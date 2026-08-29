@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from contextlib import redirect_stderr
 import io
 import json
@@ -11,15 +12,17 @@ from unittest.mock import patch
 from tools.manual_annotation.model import EVALUATION_ROLE_CONTRACT
 from tools.regression import accuracy
 from tools.regression.accuracy import (
-    GOLD_COHORT_PATH,
-    GOLD_COHORT_SCHEMA,
-    GOLD_COMPLETION_SCOPE,
+    DEVELOPMENT_GOLD_COHORT_PATH,
+    DEVELOPMENT_GOLD_COHORT_SCHEMA,
+    DEVELOPMENT_GOLD_COMPLETION_SCOPE,
     main as accuracy_main,
+    validate_count_variant_references,
     validate_gold_evaluation_role,
     validate_gold_source_identities,
     validate_gold_task_result,
 )
 from tools.regression.gold_cohort import build_gold_cohort_records
+from tools.regression.diagnostic_cohort import DIAGNOSTIC_COHORT_PATH
 from tools.regression.gold_geometry import (
     gold_frame_diagnostics,
     ordered_gold_mapping,
@@ -210,17 +213,28 @@ class GoldAccuracyContractTest(unittest.TestCase):
     def test_tracked_cohort_contains_every_current_confirmed_task(self) -> None:
         records = [
             json.loads(line)
-            for line in GOLD_COHORT_PATH.read_text(encoding="utf-8").splitlines()
+            for line in DEVELOPMENT_GOLD_COHORT_PATH.read_text(
+                encoding="utf-8"
+            ).splitlines()
             if line.strip()
         ]
-        self.assertEqual(len(records), 110)
-        self.assertEqual(len({row["sample_id"] for row in records}), 110)
+        diagnostic_count = sum(
+            bool(line.strip())
+            for line in DIAGNOSTIC_COHORT_PATH.read_text(
+                encoding="utf-8"
+            ).splitlines()
+        )
+        self.assertEqual(len(records), diagnostic_count)
+        self.assertEqual(len({row["sample_id"] for row in records}), len(records))
         self.assertTrue(
-            all(row["cohort_schema"] == GOLD_COHORT_SCHEMA for row in records)
+            all(
+                row["cohort_schema"] == DEVELOPMENT_GOLD_COHORT_SCHEMA
+                for row in records
+            )
         )
         self.assertTrue(
             all(
-                row["completion_scope"] == GOLD_COMPLETION_SCOPE
+                row["completion_scope"] == DEVELOPMENT_GOLD_COMPLETION_SCOPE
                 for row in records
             )
         )
@@ -235,7 +249,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         with TemporaryDirectory() as temporary:
             empty = Path(temporary) / "gold.jsonl"
             empty.write_text("", encoding="utf-8")
-            with patch.object(accuracy, "GOLD_COHORT_PATH", empty):
+            with patch.object(accuracy, "DEVELOPMENT_GOLD_COHORT_PATH", empty):
                 with self.assertRaisesRegex(ValueError, "calibration is incomplete"):
                     validate_gold_source_identities()
                 error = io.StringIO()
@@ -249,7 +263,9 @@ class GoldAccuracyContractTest(unittest.TestCase):
         tracked = json.loads(
             next(
                 line
-                for line in GOLD_COHORT_PATH.read_text(encoding="utf-8").splitlines()
+                for line in DEVELOPMENT_GOLD_COHORT_PATH.read_text(
+                    encoding="utf-8"
+                ).splitlines()
                 if line.strip()
             )
         )
@@ -466,6 +482,38 @@ class GoldAccuracyContractTest(unittest.TestCase):
         ):
             validate_gold_task_result(record, report)
 
+    def test_safe_challenge_automatic_approval_is_a_valid_result(self) -> None:
+        record = _basis_aware_record(start_basis="directly_visible")
+        record["cohort_role"] = "challenge"
+        gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
+
+        self.assertEqual(
+            validate_gold_task_result(record, _approved_report(gold)),
+            "approved_auto",
+        )
+
+    def test_count_variants_share_one_physical_reference(self) -> None:
+        records = [
+            json.loads(line)
+            for line in DEVELOPMENT_GOLD_COHORT_PATH.read_text(
+                encoding="utf-8"
+            ).splitlines()
+            if line.strip()
+        ]
+        validate_count_variant_references(records)
+        variants: dict[str, list[dict[str, object]]] = {}
+        for record in records:
+            variants.setdefault(record["source_sha256"], []).append(record)
+        self.assertEqual(sum(len(rows) > 1 for rows in variants.values()), 4)
+
+        pair = next(rows for rows in variants.values() if len(rows) > 1)
+        changed = copy.deepcopy(pair)
+        changed[1]["confirmed_geometry"]["frames"][0][
+            "polygon_source_pixel_center_coordinates"
+        ][0][0] += 1.0
+        with self.assertRaisesRegex(ValueError, "shared Frame reference differs"):
+            validate_count_variant_references(changed)
+
     def test_review_candidate_geometry_is_checked_without_official_outputs(
         self,
     ) -> None:
@@ -514,6 +562,37 @@ class GoldAccuracyContractTest(unittest.TestCase):
         with self.assertRaisesRegex(
             ValueError,
             "candidate crosses user-confirmed inward baseline",
+        ):
+            validate_selected_candidate_coverage(record, report)
+
+    def test_review_candidate_that_exceeds_outward_budget_is_rejected(
+        self,
+    ) -> None:
+        gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
+        record = _basis_aware_record(start_basis="directly_visible")
+        report = {
+            "photo_geometry": {
+                "lanes": [
+                    {
+                        "output_footprints": [
+                            _output(
+                                [
+                                    [-100.0, 0.0],
+                                    [560.0, 0.0],
+                                    [560.0, 560.0],
+                                    [-100.0, 560.0],
+                                ]
+                            )
+                        ]
+                    }
+                ]
+            },
+            "output": {"finalization": {"output_footprints": []}},
+        }
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "exceeds acceptance-baseline direct-use budget",
         ):
             validate_selected_candidate_coverage(record, report)
 

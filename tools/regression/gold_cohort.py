@@ -1,4 +1,4 @@
-"""Audit confirmed annotations and build the tracked blocking gold cohort."""
+"""Audit confirmed annotations and build the tracked development-gold cohort."""
 
 from __future__ import annotations
 
@@ -17,9 +17,9 @@ from tools.manual_annotation.workspace import ReviewWorkspace
 
 from .accuracy import (
     CONFIRMED_GEOMETRY_KEYS,
-    GOLD_COHORT_PATH,
-    GOLD_COHORT_SCHEMA,
-    GOLD_COMPLETION_SCOPE,
+    DEVELOPMENT_GOLD_COHORT_PATH,
+    DEVELOPMENT_GOLD_COHORT_SCHEMA,
+    DEVELOPMENT_GOLD_COMPLETION_SCOPE,
     validate_gold_evaluation_role,
     validate_gold_source_identities,
 )
@@ -166,14 +166,14 @@ def build_gold_cohort_records(
         if not isinstance(evaluation, dict):
             raise ValueError(f"confirmed evaluation role is invalid: {sample_id}")
         record = {
-            "cohort_schema": GOLD_COHORT_SCHEMA,
-            "completion_scope": GOLD_COMPLETION_SCOPE,
+            "cohort_schema": DEVELOPMENT_GOLD_COHORT_SCHEMA,
+            "completion_scope": DEVELOPMENT_GOLD_COMPLETION_SCOPE,
             "sample_id": sample_id,
             "source_relative_path": geometry["source_relative_path"],
             "source_sha256": geometry["source_sha256"],
             "format_id": geometry["format_id"],
             "count": geometry["count"],
-            "validation_role": "gold_accuracy_blocking",
+            "validation_role": "development_gold",
             "cohort_role": evaluation["cohort_role"],
             "acceptance_contract": GOLD_ACCEPTANCE_CONTRACT,
             "acceptance_baseline_schema": BASELINE_SCHEMA,
@@ -218,11 +218,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         records = current_gold_cohort_records()
         payload = gold_cohort_jsonl(records)
         if args.write:
-            GOLD_COHORT_PATH.write_text(payload, encoding="utf-8")
+            DEVELOPMENT_GOLD_COHORT_PATH.write_text(payload, encoding="utf-8")
             validate_gold_source_identities()
             state = "written"
         else:
-            current = GOLD_COHORT_PATH.read_text(encoding="utf-8")
+            current = DEVELOPMENT_GOLD_COHORT_PATH.read_text(encoding="utf-8")
             if current != payload:
                 raise ValueError("tracked gold cohort is not the current audited derivation")
             state = "current"

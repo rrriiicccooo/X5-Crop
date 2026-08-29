@@ -16,7 +16,8 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   outer、separator 与 top/bottom 邻域一次测量。固定 W/H 与 typed evidence 决定 phase、pitch、cross、
   ordinal 和最多一次直接 local advance；像素强度、片夹中心或样片规则不能替代 authority。
 - 任一 slot 不安全时整张 source `needs_review`，不做 slot salvage。Contact 与 overlap 始终属于
-  challenge；安全 review 是合格结果，不启用第二套 detector 或特殊 bleed。
+  challenge，但 challenge 不预设终态：标准 detector/Gate 可产生安全自动批准，证据不足时安全 review
+  同样合格；不启用第二套 detector 或特殊 bleed。
 - Placement 保持 source-axis；局部直线 slope 只扩大安全包络。Deskew 是批准后的可选整理，不参与
   placement、Gate 或黄金准确性；证据不足或超限时保持原始倾斜。
 - 安全层只处理唯一 selected placement 的联合可行状态。Aperture 每侧共用 5% 外扩预算；直接 enclosing
@@ -47,16 +48,23 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   越界；有预算权限的每侧最多向外 5%。`visible_content_limit` 只阻断向内越界，
   `human_width_estimate` 两向均不阻断，其它边仍独立生效。
 - Nominal/challenge 在 detector 运行前由人工证据和固定模板合同逐 task 派生，并随确认基线冻结；
-  accuracy 会重新推导核对，不能手填改类。Nominal 必须安全自动批准，challenge 允许安全 review。
+  accuracy 会重新推导核对，不能手填改类。Nominal 以安全自动批准为能力目标；challenge 的安全 auto 与
+  安全 review 都有效，前者单独记录为能力发现。
 - 两侧各空余至少一个固定 W、又缺少双端直接 outer 的内部 partial sequence 属于 challenge；该角色只从
   确认前几何推导，不由当前 detector 的结果或 post-selection holder fill 决定。
-- Accuracy 只接受当前确认 task。没有当前 blocking cohort 时明确报告
+- Accuracy 只接受当前确认 task。没有完整的当前 development cohort 时明确报告
   `calibration is incomplete`，不回退历史基线。空 slot 不参与几何比较，但 runtime 对应输出与 ordinal
   必须保留。
 - 完整确认集合通过唯一生成器独立核对 source、确认快照、审阅 artifact、task authority、角色和 geometry
-  digest 后，才写入 tracked blocking cohort。Development-only 黄金分析把基础 nominal、较难 nominal 与
+  digest 后，才写入 tracked development cohort。Development 黄金分析把基础 nominal、较难 nominal 与
   challenge 分开，并逐边区分已观察且绑定、已观察未绑定、模板补全和竞争状态；这些诊断不进入 runtime
   或黄金权限。
+- 当前已查看黄金明确归入 `development_gold`；未来 sealed acceptance 必须在查看 detector 结果前按
+  source SHA 分区，同源 count 同分区，解封调试后永久退役到 development。人工 reference 仍只有一套。
+- 验证分别报告危险自动批准、Review candidate 几何、nominal 自动覆盖和 challenge 能力；只有正式
+  `approved_auto` 越过黄金安全合同才是用户层危险输出。
+- 同源合法 count 变体按共享物理 Frame 建立 source-level diagnostic；额外空白或残缺 slot 不得把共享
+  内容重定相到危险位置，但不同 count 可以合法产生不同 auto/review 终态。
 
 ### 工程与验证
 

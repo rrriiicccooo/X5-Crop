@@ -44,7 +44,7 @@ from .refinement import REFINEMENT_REVISION, refine_record
 
 
 MANIFEST_SCHEMA = "x5crop_manual_review_manifest_v5"
-COHORT_RELATIVE_PATH = Path("tools/regression/cohorts/diagnostic_unreviewed.jsonl")
+COHORT_RELATIVE_PATH = Path("tools/regression/cohorts/development_diagnostic.jsonl")
 MANIFEST_RELATIVE_PATH = Path("Test/manual_review/manifest.jsonl")
 DEFAULT_STATE_RELATIVE_PATH = Path("Test/manual_review/source_annotations")
 REVIEW_CONTEXT_RELATIVE_PATH = Path("Test/manual_review/review_context.json")
@@ -362,7 +362,16 @@ class ReviewWorkspace:
                 != canonical["calibration_copy_relative_path"]
             ):
                 raise WorkspaceError("red-markup source path is not current")
-        return record_for_client(record) if client else record
+        return self._record_for_client(record) if client else record
+
+    def _record_for_client(self, record: dict[str, Any]) -> dict[str, Any]:
+        """Overlay current descriptive context without mutating frozen geometry."""
+        current = deepcopy(record)
+        source_sha = str(current["source"]["sha256"])
+        current["diagnostics"]["review_context"] = self._source_review_context(
+            self.groups[source_sha]
+        )
+        return record_for_client(current)
 
     def _save_record(self, record: dict[str, Any]) -> None:
         validate_annotation_record(record)
@@ -573,7 +582,7 @@ class ReviewWorkspace:
             except AnnotationError as error:
                 raise WorkspaceError(str(error)) from error
             self._save_record(updated)
-            return record_for_client(updated)
+            return self._record_for_client(updated)
 
     def reconcile_review_context(
         self,
@@ -826,7 +835,7 @@ class ReviewWorkspace:
                             )
             current["revision"] += 1
             self._save_record(current)
-            return record_for_client(current)
+            return self._record_for_client(current)
 
     def confirm(
         self,
@@ -913,4 +922,4 @@ class ReviewWorkspace:
             }
             self._save_record(current)
             self._refresh_confirmed_rows()
-            return record_for_client(current)
+            return self._record_for_client(current)

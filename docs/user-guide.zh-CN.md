@@ -32,9 +32,9 @@ separator 与 top/bottom 附近做有界局部测量。像素证据用于对准�
 format、count 或 placement。
 
 正常片带使用一个共享 pitch；有直接、ordinal 唯一的宽/窄间隔时，最多允许一次后续整体位移。缺少
-必要 authority、存在多个同样合法答案、需要多次异常位移、未知必需 Frame、contact 或 overlap 时保持
-`needs_review`。Contact 与 overlap 是 challenge：安全 review 是正确结果，V5 不为它们启用第二套
-detector 或特殊 bleed。
+必要 authority、存在多个同样合法答案、需要多次异常位移或未知必需 Frame 时保持 `needs_review`。
+Contact 与 overlap 是 challenge，不是预定终态：标准 detector 与 Gate 能唯一证明安全时可以自动批准，
+证据不足时安全 review 同样正确；V5 不为它们启用第二套 detector 或特殊 bleed。
 
 选定 placement 后，程序才判断是否铺满片夹：只检查 outer 外侧能否再容纳一个 W，不回头搜索或居中。
 135-dual 两条 lane 都必须满足完整性。

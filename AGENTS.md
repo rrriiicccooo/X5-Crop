@@ -122,8 +122,9 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
   最多一次直接 local advance 并否决非法 placement；不得用模板投影创造自己的 phase authority。
 - 安全层只处理唯一胜出 placement 的联合可行状态，不合并落选位置、不分别相加不能同时发生的
   最大误差、不静默裁掉越界 footprint。具体 bleed 和预算只由 `docs/ARCHITECTURE.md` 定义。
-- Contact 与 overlap 始终属于 challenge；安全 `needs_review` 是合格结果，不要求也不得强行
-  `approved_auto`，不建立第二套 detector 或特殊 bleed。
+- Contact 与 overlap 始终属于 challenge。Challenge 是预检测评测角色，不预设 runtime 终态：标准
+  detector 与 Gate 能唯一证明安全时可以 `approved_auto`，证据不足时 `needs_review` 同样合格。不得为
+  提高通过率强推自动批准，也不建立第二套 detector 或特殊 bleed。
 - `CandidateGate` 只记录 typed assessment；只有 `DecisionGate` 创建 final status 与 reasons。
 - 任一 slot 不安全时，整个 source `needs_review` 且不写正式照片；不做 slot salvage。
 - 不为减少 blank TIFF 牺牲内容保护或 direct-use 质量。V5 不实现 blank suppression。
@@ -140,7 +141,8 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
 - Producer 必须 fixed-template-first 且工作量有界；不恢复完整链 materialization/cache、通用 DP、
   top-K、候选笛卡尔积、逐帧尺寸、selected-placement 临时 query 或无界全图 evidence。
 - 新增自由度必须说明它减少的物理未知量、唯一 owner、启用与禁止条件、工作上界、反例、Debug、
-  Gate 失败表达，并证明普通黄金不变；不能完成这些合同的能力不进入 production。
+  Gate 失败表达，并证明 development gold 不回归；sealed acceptance 不得因开发而打开。不能完成这些
+  合同的能力不进入 production。
 - 连续几何保留到最终 sampling；不得逐格取整并累计坐标误差。不同 placement 保持竞争，同一
   placement 的连续误差才进入联合安全范围。
 - 性能优化只能复用 candidate-independent 计算或完全相同的状态。除非用户明确批准行为变化，优化
@@ -181,15 +183,26 @@ platform | platform-check | platform-package | pre-push
   alias；活动工作副本统一位于 `Test/manual_review/gold_calibration/<format>/`，用 `counts-N-M` 镜像全部
   task count，不从目录或文件名反推 authority。只有用户明确确认的原图坐标才能进入黄金基线；不建立
   平行校准池。
-- Accuracy 只有 `gold_accuracy_blocking` 与 `diagnostic_unreviewed` 两种角色。每个当前用户确认的
-  黄金 task 运行一次并携带明确 count；不保留 auto 重复任务。重置或尚无当前确认时，accuracy 必须
-  明确失败为 `calibration is incomplete`，不得回退旧基线。
-  Nominal 必须安全自动批准，challenge 允许安全 `needs_review`。不得新增样片规则、whitelist、
-  格式 denylist 或根据当前输出自动晋升黄金。
+- 当前已知样片只使用 `development_gold` 与 `development_diagnostic` 两种验证角色；它们都属于可查看、
+  可调试的 development corpus，不证明未见 X5 扫描的泛化。每个 task 运行一次并携带明确 count；不保留
+  auto 重复任务。重置或尚无当前确认时，development gold 必须明确失败为
+  `calibration is incomplete`，不得回退旧基线。
+- Development gold 必须分开报告：`unsafe_approved_auto`、Review candidate 几何、nominal 自动覆盖和
+  challenge 能力。任一角色的危险自动批准必须为 0；Review candidate 的偏差是机制诊断，不是用户层
+  危险输出；nominal 的目标是安全自动批准；challenge 的安全 `approved_auto` 与安全 `needs_review` 都是
+  合格结果，前者单独记录为能力发现。不得新增样片规则、whitelist、格式 denylist 或根据当前输出自动
+  晋升黄金。
   对 count 小于 format 最大完整格数的单片带，若人工确认的照片组在 source 长轴两侧都至少留有一个
   固定 W，且首张 START 与末张 END 不是两条都直接可见，则属于
   `two_sided_floating_partial_sequence` challenge；该事实只能从冻结前的 source 几何推导，不能读取
   detector 输出或 post-selection holder fill。
+- 当前 `development_gold.jsonl` 只包含已查看的开发黄金。未来新增 source 在查看任何 detector 结果前，
+  必须按 source SHA 固定为 development 或 sealed acceptance；同 SHA 的全部 count task 必须同分区。
+  日常开发命令不得读取或输出 sealed 的逐样片结果。显式打开 sealed source 调试后，该 source 永久转为
+  development，并补充新的 sealed source。两个分区共享同一人工 reference 权限，不建立平行校准池。
+- 同 SHA 的合法 count 变体按共享物理 `boundary_pair` 映射真实 Frame。不同 count 可以改变 ambiguity 和
+  auto/review 终态，但新增或省略空白、残缺 slot 不得把共享真实 Frame 重定相到危险位置。任一变体的
+  `approved_auto` 都必须独立满足黄金安全合同；Review candidate 的跨 count 分歧只作机制诊断。
 - Accuracy、diagnostic、performance 与 platform cohort 的每条记录都必须携带明确 count；工具不得
   从片夹容量、文件名、目录中的历史 full/partial 标签或像素推导。
 - 受跟踪的 diagnostic cohort 只判断 crash、hang、terminal/schema 完整性、authority、query/template、
@@ -213,7 +226,8 @@ platform | platform-check | platform-package | pre-push
   当前 `HEAD` 读取同一字节写入临时包；不得因此把文件恢复到本地工作区或掩盖其它缺失发布源。
 - `tools/release/manifest.py` 是发布内容唯一 owner。用户包不包含 modular source、tests、tools、
   fixtures、内部文档、开发依赖或生成输出。
-- 构建命令为 `python3 -m tools.release.build --version <version>`。只有 accuracy、性能、依赖、
-  TIFF、中文路径、文件系统恢复，以及 Apple Silicon macOS、Intel macOS、Windows x64 三目标
+- 构建命令为 `python3 -m tools.release.build --version <version>`。只有 development gold、sealed
+  acceptance aggregate receipt、性能、依赖、TIFF、中文路径、文件系统恢复，以及 Apple Silicon
+  macOS、Intel macOS、Windows x64 三目标
   实机 receipt 全部绑定同一 release commit 后，才可创建 RC、tag、GitHub Release 或公开 ZIP；
   未提供独立卷时 exFAT 必须保持显式 best-effort 未验证。

@@ -1,13 +1,23 @@
 from __future__ import annotations
 
+from contextlib import redirect_stderr, redirect_stdout
+import io
 import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
-from tools.regression.accuracy import GOLD_COHORT_PATH
+from tools.regression.accuracy import DEVELOPMENT_GOLD_COHORT_PATH
 from tools.regression.gold_analysis import (
+    ANALYSIS_RECORD_SCHEMA,
+    _analysis_identity,
+    _summary,
     line_axis_position,
+    main as gold_analysis_main,
     optimization_stage_index,
     sequence_boundary_diagnostics,
+    validate_gold_analysis_artifacts,
 )
 
 
@@ -18,7 +28,7 @@ class GoldAnalysisContractTest(unittest.TestCase):
             row["sample_id"]: row
             for row in (
                 json.loads(line)
-                for line in GOLD_COHORT_PATH.read_text(
+                for line in DEVELOPMENT_GOLD_COHORT_PATH.read_text(
                     encoding="utf-8"
                 ).splitlines()
                 if line.strip()
@@ -103,6 +113,173 @@ class GoldAnalysisContractTest(unittest.TestCase):
             "template_inferred_without_gold_observation",
         )
         self.assertTrue(all(item["resolution"] == "resolved" for item in diagnostics))
+
+    @staticmethod
+    def _analysis_record(
+        sample_id: str,
+        *,
+        source_sha256: str,
+        role: str,
+        decision: str,
+        candidate: str,
+        unsafe_auto: bool,
+        physical_frame_id: str,
+    ) -> dict[str, object]:
+        contract_passed = not unsafe_auto and not (
+            role == "nominal" and decision == "needs_review"
+        )
+        frame_unsafe = candidate == "unsafe"
+        return {
+            "record_schema": ANALYSIS_RECORD_SCHEMA,
+            "sample_id": sample_id,
+            "source_sha256": source_sha256,
+            "format_id": "135",
+            "count": 1,
+            "cohort_role": role,
+            "optimization_stage": {
+                "stage": (
+                    "stage3_challenge"
+                    if role == "challenge"
+                    else "stage1_core_nominal"
+                )
+            },
+            "decision_status": decision,
+            "final_review_reasons": [],
+            "development_contract_passed": contract_passed,
+            "development_contract_failure": (
+                None if contract_passed else "synthetic contract failure"
+            ),
+            "candidate_geometry_conformance": candidate,
+            "candidate_geometry_failure": (
+                "synthetic candidate failure" if frame_unsafe else None
+            ),
+            "unsafe_approved_auto": unsafe_auto,
+            "nominal_auto_goal_passed": (
+                role == "nominal" and decision == "approved_auto" and not unsafe_auto
+            ),
+            "challenge_capability_outcome": (
+                "needs_review_with_unsafe_candidate"
+                if role == "challenge" and decision == "needs_review"
+                else None
+            ),
+            "source_placement_state": "supported",
+            "phase_status": "resolved",
+            "cross_status": "resolved",
+            "selected_cross_boundary_use": "aperture_pair",
+            "duration_seconds": 1.0,
+            "boundary_diagnostics": [],
+            "frame_candidate_geometry_diagnostics": [
+                {
+                    "frame_index": 1,
+                    "physical_frame_id": physical_frame_id,
+                    "inward_failure_sides": (
+                        ["sequence_start"] if frame_unsafe else []
+                    ),
+                    "outward_budget_failure_sides": [],
+                }
+            ],
+        }
+
+    def test_summary_separates_unsafe_auto_from_review_candidate(self) -> None:
+        shared_sha = "a" * 64
+        records = (
+            self._analysis_record(
+                "auto",
+                source_sha256=shared_sha,
+                role="nominal",
+                decision="approved_auto",
+                candidate="unsafe",
+                unsafe_auto=True,
+                physical_frame_id="B1|B2",
+            ),
+            self._analysis_record(
+                "review",
+                source_sha256=shared_sha,
+                role="challenge",
+                decision="needs_review",
+                candidate="safe",
+                unsafe_auto=False,
+                physical_frame_id="B1|B2",
+            ),
+        )
+        summary = _summary(records, {"fixture": True})
+
+        self.assertEqual(summary["unsafe_approved_auto_count"], 1)
+        self.assertEqual(summary["safe_approved_auto_count"], 0)
+        self.assertEqual(
+            summary["review_candidate_conformance_counts"],
+            {"safe": 1},
+        )
+        self.assertEqual(
+            summary["count_variant_candidate_safety_mismatch_count"],
+            1,
+        )
+
+    def test_analysis_artifact_binds_comparator_and_reaggregates(self) -> None:
+        identity = _analysis_identity()
+        self.assertEqual(len(identity["comparator_source_manifest_sha256"]), 64)
+        self.assertIn("comparator_paths_match_head", identity)
+        record = self._analysis_record(
+            "single",
+            source_sha256="b" * 64,
+            role="challenge",
+            decision="needs_review",
+            candidate="not_available",
+            unsafe_auto=False,
+            physical_frame_id="B1|B2",
+        )
+        record["frame_candidate_geometry_diagnostics"] = []
+        summary = _summary((record,), identity)
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "gold_analysis_records.jsonl").write_text(
+                json.dumps(record, separators=(",", ":")) + "\n",
+                encoding="utf-8",
+            )
+            (root / "gold_analysis_summary.json").write_text(
+                json.dumps(summary) + "\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                validate_gold_analysis_artifacts(root),
+                summary,
+            )
+
+    def test_zero_unsafe_auto_gate_requires_the_complete_cohort(self) -> None:
+        error = io.StringIO()
+        with redirect_stderr(error):
+            result = gold_analysis_main(
+                [
+                    "--output-root",
+                    "/unused",
+                    "--sample-id",
+                    "S001",
+                    "--gate",
+                    "zero-unsafe-auto",
+                ]
+            )
+        self.assertEqual(result, 2)
+        self.assertIn("complete cohort", error.getvalue())
+
+    def test_zero_unsafe_auto_gate_blocks_dangerous_output(self) -> None:
+        output = io.StringIO()
+        summary = {"analysis_error_count": 0, "unsafe_approved_auto_count": 1}
+        with (
+            patch(
+                "tools.regression.gold_analysis.run_gold_analysis",
+                return_value=summary,
+            ),
+            redirect_stdout(output),
+        ):
+            result = gold_analysis_main(
+                [
+                    "--output-root",
+                    "/unused",
+                    "--gate",
+                    "zero-unsafe-auto",
+                ]
+            )
+        self.assertEqual(result, 1)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""Run the source-bound V5 golden comparator around the production CLI."""
+"""Run the source-bound V5 development-gold contract around production."""
 
 from __future__ import annotations
 
@@ -29,9 +29,13 @@ from .gold_geometry import (
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-GOLD_COHORT_PATH = Path(__file__).with_name("cohorts") / "gold_accuracy.jsonl"
-GOLD_COHORT_SCHEMA = "x5crop_gold_accuracy_cohort_v7"
-GOLD_COMPLETION_SCOPE = "all_current_user_confirmed_tasks_exactly_once"
+DEVELOPMENT_GOLD_COHORT_PATH = (
+    Path(__file__).with_name("cohorts") / "development_gold.jsonl"
+)
+DEVELOPMENT_GOLD_COHORT_SCHEMA = "x5crop_development_gold_cohort_v1"
+DEVELOPMENT_GOLD_COMPLETION_SCOPE = (
+    "all_current_development_user_confirmed_tasks_exactly_once"
+)
 CONFIRMED_GEOMETRY_KEYS = frozenset(
     {
         "baseline_schema",
@@ -100,11 +104,90 @@ def validate_gold_evaluation_role(record: dict[str, object]) -> None:
         raise ValueError(f"gold evaluation role is invalid: {sample_id}")
 
 
+def _physical_frames_by_boundary_pair(
+    record: dict[str, object],
+) -> dict[tuple[str, str], tuple[str, object]]:
+    """Index one task's real Frames by the source-level boundary identities."""
+
+    geometry = record["confirmed_geometry"]
+    slots = geometry["slots"]
+    frames = geometry["frames"]
+    slots_by_ordinal = {int(slot["ordinal"]): slot for slot in slots}
+    indexed: dict[tuple[str, str], tuple[str, object]] = {}
+    for frame in frames:
+        ordinal = int(frame["frame_index"])
+        slot = slots_by_ordinal[ordinal]
+        reference = slot["reference_geometry"]
+        if reference.get("kind") != "boundary_pair":
+            raise ValueError(
+                f"count-variant Frame identity is invalid: {record['sample_id']}"
+            )
+        identity = (
+            str(reference["start_boundary_id"]),
+            str(reference["end_boundary_id"]),
+        )
+        value = (
+            str(slot["slot_kind"]),
+            frame["polygon_source_pixel_center_coordinates"],
+        )
+        if identity in indexed:
+            raise ValueError(
+                f"count-variant Frame identity is invalid: {record['sample_id']}"
+            )
+        indexed[identity] = value
+    return indexed
+
+
+def validate_count_variant_references(
+    records: Iterable[dict[str, object]],
+) -> None:
+    """Require same-source count tasks to share one physical reference."""
+
+    by_source: dict[str, list[dict[str, object]]] = {}
+    for record in records:
+        by_source.setdefault(str(record["source_sha256"]), []).append(record)
+    for members in by_source.values():
+        if len(members) < 2:
+            continue
+        reference_geometry = members[0]["confirmed_geometry"]
+        reference_shared = reference_geometry["shared_edges"]
+        reference_pool = reference_geometry["boundary_pool"]
+        frames_by_task = {
+            str(record["sample_id"]): _physical_frames_by_boundary_pair(record)
+            for record in members
+        }
+        for record in members[1:]:
+            geometry = record["confirmed_geometry"]
+            if (
+                geometry["shared_edges"] != reference_shared
+                or geometry["boundary_pool"] != reference_pool
+            ):
+                raise ValueError(
+                    "count-variant source reference differs: "
+                    f"{members[0]['sample_id']}/{record['sample_id']}"
+                )
+        for left_index, left in enumerate(members):
+            left_frames = frames_by_task[str(left["sample_id"])]
+            for right in members[left_index + 1 :]:
+                right_frames = frames_by_task[str(right["sample_id"])]
+                shared = set(left_frames) & set(right_frames)
+                if not shared or any(
+                    left_frames[identity] != right_frames[identity]
+                    for identity in shared
+                ):
+                    raise ValueError(
+                        "count-variant shared Frame reference differs: "
+                        f"{left['sample_id']}/{right['sample_id']}"
+                    )
+
+
 def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
     validate_cohort_counts()
     records = tuple(
         json.loads(line)
-        for line in GOLD_COHORT_PATH.read_text(encoding="utf-8").splitlines()
+        for line in DEVELOPMENT_GOLD_COHORT_PATH.read_text(
+            encoding="utf-8"
+        ).splitlines()
         if line.strip()
     )
     if not records:
@@ -136,11 +219,12 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
         count = record.get("count")
         if (
             set(record) != expected_keys
-            or record.get("cohort_schema") != GOLD_COHORT_SCHEMA
-            or record.get("completion_scope") != GOLD_COMPLETION_SCOPE
+            or record.get("cohort_schema") != DEVELOPMENT_GOLD_COHORT_SCHEMA
+            or record.get("completion_scope")
+            != DEVELOPMENT_GOLD_COMPLETION_SCOPE
             or not sample_id
             or sample_id in sample_ids
-            or record.get("validation_role") != "gold_accuracy_blocking"
+            or record.get("validation_role") != "development_gold"
             or record.get("cohort_role") not in {"nominal", "challenge"}
             or record.get("acceptance_contract")
             != GOLD_ACCEPTANCE_CONTRACT
@@ -192,6 +276,7 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
             raise ValueError(f"gold geometry is invalid: {sample_id}")
         validate_gold_evaluation_role(record)
         sample_ids.add(sample_id)
+    validate_count_variant_references(records)
     return records
 
 
@@ -294,7 +379,7 @@ def run_accuracy(records: Iterable[dict[str, object]]) -> tuple[int, int]:
         print(f"{identity}: {status}")
     if failures:
         raise ValueError(
-            f"gold accuracy failed {len(failures)} task(s):\n"
+            f"development gold contract failed {len(failures)} task(s):\n"
             + "\n".join(failures)
         )
     return passed, approved
@@ -307,10 +392,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         records = validate_gold_source_identities()
         passed, approved = run_accuracy(records)
     except ValueError as error:
-        print(f"gold accuracy: FAIL: {error}", file=sys.stderr)
+        print(f"development gold contract: FAIL: {error}", file=sys.stderr)
         return 1
     print(
-        f"gold accuracy: {passed}/{len(records)} safe; "
+        f"development gold contract: {passed}/{len(records)} accepted; "
         f"approved={approved}"
     )
     return 0

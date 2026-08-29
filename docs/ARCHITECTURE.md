@@ -24,6 +24,10 @@ X5 Crop 是已知胶片模板的自动对准器，不是通用照片边界检测
 - 明确 count 表示用户确认实际 slot 数，必须满足 `1 <= count <= holder_full_count`。
 - 同一 source SHA 可以建立多个显式 count 的独立 evaluation task；它们复用同一物理边界标注，但
   分别验证对应 slot 解释和输出。Source SHA 只固定 format 与像素身份，不固定 count。
+- 同源 count 变体按共享物理 `boundary_pair` 映射真实 Frame。不同 count 可以合法改变 ambiguity 和
+  `approved_auto` / `needs_review` 终态，但增加或省略空白、残缺 slot 不得把已有真实 Frame 重定相到
+  危险位置。任一自动批准的变体都必须独立满足同一黄金安全合同；Review candidate 的跨 count 分歧只
+  作 development diagnostic，不等同危险输出。
 - Runtime 不保存 full/partial mode。是否铺满是 placement 选定后的物理事实，不是搜索权限。
 - `135-dual` 默认 12 格、每 lane 6 格。其它明确 count 产生
   `unsupported_dual_count` 并进入 review，不猜 lane 分配，不运行自动 placement。
@@ -221,8 +225,9 @@ role = phase
 单个 material 宽度偏离仍可属于正常扫描变化。只有多个独立、source-wide separator support 的
 两侧 residual 无法由同一个模板解释时，才构成全局矛盾；不能把一条局部窄 band 当成第二次位移。
 
-Contact 与 overlap 始终属于 challenge；安全 `needs_review` 是合格结果，不要求自动批准，也不启用
-额外 bleed。
+Contact 与 overlap 始终属于 challenge。Challenge 是运行前的评测角色，不是终态：标准 detector 与
+Gate 能唯一证明安全时可以 `approved_auto`，证据不足时 `needs_review` 同样合格；不启用额外 bleed、
+第二套 detector 或强制批准。
 
 ## 8. Cross、outer 与固定 H
 
@@ -526,11 +531,12 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
 - `x5crop_directional_minimum_acceptable_crop_v1` 是全部当前与以后用户确认黄金共用的
   accuracy 合同。用户确认 polygon 表示最内侧可接受的无 bleed 裁切，不表示真实内容边界的 100%
   测量，也不限定 detector 只能产生一个逐像素相同的答案。
-- 黄金比较是方向性的：任何已选 candidate 及 `approved_auto` 的正式 post-bleed
-  `required_source_footprint` 都必须完整包含确认 polygon，边、角点或亚像素位置不得向其内侧越界；
-  几何 epsilon 只吸收浮点计算误差。具有向外预算权限的每一侧，其总 expansion 不得超过对应确认
-  W/H span 的 5% 加命名的 sampling allowance，uncertainty、residual 与 bleed 均消耗该预算。这不是
-  零像素误差或对称接近度要求。
+- 黄金比较是方向性的：`approved_auto` 的正式 post-bleed `required_source_footprint` 必须完整包含确认
+  polygon，边、角点或亚像素位置不得向其内侧越界；任一违例都是危险自动批准并硬阻断。Development
+  contract 还用同一规则检查 selected candidate，以定位 detector 机制；Review candidate 的偏差不产生
+  正式输出，因此只属于 candidate 几何诊断，不能称为用户层危险批准。几何 epsilon 只吸收浮点计算
+  误差。具有向外预算权限的每一侧，其总 expansion 不得超过对应确认 W/H span 的 5% 加命名的 sampling
+  allowance，uncertainty、residual 与 bleed 均消耗该预算。这不是零像素误差或对称接近度要求。
 - 逐线 `review_basis` 分别决定向内包含与向外 5% 预算能否产生阻断 accuracy verdict：
 
   | 证据基础 | 向内越线 | 向外超过 5% |
@@ -541,8 +547,8 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
 
   `directly_visible` 只表示人类从原 TIFF 的可靠像素分界确信该侧是真实内容边缘；分界可以很淡、很短，
   不必覆盖完整 H。它不建立 detector edge/trace 命中、observation identity、证据长度、强度或逐像素坐标
-  相等要求。Accuracy 只检查 selected candidate 与正式 `required_source_footprint` 是否满足上表对应的
-  方向性几何合同；检测机制不同但最终安全裁切合格时仍通过。
+  相等要求。比较只检查 candidate 或正式 `required_source_footprint` 是否满足上表对应的方向性几何
+  合同；检测机制不同但最终安全裁切合格时仍通过。
   `visible_content_limit` 是残缺曝光中仍可见内容的最内侧安全保护线：裁切进入该线以内会丢失可见内容，
   必须阻断；线外没有可见内容证据，因此不能用相对该线的 5% 预算阻断更大的外扩。
   `human_width_estimate` 由同一 source 中其它直接可见边界所确定的一致 Frame 宽度推算；它仍不是该侧
@@ -556,8 +562,9 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   也不改变模板、源内安全和整张 source 决策合同。
 - 上述黄金合同不因 `boundary_use` 改变。`enclosing_support_pair` 的总高度不超过 `1.1H` 仍是 runtime
   自动决策合同，但在黄金 accuracy 中还必须满足逐侧 5% 外扩上限，不能用总 span 隐藏单侧过度外扩。
-- Nominal 必须安全自动批准，challenge 允许安全 review。角色在运行 detector 前按 evaluation task
-  的证据充分性冻结，不读取 detector 输出，也不进入 runtime：只要人工确认的直接证据与
+- Nominal 的能力目标是安全自动批准；challenge 不预设终态，安全 `approved_auto` 与安全
+  `needs_review` 都是合格结果，前者单独记录为能力发现。角色在运行 detector 前按 evaluation task 的
+  证据充分性冻结，不读取 detector 输出，也不进入 runtime：只要人工确认的直接证据与
   format/count/template 能唯一确定合法 placement 和 source-safe footprint，即使存在残缺曝光、源截断、
   空 slot 或 `visible_content_limit`，仍可属于 nominal；这些标签本身不是 challenge 原因。
   只有必要边界权限缺失、存在多个同样合法的 placement、安全闭合无法唯一证明、未知必需 Frame、
@@ -574,21 +581,32 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   角色不能在观察失败后修改，也不能成为样片 whitelist。
   标注器按该合同逐 task 派生并展示角色，不提供人工切换；同一 source 的任一 task 为 challenge 时，
   source 队列归入 challenge，同时保留各 count task 的独立角色与原因。
-  只有不存在 selected candidate 的安全 review 不产生几何 verdict；cosmetic deskew 精度不阻断黄金，
-  affine polygon envelope 与 TIFF 安全合同仍阻断。
-- 受跟踪的 diagnostic cohort 只证明不崩溃、工作量有界、报告闭合和 TIFF 工程合同，不证明几何正确。
-- 黄金校准只有一个 source-SHA-bound 集合。只有当前 `user_confirmed` 记录可生成
-  blocking cohort；集合被重置或没有当前确认时，accuracy 明确报告 `calibration is incomplete`，不读取
-  旧确认、旧 JPG 或历史 cohort 作为回退。`tools.regression.gold_cohort` 是确认汇总到 tracked blocking
-  cohort 的唯一生成入口：逐一复核 source、确认快照、审阅 artifact、task identity、format、count、
-  角色和 geometry digest，且不由标注器自动触发。
-- `tools.regression.gold_analysis` 只在 blocking cohort 上生成优化分层与 development diagnostic；不进入
+  不存在 selected candidate 的 Review 记录为 candidate `not_available`，不伪造几何 verdict；cosmetic
+  deskew 精度不阻断黄金，affine polygon envelope 与 TIFF 安全合同仍阻断。
+- Development 验证分开报告四个维度：任何角色均须为 0 的 `unsafe_approved_auto`、不产生正式输出的
+  candidate geometry conformance、nominal 自动覆盖，以及 challenge capability。决定分布、candidate
+  偏差、自动覆盖与安全准确性不得合并为单一“准确率”。
+- 受跟踪的 `development_diagnostic` cohort 只证明不崩溃、工作量有界、报告闭合和 TIFF 工程合同，
+  不证明几何正确或未见来源泛化。
+- 黄金 reference 只有一个 source-SHA-bound 权威集合；人工确认只授予 reference，不自动决定 evaluation
+  partition。当前 `development_gold.jsonl` 是已经查看并用于调试的开发集。集合被重置或没有当前开发
+  确认时，development gold 明确报告 `calibration is incomplete`，不读取旧确认、旧 JPG 或历史 cohort
+  回退。`tools.regression.gold_cohort` 是当前 development 确认汇总到 tracked cohort 的唯一生成入口：
+  逐一复核 source、确认快照、审阅 artifact、task identity、format、count、角色和 geometry digest，且
+  不由标注器自动触发。
+- 未来新增 source 必须在查看 detector 结果前按 source SHA 固定为 development 或 sealed acceptance；
+  同 SHA 的全部 count task 同分区。日常开发命令不得读取或输出 sealed 的逐样片结果，只能在里程碑生成
+  aggregate receipt。显式打开 sealed source 调试后，该 source 永久转入 development，并补充新的 sealed
+  source。分区共享同一 reference authority，不建立 v1/v2 或其它平行校准池。当前尚无 sealed cohort，
+  因而不能作未见 X5 扫描的泛化或发布准确性声明。
+- `tools.regression.gold_analysis` 只在 development gold 上生成优化分层与 diagnostic；不进入
   runtime、Gate 或黄金 verdict。分层只读取冻结人工事实：结构正常、全部直接可见、`count >= 3` 且人工
   几何对最佳固定 `phase + pitch + W` lattice 的最大 role residual 不超过 `0.02W` 时进入基础 nominal
   分桶，其它 nominal 进入较难分桶，challenge 保持原角色。该 2% 只是优化顺序，不是 runtime 阈值、
   5% 安全预算或样片白名单。“机器是否看见”必须由每次运行的 observation/binding 事实重新生成，不能
-  写回人工基线。分析结果绑定 HEAD、detector source manifest SHA 与黄金 cohort SHA，并明确记录 detector
-  路径是否与 HEAD 一致。
+  写回人工基线。分析结果绑定 HEAD、detector source manifest、comparator source manifest 与 development
+  gold SHA，并分别记录两组路径是否与 HEAD 一致。`--gate zero-unsafe-auto` 只在完整 development gold 上
+  阻断危险自动批准；完整 development contract 仍独立检查 candidate conformance 与 nominal 目标。
 - 24-source performance 只证明其绑定 commit、依赖和机器上的完整路径时间与资源；5 秒均值是
   blocking Gate，3 秒均值只是 non-blocking challenge。
 - Platform 聚合必须同时收到同一 commit 的 Apple Silicon macOS、Intel macOS 与 Windows x64
@@ -596,6 +614,7 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   `best_effort_unverified`，不得静默升级为已验证。
 - 合成和变形合同覆盖 coarse support 的统一边框、翻转、横竖转置和亮度/对比度，phase 的平移、缩放
   与 fractional pitch，cosmetic deskew 的可用/跳过及横竖旋转符号，轻微直线 residual、缺边、
-  wide/narrow 单次 gap、contact
-  review、强内部假边、填充状态、dual lane、联合安全预算和 source-wide 事务。
-- 全部 release receipt 必须绑定同一最终 commit；否则 V5 不创建 RC、tag、Release 或公开 ZIP。
+  wide/narrow 单次 gap、contact/overlap 的安全 auto 与安全 review、同源 count 变体、强内部假边、填充
+  状态、dual lane、联合安全预算和 source-wide 事务。
+- 全部 release receipt 和 sealed acceptance aggregate receipt 必须绑定同一最终 commit；否则 V5 不创建
+  RC、tag、Release 或公开 ZIP。

@@ -1147,7 +1147,7 @@ class SyntheticReviewRepository:
         }
         cohort_path = (
             self.root
-            / "tools/regression/cohorts/diagnostic_unreviewed.jsonl"
+            / "tools/regression/cohorts/development_diagnostic.jsonl"
         )
         cohort_path.parent.mkdir(parents=True)
         cohort_path.write_text(json.dumps(cohort) + "\n", encoding="utf-8")
@@ -1160,7 +1160,7 @@ class SyntheticReviewRepository:
     def add_two_count_alias(self) -> None:
         cohort_path = (
             self.root
-            / "tools/regression/cohorts/diagnostic_unreviewed.jsonl"
+            / "tools/regression/cohorts/development_diagnostic.jsonl"
         )
         first_cohort = json.loads(cohort_path.read_text(encoding="utf-8"))
         first_cohort["format_id"] = "half"
@@ -1592,6 +1592,22 @@ class ManualAnnotationWorkspaceContractTest(unittest.TestCase):
         with self.assertRaisesRegex(WorkspaceError, "immutable"):
             workspace.reconcile_review_context(identities=["S001"])
         self.assertEqual(workspace.load_record("S001"), before)
+        current_view = workspace.load_record("S001", client=True)
+        self.assertEqual(
+            current_view["diagnostics"]["review_context"]["tasks"]["S001"][
+                "case_tags"
+            ],
+            ["human_width_estimate"],
+        )
+        self.assertTrue(
+            all(
+                line["review_basis"] == "directly_visible"
+                for line in [
+                    *current_view["shared_edges"],
+                    *current_view["boundary_pool"],
+                ]
+            )
+        )
 
     def test_explicit_context_reconciles_shared_partial_frame_without_geometry_change(
         self,

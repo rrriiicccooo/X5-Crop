@@ -32,9 +32,10 @@ fixed W/H template and makes bounded local measurements only near theoretical ou
 positions. Pixel evidence aligns or rejects the template; it cannot invent format, count, or placement authority.
 
 Normal strips use one shared pitch. One directly proven, ordinal-unique wide or narrow gap may apply a single suffix
-shift. Missing authority, multiple equally legal answers, multiple required shifts, an unknown required Frame, contact,
-or overlap remains `needs_review`. Contact and overlap are challenge cases: safe review is correct behavior, and V5
-does not enable a second detector or special bleed for them.
+shift. Missing authority, multiple equally legal answers, multiple required shifts, or an unknown required Frame remains
+`needs_review`. Contact and overlap are challenge cases, not predetermined outcomes: the standard detector and Gate may
+approve them when safety is uniquely proven, while safe review remains correct when evidence is insufficient. V5 does
+not enable a second detector or special bleed for them.
 
 Holder fill is assessed only after placement by asking whether another W fits beyond either outer. It never searches
 for or centers a placement. Both lanes of 135-dual must be complete.

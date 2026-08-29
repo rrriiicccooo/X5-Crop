@@ -1,4 +1,4 @@
-"""Run development-only diagnostics against the current blocking gold cohort."""
+"""Run source-bound diagnostics against the current development gold."""
 
 from __future__ import annotations
 
@@ -18,21 +18,32 @@ from typing import Any, Iterable, Sequence
 import numpy as np
 
 from .accuracy import (
-    GOLD_COHORT_PATH,
+    DEVELOPMENT_GOLD_COHORT_PATH,
     PROJECT_ROOT,
     validate_gold_source_identities,
     validate_gold_task_result,
 )
 from .file_identity import sha256_file
-from .gold_geometry import gold_frame_diagnostics
+from .gold_geometry import (
+    gold_frame_diagnostics,
+    validate_selected_candidate_coverage,
+)
 from .report_validation import validate_current_report_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_gold_detector_analysis_record_v2"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_gold_detector_analysis_summary_v2"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v3"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v3"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
 SOURCE_TIMEOUT_SECONDS = 600
+COMPARATOR_SOURCE_PATHS = (
+    "tools/manual_annotation/model.py",
+    "tools/regression/accuracy.py",
+    "tools/regression/development_run.py",
+    "tools/regression/gold_analysis.py",
+    "tools/regression/gold_geometry.py",
+    "tools/regression/report_validation.py",
+)
 
 
 def _canonical_point(
@@ -459,6 +470,52 @@ def _command(record: dict[str, Any], output: Path) -> list[str]:
     ]
 
 
+def _frame_diagnostics_with_physical_identity(
+    record: dict[str, Any],
+    diagnostics: Sequence[dict[str, object]],
+) -> list[dict[str, object]]:
+    slots = {
+        int(slot["ordinal"]): slot
+        for slot in record["confirmed_geometry"]["slots"]
+    }
+    results: list[dict[str, object]] = []
+    for diagnostic in diagnostics:
+        ordinal = int(diagnostic["frame_index"])
+        reference = slots[ordinal]["reference_geometry"]
+        results.append(
+            {
+                **diagnostic,
+                "physical_frame_id": (
+                    f"{reference['start_boundary_id']}|"
+                    f"{reference['end_boundary_id']}"
+                ),
+            }
+        )
+    return results
+
+
+def _challenge_capability_outcome(
+    *,
+    cohort_role: str,
+    decision_status: str,
+    development_contract_passed: bool,
+    candidate_geometry_conformance: str,
+) -> str | None:
+    if cohort_role != "challenge":
+        return None
+    if decision_status == "approved_auto":
+        return (
+            "safe_approved_auto"
+            if development_contract_passed
+            else "unsafe_approved_auto"
+        )
+    return {
+        "safe": "needs_review_with_safe_candidate",
+        "unsafe": "needs_review_with_unsafe_candidate",
+        "not_available": "needs_review_without_candidate",
+    }[candidate_geometry_conformance]
+
+
 def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
     source = (PROJECT_ROOT / record["source_relative_path"]).resolve()
     before = source.stat()
@@ -504,12 +561,28 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         ):
             raise ValueError("source stat identity changed across gold analysis")
 
-        accuracy_failure = None
+        development_contract_failure = None
         try:
             status = validate_gold_task_result(record, report)
         except ValueError as error:
             status = str(report["decision"]["status"])
-            accuracy_failure = str(error)
+            development_contract_failure = str(error)
+        candidate_geometry_failure = None
+        try:
+            candidate_available = validate_selected_candidate_coverage(
+                record,
+                report,
+            )
+        except ValueError as error:
+            candidate_available = True
+            candidate_geometry_failure = str(error)
+        candidate_geometry_conformance = (
+            "unsafe"
+            if candidate_geometry_failure is not None
+            else "safe"
+            if candidate_available
+            else "not_available"
+        )
         development_lanes = report["development"]["lanes"]
         production_lanes = report["photo_geometry"]["lanes"]
         if len(development_lanes) != 1 or len(production_lanes) != 1:
@@ -529,7 +602,14 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
                 placement_state=placement_state,
             ),
         )
-        frame_diagnostics = gold_frame_diagnostics(record, report)
+        frame_diagnostics = _frame_diagnostics_with_physical_identity(
+            record,
+            gold_frame_diagnostics(record, report),
+        )
+    development_contract_passed = development_contract_failure is None
+    unsafe_approved_auto = (
+        status == "approved_auto" and not development_contract_passed
+    )
     return {
         "record_schema": ANALYSIS_RECORD_SCHEMA,
         "sample_id": record["sample_id"],
@@ -540,8 +620,22 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         "optimization_stage": optimization_stage_index(record),
         "decision_status": status,
         "final_review_reasons": list(report["decision"]["final_review_reasons"]),
-        "accuracy_passed": accuracy_failure is None,
-        "accuracy_failure": accuracy_failure,
+        "development_contract_passed": development_contract_passed,
+        "development_contract_failure": development_contract_failure,
+        "candidate_geometry_conformance": candidate_geometry_conformance,
+        "candidate_geometry_failure": candidate_geometry_failure,
+        "unsafe_approved_auto": unsafe_approved_auto,
+        "nominal_auto_goal_passed": (
+            record["cohort_role"] == "nominal"
+            and status == "approved_auto"
+            and development_contract_passed
+        ),
+        "challenge_capability_outcome": _challenge_capability_outcome(
+            cohort_role=str(record["cohort_role"]),
+            decision_status=status,
+            development_contract_passed=development_contract_passed,
+            candidate_geometry_conformance=candidate_geometry_conformance,
+        ),
         "source_placement_state": placement_state,
         "phase_status": production_lanes[0]["phase_status"],
         "cross_status": production_lanes[0]["cross_status"],
@@ -550,7 +644,7 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         ],
         "duration_seconds": duration,
         "boundary_diagnostics": list(boundaries),
-        "frame_accuracy_diagnostics": list(frame_diagnostics),
+        "frame_candidate_geometry_diagnostics": list(frame_diagnostics),
     }
 
 
@@ -558,8 +652,10 @@ def _counter(records: Iterable[dict[str, Any]], key: str) -> dict[str, int]:
     return dict(sorted(Counter(str(record[key]) for record in records).items()))
 
 
-def _accuracy_failure_category(record: dict[str, Any]) -> str | None:
-    failure = record["accuracy_failure"]
+def _development_contract_failure_category(
+    record: dict[str, Any],
+) -> str | None:
+    failure = record["development_contract_failure"]
     if failure is None:
         return None
     if "nominal task is needs_review" in failure:
@@ -573,6 +669,60 @@ def _accuracy_failure_category(record: dict[str, Any]) -> str | None:
     return "analysis_or_contract_failure"
 
 
+def _source_manifest_identity(paths: Sequence[str]) -> dict[str, Any]:
+    diff = subprocess.run(
+        ["git", "diff", "--quiet", "HEAD", "--", *paths],
+        cwd=PROJECT_ROOT,
+        check=False,
+    )
+    if diff.returncode not in {0, 1}:
+        raise ValueError("cannot establish analysis source identity")
+    source_paths = subprocess.run(
+        [
+            "git",
+            "ls-files",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "--",
+            *paths,
+        ],
+        cwd=PROJECT_ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+    ).stdout.splitlines()
+    untracked_paths = subprocess.run(
+        [
+            "git",
+            "ls-files",
+            "--others",
+            "--exclude-standard",
+            "--",
+            *paths,
+        ],
+        cwd=PROJECT_ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+    ).stdout.splitlines()
+    manifest = hashlib.sha256()
+    for relative in sorted(source_paths):
+        manifest.update(relative.encode("utf-8"))
+        manifest.update(b"\0")
+        path = PROJECT_ROOT / relative
+        manifest.update(
+            sha256_file(path).encode("ascii") if path.is_file() else b"deleted"
+        )
+        manifest.update(b"\n")
+    return {
+        "paths_match_head": diff.returncode == 0 and not untracked_paths,
+        "source_manifest_sha256": manifest.hexdigest(),
+    }
+
+
 def _analysis_identity() -> dict[str, Any]:
     head = subprocess.run(
         ["git", "rev-parse", "HEAD"],
@@ -582,63 +732,90 @@ def _analysis_identity() -> dict[str, Any]:
         stderr=subprocess.PIPE,
         check=True,
     ).stdout.strip()
-    detector_diff = subprocess.run(
-        ["git", "diff", "--quiet", "HEAD", "--", "X5_Crop.py", "x5crop"],
-        cwd=PROJECT_ROOT,
-        check=False,
-    )
-    if detector_diff.returncode not in {0, 1}:
-        raise ValueError("cannot establish detector source identity")
-    detector_paths = subprocess.run(
-        [
-            "git",
-            "ls-files",
-            "--cached",
-            "--others",
-            "--exclude-standard",
-            "--",
-            "X5_Crop.py",
-            "x5crop",
-        ],
-        cwd=PROJECT_ROOT,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=True,
-    ).stdout.splitlines()
-    untracked_detector_paths = subprocess.run(
-        [
-            "git",
-            "ls-files",
-            "--others",
-            "--exclude-standard",
-            "--",
-            "X5_Crop.py",
-            "x5crop",
-        ],
-        cwd=PROJECT_ROOT,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=True,
-    ).stdout.splitlines()
-    manifest = hashlib.sha256()
-    for relative in sorted(detector_paths):
-        manifest.update(relative.encode("utf-8"))
-        manifest.update(b"\0")
-        path = PROJECT_ROOT / relative
-        manifest.update(
-            sha256_file(path).encode("ascii") if path.is_file() else b"deleted"
-        )
-        manifest.update(b"\n")
+    detector = _source_manifest_identity(("X5_Crop.py", "x5crop"))
+    comparator = _source_manifest_identity(COMPARATOR_SOURCE_PATHS)
     return {
         "repository_head_commit": head,
-        "detector_paths_match_head": (
-            detector_diff.returncode == 0 and not untracked_detector_paths
+        "detector_paths_match_head": detector["paths_match_head"],
+        "detector_source_manifest_sha256": detector[
+            "source_manifest_sha256"
+        ],
+        "comparator_paths_match_head": comparator["paths_match_head"],
+        "comparator_source_manifest_sha256": comparator[
+            "source_manifest_sha256"
+        ],
+        "development_gold_cohort_sha256": sha256_file(
+            DEVELOPMENT_GOLD_COHORT_PATH
         ),
-        "detector_source_manifest_sha256": manifest.hexdigest(),
-        "gold_cohort_sha256": sha256_file(GOLD_COHORT_PATH),
     }
+
+
+def _count_variant_diagnostics(
+    records: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    by_source: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for record in records:
+        by_source[str(record["source_sha256"])].append(record)
+    diagnostics: list[dict[str, Any]] = []
+    for source_sha, members in sorted(by_source.items()):
+        if len(members) < 2:
+            continue
+        frame_states: dict[str, dict[str, str]] = defaultdict(dict)
+        for member in members:
+            for frame in member["frame_candidate_geometry_diagnostics"]:
+                unsafe = bool(
+                    frame["inward_failure_sides"]
+                    or frame["outward_budget_failure_sides"]
+                )
+                frame_states[str(frame["physical_frame_id"])][
+                    str(member["sample_id"])
+                ] = "unsafe" if unsafe else "safe"
+        mismatches = [
+            {
+                "physical_frame_id": identity,
+                "task_states": dict(sorted(states.items())),
+            }
+            for identity, states in sorted(frame_states.items())
+            if len(states) > 1 and set(states.values()) == {"safe", "unsafe"}
+        ]
+        diagnostics.append(
+            {
+                "source_sha256": source_sha,
+                "tasks": [
+                    {
+                        "sample_id": member["sample_id"],
+                        "count": member["count"],
+                        "cohort_role": member["cohort_role"],
+                        "decision_status": member["decision_status"],
+                        "candidate_geometry_conformance": member[
+                            "candidate_geometry_conformance"
+                        ],
+                        "unsafe_approved_auto": member[
+                            "unsafe_approved_auto"
+                        ],
+                    }
+                    for member in sorted(
+                        members,
+                        key=lambda item: str(item["sample_id"]),
+                    )
+                ],
+                "shared_frame_safety_mismatches": mismatches,
+                "candidate_safety_mismatch": bool(mismatches),
+                "candidate_availability_mismatch": len(
+                    {
+                        member["candidate_geometry_conformance"]
+                        for member in members
+                    }
+                )
+                > 1,
+                "unsafe_approved_auto_task_ids": sorted(
+                    str(member["sample_id"])
+                    for member in members
+                    if member["unsafe_approved_auto"]
+                ),
+            }
+        )
+    return diagnostics
 
 
 def _summary(
@@ -660,40 +837,73 @@ def _summary(
     failure_categories = Counter(
         category
         for record in records
-        if (category := _accuracy_failure_category(record)) is not None
+        if (
+            category := _development_contract_failure_category(record)
+        )
+        is not None
+    )
+    variants = _count_variant_diagnostics(records)
+    completed = [record for record in records if record["decision_status"] is not None]
+    challenge_outcomes = Counter(
+        str(record["challenge_capability_outcome"])
+        for record in completed
+        if record["challenge_capability_outcome"] is not None
+    )
+    candidate_states = Counter(
+        str(record["candidate_geometry_conformance"])
+        for record in completed
+    )
+    review_candidate_states = Counter(
+        str(record["candidate_geometry_conformance"])
+        for record in completed
+        if record["decision_status"] == "needs_review"
     )
     return {
         "summary_schema": ANALYSIS_SUMMARY_SCHEMA,
-        "validation_role": "gold_accuracy_blocking_development_diagnostic",
+        "validation_role": "development_gold_diagnostic",
         "analysis_identity": identity,
         "task_count": len(records),
         "analysis_completed_count": len(records) - analysis_error_count,
         "analysis_error_count": analysis_error_count,
-        "accuracy_passed_count": sum(record["accuracy_passed"] for record in records),
-        "accuracy_failure_count": sum(not record["accuracy_passed"] for record in records),
-        "accuracy_failure_category_counts": dict(sorted(failure_categories.items())),
-        "unsafe_approved_auto_count": sum(
+        "development_contract_passed_count": sum(
+            record["development_contract_passed"] for record in records
+        ),
+        "development_contract_failure_count": sum(
+            not record["development_contract_passed"] for record in records
+        ),
+        "development_contract_failure_category_counts": dict(
+            sorted(failure_categories.items())
+        ),
+        "safe_approved_auto_count": sum(
             record["decision_status"] == "approved_auto"
-            and not record["accuracy_passed"]
+            and not record["unsafe_approved_auto"]
             for record in records
+        ),
+        "unsafe_approved_auto_count": sum(
+            record["unsafe_approved_auto"] for record in records
+        ),
+        "candidate_geometry_conformance_counts": dict(
+            sorted(candidate_states.items())
+        ),
+        "review_candidate_conformance_counts": dict(
+            sorted(review_candidate_states.items())
+        ),
+        "nominal_auto_goal_passed_count": sum(
+            record["nominal_auto_goal_passed"] for record in records
         ),
         "nominal_needs_review_count": sum(
             record["cohort_role"] == "nominal"
             and record["decision_status"] == "needs_review"
             for record in records
         ),
-        "safe_challenge_needs_review_count": sum(
-            record["cohort_role"] == "challenge"
-            and record["decision_status"] == "needs_review"
-            and record["accuracy_passed"]
-            for record in records
+        "challenge_capability_outcome_counts": dict(
+            sorted(challenge_outcomes.items())
         ),
-        "unsafe_challenge_needs_review_count": sum(
-            record["cohort_role"] == "challenge"
-            and record["decision_status"] == "needs_review"
-            and not record["accuracy_passed"]
-            for record in records
+        "count_variant_source_count": len(variants),
+        "count_variant_candidate_safety_mismatch_count": sum(
+            item["candidate_safety_mismatch"] for item in variants
         ),
+        "count_variant_diagnostics": variants,
         "decision_status_counts": _counter(records, "decision_status"),
         "stage_counts": dict(
             sorted(
@@ -703,7 +913,14 @@ def _summary(
         "stages": {
             stage: {
                 "task_count": len(items),
-                "accuracy_passed_count": sum(item["accuracy_passed"] for item in items),
+                "development_contract_passed_count": sum(
+                    item["development_contract_passed"] for item in items
+                ),
+                "safe_approved_auto_count": sum(
+                    item["decision_status"] == "approved_auto"
+                    and not item["unsafe_approved_auto"]
+                    for item in items
+                ),
                 "approved_auto_count": sum(
                     item["decision_status"] == "approved_auto" for item in items
                 ),
@@ -711,9 +928,15 @@ def _summary(
                     item["decision_status"] == "needs_review" for item in items
                 ),
                 "unsafe_approved_auto_count": sum(
-                    item["decision_status"] == "approved_auto"
-                    and not item["accuracy_passed"]
-                    for item in items
+                    item["unsafe_approved_auto"] for item in items
+                ),
+                "candidate_geometry_conformance_counts": dict(
+                    sorted(
+                        Counter(
+                            str(item["candidate_geometry_conformance"])
+                            for item in items
+                        ).items()
+                    )
                 ),
             }
             for stage, items in sorted(by_stage.items())
@@ -732,6 +955,36 @@ def _summary(
             "scope": "development_detail_end_to_end_diagnostic_not_performance_gate",
         },
     }
+
+
+def validate_gold_analysis_artifacts(output_root: Path) -> dict[str, Any]:
+    """Re-read one analysis artifact and prove its schema and aggregation."""
+
+    records = tuple(
+        json.loads(line)
+        for line in (output_root / "gold_analysis_records.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if line.strip()
+    )
+    summary = json.loads(
+        (output_root / "gold_analysis_summary.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    if (
+        not records
+        or any(
+            record.get("record_schema") != ANALYSIS_RECORD_SCHEMA
+            for record in records
+        )
+        or len({record.get("sample_id") for record in records}) != len(records)
+        or summary.get("summary_schema") != ANALYSIS_SUMMARY_SCHEMA
+        or not isinstance(summary.get("analysis_identity"), dict)
+        or _summary(records, summary["analysis_identity"]) != summary
+    ):
+        raise ValueError("development gold analysis artifact is invalid")
+    return summary
 
 
 def run_gold_analysis(
@@ -776,20 +1029,30 @@ def run_gold_analysis(
                 "optimization_stage": optimization_stage_index(record),
                 "decision_status": None,
                 "final_review_reasons": [],
-                "accuracy_passed": False,
-                "accuracy_failure": f"{type(error).__name__}: {error}",
+                "development_contract_passed": False,
+                "development_contract_failure": (
+                    f"{type(error).__name__}: {error}"
+                ),
+                "candidate_geometry_conformance": "not_available",
+                "candidate_geometry_failure": None,
+                "unsafe_approved_auto": False,
+                "nominal_auto_goal_passed": False,
+                "challenge_capability_outcome": None,
                 "source_placement_state": None,
                 "phase_status": None,
                 "cross_status": None,
                 "selected_cross_boundary_use": None,
                 "duration_seconds": 0.0,
                 "boundary_diagnostics": [],
-                "frame_accuracy_diagnostics": [],
+                "frame_candidate_geometry_diagnostics": [],
             }
         records.append(result)
         print(
             f"  {result['decision_status'] or 'analysis_error'} · "
-            f"accuracy={'pass' if result['accuracy_passed'] else 'fail'} · "
+            "candidate="
+            f"{result['candidate_geometry_conformance']} · "
+            "development_contract="
+            f"{'pass' if result['development_contract_passed'] else 'fail'} · "
             f"{result['optimization_stage']['stage']}",
             flush=True,
         )
@@ -806,7 +1069,7 @@ def run_gold_analysis(
         json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
-    return summary
+    return validate_gold_analysis_artifacts(output_root)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -818,17 +1081,40 @@ def main(argv: Sequence[str] | None = None) -> int:
         dest="sample_ids",
         help="limit analysis to one gold task; repeat as needed",
     )
+    parser.add_argument(
+        "--gate",
+        choices=("report", "zero-unsafe-auto"),
+        default="report",
+        help=(
+            "report only, or fail unless the complete development gold has "
+            "zero unsafe automatic approvals"
+        ),
+    )
     args = parser.parse_args(argv)
+    if args.gate == "zero-unsafe-auto" and args.sample_ids is not None:
+        print(
+            "development gold analysis: FAIL: the safety gate requires the "
+            "complete cohort",
+            file=sys.stderr,
+        )
+        return 2
     try:
         summary = run_gold_analysis(
             args.output_root.expanduser().resolve(),
             sample_ids=args.sample_ids,
         )
     except (OSError, ValueError, subprocess.SubprocessError) as error:
-        print(f"gold analysis: FAIL: {error}", file=sys.stderr)
+        print(f"development gold analysis: FAIL: {error}", file=sys.stderr)
         return 1
     print(json.dumps(summary, ensure_ascii=False, indent=2))
-    return 0 if summary["analysis_error_count"] == 0 else 1
+    if summary["analysis_error_count"] != 0:
+        return 1
+    if (
+        args.gate == "zero-unsafe-auto"
+        and summary["unsafe_approved_auto_count"] != 0
+    ):
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

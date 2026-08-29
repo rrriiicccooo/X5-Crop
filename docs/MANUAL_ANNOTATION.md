@@ -1,7 +1,8 @@
 # 黄金基线标注器
 
-本地标注器把 tracked diagnostic cohort 转为可人工审核的 source-SHA-bound 几何。它不属于 production
-detector、公开界面或发布包；机器 proposal、红线导入、像素精修、预览和确认图都不会自动成为黄金。
+本地标注器把 tracked development diagnostic cohort 转为可人工审核的 source-SHA-bound 几何。它不属于
+production detector、公开界面或发布包；机器 proposal、红线导入、像素精修、预览和确认图都不会自动
+成为黄金。
 
 ## 黄金权限与验收
 
@@ -24,8 +25,9 @@ accuracy polygon 使用“物理 Frame 与 TIFF 栅格的交集”，并沿 TIFF
 Frame 必须完整位于源内；只有类型标签、没有实际越界几何的记录不能确认。该规则对四条外缘和
 Orientation 1–8 一致，不建立样片特例。
 
-活动数据只有 `Test/manual_review/gold_calibration/<format>/` 这一套校准池；不区分 v1/v2，也不建立
-archive。一个 source SHA 只有一套物理几何，同源多 count 分别保留 task mapping。只有当前
+活动数据只有 `Test/manual_review/gold_calibration/<format>/` 这一套用户红线校准草稿；不区分 v1/v2，
+也不建立 archive。原始 source TIFF 才是像素 authority，草稿只供红线导入与恢复，工具不得改写。一个
+source SHA 只有一套物理几何，同源多 count 分别保留 task mapping。只有当前
 `user_confirmed` 记录具备黄金权限；确认集合为空时，accuracy 必须报告
 `calibration is incomplete`，不能回退旧 cohort。
 
@@ -58,7 +60,8 @@ python3 -m tools.manual_annotation audit
 TIFF 像素中心。Manifest 必须与 tracked diagnostic cohort 的 sample、format、count、相对路径和 source
 SHA 完全一致；工具不从路径猜 count。`Test/` 不受 Git 跟踪，确认不会自动改写 tracked accuracy cohort。
 
-全部 task 确认后，只有显式执行下面的命令才会把当前确认集合提升为 blocking 黄金：
+全部当前 development task 确认后，只有显式执行下面的命令才会把确认集合提升为 tracked
+`development_gold`：
 
 ```bash
 python3 -m tools.regression.gold_cohort --write
@@ -67,8 +70,11 @@ tools/verify accuracy
 ```
 
 生成器逐一核对 source SHA、确认快照、审阅 artifact、tracked task identity、format、count 和自动派生
-角色，并要求每个当前 task 恰好一行。第二条命令只读检查 tracked cohort 是否仍是同一推导；标注器、
-机器 proposal 和普通启动流程都不能隐式执行提升。
+角色，并要求每个当前 development task 恰好一行。第二条命令只读检查 tracked cohort 是否仍是同一
+推导；标注器、机器 proposal 和普通启动流程都不能隐式执行提升。人工确认只授予 reference 权限，
+不自动决定 development/sealed 用途。未来 sealed source 必须在查看 detector 结果前走独立的封存验收
+入口，不能先加入本 development workspace 或运行上述命令后再声称盲测；两个用途仍共享同一种 baseline
+合同，不建立平行校准池。
 
 ## 边界、Frame 与评测角色
 
@@ -99,8 +105,9 @@ end/start 物理线为 `contact`；前一 end 越过后一 start 为 `overlap`�
   时为 challenge。
 
 长轴边按唯一物理 line ID 计数，contact 共用线不重复，空曝光不参与。角色与原因在确认基线中冻结，
-accuracy 会从冻结证据重新推导并核对。Nominal 必须安全自动批准；challenge 允许安全
-`needs_review`，不能通过手工改类、白名单或放宽 Gate 提高通过率。
+accuracy 会从冻结证据重新推导并核对。Nominal 的能力目标是安全自动批准；challenge 不预设 runtime
+终态，标准 detector/Gate 能证明安全时可以 `approved_auto`，证据不足时 `needs_review` 同样合格。不能
+通过手工改类、白名单、特殊 detector 或放宽 Gate 提高通过率。
 “两侧浮动”使用人工 geometry、source extent 与 format W 在 detector 运行前推导；不读取当前检测
 结果，也不复用 selection 之后的 `HolderFillAssessment`。两端 outer 都直接可见时仍为 nominal，以继续
 约束 detector 正确处理证据完整的内部短片条。
@@ -148,8 +155,9 @@ python3 -m tools.manual_annotation refine
 ## Review context 与恢复
 
 `Test/manual_review/review_context.json` 保存用户提供的空 slot、接触、叠片、估计边、漏光、片夹遮挡和
-正负片等审核上下文。它只服务校准分层与预填，不是 production whitelist、format 推断、Gate authority
-或另一条 detector path。漏光与可舍弃小角只能推动通用证据改进；正负片只用于覆盖统计。
+正负片等审核上下文。它只服务校准分层与预填，不得预设 detector 终态，也不是 production whitelist、
+format 推断、Gate authority 或另一条 detector path。漏光与可舍弃小角只能推动通用证据改进；正负片
+只用于覆盖统计。
 
 对未确认记录更新 context 后，可显式同步非结构性依据与 Frame 类型：
 

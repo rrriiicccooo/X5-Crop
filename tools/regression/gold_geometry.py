@@ -408,9 +408,7 @@ def _projection_bounds(
     return min(values), max(values)
 
 
-def _assert_direct_use_budget(
-    sample_id: str,
-    frame_index: int,
+def _direct_use_budget_diagnostics(
     gold: Sequence[Sequence[float]],
     output: Sequence[Sequence[float]],
     strip_orientation: str,
@@ -418,7 +416,7 @@ def _assert_direct_use_budget(
     *,
     sequence_axis: tuple[float, float] | None = None,
     cross_axis: tuple[float, float] | None = None,
-) -> None:
+) -> tuple[dict[str, float], dict[str, float], tuple[str, ...]]:
     if sequence_axis is None or cross_axis is None:
         horizontal = strip_orientation == "horizontal"
         sequence_axis = _mean_edge_axis(
@@ -455,17 +453,40 @@ def _assert_direct_use_budget(
         cross_span * OUTPUT_PROTECTION_SPEC.maximum_expansion_ratio_per_side
         + pixel_allowance
     )
-    sequence_exceeded = any(
-        expansion_by_side[side] > sequence_limit
-        for side in ("sequence_start", "sequence_end")
-        if side in outward_budget_blocking_sides
+    limits = {
+        "sequence_start": sequence_limit,
+        "sequence_end": sequence_limit,
+        "cross_low": cross_limit,
+        "cross_high": cross_limit,
+    }
+    failures = tuple(
+        side
+        for side in sorted(outward_budget_blocking_sides)
+        if expansion_by_side[side] > limits[side]
     )
-    cross_exceeded = any(
-        expansion_by_side[side] > cross_limit
-        for side in ("cross_low", "cross_high")
-        if side in outward_budget_blocking_sides
+    return expansion_by_side, limits, failures
+
+
+def _assert_direct_use_budget(
+    sample_id: str,
+    frame_index: int,
+    gold: Sequence[Sequence[float]],
+    output: Sequence[Sequence[float]],
+    strip_orientation: str,
+    outward_budget_blocking_sides: frozenset[str] = FRAME_SIDES,
+    *,
+    sequence_axis: tuple[float, float] | None = None,
+    cross_axis: tuple[float, float] | None = None,
+) -> None:
+    _, _, failures = _direct_use_budget_diagnostics(
+        gold,
+        output,
+        strip_orientation,
+        outward_budget_blocking_sides,
+        sequence_axis=sequence_axis,
+        cross_axis=cross_axis,
     )
-    if sequence_exceeded or cross_exceeded:
+    if failures:
         raise ValueError(
             f"{sample_id} frame {frame_index} exceeds acceptance-baseline "
             "direct-use budget"
@@ -571,6 +592,42 @@ def _slot_aware_gold_mapping(
     return tuple(mapping)
 
 
+def _validate_directional_geometry(
+    record: dict[str, object],
+    outputs: Sequence[dict[str, object]],
+    *,
+    subject: str,
+) -> None:
+    """Apply the one directional baseline contract to supplied footprints."""
+
+    sample_id = str(record["sample_id"])
+    gold = record["confirmed_geometry"]
+    frames = gold["frames"]
+    accuracy_sides = _accuracy_sides_by_frame(gold, frames)
+    mapping = _slot_aware_gold_mapping(
+        gold,
+        outputs,
+        tuple(sides.inward_blocking for sides in accuracy_sides),
+    )
+    if len(mapping) != len(frames):
+        raise ValueError(
+            f"{sample_id} {subject} crosses user-confirmed inward baseline"
+        )
+    for frame, output_index, frame_accuracy_sides in zip(
+        frames, mapping, accuracy_sides, strict=True
+    ):
+        _assert_direct_use_budget(
+            sample_id,
+            int(frame["frame_index"]),
+            frame["polygon_source_pixel_center_coordinates"],
+            outputs[output_index]["required_source_footprint"],
+            str(gold["strip_orientation"]),
+            frame_accuracy_sides.outward_budget_blocking,
+            sequence_axis=frame_accuracy_sides.sequence_axis,
+            cross_axis=frame_accuracy_sides.cross_axis,
+        )
+
+
 def validate_selected_candidate_coverage(
     record: dict[str, object],
     report: dict[str, object],
@@ -584,19 +641,7 @@ def validate_selected_candidate_coverage(
     )
     if not outputs:
         return False
-    sample_id = str(record["sample_id"])
-    gold = record["confirmed_geometry"]
-    frames = gold["frames"]
-    accuracy_sides = _accuracy_sides_by_frame(gold, frames)
-    mapping = _slot_aware_gold_mapping(
-        gold,
-        outputs,
-        tuple(sides.inward_blocking for sides in accuracy_sides),
-    )
-    if len(mapping) != len(frames):
-        raise ValueError(
-            f"{sample_id} candidate crosses user-confirmed inward baseline"
-        )
+    _validate_directional_geometry(record, outputs, subject="candidate")
     return True
 
 
@@ -636,58 +681,15 @@ def gold_frame_diagnostics(
                 frozenset({side}),
             )
         )
-        gold_sequence = _projection_bounds(
-            polygon,
-            frame_accuracy_sides.sequence_axis,
-        )
-        output_sequence = _projection_bounds(
-            output,
-            frame_accuracy_sides.sequence_axis,
-        )
-        gold_cross = _projection_bounds(
-            polygon,
-            frame_accuracy_sides.cross_axis,
-        )
-        output_cross = _projection_bounds(
-            output,
-            frame_accuracy_sides.cross_axis,
-        )
-        expansion_by_side = {
-            "sequence_start": gold_sequence[0] - output_sequence[0],
-            "sequence_end": output_sequence[1] - gold_sequence[1],
-            "cross_low": gold_cross[0] - output_cross[0],
-            "cross_high": output_cross[1] - gold_cross[1],
-        }
-        pixel_allowance = (
-            PHOTO_BOUNDARY_MEASUREMENT_SPEC
-            .transition_coordinate_sampling_uncertainty_px
-        )
-        limits = {
-            "sequence_start": (
-                (gold_sequence[1] - gold_sequence[0])
-                * OUTPUT_PROTECTION_SPEC.maximum_expansion_ratio_per_side
-                + pixel_allowance
-            ),
-            "sequence_end": (
-                (gold_sequence[1] - gold_sequence[0])
-                * OUTPUT_PROTECTION_SPEC.maximum_expansion_ratio_per_side
-                + pixel_allowance
-            ),
-            "cross_low": (
-                (gold_cross[1] - gold_cross[0])
-                * OUTPUT_PROTECTION_SPEC.maximum_expansion_ratio_per_side
-                + pixel_allowance
-            ),
-            "cross_high": (
-                (gold_cross[1] - gold_cross[0])
-                * OUTPUT_PROTECTION_SPEC.maximum_expansion_ratio_per_side
-                + pixel_allowance
-            ),
-        }
-        outward_failures = tuple(
-            side
-            for side in sorted(frame_accuracy_sides.outward_budget_blocking)
-            if expansion_by_side[side] > limits[side]
+        expansion_by_side, limits, outward_failures = (
+            _direct_use_budget_diagnostics(
+                polygon,
+                output,
+                str(gold["strip_orientation"]),
+                frame_accuracy_sides.outward_budget_blocking,
+                sequence_axis=frame_accuracy_sides.sequence_axis,
+                cross_axis=frame_accuracy_sides.cross_axis,
+            )
         )
         diagnostics.append(
             {
@@ -705,32 +707,5 @@ def validate_approved_geometry(
     record: dict[str, object],
     report: dict[str, object],
 ) -> None:
-    sample_id = str(record["sample_id"])
-    gold = record["confirmed_geometry"]
-    frames = gold["frames"]
     outputs = report["output"]["finalization"]["output_footprints"]
-    accuracy_sides = _accuracy_sides_by_frame(gold, frames)
-    mapping = _slot_aware_gold_mapping(
-        gold,
-        outputs,
-        tuple(sides.inward_blocking for sides in accuracy_sides),
-    )
-    if len(mapping) != len(frames):
-        raise ValueError(
-            f"{sample_id} approved output crosses user-confirmed inward baseline"
-        )
-    for frame, output_index, frame_accuracy_sides in zip(
-        frames, mapping, accuracy_sides, strict=True
-    ):
-        polygon = frame["polygon_source_pixel_center_coordinates"]
-        output_polygon = outputs[output_index]["required_source_footprint"]
-        _assert_direct_use_budget(
-            sample_id,
-            int(frame["frame_index"]),
-            polygon,
-            output_polygon,
-            str(gold["strip_orientation"]),
-            frame_accuracy_sides.outward_budget_blocking,
-            sequence_axis=frame_accuracy_sides.sequence_axis,
-            cross_axis=frame_accuracy_sides.cross_axis,
-        )
+    _validate_directional_geometry(record, outputs, subject="approved output")

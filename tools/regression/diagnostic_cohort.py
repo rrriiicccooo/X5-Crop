@@ -1,4 +1,4 @@
-"""Run the tracked 110-task cohort as non-blocking recognition diagnostics."""
+"""Run the tracked development cohort as non-blocking diagnostics."""
 
 from __future__ import annotations
 
@@ -29,12 +29,11 @@ from .file_identity import sha256_file
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DIAGNOSTIC_COHORT_PATH = (
     Path(__file__).with_name("cohorts")
-    / "diagnostic_unreviewed.jsonl"
+    / "development_diagnostic.jsonl"
 )
-COHORT_SCHEMA = "x5crop_diagnostic_unreviewed_cohort_v2"
+COHORT_SCHEMA = "x5crop_development_diagnostic_cohort_v1"
 RECORD_SCHEMA = "x5crop_diagnostic_record_v5"
 SUMMARY_SCHEMA = "x5crop_diagnostic_summary_v5"
-EXPECTED_RECORD_COUNT = 110
 DIAGNOSTIC_SOURCE_TIMEOUT_SECONDS = 600
 
 
@@ -57,9 +56,9 @@ def load_diagnostic_sources(
         if line.strip()
     )
     if (
-        len(rows) != EXPECTED_RECORD_COUNT
+        not rows
         or tuple(row.get("sort_index") for row in rows)
-        != tuple(range(1, EXPECTED_RECORD_COUNT + 1))
+        != tuple(range(1, len(rows) + 1))
         or len({row.get("sample_id") for row in rows}) != len(rows)
     ):
         raise ValueError("diagnostic cohort identity is incomplete")
@@ -87,7 +86,7 @@ def load_diagnostic_sources(
         if (
             set(row) != expected_keys
             or row.get("cohort_schema") != COHORT_SCHEMA
-            or row.get("validation_role") != "diagnostic_unreviewed"
+            or row.get("validation_role") != "development_diagnostic"
             or relative.is_absolute()
             or not source_path.is_relative_to(project_root)
             or len(digest) != 64
@@ -145,7 +144,7 @@ def _failure_record(
 ) -> dict[str, Any]:
     return {
         "record_schema": RECORD_SCHEMA,
-        "validation_role": "diagnostic_unreviewed",
+        "validation_role": "development_diagnostic",
         "sample_id": source.identity["sample_id"],
         "source_sha256": source.identity["source_sha256"],
         "format_id": source.identity["format_id"],
@@ -283,7 +282,7 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
     ]
     return {
         "record_schema": RECORD_SCHEMA,
-        "validation_role": "diagnostic_unreviewed",
+        "validation_role": "development_diagnostic",
         "sample_id": source.identity["sample_id"],
         "source_sha256": source.identity["source_sha256"],
         "format_id": source.identity["format_id"],
@@ -351,7 +350,7 @@ def run_diagnostic_cohort(
         ),
         encoding="utf-8",
     )
-    terminal = len(records) == EXPECTED_RECORD_COUNT and all(
+    terminal = len(records) == len(sources) and all(
         record["terminal_outcome"] in {"completed", "runtime_error"}
         for record in records
     )
@@ -411,7 +410,7 @@ def run_diagnostic_cohort(
     )
     summary = {
         "summary_schema": SUMMARY_SCHEMA,
-        "validation_role": "diagnostic_unreviewed",
+        "validation_role": "development_diagnostic",
         "source_count": len(sources),
         "terminal_record_count": len(records),
         "diagnostic_run_completed": terminal,
@@ -483,7 +482,7 @@ def run_diagnostic_cohort(
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Run the non-blocking 110-task diagnostic cohort"
+        description="Run the non-blocking development diagnostic cohort"
     )
     parser.add_argument("--output-root", type=Path)
     args = parser.parse_args(argv)
