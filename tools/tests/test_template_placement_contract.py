@@ -30,6 +30,7 @@ from x5crop.detection.photo_geometry.template_model import (
 )
 from x5crop.detection.photo_geometry.template_placement import (
     compose_format_placement,
+    resolved_sequence_support_domains_px,
 )
 
 
@@ -198,7 +199,6 @@ class TemplatePlacementContractTest(unittest.TestCase):
             shared_trace_support_count=3,
             continuous_support_fraction=1.0,
             residual_sum_px=0.0,
-            center_compatible=True,
             boundary_use=OutputBoundaryUse.APERTURE_PAIR,
         )
         frame = _compose(template, sequence, cross).frames[0]
@@ -206,6 +206,84 @@ class TemplatePlacementContractTest(unittest.TestCase):
         self.assertEqual(frame.end.full_position_interval_px, FiniteInterval.exact(200.0))
         self.assertEqual(frame.top.full_position_interval_px, FiniteInterval.exact(10.0))
         self.assertEqual(frame.bottom.full_position_interval_px, FiniteInterval.exact(250.0))
+
+    def test_direct_edges_keep_native_positions_instead_of_grid_positions(self) -> None:
+        template = replace(
+            _template(1),
+            frame_width_px=FiniteInterval(96.0, 104.0),
+        )
+        sequence = _sequence(template)
+        cross = _cross(template, direction=_direction())
+        model_placement = _compose(template, sequence, cross)
+        bindings = list(sequence.role_bindings)
+        assert bindings[0] is not None and bindings[1] is not None
+        bindings[0] = replace(
+            bindings[0],
+            canonical_position_px=102.0,
+            fit_position_interval_px=FiniteInterval(101.5, 102.5),
+            full_position_interval_px=FiniteInterval(101.5, 102.5),
+        )
+        bindings[1] = replace(
+            bindings[1],
+            canonical_position_px=201.0,
+            fit_position_interval_px=FiniteInterval(200.5, 201.5),
+            full_position_interval_px=FiniteInterval(200.5, 201.5),
+        )
+        sequence = replace(
+            sequence,
+            role_bindings=tuple(bindings),
+        )
+
+        placement = _compose(
+            template,
+            sequence,
+            cross,
+        )
+
+        self.assertEqual(sequence.model_role_positions_px, (100.0, 200.0))
+        self.assertEqual(placement.frames[0].start.canonical_position_px, 102.0)
+        self.assertEqual(placement.frames[0].end.canonical_position_px, 201.0)
+        self.assertEqual(
+            resolved_sequence_support_domains_px(sequence),
+            (FiniteInterval(102.0, 201.0),),
+        )
+        self.assertNotEqual(placement.placement_id, model_placement.placement_id)
+
+    def test_single_direct_edge_projects_source_width_from_native_position(self) -> None:
+        template = replace(
+            _template(1),
+            frame_width_px=FiniteInterval(96.0, 104.0),
+        )
+        sequence = _sequence(template, missing=(1,))
+        bindings = list(sequence.role_bindings)
+        assert bindings[0] is not None
+        bindings[0] = replace(
+            bindings[0],
+            canonical_position_px=102.0,
+            fit_position_interval_px=FiniteInterval(101.5, 102.5),
+            full_position_interval_px=FiniteInterval(101.5, 102.5),
+        )
+        sequence = replace(
+            sequence,
+            role_bindings=tuple(bindings),
+        )
+
+        frame = _compose(
+            template,
+            sequence,
+            _cross(template, direction=_direction()),
+        ).frames[0]
+
+        self.assertEqual(frame.start.canonical_position_px, 102.0)
+        self.assertEqual(frame.end.canonical_position_px, 202.0)
+        self.assertEqual(
+            frame.end.full_position_interval_px,
+            FiniteInterval(197.5, 206.5),
+        )
+        self.assertEqual(
+            resolved_sequence_support_domains_px(sequence),
+            (FiniteInterval(102.0, 202.0),),
+        )
 
     def test_sloped_cross_evidence_does_not_reanchor_output_boundary(self) -> None:
         template = _template(1)

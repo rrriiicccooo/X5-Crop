@@ -88,7 +88,10 @@ class TemplateAlignmentDiagnosticContractTest(unittest.TestCase):
             best=replace(phase.best, local_advance_relations=(relation,)),
         )
         diagnostic = template_alignment_diagnostic(phase, observations)
-        self.assertEqual(diagnostic.pattern, ResidualPattern.LOCAL_STEP)
+        self.assertEqual(
+            diagnostic.pattern,
+            ResidualPattern.MEASURED_ADVANCES,
+        )
         self.assertEqual(diagnostic.local_advance_relations, (relation,))
 
     def test_unresolved_fit_preserves_the_minimum_reason(self) -> None:
@@ -111,7 +114,7 @@ class TemplateAlignmentDiagnosticContractTest(unittest.TestCase):
         )
         self.assertIsNone(diagnostic.absolute_phase_px)
 
-    def test_repeated_separator_shape_conflicts_remain_diagnostic_only(self) -> None:
+    def test_repeated_separator_shape_conflicts_remain_explicit_diagnostics(self) -> None:
         observations = tuple(
             edge(name, coordinate)
             for name, coordinate in (
@@ -154,13 +157,13 @@ class TemplateAlignmentDiagnosticContractTest(unittest.TestCase):
         )
         self.assertEqual(
             diagnostic.pattern,
-            ResidualPattern.UNRESOLVED,
+            ResidualPattern.NORMAL,
         )
         self.assertEqual(len(diagnostic.incompatible_separator_support_ids), 2)
         self.assertEqual(phase.status, PhaseFitStatus.RESOLVED)
         self.assertIsNotNone(phase.best)
 
-    def test_one_separator_width_departure_does_not_invent_a_local_step(self) -> None:
+    def test_one_separator_width_departure_does_not_invent_an_advance(self) -> None:
         observations = tuple(
             edge(name, coordinate)
             for name, coordinate in (

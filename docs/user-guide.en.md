@@ -31,9 +31,10 @@ V5 first establishes coarse support and a common direction from the whole strip.
 fixed W/H template and makes bounded local measurements only near theoretical outer, separator, and top/bottom
 positions. Pixel evidence aligns or rejects the template; it cannot invent format, count, or placement authority.
 
-Normal strips use one shared pitch. One directly proven, ordinal-unique wide or narrow gap may apply a single suffix
-shift. Missing authority, multiple equally legal answers, multiple required shifts, or an unknown required Frame remains
-`needs_review`. Contact and overlap are challenge cases, not predetermined outcomes: the standard detector and Gate may
+Normal strips use one shared pitch. Every directly proven, ordinal-unique separator may constrain its own wide or narrow
+gap; later Frames apply that measured delta once. Multiple proven gap changes still use one bounded pass. An ambiguous
+gap, missing authority, multiple equally legal answers, or an unknown required Frame remains `needs_review`. Contact and
+overlap are challenge cases, not predetermined outcomes: the standard detector and Gate may
 approve them when safety is uniquely proven, while safe review remains correct when evidence is insufficient. V5 does
 not enable a second detector or special bleed for them.
 
@@ -52,7 +53,8 @@ top/bottom = 0.25 mm
 Measurement uncertainty, local residual, and bleed share a maximum 5% W/H outward budget per side. Sides cannot
 borrow budget from one another. A directly observed continuous outer-support pair may replace unavailable aperture
 top/bottom when it fully encloses fixed H and its total height is no greater than `1.1H`; that mode adds no 0.25 mm
-cross bleed. Any genuinely required source-space footprint outside authority enters review instead of being clipped.
+cross bleed, while per-side and joint alignment padding remain inside the 5% budget. Any genuinely required source-space
+footprint outside authority enters review instead of being clipped.
 
 Two-dimensional content is a conservative veto on the final post-bleed polygon. Picture structure inside bleed may be
 retained; reliable content crossing the final crop boundary blocks automatic output. Dust, aliasing, and tiny corner

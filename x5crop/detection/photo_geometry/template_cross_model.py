@@ -442,7 +442,6 @@ class TemplateCrossInput:
     template: TemplateSpec
     fixed_height_px: FiniteInterval | PositiveInterval | float | None = None
     canonical_fixed_height_px: float | None = None
-    holder_short_axis_center_px: FiniteInterval | float | None = None
     lane_reference_trace_px: float = 0.0
     source_direction: SharedStripDirection | None = None
     top_bindings: tuple[CrossRoleBinding, ...] = ()
@@ -488,8 +487,6 @@ class TemplateCrossInput:
             template_height = _interval(self.template.frame_height_px)
             if intersect(height, template_height) is None:
                 raise ValueError("fixed height contradicts template frame height")
-        if self.holder_short_axis_center_px is not None:
-            object.__setattr__(self, "holder_short_axis_center_px", _interval(self.holder_short_axis_center_px))
         if not math.isfinite(float(self.lane_reference_trace_px)):
             raise ValueError("lane reference trace must be finite")
         if self.boundary_axis not in {BoundaryAxis.X, BoundaryAxis.Y}:
@@ -505,7 +502,7 @@ class TemplateCrossInput:
             len(domains) != self.template.count
             or any(not isinstance(item, FiniteInterval) for item in domains)
             or any(
-                left.maximum >= right.minimum
+                left.maximum > right.minimum
                 for left, right in zip(domains, domains[1:])
             )
         ):
@@ -578,6 +575,13 @@ class CrossFitStatus(str, Enum):
     BOUND_EXCEEDED = "bound_exceeded"
 
 
+class CrossWinnerBasis(str, Enum):
+    """Exclusive physical proof that selected one short-axis fit."""
+
+    ONLY_AUTHORITATIVE_FIT = "only_authoritative_fit"
+    UNIQUE_ENCLOSING_SUPPORT = "unique_enclosing_support"
+
+
 @dataclass(frozen=True)
 class CrossFit:
     """One short-axis fit with direct/inferred role and closure provenance."""
@@ -598,12 +602,10 @@ class CrossFit:
     shared_trace_support_count: int
     continuous_support_fraction: float
     residual_sum_px: float
-    center_compatible: bool
     boundary_use: OutputBoundaryUse
     enclosing_support_pair: EnclosingSupportPair | None = None
     height_compatibility_px: FiniteInterval | None = None
     shift_interval_px: FiniteInterval | None = None
-    center_interval_px: FiniteInterval | None = None
     parallel_direction_interval_degrees: FiniteInterval | None = None
     direction_provenance_ids: tuple[ObservationId, ...] = ()
     single_side_inferred: bool = False
@@ -695,12 +697,11 @@ class CrossFit:
             raise ValueError("cross continuous support is invalid")
         if not math.isfinite(self.residual_sum_px) or self.residual_sum_px < 0.0:
             raise ValueError("cross residual is invalid")
-        if not isinstance(self.center_compatible, bool) or not isinstance(self.single_side_inferred, bool):
+        if not isinstance(self.single_side_inferred, bool):
             raise ValueError("cross closure flags are invalid")
         for interval in (
             self.height_compatibility_px,
             self.shift_interval_px,
-            self.center_interval_px,
             self.parallel_direction_interval_degrees,
         ):
             if interval is not None and not isinstance(interval, FiniteInterval):
@@ -723,7 +724,7 @@ class CrossFit:
         object.__setattr__(self, "direct_provenance_ids", direct_ids)
 
     @property
-    def direct_observation_ids(self) -> tuple[ObservationId, ...]:
+    def bound_observation_ids(self) -> tuple[ObservationId, ...]:
         return self.direct_provenance_ids
 
     @property
@@ -743,12 +744,20 @@ class CrossFitCompetition:
     best: CrossFit | None
     runner_up: CrossFit | None
     status: CrossFitStatus
+    winner_basis: CrossWinnerBasis | None
     reason: str | None
     receipt: CrossSearchReceipt
 
     def __post_init__(self) -> None:
-        if self.status == CrossFitStatus.RESOLVED and self.best is None:
-            raise ValueError("resolved cross competition requires a best fit")
+        if self.status == CrossFitStatus.RESOLVED and (
+            self.best is None
+            or not isinstance(self.winner_basis, CrossWinnerBasis)
+        ):
+            raise ValueError(
+                "resolved cross competition requires a best fit and winner basis"
+            )
+        if self.status != CrossFitStatus.RESOLVED and self.winner_basis is not None:
+            raise ValueError("unresolved cross competition cannot have a winner basis")
         if self.status == CrossFitStatus.BOUND_EXCEEDED and self.best is not None:
             raise ValueError("bound-exceeded cross competition cannot select a fit")
         if self.reason is not None and not self.reason:

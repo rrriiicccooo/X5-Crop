@@ -502,7 +502,7 @@ def _draw_fit_start_end(
         if fit is None or source_lane is None:
             continue
         lane_box = source_lane_box(source_lane, workspace.layout)
-        for coordinate in fit.canonical_role_positions_px:
+        for coordinate in fit.model_role_positions_px:
             source_points = (
                 ((coordinate, lane_box.top), (coordinate, lane_box.bottom))
                 if workspace.layout == "horizontal"

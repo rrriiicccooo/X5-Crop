@@ -19,7 +19,6 @@ from x5crop.detection.gate_checks import (
     GateGap,
     MinimumMissingFact,
     TypedAssessment,
-    failure_fact,
 )
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.content_veto_model import (
@@ -49,7 +48,6 @@ def _resolved():
         TemplateCrossInput(
             template=spec,
             fixed_height_px=240.0,
-            holder_short_axis_center_px=220.0,
             top_bindings=(binding(BoundaryRole.TOP, "top", 100.0),),
             bottom_bindings=(binding(BoundaryRole.BOTTOM, "bottom", 340.0),),
         )
@@ -191,6 +189,7 @@ class TemplateSelectionContractTest(unittest.TestCase):
         unresolved_cross = replace(
             cross,
             status=CrossFitStatus.UNRESOLVED,
+            winner_basis=None,
             reason="non-equivalent cross fits remain",
         )
         assessment = ContentVetoAssessment(

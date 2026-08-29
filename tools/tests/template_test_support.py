@@ -25,6 +25,7 @@ from x5crop.detection.photo_geometry.template_model import (
     PhaseLatticeFit,
     PitchFit,
     SequenceFit,
+    SequenceRoleBinding,
     TemplateSpec,
 )
 from x5crop.detection.photo_geometry.template_placement import (
@@ -252,8 +253,25 @@ def placement_sequence(
         None if index in missing else ObservationId(f"sequence:{index}")
         for index in range(2 * template.count)
     )
-    matched = tuple(
-        index for index in range(2 * template.count) if index not in missing
+    bindings = tuple(
+        None
+        if identity is None
+        else SequenceRoleBinding(
+            observation_id=identity,
+            independent_support_id=identity,
+            canonical_position_px=positions[index],
+            fit_position_interval_px=FiniteInterval.exact(positions[index]),
+            full_position_interval_px=FiniteInterval.exact(positions[index]),
+            line_evidence=None,
+        )
+        for index, identity in enumerate(ids)
+    )
+    phase_support_count = len(
+        {
+            (index + 1) // 2
+            for index, binding in enumerate(bindings)
+            if binding is not None
+        }
     )
     return SequenceFit(
         template=template,
@@ -275,21 +293,15 @@ def placement_sequence(
             canonical_pitch_px=pitch,
             observation_ids=tuple(item for item in ids if item is not None),
         ),
-        canonical_role_positions_px=positions,
-        role_positions_px=tuple(
+        model_role_positions_px=positions,
+        model_role_intervals_px=tuple(
             FiniteInterval.exact(value) for value in positions
         ),
-        role_full_position_intervals_px=tuple(
+        model_full_role_intervals_px=tuple(
             FiniteInterval.exact(value) for value in positions
         ),
-        role_observation_ids=ids,
-        role_line_evidence=(None,) * (2 * template.count),
-        matched_role_indices=matched,
-        inferred_role_indices=tuple(missing),
-        direct_observation_ids=tuple(item for item in ids if item is not None),
-        independent_support_ids=tuple(item for item in ids if item is not None),
-        independent_support_coverage=float(len(matched)),
-        independent_polarity_support_count=len(matched),
+        role_bindings=bindings,
+        phase_support_coverage=float(phase_support_count),
     )
 
 
@@ -365,7 +377,6 @@ def placement_cross(
         shared_trace_support_count=3,
         continuous_support_fraction=1.0,
         residual_sum_px=0.0,
-        center_compatible=True,
         boundary_use=OutputBoundaryUse.APERTURE_PAIR,
     )
 
@@ -394,7 +405,7 @@ def placement_compose(
         height_axis=BoundaryAxis.Y,
         width_authority_px=FiniteInterval(
             0.0,
-            max(sequence.canonical_role_positions_px) + 100.0,
+            max(sequence.model_role_positions_px) + 100.0,
         ),
         height_authority_px=FiniteInterval(0.0, 400.0),
     )

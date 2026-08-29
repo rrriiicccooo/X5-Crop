@@ -19,7 +19,7 @@ from .model import (
 from .observation_types import BasicAxisProfile, ProfileRun
 from .line_observations import PhotoBoundaryObservation
 from .physical_identity import physical_fact_id
-from .source_geometry import SourceScanGeometry, centered_short_axis_authority_px
+from .source_geometry import SourceScanGeometry
 from .template_cross_model import CrossEvidence, CrossRoleBinding
 from .template_model import PhaseLatticeAuthority, TemplateSpec
 from .trace_support import trace_support_is_one_connected_run
@@ -30,7 +30,6 @@ def _add(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval:
         left.minimum + right.minimum,
         left.maximum + right.maximum,
     )
-
 
 def template_spec_from_physical_authority(
     *,
@@ -642,14 +641,4 @@ def register_template_local_cross_refinements(
         ),
         observations=ordered_observations,
         fit_attempt_count=fit_attempt_count,
-    )
-
-
-def short_axis_center_authority(
-    visible_authority_px: FiniteInterval,
-    scale_authority_px_per_mm: PositiveInterval,
-) -> FiniteInterval:
-    return centered_short_axis_authority_px(
-        visible_authority_px,
-        scale_authority_px_per_mm,
     )

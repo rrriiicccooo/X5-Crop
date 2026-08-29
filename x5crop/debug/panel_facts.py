@@ -99,11 +99,15 @@ def competition_summary(detection: FinalDetection) -> str:
     lanes = detection.candidate.geometry.lane_reconstructions
     differences: set[str] = set()
     phase_bases: set[str] = set()
+    cross_bases: set[str] = set()
     for lane in lanes:
         competition = lane.placement_competition
-        winner_basis = lane.prepared.phase_competition.winner_basis
-        if winner_basis is not None:
-            phase_bases.add(winner_basis.value.upper().replace("_", " "))
+        phase_basis = lane.prepared.phase_competition.winner_basis
+        if phase_basis is not None:
+            phase_bases.add(phase_basis.value.upper().replace("_", " "))
+        cross_basis = lane.prepared.cross_competition.winner_basis
+        if cross_basis is not None:
+            cross_bases.add(cross_basis.value.upper().replace("_", " "))
         if lane.prepared.phase_competition.runner_up is not None:
             differences.add("PHASE")
         if lane.prepared.cross_competition.runner_up is not None:
@@ -133,8 +137,11 @@ def competition_summary(detection: FinalDetection) -> str:
         phase_basis = (
             "/".join(sorted(phase_bases)) if phase_bases else "UNAVAILABLE"
         )
+        cross_basis = (
+            "/".join(sorted(cross_bases)) if cross_bases else "UNAVAILABLE"
+        )
         basis = (
-            f"PHASE {phase_basis} + CROSS UNIQUE PHYSICAL GROUP + "
+            f"PHASE {phase_basis} + CROSS {cross_basis} + "
             "CONTENT SAFE + SHARED SOURCE"
         )
         subject = "WINNER BASIS"
@@ -333,12 +340,12 @@ def axis_authority_summaries(
             f"SOURCE FIT · {competitors} PLACEMENTS · {detail}",
         )
     direct_sequence = sum(
-        len(item.prepared.phase_competition.best.direct_observation_ids)
+        len(item.prepared.phase_competition.best.bound_observation_ids)
         for item in lanes
         if item.prepared.phase_competition.best is not None
     )
     inferred_sequence = sum(
-        len(item.prepared.phase_competition.best.inferred_role_indices)
+        len(item.prepared.phase_competition.best.unbound_role_indices)
         for item in lanes
         if item.prepared.phase_competition.best is not None
     )

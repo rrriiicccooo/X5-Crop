@@ -26,7 +26,6 @@ from .measurement_model import (
     PhotoBoundaryMeasurementSet,
     PhotoBoundaryTransition,
 )
-from .observation_types import BasicAxisProfile
 from .model import BoundaryRole
 from .observations import build_sequence_observations
 from .output_model import ResolvedOutputSlots, SharedStripDirection
@@ -43,7 +42,6 @@ from .template_measurement_plan import compile_template_measurement_plan
 from .template_registration import (
     register_cross_evidence,
     register_template_local_cross_refinements,
-    short_axis_center_authority,
     template_spec_from_physical_authority,
 )
 from .template_cross import fit_template_cross
@@ -63,6 +61,7 @@ from .template_pitch import (
     calibrate_template_source_pitch,
     close_separator_phase_hypothesis,
 )
+from .template_placement import resolved_sequence_support_domains_px
 from .source_geometry import SourceScanGeometry
 from .transition_tracking import track_side_transition_regions
 
@@ -194,7 +193,7 @@ def _calibrated_width_geometry(
         tuple[int, FiniteInterval, tuple[ObservationId, ObservationId]]
     ] = []
     for ordinal in range(fit.template.count):
-        start_id, end_id = fit.role_observation_ids[2 * ordinal : 2 * ordinal + 2]
+        start_id, end_id = fit.binding_observation_ids[2 * ordinal : 2 * ordinal + 2]
         if start_id is None or end_id is None:
             continue
         start = by_id[start_id].fit_position_interval_px
@@ -626,32 +625,29 @@ def prepare_template_lane(
             failure_kind=PhaseFailureKind.HYPOTHESIS_BOUND_EXCEEDED,
             winner_basis=None,
         )
-    longitudinal_support_domains_px = (
-        ()
-        if phase.best is None
-        else tuple(
+    longitudinal_support_domains_px = ()
+    if phase.status == PhaseFitStatus.RESOLVED and phase.best is not None:
+        domains = tuple(
             sorted(
-                (
-                    FiniteInterval(
-                        min(
-                            phase.best.canonical_role_positions_px[index],
-                            phase.best.canonical_role_positions_px[index + 1],
-                        ),
-                        max(
-                            phase.best.canonical_role_positions_px[index],
-                            phase.best.canonical_role_positions_px[index + 1],
-                        ),
-                    )
-                    for index in range(
-                        0,
-                        len(phase.best.canonical_role_positions_px),
-                        2,
-                    )
-                ),
+                resolved_sequence_support_domains_px(phase.best),
                 key=lambda item: item.minimum,
             )
         )
-    )
+        if any(
+            left.maximum > right.minimum
+            for left, right in zip(domains, domains[1:])
+        ):
+            phase = replace(
+                phase,
+                status=PhaseFitStatus.UNRESOLVED,
+                ambiguity_reason=(
+                    "realized frame domains overlap after direct binding"
+                ),
+                failure_kind=PhaseFailureKind.FIXED_TEMPLATE_MISMATCH,
+                winner_basis=None,
+            )
+        else:
+            longitudinal_support_domains_px = domains
     cross = register_cross_evidence(
         profile=cross_profile,
         top_measurement=precision_measurement_sets[0],
@@ -722,10 +718,6 @@ def prepare_template_lane(
         template=template,
         fixed_height_px=source_geometry.height_state.extent_projection_px(),
         canonical_fixed_height_px=canonical_height,
-        holder_short_axis_center_px=short_axis_center_authority(
-            height_authority,
-            scales.height_axis_px_per_mm,
-        ),
         lane_reference_trace_px=width_authority.center,
         source_direction=source_direction,
         registered_trace_coordinates_px=precision_measurement_sets[

@@ -50,7 +50,6 @@ from x5crop.detection.final.finalize import finalize_detection
 from x5crop.detection.output_deskew import observe_lightweight_deskew
 from x5crop.detection.pipeline import choose_detection
 from x5crop.detection.workspace import prepare_detection_workspace
-from x5crop.domain import FiniteInterval
 from x5crop.io.tiff import read_tiff
 from x5crop.run_status import RunTerminalOutcome
 
@@ -540,7 +539,12 @@ class DebugAnalysisContractTest(unittest.TestCase):
                             runner_up="phase:runner",
                             winner_basis=SimpleNamespace(value="direct_support"),
                         ),
-                        cross_competition=SimpleNamespace(runner_up=None),
+                        cross_competition=SimpleNamespace(
+                            runner_up=None,
+                            winner_basis=SimpleNamespace(
+                                value="only_authoritative_fit"
+                            ),
+                        ),
                     ),
                 ),
             ),
@@ -561,6 +565,10 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertEqual(primary_geometry_by_identity(detection), ((1, winner_frame),))
         self.assertEqual(runner_geometry_by_identity(detection), ((1, runner_frame),))
         self.assertIn("PHASE DIRECT SUPPORT", competition_summary(detection))
+        self.assertIn(
+            "CROSS ONLY AUTHORITATIVE FIT",
+            competition_summary(detection),
+        )
         self.assertIn("RUNNER DIFF PHASE", competition_summary(detection))
         self.assertFalse(hasattr(debug_panel_facts, "geometry_by_identity"))
 

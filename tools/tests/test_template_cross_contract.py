@@ -14,6 +14,7 @@ from x5crop.detection.photo_geometry.template_cross import fit_template_cross
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossEvidence,
     CrossFitStatus,
+    CrossWinnerBasis,
     CrossRoleBinding,
     TemplateCrossInput,
 )
@@ -25,6 +26,28 @@ from x5crop.detection.photo_geometry.trace_support import (
 
 
 class TemplateCrossContractTest(unittest.TestCase):
+    def test_touching_frame_domains_are_valid_but_overlap_is_not(self) -> None:
+        TemplateCrossInput(
+            template=template(count=2),
+            fixed_height_px=240.0,
+            longitudinal_support_domains_px=(
+                FiniteInterval(0.0, 100.0),
+                FiniteInterval(100.0, 200.0),
+            ),
+        )
+        with self.assertRaisesRegex(
+            ValueError,
+            "longitudinal support domains",
+        ):
+            TemplateCrossInput(
+                template=template(count=2),
+                fixed_height_px=240.0,
+                longitudinal_support_domains_px=(
+                    FiniteInterval(0.0, 101.0),
+                    FiniteInterval(100.0, 200.0),
+                ),
+            )
+
     def test_source_spanning_reaches_both_registered_domain_ends(self) -> None:
         queried = tuple(range(0, 101, 10))
         self.assertTrue(
@@ -74,17 +97,20 @@ class TemplateCrossContractTest(unittest.TestCase):
             TemplateCrossInput(
                 template=template(),
                 fixed_height_px=240.0,
-                holder_short_axis_center_px=220.0,
                 top_bindings=(binding(BoundaryRole.TOP, "top", 100.0),),
                 bottom_bindings=(binding(BoundaryRole.BOTTOM, "bottom", 340.0),),
             )
         )
         self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        self.assertEqual(
+            result.winner_basis,
+            CrossWinnerBasis.ONLY_AUTHORITATIVE_FIT,
+        )
         self.assertIsNotNone(result.best)
         assert result.best is not None
         self.assertTrue(result.best.direct_pair)
         self.assertEqual(result.best.boundary_use, OutputBoundaryUse.APERTURE_PAIR)
-        self.assertEqual(result.best.direct_observation_ids, (
+        self.assertEqual(result.best.bound_observation_ids, (
             ObservationId("observation:top"),
             ObservationId("observation:bottom"),
         ))
@@ -183,7 +209,6 @@ class TemplateCrossContractTest(unittest.TestCase):
             TemplateCrossInput(
                 template=template(count=2),
                 fixed_height_px=240.0,
-                holder_short_axis_center_px=220.0,
                 registered_trace_coordinates_px=(0, 50, 100),
                 longitudinal_support_domains_px=(
                     FiniteInterval(-1.0, 10.0),
@@ -199,7 +224,6 @@ class TemplateCrossContractTest(unittest.TestCase):
             TemplateCrossInput(
                 template=template(count=2),
                 fixed_height_px=240.0,
-                holder_short_axis_center_px=220.0,
                 registered_trace_coordinates_px=(0, 50, 100),
                 longitudinal_support_domains_px=(
                     FiniteInterval(-1.0, 10.0),
@@ -218,7 +242,44 @@ class TemplateCrossContractTest(unittest.TestCase):
             2,
         )
 
-    def test_local_and_spanning_pairs_keep_canonical_fixed_height(self) -> None:
+    def test_two_domain_pair_cannot_own_three_frame_shared_edges(self) -> None:
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(count=3),
+                fixed_height_px=240.0,
+                registered_trace_coordinates_px=(0, 20, 40, 60, 80, 100),
+                longitudinal_support_domains_px=(
+                    FiniteInterval(0.0, 20.0),
+                    FiniteInterval(40.0, 60.0),
+                    FiniteInterval(80.0, 100.0),
+                ),
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "local-three-frame-top",
+                        100.0,
+                        traces=(10, 50),
+                        source_spanning=False,
+                        independent_regions=2,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "local-three-frame-bottom",
+                        340.0,
+                        traces=(10, 50),
+                        source_spanning=False,
+                        independent_regions=2,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertIsNotNone(result.best)
+
+    def test_direct_pairs_keep_native_height_inside_source_authority(self) -> None:
         fixed_template = replace(
             template(count=2),
             frame_height_px=FiniteInterval(230.0, 250.0),
@@ -255,7 +316,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         assert local.best is not None
         self.assertAlmostEqual(
             local.best.bottom_canonical_px - local.best.top_canonical_px,
-            245.0,
+            238.0,
         )
         spanning = fit_template_cross(
             TemplateCrossInput(
@@ -274,7 +335,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         assert spanning.best is not None
         self.assertAlmostEqual(
             spanning.best.bottom_canonical_px - spanning.best.top_canonical_px,
-            245.0,
+            238.0,
         )
 
     def test_single_side_infers_opposite_fixed_height(self) -> None:
@@ -282,7 +343,6 @@ class TemplateCrossContractTest(unittest.TestCase):
             TemplateCrossInput(
                 template=template(),
                 fixed_height_px=240.0,
-                holder_short_axis_center_px=220.0,
                 top_bindings=(binding(BoundaryRole.TOP, "top", 100.0),),
             )
         )
@@ -306,12 +366,11 @@ class TemplateCrossContractTest(unittest.TestCase):
         )
         self.assertEqual(result.receipt.single_side_inference_count, 1)
 
-    def test_single_side_does_not_recalibrate_fixed_height_or_center(self) -> None:
+    def test_single_side_does_not_recalibrate_fixed_height(self) -> None:
         result = fit_template_cross(
             TemplateCrossInput(
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
-                holder_short_axis_center_px=FiniteInterval(215.0, 225.0),
                 top_bindings=(binding(BoundaryRole.TOP, "top-offset", 105.0),),
             )
         )
@@ -322,10 +381,6 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertEqual(
             result.best.height_compatibility_px,
             FiniteInterval(238.0, 242.0),
-        )
-        self.assertEqual(
-            result.best.center_interval_px,
-            FiniteInterval(215.0, 225.0),
         )
         self.assertEqual(
             result.best.top_full_interval_px,
@@ -341,7 +396,6 @@ class TemplateCrossContractTest(unittest.TestCase):
             TemplateCrossInput(
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
-                holder_short_axis_center_px=FiniteInterval(215.0, 225.0),
                 registered_trace_coordinates_px=(0, 20, 40, 60, 80, 100),
                 top_bindings=(
                     binding(
@@ -356,12 +410,11 @@ class TemplateCrossContractTest(unittest.TestCase):
         )
         self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
 
-    def test_center_owned_discrete_single_sides_remain_unresolved(self) -> None:
+    def test_local_discrete_single_sides_have_no_placement_authority(self) -> None:
         result = fit_template_cross(
             TemplateCrossInput(
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
-                holder_short_axis_center_px=FiniteInterval(215.0, 225.0),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -379,23 +432,14 @@ class TemplateCrossContractTest(unittest.TestCase):
             )
         )
         self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
-        self.assertIsNotNone(result.runner_up)
-        assert result.best is not None
-        # Holder centre compatibility is not output uncertainty; the local
-        # direct measurements remain discrete placement interpretations.
-        self.assertAlmostEqual(result.best.top_canonical_px, 96.0)
-        self.assertAlmostEqual(result.runner_up.top_canonical_px, 104.0)
-        self.assertAlmostEqual(
-            result.best.bottom_canonical_px - result.best.top_canonical_px,
-            240.0,
-        )
+        self.assertIsNone(result.best)
+        self.assertIsNone(result.runner_up)
 
-    def test_three_region_direct_pair_narrows_center_owned_height(self) -> None:
+    def test_three_region_direct_pair_narrows_fixed_height(self) -> None:
         result = fit_template_cross(
             TemplateCrossInput(
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
-                holder_short_axis_center_px=FiniteInterval(215.0, 225.0),
                 longitudinal_support_domains_px=(FiniteInterval(0.0, 100.0),),
                 top_bindings=(
                     binding(
@@ -423,12 +467,11 @@ class TemplateCrossContractTest(unittest.TestCase):
             FiniteInterval.exact(240.0),
         )
 
-    def test_connected_local_pairs_can_form_one_source_wide_network(self) -> None:
+    def test_shared_anchor_does_not_merge_distinct_opposite_boundaries(self) -> None:
         result = fit_template_cross(
             TemplateCrossInput(
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
-                holder_short_axis_center_px=FiniteInterval(215.0, 225.0),
                 registered_trace_coordinates_px=(0, 20, 40, 60, 80, 100),
                 longitudinal_support_domains_px=(FiniteInterval(0.0, 100.0),),
                 top_bindings=(
@@ -461,12 +504,11 @@ class TemplateCrossContractTest(unittest.TestCase):
                 ),
             )
         )
-        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
         assert result.best is not None
-        self.assertIsNone(result.runner_up)
+        self.assertIsNotNone(result.runner_up)
         self.assertTrue(result.best.direct_pair)
-        self.assertEqual(result.best.independent_support_region_count, 3)
-        self.assertEqual(len(result.best.direct_provenance_ids), 3)
+        self.assertIn("non-equivalent", result.reason or "")
 
     def test_exact_registered_trace_subset_dominates_despite_disjoint_direction(self) -> None:
         registered = tuple(range(0, 101, 10))
@@ -521,7 +563,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         assert result.best is not None
         self.assertIsNone(result.runner_up)
         self.assertEqual(
-            result.best.direct_observation_ids,
+            result.best.bound_observation_ids,
             (
                 ObservationId("observation:exact-broader-top"),
                 ObservationId("observation:exact-shared-bottom"),
@@ -576,7 +618,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         assert result.best is not None
         self.assertIsNone(result.runner_up)
         self.assertEqual(
-            result.best.direct_observation_ids,
+            result.best.bound_observation_ids,
             (
                 ObservationId("observation:broader-top"),
                 ObservationId("observation:shared-bottom"),
@@ -885,7 +927,6 @@ class TemplateCrossContractTest(unittest.TestCase):
             TemplateCrossInput(
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(236.0, 240.0),
-                holder_short_axis_center_px=FiniteInterval(215.0, 225.0),
                 registered_trace_coordinates_px=registered,
                 longitudinal_support_domains_px=(
                     FiniteInterval(-1.0, 21.0),
@@ -944,7 +985,6 @@ class TemplateCrossContractTest(unittest.TestCase):
                     TemplateCrossInput(
                         template=template(count=4),
                         fixed_height_px=FiniteInterval(236.0, 240.0),
-                        holder_short_axis_center_px=FiniteInterval(215.0, 225.0),
                         registered_trace_coordinates_px=registered,
                         longitudinal_support_domains_px=domains,
                         top_bindings=(
@@ -987,7 +1027,6 @@ class TemplateCrossContractTest(unittest.TestCase):
             TemplateCrossInput(
                 template=template(count=4),
                 fixed_height_px=FiniteInterval(236.0, 240.0),
-                holder_short_axis_center_px=FiniteInterval(215.0, 225.0),
                 registered_trace_coordinates_px=tuple(range(0, 101, 10)),
                 longitudinal_support_domains_px=(
                     FiniteInterval(-1.0, 21.0),
@@ -1030,7 +1069,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         assert result.best is not None
         self.assertIsNone(result.runner_up)
         self.assertEqual(
-            result.best.direct_observation_ids,
+            result.best.bound_observation_ids,
             (
                 ObservationId("observation:one-domain-broader-top"),
                 ObservationId("observation:one-domain-shared-bottom"),
@@ -1094,7 +1133,6 @@ class TemplateCrossContractTest(unittest.TestCase):
             TemplateCrossInput(
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
-                holder_short_axis_center_px=FiniteInterval(215.0, 225.0),
                 registered_trace_coordinates_px=(0, 20, 40, 60, 80, 100),
                 top_bindings=(
                     binding(
@@ -1225,7 +1263,6 @@ class TemplateCrossContractTest(unittest.TestCase):
             TemplateCrossInput(
                 template=template(count=3),
                 fixed_height_px=240.0,
-                holder_short_axis_center_px=220.0,
                 longitudinal_support_domains_px=domains,
                 top_bindings=(
                     binding(
@@ -1274,7 +1311,6 @@ class TemplateCrossContractTest(unittest.TestCase):
             TemplateCrossInput(
                 template=template(count=3),
                 fixed_height_px=240.0,
-                holder_short_axis_center_px=220.0,
                 registered_trace_coordinates_px=(10, 50, 90),
                 longitudinal_support_domains_px=domains,
                 top_bindings=(
@@ -1300,7 +1336,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertAlmostEqual(result.best.top_canonical_px, 100.0)
         self.assertAlmostEqual(result.best.bottom_canonical_px, 340.0)
 
-    def test_domain_complete_role_anchor_does_not_require_holder_center(self) -> None:
+    def test_domain_complete_role_anchor_owns_fixed_height_inference(self) -> None:
         domains = (
             FiniteInterval(0.0, 20.0),
             FiniteInterval(40.0, 60.0),
@@ -1339,7 +1375,6 @@ class TemplateCrossContractTest(unittest.TestCase):
             TemplateCrossInput(
                 template=template(count=2),
                 fixed_height_px=240.0,
-                holder_short_axis_center_px=220.0,
                 registered_trace_coordinates_px=(10, 50),
                 longitudinal_support_domains_px=domains,
                 top_bindings=(
@@ -1367,7 +1402,6 @@ class TemplateCrossContractTest(unittest.TestCase):
             TemplateCrossInput(
                 template=template(count=3),
                 fixed_height_px=240.0,
-                holder_short_axis_center_px=220.0,
                 registered_trace_coordinates_px=(10, 50, 90),
                 longitudinal_support_domains_px=domains,
                 top_bindings=(
@@ -1395,7 +1429,6 @@ class TemplateCrossContractTest(unittest.TestCase):
             TemplateCrossInput(
                 template=template(count=3),
                 fixed_height_px=240.0,
-                holder_short_axis_center_px=220.0,
                 registered_trace_coordinates_px=(10, 50, 90),
                 longitudinal_support_domains_px=domains,
                 top_bindings=(
@@ -1426,7 +1459,6 @@ class TemplateCrossContractTest(unittest.TestCase):
             TemplateCrossInput(
                 template=template(count=3),
                 fixed_height_px=240.0,
-                holder_short_axis_center_px=220.0,
                 registered_trace_coordinates_px=(10, 50, 90),
                 longitudinal_support_domains_px=domains,
                 top_bindings=(
@@ -1455,7 +1487,6 @@ class TemplateCrossContractTest(unittest.TestCase):
             TemplateCrossInput(
                 template=template(count=3),
                 fixed_height_px=240.0,
-                holder_short_axis_center_px=220.0,
                 registered_trace_coordinates_px=(10, 50, 90),
                 longitudinal_support_domains_px=domains,
                 top_bindings=(
@@ -1481,7 +1512,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
         self.assertIsNone(result.best)
 
-    def test_template_wide_anchor_refines_the_nearest_opposite_line(self) -> None:
+    def test_template_wide_anchor_cannot_promote_role_unknown_opposite_line(self) -> None:
         domains = (
             FiniteInterval(0.0, 20.0),
             FiniteInterval(40.0, 60.0),
@@ -1492,7 +1523,6 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(230.0, 250.0),
                 canonical_fixed_height_px=240.0,
-                holder_short_axis_center_px=FiniteInterval(215.0, 225.0),
                 longitudinal_support_domains_px=domains,
                 top_bindings=(
                     binding(
@@ -1527,15 +1557,13 @@ class TemplateCrossContractTest(unittest.TestCase):
         )
         self.assertEqual(result.status, CrossFitStatus.RESOLVED)
         assert result.best is not None
-        self.assertTrue(result.best.direct_pair)
-        self.assertAlmostEqual(result.best.top_canonical_px, 100.0)
-        self.assertAlmostEqual(result.best.bottom_canonical_px, 342.0)
+        self.assertFalse(result.best.direct_pair)
         self.assertEqual(
-            result.best.direct_bindings[1].evidence,
-            CrossEvidence.TEMPLATE_LOCAL_REFINEMENT,
+            result.best.inferred_bindings[0].evidence,
+            CrossEvidence.FIXED_HEIGHT_INFERRED,
         )
 
-    def test_equal_nearest_local_outer_lines_remain_unresolved(self) -> None:
+    def test_role_unknown_outer_lines_do_not_compete_with_fixed_height(self) -> None:
         domains = (
             FiniteInterval(0.0, 20.0),
             FiniteInterval(40.0, 60.0),
@@ -1546,7 +1574,6 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(230.0, 250.0),
                 canonical_fixed_height_px=240.0,
-                holder_short_axis_center_px=FiniteInterval(215.0, 225.0),
                 longitudinal_support_domains_px=domains,
                 top_bindings=(
                     binding(
@@ -1579,9 +1606,10 @@ class TemplateCrossContractTest(unittest.TestCase):
                 ),
             )
         )
-        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
-        self.assertIsNotNone(result.best)
-        self.assertIsNotNone(result.runner_up)
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertFalse(result.best.direct_pair)
+        self.assertIsNone(result.runner_up)
 
     def test_role_authorized_direct_pair_precedes_single_side_inference(self) -> None:
         domains = (
@@ -1593,7 +1621,6 @@ class TemplateCrossContractTest(unittest.TestCase):
             TemplateCrossInput(
                 template=template(count=3),
                 fixed_height_px=240.0,
-                holder_short_axis_center_px=220.0,
                 longitudinal_support_domains_px=domains,
                 top_bindings=(
                     binding(
@@ -1705,7 +1732,6 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
                 canonical_fixed_height_px=240.0,
-                holder_short_axis_center_px=FiniteInterval(224.0, 226.0),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -1879,7 +1905,6 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(235.0, 245.0),
                 canonical_fixed_height_px=240.0,
-                holder_short_axis_center_px=FiniteInterval(200.0, 210.0),
                 registered_trace_coordinates_px=(0, 50, 100),
                 longitudinal_support_domains_px=(
                     FiniteInterval(-1.0, 1.0),
@@ -1933,7 +1958,6 @@ class TemplateCrossContractTest(unittest.TestCase):
             TemplateCrossInput(
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
-                holder_short_axis_center_px=FiniteInterval(219.0, 221.0),
                 top_bindings=(
                     binding(BoundaryRole.TOP, "top-a", 100.0, traces=(0, 50)),
                     binding(BoundaryRole.TOP, "top-b", 100.25, traces=(50, 100)),
@@ -2009,12 +2033,11 @@ class TemplateCrossContractTest(unittest.TestCase):
             FiniteInterval.exact(500.0),
         )
 
-    def test_holder_center_cannot_select_between_direct_aperture_pairs(self) -> None:
+    def test_discrete_direct_aperture_pairs_remain_unresolved(self) -> None:
         result = fit_template_cross(
             TemplateCrossInput(
                 template=template(),
                 fixed_height_px=240.0,
-                holder_short_axis_center_px=220.0,
                 top_bindings=(
                     binding(BoundaryRole.TOP, "normal-top", 100.0),
                     binding(BoundaryRole.TOP, "clutter-top", 300.0),
@@ -2028,20 +2051,17 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
         assert result.best is not None
         assert result.runner_up is not None
-        self.assertEqual(result.best.direct_observation_ids[0], ObservationId("observation:normal-top"))
-        self.assertTrue(result.best.center_compatible)
+        self.assertEqual(result.best.bound_observation_ids[0], ObservationId("observation:normal-top"))
         self.assertEqual(
-            result.runner_up.direct_observation_ids[0],
+            result.runner_up.bound_observation_ids[0],
             ObservationId("observation:clutter-top"),
         )
-        self.assertFalse(result.runner_up.center_compatible)
 
-    def test_unique_direct_aperture_pair_owns_offset_outside_holder_center(self) -> None:
+    def test_unique_direct_aperture_pair_owns_measured_offset(self) -> None:
         result = fit_template_cross(
             TemplateCrossInput(
                 template=template(),
                 fixed_height_px=240.0,
-                holder_short_axis_center_px=220.0,
                 top_bindings=(binding(BoundaryRole.TOP, "top", 300.0),),
                 bottom_bindings=(
                     binding(BoundaryRole.BOTTOM, "bottom", 540.0),
@@ -2051,7 +2071,8 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertEqual(result.status, CrossFitStatus.RESOLVED)
         self.assertIsNone(result.runner_up)
         assert result.best is not None
-        self.assertFalse(result.best.center_compatible)
+        self.assertEqual(result.best.top_canonical_px, 300.0)
+        self.assertEqual(result.best.bottom_canonical_px, 540.0)
 
     def test_direct_height_contradiction_does_not_recalibrate_or_resolve(self) -> None:
         result = fit_template_cross(
@@ -2253,7 +2274,6 @@ class TemplateCrossContractTest(unittest.TestCase):
             TemplateCrossInput(
                 template=template(count=4),
                 fixed_height_px=240.0,
-                holder_short_axis_center_px=FiniteInterval(219.0, 225.0),
                 registered_trace_coordinates_px=(0, 20, 40, 60, 80, 100),
                 longitudinal_support_domains_px=(
                     FiniteInterval(5.0, 20.0),
@@ -2302,7 +2322,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         assert result.best is not None
         self.assertEqual(result.best.independent_support_region_count, 3)
         self.assertEqual(
-            set(result.best.direct_observation_ids),
+            set(result.best.bound_observation_ids),
             {
                 ObservationId("observation:whole-top"),
                 ObservationId("observation:whole-bottom"),

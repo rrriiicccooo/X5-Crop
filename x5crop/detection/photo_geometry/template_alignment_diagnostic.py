@@ -9,11 +9,7 @@ from ...domain import FiniteInterval, ObservationId
 from .model import BoundaryRole, SPATIAL_SUPPORT_REGION_COUNT
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_evidence import separator_support_authority
-from .template_model import (
-    MAX_LOCAL_ADVANCE_ANOMALIES,
-    LocalAdvanceRelation,
-    SequenceFit,
-)
+from .template_model import LocalAdvanceRelation, SequenceFit
 from .template_phase_model import PhaseFitResult, PhaseFitStatus
 from .template_residual import ResidualPattern
 
@@ -88,7 +84,7 @@ class TemplateAlignmentDiagnostic:
             != len(self.incompatible_separator_support_ids)
             or (self.pattern == ResidualPattern.NORMAL and self.local_advance_relations)
             or (
-                self.pattern == ResidualPattern.LOCAL_STEP
+                self.pattern == ResidualPattern.MEASURED_ADVANCES
                 and not any(item.is_anomaly for item in self.local_advance_relations)
             )
             or (self.pattern == ResidualPattern.UNRESOLVED)
@@ -130,8 +126,8 @@ def _role_residuals(
     values: list[TemplateRoleResidual] = []
     for role, theoretical, observation_id in zip(
         fit.template.roles,
-        fit.canonical_role_positions_px,
-        fit.role_observation_ids,
+        fit.model_role_positions_px,
+        fit.binding_observation_ids,
         strict=True,
     ):
         observation = None if observation_id is None else by_id.get(observation_id)
@@ -229,7 +225,9 @@ def template_alignment_diagnostic(
         if item.observation_id is not None
     }
     unbound = tuple(
-        identity for identity in phase.direct_observation_ids if identity not in bound
+        identity
+        for identity in phase.registered_direct_observation_ids
+        if identity not in bound
     )
     residual_values = tuple(
         abs(float(item.canonical_residual_px))
@@ -243,16 +241,10 @@ def template_alignment_diagnostic(
     if phase.status != PhaseFitStatus.RESOLVED:
         pattern = ResidualPattern.UNRESOLVED
         reason = phase.ambiguity_reason or phase.status.value
-    elif len(incompatible) > MAX_LOCAL_ADVANCE_ANOMALIES:
-        pattern = ResidualPattern.UNRESOLVED
-        reason = (
-            "multiple independent separator residuals contradict one "
-            "global template"
-        )
     elif fit is not None and any(
         relation.is_anomaly for relation in fit.local_advance_relations
     ):
-        pattern = ResidualPattern.LOCAL_STEP
+        pattern = ResidualPattern.MEASURED_ADVANCES
         reason = None
     else:
         pattern = ResidualPattern.NORMAL

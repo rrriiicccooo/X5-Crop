@@ -4,7 +4,7 @@ The normal fit is the default answer. This module never searches pixels,
 ordinals, or placements. It walks the already-bound roles once and asks one
 physical question: does a directly observed END -> material band -> START
 adjacency depart from the format gap authority?  Only that exact material
-relation can authorize one suffix shift.
+relation can authorize its own measured suffix advance.
 """
 
 from __future__ import annotations
@@ -17,7 +17,6 @@ from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_model import (
     LocalAdvanceKind,
     LocalAdvanceRelation,
-    MAX_LOCAL_ADVANCE_ANOMALIES,
     SequenceFit,
 )
 
@@ -29,7 +28,7 @@ class ResidualPattern(str, Enum):
     """The physical shape left after fitting the normal global template."""
 
     NORMAL = "normal"
-    LOCAL_STEP = "local_step"
+    MEASURED_ADVANCES = "measured_advances"
     UNRESOLVED = "unresolved"
 
 
@@ -38,7 +37,6 @@ class LocalAdvanceFailureKind(str, Enum):
 
     MULTIPLE_BANDS = "multiple_bands"
     TOPOLOGY_CONTRADICTION = "topology_contradiction"
-    TOO_MANY_ANOMALIES = "too_many_anomalies"
 
 
 @dataclass(frozen=True)
@@ -81,8 +79,6 @@ class LocalAdvanceAnalysis:
             raise ValueError("local adjacency count cannot be negative")
         if tuple(sorted(set(self.anomaly_ordinals))) != self.anomaly_ordinals:
             raise ValueError("local anomaly ordinals must be unique and ordered")
-        if len(self.anomaly_ordinals) > MAX_LOCAL_ADVANCE_ANOMALIES:
-            raise ValueError("local anomaly count exceeds the bounded model")
         relation_anomalies = tuple(
             item.relation_ordinal for item in self.relations if item.is_anomaly
         )
@@ -99,8 +95,8 @@ class LocalAdvanceAnalysis:
             raise ValueError("residual failure reason disagrees with its pattern")
         if unresolved and self.relations:
             raise ValueError("unresolved residual topology cannot authorize relations")
-        if self.pattern == ResidualPattern.LOCAL_STEP and not self.relations:
-            raise ValueError("local-step pattern requires one direct relation")
+        if self.pattern == ResidualPattern.MEASURED_ADVANCES and not self.relations:
+            raise ValueError("measured-advance pattern requires direct relations")
         if self.pattern == ResidualPattern.NORMAL and (
             self.relations or self.anomaly_ordinals
         ):
@@ -145,7 +141,7 @@ def derive_bounded_local_advances(
     sequence_edges: tuple[BoundaryEdgeObservation, ...],
     separator_bands: tuple[SeparatorBandObservation, ...],
 ) -> LocalAdvanceAnalysis:
-    """Classify normal versus one directly proved suffix shift in O(count)."""
+    """Classify normal versus directly measured adjacency advances in O(count)."""
 
     evaluated = max(0, fit.template.count - 1)
     if evaluated == 0:
@@ -156,8 +152,8 @@ def derive_bounded_local_advances(
     bands_by_pair = _bands_by_bound_pair(separator_bands, set(by_id))
     facts: list[AdjacencyGapFact] = []
     for adjacency_index in range(evaluated):
-        end_id = fit.role_observation_ids[2 * adjacency_index + 1]
-        next_start_id = fit.role_observation_ids[2 * adjacency_index + 2]
+        end_id = fit.binding_observation_ids[2 * adjacency_index + 1]
+        next_start_id = fit.binding_observation_ids[2 * adjacency_index + 2]
         if end_id is None or next_start_id is None:
             continue
         end = by_id.get(end_id)
@@ -248,56 +244,46 @@ def derive_bounded_local_advances(
             evaluated,
         )
 
-    if len(anomalies) > MAX_LOCAL_ADVANCE_ANOMALIES:
-        return LocalAdvanceAnalysis(
-            ResidualPattern.UNRESOLVED,
-            (),
-            ordered_facts,
-            evaluated,
-            failure_kind=LocalAdvanceFailureKind.TOO_MANY_ANOMALIES,
-            unresolved_reason=(
-                "direct local gap anomalies exceed bounded model"
-            ),
+    anomalies_by_ordinal = {
+        item.relation_ordinal: item for item in anomalies
+    }
+    relations: list[LocalAdvanceRelation] = []
+    for ordinal in range(1, max(anomalies_by_ordinal) + 1):
+        anomaly = anomalies_by_ordinal.get(ordinal)
+        if anomaly is None:
+            relations.append(_nominal_relation(ordinal))
+            continue
+        delta = _difference(anomaly.gap_interval_px, gap_prior)
+        canonical_delta = anomaly.canonical_gap_px - gap_prior.center
+        if delta.contains(0.0):
+            relations.append(_nominal_relation(ordinal))
+            continue
+        kind = (
+            LocalAdvanceKind.WIDE
+            if canonical_delta > 0.0
+            else LocalAdvanceKind.NARROW
         )
-
-    anomaly = anomalies[0]
-    delta = _difference(anomaly.gap_interval_px, gap_prior)
-    canonical_delta = anomaly.canonical_gap_px - gap_prior.center
-    if delta.contains(0.0):
-        return LocalAdvanceAnalysis(
-            ResidualPattern.NORMAL,
-            (),
-            ordered_facts,
-            evaluated,
+        relation_ids = (
+            anomaly.separator_band_id,
+            *anomaly.observation_ids,
         )
-    kind = (
-        LocalAdvanceKind.WIDE
-        if canonical_delta > 0.0
-        else LocalAdvanceKind.NARROW
-    )
-    relations = [
-        _nominal_relation(ordinal)
-        for ordinal in range(1, anomaly.relation_ordinal)
-    ]
-    relation_ids = (
-        anomaly.separator_band_id,
-        *anomaly.observation_ids,
-    )
-    relations.append(
-        LocalAdvanceRelation(
-            relation_ordinal=anomaly.relation_ordinal,
-            kind=kind,
-            delta_interval_px=delta,
-            canonical_delta_px=canonical_delta,
-            observation_ids=tuple(
-                identity for identity in relation_ids if identity is not None
-            ),
+        relations.append(
+            LocalAdvanceRelation(
+                relation_ordinal=ordinal,
+                kind=kind,
+                delta_interval_px=delta,
+                canonical_delta_px=canonical_delta,
+                observation_ids=tuple(
+                    identity
+                    for identity in relation_ids
+                    if identity is not None
+                ),
+            )
         )
-    )
     return LocalAdvanceAnalysis(
-        ResidualPattern.LOCAL_STEP,
+        ResidualPattern.MEASURED_ADVANCES,
         tuple(relations),
         ordered_facts,
         evaluated,
-        anomaly_ordinals=(anomaly.relation_ordinal,),
+        anomaly_ordinals=tuple(item.relation_ordinal for item in anomalies),
     )

@@ -97,14 +97,14 @@ def template_evidence_use_ledger(
             if phase.best is None
             else (
                 identity
-                for identity in phase.best.role_observation_ids
+                for identity in phase.best.binding_observation_ids
                 if identity is not None and identity not in local_ids
             )
         )
     )
     phase_id = ordered_sequence_ids[0] if ordered_sequence_ids else None
     fit_sequence_ids = set(
-        () if phase.best is None else phase.best.direct_observation_ids
+        () if phase.best is None else phase.best.bound_observation_ids
     )
 
     direct_cross_ids = tuple(

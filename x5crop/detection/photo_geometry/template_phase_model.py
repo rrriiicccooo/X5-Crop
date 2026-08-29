@@ -16,7 +16,7 @@ from .template_model import (
 
 @dataclass(frozen=True)
 class TemplatePhaseInput:
-    """Exact registered input to the normal-plus-one-local-step solver."""
+    """Exact registered input to the bounded phase/advance solver."""
 
     observations: tuple[BoundaryEdgeObservation, ...]
     separator_bands: tuple[SeparatorBandObservation, ...]
@@ -62,6 +62,7 @@ class PhaseFailureKind(str, Enum):
     OBSERVATION_BOUND_EXCEEDED = "observation_bound_exceeded"
     HYPOTHESIS_BOUND_EXCEEDED = "hypothesis_bound_exceeded"
     DIRECT_PHASE_ANCHOR_UNAVAILABLE = "direct_phase_anchor_unavailable"
+    PHASE_SUPPORT_DISCONTINUITY = "phase_support_discontinuity"
     FIXED_TEMPLATE_MISMATCH = "fixed_template_mismatch"
     DISCRETE_PHASE_AMBIGUOUS = "discrete_phase_ambiguous"
     LOCAL_ADVANCE_AMBIGUOUS = "local_advance_ambiguous"
@@ -72,7 +73,6 @@ class PhaseWinnerBasis(str, Enum):
     RESIDUAL_COMPATIBILITY = "residual_compatibility"
     INDEPENDENT_SUPPORT = "independent_support"
     INDEPENDENT_COVERAGE = "independent_coverage"
-    INDEPENDENT_POLARITY_SUPPORT = "independent_polarity_support"
     RESIDUAL_SEPARATION = "residual_separation"
     CALIBRATED_RUNNER_REJECTED = "calibrated_runner_rejected"
 
@@ -85,11 +85,20 @@ class PhaseFitResult:
     status: PhaseFitStatus
     ambiguity_reason: str | None
     receipt: TemplateSearchReceipt
-    direct_observation_ids: tuple[ObservationId, ...]
+    registered_direct_observation_ids: tuple[ObservationId, ...]
     failure_kind: PhaseFailureKind | None = None
     winner_basis: PhaseWinnerBasis | None = None
 
     def __post_init__(self) -> None:
+        if (
+            len(set(self.registered_direct_observation_ids))
+            != len(self.registered_direct_observation_ids)
+            or any(
+                not isinstance(identity, ObservationId)
+                for identity in self.registered_direct_observation_ids
+            )
+        ):
+            raise ValueError("registered direct observation ledger is invalid")
         if self.status == PhaseFitStatus.RESOLVED and self.best is None:
             raise ValueError("resolved phase fit requires a placement")
         if self.status == PhaseFitStatus.BOUND_EXCEEDED and self.best is not None:
@@ -137,7 +146,9 @@ class PhaseFitResult:
             status=status,
             ambiguity_reason=reason,
             receipt=self.receipt,
-            direct_observation_ids=self.direct_observation_ids,
+            registered_direct_observation_ids=(
+                self.registered_direct_observation_ids
+            ),
             failure_kind=(None if status == PhaseFitStatus.RESOLVED else self.failure_kind),
             winner_basis=winner_basis,
         )

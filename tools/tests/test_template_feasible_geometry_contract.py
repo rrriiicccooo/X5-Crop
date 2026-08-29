@@ -68,13 +68,13 @@ class TemplateFeasibleGeometryContractTest(unittest.TestCase):
                 canonical_pitch_px=120.0,
                 observation_ids=sequence.pitch_fit.observation_ids,
             ),
-            role_positions_px=(
+            model_role_intervals_px=(
                 FiniteInterval(95.0, 105.0),
                 FiniteInterval(195.0, 205.0),
                 FiniteInterval.exact(220.0),
                 FiniteInterval.exact(320.0),
             ),
-            role_full_position_intervals_px=(
+            model_full_role_intervals_px=(
                 FiniteInterval(95.0, 105.0),
                 FiniteInterval(195.0, 205.0),
                 FiniteInterval.exact(220.0),

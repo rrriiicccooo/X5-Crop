@@ -13,8 +13,13 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
 - 用户提供 format，并确认匹配片夹的默认 count 或显式 count；count 包含中间空白曝光格。Runtime 不猜
   format、照片数或 blank，也没有 full/partial mode。`135-dual` 只有 12=6+6 可自动处理。
 - Detector 改为有界 fixed-template-first：从整条片带建立 coarse support，再在 format/count 编译出的
-  outer、separator 与 top/bottom 邻域一次测量。固定 W/H 与 typed evidence 决定 phase、pitch、cross、
-  ordinal 和最多一次直接 local advance；像素强度、片夹中心或样片规则不能替代 authority。
+  outer、separator 与 top/bottom 邻域一次测量。固定 W/H 与 typed evidence 决定 phase、pitch、cross 和
+  ordinal；每个唯一绑定的直接 separator 可以约束自己的 local advance，全部变化仍只作一次 O(count)
+  传播。像素强度、片夹中心或样片规则不能替代 authority。
+- 直接观察到的 start/end 在最终 placement 中保留 native coordinate 与完整 interval；Grid 只补齐缺失
+  角色。Phase support 按物理 lattice location 而非 raw edge 数计数，跨越过长的无观察区明确 review。
+- Cross 不再用片夹短轴中心选择最终边界；它只帮助编译有界测量 corridor。Cross winner basis、source
+  长轴投影与 enclosing-support 的逐侧/联合 padding 预算均进入 typed report 与外部校验。
 - 任一 slot 不安全时整张 source `needs_review`，不做 slot salvage。Contact 与 overlap 始终属于
   challenge，但 challenge 不预设终态：标准 detector/Gate 可产生安全自动批准，证据不足时安全 review
   同样合格；不启用第二套 detector 或特殊 bleed。

@@ -148,13 +148,11 @@ def _state_boundary_residuals(
 
     result: dict[BoundaryRole, float] = {
         BoundaryRole.START: (
-            state.sequence_start_model_residual_px
-            + frame.start.local_outward_departure_px
+            frame.start.local_outward_departure_px
             + PIXEL_CENTER_EXTENT_PX
         ),
         BoundaryRole.END: (
-            state.sequence_end_model_residual_px
-            + frame.end.local_outward_departure_px
+            frame.end.local_outward_departure_px
             + PIXEL_CENTER_EXTENT_PX
         ),
         BoundaryRole.TOP: (
@@ -185,17 +183,17 @@ def _state_cross_outward_departure_px(
     state: JointFrameState,
     role: BoundaryRole,
 ) -> float:
-    """Evaluate one aperture residual against the same feasible state.
+    """Evaluate one cross-edge residual against the same feasible state.
 
     A trace interval and the role position come from one observation family.
     Measuring their outward difference at each retained state avoids the false
     Cartesian sum of an extreme position with an independently extreme local
     departure.  Direction uncertainty is used only when raw trace intervals do
-    not cover the frame support.
+    not cover the frame support. Aperture output uses the compatible physical
+    direction family; enclosing support retains the wider direction directly
+    observed on that material edge outside its sampled trace span.
     """
 
-    if placement.cross_fit.boundary_use != OutputBoundaryUse.APERTURE_PAIR:
-        return 0.0
     direct = {item.role: item for item in placement.cross_fit.direct_bindings}
     binding = direct.get(role)
     source_role = role
@@ -270,10 +268,26 @@ def _state_cross_outward_departure_px(
         raw_departure = max(raw_departure, departure)
         covered_traces.append(trace_px)
 
-    fit_direction = binding.fit_direction_interval_degrees
-    if fit_direction is None:
+    direction_uncertainty = (
+        binding.observed_direction_interval_degrees
+        if placement.cross_fit.boundary_use
+        == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
+        else binding.full_direction_interval_degrees
+    )
+    if direction_uncertainty is None:
         return max(0.0, raw_departure)
-    if covered_traces:
+    if (
+        placement.cross_fit.boundary_use
+        == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
+        and binding.trace_coordinates_px
+    ):
+        lower = float(binding.trace_coordinates_px[0])
+        upper = float(binding.trace_coordinates_px[-1])
+        extrapolation_deltas = tuple(
+            endpoint - min(max(endpoint, lower), upper)
+            for endpoint in (support.minimum, support.maximum)
+        )
+    elif covered_traces:
         lower = min(covered_traces)
         upper = max(covered_traces)
         extrapolation_deltas = tuple(
@@ -287,7 +301,10 @@ def _state_cross_outward_departure_px(
         )
     shifts = tuple(
         math.tan(math.radians(angle)) * delta
-        for angle in (fit_direction.minimum, fit_direction.maximum)
+        for angle in (
+            direction_uncertainty.minimum,
+            direction_uncertainty.maximum,
+        )
         for delta in extrapolation_deltas
     )
     direction_departure = (
@@ -533,28 +550,26 @@ def template_direct_use_budget_assessment(
         output.envelope.boundary_use
         == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
     )
+    expansion_mm = {
+        role: states[role].worst_case_mm(
+            protections[role].joint_expansion_px
+        )
+        for role in _ROLES
+    }
+    support_cross_alignment_padding_mm = (
+        expansion_mm[BoundaryRole.TOP]
+        + expansion_mm[BoundaryRole.BOTTOM]
+        if support_output
+        else None
+    )
     edge_assessments = tuple(
         DirectUseBudgetEdgeAssessment(
             role=role,
             expansion_px=protections[role].joint_expansion_px,
-            expansion_mm=states[role].worst_case_mm(
-                protections[role].joint_expansion_px
-            ),
+            expansion_mm=expansion_mm[role],
             limit_mm=limit_mm[role],
-            limit_applies=(
-                not support_output
-                or role in {BoundaryRole.START, BoundaryRole.END}
-            ),
-            within_limit=(
-                True
-                if support_output
-                and role in {BoundaryRole.TOP, BoundaryRole.BOTTOM}
-                else
-                states[role].worst_case_mm(
-                    protections[role].joint_expansion_px
-                )
-                <= limit_mm[role]
-            ),
+            limit_applies=True,
+            within_limit=expansion_mm[role] <= limit_mm[role],
         )
         for role in _ROLES
     )
@@ -576,8 +591,15 @@ def template_direct_use_budget_assessment(
             support_ratio
             <= OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio
         )
-    supported = all(item.within_limit for item in edge_assessments) and (
-        support_within_limit is not False
+    support_cross_alignment_within_limit = (
+        None
+        if support_cross_alignment_padding_mm is None
+        else support_cross_alignment_padding_mm <= limit_mm[BoundaryRole.TOP]
+    )
+    supported = (
+        all(item.within_limit for item in edge_assessments)
+        and support_within_limit is not False
+        and support_cross_alignment_within_limit is not False
     )
     return DirectUseBudgetAssessment(
         geometry_id=output.geometry_id,
@@ -585,6 +607,12 @@ def template_direct_use_budget_assessment(
         edge_assessments=edge_assessments,
         enclosing_support_height_ratio=support_ratio,
         enclosing_support_within_limit=support_within_limit,
+        support_cross_alignment_padding_mm=(
+            support_cross_alignment_padding_mm
+        ),
+        support_cross_alignment_within_limit=(
+            support_cross_alignment_within_limit
+        ),
         state=(
             EvidenceState.SUPPORTED
             if supported

@@ -12,7 +12,6 @@ from ..gate_checks import (
 from .output_model import ResolvedOutputSlots
 from .template_cross_model import CrossFitStatus
 from .template_holder_fill import HolderFillState
-from .template_model import LocalAdvanceKind
 from .template_phase_model import PhaseFailureKind, PhaseFitStatus
 from .template_runtime_model import TemplateLaneReconstruction, TemplateSourceSelection
 
@@ -82,19 +81,7 @@ def build_template_gate(
         ),
         None,
     )
-    local_advance_unresolved = local_phase_failure is not None or any(
-        lane.prepared.phase_competition.best is not None
-        and any(
-            relation.kind
-            in {
-                LocalAdvanceKind.CONTACT,
-                LocalAdvanceKind.OVERLAP,
-                LocalAdvanceKind.UNRESOLVED,
-            }
-            for relation in lane.prepared.phase_competition.best.local_advance_relations
-        )
-        for lane in reconstructions
-    )
+    local_advance_unresolved = local_phase_failure is not None
     local_advance_failure = (
         None
         if local_phase_failure is None

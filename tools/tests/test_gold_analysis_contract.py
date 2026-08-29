@@ -79,11 +79,19 @@ class GoldAnalysisContractTest(unittest.TestCase):
                 "qualified_anchor_roles": [role],
             }
 
-        role_ids: list[str | None] = [None] * (2 * int(geometry["count"]))
-        role_ids[0] = "start-observation"
-        positions = [0.0] * len(role_ids)
-        positions[0] = start
-        positions[1] = end
+        bindings: list[dict[str, str] | None] = [
+            None
+        ] * (2 * int(geometry["count"]))
+        bindings[0] = {"observation_id": "start-observation"}
+        frames = [
+            {
+                "start": {"canonical_position_px": 0.0},
+                "end": {"canonical_position_px": 0.0},
+            }
+            for _ in geometry["slots"]
+        ]
+        frames[0]["start"]["canonical_position_px"] = start
+        frames[0]["end"]["canonical_position_px"] = end
         lane = {
             "observations": {
                 "sequence_edges": [
@@ -94,9 +102,17 @@ class GoldAnalysisContractTest(unittest.TestCase):
             "phase_competition": {
                 "status": "resolved",
                 "best": {
-                    "role_observation_ids": role_ids,
-                    "canonical_role_positions_px": positions,
+                    "role_bindings": bindings,
                 },
+            },
+            "placement_competition": {
+                "selected_placement_id": "selected",
+                "placements": [
+                    {
+                        "placement_id": "selected",
+                        "frames": frames,
+                    }
+                ],
             },
         }
 
@@ -178,6 +194,32 @@ class GoldAnalysisContractTest(unittest.TestCase):
                     "outward_budget_failure_sides": [],
                 }
             ],
+            "physical_prior_diagnostic": {
+                "source_sha256": source_sha256,
+                "format_id": "135",
+                "count": 1,
+                "scan_canvas_outcome": "supported",
+                "scan_canvas_matching_profile_ids": ["135_standard"],
+                "scan_canvas_profile_id": "135_standard",
+                "nearest_scan_canvas_profile_id": "135_standard",
+                "scan_canvas_aspect_error_ratio": 0.0,
+                "scan_canvas_scale_authority_supported": True,
+                "frame_ratio_measurements": [1.5],
+                "excluded_frame_count": 0,
+                "separator_gap_measurements_mm": [2.0],
+                "separator_gap_prior_containment": [True],
+                "pitch_measurements_mm": [38.0],
+                "pitch_prior_containment": [True],
+                "excluded_separator_count": 0,
+                "cross_corridor": {
+                    "available": True,
+                    "trace_count": 3,
+                    "top_outside_trace_count": 0,
+                    "bottom_outside_trace_count": 0,
+                    "maximum_top_outside_px": 0.0,
+                    "maximum_bottom_outside_px": 0.0,
+                },
+            },
         }
 
     def test_summary_separates_unsafe_auto_from_review_candidate(self) -> None:
@@ -212,6 +254,13 @@ class GoldAnalysisContractTest(unittest.TestCase):
         )
         self.assertEqual(
             summary["count_variant_candidate_safety_mismatch_count"],
+            1,
+        )
+        self.assertEqual(summary["physical_prior_validation"]["source_count"], 1)
+        self.assertEqual(
+            summary["physical_prior_validation"]["formats"]["135"][
+                "directly_visible_frame_ratio_within_catalog_count"
+            ],
             1,
         )
 

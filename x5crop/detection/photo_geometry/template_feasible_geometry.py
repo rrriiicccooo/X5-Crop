@@ -10,7 +10,7 @@ from scipy.optimize import linprog
 
 from ...domain import FiniteInterval
 from ...run_local_identity import run_local_id
-from .model import BoundaryRole
+from .model import BoundaryRole, PositionSource
 from .output_model import OutputBoundaryUse
 from .template_placement import FormatPlacement
 
@@ -39,8 +39,6 @@ class JointFrameState:
     top_at_lane_reference_px: float
     bottom_at_lane_reference_px: float
     enclosing_support_slope: float | None
-    sequence_start_model_residual_px: float
-    sequence_end_model_residual_px: float
 
     def __post_init__(self) -> None:
         values = (
@@ -48,21 +46,12 @@ class JointFrameState:
             self.sequence_end_px,
             self.top_at_lane_reference_px,
             self.bottom_at_lane_reference_px,
-            self.sequence_start_model_residual_px,
-            self.sequence_end_model_residual_px,
         )
         if (
             any(not math.isfinite(value) for value in values)
             or (
                 self.enclosing_support_slope is not None
                 and not math.isfinite(self.enclosing_support_slope)
-            )
-            or any(
-                value < 0.0
-                for value in (
-                    self.sequence_start_model_residual_px,
-                    self.sequence_end_model_residual_px,
-                )
             )
         ):
             raise ValueError("joint frame state must be finite")
@@ -319,76 +308,6 @@ def _project_pair_solutions(
             return tuple(solutions[key] for key in keys), evaluations
 
 
-def _sequence_model_residuals(
-    placement: FormatPlacement,
-    roles: tuple[_LinearExpression, ...],
-    solution: np.ndarray,
-    frame_index: int,
-) -> tuple[float, float]:
-    """Measure local direct residuals and bounded inferred-edge inheritance."""
-
-    direction = placement.sequence_fit.template.direction
-    by_role: dict[BoundaryRole, list[tuple[int, float]]] = {
-        BoundaryRole.START: [],
-        BoundaryRole.END: [],
-    }
-    for index, (expression, interval, observation_id) in enumerate(
-        zip(
-            roles,
-            placement.sequence_fit.role_full_position_intervals_px,
-            placement.sequence_fit.role_observation_ids,
-            strict=True,
-        )
-    ):
-        if observation_id is None:
-            continue
-        predicted = expression.value(solution)
-        if index % 2 == 0:
-            role = BoundaryRole.START
-            outward = interval.minimum if direction > 0 else interval.maximum
-            residual = (
-                predicted - outward
-                if direction > 0
-                else outward - predicted
-            )
-        else:
-            role = BoundaryRole.END
-            outward = interval.maximum if direction > 0 else interval.minimum
-            residual = (
-                outward - predicted
-                if direction > 0
-                else predicted - outward
-            )
-        by_role[role].append((index, max(0.0, residual)))
-
-    def selected(role: BoundaryRole, role_index: int) -> float:
-        direct = dict(by_role[role])
-        if role_index in direct:
-            return direct[role_index]
-        # A missing edge still represents one fixed-format frame. Its local
-        # straight-model departure is bounded by the nearest direct occurrence
-        # of the same physical role on either side; a remote outlier elsewhere
-        # on the strip is not copied into this frame. Width already varies in
-        # this joint solution and must not be added again as an independent
-        # maximum.
-        left = tuple(
-            value for index, value in direct.items() if index < role_index
-        )
-        right = tuple(
-            value for index, value in direct.items() if index > role_index
-        )
-        neighbours = (
-            *((left[-1],) if left else ()),
-            *((right[0],) if right else ()),
-        )
-        return max(neighbours, default=0.0)
-
-    return (
-        selected(BoundaryRole.START, 2 * frame_index),
-        selected(BoundaryRole.END, 2 * frame_index + 1),
-    )
-
-
 def _sequence_system(
     placement: FormatPlacement,
 ) -> tuple[_FeasibleSystem, tuple[_LinearExpression, ...]]:
@@ -441,7 +360,7 @@ def _sequence_system(
         (expression, interval)
         for expression, interval in zip(
             roles,
-            sequence.role_positions_px,
+            sequence.model_role_intervals_px,
             strict=True,
         )
     ) + (
@@ -452,6 +371,71 @@ def _sequence_system(
         (_LinearExpression(gap, 0.0), sequence.pitch_fit.gap_interval_px),
     )
     return _FeasibleSystem(bounds, _constraints(constraints)), roles
+
+
+def _direct_sequence_solutions(
+    placement: FormatPlacement,
+    frame_index: int,
+) -> tuple[tuple[tuple[float, float], ...], int] | None:
+    """Project native direct roles without returning them to the global grid.
+
+    Direct coordinates are measured facts, not additional detector degrees of
+    freedom.  One direct side therefore varies only with source-shared W; two
+    direct sides retain their observed intervals plus the fixed-W feasibility
+    check.  Frames without a direct side remain owned by phase and pitch.
+    """
+
+    frame = placement.frames[frame_index]
+    direction = placement.sequence_fit.template.direction
+    width = placement.sequence_fit.template.frame_width_px
+    start_direct = (
+        frame.start.position_source == PositionSource.OBSERVED_TRANSITION
+    )
+    end_direct = frame.end.position_source == PositionSource.OBSERVED_TRANSITION
+    if not start_direct and not end_direct:
+        return None
+
+    candidates: list[tuple[float, float]] = []
+    if start_direct and end_direct:
+        starts = frame.start.full_position_interval_px
+        ends = frame.end.full_position_interval_px
+
+        def retain(start: float, end: float) -> None:
+            measured = direction * (end - start)
+            if (
+                starts.contains(start, epsilon=_GEOMETRY_EPSILON)
+                and ends.contains(end, epsilon=_GEOMETRY_EPSILON)
+                and width.minimum - _GEOMETRY_EPSILON
+                <= measured
+                <= width.maximum + _GEOMETRY_EPSILON
+            ):
+                candidates.append((start, end))
+
+        for start in (starts.minimum, starts.maximum):
+            for end in (ends.minimum, ends.maximum):
+                retain(start, end)
+            for measured in (width.minimum, width.maximum):
+                retain(start, start + direction * measured)
+        for end in (ends.minimum, ends.maximum):
+            for measured in (width.minimum, width.maximum):
+                retain(end - direction * measured, end)
+    else:
+        direct = frame.start if start_direct else frame.end
+        for anchor in (
+            direct.full_position_interval_px.minimum,
+            direct.full_position_interval_px.maximum,
+        ):
+            for measured in (width.minimum, width.maximum):
+                candidates.append(
+                    (
+                        (anchor if start_direct else anchor - direction * measured),
+                        (anchor + direction * measured if start_direct else anchor),
+                    )
+                )
+    positions = _ordered_hull(tuple(candidates))
+    if not positions:
+        raise ValueError("direct frame boundaries have no fixed-W state")
+    return positions, len(candidates)
 
 
 def _aperture_cross_vertices(
@@ -631,11 +615,23 @@ def project_selected_placement(
         aperture_states = ()
     frames: list[tuple[JointFrameState, ...]] = []
     for ordinal in range(placement.output_slot_count):
-        sequence_solutions, evaluations = _project_pair_solutions(
-            sequence_system,
-            roles[2 * ordinal],
-            roles[2 * ordinal + 1],
-        )
+        direct_solutions = _direct_sequence_solutions(placement, ordinal)
+        if direct_solutions is None:
+            raw_sequence_solutions, evaluations = _project_pair_solutions(
+                sequence_system,
+                roles[2 * ordinal],
+                roles[2 * ordinal + 1],
+            )
+            sequence_solutions = tuple(
+                (
+                    roles[2 * ordinal].value(solution),
+                    roles[2 * ordinal + 1].value(solution),
+                )
+                for solution in raw_sequence_solutions
+            )
+        else:
+            direct_positions, evaluations = direct_solutions
+            sequence_solutions = direct_positions
         evaluation_count += evaluations
         if support_system is None:
             cross_shift = (
@@ -654,15 +650,7 @@ def project_selected_placement(
             )
             evaluation_count += evaluations
         states = []
-        for solution in sequence_solutions:
-            start = roles[2 * ordinal].value(solution)
-            end = roles[2 * ordinal + 1].value(solution)
-            start_residual, end_residual = _sequence_model_residuals(
-                placement,
-                roles,
-                solution,
-                ordinal,
-            )
+        for start, end in sequence_solutions:
             states.extend(
                 JointFrameState(
                     start,
@@ -670,8 +658,6 @@ def project_selected_placement(
                     top,
                     bottom,
                     support_slope,
-                    start_residual,
-                    end_residual,
                 )
                 for top, bottom, support_slope in cross_states
             )

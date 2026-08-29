@@ -17,6 +17,21 @@ from typing import Any, Iterable, Sequence
 
 import numpy as np
 
+from x5crop.configuration.scan_canvas import (
+    ScanCanvasDetectionConfiguration,
+)
+from x5crop.detection.evidence.scan_canvas import observe_scan_canvas
+from x5crop.detection.photo_geometry.template_measurement_plan import (
+    compile_template_measurement_plan,
+)
+from x5crop.detection.source_core import SourceStripValidationDomain
+from x5crop.domain import Box
+from x5crop.formats import (
+    FRAME_DIMENSION_TOLERANCE_SPEC,
+    format_spec,
+)
+from x5crop.formats.scan_canvas import scan_canvas_specs_for_format
+
 from .accuracy import (
     DEVELOPMENT_GOLD_COHORT_PATH,
     PROJECT_ROOT,
@@ -31,8 +46,8 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v3"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v3"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v4"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v4"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
 SOURCE_TIMEOUT_SECONDS = 600
@@ -111,6 +126,283 @@ def _canonical_axis_extents(
     long_extent = float(extent["width"] if horizontal else extent["height"])
     cross_extent = float(extent["height"] if horizontal else extent["width"])
     return long_extent, cross_extent
+
+
+def _line_pool(geometry: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        str(line["line_id"]): line for line in geometry["boundary_pool"]
+    }
+
+
+def _boundary_pair_by_ordinal(
+    geometry: dict[str, Any],
+) -> dict[int, tuple[dict[str, Any], dict[str, Any], str]]:
+    lines = _line_pool(geometry)
+    pairs: dict[int, tuple[dict[str, Any], dict[str, Any], str]] = {}
+    for slot in geometry["slots"]:
+        reference = slot["reference_geometry"]
+        if reference["kind"] != "boundary_pair":
+            continue
+        pairs[int(slot["ordinal"])] = (
+            lines[str(reference["start_boundary_id"])],
+            lines[str(reference["end_boundary_id"])],
+            str(slot["slot_kind"]),
+        )
+    return pairs
+
+
+def _outside_distance(interval: object, value: float) -> float:
+    minimum = float(getattr(interval, "minimum"))
+    maximum = float(getattr(interval, "maximum"))
+    return max(minimum - value, value - maximum, 0.0)
+
+
+def _physical_prior_diagnostic(record: dict[str, Any]) -> dict[str, Any]:
+    """Compare one confirmed source against the current physical catalogue."""
+
+    geometry = record["confirmed_geometry"]
+    physical = format_spec(str(record["format_id"]))
+    frame = physical.frame
+    long_extent, cross_extent = _canonical_axis_extents(geometry)
+    profiles = scan_canvas_specs_for_format(physical.format_id)
+    observed_aspect = long_extent / cross_extent
+    nearest_profile = min(
+        profiles,
+        key=lambda item: (
+            abs(observed_aspect - item.aspect) / item.aspect,
+            item.profile_id,
+        ),
+    )
+    aspect_error = (
+        abs(observed_aspect - nearest_profile.aspect) / nearest_profile.aspect
+    )
+    canvas_configuration = ScanCanvasDetectionConfiguration(profiles)
+    canvas_evidence = observe_scan_canvas(
+        int(long_extent),
+        int(cross_extent),
+        "horizontal",
+        canvas_configuration,
+    )
+    selected_profile = canvas_evidence.selected_profile
+    scale_authority = canvas_evidence.axis_scales
+    plan = None
+    if selected_profile is not None and scale_authority is not None:
+        holder_count = physical.holder_full_count(selected_profile.profile_id)
+        if holder_count is None:
+            raise ValueError("selected scan canvas has no format capacity")
+        plan = compile_template_measurement_plan(
+            format_spec=physical,
+            frame_spec=frame,
+            count=int(record["count"]),
+            full_count=holder_count,
+            holder_full_count=holder_count,
+            lane_authority=SourceStripValidationDomain(
+                lane_id="gold-physics",
+                work_box=Box(0, 0, int(long_extent), int(cross_extent)),
+                source_axis_long="x",
+                authority_profile_id=selected_profile.profile_id,
+            ),
+            layout="horizontal",
+            scale_authority=scale_authority,
+        )
+
+    pairs = _boundary_pair_by_ordinal(geometry)
+    shared = geometry["shared_edges"]
+    cross_reference = (cross_extent - 1.0) / 2.0
+    frame_ratio_measurements: list[float] = []
+    excluded_frame_count = 0
+    for start, end, slot_kind in pairs.values():
+        if (
+            slot_kind != "image"
+            or start["review_basis"] != "directly_visible"
+            or end["review_basis"] != "directly_visible"
+        ):
+            excluded_frame_count += 1
+            continue
+        start_position = line_axis_position(
+            geometry,
+            start,
+            axis="sequence",
+            reference_trace_px=cross_reference,
+        )
+        end_position = line_axis_position(
+            geometry,
+            end,
+            axis="sequence",
+            reference_trace_px=cross_reference,
+        )
+        long_reference = (start_position + end_position) / 2.0
+        top = line_axis_position(
+            geometry,
+            shared[0],
+            axis="cross",
+            reference_trace_px=long_reference,
+        )
+        bottom = line_axis_position(
+            geometry,
+            shared[1],
+            axis="cross",
+            reference_trace_px=long_reference,
+        )
+        width = abs(end_position - start_position)
+        height = abs(bottom - top)
+        if min(width, height) <= 0.0:
+            raise ValueError("gold frame has non-positive physical extent")
+        frame_ratio_measurements.append(width / height)
+
+    gap_measurements_mm: list[float] = []
+    gap_prior_containment: list[bool] = []
+    pitch_measurements_mm: list[float] = []
+    pitch_prior_containment: list[bool] = []
+    excluded_separator_count = 0
+    for adjacency in geometry["adjacencies"]:
+        if adjacency["kind"] != "separator":
+            continue
+        left = pairs.get(int(adjacency["left_ordinal"]))
+        right = pairs.get(int(adjacency["right_ordinal"]))
+        if (
+            left is None
+            or right is None
+            or left[1]["review_basis"] != "directly_visible"
+            or right[0]["review_basis"] != "directly_visible"
+        ):
+            excluded_separator_count += 1
+            continue
+        left_end = line_axis_position(
+            geometry,
+            left[1],
+            axis="sequence",
+            reference_trace_px=cross_reference,
+        )
+        right_start = line_axis_position(
+            geometry,
+            right[0],
+            axis="sequence",
+            reference_trace_px=cross_reference,
+        )
+        long_reference = (left_end + right_start) / 2.0
+        top = line_axis_position(
+            geometry,
+            shared[0],
+            axis="cross",
+            reference_trace_px=long_reference,
+        )
+        bottom = line_axis_position(
+            geometry,
+            shared[1],
+            axis="cross",
+            reference_trace_px=long_reference,
+        )
+        height = abs(bottom - top)
+        gap = right_start - left_end
+        if height <= 0.0 or gap < 0.0:
+            raise ValueError("gold separator contradicts physical order")
+        gap_measurements_mm.append(gap * frame.frame_height_mm / height)
+        if (
+            left[0]["review_basis"] == "directly_visible"
+            and right[1]["review_basis"] == "directly_visible"
+        ):
+            left_start = line_axis_position(
+                geometry,
+                left[0],
+                axis="sequence",
+                reference_trace_px=cross_reference,
+            )
+            right_end = line_axis_position(
+                geometry,
+                right[1],
+                axis="sequence",
+                reference_trace_px=cross_reference,
+            )
+            pitch = (
+                (right_start - left_start) + (right_end - left_end)
+            ) / 2.0
+            if pitch <= 0.0:
+                raise ValueError("gold pitch contradicts physical order")
+            pitch_measurements_mm.append(
+                pitch * frame.frame_height_mm / height
+            )
+            if plan is not None:
+                pitch_prior_containment.append(
+                    plan.template_spec.pitch_px.minimum
+                    <= pitch
+                    <= plan.template_spec.pitch_px.maximum
+                )
+        if frame.format_gap_prior_mm is not None and plan is not None:
+            gap_prior_containment.append(
+                plan.template_spec.nominal_gap_px.minimum
+                <= gap
+                <= plan.template_spec.nominal_gap_px.maximum
+            )
+
+    corridor = {
+        "available": False,
+        "trace_count": 0,
+        "top_outside_trace_count": 0,
+        "bottom_outside_trace_count": 0,
+        "maximum_top_outside_px": None,
+        "maximum_bottom_outside_px": None,
+    }
+    if plan is not None:
+        projected = plan.projected_queries
+        top_outside: list[float] = []
+        bottom_outside: list[float] = []
+        for trace, top_interval, bottom_interval in zip(
+            projected.cross_trace_positions_px,
+            projected.top_measurement_intervals_px,
+            projected.bottom_measurement_intervals_px,
+            strict=True,
+        ):
+            top_position = line_axis_position(
+                geometry,
+                shared[0],
+                axis="cross",
+                reference_trace_px=float(trace),
+            )
+            bottom_position = line_axis_position(
+                geometry,
+                shared[1],
+                axis="cross",
+                reference_trace_px=float(trace),
+            )
+            top_outside.append(_outside_distance(top_interval, top_position))
+            bottom_outside.append(
+                _outside_distance(bottom_interval, bottom_position)
+            )
+        corridor = {
+            "available": True,
+            "trace_count": len(top_outside),
+            "top_outside_trace_count": sum(value > 0.0 for value in top_outside),
+            "bottom_outside_trace_count": sum(
+                value > 0.0 for value in bottom_outside
+            ),
+            "maximum_top_outside_px": max(top_outside, default=0.0),
+            "maximum_bottom_outside_px": max(bottom_outside, default=0.0),
+        }
+
+    return {
+        "source_sha256": record["source_sha256"],
+        "format_id": physical.format_id,
+        "count": int(record["count"]),
+        "scan_canvas_outcome": canvas_evidence.outcome.value,
+        "scan_canvas_matching_profile_ids": [
+            match.profile.profile_id for match in canvas_evidence.matches
+        ],
+        "scan_canvas_profile_id": (
+            None if selected_profile is None else selected_profile.profile_id
+        ),
+        "nearest_scan_canvas_profile_id": nearest_profile.profile_id,
+        "scan_canvas_aspect_error_ratio": aspect_error,
+        "scan_canvas_scale_authority_supported": scale_authority is not None,
+        "frame_ratio_measurements": frame_ratio_measurements,
+        "excluded_frame_count": excluded_frame_count,
+        "separator_gap_measurements_mm": gap_measurements_mm,
+        "separator_gap_prior_containment": gap_prior_containment,
+        "pitch_measurements_mm": pitch_measurements_mm,
+        "pitch_prior_containment": pitch_prior_containment,
+        "excluded_separator_count": excluded_separator_count,
+        "cross_corridor": corridor,
+    }
 
 
 def _referenced_sequence_roles(
@@ -255,6 +547,21 @@ def _interval_distance(interval: dict[str, Any], value: float) -> float:
     return 0.0
 
 
+def _selected_placement(lane: dict[str, Any]) -> dict[str, Any] | None:
+    competition = lane["placement_competition"]
+    selected_id = competition.get("selected_placement_id")
+    if selected_id is None:
+        return None
+    matches = tuple(
+        placement
+        for placement in competition["placements"]
+        if placement["placement_id"] == selected_id
+    )
+    if len(matches) != 1:
+        raise ValueError("selected placement identity is not unique")
+    return matches[0]
+
+
 def sequence_boundary_diagnostics(
     geometry: dict[str, Any],
     lane: dict[str, Any],
@@ -267,9 +574,17 @@ def sequence_boundary_diagnostics(
     }
     competition = lane["phase_competition"]
     best = competition.get("best")
-    bound_ids = [] if best is None else list(best["role_observation_ids"])
-    canonical_positions = (
-        [] if best is None else list(best["canonical_role_positions_px"])
+    bound_ids = (
+        []
+        if best is None
+        else [
+            None if binding is None else str(binding["observation_id"])
+            for binding in best["role_bindings"]
+        ]
+    )
+    selected_placement = _selected_placement(lane)
+    selected_frames = (
+        () if selected_placement is None else selected_placement["frames"]
     )
     _, cross_extent = _canonical_axis_extents(geometry)
     common_trace = (cross_extent - 1.0) / 2.0
@@ -320,10 +635,11 @@ def sequence_boundary_diagnostics(
             axis="sequence",
             reference_trace_px=common_trace,
         )
+        frame_index = int(item["ordinal"]) - 1
         selected = (
-            float(canonical_positions[role_index])
-            if role_index < len(canonical_positions)
-            else None
+            None
+            if frame_index >= len(selected_frames)
+            else float(selected_frames[frame_index][item["role"]]["canonical_position_px"])
         )
         bound_observation = observation_by_id.get(bound_id)
         results.append(
@@ -369,6 +685,10 @@ def cross_boundary_diagnostics(
 ) -> tuple[dict[str, Any], ...]:
     competition = lane["cross_competition"]
     best = competition.get("best")
+    selected_placement = _selected_placement(lane)
+    selected_cross = (
+        None if selected_placement is None else selected_placement["cross_fit"]
+    )
     long_extent, _ = _canonical_axis_extents(geometry)
     reference_trace = (
         (long_extent - 1.0) / 2.0
@@ -413,8 +733,8 @@ def cross_boundary_diagnostics(
             diagnostic_class = "bound_elsewhere_without_gold_observation"
         selected = (
             None
-            if best is None
-            else float(best[f"{role}_canonical_px"])
+            if selected_cross is None
+            else float(selected_cross[f"{role}_canonical_px"])
         )
         results.append(
             {
@@ -448,7 +768,7 @@ def cross_boundary_diagnostics(
                     else "competing_or_unresolved"
                 ),
                 "selected_boundary_use": (
-                    None if best is None else best["boundary_use"]
+                    None if selected_cross is None else selected_cross["boundary_use"]
                 ),
             }
         )
@@ -517,6 +837,7 @@ def _challenge_capability_outcome(
 
 
 def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
+    physical_prior = _physical_prior_diagnostic(record)
     source = (PROJECT_ROOT / record["source_relative_path"]).resolve()
     before = source.stat()
     started = time.perf_counter()
@@ -645,11 +966,231 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         "duration_seconds": duration,
         "boundary_diagnostics": list(boundaries),
         "frame_candidate_geometry_diagnostics": list(frame_diagnostics),
+        "physical_prior_diagnostic": physical_prior,
     }
 
 
 def _counter(records: Iterable[dict[str, Any]], key: str) -> dict[str, int]:
     return dict(sorted(Counter(str(record[key]) for record in records).items()))
+
+
+def _distribution(values: Iterable[float]) -> dict[str, float | int | None]:
+    samples = tuple(float(value) for value in values)
+    if not samples:
+        return {
+            "count": 0,
+            "minimum": None,
+            "p50": None,
+            "p90": None,
+            "p95": None,
+            "maximum": None,
+        }
+    return {
+        "count": len(samples),
+        "minimum": min(samples),
+        "p50": float(np.percentile(samples, 50)),
+        "p90": float(np.percentile(samples, 90)),
+        "p95": float(np.percentile(samples, 95)),
+        "maximum": max(samples),
+    }
+
+
+def _unique_source_physical_diagnostics(
+    records: Sequence[dict[str, Any]],
+) -> tuple[dict[str, Any], ...]:
+    selected: dict[str, dict[str, Any]] = {}
+    for record in records:
+        diagnostic = record["physical_prior_diagnostic"]
+        if diagnostic.get("analysis_error") is not None:
+            continue
+        source_sha = str(record["source_sha256"])
+        current = selected.get(source_sha)
+        if current is None or (
+            int(diagnostic["count"]),
+            str(record["sample_id"]),
+        ) > (
+            int(current["count"]),
+            str(current["sample_id"]),
+        ):
+            selected[source_sha] = {
+                **diagnostic,
+                "sample_id": str(record["sample_id"]),
+            }
+    return tuple(
+        selected[source_sha] for source_sha in sorted(selected)
+    )
+
+
+def _physical_format_summary(
+    format_id: str,
+    diagnostics: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
+    physical = format_spec(format_id)
+    frame = physical.frame
+    nominal_ratio = frame.frame_width_mm / frame.frame_height_mm
+    minimum_ratio = nominal_ratio * (
+        1.0 - FRAME_DIMENSION_TOLERANCE_SPEC.frame_width_tolerance_ratio
+    ) / (1.0 + FRAME_DIMENSION_TOLERANCE_SPEC.frame_height_tolerance_ratio)
+    maximum_ratio = nominal_ratio * (
+        1.0 + FRAME_DIMENSION_TOLERANCE_SPEC.frame_width_tolerance_ratio
+    ) / (1.0 - FRAME_DIMENSION_TOLERANCE_SPEC.frame_height_tolerance_ratio)
+    frame_ratios = tuple(
+        ratio
+        for diagnostic in diagnostics
+        for ratio in diagnostic["frame_ratio_measurements"]
+    )
+    gap_measurements = tuple(
+        gap
+        for diagnostic in diagnostics
+        for gap in diagnostic["separator_gap_measurements_mm"]
+    )
+    gap_containment = tuple(
+        contained
+        for diagnostic in diagnostics
+        for contained in diagnostic["separator_gap_prior_containment"]
+    )
+    pitch_measurements = tuple(
+        pitch
+        for diagnostic in diagnostics
+        for pitch in diagnostic["pitch_measurements_mm"]
+    )
+    pitch_containment = tuple(
+        contained
+        for diagnostic in diagnostics
+        for contained in diagnostic["pitch_prior_containment"]
+    )
+    corridor_diagnostics = tuple(
+        diagnostic["cross_corridor"]
+        for diagnostic in diagnostics
+        if diagnostic["cross_corridor"]["available"]
+    )
+    return {
+        "source_count": len(diagnostics),
+        "scan_canvas_outcome_counts": dict(
+            sorted(
+                Counter(
+                    str(diagnostic["scan_canvas_outcome"])
+                    for diagnostic in diagnostics
+                ).items()
+            )
+        ),
+        "selected_scan_canvas_profile_counts": dict(
+            sorted(
+                Counter(
+                    str(diagnostic["scan_canvas_profile_id"])
+                    for diagnostic in diagnostics
+                    if diagnostic["scan_canvas_profile_id"] is not None
+                ).items()
+            )
+        ),
+        "scan_canvas_aspect_error_ratio": _distribution(
+            diagnostic["scan_canvas_aspect_error_ratio"]
+            for diagnostic in diagnostics
+        ),
+        "scan_canvas_scale_authority_supported_source_count": sum(
+            diagnostic["scan_canvas_scale_authority_supported"]
+            for diagnostic in diagnostics
+        ),
+        "frame_ratio_catalog": {
+            "nominal": nominal_ratio,
+            "minimum": minimum_ratio,
+            "maximum": maximum_ratio,
+        },
+        "directly_visible_frame_ratio": _distribution(frame_ratios),
+        "directly_visible_frame_ratio_within_catalog_count": sum(
+            minimum_ratio <= ratio <= maximum_ratio for ratio in frame_ratios
+        ),
+        "directly_visible_frame_ratio_below_catalog_count": sum(
+            ratio < minimum_ratio for ratio in frame_ratios
+        ),
+        "directly_visible_frame_ratio_above_catalog_count": sum(
+            ratio > maximum_ratio for ratio in frame_ratios
+        ),
+        "excluded_frame_count": sum(
+            int(diagnostic["excluded_frame_count"])
+            for diagnostic in diagnostics
+        ),
+        "separator_gap_prior_mm": frame.format_gap_prior_mm,
+        "directly_visible_separator_gap_mm": _distribution(gap_measurements),
+        "separator_gap_within_runtime_prior_count": sum(gap_containment),
+        "separator_gap_runtime_prior_comparison_count": len(gap_containment),
+        "directly_visible_pitch_mm": _distribution(pitch_measurements),
+        "pitch_within_runtime_interval_count": sum(pitch_containment),
+        "pitch_runtime_interval_comparison_count": len(pitch_containment),
+        "excluded_separator_count": sum(
+            int(diagnostic["excluded_separator_count"])
+            for diagnostic in diagnostics
+        ),
+        "compiled_cross_measurement_corridor": {
+            "source_count": len(corridor_diagnostics),
+            "trace_count": sum(
+                int(diagnostic["trace_count"])
+                for diagnostic in corridor_diagnostics
+            ),
+            "source_with_outside_trace_count": sum(
+                bool(
+                    diagnostic["top_outside_trace_count"]
+                    or diagnostic["bottom_outside_trace_count"]
+                )
+                for diagnostic in corridor_diagnostics
+            ),
+            "top_outside_trace_count": sum(
+                int(diagnostic["top_outside_trace_count"])
+                for diagnostic in corridor_diagnostics
+            ),
+            "bottom_outside_trace_count": sum(
+                int(diagnostic["bottom_outside_trace_count"])
+                for diagnostic in corridor_diagnostics
+            ),
+            "maximum_top_outside_px": max(
+                (
+                    float(diagnostic["maximum_top_outside_px"])
+                    for diagnostic in corridor_diagnostics
+                ),
+                default=None,
+            ),
+            "maximum_bottom_outside_px": max(
+                (
+                    float(diagnostic["maximum_bottom_outside_px"])
+                    for diagnostic in corridor_diagnostics
+                ),
+                default=None,
+            ),
+        },
+    }
+
+
+def _physical_prior_validation(
+    records: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
+    diagnostics = _unique_source_physical_diagnostics(records)
+    by_format: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for diagnostic in diagnostics:
+        by_format[str(diagnostic["format_id"])].append(diagnostic)
+    return {
+        "scope": (
+            "unique_source_gold_geometry_against_current_runtime_physical_priors"
+        ),
+        "source_count": len(diagnostics),
+        "analysis_error_source_count": len(
+            {
+                str(record["source_sha256"])
+                for record in records
+                if record["physical_prior_diagnostic"].get("analysis_error")
+                is not None
+            }
+        ),
+        "format_source_counts": dict(
+            sorted(
+                (format_id, len(items))
+                for format_id, items in by_format.items()
+            )
+        ),
+        "formats": {
+            format_id: _physical_format_summary(format_id, items)
+            for format_id, items in sorted(by_format.items())
+        },
+    }
 
 
 def _development_contract_failure_category(
@@ -904,6 +1445,7 @@ def _summary(
             item["candidate_safety_mismatch"] for item in variants
         ),
         "count_variant_diagnostics": variants,
+        "physical_prior_validation": _physical_prior_validation(records),
         "decision_status_counts": _counter(records, "decision_status"),
         "stage_counts": dict(
             sorted(
@@ -1019,6 +1561,17 @@ def run_gold_analysis(
         try:
             result = run_gold_analysis_task(record)
         except Exception as error:
+            try:
+                physical_prior = _physical_prior_diagnostic(record)
+            except Exception as physical_error:
+                physical_prior = {
+                    "source_sha256": record["source_sha256"],
+                    "format_id": record["format_id"],
+                    "count": record["count"],
+                    "analysis_error": (
+                        f"{type(physical_error).__name__}: {physical_error}"
+                    ),
+                }
             result = {
                 "record_schema": ANALYSIS_RECORD_SCHEMA,
                 "sample_id": record["sample_id"],
@@ -1045,6 +1598,7 @@ def run_gold_analysis(
                 "duration_seconds": 0.0,
                 "boundary_diagnostics": [],
                 "frame_candidate_geometry_diagnostics": [],
+                "physical_prior_diagnostic": physical_prior,
             }
         records.append(result)
         print(

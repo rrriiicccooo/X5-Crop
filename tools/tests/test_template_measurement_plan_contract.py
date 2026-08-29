@@ -204,6 +204,10 @@ class TemplateMeasurementPlanContractTest(unittest.TestCase):
         )
         projected = plan.projected_queries
         self.assertEqual(projected.long_extent_px, 9899)
+        self.assertGreater(
+            plan.template_spec.phase_lattice_authority.maximum_slot_offset,
+            3,
+        )
         self.assertLess(max(projected.cross_trace_positions_px), 9899)
         self.assertLess(max(projected.sequence_trace_positions_px), 2797)
         self.assertTrue(

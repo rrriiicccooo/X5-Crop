@@ -34,6 +34,7 @@ from x5crop.detection.photo_geometry.template_phase_candidates import (
     _separator_role_authority,
 )
 from x5crop.detection.photo_geometry.template_phase_model import (
+    PhaseFailureKind,
     PhaseFitStatus,
     PhaseWinnerBasis,
     TemplatePhaseInput,
@@ -83,13 +84,13 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
         self.assertIsNotNone(result.best)
         for actual, expected in zip(
-            result.best.canonical_role_positions_px,
+            result.best.model_role_positions_px,
             (100.0, 200.0, 220.0, 320.0, 340.0, 440.0),
             strict=True,
         ):
             self.assertAlmostEqual(actual, expected)
         self.assertEqual(
-            result.best.role_observation_ids[-1],
+            result.best.binding_observation_ids[-1],
             ObservationId("bend:end:3"),
         )
 
@@ -125,6 +126,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         matches = _match_roles(
             _facts(observations),
             template.roles,
+            (),
             phase=100.0,
             width=100.0,
             pitch=120.0,
@@ -135,6 +137,68 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
 
         self.assertEqual(matches, ())
+
+    def test_separator_roles_cannot_form_an_unobserved_mixed_pair(self) -> None:
+        observations = (
+            replace(
+                edge("outer:start", 30.0),
+                qualified_anchor_roles=(BoundaryRole.START,),
+            ),
+            replace(
+                edge("band:a:end", 110.0),
+                qualified_anchor_roles=(BoundaryRole.END,),
+            ),
+            replace(
+                edge("band:b:end", 130.0),
+                qualified_anchor_roles=(BoundaryRole.END,),
+            ),
+            replace(
+                edge("band:a:start", 150.0),
+                qualified_anchor_roles=(BoundaryRole.START,),
+            ),
+            replace(
+                edge("band:b:start", 170.0),
+                qualified_anchor_roles=(BoundaryRole.START,),
+            ),
+            replace(
+                edge("outer:end", 250.0),
+                qualified_anchor_roles=(BoundaryRole.END,),
+            ),
+        )
+        facts = _facts(observations)
+        by_id = {item.observation_id: item for item in facts}
+        separator_pairs = (
+            (
+                by_id[ObservationId("band:a:end")],
+                by_id[ObservationId("band:a:start")],
+            ),
+            (
+                by_id[ObservationId("band:b:end")],
+                by_id[ObservationId("band:b:start")],
+            ),
+        )
+        compiled = template(2)
+
+        matches = _match_roles(
+            facts,
+            compiled.roles,
+            separator_pairs,
+            phase=30.0,
+            width=100.0,
+            pitch=120.0,
+            direction=1,
+            prefixes=(0.0, 0.0),
+            frame_width=compiled.frame_width_px,
+            fit_residual_limit_px=None,
+        )
+
+        self.assertEqual(
+            tuple((role.role_index, fact.observation_id) for role, fact in matches),
+            (
+                (0, ObservationId("outer:start")),
+                (3, ObservationId("outer:end")),
+            ),
+        )
 
     def test_sequence_fit_rejects_invalid_provenance_and_residual(self) -> None:
         result = fit_template_phase(
@@ -147,17 +211,13 @@ class TemplatePhaseContractTest(unittest.TestCase):
         assert result.best is not None
         with self.assertRaisesRegex(ValueError, "residual"):
             replace(result.best, residual_sum_px=math.inf)
-        duplicate = result.best.role_observation_ids[0]
+        duplicate = result.best.binding_observation_ids[0]
         assert duplicate is not None
+        bindings = list(result.best.role_bindings)
+        assert bindings[1] is not None
+        bindings[1] = replace(bindings[1], observation_id=duplicate)
         with self.assertRaisesRegex(ValueError, "multiple template roles"):
-            replace(
-                result.best,
-                role_observation_ids=(
-                    duplicate,
-                    duplicate,
-                    *result.best.role_observation_ids[2:],
-                ),
-            )
+            replace(result.best, role_bindings=tuple(bindings))
 
     def test_regular_sequence_uses_direct_phase(self) -> None:
         observations = tuple(
@@ -177,8 +237,9 @@ class TemplatePhaseContractTest(unittest.TestCase):
             result.best.phase_lattice_fit.canonical_absolute_phase_px,
             80.0,
         )
-        self.assertEqual(result.best.independent_support_count, 6)
-        self.assertEqual(result.best.inferred_role_indices, ())
+        self.assertEqual(result.best.phase_support_count, 4)
+        self.assertEqual(result.best.phase_support_locations, (0, 1, 2, 3))
+        self.assertEqual(result.best.unbound_role_indices, ())
 
     def test_phase_is_derived_from_direct_observations(self) -> None:
         observations = tuple(
@@ -193,6 +254,39 @@ class TemplatePhaseContractTest(unittest.TestCase):
             result.best.phase_lattice_fit.canonical_absolute_phase_px,
             35.0,
         )
+
+    def test_two_consecutive_unobserved_adjacencies_withhold_phase(self) -> None:
+        specs = (
+            ("gap:start:2", 160.0, BoundaryRole.START),
+            ("gap:end:2", 260.0, BoundaryRole.END),
+            ("gap:start:3", 280.0, BoundaryRole.START),
+            ("gap:end:3", 380.0, BoundaryRole.END),
+            ("gap:start:4", 400.0, BoundaryRole.START),
+            ("gap:end:6", 740.0, BoundaryRole.END),
+        )
+        observations = tuple(
+            replace(
+                edge(identity, coordinate),
+                qualified_anchor_roles=(role,),
+                polarity=1 if role == BoundaryRole.START else -1,
+            )
+            for identity, coordinate, role in specs
+        )
+
+        result = fit_template_phase(
+            observations,
+            template(6),
+            holder_span_px=FiniteInterval(0.0, 800.0),
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            PhaseFailureKind.PHASE_SUPPORT_DISCONTINUITY,
+        )
+        assert result.best is not None
+        self.assertEqual(result.best.phase_support_locations, (1, 2, 3, 6))
+        self.assertEqual(result.best.maximum_internal_phase_gap, 2)
 
     def test_direct_phase_authority_preserves_calibrated_placement(self) -> None:
         observations = (
@@ -209,7 +303,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertIn(result.status, (PhaseFitStatus.RESOLVED, PhaseFitStatus.AMBIGUOUS))
         assert result.best is not None
         self.assertEqual(
-            result.best.role_observation_ids[0],
+            result.best.binding_observation_ids[0],
             ObservationId("prior-start"),
         )
         self.assertLessEqual(
@@ -305,22 +399,22 @@ class TemplatePhaseContractTest(unittest.TestCase):
         assert translated.best is not None
         assert scaled.best is not None
         self.assertEqual(
-            translated.best.role_observation_ids,
-            base.best.role_observation_ids,
+            translated.best.binding_observation_ids,
+            base.best.binding_observation_ids,
         )
         self.assertEqual(
-            scaled.best.role_observation_ids,
-            base.best.role_observation_ids,
+            scaled.best.binding_observation_ids,
+            base.best.binding_observation_ids,
         )
         for original, moved in zip(
-            base.best.canonical_role_positions_px,
-            translated.best.canonical_role_positions_px,
+            base.best.model_role_positions_px,
+            translated.best.model_role_positions_px,
             strict=True,
         ):
             self.assertAlmostEqual(moved, original + 37.25)
         for original, resized in zip(
-            base.best.canonical_role_positions_px,
-            scaled.best.canonical_role_positions_px,
+            base.best.model_role_positions_px,
+            scaled.best.model_role_positions_px,
             strict=True,
         ):
             self.assertAlmostEqual(resized, original * factor)
@@ -357,12 +451,12 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
         assert result.best is not None
         self.assertAlmostEqual(
-            result.best.canonical_role_positions_px[-2],
+            result.best.model_role_positions_px[-2],
             phase + (count - 1) * pitch,
             places=9,
         )
         self.assertAlmostEqual(
-            result.best.canonical_role_positions_px[-1],
+            result.best.model_role_positions_px[-1],
             phase + (count - 1) * pitch + width,
             places=9,
         )
@@ -386,10 +480,10 @@ class TemplatePhaseContractTest(unittest.TestCase):
             ),
             constrained,
         )
-        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        self.assertEqual(result.status, PhaseFitStatus.AMBIGUOUS)
         assert result.best is not None
         self.assertEqual(result.best.phase_lattice_fit.integer_slot_offset, 0)
-        self.assertEqual(result.best.inferred_role_indices[:2], (0, 1))
+        self.assertEqual(result.best.unbound_role_indices[:2], (0, 1))
         self.assertAlmostEqual(
             result.best.phase_lattice_fit.canonical_absolute_phase_px,
             40.0,
@@ -418,8 +512,8 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         narrowed = result.with_calibrated_template(calibrated)
         self.assertEqual(
-            narrowed.best.role_observation_ids,
-            result.best.role_observation_ids,
+            narrowed.best.binding_observation_ids,
+            result.best.binding_observation_ids,
         )
         self.assertAlmostEqual(
             narrowed.best.pitch_fit.canonical_frame_width_px,
@@ -454,8 +548,8 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         assert narrowed.best is not None
         self.assertEqual(
-            narrowed.best.canonical_role_positions_px,
-            result.best.canonical_role_positions_px,
+            narrowed.best.model_role_positions_px,
+            result.best.model_role_positions_px,
         )
 
     def test_clutter_does_not_move_global_fit(self) -> None:
@@ -472,7 +566,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             result.best.phase_lattice_fit.canonical_absolute_phase_px,
             40.0,
         )
-        self.assertEqual(result.best.independent_support_count, 6)
+        self.assertEqual(result.best.phase_support_count, 4)
 
         weak_clutter = (*true_edges, 100.0)
         result = fit_template_phase(
@@ -488,7 +582,41 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
         assert result.best is not None
-        self.assertEqual(result.best.independent_support_count, 6)
+        self.assertEqual(result.best.phase_support_count, 4)
+
+    def test_more_supported_lattice_locations_outrank_more_local_edges(
+        self,
+    ) -> None:
+        coordinates = (10.0, 127.0, 227.0, 247.0, 350.0, 370.0, 470.0)
+        roles = (
+            BoundaryRole.START,
+            BoundaryRole.START,
+            BoundaryRole.END,
+            BoundaryRole.START,
+            BoundaryRole.END,
+            BoundaryRole.START,
+            BoundaryRole.END,
+        )
+        observations = tuple(
+            replace(
+                edge(f"contradiction:{index}", coordinate),
+                qualified_anchor_roles=(role,),
+                polarity=1 if role == BoundaryRole.START else -1,
+            )
+            for index, (coordinate, role) in enumerate(
+                zip(coordinates, roles, strict=True)
+            )
+        )
+
+        result = fit_template_phase(observations, template(3))
+
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        self.assertEqual(result.winner_basis, PhaseWinnerBasis.INDEPENDENT_SUPPORT)
+        assert result.best is not None and result.runner_up is not None
+        self.assertGreater(
+            result.best.phase_support_count,
+            result.runner_up.phase_support_count,
+        )
 
     def test_fixed_width_pair_rejects_nearer_interior_end_edge(self) -> None:
         observations = (
@@ -516,7 +644,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
         assert result.best is not None
         self.assertEqual(
-            result.best.role_observation_ids,
+            result.best.binding_observation_ids,
             (ObservationId("outer-start"), ObservationId("outer-end")),
         )
 
@@ -558,7 +686,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
         assert result.best is not None
         self.assertEqual(
-            result.best.role_observation_ids,
+            result.best.binding_observation_ids,
             (start.observation_id, true_end.observation_id),
         )
 
@@ -570,12 +698,12 @@ class TemplatePhaseContractTest(unittest.TestCase):
             )
         )
         result = fit_template_phase(observations, template(3))
-        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        self.assertEqual(result.status, PhaseFitStatus.AMBIGUOUS)
         assert result.best is not None
-        first = result.best.role_positions_px[0]
-        last = result.best.role_positions_px[-1]
+        first = result.best.model_role_intervals_px[0]
+        last = result.best.model_role_intervals_px[-1]
         self.assertLess(first.width, 6.0)
-        self.assertGreater(last.width, first.width)
+        self.assertLess(last.width, 6.0)
 
     def test_missing_separator_is_inferred_only_after_direct_phase(self) -> None:
         # Slot 2 is directly anchored; slot 1 has no observed separator and
@@ -588,7 +716,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
         self.assertIsNotNone(result.best)
         assert result.best is not None
-        self.assertEqual(result.best.inferred_role_indices, (2, 3))
+        self.assertEqual(result.best.unbound_role_indices, (2, 3))
 
         unresolved = fit_template_phase((), template(3))
         self.assertEqual(unresolved.status, PhaseFitStatus.UNRESOLVED)
@@ -624,7 +752,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             40.0,
         )
         self.assertEqual(
-            result.best.role_observation_ids,
+            result.best.binding_observation_ids,
             (
                 None,
                 None,
@@ -634,13 +762,13 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 None,
             ),
         )
-        self.assertEqual(len(result.best.direct_observation_ids), 2)
-        self.assertEqual(result.best.independent_support_count, 1)
+        self.assertEqual(len(result.best.bound_observation_ids), 2)
+        self.assertEqual(result.best.phase_support_count, 1)
         self.assertEqual(
             result.best.independent_support_ids,
             (band.observation_id,),
         )
-        self.assertAlmostEqual(result.best.independent_support_coverage, 0.2)
+        self.assertAlmostEqual(result.best.phase_support_coverage, 0.2)
 
     def test_internal_edges_preserve_discrete_ordinal_mappings(self) -> None:
         observations = tuple(
@@ -698,17 +826,19 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
         assert result.best is not None
-        first_missing_start = result.best.role_positions_px[2]
-        last_missing_start = result.best.role_positions_px[6]
+        first_missing_start = result.best.model_role_intervals_px[2]
+        last_missing_start = result.best.model_role_intervals_px[6]
         self.assertAlmostEqual(
             last_missing_start.width - first_missing_start.width,
             8.0,
         )
         # A direct observation keeps its own local interval and is not widened
         # by pitch authority belonging to later inferred roles.
-        self.assertLess(result.best.role_positions_px[0].width, 2.0)
+        self.assertLess(result.best.model_role_intervals_px[0].width, 2.0)
 
-    def test_far_separated_direct_roles_narrow_continuous_pitch(self) -> None:
+    def test_far_separated_roles_narrow_pitch_but_leave_local_gap_unresolved(
+        self,
+    ) -> None:
         compiled = TemplateSpec(
             template_id="far-span-pitch",
             frame_width_px=FiniteInterval(90.0, 110.0),
@@ -736,20 +866,15 @@ class TemplatePhaseContractTest(unittest.TestCase):
             compiled,
             holder_span_px=FiniteInterval(0.0, 800.0),
         )
-        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            PhaseFailureKind.PHASE_SUPPORT_DISCONTINUITY,
+        )
         assert result.best is not None
-        self.assertIsNotNone(result.runner_up)
-        assert result.runner_up is not None
-        self.assertGreater(
-            result.best.independent_support_count,
-            result.runner_up.independent_support_count,
-        )
+        self.assertEqual(result.best.maximum_internal_phase_gap, 2)
         self.assertEqual(
-            result.winner_basis,
-            PhaseWinnerBasis.INDEPENDENT_SUPPORT,
-        )
-        self.assertEqual(
-            result.best.role_observation_ids,
+            result.best.binding_observation_ids,
             (
                 None,
                 None,
@@ -775,7 +900,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             pitch_interval.maximum - pitch_interval.minimum,
             0.3,
         )
-        self.assertLess(result.best.role_positions_px[8].width, 3.0)
+        self.assertLess(result.best.model_role_intervals_px[8].width, 3.0)
 
     def test_local_advance_interval_is_applied_once_to_the_suffix(self) -> None:
         relation = LocalAdvanceRelation(
@@ -792,7 +917,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
         assert result.best is not None
-        slot_two_start = result.best.role_positions_px[4]
+        slot_two_start = result.best.model_role_intervals_px[4]
         self.assertLessEqual(slot_two_start.minimum, 268.0)
         self.assertGreaterEqual(slot_two_start.maximum, 272.0)
         self.assertLess(slot_two_start.maximum, 285.0)
@@ -883,9 +1008,12 @@ class TemplatePhaseContractTest(unittest.TestCase):
             ),
         )
 
-        self.assertIn(
-            AnchorDependencyEffect.DISCRETE_SLOT_JUMP,
+        self.assertEqual(
             tuple(item.effect for item in analysis.dependencies),
+            (
+                AnchorDependencyEffect.UNRESOLVED_WITHOUT_ANCHOR,
+                AnchorDependencyEffect.UNRESOLVED_WITHOUT_ANCHOR,
+            ),
         )
 
     def test_leave_one_anchor_out_reports_continuous_shift(self) -> None:
@@ -919,26 +1047,14 @@ class TemplatePhaseContractTest(unittest.TestCase):
             tuple(item.effect for item in analysis.dependencies),
         )
 
-    def test_leave_only_anchor_out_reports_unresolved(self) -> None:
+    def test_only_anchor_is_not_a_resolved_phase(self) -> None:
         observations = (edge("only-anchor", 40.0),)
         compiled = template(1)
         result = fit_template_phase(observations, compiled)
-
-        analysis = leave_one_anchor_out_phase_stability(
-            result,
-            TemplatePhaseInput(
-                observations=observations,
-                separator_bands=(),
-                template=compiled,
-                scale_px_per_mm=None,
-                holder_span_px=None,
-                phase_authority_px=None,
-            ),
-        )
-
+        self.assertEqual(result.status, PhaseFitStatus.AMBIGUOUS)
         self.assertEqual(
-            analysis.dependencies[0].effect,
-            AnchorDependencyEffect.UNRESOLVED_WITHOUT_ANCHOR,
+            result.failure_kind,
+            PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS,
         )
 
     def test_close_runner_up_is_ambiguous(self) -> None:
@@ -980,8 +1096,8 @@ class TemplatePhaseContractTest(unittest.TestCase):
             max(
                 abs(left - right)
                 for left, right in zip(
-                    result.best.canonical_role_positions_px,
-                    result.runner_up.canonical_role_positions_px,
+                    result.best.model_role_positions_px,
+                    result.runner_up.model_role_positions_px,
                     strict=True,
                 )
             ),
@@ -995,11 +1111,11 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         fit = fit_template_phase(observations, template(2)).best
         assert fit is not None
-        positions = list(fit.canonical_role_positions_px)
+        positions = list(fit.model_role_positions_px)
         positions[2] += 2.0
         positions[3] += 2.0
-        role_intervals = list(fit.role_positions_px)
-        full_intervals = list(fit.role_full_position_intervals_px)
+        role_intervals = list(fit.model_role_intervals_px)
+        full_intervals = list(fit.model_full_role_intervals_px)
         for index in (2, 3):
             role_intervals[index] = FiniteInterval.exact(positions[index])
             full_intervals[index] = FiniteInterval.exact(positions[index])
@@ -1007,38 +1123,43 @@ class TemplatePhaseContractTest(unittest.TestCase):
             ObservationId("connected:alternate:start"),
             ObservationId("connected:alternate:end"),
         )
-        role_ids = list(fit.role_observation_ids)
-        original_ids = (role_ids[2], role_ids[3])
-        role_ids[2:4] = alternative_ids
-        direct_ids = tuple(
-            alternative_ids[0]
-            if identity == original_ids[0]
-            else alternative_ids[1]
-            if identity == original_ids[1]
-            else identity
-            for identity in fit.direct_observation_ids
+        bindings = list(fit.role_bindings)
+        original_bindings = (bindings[2], bindings[3])
+        assert all(binding is not None for binding in original_bindings)
+        bindings[2:4] = tuple(
+            replace(binding, observation_id=identity)
+            for binding, identity in zip(
+                original_bindings,
+                alternative_ids,
+                strict=True,
+            )
+            if binding is not None
         )
         alternative = replace(
             fit,
-            canonical_role_positions_px=tuple(positions),
-            role_positions_px=tuple(role_intervals),
-            role_full_position_intervals_px=tuple(full_intervals),
-            role_observation_ids=tuple(role_ids),
-            direct_observation_ids=direct_ids,
+            model_role_positions_px=tuple(positions),
+            model_role_intervals_px=tuple(role_intervals),
+            model_full_role_intervals_px=tuple(full_intervals),
+            role_bindings=tuple(bindings),
         )
-        first_support = ObservationId("separator-support:first")
-        second_support = ObservationId("separator-support:second")
-        connected = {
-            original_ids[0]: first_support,
-            alternative_ids[0]: first_support,
-            original_ids[1]: second_support,
-            alternative_ids[1]: second_support,
-        }
+        self.assertTrue(_same_continuous_placement(fit, alternative))
+        disconnected_bindings = list(alternative.role_bindings)
+        for index, identity in zip((2, 3), alternative_ids, strict=True):
+            binding = disconnected_bindings[index]
+            assert binding is not None
+            disconnected_bindings[index] = replace(
+                binding,
+                independent_support_id=identity,
+            )
+        disconnected = replace(
+            alternative,
+            role_bindings=tuple(disconnected_bindings),
+        )
+        self.assertFalse(_same_continuous_placement(fit, disconnected))
 
-        self.assertTrue(_same_continuous_placement(fit, alternative, connected))
-        self.assertFalse(_same_continuous_placement(fit, alternative, {}))
-
-    def test_local_anomaly_prefix_is_transmitted_once(self) -> None:
+    def test_local_anomaly_prefix_is_transmitted_once_per_competing_fit(
+        self,
+    ) -> None:
         relation = LocalAdvanceRelation(
             relation_ordinal=1,
             kind=LocalAdvanceKind.WIDE,
@@ -1055,10 +1176,19 @@ class TemplatePhaseContractTest(unittest.TestCase):
             template(3),
             local_advance_relations=(relation,),
         )
-        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
-        assert result.best is not None
-        self.assertAlmostEqual(result.best.role_positions_px[4].center, 250.0)
-        self.assertAlmostEqual(result.best.role_positions_px[5].center, 350.0)
+        self.assertEqual(result.status, PhaseFitStatus.AMBIGUOUS)
+        assert result.best is not None and result.runner_up is not None
+        for fit in (result.best, result.runner_up):
+            phase = fit.phase_lattice_fit.canonical_absolute_phase_px
+            pitch = fit.pitch_fit.canonical_pitch_px
+            self.assertAlmostEqual(
+                fit.model_role_intervals_px[4].center,
+                phase + 2.0 * pitch + 20.0,
+            )
+            self.assertAlmostEqual(
+                fit.model_role_intervals_px[5].center,
+                phase + 2.0 * pitch + 120.0,
+            )
 
     def test_direct_separator_authorizes_one_bounded_local_refit(self) -> None:
         observations = tuple(
@@ -1093,8 +1223,8 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         self.assertEqual(len(anomalies), 1)
         self.assertEqual(anomalies[0].relation_ordinal, 2)
-        self.assertAlmostEqual(result.best.canonical_role_positions_px[4], 253.0)
-        self.assertAlmostEqual(result.best.canonical_role_positions_px[5], 353.0)
+        self.assertAlmostEqual(result.best.model_role_positions_px[4], 253.0)
+        self.assertAlmostEqual(result.best.model_role_positions_px[5], 353.0)
         self.assertEqual(result.receipt.local_relation_evaluation_count, 2)
         self.assertEqual(result.receipt.fit_pass_count, 2)
 
@@ -1133,10 +1263,10 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(len(anomalies), 1)
         self.assertEqual(anomalies[0].kind, LocalAdvanceKind.NARROW)
         self.assertEqual(anomalies[0].relation_ordinal, 1)
-        self.assertAlmostEqual(result.best.canonical_role_positions_px[2], 127.0)
-        self.assertAlmostEqual(result.best.canonical_role_positions_px[4], 247.0)
+        self.assertAlmostEqual(result.best.model_role_positions_px[2], 127.0)
+        self.assertAlmostEqual(result.best.model_role_positions_px[4], 247.0)
 
-    def test_separator_relation_overrides_conflicting_single_edge_role_hint(self) -> None:
+    def test_local_separator_cannot_override_conflicting_edge_roles(self) -> None:
         observations = list(
             edge(f"edge:{index}", coordinate)
             for index, coordinate in enumerate(
@@ -1171,12 +1301,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 phase_authority_px=None,
             )
         )
-        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
-        assert result.best is not None
-        self.assertEqual(
-            result.best.role_observation_ids,
-            tuple(item.observation_id for item in observations),
-        )
+        self.assertNotEqual(result.status, PhaseFitStatus.RESOLVED)
 
     def test_source_wide_band_excludes_a_competing_local_edge_pair(self) -> None:
         observations = list(
@@ -1265,15 +1390,15 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
         assert result.best is not None
         self.assertEqual(
-            result.best.role_full_position_intervals_px[1],
+            result.best.model_full_role_intervals_px[1],
             observations[1].full_position_interval_px,
         )
         self.assertLess(
-            result.best.role_full_position_intervals_px[2].minimum,
+            result.best.model_full_role_intervals_px[2].minimum,
             observations[2].full_position_interval_px.minimum,
         )
 
-    def test_two_direct_gap_anomalies_exceed_the_bounded_model(self) -> None:
+    def test_two_direct_gap_anomalies_bind_two_measured_advances(self) -> None:
         nominal_edges = tuple(
             edge(f"edge:{index}", coordinate)
             for index, coordinate in enumerate(
@@ -1301,10 +1426,16 @@ class TemplatePhaseContractTest(unittest.TestCase):
             nominal_edges,
             bands,
         )
-        self.assertEqual(analysis.pattern, ResidualPattern.UNRESOLVED)
-        self.assertEqual(analysis.anomaly_ordinals, ())
-        self.assertEqual(analysis.relations, ())
-        self.assertIn("exceed bounded model", analysis.unresolved_reason or "")
+        self.assertEqual(
+            analysis.pattern,
+            ResidualPattern.MEASURED_ADVANCES,
+        )
+        self.assertEqual(analysis.anomaly_ordinals, (1, 2))
+        self.assertEqual(
+            tuple(item.kind for item in analysis.relations),
+            (LocalAdvanceKind.WIDE, LocalAdvanceKind.WIDE),
+        )
+        self.assertIsNone(analysis.unresolved_reason)
         self.assertEqual(analysis.evaluated_adjacency_count, 2)
 
     def test_direct_contact_or_overlap_without_band_stays_review_only(self) -> None:
@@ -1329,11 +1460,11 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(analysis.relations, ())
         self.assertIn("end-then-start", analysis.unresolved_reason or "")
 
-    def test_repeated_gap_facts_within_normal_bleed_do_not_open_model(self) -> None:
+    def test_repeated_direct_gap_facts_are_all_applied_before_output_bleed(self) -> None:
         regular = tuple(
             edge(f"edge:overflow:{index}", coordinate)
             for index, coordinate in enumerate(
-                (10.0, 110.0, 130.0, 230.0, 250.0, 350.0, 370.0, 470.0)
+                (10.0, 110.0, 131.0, 231.0, 252.0, 352.0, 373.0, 473.0)
             )
         )
         fit = fit_template_phase(regular, template(4)).best
@@ -1343,14 +1474,17 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 f"separator:overflow:{index}",
                 regular[2 * index + 1],
                 regular[2 * index + 2],
-                FiniteInterval(22.8, 23.2),
+                FiniteInterval(20.8, 21.2),
             )
             for index in range(3)
         )
         analysis = derive_bounded_local_advances(fit, regular, bands)
-        self.assertEqual(analysis.pattern, ResidualPattern.UNRESOLVED)
-        self.assertEqual(analysis.relations, ())
-        self.assertIn("exceed bounded model", analysis.unresolved_reason or "")
+        self.assertEqual(
+            analysis.pattern,
+            ResidualPattern.MEASURED_ADVANCES,
+        )
+        self.assertEqual(len(analysis.relations), 3)
+        self.assertTrue(all(item.is_anomaly for item in analysis.relations))
         result = fit_template_phase_with_local_advance(
             TemplatePhaseInput(
                 observations=regular,
@@ -1363,7 +1497,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
         assert result.best is not None
-        self.assertEqual(result.best.local_advance_relations, ())
+        self.assertEqual(len(result.best.local_advance_relations), 3)
 
     def test_bound_overflow_is_explicit_and_receipt_cannot_be_overstated(self) -> None:
         result = fit_template_phase(

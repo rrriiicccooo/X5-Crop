@@ -10,6 +10,7 @@ from ..source_core import SourceLaneEvidence
 from .content_topology import build_content_topology_index
 from .content_veto import content_veto_assessment
 from .content_veto_model import ContentVetoAssessment
+from .corridors import source_lane_box
 from .lane_preparation import (
     lane_measurement_capacity,
     prepare_template_lane,
@@ -18,7 +19,7 @@ from .lane_preparation import (
 from .measurement_model import PhotoBoundaryMeasurementField
 from .output_model import OutputFootprint, OutputSlotIdentity
 from .source_geometry import SourceScanGeometry
-from .template_cross_model import CrossFit, CrossFitStatus
+from .template_cross_model import CrossFitStatus
 from .template_feasible_geometry import project_selected_placement
 from .template_gate import (
     build_template_gate,
@@ -332,7 +333,7 @@ def reconstruct_photo_geometry(
                 LaneLongAxisAuthority.from_box(
                     selected.lane_id,
                     selected.width_axis,
-                    source_lane.domain.work_box,
+                    source_lane_box(source_lane, layout),
                 ),
             )
         )

@@ -22,6 +22,7 @@ class GateGap(str, Enum):
     SOURCE_SCAN_GEOMETRY_UNAVAILABLE = "source_scan_geometry_unavailable"
     PLACEMENT_UNRESOLVED = "placement_unresolved"
     PHASE_ANCHOR_UNAVAILABLE = "phase_anchor_unavailable"
+    PHASE_SUPPORT_DISCONTINUITY = "phase_support_discontinuity"
     PHASE_TEMPLATE_MISMATCH = "phase_template_mismatch"
     PHASE_PLACEMENT_AMBIGUOUS = "phase_placement_ambiguous"
     CROSS_AUTHORITY_UNAVAILABLE = "cross_authority_unavailable"
@@ -47,6 +48,7 @@ class MinimumMissingFact(str, Enum):
     COUNT_AUTHORITY = "count_authority"
     COMPLETE_SCAN_CANVAS = "complete_scan_canvas"
     ABSOLUTE_PHASE_ANCHOR = "absolute_phase_anchor"
+    LOCAL_PHASE_CONTINUITY = "local_phase_continuity"
     PITCH_CLOSURE = "pitch_closure"
     CROSS_POSITION = "cross_position"
     REGISTERED_QUERY_COVERAGE = "registered_query_coverage"
@@ -138,6 +140,11 @@ def failure_fact(
         GateGap.PHASE_ANCHOR_UNAVAILABLE: (
             FailureRecovery.REMEASURE,
             MinimumMissingFact.ABSOLUTE_PHASE_ANCHOR,
+            RecoveryAction.RERUN_MEASUREMENT,
+        ),
+        GateGap.PHASE_SUPPORT_DISCONTINUITY: (
+            FailureRecovery.REMEASURE,
+            MinimumMissingFact.LOCAL_PHASE_CONTINUITY,
             RecoveryAction.RERUN_MEASUREMENT,
         ),
         GateGap.PHASE_TEMPLATE_MISMATCH: (

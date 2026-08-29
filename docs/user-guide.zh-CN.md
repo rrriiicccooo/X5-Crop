@@ -31,8 +31,9 @@ V5 先从整条片带建立粗略支撑和共同方向，再把 format/count 编
 separator 与 top/bottom 附近做有界局部测量。像素证据用于对准模板和否决危险裁切，不能凭自身创造
 format、count 或 placement。
 
-正常片带使用一个共享 pitch；有直接、ordinal 唯一的宽/窄间隔时，最多允许一次后续整体位移。缺少
-必要 authority、存在多个同样合法答案、需要多次异常位移或未知必需 Frame 时保持 `needs_review`。
+正常片带使用一个共享 pitch；每个直接且 ordinal 唯一的 separator 可以约束自己的宽/窄间隔，后续
+Frame 只累加一次该处实测差值。多个已证明的间隔变化仍以一次有界传播处理；任一间隔存在多种解释、
+缺少必要 authority、存在多个同样合法答案或未知必需 Frame 时保持 `needs_review`。
 Contact 与 overlap 是 challenge，不是预定终态：标准 detector 与 Gate 能唯一证明安全时可以自动批准，
 证据不足时安全 review 同样正确；V5 不为它们启用第二套 detector 或特殊 bleed。
 
@@ -50,8 +51,8 @@ top/bottom = 0.25 mm
 
 测量不确定性、局部 residual 与 bleed 共同消耗每侧最多 5% W/H 的安全外扩预算，边与边之间不能借用。
 若直接观察到一对连续 outer support 完整包住固定 H，且总高度不超过 `1.1H`，它可以替代不可用的
-aperture top/bottom；此时不再添加 0.25 mm cross bleed。任何真正需要的 source-space footprint 越界都
-进入 review，不会静默裁小。
+aperture top/bottom；此时不再添加 0.25 mm cross bleed，但逐侧与联合对齐 padding 仍受 5% 预算保护。
+任何真正需要的 source-space footprint 越界都进入 review，不会静默裁小。
 
 二维内容只在最终 post-bleed polygon 上作保守否决：bleed 内的画面可以保留；可靠内容越过最终裁切边
 会阻止自动输出。尘点、别名和极小角点接触不会单独移动边界或选择另一个 placement。

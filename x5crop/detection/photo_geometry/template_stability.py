@@ -57,7 +57,7 @@ class TemplateStabilityAnalysis:
 def _signature(fit: SequenceFit) -> tuple[int, tuple[ObservationId | None, ...]]:
     return (
         fit.phase_lattice_fit.integer_slot_offset,
-        fit.role_observation_ids,
+        fit.binding_observation_ids,
     )
 
 
@@ -76,7 +76,7 @@ def leave_one_anchor_out_phase_stability(
     separator_bands = phase_input.separator_bands
     ids = tuple(
         sorted(
-            {item for item in baseline.role_observation_ids if item is not None},
+            {item for item in baseline.binding_observation_ids if item is not None},
             key=str,
         )
     )

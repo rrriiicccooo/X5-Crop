@@ -69,6 +69,9 @@ def select_lane_template_placement(
             PhaseFailureKind.DIRECT_PHASE_ANCHOR_UNAVAILABLE: (
                 GateGap.PHASE_ANCHOR_UNAVAILABLE
             ),
+            PhaseFailureKind.PHASE_SUPPORT_DISCONTINUITY: (
+                GateGap.PHASE_SUPPORT_DISCONTINUITY
+            ),
             PhaseFailureKind.FIXED_TEMPLATE_MISMATCH: (
                 GateGap.PHASE_TEMPLATE_MISMATCH
             ),

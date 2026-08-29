@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 from dataclasses import replace
 import inspect
+import math
 from pathlib import Path
 import unittest
 
@@ -72,18 +73,30 @@ def _enclosing_support_placement(
     support_span_px: float = 250.0,
     support_position_uncertainty_px: float = 0.0,
     support_slope: float = 0.0,
+    observed_direction_half_width_degrees: float = 0.0,
 ):
     template = _template(frame_count)
-    direction = _direction()
     support_center = 152.0
     support_top = support_center - support_span_px / 2.0
     support_bottom = support_center + support_span_px / 2.0
+    support_traces = (0, 150, 300)
+    canonical_direction = math.degrees(math.atan(support_slope))
+    full_direction = FiniteInterval.exact(canonical_direction)
+    observed_direction = FiniteInterval(
+        canonical_direction - observed_direction_half_width_degrees,
+        canonical_direction + observed_direction_half_width_degrees,
+    )
     top = replace(
         _binding(BoundaryRole.TOP, "support-top", support_top),
         full_interval_px=FiniteInterval(
             support_top - support_position_uncertainty_px,
             support_top + support_position_uncertainty_px,
         ),
+        trace_coordinates_px=support_traces,
+        canonical_direction_degrees=canonical_direction,
+        fit_direction_interval_degrees=full_direction,
+        full_direction_interval_degrees=full_direction,
+        observed_direction_interval_degrees=observed_direction,
     )
     bottom = replace(
         _binding(BoundaryRole.BOTTOM, "support-bottom", support_bottom),
@@ -91,8 +104,19 @@ def _enclosing_support_placement(
             support_bottom - support_position_uncertainty_px,
             support_bottom + support_position_uncertainty_px,
         ),
+        trace_coordinates_px=support_traces,
+        canonical_direction_degrees=canonical_direction,
+        fit_direction_interval_degrees=full_direction,
+        full_direction_interval_degrees=full_direction,
+        observed_direction_interval_degrees=observed_direction,
     )
-    support_traces = (0, 150, 300)
+    direction = replace(
+        _direction(),
+        selected_observation_ids=(top.observation_id, bottom.observation_id),
+        full_angle_interval_degrees=full_direction,
+        observed_angle_interval_degrees=observed_direction,
+        canonical_angle_degrees=canonical_direction,
+    )
     support = EnclosingSupportPair(
         top_canonical_px=support_top,
         bottom_canonical_px=support_bottom,
@@ -152,7 +176,6 @@ def _enclosing_support_placement(
         shared_trace_support_count=3,
         continuous_support_fraction=1.0,
         residual_sum_px=0.0,
-        center_compatible=True,
         boundary_use=OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR,
         enclosing_support_pair=support,
     )
@@ -224,7 +247,34 @@ class TemplateOutputContractTest(unittest.TestCase):
             )
         )
 
-    def test_enclosing_support_uses_no_cross_bleed_and_its_own_height_limit(self) -> None:
+    def test_enclosing_support_retains_observed_direction_beyond_trace_span(
+        self,
+    ) -> None:
+        placement = _enclosing_support_placement(
+            frame_count=3,
+            observed_direction_half_width_degrees=4.0,
+        )
+        output = output_footprint_from_template_placement(
+            placement,
+            project_selected_placement(placement),
+            lane=_lane(),
+            lane_ordinal=3,
+            layout="horizontal",
+        )
+        protections = {
+            item.role: item for item in output.boundary_protections
+        }
+
+        self.assertGreater(
+            protections[BoundaryRole.TOP].local_boundary_residual_px,
+            8.0,
+        )
+        self.assertGreater(
+            protections[BoundaryRole.BOTTOM].local_boundary_residual_px,
+            8.0,
+        )
+
+    def test_enclosing_support_uses_no_cross_bleed_and_keeps_per_side_limit(self) -> None:
         placement = _enclosing_support_placement()
         output = output_footprint_from_template_placement(
             placement,
@@ -252,13 +302,13 @@ class TemplateOutputContractTest(unittest.TestCase):
         self.assertTrue(assessment.enclosing_support_within_limit)
         self.assertTrue(
             all(
-                not item.limit_applies
+                item.limit_applies
                 for item in assessment.edge_assessments
                 if item.role in {BoundaryRole.TOP, BoundaryRole.BOTTOM}
             )
         )
 
-    def test_enclosing_support_at_exact_height_limit_remains_supported(self) -> None:
+    def test_exact_enclosing_height_still_needs_per_side_sampling_headroom(self) -> None:
         placement = _enclosing_support_placement(support_span_px=264.0)
         output = output_footprint_from_template_placement(
             placement,
@@ -270,14 +320,14 @@ class TemplateOutputContractTest(unittest.TestCase):
 
         assessment = template_direct_use_budget_assessment(placement, output)
 
-        self.assertEqual(assessment.state, EvidenceState.SUPPORTED)
+        self.assertEqual(assessment.state, EvidenceState.CONTRADICTED)
         self.assertLessEqual(
             assessment.enclosing_support_height_ratio,
             OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio,
         )
         self.assertTrue(assessment.enclosing_support_within_limit)
 
-    def test_enclosing_height_budget_does_not_mix_alternative_support_positions(
+    def test_enclosing_height_ratio_does_not_mix_alternative_support_positions(
         self,
     ) -> None:
         placement = _enclosing_support_placement(
@@ -295,7 +345,7 @@ class TemplateOutputContractTest(unittest.TestCase):
 
         assessment = template_direct_use_budget_assessment(placement, output)
 
-        self.assertEqual(assessment.state, EvidenceState.SUPPORTED)
+        self.assertEqual(assessment.state, EvidenceState.CONTRADICTED)
         self.assertAlmostEqual(
             assessment.enclosing_support_height_ratio,
             OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio,
@@ -484,16 +534,19 @@ class TemplateOutputContractTest(unittest.TestCase):
     def test_sequence_line_departure_protects_axis_aligned_output(self) -> None:
         template = _template(1)
         sequence = _sequence(template)
-        lines = list(sequence.role_line_evidence)
-        end_id = sequence.role_observation_ids[1]
-        assert end_id is not None
-        lines[1] = SequenceRoleLineEvidence(
-            observation_id=end_id,
+        bindings = list(sequence.role_bindings)
+        binding = bindings[1]
+        assert binding is not None
+        bindings[1] = replace(
+            binding,
+            line_evidence=SequenceRoleLineEvidence(
+            observation_id=binding.observation_id,
             reference_trace_px=130.0,
             fit_position_interval_px=FiniteInterval.exact(200.0),
             fit_direction_interval_degrees=FiniteInterval.exact(-1.0),
+            ),
         )
-        sequence = replace(sequence, role_line_evidence=tuple(lines))
+        sequence = replace(sequence, role_bindings=tuple(bindings))
         placement = _compose(
             template,
             sequence,
@@ -532,30 +585,32 @@ class TemplateOutputContractTest(unittest.TestCase):
     ) -> None:
         template = _template(1)
         sequence = _sequence(template)
-        full = list(sequence.role_full_position_intervals_px)
-        full[1] = FiniteInterval(200.0, 204.0)
-        sequence = replace(
-            sequence,
-            role_full_position_intervals_px=tuple(full),
+        bindings = list(sequence.role_bindings)
+        binding = bindings[1]
+        assert binding is not None
+        bindings[1] = replace(
+            binding,
+            full_position_interval_px=FiniteInterval(200.0, 204.0),
         )
+        sequence = replace(sequence, role_bindings=tuple(bindings))
         baseline = _compose(
             template,
             sequence,
             _cross(template, direction=_direction()),
         ).frames[0].end.local_outward_departure_px
-        lines = list(sequence.role_line_evidence)
-        end_id = sequence.role_observation_ids[1]
-        assert end_id is not None
-        lines[1] = SequenceRoleLineEvidence(
-            observation_id=end_id,
+        bindings = list(sequence.role_bindings)
+        binding = bindings[1]
+        assert binding is not None
+        bindings[1] = replace(
+            binding,
+            line_evidence=SequenceRoleLineEvidence(
+            observation_id=binding.observation_id,
             reference_trace_px=130.0,
             fit_position_interval_px=FiniteInterval.exact(200.0),
             fit_direction_interval_degrees=FiniteInterval.exact(-1.0),
+            ),
         )
-        sequence = replace(
-            sequence,
-            role_line_evidence=tuple(lines),
-        )
+        sequence = replace(sequence, role_bindings=tuple(bindings))
         placement = _compose(
             template,
             sequence,
@@ -570,16 +625,19 @@ class TemplateOutputContractTest(unittest.TestCase):
     def test_inferred_fixed_width_edge_inherits_shifted_line_safety(self) -> None:
         template = _template(1)
         sequence = _sequence(template, missing=(1,))
-        lines = list(sequence.role_line_evidence)
-        start_id = sequence.role_observation_ids[0]
-        assert start_id is not None
-        lines[0] = SequenceRoleLineEvidence(
-            observation_id=start_id,
+        bindings = list(sequence.role_bindings)
+        binding = bindings[0]
+        assert binding is not None
+        bindings[0] = replace(
+            binding,
+            line_evidence=SequenceRoleLineEvidence(
+            observation_id=binding.observation_id,
             reference_trace_px=130.0,
             fit_position_interval_px=FiniteInterval.exact(100.0),
             fit_direction_interval_degrees=FiniteInterval.exact(-1.0),
+            ),
         )
-        sequence = replace(sequence, role_line_evidence=tuple(lines))
+        sequence = replace(sequence, role_bindings=tuple(bindings))
         placement = _compose(
             template,
             sequence,
@@ -653,15 +711,20 @@ class TemplateOutputContractTest(unittest.TestCase):
         self.assertAlmostEqual(protection.local_boundary_residual_px, 3.0)
         self.assertAlmostEqual(protection.joint_expansion_px, 5.5)
 
-    def test_selected_frame_residual_is_retained_before_bleed(self) -> None:
-        template = _template(1)
-        sequence = _sequence(template)
-        intervals = list(sequence.role_full_position_intervals_px)
-        intervals[1] = FiniteInterval(200.0, 210.0)
-        sequence = replace(
-            sequence,
-            role_full_position_intervals_px=tuple(intervals),
+    def test_native_direct_interval_is_retained_before_bleed(self) -> None:
+        template = replace(
+            _template(1),
+            frame_width_px=FiniteInterval(90.0, 110.0),
         )
+        sequence = _sequence(template)
+        bindings = list(sequence.role_bindings)
+        binding = bindings[1]
+        assert binding is not None
+        bindings[1] = replace(
+            binding,
+            full_position_interval_px=FiniteInterval(200.0, 210.0),
+        )
+        sequence = replace(sequence, role_bindings=tuple(bindings))
         placement = _compose(
             template,
             sequence,
@@ -679,8 +742,8 @@ class TemplateOutputContractTest(unittest.TestCase):
             for item in output.boundary_protections
             if item.role == BoundaryRole.END
         )
-        self.assertGreaterEqual(end.local_boundary_residual_px, 9.9)
-        self.assertGreater(end.joint_expansion_px, end.local_boundary_residual_px)
+        self.assertGreaterEqual(end.measurement_expansion_px, 9.9)
+        self.assertGreater(end.joint_expansion_px, end.measurement_expansion_px)
 
     def test_final_footprint_retains_the_complete_pixel_center_span(self) -> None:
         template = _template(1)
@@ -708,17 +771,17 @@ class TemplateOutputContractTest(unittest.TestCase):
             EvidenceState.SUPPORTED,
         )
 
-    def test_inferred_edge_retains_same_role_selected_fit_residual(self) -> None:
+    def test_inferred_edge_does_not_inherit_remote_direct_interval(self) -> None:
         template = replace(
             _template(2),
             frame_width_px=FiniteInterval(96.0, 104.0),
         )
         sequence = _sequence(template, missing=(3,))
-        intervals = list(sequence.role_full_position_intervals_px)
+        intervals = list(sequence.model_full_role_intervals_px)
         intervals[1] = FiniteInterval(200.0, 210.0)
         sequence = replace(
             sequence,
-            role_full_position_intervals_px=tuple(intervals),
+            model_full_role_intervals_px=tuple(intervals),
         )
         placement = _compose(
             template,
@@ -745,18 +808,17 @@ class TemplateOutputContractTest(unittest.TestCase):
             for item in output.boundary_protections
             if item.role == BoundaryRole.END
         )
-        self.assertGreaterEqual(end.local_boundary_residual_px, 9.9)
+        self.assertLess(end.local_boundary_residual_px, 3.0)
 
-    def test_inferred_frame_does_not_add_width_twice(self) -> None:
+    def test_inferred_frame_does_not_inherit_remote_model_residual(self) -> None:
         template = replace(
             _template(4),
             frame_width_px=FiniteInterval(96.0, 104.0),
         )
         sequence = _sequence(template, missing=(4, 5))
-        intervals = list(sequence.role_full_position_intervals_px)
-        # A remote first-frame outlier must not be copied into frame 3.  The
-        # nearest direct START/END facts on both sides bound the local straight
-        # residual. W already belongs to the joint state and is not added again.
+        intervals = list(sequence.model_full_role_intervals_px)
+        # A remote direct-model departure must not be copied into an inferred
+        # frame. Its joint model interval already owns all placement uncertainty.
         intervals[0] = FiniteInterval(70.0, 100.0)
         intervals[2] = FiniteInterval(215.0, 220.0)
         intervals[3] = FiniteInterval(320.0, 325.0)
@@ -764,7 +826,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         intervals[7] = FiniteInterval(560.0, 566.0)
         sequence = replace(
             sequence,
-            role_full_position_intervals_px=tuple(intervals),
+            model_full_role_intervals_px=tuple(intervals),
         )
         placement = _compose(
             template,
@@ -780,24 +842,30 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         protections = {item.role: item for item in output.boundary_protections}
 
-        self.assertLess(
-            protections[BoundaryRole.START].local_boundary_residual_px,
-            10.0,
-        )
-        self.assertAlmostEqual(
-            protections[BoundaryRole.END].local_boundary_residual_px,
-            7.0 + placement.frames[2].end.local_outward_departure_px,
-        )
+        for role, boundary in (
+            (BoundaryRole.START, placement.frames[2].start),
+            (BoundaryRole.END, placement.frames[2].end),
+        ):
+            self.assertAlmostEqual(
+                protections[role].local_boundary_residual_px,
+                boundary.local_outward_departure_px + 1.0,
+            )
 
     def test_selected_frame_residual_still_obeys_five_percent_limit(self) -> None:
-        template = _template(1)
-        sequence = _sequence(template)
-        intervals = list(sequence.role_full_position_intervals_px)
-        intervals[1] = FiniteInterval(200.0, 230.0)
-        sequence = replace(
-            sequence,
-            role_full_position_intervals_px=tuple(intervals),
+        template = replace(
+            _template(1),
+            frame_width_px=FiniteInterval(70.0, 130.0),
+            nominal_gap_px=FiniteInterval(0.0, 50.0),
         )
+        sequence = _sequence(template)
+        bindings = list(sequence.role_bindings)
+        binding = bindings[1]
+        assert binding is not None
+        bindings[1] = replace(
+            binding,
+            full_position_interval_px=FiniteInterval(200.0, 230.0),
+        )
+        sequence = replace(sequence, role_bindings=tuple(bindings))
         placement = _compose(
             template,
             sequence,

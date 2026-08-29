@@ -118,8 +118,9 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
   count。Runtime 不保留 full/partial mode，也不使用长轴居中；是否铺满只在 selection 后按 outer
   外侧能否再容纳一个 W 判断。`135-dual` 只有 12=6+6 可自动处理，其它 count 直接 review。
 - Detector 先从整条片带建立 coarse support 和共同方向，再把 format、count 与片夹 authority 编译成
-  有界固定模板，只在理论 outer、separator 和 top/bottom 附近精修。独立像素观察负责对准、解释
-  最多一次直接 local advance 并否决非法 placement；不得用模板投影创造自己的 phase authority。
+  有界固定模板，只在理论 outer、separator 和 top/bottom 附近精修。独立像素观察负责对准、约束每个
+  已唯一绑定 adjacency 的直接 local advance，并否决非法 placement；不得用模板投影创造自己的 phase
+  authority。全部 local advance 的数量始终不超过 `count - 1`，且只作一次 O(count) 传播。
 - 安全层只处理唯一胜出 placement 的联合可行状态，不合并落选位置、不分别相加不能同时发生的
   最大误差、不静默裁掉越界 footprint。具体 bleed 和预算只由 `docs/ARCHITECTURE.md` 定义。
 - Contact 与 overlap 始终属于 challenge。Challenge 是预检测评测角色，不预设 runtime 终态：标准

@@ -8,6 +8,7 @@ from typing import Any
 from x5crop.detection.candidate.assessment.model import CANDIDATE_GATE_CHECK_CODES
 from x5crop.detection.decision.vocabulary import FINAL_REVIEW_REASONS
 from x5crop.detection.output_deskew import DeskewSkipReason
+from x5crop.formats import OUTPUT_PROTECTION_SPEC
 from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 
 
@@ -35,6 +36,8 @@ _DIRECT_USE_BUDGET_FIELDS = {
     "edge_assessments",
     "enclosing_support_height_ratio",
     "enclosing_support_within_limit",
+    "support_cross_alignment_padding_mm",
+    "support_cross_alignment_within_limit",
     "state",
 }
 _DIRECT_USE_EDGE_FIELDS = {
@@ -420,11 +423,12 @@ def _validate_geometry(record: dict[str, Any]) -> None:
                 "unbound_direct_observation_count",
                 "unresolved_reason",
             }
-            or alignment["pattern"] not in {"normal", "local_step", "unresolved"}
+            or alignment["pattern"]
+            not in {"normal", "measured_advances", "unresolved"}
             or alignment["path"]
             != {
                 "normal": "normal",
-                "local_step": "local_advance",
+                "measured_advances": "local_advance",
                 "unresolved": None,
             }[alignment["pattern"]]
             or (alignment["pattern"] == "unresolved")
@@ -458,6 +462,73 @@ def _validate_geometry(record: dict[str, Any]) -> None:
                 != ("start", "end", "top", "bottom")
             ):
                 raise ValueError("direct-use budget summary is invalid")
+            if any(
+                not _finite_number(edge[key]) or float(edge[key]) < 0.0
+                for edge in edges
+                for key in ("expansion_px", "expansion_mm", "limit_mm")
+            ) or any(
+                edge["limit_applies"] is not True
+                or edge["within_limit"]
+                != (float(edge["expansion_mm"]) <= float(edge["limit_mm"]))
+                for edge in edges
+            ):
+                raise ValueError("direct-use edge budget is invalid")
+            support = budget["boundary_use"] == "enclosing_support_pair"
+            support_fields_present = (
+                _finite_number(budget["enclosing_support_height_ratio"])
+                and isinstance(
+                    budget["enclosing_support_within_limit"], bool
+                )
+                and _finite_number(
+                    budget["support_cross_alignment_padding_mm"]
+                )
+                and isinstance(
+                    budget["support_cross_alignment_within_limit"], bool
+                )
+            )
+            if support != support_fields_present:
+                raise ValueError("enclosing-support budget is invalid")
+            if not support and any(
+                budget[key] is not None
+                for key in (
+                    "enclosing_support_height_ratio",
+                    "enclosing_support_within_limit",
+                    "support_cross_alignment_padding_mm",
+                    "support_cross_alignment_within_limit",
+                )
+            ):
+                raise ValueError("aperture budget carries support fields")
+            if support:
+                cross_limit = min(
+                    float(edge["limit_mm"])
+                    for edge in edges
+                    if edge["role"] in {"top", "bottom"}
+                )
+                if (
+                    float(budget["enclosing_support_height_ratio"]) <= 1.0
+                    or budget["enclosing_support_within_limit"]
+                    != (
+                        float(budget["enclosing_support_height_ratio"])
+                        <= OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio
+                    )
+                    or float(budget["support_cross_alignment_padding_mm"])
+                    < 0.0
+                    or budget["support_cross_alignment_within_limit"]
+                    != (
+                        float(
+                            budget["support_cross_alignment_padding_mm"]
+                        )
+                        <= cross_limit
+                    )
+                ):
+                    raise ValueError("support cross-alignment budget is invalid")
+            supported = all(edge["within_limit"] for edge in edges) and (
+                budget["enclosing_support_within_limit"] is not False
+            ) and (
+                budget["support_cross_alignment_within_limit"] is not False
+            )
+            if (budget["state"] == "supported") != supported:
+                raise ValueError("direct-use budget state is invalid")
         for output in outputs:
             validate_output_footprint_authority(output)
         selected = lane["selected_placement_id"]
@@ -484,6 +555,7 @@ def _validate_development(record: dict[str, Any]) -> None:
     for lane in lanes:
         placement = lane.get("placement_competition")
         work = lane.get("work")
+        winner = lane.get("winner_basis")
         if (
             not isinstance(placement, dict)
             or not isinstance(work, dict)
@@ -492,7 +564,26 @@ def _validate_development(record: dict[str, Any]) -> None:
             or not isinstance(lane.get("phase_competition"), dict)
             or not isinstance(lane.get("cross_competition"), dict)
             or not isinstance(lane.get("template_alignment"), dict)
-            or not isinstance(lane.get("winner_basis"), dict)
+            or not isinstance(winner, dict)
+            or set(winner)
+            != {
+                "state",
+                "phase",
+                "cross",
+                "failure",
+                "selected_placement_id",
+                "runner_up_placement_id",
+            }
+            or winner["phase"]
+            != lane["phase_competition"].get("winner_basis")
+            or winner["cross"]
+            != lane["cross_competition"].get("winner_basis")
+            or winner["state"] != placement.get("state")
+            or winner["failure"] != placement.get("failure")
+            or winner["selected_placement_id"]
+            != placement.get("selected_placement_id")
+            or winner["runner_up_placement_id"]
+            != placement.get("runner_up_placement_id")
         ):
             raise ValueError("development template ledger is invalid")
 

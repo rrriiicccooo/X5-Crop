@@ -7,7 +7,6 @@ from dataclasses import replace
 from typing import Sequence
 
 from ...domain import FiniteInterval, ObservationId, PositiveInterval
-from ...formats import OUTPUT_PROTECTION_SPEC
 from .model import BoundaryRole, PHOTO_BOUNDARY_MEASUREMENT_SPEC
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_model import (
@@ -18,8 +17,8 @@ from .template_model import (
     ordered_template_roles,
 )
 from .template_phase_candidates import (
-    _AnchorFact,
     _BoundFit,
+    _PhaseSeed,
     _clear_winner_basis,
     _facts,
     _fit_seed,
@@ -28,6 +27,7 @@ from .template_phase_candidates import (
     _prefixes,
     _rank,
     _relations,
+    _separator_pair_facts,
     _separator_phase_seeds,
     _with_separator_role_authority,
 )
@@ -41,6 +41,9 @@ from .template_phase_model import (
 )
 
 
+_MAX_CONSECUTIVE_UNOBSERVED_PHASE_LOCATIONS = 1
+
+
 def _intervals_overlap(left: FiniteInterval, right: FiniteInterval) -> bool:
     return not (
         left.maximum < right.minimum or right.maximum < left.minimum
@@ -50,29 +53,27 @@ def _intervals_overlap(left: FiniteInterval, right: FiniteInterval) -> bool:
 def _same_continuous_placement(
     left: SequenceFit,
     right: SequenceFit,
-    separator_support_ids: dict[ObservationId, ObservationId],
 ) -> bool:
     """Distinguish one joint feasible placement from a discrete runner."""
 
     def same_role_state(
         left_interval: FiniteInterval,
         right_interval: FiniteInterval,
-        left_id: ObservationId | None,
-        right_id: ObservationId | None,
+        left_binding,
+        right_binding,
     ) -> bool:
         if _intervals_overlap(left_interval, right_interval):
             return True
-        if left_id is None or right_id is None:
+        if left_binding is None or right_binding is None:
             return False
         # Several measured edges can describe the two sides or texture inside
         # one directly observed separator.  Once the ordinal lattice is the
         # same, those alternatives are uncertainty about one role position,
         # not two photo placements.  The connected material identity is the
         # authority for that statement; proximity or edge strength is not.
-        left_support = separator_support_ids.get(left_id)
         return (
-            left_support is not None
-            and left_support == separator_support_ids.get(right_id)
+            left_binding.independent_support_id
+            == right_binding.independent_support_id
         )
 
     return (
@@ -89,14 +90,14 @@ def _same_continuous_placement(
             same_role_state(
                 left_interval,
                 right_interval,
-                left_id,
-                right_id,
+                left_binding,
+                right_binding,
             )
-            for left_interval, right_interval, left_id, right_id in zip(
-                left.role_full_position_intervals_px,
-                right.role_full_position_intervals_px,
-                left.role_observation_ids,
-                right.role_observation_ids,
+            for left_interval, right_interval, left_binding, right_binding in zip(
+                left.model_full_role_intervals_px,
+                right.model_full_role_intervals_px,
+                left.role_bindings,
+                right.role_bindings,
                 strict=True,
             )
         )
@@ -113,17 +114,12 @@ def _interval_hull(left: FiniteInterval, right: FiniteInterval) -> FiniteInterva
 def _merge_continuous_placement(
     selected: _BoundFit,
     alternative: _BoundFit,
-    separator_support_ids: dict[ObservationId, ObservationId],
 ) -> _BoundFit:
     """Retain the selected canonical state and expose the full joint hull."""
 
     left = selected.fit
     right = alternative.fit
-    if not _same_continuous_placement(
-        left,
-        right,
-        separator_support_ids,
-    ):
+    if not _same_continuous_placement(left, right):
         raise ValueError("cannot merge discrete phase placements")
     cycle_interval = _interval_hull(
         left.phase_lattice_fit.cycle_phase_interval_px,
@@ -141,26 +137,20 @@ def _merge_continuous_placement(
                 right.phase_lattice_fit.absolute_phase_interval_px,
             ),
         ),
-        role_positions_px=tuple(
+        model_role_intervals_px=tuple(
             _interval_hull(left_interval, right_interval)
             for left_interval, right_interval in zip(
-                left.role_positions_px,
-                right.role_positions_px,
+                left.model_role_intervals_px,
+                right.model_role_intervals_px,
                 strict=True,
             )
         ),
-        role_full_position_intervals_px=tuple(
+        model_full_role_intervals_px=tuple(
             _interval_hull(left_interval, right_interval)
             for left_interval, right_interval in zip(
-                left.role_full_position_intervals_px,
-                right.role_full_position_intervals_px,
+                left.model_full_role_intervals_px,
+                right.model_full_role_intervals_px,
                 strict=True,
-            )
-        ),
-        direct_observation_ids=tuple(
-            sorted(
-                set(left.direct_observation_ids)
-                | set(right.direct_observation_ids)
             )
         ),
     )
@@ -198,6 +188,7 @@ def fit_template_phase(
         separator_support_ids=separator_support_ids,
     )
     direct = tuple(item for item in facts if item.direct)
+    separator_pairs = _separator_pair_facts(separator_bands, direct)
     roles = ordered_template_roles(template.count)
     relations = _relations(local_advance_relations, template.count)
     base = TemplateSearchReceipt(
@@ -271,9 +262,37 @@ def fit_template_phase(
         + prefixes[-1]
     )
     span_window = max(3.0, pitch0 * 0.35)
-    seed_values: set[tuple[float, float]] = set()
-    seed_values.update(
-        _separator_phase_seeds(
+    seed_values: dict[tuple[float, float], _PhaseSeed | None] = {}
+
+    def register_seed(seed: _PhaseSeed) -> None:
+        key = (seed.phase_px, seed.pitch_px)
+        if key not in seed_values:
+            seed_values[key] = seed
+            return
+        current = seed_values[key]
+        if current is None:
+            return
+        merged = set(current.required_bindings) | set(seed.required_bindings)
+        role_to_observation: dict[int, ObservationId] = {}
+        observation_to_role: dict[ObservationId, int] = {}
+        for role_index, observation_id in merged:
+            if (
+                role_index in role_to_observation
+                and role_to_observation[role_index] != observation_id
+                or observation_id in observation_to_role
+                and observation_to_role[observation_id] != role_index
+            ):
+                seed_values[key] = None
+                return
+            role_to_observation[role_index] = observation_id
+            observation_to_role[observation_id] = role_index
+        seed_values[key] = _PhaseSeed(
+            seed.phase_px,
+            seed.pitch_px,
+            tuple(sorted(merged, key=lambda item: (item[0], str(item[1])))),
+        )
+
+    for seed in _separator_phase_seeds(
             separator_bands,
             direct,
             roles,
@@ -281,16 +300,26 @@ def fit_template_phase(
             width=width0,
             pitch=pitch0,
             prefixes=prefixes,
-        )
-    )
-    if template.direction > 0:
+        ):
+        register_seed(seed)
+    # Count-one templates have no pitch relation.  Their START and END seeds
+    # already close the fixed-width pair below; treating every nearby END as a
+    # second full-span origin would merge distinct physical edge alternatives
+    # into one seed identity.
+    if template.count == 1:
+        pass
+    elif template.direction > 0:
         for first in direct:
+            if BoundaryRole.START not in first.qualified_anchor_roles:
+                continue
             target = first.coordinate_px + nominal_span
             insertion = bisect_left(coordinates, target)
             for index in (insertion - 2, insertion - 1, insertion, insertion + 1):
                 if not 0 <= index < len(direct):
                     continue
                 last = direct[index]
+                if BoundaryRole.END not in last.qualified_anchor_roles:
+                    continue
                 if abs(last.coordinate_px - target) > span_window:
                     continue
                 if template.count > 1:
@@ -304,15 +333,28 @@ def fit_template_phase(
                         continue
                 else:
                     derived_pitch = pitch0
-                seed_values.add((round(first.coordinate_px, 9), round(derived_pitch, 9)))
+                register_seed(
+                    _PhaseSeed(
+                        round(first.coordinate_px, 9),
+                        round(derived_pitch, 9),
+                        (
+                            (roles[0].role_index, first.observation_id),
+                            (roles[-1].role_index, last.observation_id),
+                        ),
+                    )
+                )
     else:
         for first in reversed(direct):
+            if BoundaryRole.START not in first.qualified_anchor_roles:
+                continue
             target = first.coordinate_px - nominal_span
             insertion = bisect_left(coordinates, target)
             for index in (insertion - 2, insertion - 1, insertion, insertion + 1):
                 if not 0 <= index < len(direct):
                     continue
                 last = direct[index]
+                if BoundaryRole.END not in last.qualified_anchor_roles:
+                    continue
                 if abs(last.coordinate_px - target) > span_window:
                     continue
                 if template.count > 1:
@@ -326,7 +368,16 @@ def fit_template_phase(
                         continue
                 else:
                     derived_pitch = pitch0
-                seed_values.add((round(first.coordinate_px, 9), round(derived_pitch, 9)))
+                register_seed(
+                    _PhaseSeed(
+                        round(first.coordinate_px, 9),
+                        round(derived_pitch, 9),
+                        (
+                            (roles[0].role_index, first.observation_id),
+                            (roles[-1].role_index, last.observation_id),
+                        ),
+                    )
+                )
     # Missing or dark outer frames are common.  A direct role-qualified edge
     # therefore seeds every compatible indexed role.  The pixel observation
     # remains the phase authority; the template contributes only the finite
@@ -344,34 +395,42 @@ def fit_template_phase(
             relative = role.slot_index * pitch0 + prefixes[role.slot_index]
             if role.role == BoundaryRole.END:
                 relative += width0
-            seed_values.add(
-                (
+            register_seed(
+                _PhaseSeed(
                     round(
                         anchor.coordinate_px
                         - template.direction * relative,
                         9,
                     ),
                     round(pitch0, 9),
+                    ((role.role_index, anchor.observation_id),),
                 )
             )
     if phase_authority_px is not None:
-        seed_values.add((
-            round(phase_authority_px.center, 9),
-            round(pitch0, 9),
-        ))
+        register_seed(
+            _PhaseSeed(
+                round(phase_authority_px.center, 9),
+                round(pitch0, 9),
+            )
+        )
+    seeds = tuple(
+        seed
+        for seed in seed_values.values()
+        if seed is not None
+    )
     maximum_hypotheses = len(facts) * max(6, len(roles))
-    if len(seed_values) > maximum_hypotheses:
+    if len(seeds) > maximum_hypotheses:
         receipt = TemplateSearchReceipt(
             observation_count=len(facts),
             role_count=len(roles),
-            phase_lookup_count=len(seed_values),
+            phase_lookup_count=len(seeds),
             role_binding_count=0,
             local_relation_evaluation_count=len(relations),
-            phase_hypothesis_count=len(seed_values),
-            phase_offset_lookup_count=len(seed_values),
+            phase_hypothesis_count=len(seeds),
+            phase_offset_lookup_count=len(seeds),
             direct_observation_count=len(direct),
             inferred_role_count=0,
-            peak_temporary_bytes=len(seed_values) * len(roles) * 32,
+            peak_temporary_bytes=len(seeds) * len(roles) * 32,
         )
         return PhaseFitResult(
             template,
@@ -388,24 +447,35 @@ def fit_template_phase(
         value
         for value in (
             _fit_seed(
-                seed_phase,
-                seed_pitch,
+                seed,
                 direct,
+                separator_pairs,
                 roles,
                 template,
                 relations,
                 pitch_authority,
+                phase_authority_px,
                 fit_residual_limit_px,
             )
-            for seed_phase, seed_pitch in sorted(seed_values)
+            for seed in sorted(
+                seeds,
+                key=lambda item: (
+                    item.phase_px,
+                    item.pitch_px,
+                    tuple(
+                        (role_index, str(observation_id))
+                        for role_index, observation_id in item.required_bindings
+                    ),
+                ),
+            )
         )
         if value is not None
         and (
             holder_limits is None
             or (
-                min(value.fit.canonical_role_positions_px)
+                min(value.fit.model_role_positions_px)
                 >= holder_limits[0] - width0 * 0.04
-                and max(value.fit.canonical_role_positions_px)
+                and max(value.fit.model_role_positions_px)
                 <= holder_limits[1] + width0 * 0.04
             )
         )
@@ -423,12 +493,18 @@ def fit_template_phase(
     for candidate in candidates:
         key = (
             candidate.fit.phase_lattice_fit.integer_slot_offset,
-            candidate.fit.role_observation_ids,
+            candidate.fit.binding_observation_ids,
         )
         current = by_binding.get(key)
         if current is None or _rank(candidate) > _rank(current):
             by_binding[key] = candidate
-    ordered = tuple(sorted(by_binding.values(), key=_rank, reverse=True))
+    compatible = tuple(
+        item for item in by_binding.values() if item.residual_compatible
+    )
+    incompatible = tuple(
+        item for item in by_binding.values() if not item.residual_compatible
+    )
+    ordered = tuple(sorted(compatible, key=_rank, reverse=True))
     best = ordered[0] if ordered else None
     if len(ordered) > 1:
         discrete: list[_BoundFit] = []
@@ -437,12 +513,10 @@ def fit_template_phase(
             if _same_continuous_placement(
                 original_best.fit,
                 candidate.fit,
-                separator_support_ids,
             ):
                 best = _merge_continuous_placement(
                     best,
                     candidate,
-                    separator_support_ids,
                 )
             else:
                 discrete.append(candidate)
@@ -452,14 +526,14 @@ def fit_template_phase(
     receipt = TemplateSearchReceipt(
         observation_count=len(facts),
         role_count=len(roles),
-        phase_lookup_count=len(seed_values),
-        role_binding_count=len(seed_values) * len(roles),
+        phase_lookup_count=len(seeds),
+        role_binding_count=len(seeds) * len(roles),
         local_relation_evaluation_count=len(relations),
-        phase_hypothesis_count=len(seed_values),
-        phase_offset_lookup_count=len(seed_values),
+        phase_hypothesis_count=len(seeds),
+        phase_offset_lookup_count=len(seeds),
         direct_observation_count=len(direct),
-        inferred_role_count=(0 if best is None else len(best.fit.inferred_role_indices)),
-        peak_temporary_bytes=len(seed_values) * len(roles) * 32,
+        inferred_role_count=(0 if best is None else len(best.fit.unbound_role_indices)),
+        peak_temporary_bytes=len(seeds) * len(roles) * 32,
     )
     receipt.validate_bounds()
     if best is None:
@@ -468,21 +542,67 @@ def fit_template_phase(
             None,
             None,
             PhaseFitStatus.UNRESOLVED,
-            "no direct observation matched the fixed template",
+            "no residual-compatible direct observation matched the fixed template",
             receipt,
             direct_ids,
             PhaseFailureKind.FIXED_TEMPLATE_MISMATCH,
         )
-    if runner is None:
+    contradictory_runner = max(
+        (
+            item
+            for item in incompatible
+            if item.fit.phase_support_count > best.fit.phase_support_count
+            and not (
+                _intervals_overlap(
+                    item.fit.phase_lattice_fit.absolute_phase_interval_px,
+                    best.fit.phase_lattice_fit.absolute_phase_interval_px,
+                )
+                and _intervals_overlap(
+                    FiniteInterval(
+                        item.fit.pitch_fit.pitch_interval_px.minimum,
+                        item.fit.pitch_fit.pitch_interval_px.maximum,
+                    ),
+                    FiniteInterval(
+                        best.fit.pitch_fit.pitch_interval_px.minimum,
+                        best.fit.pitch_fit.pitch_interval_px.maximum,
+                    ),
+                )
+            )
+        ),
+        key=_rank,
+        default=None,
+    )
+    if contradictory_runner is not None:
+        runner = contradictory_runner
+        winner_basis = None
+    elif runner is None:
         winner_basis = PhaseWinnerBasis.ONLY_PHYSICAL_FIT
     else:
         winner_basis = _clear_winner_basis(best, runner)
-    if winner_basis is not None:
+    if (
+        winner_basis is not None
+        and best.fit.maximum_internal_phase_gap
+        > _MAX_CONSECUTIVE_UNOBSERVED_PHASE_LOCATIONS
+    ):
+        status = PhaseFitStatus.UNRESOLVED
+        reason = (
+            "direct phase support skips more than one consecutive physical "
+            "adjacency"
+        )
+        failure_kind = PhaseFailureKind.PHASE_SUPPORT_DISCONTINUITY
+        winner_basis = None
+    elif winner_basis is not None:
         status = PhaseFitStatus.RESOLVED
         reason = None
+        failure_kind = None
     else:
         status = PhaseFitStatus.AMBIGUOUS
-        reason = "runner-up is not clearly separated from the best template"
+        reason = (
+            "higher-support direct evidence contradicts the selected fixed template"
+            if contradictory_runner is not None
+            else "runner-up is not clearly separated from the best template"
+        )
+        failure_kind = PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS
     return PhaseFitResult(
         template,
         best.fit,
@@ -491,11 +611,7 @@ def fit_template_phase(
         reason,
         receipt,
         direct_ids,
-        (
-            None
-            if status == PhaseFitStatus.RESOLVED
-            else PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS
-        ),
+        failure_kind,
         winner_basis,
     )
 
@@ -539,7 +655,7 @@ def _aggregate_phase_work(
 def fit_template_phase_with_local_advance(
     phase_input: TemplatePhaseInput,
 ) -> PhaseFitResult:
-    """Fit the normal template, then allow one directly proved suffix shift."""
+    """Fit the normal template, then apply directly measured adjacency advances."""
 
     if not isinstance(phase_input, TemplatePhaseInput):
         raise TypeError("local-advance phase fit requires TemplatePhaseInput")
@@ -564,11 +680,7 @@ def fit_template_phase_with_local_advance(
         return normal
     # Import here keeps the residual owner dependent on the canonical phase
     # types without creating a module import cycle.
-    from .template_residual import (
-        LocalAdvanceFailureKind,
-        ResidualPattern,
-        derive_bounded_local_advances,
-    )
+    from .template_residual import derive_bounded_local_advances
 
     analysis = derive_bounded_local_advances(
         normal.best,
@@ -577,60 +689,6 @@ def fit_template_phase_with_local_advance(
         ),
         separator_bands,
     )
-    scale = (
-        0.0
-        if scale_px_per_mm is None
-        else scale_px_per_mm.maximum
-        if isinstance(scale_px_per_mm, PositiveInterval)
-        else float(scale_px_per_mm)
-    )
-    normal_bleed_px = max(
-        OUTPUT_PROTECTION_SPEC.sequence_bleed_frame_ratio
-        * normal.best.pitch_fit.canonical_frame_width_px,
-        OUTPUT_PROTECTION_SPEC.sequence_bleed_minimum_mm * scale,
-    )
-    direct_by_id = {
-        item.observation_id: item
-        for item in observations
-        if isinstance(item, BoundaryEdgeObservation)
-    }
-    direct_role_misses = tuple(
-        0.0
-        if direct_by_id[identity].full_position_interval_px.contains(
-            position,
-            epsilon=1.0e-9,
-        )
-        else direct_by_id[identity].full_position_interval_px.minimum - position
-        if position < direct_by_id[identity].full_position_interval_px.minimum
-        else position - direct_by_id[identity].full_position_interval_px.maximum
-        for position, identity in zip(
-            normal.best.canonical_role_positions_px,
-            normal.best.role_observation_ids,
-            strict=True,
-        )
-        if identity is not None
-    )
-    normal_output_covers_direct_residuals = (
-        not direct_role_misses
-        or max(direct_role_misses) <= normal_bleed_px + 1.0e-7
-    )
-    if normal_output_covers_direct_residuals and (
-        analysis.pattern == ResidualPattern.LOCAL_STEP
-        or analysis.failure_kind == LocalAdvanceFailureKind.TOO_MANY_ANOMALIES
-    ):
-        # The normal placement is already unique, and its ordinary deterministic
-        # bleed covers every direct sequence residual.  Small gap variation is
-        # a validation fact, not permission to open another degree of freedom.
-        # Contact/overlap and topology contradictions never use this stop.
-        return replace(
-            normal,
-            receipt=replace(
-                normal.receipt,
-                local_relation_evaluation_count=(
-                    analysis.evaluated_adjacency_count
-                ),
-            ),
-        )
     if analysis.unresolved_reason is not None:
         return replace(
             normal,

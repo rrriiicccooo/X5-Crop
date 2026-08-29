@@ -282,11 +282,15 @@ class DirectUseBudgetAssessment:
     edge_assessments: tuple[DirectUseBudgetEdgeAssessment, ...]
     enclosing_support_height_ratio: float | None
     enclosing_support_within_limit: bool | None
+    support_cross_alignment_padding_mm: float | None
+    support_cross_alignment_within_limit: bool | None
     state: EvidenceState
 
     def __post_init__(self) -> None:
         supported = all(item.within_limit for item in self.edge_assessments) and (
             self.enclosing_support_within_limit is not False
+        ) and (
+            self.support_cross_alignment_within_limit is not False
         )
         if (
             not self.geometry_id
@@ -308,6 +312,10 @@ class DirectUseBudgetAssessment:
         support = self.boundary_use == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
         if support != (self.enclosing_support_height_ratio is not None) or support != (
             self.enclosing_support_within_limit is not None
+        ) or support != (
+            self.support_cross_alignment_padding_mm is not None
+        ) or support != (
+            self.support_cross_alignment_within_limit is not None
         ):
             raise ValueError("enclosing-support budget fields are inconsistent")
         if support and (
@@ -315,6 +323,20 @@ class DirectUseBudgetAssessment:
             or float(self.enclosing_support_height_ratio) <= 1.0
         ):
             raise ValueError("enclosing-support height ratio is invalid")
+        if support:
+            padding = float(self.support_cross_alignment_padding_mm)
+            cross_limit = min(
+                item.limit_mm
+                for item in self.edge_assessments
+                if item.role in {BoundaryRole.TOP, BoundaryRole.BOTTOM}
+            )
+            if (
+                not math.isfinite(padding)
+                or padding < 0.0
+                or bool(self.support_cross_alignment_within_limit)
+                != (padding <= cross_limit)
+            ):
+                raise ValueError("support cross-alignment budget is invalid")
 
 
 @dataclass(frozen=True)

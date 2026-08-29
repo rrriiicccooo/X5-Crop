@@ -22,7 +22,6 @@ from .template_measurement_plan_model import (
     MAX_PHASE_OBSERVATIONS,
     MAX_PIXEL_COORDINATES,
     MAX_PLACEMENT_CHECKS,
-    MAX_QUERY_INTENTS,
     MAX_REGISTERED_QUERIES,
     MAX_WORK_UNITS,
     MeasurementAxis,
@@ -86,11 +85,10 @@ def compile_template_measurement_plan(
         frame_width_px.minimum + gap_px.minimum,
         frame_width_px.maximum + gap_px.maximum,
     )
-    long_extent_px = (
-        lane_authority.work_box.width
-        if lane_authority.source_axis_long == "x"
-        else lane_authority.work_box.height
-    )
+    # The lane work box is canonical long-x/cross-y for both raw layouts.
+    # source_axis_long records the raw TIFF axis and must not rotate the
+    # already-canonical authority a second time.
+    long_extent_px = lane_authority.work_box.width
     phase_lattice = PhaseLatticeAuthority(
         period_px=pitch_px,
         cycle_origin_px=0.0,

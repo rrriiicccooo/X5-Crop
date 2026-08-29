@@ -150,6 +150,11 @@ def development_report_facts(
                         if lane.prepared.phase_competition.winner_basis is None
                         else lane.prepared.phase_competition.winner_basis.value
                     ),
+                    "cross": (
+                        None
+                        if lane.prepared.cross_competition.winner_basis is None
+                        else lane.prepared.cross_competition.winner_basis.value
+                    ),
                     "failure": typed_read_model(
                         lane.placement_competition.failure
                     ),

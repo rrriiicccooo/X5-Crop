@@ -11,7 +11,6 @@ from typing import Sequence
 from ...domain import FiniteInterval
 from ...formats import OUTPUT_PROTECTION_SPEC
 from .interval_math import (
-    intersect as _intersect,
     midpoint as _midpoint_interval,
     subtract as _subtract,
 )
@@ -81,7 +80,6 @@ def _candidate(
     fixed_height: FiniteInterval,
     canonical_height_px: float,
     reference_trace_px: float,
-    holder_center: FiniteInterval | None,
     registered_traces: tuple[int, ...],
     minimum_shared_trace_support: int,
     longitudinal_support_domains_px: tuple[FiniteInterval, ...],
@@ -167,13 +165,6 @@ def _candidate(
     if not source_spanning and not connected:
         return None
     midpoint = _midpoint_interval(top.full_interval_px, bottom.full_interval_px)
-    center_interval = (
-        _intersect(midpoint, holder_center)
-        if holder_center is not None
-        else midpoint
-    )
-    if center_interval is None:
-        return None
     span = _subtract(bottom.full_interval_px, top.full_interval_px)
     # The broad physical-H interval is search compatibility, not the
     # aperture/support classifier. A role-unknown pair is usable only when it
@@ -185,7 +176,7 @@ def _candidate(
         * canonical_height_px
     ):
         return None
-    aperture_center = center_interval.center
+    aperture_center = midpoint.center
     aperture_top = aperture_center - canonical_height_px / 2.0
     aperture_bottom = aperture_center + canonical_height_px / 2.0
     if (
@@ -262,7 +253,6 @@ def fit_enclosing_support(
     fixed_height: FiniteInterval,
     canonical_height_px: float,
     reference_trace_px: float,
-    holder_center: FiniteInterval | None,
     top_bindings: Sequence[CrossRoleBinding],
     bottom_bindings: Sequence[CrossRoleBinding],
     registered_trace_coordinates_px: tuple[int, ...],
@@ -309,7 +299,6 @@ def fit_enclosing_support(
                 fixed_height=fixed_height,
                 canonical_height_px=canonical_height_px,
                 reference_trace_px=reference_trace_px,
-                holder_center=holder_center,
                 registered_traces=registered_trace_coordinates_px,
                 minimum_shared_trace_support=minimum_shared_trace_support,
                 longitudinal_support_domains_px=longitudinal_support_domains_px,

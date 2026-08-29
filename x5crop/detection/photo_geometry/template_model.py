@@ -15,7 +15,6 @@ import math
 from ...domain import FiniteInterval, ObservationId, PositiveInterval
 
 
-MAX_LOCAL_ADVANCE_ANOMALIES = 1
 MAX_TEMPLATE_FIT_PASSES = 5
 TEMPLATE_ROLE_REFINEMENT_RADIUS_RATIO = 0.11
 MIN_TEMPLATE_ROLE_REFINEMENT_RADIUS_PX = 3.0
@@ -163,9 +162,6 @@ class LocalAdvanceKind(str, Enum):
     NOMINAL = "nominal"
     WIDE = "wide"
     NARROW = "narrow"
-    CONTACT = "contact"
-    OVERLAP = "overlap"
-    UNRESOLVED = "unresolved"
 
 
 @dataclass(frozen=True, order=True)
@@ -386,10 +382,7 @@ class LocalAdvanceRelation:
 
     @property
     def is_anomaly(self) -> bool:
-        return self.kind not in {
-            LocalAdvanceKind.NOMINAL,
-            LocalAdvanceKind.UNRESOLVED,
-        }
+        return self.kind != LocalAdvanceKind.NOMINAL
 
 
 @dataclass(frozen=True)
@@ -415,30 +408,140 @@ class SequenceRoleLineEvidence:
 
 
 @dataclass(frozen=True)
+class SequenceRoleBinding:
+    """One template role bound atomically to one native observation."""
+
+    observation_id: ObservationId
+    independent_support_id: ObservationId
+    canonical_position_px: float
+    fit_position_interval_px: FiniteInterval
+    full_position_interval_px: FiniteInterval
+    line_evidence: SequenceRoleLineEvidence | None
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.observation_id, ObservationId)
+            or not isinstance(self.independent_support_id, ObservationId)
+            or not math.isfinite(self.canonical_position_px)
+            or not isinstance(self.fit_position_interval_px, FiniteInterval)
+            or not isinstance(self.full_position_interval_px, FiniteInterval)
+        ):
+            raise ValueError("sequence role binding is invalid")
+        if not self.fit_position_interval_px.contains(
+            self.canonical_position_px,
+            epsilon=1.0e-9,
+        ):
+            raise ValueError("sequence role binding excludes its canonical position")
+        if (
+            not self.full_position_interval_px.contains(
+                self.fit_position_interval_px.minimum,
+                epsilon=1.0e-9,
+            )
+            or not self.full_position_interval_px.contains(
+                self.fit_position_interval_px.maximum,
+                epsilon=1.0e-9,
+            )
+        ):
+            raise ValueError("sequence role binding full interval excludes fit")
+        if self.line_evidence is not None and (
+            self.line_evidence.observation_id != self.observation_id
+            or not self.full_position_interval_px.contains(
+                self.line_evidence.fit_position_interval_px.minimum,
+                epsilon=1.0e-9,
+            )
+            or not self.full_position_interval_px.contains(
+                self.line_evidence.fit_position_interval_px.maximum,
+                epsilon=1.0e-9,
+            )
+        ):
+            raise ValueError("sequence role line evidence lost its binding")
+
+
+@dataclass(frozen=True)
 class SequenceFit:
     """A fixed-count sequence placement with direct/inferred role accounting."""
 
     template: TemplateSpec
     phase_lattice_fit: PhaseLatticeFit
     pitch_fit: PitchFit
-    canonical_role_positions_px: tuple[float, ...]
-    role_positions_px: tuple[FiniteInterval, ...]
-    role_full_position_intervals_px: tuple[FiniteInterval, ...]
-    role_observation_ids: tuple[ObservationId | None, ...]
-    role_line_evidence: tuple[SequenceRoleLineEvidence | None, ...]
-    matched_role_indices: tuple[int, ...]
-    inferred_role_indices: tuple[int, ...]
-    direct_observation_ids: tuple[ObservationId, ...]
-    independent_support_ids: tuple[ObservationId, ...]
+    model_role_positions_px: tuple[float, ...]
+    model_role_intervals_px: tuple[FiniteInterval, ...]
+    model_full_role_intervals_px: tuple[FiniteInterval, ...]
+    role_bindings: tuple[SequenceRoleBinding | None, ...]
     local_advance_relations: tuple[LocalAdvanceRelation, ...] = ()
     contradicted_observation_count: int = 0
     residual_sum_px: float = 0.0
-    independent_support_coverage: float = 0.0
-    independent_polarity_support_count: int = 0
+    phase_support_coverage: float = 0.0
 
     @property
-    def independent_support_count(self) -> int:
-        return len(self.independent_support_ids)
+    def bound_observation_ids(self) -> tuple[ObservationId, ...]:
+        return tuple(
+            binding.observation_id
+            for binding in self.role_bindings
+            if binding is not None
+        )
+
+    @property
+    def independent_support_ids(self) -> tuple[ObservationId, ...]:
+        return tuple(
+            sorted(
+                {
+                    binding.independent_support_id
+                    for binding in self.role_bindings
+                    if binding is not None
+                }
+            )
+        )
+
+    @property
+    def phase_support_locations(self) -> tuple[int, ...]:
+        """Independent lattice locations, not raw edges, with direct evidence."""
+
+        # END(i) and START(i+1) describe one physical adjacency.  Both may
+        # measure its width, but together count as one global phase location.
+        return tuple(
+            sorted(
+                {
+                    (role_index + 1) // 2
+                    for role_index, binding in enumerate(self.role_bindings)
+                    if binding is not None
+                }
+            )
+        )
+
+    @property
+    def phase_support_count(self) -> int:
+        return len(self.phase_support_locations)
+
+    @property
+    def maximum_internal_phase_gap(self) -> int:
+        """Number of consecutive unsupported lattice locations between anchors."""
+
+        return max(
+            (
+                right - left - 1
+                for left, right in zip(
+                    self.phase_support_locations,
+                    self.phase_support_locations[1:],
+                )
+            ),
+            default=0,
+        )
+
+    @property
+    def binding_observation_ids(self) -> tuple[ObservationId | None, ...]:
+        return tuple(
+            None if binding is None else binding.observation_id
+            for binding in self.role_bindings
+        )
+
+    @property
+    def unbound_role_indices(self) -> tuple[int, ...]:
+        return tuple(
+            index
+            for index, binding in enumerate(self.role_bindings)
+            if binding is None
+        )
 
     def __post_init__(self) -> None:
         if (
@@ -449,19 +552,34 @@ class SequenceFit:
         ):
             raise ValueError("sequence phase lattice disagrees with template")
         if (
-            len(self.canonical_role_positions_px) != 2 * self.template.count
-            or len(self.role_positions_px) != 2 * self.template.count
-            or len(self.role_full_position_intervals_px)
+            len(self.model_role_positions_px) != 2 * self.template.count
+            or len(self.model_role_intervals_px) != 2 * self.template.count
+            or len(self.model_full_role_intervals_px)
             != 2 * self.template.count
-            or len(self.role_observation_ids) != 2 * self.template.count
-            or len(self.role_line_evidence) != 2 * self.template.count
+            or len(self.role_bindings) != 2 * self.template.count
         ):
             raise ValueError("sequence role position count is invalid")
+        if (
+            any(not math.isfinite(value) for value in self.model_role_positions_px)
+            or any(
+                not isinstance(interval, FiniteInterval)
+                for interval in (
+                    *self.model_role_intervals_px,
+                    *self.model_full_role_intervals_px,
+                )
+            )
+            or any(
+                binding is not None
+                and not isinstance(binding, SequenceRoleBinding)
+                for binding in self.role_bindings
+            )
+        ):
+            raise TypeError("sequence role ledger has invalid value types")
         if any(
             not interval.contains(canonical, epsilon=1.0e-9)
             for canonical, interval in zip(
-                self.canonical_role_positions_px,
-                self.role_positions_px,
+                self.model_role_positions_px,
+                self.model_role_intervals_px,
                 strict=True,
             )
         ):
@@ -470,45 +588,28 @@ class SequenceFit:
             not full.contains(fit.minimum, epsilon=1.0e-9)
             or not full.contains(fit.maximum, epsilon=1.0e-9)
             for fit, full in zip(
-                self.role_positions_px,
-                self.role_full_position_intervals_px,
+                self.model_role_intervals_px,
+                self.model_full_role_intervals_px,
                 strict=True,
             )
         ):
             raise ValueError("sequence full role interval excludes fit interval")
-        expected_roles = set(range(2 * self.template.count))
-        matched = set(self.matched_role_indices)
-        inferred = set(self.inferred_role_indices)
-        if not matched.issubset(expected_roles) or not inferred.issubset(expected_roles):
-            raise ValueError("sequence role binding index is invalid")
-        if matched & inferred or len(matched) + len(inferred) > len(expected_roles):
-            raise ValueError("sequence role binding is not disjoint")
+        bound_role_count = sum(binding is not None for binding in self.role_bindings)
         if (
             not self.independent_support_ids
-            or len(set(self.independent_support_ids))
-            != len(self.independent_support_ids)
-            or any(
-                not isinstance(identity, ObservationId)
-                for identity in self.independent_support_ids
-            )
-            or self.independent_support_count > len(matched)
+            or not self.phase_support_locations
+            or self.phase_support_count > bound_role_count
         ):
             raise ValueError("sequence independent support ledger is invalid")
         if self.contradicted_observation_count < 0:
             raise ValueError("sequence contradiction count is invalid")
         if (
-            not math.isfinite(self.independent_support_coverage)
+            not math.isfinite(self.phase_support_coverage)
             or not 0.0
-            <= self.independent_support_coverage
-            <= self.independent_support_count + 1.0e-9
+            <= self.phase_support_coverage
+            <= self.phase_support_count + 1.0e-9
         ):
-            raise ValueError("sequence independent support coverage is invalid")
-        if not (
-            0
-            <= self.independent_polarity_support_count
-            <= self.independent_support_count
-        ):
-            raise ValueError("sequence independent polarity support is invalid")
+            raise ValueError("sequence phase support coverage is invalid")
         if not math.isfinite(self.residual_sum_px) or self.residual_sum_px < 0.0:
             raise ValueError("sequence residual is invalid")
         if tuple(item.relation_ordinal for item in self.local_advance_relations) != tuple(
@@ -517,54 +618,12 @@ class SequenceFit:
             raise ValueError("local relation ordinals must be contiguous")
         if len(self.local_advance_relations) > max(0, self.template.count - 1):
             raise ValueError("local relations exceed template adjacencies")
-        if (
-            sum(item.is_anomaly for item in self.local_advance_relations)
-            > MAX_LOCAL_ADVANCE_ANOMALIES
-        ):
-            raise ValueError("local anomaly count exceeds the bounded template model")
-        if len(set(self.direct_observation_ids)) != len(self.direct_observation_ids):
-            raise ValueError("sequence direct observations must be unique")
-        if any(
-            identity is not None and not isinstance(identity, ObservationId)
-            for identity in self.role_observation_ids
-        ):
-            raise TypeError("sequence role observations must be typed identities")
-        bound_ids = tuple(
-            identity for identity in self.role_observation_ids if identity is not None
-        )
+        bound_ids = self.bound_observation_ids
         if len(set(bound_ids)) != len(bound_ids):
             raise ValueError("one observation cannot bind multiple template roles")
-        if tuple(index for index, identity in enumerate(self.role_observation_ids) if identity is not None) != tuple(
-            self.matched_role_indices
-        ):
-            raise ValueError("sequence matched roles disagree with role observations")
-        if any(
-            evidence is not None
-            and (
-                identity is None
-                or evidence.observation_id != identity
-                or not full.contains(
-                    evidence.fit_position_interval_px.minimum,
-                    epsilon=1.0e-9,
-                )
-                or not full.contains(
-                    evidence.fit_position_interval_px.maximum,
-                    epsilon=1.0e-9,
-                )
-            )
-            for identity, evidence, full in zip(
-                self.role_observation_ids,
-                self.role_line_evidence,
-                self.role_full_position_intervals_px,
-                strict=True,
-            )
-        ):
-            raise ValueError("sequence role line evidence lost its bound identity")
-        if not set(bound_ids).issubset(self.direct_observation_ids):
-            raise ValueError("bound role observations must be direct observations")
         direction = self.template.direction
-        starts = self.canonical_role_positions_px[0::2]
-        ends = self.canonical_role_positions_px[1::2]
+        starts = self.model_role_positions_px[0::2]
+        ends = self.model_role_positions_px[1::2]
         widths = tuple(
             direction * (end - start)
             for start, end in zip(starts, ends, strict=True)
@@ -625,17 +684,17 @@ class SequenceFit:
         canonical_positions: list[float] = []
         role_intervals: list[FiniteInterval] = []
         role_full_intervals: list[FiniteInterval] = []
-        for role, old_canonical, old_interval, old_full_interval, observation_id in zip(
+        for role, old_canonical, old_interval, old_full_interval, binding in zip(
             template.roles,
-            self.canonical_role_positions_px,
-            self.role_positions_px,
-            self.role_full_position_intervals_px,
-            self.role_observation_ids,
+            self.model_role_positions_px,
+            self.model_role_intervals_px,
+            self.model_full_role_intervals_px,
+            self.role_bindings,
             strict=True,
         ):
             canonical = (
                 old_canonical
-                if role.role == BoundaryRole.START or observation_id is not None
+                if role.role == BoundaryRole.START or binding is not None
                 else canonical_positions[-1] + template.direction * width
             )
             canonical_positions.append(canonical)
@@ -667,22 +726,14 @@ class SequenceFit:
                 direction=template.direction,
             ),
             pitch_fit=self.pitch_fit.with_calibrated_template(template),
-            canonical_role_positions_px=tuple(canonical_positions),
-            role_positions_px=tuple(role_intervals),
-            role_full_position_intervals_px=tuple(role_full_intervals),
-            role_observation_ids=self.role_observation_ids,
-            role_line_evidence=self.role_line_evidence,
-            matched_role_indices=self.matched_role_indices,
-            inferred_role_indices=self.inferred_role_indices,
-            direct_observation_ids=self.direct_observation_ids,
-            independent_support_ids=self.independent_support_ids,
+            model_role_positions_px=tuple(canonical_positions),
+            model_role_intervals_px=tuple(role_intervals),
+            model_full_role_intervals_px=tuple(role_full_intervals),
+            role_bindings=self.role_bindings,
             local_advance_relations=self.local_advance_relations,
             contradicted_observation_count=self.contradicted_observation_count,
             residual_sum_px=self.residual_sum_px,
-            independent_support_coverage=self.independent_support_coverage,
-            independent_polarity_support_count=(
-                self.independent_polarity_support_count
-            ),
+            phase_support_coverage=self.phase_support_coverage,
         )
 
 @dataclass(frozen=True)
@@ -747,8 +798,9 @@ class TemplateSearchReceipt:
         Phase lookup and role binding are each at most ``H * R``.  Local
         relations are per adjacency (``count - 1``) per declared numeric fit
         pass, never per candidate chain.  Five passes cover provisional fit,
-        physical rebind, one local refit, source-pitch rebind, and its one
-        local refit.  The method fails explicitly; callers must not truncate.
+        physical rebind, one bounded local-advance refit, source-pitch rebind,
+        and its bounded local-advance refit. The method fails explicitly;
+        callers must not truncate.
         """
 
         h = self.observation_count if observation_count is None else observation_count

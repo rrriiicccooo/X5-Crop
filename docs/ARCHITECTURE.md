@@ -75,8 +75,8 @@ holder extent：物理名义范围 ±3.5%
   胶片材料边、照片边或其它长距离稳定结构，但不能直接决定 crop 或输出 deskew。
 - `OuterBoundaryObservation` / `PhotoBoundaryAnchor`：role-free 像素观察与模板绑定后，才可能
   获得 first、last、top 或 bottom 的照片边界权限。
-- `CanonicalPlacement`：format、count、phase、pitch、cross 和至多一次 local advance 共同决定的
-  source-axis 固定矩形集合。
+- `CanonicalPlacement`：format、count、phase、pitch、cross 和直接 separator 已证明的有界 local
+  advances 共同决定的 source-axis 固定矩形集合。
 - `PhotoGroupOuter`：从已选 placement 的 first start 与 last end 推导的长轴范围；不反向参与选位。
 - `OutputFootprint`：联合不确定性、直线残差和产品 bleed 后，在 source 坐标中已经确认安全的区域。
 
@@ -90,8 +90,8 @@ sequence/cross provenance，`CanonicalPlacement` 使用 `FormatPlacement`。不�
 
 ## 4. Source-axis placement 与可选 deskew
 
-检测中的 placement 没有角度自由度。每个 lane 独立拥有 phase、pitch、cross center 和 local
-advance；全部 aperture frame 的 start/end 与 top/bottom 都沿 source axes。双 lane 只共享相容的
+检测中的 placement 没有角度自由度。每个 lane 独立拥有 phase、pitch、cross offset 和有界 local
+advances；全部 aperture frame 的 start/end 与 top/bottom 都沿 source axes。双 lane 只共享相容的
 W/H 与 px/mm，不共享检测角度或输出旋转权限。
 
 `SharedStripDirection` 只保留在 cross evidence 内，用来证明局部 fragment 的方向完整、两侧平行或
@@ -149,11 +149,10 @@ winner-specific requery。
 同一 trace lattice 只建立一次全局 normalization baseline，再由理论窗口切出局部测量。Baseline
 不产生 transition 或 placement evidence；其像素和临时内存仍完整计入 receipt，不能伪装成免费工作。
 
-正常片条在 outer、phase/pitch、separator topology、闭环、content 和输出预算均唯一且
-相容时，运行时根据已测 residual 停止。Registered measurement 仍保持
-candidate-independent；“停止”表示不再开放 local
-advance、额外 fit pass 或新 hypothesis，不是按 winner 临时少登记查询。普通 gap residual 已由正常
-bleed 覆盖时只保留诊断事实，不增加自由度。
+正常片条在 outer、phase/pitch、separator topology、闭环、content 和输出预算均唯一且相容时停止。
+Registered measurement 始终 candidate-independent；每个已唯一绑定的直接 separator 可以在同一次
+O(count) 传播中约束自己的 adjacency advance，但不能触发额外像素读取、fit pass、winner-specific
+query 或无界 hypothesis。
 
 ## 6. Observation 与独立证据
 
@@ -170,9 +169,10 @@ Registered measurement 一次生成 role-free、候选无关、数量有界的�
 和两侧 edge identity。一个 separator 的两条边、band、多条 trace 和全部梯度像素是一份物理证据，
 不能变成多票。
 
-同一物理 material support 中，source-wide band 优先拥有 END→START 角色；否则只有一对唯一且
-极性闭合的局部 edge 可以获得该角色。存在多个局部解释时不按强度或距离挑选。局部 band 可以提供
-phase anchor，但 band 宽度本身不能创造 local step。
+同一物理 material support 中，只有 source-wide band 可以自行授予 END→START 角色。局部 band 只能
+连接两条已经由各自像素观察取得相容角色的 edge，不能覆盖或创造角色；存在多个局部解释时不按强度或
+距离挑选。Band 可以提供 phase anchor；只有它的两侧 edge 已共同绑定到同一个明确 adjacency 时，实测
+宽度才能约束该处 local advance。
 
 ### 6.3 Cross observation
 
@@ -201,29 +201,34 @@ role = phase
 - 不同 ordinal mapping 或相隔明显的 phase 是离散 placements，保留 winner/runner，绝不平均。
 - Holder 长轴中心不参与 phase。省略 count 也不提供居中权限。
 - 模板投影可以补齐缺失 first/last 或 separator，但 phase 必须来自其它独立 direct anchor。
-- 已绑定的直接角色保留自己的 observation interval；模板只传播 inferred role。
+- 已绑定的直接角色在最终 placement 中保留自己的 native canonical coordinate、完整 observation interval
+  与 observation identity；固定 Grid 只组织 ordinal 并补齐未观察角色，不能覆盖直接位置。
+- Phase support 按物理 lattice location 计数，不按原始 edge 数计票；同一 separator 的 END/START 共同
+  描述一个位置。两个 direct anchors 之间若连续缺少超过一个物理 adjacency，phase 保持 unresolved。
 - Source pitch 必须由至少两个不同直接 separator 位置或独立同角色 advance 支持。一个 separator
   只能证明自己所在 adjacency。
 - 两个 separator 可以收紧 pitch，但不能用同一对事实自证 absolute phase。短片条中的两点投影
   只是一项 phase hypothesis；只有该区间内的完整合法 fit 还绑定了不属于这两个 separator 的独立
-  direct support，才可晋升为 phase authority。长片条中的两点还可能跨过一次 direct local advance，
+  direct support，才可晋升为 phase authority。长片条中的两点还可能跨过一个或多个已测 local advance，
   只能缩小 pitch 搜索。至少三个独立 material 位置形成周期闭环后，separator lattice 才能自行收紧
   absolute phase；不同解释仍保留为离散 placement。
 - 未标 ordinal 的 separator lattice 只枚举 `直接 band 对 × 有限 ordinal distance`，并在循环前
   检查编译上界；超界直接产生 `producer_bound_exceeded`，不截断候选。
 
-模板放置后，`template_alignment_diagnostic` 只读比较 theoretical role 与 bound observation，
-报告 normal、一次 local step 或 unresolved；它不搜索、不选择、不改变 placement。
+模板放置后，`template_alignment_diagnostic` 只读比较 theoretical role 与 bound observation，报告
+`normal`、`measured_advances` 或 `unresolved`；它不搜索、不选择、不改变 placement。
 
-局部异常只复用一个 `LocalAdvanceRelation`：
+每个 adjacency 只有一个 `LocalAdvanceRelation`：
 
-- 直接、ordinal 唯一的 wide/narrow adjacency 可产生一次 suffix shift；
-- 只在该 adjacency 以后累加一次，随后恢复共同 pitch；
-- 没有 separator material 且 END/START 顺序相等或反转，属于 contact/overlap 风险；
-- 需要两个异常、ordinal 不明或存在多种解释时保持 `local_advance_unresolved`。
+- 直接、ordinal 唯一的 END → material → START 可产生 wide/narrow advance；
+- 该差值从下一格开始累加一次，后续仍共享同一个 source pitch；
+- 多处实测变化可以同时存在，但关系总数固定为 `count - 1`，整次传播为 O(count)；
+- 任一 adjacency 的 band、角色或 ordinal 存在多个解释时，整条 placement 保持
+  `local_advance_unresolved`；不能由相邻宽度、bleed 或模板先验猜测；
+- 没有 separator material 且 END/START 顺序相等或反转，属于 contact/overlap 风险。
 
-单个 material 宽度偏离仍可属于正常扫描变化。只有多个独立、source-wide separator support 的
-两侧 residual 无法由同一个模板解释时，才构成全局矛盾；不能把一条局部窄 band 当成第二次位移。
+黄金物理诊断表明 source pitch 通常稳定，而实际 separator 宽度可在同一 source 内变化；因此 pitch 是
+共同 lattice authority，separator 宽度只拥有其已直接证明的局部 advance，不能反向改写全局 W 或 pitch。
 
 Contact 与 overlap 始终属于 challenge。Challenge 是运行前的评测角色，不是终态：标准 detector 与
 Gate 能唯一证明安全时可以 `approved_auto`，证据不足时 `needs_review` 同样合格；不启用额外 bleed、
@@ -231,9 +236,9 @@ Gate 能唯一证明安全时可以 `approved_auto`，证据不足时 `needs_rev
 
 ## 8. Cross、outer 与固定 H
 
-Cross 寻找能够确定短轴 offset、fixed H 和局部连续性的直接证据。片夹短轴中心只帮助单侧
-anchor 推导 opposite，并验证 enclosing support；它不能选择或否决一对角色正确、固定 H 闭环的
-直接 aperture，也不是边界位置或输出 deskew authority。
+Cross 寻找能够确定短轴 offset、fixed H 和局部连续性的直接证据。片夹短轴尺度与画布只编译有界
+top/bottom 测量 corridor；片夹短轴中心不参与最终 aperture/support 选择、边界位置、fixed-H 推导或
+输出 deskew。
 
 ### 8.1 `APERTURE_PAIR`
 
@@ -272,9 +277,9 @@ domain 相等、opposite 不同，或 staggered proof 的 extent 相等/分离�
 上述 domain-complete anchor 仍必须有完整方向、明确 role authority，并由同一个 direct binding
 在每个 selected frame domain 中分别命中 direct trace；selected domain 少于 3 个、缺少一个
 domain、把两个不连通 fragments 合计覆盖、role 未授权或方向不完整时，不能拼接或推导 placement，
-继续 review。Holder short-axis center
-只作兼容事实，不是这一 authority 的必要条件；opposite 仍只由 fixed H 推导，局部 departure
-继续进入 selected placement 的 output budget。
+继续 review。Holder short-axis center 只在 measurement compiler 中生成有界 corridor；观察登记完成后，
+它不再是 compatibility、selection 或边界 authority。Opposite 只由 fixed H 推导，局部 departure 继续
+进入 selected placement 的 output budget。
 
 ### 8.2 `ENCLOSING_SUPPORT_PAIR`
 
@@ -284,7 +289,7 @@ domain、把两个不连通 fragments 合计覆盖、role 未授权或方向不�
 - 两侧均 source-spanning，或覆盖 3 个独立支持区域和 `min(3, count)` 个长轴 frame domain；
 - 直接 span 完整包含 canonical fixed H；
 - `H < support_span <= 1.1H`；
-- 与片夹短轴中心和 lane authority 相容；
+- 完整位于 lane/source authority；
 - 只有一个合法 pair。
 
 两侧 `boundary_use` 必须一致，禁止 aperture/support 混用。两侧直接闭环且唯一的 aperture 优先；
@@ -306,11 +311,11 @@ domain、把两个不连通 fragments 合计覆盖、role 未授权或方向不�
 - first/last、separator、top/bottom 和总跨度闭环；
 - 双 lane 的共享尺度与 slot identity 相容。
 
-直接绑定的 sequence start/end 若有稳定直线拟合，`SequenceFit` 只把该 observation 的
-reference trace、fit position interval 和 fit direction interval 交给输出安全层。Placement 仍保持
-source-axis，不沿该直线移动 phase 或旋转 frame；安全层只计算拟合直线在当前 frame 短轴 support 上
-超过既有 full position interval 的向外部分，已经由 full interval 覆盖的 residual 不重复相加。固定 W
-推导的 opposite edge 继承同一个直线证据；没有直接方向证据时不创造 slope authority。
+直接绑定的 sequence start/end 把自己的 native coordinate、full interval 与稳定直线拟合交给最终
+placement；Grid coordinate 只保留为模型诊断。Placement 仍保持 source-axis，不沿拟合直线旋转 frame；
+安全层只计算该直线在当前 frame 短轴 support 上超过 full interval 的向外部分，已覆盖的 residual 不重复
+相加。只有一侧直接可见时，固定 W 推导 opposite，并平移同一条直线证据；两侧都直接可见时各自保留
+独立 observation，不把远处 model residual 复制到本 Frame。
 
 选择只使用 typed hard facts 和证据职责，不使用加权总分、confidence 补偿、top-K、投票或
 样片/format 特判。同一 template identity、integer offset、local topology 与独立物理 support 下，
@@ -342,10 +347,10 @@ selected placement
 ```
 
 `PlacementFeasibleSet` 保留同一 observation bindings、ordinal topology、boundary use 和 placement
-identity 下仍合法的 phase、W、pitch、local delta 与 cross 联合状态；直接 enclosing pair 额外保留
-自己的 same-state slope。每个 frame 的边界极值从这个低维联合集合求出，再加入上一节中未被 full
-position interval 覆盖的 sequence-line outward departure；不把同一 residual 重复相加，不吸收
-runner-up，也不重新读取像素。
+identity 下仍合法的 W、未观察 Grid role、local delta 与 cross 联合状态；直接 sequence role 从自己的
+native interval 投影，不能被全局 Grid 拉回。直接 enclosing pair 额外保留自己的 same-state slope。
+每个 frame 的边界极值从这个低维联合集合求出，再加入未被 full interval 覆盖的 line outward
+departure；不把同一 residual 重复相加，不吸收 runner-up，也不重新读取像素。
 
 产品 bleed：
 
@@ -357,9 +362,9 @@ cross：0.25 mm
 `APERTURE_PAIR` 四边的完整 expansion（联合不确定性 + 直线 residual + bleed）各自不得超过对应
 format 尺寸的 5%。四边不能借额度；刚好达到上限通过。
 
-`ENCLOSING_SUPPORT_PAIR` 的 top/bottom 使用直接 support 边，不再添加 cross bleed，也不使用
-aperture 单边 5%；它只接受上节的总 span `<= 1.1H`。Start/end 仍使用正常 sequence bleed 和
-单边 5%。
+`ENCLOSING_SUPPORT_PAIR` 的 top/bottom 使用直接 support 边，不再添加 cross bleed；除总 span
+`<= 1.1H` 外，每侧自身 expansion 仍不得超过 5%，两侧为对齐同一直接支撑状态而增加的 cross padding
+之和也不得超过一个 5% 短轴预算。Start/end 使用正常 sequence bleed 和各自 5% 预算。
 
 `OutputFootprint` 不得与 source/lane authority 相交后静默缩小。Decision 前只验证联合 source-space
 polygon 完整位于 lane authority；任一真正所需区域越界都按 authority side 保存一个 saturation fact
@@ -415,7 +420,7 @@ validator 位于 `tools/regression/`，不进入用户 standalone。
 Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决定、不写正式 TIFF。它必须展示：
 
 - theoretical template 与 role-free observations；
-- 每个 bound role 的 residual 和 normal/local-step/unresolved pattern；
+- 每个 bound role 的 residual 和 normal/measured-advances/unresolved pattern；
 - direct 与 inferred 边界；
 - best、runner 及真正不同之处；
 - `APERTURE_PAIR` 或 `ENCLOSING_SUPPORT_PAIR`；
@@ -488,7 +493,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/template_measurement_plan*.py` | pixel-free 模板、有限 query intents、停止与工作上界 |
 | `photo_geometry/registered_*.py`、`observations.py`、`separator_*.py` | 一次性 measurement、role-free edge 与 material band |
 | `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source 共享 W/H/scale authority |
-| `photo_geometry/template_phase*.py`、`template_pitch.py`、`template_residual.py` | phase、ordinal、source pitch 与最多一次 direct local advance |
+| `photo_geometry/template_phase*.py`、`template_pitch.py`、`template_residual.py` | phase、ordinal、source pitch 与逐 adjacency 的 direct local advance |
 | `photo_geometry/template_alignment_diagnostic.py` | theoretical-vs-observed residual 的只读诊断 |
 | `photo_geometry/interval_math.py`、`template_cross*.py`、`template_cross_support.py` | 共享 interval 运算、fixed-H aperture、局部 top/bottom 方向闭合与 enclosing support |
 | `photo_geometry/template_placement.py`、`template_selection.py` | source-axis frame 的一次 compose 与离散 winner/runner |
@@ -607,6 +612,9 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   写回人工基线。分析结果绑定 HEAD、detector source manifest、comparator source manifest 与 development
   gold SHA，并分别记录两组路径是否与 HEAD 一致。`--gate zero-unsafe-auto` 只在完整 development gold 上
   阻断危险自动批准；完整 development contract 仍独立检查 candidate conformance 与 nominal 目标。
+- 同一分析按 source SHA 去重验证 runtime 物理先验：scan-canvas/profile 匹配、直接可见 Frame 比例、
+  separator gap、相邻 pitch 和编译后的 top/bottom corridor。黄金线是最内侧可接受基准，不是物理片门
+  真值；因此这些统计只用于发现方向性偏差和缺失能力，不能自动校准 runtime 常量或晋升黄金。
 - 24-source performance 只证明其绑定 commit、依赖和机器上的完整路径时间与资源；5 秒均值是
   blocking Gate，3 秒均值只是 non-blocking challenge。
 - Platform 聚合必须同时收到同一 commit 的 Apple Silicon macOS、Intel macOS 与 Windows x64
@@ -614,7 +622,7 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   `best_effort_unverified`，不得静默升级为已验证。
 - 合成和变形合同覆盖 coarse support 的统一边框、翻转、横竖转置和亮度/对比度，phase 的平移、缩放
   与 fractional pitch，cosmetic deskew 的可用/跳过及横竖旋转符号，轻微直线 residual、缺边、
-  wide/narrow 单次 gap、contact/overlap 的安全 auto 与安全 review、同源 count 变体、强内部假边、填充
+  多处直接 wide/narrow gap、contact/overlap 的安全 auto 与安全 review、同源 count 变体、强内部假边、填充
   状态、dual lane、联合安全预算和 source-wide 事务。
 - 全部 release receipt 和 sealed acceptance aggregate receipt 必须绑定同一最终 commit；否则 V5 不创建
   RC、tag、Release 或公开 ZIP。

@@ -434,7 +434,7 @@ def refine_placement_pitch_interval(
 
     Farthest START-to-START and END-to-END advances cancel fixed frame width.
     At most two relations are evaluated in one O(R) pass.  A relation that
-    disagrees with the selected base pitch is left to bounded local-step
+    disagrees with the selected base pitch is left to bounded local-advance
     analysis instead of rejecting or recalibrating the placement here.
     """
 
@@ -532,8 +532,8 @@ def calibrate_template_source_pitch(
         for ordinal in range(template.count - 1):
             relations: list[FiniteInterval] = []
             for role_offset in (0, 1):
-                left_id = fit.role_observation_ids[2 * ordinal + role_offset]
-                right_id = fit.role_observation_ids[
+                left_id = fit.binding_observation_ids[2 * ordinal + role_offset]
+                right_id = fit.binding_observation_ids[
                     2 * (ordinal + 1) + role_offset
                 ]
                 if left_id is None or right_id is None:

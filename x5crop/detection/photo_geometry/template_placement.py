@@ -8,6 +8,7 @@ import math
 from ...domain import FiniteInterval, ObservationId
 from ...formats import FramePhysicalSpec
 from ...geometry.convex import ConvexPolygon, signed_area
+from ...run_local_identity import run_local_id
 from .boundary_geometry import canonical_boundary_line
 from .interval_math import (
     add as _interval_sum,
@@ -179,24 +180,23 @@ def _sequence_boundary(
     role_index: int,
 ) -> _ResolvedBoundary:
     role = template.roles[role_index]
-    interval = sequence.role_full_position_intervals_px[role_index]
-    canonical = float(sequence.canonical_role_positions_px[role_index])
-    identity = sequence.role_observation_ids[role_index]
-    direct = role_index in sequence.matched_role_indices
-    inferred = role_index in sequence.inferred_role_indices
-    if direct != (identity is not None) or inferred != (identity is None):
-        raise ValueError("sequence role ledger and observation identity disagree")
-    if direct:
-        ids = (identity,)
-        assert identity is not None
+    interval = sequence.model_full_role_intervals_px[role_index]
+    canonical = float(sequence.model_role_positions_px[role_index])
+    binding = sequence.role_bindings[role_index]
+    if binding is not None:
+        ids = (binding.observation_id,)
         source = PositionSource.OBSERVED_TRANSITION
         inference = None
+        canonical = binding.canonical_position_px
+        interval = binding.full_position_interval_px
+        line_evidence = binding.line_evidence
     else:
-        ids = tuple(sequence.direct_observation_ids)
+        ids = tuple(sequence.bound_observation_ids)
         if not ids:
             raise ValueError("template-inferred sequence edge lacks direct authority")
         source = PositionSource.INFERRED_SEQUENCE
         inference = f"{role.role.value}_from_template_fixed_width"
+        line_evidence = None
     return _ResolvedBoundary(
         role=role.role,
         canonical=canonical,
@@ -204,7 +204,7 @@ def _sequence_boundary(
         observation_ids=ids,
         source=source,
         inference=inference,
-        line_evidence=sequence.role_line_evidence[role_index],
+        line_evidence=line_evidence,
     )
 
 
@@ -227,7 +227,7 @@ def _shift_sequence_line_evidence(
     )
 
 
-def _resolve_sequence_pair(
+def _sequence_pair(
     sequence: SequenceFit,
     template: TemplateSpec,
     ordinal: int,
@@ -277,6 +277,16 @@ def _resolve_sequence_pair(
                 -width * template.direction,
             ),
         )
+    return start, end
+
+
+def _resolve_sequence_pair(
+    sequence: SequenceFit,
+    template: TemplateSpec,
+    ordinal: int,
+    width: float,
+) -> tuple[_ResolvedBoundary, _ResolvedBoundary]:
+    start, end = _sequence_pair(sequence, template, ordinal, width)
     # When both sides are direct, each keeps its own measured physical
     # interval.  Fixed W is already enforced by the selected placement's
     # joint feasible set; hulling a direct END with START + the independent
@@ -306,6 +316,42 @@ def _resolve_sequence_pair(
     ):
         raise ValueError("sequence frame edges contradict fixed template width")
     return start, end
+
+
+def _resolved_sequence_pairs(
+    sequence: SequenceFit,
+    template: TemplateSpec,
+) -> tuple[tuple[_ResolvedBoundary, _ResolvedBoundary], ...]:
+    width = _canonical_width(sequence, template)
+    return tuple(
+        _resolve_sequence_pair(sequence, template, ordinal, width)
+        for ordinal in range(template.count)
+    )
+
+
+def resolved_sequence_support_domains_px(
+    sequence: SequenceFit,
+) -> tuple[FiniteInterval, ...]:
+    """Return the realized long-axis domain of every fixed-template frame.
+
+    Direct observations own their native coordinates; fixed-W inference fills
+    only an unobserved opposite side.  Cross registration and final placement
+    must therefore consult this same resolved geometry instead of the model
+    lattice that merely organized the observations.
+    """
+
+    template = sequence.template
+    width = _canonical_width(sequence, template)
+    return tuple(
+        FiniteInterval(
+            min(start.canonical, end.canonical),
+            max(start.canonical, end.canonical),
+        )
+        for start, end in (
+            _sequence_pair(sequence, template, ordinal, width)
+            for ordinal in range(template.count)
+        )
+    )
 
 
 def _cross_boundaries(
@@ -540,22 +586,17 @@ def compose_format_placement(
         raise TypeError("lane authority must use FiniteInterval")
     if not math.isfinite(cross_fit.lane_reference_trace_px):
         raise ValueError("cross lane reference trace is not finite")
-    if len(sequence_fit.role_positions_px) != 2 * template.count:
+    if len(sequence_fit.model_role_intervals_px) != 2 * template.count:
         raise ValueError("sequence fit count contradicts template count")
-    width = _canonical_width(sequence_fit, template)
     if template.frame_height_px is not None and not _intersects(
         template.frame_height_px, cross_fit.fixed_height_px
     ):
         raise ValueError("cross fixed height contradicts template frame height")
     cross_top, cross_bottom = _cross_boundaries(cross_fit)
     frames: list[TemplateFrame] = []
-    for ordinal in range(template.count):
-        start, end = _resolve_sequence_pair(
-            sequence_fit,
-            template,
-            ordinal,
-            width,
-        )
+    for ordinal, (start, end) in enumerate(
+        _resolved_sequence_pairs(sequence_fit, template)
+    ):
         frame_reference = (start.canonical + end.canonical) / 2.0
         projected_cross_shift = _aperture_center_shift_px(
             cross_fit,
@@ -660,11 +701,32 @@ def compose_format_placement(
                 canonical_source_polygon=polygon,
             )
         )
-    phase = sequence_fit.phase_lattice_fit.canonical_absolute_phase_px.hex()
-    identity = placement_id or (
-        f"template-placement:{lane_id}:{template.template_id}:"
-        f"{source_scan_geometry.geometry_id}:{phase}:"
-        f"{cross_fit.top_canonical_px.hex()}:{cross_fit.bottom_canonical_px.hex()}"
+    realized_geometry_identity = tuple(
+        (
+            frame.lane_ordinal,
+            *tuple(
+                (
+                    boundary.canonical_position_px.hex(),
+                    boundary.full_position_interval_px.minimum.hex(),
+                    boundary.full_position_interval_px.maximum.hex(),
+                    tuple(map(str, boundary.position_observation_ids)),
+                )
+                for boundary in (
+                    frame.start,
+                    frame.end,
+                    frame.top,
+                    frame.bottom,
+                )
+            ),
+        )
+        for frame in frames
+    )
+    identity = placement_id or run_local_id(
+        "template-placement",
+        lane_id,
+        template.template_id,
+        source_scan_geometry.geometry_id,
+        realized_geometry_identity,
     )
     return FormatPlacement(
         placement_id=identity,
