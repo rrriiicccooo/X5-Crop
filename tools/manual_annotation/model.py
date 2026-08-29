@@ -9,35 +9,40 @@ import json
 import math
 from typing import Any, Iterable, Sequence
 
+from x5crop.formats import format_spec
 
-ANNOTATION_SCHEMA = "x5crop_source_annotation_v3"
-BASELINE_SCHEMA = "x5crop_user_confirmed_source_geometry_v4"
+
+ANNOTATION_SCHEMA = "x5crop_source_annotation_v4"
+BASELINE_SCHEMA = "x5crop_user_confirmed_source_geometry_v5"
+EVALUATION_ROLE_CONTRACT = "x5crop_pre_detector_evidence_role_v1"
 COORDINATE_SYSTEM = "raw_tiff_raster_pixel_centers"
 MACHINE_ORIGIN = "independent_bounded_pixel_proposal_v1"
-RED_MARKUP_ORIGIN = "user_red_markup_hybrid_draft_import_v2"
-CONFIRMED_IMPORT_ORIGIN = "existing_user_confirmed_baseline_import_v1"
+RED_MARKUP_ORIGIN = "user_red_markup_import"
 RECORD_STATES = frozenset(
     {"machine_proposal", "human_adjusted", "user_confirmed"}
 )
 LINE_REVIEW_BASES = frozenset(
     {
-        "machine_proposal_pending_review",
+        "unclassified",
         "directly_visible",
         "visible_content_limit",
         "human_width_estimate",
-        "human_adjusted_native_pixel",
-        "user_accepted_machine_inference",
-        "explicit_prior_user_confirmation",
         "unresolved_red_stroke",
     }
 )
 CLIENT_EDITABLE_LINE_REVIEW_BASES = frozenset(
     {
+        "unclassified",
         "directly_visible",
         "visible_content_limit",
         "human_width_estimate",
-        "human_adjusted_native_pixel",
     }
+)
+CONFIRMABLE_LINE_REVIEW_BASES = frozenset(
+    {"directly_visible", "visible_content_limit", "human_width_estimate"}
+)
+NON_DIRECT_LINE_REVIEW_BASES = frozenset(
+    {"visible_content_limit", "human_width_estimate"}
 )
 SLOT_KINDS = frozenset(
     {"image", "blank_exposure", "partial_exposure", "source_truncated", "unknown"}
@@ -46,7 +51,7 @@ CLIENT_EDITABLE_SLOT_KINDS = frozenset(
     {"image", "partial_exposure", "source_truncated", "unknown"}
 )
 ADJACENCY_KINDS = frozenset(
-    {"separator", "contact", "overlap", "unresolved", "not_applicable"}
+    {"separator", "contact", "overlap", "not_applicable"}
 )
 
 
@@ -217,6 +222,274 @@ def referenced_boundary_ids(record: dict[str, Any]) -> set[str]:
     }
 
 
+def line_basis_summary(record: dict[str, Any]) -> dict[str, Any]:
+    """Summarize active line authority without changing annotation state."""
+    referenced = referenced_boundary_ids(record)
+    uses: dict[str, list[str]] = {}
+    for task in record["tasks"]:
+        for slot in task["slots"]:
+            pair = slot_boundary_ids(
+                slot,
+                name=f"{task['task_id']} slot {slot['ordinal']}",
+            )
+            if pair is None:
+                continue
+            uses.setdefault(pair[0], []).append(
+                f"{task['task_id']}#{slot['ordinal']}.start"
+            )
+            uses.setdefault(pair[1], []).append(
+                f"{task['task_id']}#{slot['ordinal']}.end"
+            )
+
+    active_lines = [
+        *record["shared_edges"],
+        *(
+            line
+            for line in record["boundary_pool"]
+            if line["line_id"] in referenced
+            or line["review_basis"] == "unresolved_red_stroke"
+        ),
+    ]
+    attention_lines: list[dict[str, Any]] = []
+    unclassified_count = 0
+    non_direct_count = 0
+    shared_ids = {line["line_id"] for line in record["shared_edges"]}
+    for line in active_lines:
+        basis = line["review_basis"]
+        if basis == "directly_visible":
+            continue
+        is_unclassified = basis in {"unclassified", "unresolved_red_stroke"}
+        unclassified_count += int(is_unclassified)
+        non_direct_count += int(not is_unclassified)
+        attention_lines.append(
+            {
+                "line_id": line["line_id"],
+                "family": "shared" if line["line_id"] in shared_ids else "boundary",
+                "review_basis": basis,
+                "uses": (
+                    [line["role"]]
+                    if line["line_id"] in shared_ids
+                    else sorted(set(uses.get(line["line_id"], [])))
+                ),
+            }
+        )
+
+    source_conditions = []
+    for task in record["tasks"]:
+        for slot in task["slots"]:
+            if slot["slot_kind"] not in {"source_truncated", "unknown"}:
+                continue
+            pair = slot_boundary_ids(
+                slot,
+                name=f"{task['task_id']} slot {slot['ordinal']}",
+            )
+            source_conditions.append(
+                {
+                    "task_id": task["task_id"],
+                    "ordinal": slot["ordinal"],
+                    "slot_kind": slot["slot_kind"],
+                    "line_ids": list(pair) if pair is not None else [],
+                }
+            )
+
+    classification_complete = unclassified_count == 0
+    if not classification_complete:
+        status = "needs_classification"
+    elif attention_lines or source_conditions:
+        status = "has_non_direct_basis"
+    else:
+        status = "all_directly_visible"
+    return {
+        "status": status,
+        "classification_complete": classification_complete,
+        "all_directly_visible": status == "all_directly_visible",
+        "unclassified_line_count": unclassified_count,
+        "non_direct_line_count": non_direct_count,
+        "attention_lines": attention_lines,
+        "source_conditions": source_conditions,
+    }
+
+
+def frame_state_summary(record: dict[str, Any]) -> dict[str, Any]:
+    """Summarize whether every explicit task slot is a normal photo."""
+    non_normal_slots = [
+        {
+            "task_id": task["task_id"],
+            "ordinal": slot["ordinal"],
+            "slot_kind": slot["slot_kind"],
+        }
+        for task in record["tasks"]
+        for slot in task["slots"]
+        if slot["slot_kind"] != "image"
+    ]
+    pending_source_truncation = _pending_source_truncated_geometry(record)
+    all_normal = not non_normal_slots
+    return {
+        "status": (
+            "all_frames_normal" if all_normal else "has_non_normal_frames"
+        ),
+        "all_frames_normal": all_normal,
+        "non_normal_slot_count": len(non_normal_slots),
+        "non_normal_slots": non_normal_slots,
+        "pending_source_truncated_geometry_count": len(pending_source_truncation),
+        "pending_source_truncated_geometry": pending_source_truncation,
+    }
+
+
+def evaluation_task_role(
+    *,
+    format_id: str,
+    shared_edges: Sequence[dict[str, Any]],
+    boundary_pool: Sequence[dict[str, Any]],
+    task: dict[str, Any],
+    pending_source_truncated_ordinals: Iterable[int] = (),
+) -> dict[str, Any]:
+    """Derive one task role only from frozen pre-detector evidence."""
+    boundary_by_id = {
+        line["line_id"]: line
+        for line in boundary_pool
+    }
+    pending_ordinals = set(pending_source_truncated_ordinals)
+    try:
+        physical = format_spec(str(format_id))
+    except KeyError:
+        physical = None
+
+    reasons: list[str] = []
+    boundary_ids: set[str] = set()
+    non_direct_by_frame: dict[int, set[str]] = {}
+    for slot in task["slots"]:
+        pair = slot_boundary_ids(
+            slot,
+            name=f"{task['task_id']} slot {slot['ordinal']}",
+        )
+        if pair is None:
+            continue
+        boundary_ids.update(pair)
+        non_direct = {
+            line_id
+            for line_id in pair
+            if boundary_by_id[line_id]["review_basis"]
+            in NON_DIRECT_LINE_REVIEW_BASES
+        }
+        if non_direct:
+            non_direct_by_frame[slot["ordinal"]] = non_direct
+
+    non_direct_boundary_ids = (
+        set().union(*non_direct_by_frame.values())
+        if non_direct_by_frame
+        else set()
+    )
+    two_sided_non_direct_frames = sorted(
+        ordinal
+        for ordinal, line_ids in non_direct_by_frame.items()
+        if len(line_ids) == 2
+    )
+    clustered_non_direct_frames = [
+        ordinal
+        for ordinal in two_sided_non_direct_frames
+        if any(
+            other_ordinal != ordinal
+            and bool(other_line_ids - non_direct_by_frame[ordinal])
+            for other_ordinal, other_line_ids in non_direct_by_frame.items()
+        )
+    ]
+    task_boundaries = [boundary_by_id[line_id] for line_id in boundary_ids]
+    required_lines = [*shared_edges, *task_boundaries]
+
+    if any(
+        line["review_basis"] not in CONFIRMABLE_LINE_REVIEW_BASES
+        for line in required_lines
+    ):
+        reasons.append("required_boundary_basis_missing")
+    if any(line["review_basis"] != "directly_visible" for line in shared_edges):
+        reasons.append("shared_edges_lack_direct_visibility")
+    if not any(
+        line["review_basis"] == "directly_visible"
+        for line in task_boundaries
+    ):
+        reasons.append("no_direct_sequence_anchor")
+    count = task["count"]
+    non_direct_boundary_challenge_threshold = (
+        2
+        if isinstance(count, int)
+        and not isinstance(count, bool)
+        and count <= 3
+        else 4
+    )
+    if clustered_non_direct_frames:
+        reasons.append("clustered_non_direct_boundaries")
+    if len(non_direct_boundary_ids) >= non_direct_boundary_challenge_threshold:
+        reasons.append("non_direct_boundary_count_threshold")
+    if any(slot["slot_kind"] == "unknown" for slot in task["slots"]):
+        reasons.append("unknown_required_frame")
+    if any(adjacency["kind"] == "contact" for adjacency in task["adjacencies"]):
+        reasons.append("contact_adjacency")
+    if any(adjacency["kind"] == "overlap" for adjacency in task["adjacencies"]):
+        reasons.append("overlap_adjacency")
+    if any(slot["ordinal"] in pending_ordinals for slot in task["slots"]):
+        reasons.append("source_truncation_not_geometrically_established")
+
+    count_supported = (
+        physical is not None
+        and isinstance(count, int)
+        and not isinstance(count, bool)
+        and count > 0
+        and (
+            count == physical.maximum_full_count
+            if physical.layout.kind == "dual_lane"
+            else count <= physical.maximum_full_count
+        )
+    )
+    if not count_supported:
+        reasons.append("count_outside_fixed_template_contract")
+
+    return {
+        "task_id": task["task_id"],
+        "sample_id": task["sample_id"],
+        "count": count,
+        "cohort_role": "challenge" if reasons else "nominal",
+        "reasons": reasons,
+        "non_direct_boundary_count": len(non_direct_boundary_ids),
+        "non_direct_boundary_challenge_threshold": (
+            non_direct_boundary_challenge_threshold
+        ),
+        "non_direct_boundary_ids": sorted(non_direct_boundary_ids),
+        "two_sided_non_direct_frame_ordinals": two_sided_non_direct_frames,
+        "clustered_non_direct_frame_ordinals": clustered_non_direct_frames,
+    }
+
+
+def evaluation_role_summary(record: dict[str, Any]) -> dict[str, Any]:
+    """Derive pre-detector nominal/challenge roles from reviewable task facts."""
+    pending_by_task: dict[str, set[int]] = {}
+    for item in _pending_source_truncated_geometry(record):
+        pending_by_task.setdefault(item["task_id"], set()).add(item["ordinal"])
+    tasks = [
+        evaluation_task_role(
+            format_id=str(record["format_id"]),
+            shared_edges=record["shared_edges"],
+            boundary_pool=record["boundary_pool"],
+            task=task,
+            pending_source_truncated_ordinals=pending_by_task.get(
+                task["task_id"], ()
+            ),
+        )
+        for task in record["tasks"]
+    ]
+
+    challenge_count = sum(
+        task["cohort_role"] == "challenge"
+        for task in tasks
+    )
+    return {
+        "source_role": "challenge" if challenge_count else "nominal",
+        "nominal_task_count": len(tasks) - challenge_count,
+        "challenge_task_count": challenge_count,
+        "tasks": tasks,
+    }
+
+
 def _polygon_area(polygon: Sequence[Sequence[float]]) -> float:
     return (
         sum(
@@ -231,7 +504,7 @@ def _polygon_area(polygon: Sequence[Sequence[float]]) -> float:
     )
 
 
-def frame_polygons_display(
+def _physical_frame_polygons_display(
     record: dict[str, Any],
     task: dict[str, Any],
 ) -> tuple[list[list[float]], ...]:
@@ -292,6 +565,113 @@ def frame_polygons_display(
             ]
         polygons.append(polygon)
     return tuple(polygons)
+
+
+def _pending_source_truncated_geometry(
+    record: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Return source-truncated slots whose physical frame is still fully in raster."""
+    extent = record["source"]["canonical_extent"]
+    width = float(extent["width"])
+    height = float(extent["height"])
+    pending: list[dict[str, Any]] = []
+    for task in record["tasks"]:
+        physical_polygons = _physical_frame_polygons_display(record, task)
+        reference_slots = [
+            slot
+            for slot in task["slots"]
+            if slot_boundary_ids(slot) is not None
+        ]
+        for slot, polygon in zip(reference_slots, physical_polygons, strict=True):
+            if slot["slot_kind"] != "source_truncated":
+                continue
+            leaves_source = any(
+                not -0.5 <= x <= width - 0.5
+                or not -0.5 <= y <= height - 0.5
+                for x, y in polygon
+            )
+            if not leaves_source:
+                pending.append(
+                    {
+                        "task_id": task["task_id"],
+                        "ordinal": slot["ordinal"],
+                    }
+                )
+    return pending
+
+
+def _clip_polygon_to_source_raster(
+    record: dict[str, Any],
+    polygon: Sequence[Sequence[float]],
+) -> list[list[float]]:
+    extent = record["source"]["canonical_extent"]
+    bounds = (
+        (0, -0.5, True),
+        (0, float(extent["width"]) - 0.5, False),
+        (1, -0.5, True),
+        (1, float(extent["height"]) - 0.5, False),
+    )
+
+    def append_unique(points: list[list[float]], point: Sequence[float]) -> None:
+        candidate = [float(point[0]), float(point[1])]
+        if not points or math.dist(points[-1], candidate) > 1.0e-9:
+            points.append(candidate)
+
+    clipped = [[float(point[0]), float(point[1])] for point in polygon]
+    for axis, boundary, keep_greater in bounds:
+        if not clipped:
+            break
+        output: list[list[float]] = []
+        previous = clipped[-1]
+        previous_inside = (
+            previous[axis] >= boundary
+            if keep_greater
+            else previous[axis] <= boundary
+        )
+        for current in clipped:
+            current_inside = (
+                current[axis] >= boundary
+                if keep_greater
+                else current[axis] <= boundary
+            )
+            if current_inside != previous_inside:
+                delta = current[axis] - previous[axis]
+                if abs(delta) <= 1.0e-12:
+                    raise AnnotationError("source-raster clipping is numerically unstable")
+                fraction = (boundary - previous[axis]) / delta
+                intersection = [
+                    previous[index]
+                    + fraction * (current[index] - previous[index])
+                    for index in range(2)
+                ]
+                intersection[axis] = boundary
+                append_unique(output, intersection)
+            if current_inside:
+                append_unique(output, current)
+            previous = current
+            previous_inside = current_inside
+        if len(output) > 1 and math.dist(output[0], output[-1]) <= 1.0e-9:
+            output.pop()
+        clipped = output
+    return clipped
+
+
+def frame_polygons_display(
+    record: dict[str, Any],
+    task: dict[str, Any],
+) -> tuple[list[list[float]], ...]:
+    physical_polygons = _physical_frame_polygons_display(record, task)
+    reference_slots = [
+        slot
+        for slot in task["slots"]
+        if slot_boundary_ids(slot) is not None
+    ]
+    return tuple(
+        _clip_polygon_to_source_raster(record, polygon)
+        if slot["slot_kind"] == "source_truncated"
+        else polygon
+        for slot, polygon in zip(reference_slots, physical_polygons, strict=True)
+    )
 
 
 def frame_polygons_raw(
@@ -355,6 +735,43 @@ def _boundary_axis_position(
     if abs(denominator) < 1.0e-9:
         raise AnnotationError("long boundary is parallel to the strip axis")
     return first[1] + (second[1] - first[1]) * (reference - first[0]) / denominator
+
+
+def _derived_adjacency_kind(
+    record: dict[str, Any],
+    left_slot: dict[str, Any],
+    right_slot: dict[str, Any],
+    pool_by_id: dict[str, dict[str, Any]],
+) -> str:
+    left_pair = slot_boundary_ids(left_slot)
+    right_pair = slot_boundary_ids(right_slot)
+    if left_pair is None or right_pair is None:
+        return "not_applicable"
+    left_end_id = left_pair[1]
+    right_start_id = right_pair[0]
+    if left_end_id == right_start_id:
+        return "contact"
+    left_end = _boundary_axis_position(record, pool_by_id[left_end_id])
+    right_start = _boundary_axis_position(record, pool_by_id[right_start_id])
+    return "overlap" if left_end > right_start else "separator"
+
+
+def refresh_adjacency_kinds(record: dict[str, Any]) -> int:
+    """Store adjacency facts derived only from the current slot geometry."""
+    pool_by_id = {line["line_id"]: line for line in record["boundary_pool"]}
+    changed = 0
+    for task in record["tasks"]:
+        for index, adjacency in enumerate(task["adjacencies"]):
+            kind = _derived_adjacency_kind(
+                record,
+                task["slots"][index],
+                task["slots"][index + 1],
+                pool_by_id,
+            )
+            if adjacency["kind"] != kind:
+                adjacency["kind"] = kind
+                changed += 1
+    return changed
 
 
 def _validate_source(record: dict[str, Any]) -> None:
@@ -455,6 +872,13 @@ def validate_annotation_record(record: dict[str, Any]) -> None:
         raise AnnotationError("annotation origin is missing")
     if not isinstance(record["diagnostics"], dict):
         raise AnnotationError("annotation diagnostics must be typed facts")
+    unresolved = record["diagnostics"].get("unresolved", [])
+    if not isinstance(unresolved, list):
+        raise AnnotationError("annotation unresolved diagnostics must be a list")
+    if record["state"] == "user_confirmed" and unresolved:
+        raise AnnotationError(
+            "confirmed annotation cannot retain unresolved proposal hints"
+        )
     _validate_source(record)
 
     shared = record["shared_edges"]
@@ -564,34 +988,17 @@ def validate_annotation_record(record: dict[str, Any]) -> None:
             raise AnnotationError(f"{task_id}: adjacency semantics are invalid")
         pool_by_id = {line["line_id"]: line for line in boundary_pool}
         for index, adjacency in enumerate(adjacencies):
-            left_pair = boundary_pairs[index]
-            right_pair = boundary_pairs[index + 1]
-            kind = adjacency["kind"]
-            if left_pair is None or right_pair is None:
-                if kind != "not_applicable":
-                    raise AnnotationError(
-                        f"{task_id}: adjacency touching a blank slot is not applicable"
-                    )
-                continue
-            if kind == "not_applicable":
+            expected_kind = _derived_adjacency_kind(
+                record,
+                slots[index],
+                slots[index + 1],
+                pool_by_id,
+            )
+            if adjacency["kind"] != expected_kind:
                 raise AnnotationError(
-                    f"{task_id}: nonblank adjacency requires physical semantics"
+                    f"{task_id}: adjacency {index + 1}-{index + 2} must be "
+                    f"derived as {expected_kind}"
                 )
-            left_id = left_pair[1]
-            right_id = right_pair[0]
-            if kind == "contact":
-                if left_id != right_id:
-                    raise AnnotationError(f"{task_id}: contact must share one physical line")
-            elif left_id == right_id:
-                raise AnnotationError(
-                    f"{task_id}: shared boundary identity requires contact semantics"
-                )
-            left_position = _boundary_axis_position(record, pool_by_id[left_id])
-            right_position = _boundary_axis_position(record, pool_by_id[right_id])
-            if kind == "overlap" and left_position <= right_position:
-                raise AnnotationError(f"{task_id}: overlap boundaries are not crossed")
-            if kind == "separator" and left_position > right_position:
-                raise AnnotationError(f"{task_id}: separator boundaries overlap")
         uses: dict[str, list[tuple[int, str]]] = {}
         for slot, pair in zip(slots, boundary_pairs, strict=True):
             if pair is None:
@@ -608,19 +1015,46 @@ def validate_annotation_record(record: dict[str, Any]) -> None:
                 raise AnnotationError(f"{task_id}: physical line reuse is not contact")
             if adjacencies[first[0] - 1]["kind"] != "contact":
                 raise AnnotationError(f"{task_id}: reused line lacks contact semantics")
+        physical_polygons = _physical_frame_polygons_display(record, task)
         polygons = frame_polygons_display(record, task)
+        reference_slots = [
+            slot
+            for slot in slots
+            if slot_boundary_ids(slot) is not None
+        ]
         previous_center = -math.inf
         horizontal = record["strip_axis_display"] == "horizontal"
-        for polygon in polygons:
-            if _polygon_area(polygon) < 4.0:
+        for slot, physical_polygon, polygon in zip(
+            reference_slots,
+            physical_polygons,
+            polygons,
+            strict=True,
+        ):
+            if _polygon_area(physical_polygon) < 4.0:
                 raise AnnotationError("annotation frame is degenerate or reversed")
-            for x, y in polygon:
-                if (
-                    not -0.5 <= x <= width - 0.5
-                    or not -0.5 <= y <= height - 0.5
-                ):
-                    raise AnnotationError("annotation frame leaves the source raster")
-            center = sum(point[0 if horizontal else 1] for point in polygon) / 4.0
+            leaves_source = any(
+                not -0.5 <= x <= width - 0.5
+                or not -0.5 <= y <= height - 0.5
+                for x, y in physical_polygon
+            )
+            if leaves_source and slot["slot_kind"] != "source_truncated":
+                raise AnnotationError(
+                    f"{task_id} frame {slot['ordinal']} leaves the source raster; "
+                    "classify it as source_truncated only when the TIFF truly cuts it"
+                )
+            if _polygon_area(polygon) < 4.0:
+                raise AnnotationError(
+                    f"{task_id} frame {slot['ordinal']} has no usable source-raster intersection"
+                )
+            if any(
+                not -0.5 <= x <= width - 0.5
+                or not -0.5 <= y <= height - 0.5
+                for x, y in polygon
+            ):
+                raise AnnotationError("source-raster clipping did not contain the frame")
+            center = sum(
+                point[0 if horizontal else 1] for point in polygon
+            ) / len(polygon)
             if center <= previous_center:
                 raise AnnotationError("annotation frames are not in display order")
             previous_center = center
@@ -700,6 +1134,26 @@ def validate_annotation_record(record: dict[str, Any]) -> None:
             or not all(value is True for value in checklist.values())
         ):
             raise AnnotationError("confirmation checklist is incomplete")
+        basis_summary = line_basis_summary(record)
+        if not basis_summary["classification_complete"]:
+            line_ids = ", ".join(
+                line["line_id"]
+                for line in basis_summary["attention_lines"]
+                if line["review_basis"] not in CONFIRMABLE_LINE_REVIEW_BASES
+            )
+            raise AnnotationError(
+                f"confirmed annotation has unclassified lines: {line_ids}"
+            )
+        pending_source_truncation = _pending_source_truncated_geometry(record)
+        if pending_source_truncation:
+            frames = ", ".join(
+                f"{item['task_id']}#{item['ordinal']}"
+                for item in pending_source_truncation
+            )
+            raise AnnotationError(
+                "source_truncated frames must physically leave the source raster "
+                f"before confirmation: {frames}"
+            )
     elif confirmation is not None:
         raise AnnotationError("unconfirmed annotation cannot carry confirmation")
 
@@ -719,6 +1173,9 @@ def geometry_snapshot(record: dict[str, Any]) -> dict[str, Any]:
 
 def record_for_client(record: dict[str, Any]) -> dict[str, Any]:
     result = deepcopy(record)
+    result["line_basis_summary"] = line_basis_summary(record)
+    result["frame_state_summary"] = frame_state_summary(record)
+    result["evaluation_role_summary"] = evaluation_role_summary(record)
     for line in result["shared_edges"]:
         line["points_display"] = [
             raw_to_display_point(record, point)
@@ -752,12 +1209,11 @@ def apply_client_geometry(
     if current["state"] == "user_confirmed":
         raise AnnotationError("confirmed annotation is immutable")
     updated = deepcopy(current)
+    changed_refinement_line_ids: set[str] = set()
 
     def replace_lines(
         target: list[dict[str, Any]],
         incoming: object,
-        *,
-        editable_bases: frozenset[str],
     ) -> None:
         if not isinstance(incoming, list) or len(incoming) != len(target):
             raise AnnotationError("geometry line set does not match the task")
@@ -781,7 +1237,7 @@ def apply_client_geometry(
                 raise AnnotationError("geometry line requires two display points")
             requested_basis = incoming_line["review_basis"]
             if requested_basis != line["review_basis"] and (
-                requested_basis not in editable_bases
+                requested_basis not in CLIENT_EDITABLE_LINE_REVIEW_BASES
             ):
                 raise AnnotationError("line review basis change is not editable")
             mapped = [
@@ -794,22 +1250,19 @@ def apply_client_geometry(
             )
             if geometry_changed:
                 line["origin"] = "human_adjustment"
-                if requested_basis not in CLIENT_EDITABLE_LINE_REVIEW_BASES:
-                    requested_basis = "human_adjusted_native_pixel"
+                changed_refinement_line_ids.add(str(line["line_id"]))
+            if requested_basis != line["review_basis"]:
+                changed_refinement_line_ids.add(str(line["line_id"]))
             line["review_basis"] = requested_basis
             line["points_raw"] = mapped
 
     replace_lines(
         updated["shared_edges"],
         payload["shared_edges"],
-        editable_bases=frozenset(
-            {"directly_visible", "human_adjusted_native_pixel"}
-        ),
     )
     replace_lines(
         updated["boundary_pool"],
         payload["boundary_pool"],
-        editable_bases=CLIENT_EDITABLE_LINE_REVIEW_BASES,
     )
 
     incoming_slot_kinds = payload["slot_kinds"]
@@ -845,12 +1298,30 @@ def apply_client_geometry(
             or slot["slot_kind"] not in CLIENT_EDITABLE_SLOT_KINDS
         ):
             raise AnnotationError("slot kind change is not editable")
+        if requested_kind != slot["slot_kind"]:
+            pair = slot_boundary_ids(slot)
+            if pair is not None:
+                changed_refinement_line_ids.update(pair)
         slot["slot_kind"] = requested_kind
+
+    refresh_adjacency_kinds(updated)
 
     updated["revision"] += 1
     updated["state"] = "human_adjusted"
     updated["reviewed_task_ids"] = []
     updated["confirmation"] = None
+    refinement = updated["diagnostics"].get("refinement")
+    if isinstance(refinement, dict):
+        line_evidence = refinement.get("lines")
+        if isinstance(line_evidence, dict):
+            for line_id in changed_refinement_line_ids:
+                evidence = line_evidence.get(line_id)
+                if isinstance(evidence, dict):
+                    evidence["human_review_status"] = "adjusted_after_refinement"
+        refinement["human_review_state"] = "pending"
+        refinement["current_geometry_sha256"] = canonical_record_sha256(
+            geometry_snapshot(updated)
+        )
     validate_annotation_record(updated)
     return updated
 
@@ -860,6 +1331,10 @@ def confirmed_baseline_rows(record: dict[str, Any]) -> tuple[dict[str, Any], ...
     if record["state"] != "user_confirmed":
         raise AnnotationError("only confirmed annotations create baseline rows")
     confirmation = record["confirmation"]
+    role_by_task = {
+        item["task_id"]: item
+        for item in evaluation_role_summary(record)["tasks"]
+    }
     rows: list[dict[str, Any]] = []
     for task in record["tasks"]:
         polygons_raw = frame_polygons_raw(record, task)
@@ -901,6 +1376,11 @@ def confirmed_baseline_rows(record: dict[str, Any]) -> tuple[dict[str, Any], ...
                 "boundary_pool": deepcopy(record["boundary_pool"]),
                 "slots": deepcopy(task["slots"]),
                 "adjacencies": deepcopy(task["adjacencies"]),
+                "evaluation_role": {
+                    "contract": EVALUATION_ROLE_CONTRACT,
+                    "cohort_role": role_by_task[task["task_id"]]["cohort_role"],
+                    "reasons": deepcopy(role_by_task[task["task_id"]]["reasons"]),
+                },
                 "frames": [
                     {
                         "frame_index": slot["ordinal"],

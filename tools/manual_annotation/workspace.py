@@ -17,19 +17,17 @@ from .imaging import (
     MAX_TILE_SOURCE_DIMENSION,
     MAX_TILE_SOURCE_PIXELS,
     SourceRaster,
-    orientation_record,
     render_review_artifact,
     sha256_file,
 )
 from .model import (
-    ANNOTATION_SCHEMA,
-    CONFIRMED_IMPORT_ORIGIN,
-    COORDINATE_SYSTEM,
     AnnotationError,
     canonical_record_sha256,
     confirmed_rows_jsonl,
-    display_to_raw_point,
+    evaluation_role_summary,
+    frame_state_summary,
     geometry_snapshot,
+    line_basis_summary,
     record_for_client,
     referenced_boundary_ids,
     utc_now,
@@ -39,21 +37,18 @@ from .model import (
 from .proposal import (
     apply_review_context_metadata,
     apply_review_context_slot_semantics,
-    canonicalize_source_reference_mappings,
     import_red_markup_draft,
     propose_record,
 )
+from .refinement import REFINEMENT_REVISION, refine_record
 
 
-MANIFEST_SCHEMA = "x5crop_manual_review_manifest_v3"
+MANIFEST_SCHEMA = "x5crop_manual_review_manifest_v5"
 COHORT_RELATIVE_PATH = Path("tools/regression/cohorts/diagnostic_unreviewed.jsonl")
 MANIFEST_RELATIVE_PATH = Path("Test/manual_review/manifest.jsonl")
-LEGACY_BASELINE_RELATIVE_PATH = Path(
-    "Test/manual_review/user_confirmed_golden_baseline.jsonl"
-)
 DEFAULT_STATE_RELATIVE_PATH = Path("Test/manual_review/source_annotations")
 REVIEW_CONTEXT_RELATIVE_PATH = Path("Test/manual_review/review_context.json")
-REVIEW_CONTEXT_SCHEMA = "x5crop_manual_review_context_v1"
+REVIEW_CONTEXT_SCHEMA = "x5crop_manual_review_context_v2"
 
 
 class WorkspaceError(RuntimeError):
@@ -111,25 +106,6 @@ def _atomic_json(path: Path, value: dict[str, Any]) -> None:
     _atomic_write(path, payload)
 
 
-def _line_from_legacy(
-    seed: dict[str, Any],
-    *,
-    horizontal: bool,
-    family: str,
-    width: int,
-    height: int,
-) -> list[list[float]]:
-    slope = float(seed["slope"])
-    intercept = float(seed["intercept"])
-    if horizontal:
-        if family == "shared":
-            return [[0.0, intercept], [float(width - 1), slope * (width - 1) + intercept]]
-        return [[intercept, 0.0], [slope * (height - 1) + intercept, float(height - 1)]]
-    if family == "shared":
-        return [[intercept, 0.0], [slope * (height - 1) + intercept, float(height - 1)]]
-    return [[0.0, intercept], [float(width - 1), slope * (width - 1) + intercept]]
-
-
 class ReviewWorkspace:
     def __init__(
         self,
@@ -185,8 +161,23 @@ class ReviewWorkspace:
             "source_sha256",
         )
         manifest_by_id: dict[str, dict[str, Any]] = {}
+        expected_manifest_keys = {
+            "manifest_schema",
+            "sample_id",
+            "format_id",
+            "count",
+            "source_relative_path",
+            "source_sha256",
+            "sort_index",
+            "calibration_canonical_sample_id",
+            "calibration_copy_relative_path",
+            "source_alias_sample_ids",
+        }
         for row in manifest:
-            if row.get("manifest_schema") != MANIFEST_SCHEMA:
+            if (
+                set(row) != expected_manifest_keys
+                or row.get("manifest_schema") != MANIFEST_SCHEMA
+            ):
                 raise WorkspaceError("manual-review manifest schema is not current")
             sample_id = row.get("sample_id")
             if not isinstance(sample_id, str) or sample_id in manifest_by_id:
@@ -232,6 +223,7 @@ class ReviewWorkspace:
                 "review_context_schema": REVIEW_CONTEXT_SCHEMA,
                 "default_pending_markup_state": "unknown",
                 "default_film_polarity": "unknown",
+                "shared_edge_review_basis": "unclassified",
                 "positive_sample_ids": [],
                 "unmarked_sample_ids": [],
                 "samples": {},
@@ -244,6 +236,7 @@ class ReviewWorkspace:
             "review_context_schema",
             "default_pending_markup_state",
             "default_film_polarity",
+            "shared_edge_review_basis",
             "positive_sample_ids",
             "unmarked_sample_ids",
             "samples",
@@ -259,6 +252,11 @@ class ReviewWorkspace:
             raise WorkspaceError("manual-review default markup state is invalid")
         if value["default_film_polarity"] not in {"positive", "negative", "unknown"}:
             raise WorkspaceError("manual-review default film polarity is invalid")
+        if value["shared_edge_review_basis"] not in {
+            "unclassified",
+            "directly_visible",
+        }:
+            raise WorkspaceError("manual-review shared-edge basis is invalid")
         known = set(self.sample_to_sha)
         for key in ("positive_sample_ids", "unmarked_sample_ids"):
             identities = value[key]
@@ -293,6 +291,9 @@ class ReviewWorkspace:
         return {
             "authority": "user_supplied_calibration_metadata_only",
             "film_polarity": polarities.pop(),
+            "shared_edge_review_basis": self.review_context[
+                "shared_edge_review_basis"
+            ],
             "tasks": {
                 row["sample_id"]: deepcopy(samples.get(row["sample_id"], {}))
                 for row in members
@@ -346,6 +347,21 @@ class ReviewWorkspace:
             validate_annotation_record(record)
         except AnnotationError as error:
             raise WorkspaceError(f"annotation record is invalid: {error}") from error
+        sha = str(record["source"]["sha256"])
+        expected_preview = self.preview_path(sha).relative_to(
+            self.repository_root
+        ).as_posix()
+        if record["diagnostics"].get("preview_relative_path") != expected_preview:
+            raise WorkspaceError("annotation preview path is not current")
+        red_import = record["diagnostics"].get("red_markup_import")
+        if isinstance(red_import, dict):
+            canonical = self._canonical_row(self.groups[sha])
+            if (
+                "marked_path" in red_import
+                or red_import.get("marked_relative_path")
+                != canonical["calibration_copy_relative_path"]
+            ):
+                raise WorkspaceError("red-markup source path is not current")
         return record_for_client(record) if client else record
 
     def _save_record(self, record: dict[str, Any]) -> None:
@@ -361,134 +377,6 @@ class ReviewWorkspace:
             raise WorkspaceError(f"{row['sample_id']}: source TIFF SHA-256 mismatch")
         return source
 
-    def _legacy_baselines(self) -> dict[str, dict[str, Any]]:
-        path = self.resolve_repository_path(LEGACY_BASELINE_RELATIVE_PATH.as_posix())
-        if not path.is_file():
-            return {}
-        return {str(row["source_sha256"]): row for row in _jsonl(path)}
-
-    def _import_legacy_record(
-        self,
-        *,
-        members: list[dict[str, Any]],
-        baseline: dict[str, Any],
-        raster: SourceRaster,
-    ) -> dict[str, Any]:
-        canonical = self._canonical_row(members)
-        raw_width, raw_height = raster.raw_extent
-        display_width, display_height = raster.canonical_extent
-        horizontal = baseline["strip_orientation"] == "horizontal"
-        record: dict[str, Any] = {
-            "annotation_schema": ANNOTATION_SCHEMA,
-            "revision": 1,
-            "state": "user_confirmed",
-            "source": {
-                "canonical_sample_id": canonical["calibration_canonical_sample_id"],
-                "relative_path": canonical["source_relative_path"],
-                "sha256": canonical["source_sha256"],
-                "raw_extent": {"width": raw_width, "height": raw_height},
-                "canonical_extent": {"width": display_width, "height": display_height},
-                "orientation_mapping": orientation_record(raster.mapping),
-            },
-            "format_id": canonical["format_id"],
-            "strip_axis_display": baseline["strip_orientation"],
-            "coordinate_system": COORDINATE_SYSTEM,
-            "origin": CONFIRMED_IMPORT_ORIGIN,
-            "shared_edges": [],
-            "boundary_pool": [],
-            "tasks": [],
-            "diagnostics": {
-                "legacy_baseline_schema": baseline["baseline_schema"],
-                "legacy_baseline_sha256": canonical_record_sha256(baseline),
-                "legacy_algorithm_revision": baseline["algorithm_revision"],
-                "authority": "preserved_existing_user_confirmation",
-                "review_context": self._source_review_context(members),
-            },
-            "reviewed_task_ids": [row["sample_id"] for row in members],
-            "confirmation": {
-                "confirmed_at_utc": baseline["confirmed_at_utc"],
-                "proposal_snapshot_sha256": baseline["proposal_snapshot_sha256"],
-                "review_artifact_relative_path": baseline["confirmed_review_jpg"],
-                "review_artifact_sha256": baseline["confirmed_review_jpg_sha256"],
-                "checklist": {
-                    "shared_edges": True,
-                    "task_boundaries": True,
-                    "native_pixel_checks": True,
-                    "safe_without_bleed": True,
-                },
-            },
-        }
-        for index, seed in enumerate(baseline["shared_edges"], start=1):
-            points = _line_from_legacy(
-                seed,
-                horizontal=horizontal,
-                family="shared",
-                width=display_width,
-                height=display_height,
-            )
-            record["shared_edges"].append(
-                {
-                    "line_id": f"E{index}",
-                    "role": "short_low" if index == 1 else "short_high",
-                    "points_raw": [display_to_raw_point(record, point) for point in points],
-                    "origin": CONFIRMED_IMPORT_ORIGIN,
-                    "review_basis": "explicit_prior_user_confirmation",
-                }
-            )
-        boundary_ids: list[str] = []
-        for index, seed in enumerate(baseline["frame_boundaries"], start=1):
-            line_id = f"B{index:03d}"
-            points = _line_from_legacy(
-                seed,
-                horizontal=horizontal,
-                family="boundary",
-                width=display_width,
-                height=display_height,
-            )
-            record["boundary_pool"].append(
-                {
-                    "line_id": line_id,
-                    "role": "long_boundary",
-                    "points_raw": [display_to_raw_point(record, point) for point in points],
-                    "origin": CONFIRMED_IMPORT_ORIGIN,
-                    "review_basis": "explicit_prior_user_confirmation",
-                }
-            )
-            boundary_ids.append(line_id)
-        if len(members) != 1:
-            raise WorkspaceError("legacy confirmed source unexpectedly has aliases")
-        member = members[0]
-        record["tasks"].append(
-            {
-                "task_id": member["sample_id"],
-                "sample_id": member["sample_id"],
-                "source_relative_path": member["source_relative_path"],
-                "count": member["count"],
-                "slots": [
-                    {
-                        "ordinal": index + 1,
-                        "slot_kind": "image",
-                        "reference_geometry": {
-                            "kind": "boundary_pair",
-                            "start_boundary_id": boundary_ids[index * 2],
-                            "end_boundary_id": boundary_ids[index * 2 + 1],
-                        },
-                    }
-                    for index in range(int(member["count"]))
-                ],
-                "adjacencies": [
-                    {
-                        "left_ordinal": index,
-                        "right_ordinal": index + 1,
-                        "kind": "separator",
-                    }
-                    for index in range(1, int(member["count"]))
-                ],
-            }
-        )
-        validate_annotation_record(record)
-        return record
-
     def prepare(
         self,
         *,
@@ -501,13 +389,10 @@ class ReviewWorkspace:
             if identities is not None
             else set(self.groups)
         )
-        legacy = self._legacy_baselines()
         counts = {
             "prepared": 0,
             "existing": 0,
-            "confirmed_imported": 0,
             "red_drafts": 0,
-            "source_references_normalized": 0,
         }
         for offset, sha in enumerate(
             sorted(requested, key=lambda value: int(self.groups[value][0]["sort_index"])),
@@ -516,28 +401,8 @@ class ReviewWorkspace:
             members = self.groups[sha]
             existing_path = self.record_path(sha)
             if existing_path.is_file():
-                existing = self._read_record(sha)
+                existing = self.load_record(sha)
                 if existing["state"] != "machine_proposal" or not force_machine:
-                    if existing["state"] != "user_confirmed":
-                        try:
-                            normalized = canonicalize_source_reference_mappings(existing)
-                        except (KeyError, TypeError, ValueError) as error:
-                            raise WorkspaceError(
-                                f"{members[0]['sample_id']}: cannot normalize source reference"
-                            ) from error
-                        if normalized != existing:
-                            normalized["revision"] = int(existing["revision"]) + 1
-                            normalized["reviewed_task_ids"] = []
-                            validate_annotation_record(normalized)
-                            self._save_record(normalized)
-                            existing = normalized
-                            counts["source_references_normalized"] += 1
-                    try:
-                        validate_annotation_record(existing)
-                    except AnnotationError as error:
-                        raise WorkspaceError(
-                            f"annotation record is invalid: {error}"
-                        ) from error
                     preview_path = self.preview_path(sha)
                     if not preview_path.is_file():
                         raise WorkspaceError(
@@ -547,13 +412,7 @@ class ReviewWorkspace:
                     stored_preview_sha = existing["diagnostics"].get(
                         "preview_jpeg_sha256"
                     )
-                    if stored_preview_sha is None:
-                        existing["diagnostics"]["preview_jpeg_sha256"] = preview_sha
-                        existing["diagnostics"]["preview_relative_path"] = (
-                            preview_path.relative_to(self.repository_root).as_posix()
-                        )
-                        self._save_record(existing)
-                    elif stored_preview_sha != preview_sha:
+                    if stored_preview_sha != preview_sha:
                         raise WorkspaceError(
                             f"{members[0]['sample_id']}: prepared preview SHA-256 mismatch"
                         )
@@ -564,53 +423,46 @@ class ReviewWorkspace:
             canonical = self._canonical_row(members)
             source = self._verify_source(canonical)
             with SourceRaster(source) as raster:
-                if sha in legacy:
-                    record = self._import_legacy_record(
-                        members=members,
-                        baseline=legacy[sha],
-                        raster=raster,
+                record, _ = propose_record(
+                    raster=raster,
+                    source_relative_path=canonical["source_relative_path"],
+                    source_sha256=sha,
+                    canonical_sample_id=canonical["calibration_canonical_sample_id"],
+                    format_id=canonical["format_id"],
+                    tasks=members,
+                    review_context=self._source_review_context(members),
+                )
+                copy_path = self.resolve_repository_path(
+                    str(canonical["calibration_copy_relative_path"])
+                )
+                if not copy_path.is_file():
+                    raise WorkspaceError(
+                        f"calibration work copy is missing: {canonical['calibration_copy_relative_path']}"
                     )
-                    counts["confirmed_imported"] += 1
+                copy_changed = sha256_file(copy_path) != sha
+                declared_markup_state = self._declared_markup_state(members)
+                record["diagnostics"]["declared_markup_state"] = declared_markup_state
+                if declared_markup_state == "user_declared_marked" and not copy_changed:
+                    raise WorkspaceError(
+                        f"{canonical['sample_id']}: user-declared marked copy has no raster/file change"
+                    )
+                if copy_changed and declared_markup_state != "user_declared_unmarked":
+                    try:
+                        record = import_red_markup_draft(
+                            record,
+                            source_raster=raster,
+                            marked_path=copy_path,
+                            marked_relative_path=str(
+                                canonical["calibration_copy_relative_path"]
+                            ),
+                        )
+                    except (ValueError, AnnotationError) as error:
+                        raise WorkspaceError(
+                            f"{canonical['sample_id']}: modified work copy cannot be safely imported: {error}"
+                        ) from error
+                    counts["red_drafts"] += 1
                 else:
-                    record, _ = propose_record(
-                        raster=raster,
-                        source_relative_path=canonical["source_relative_path"],
-                        source_sha256=sha,
-                        canonical_sample_id=canonical["calibration_canonical_sample_id"],
-                        format_id=canonical["format_id"],
-                        tasks=members,
-                        review_context=self._source_review_context(members),
-                    )
-                    copy_path = self.resolve_repository_path(
-                        str(canonical["calibration_copy_relative_path"])
-                    )
-                    if not copy_path.is_file():
-                        raise WorkspaceError(
-                            f"calibration work copy is missing: {canonical['calibration_copy_relative_path']}"
-                        )
-                    copy_changed = sha256_file(copy_path) != sha
-                    declared_markup_state = self._declared_markup_state(members)
-                    record["diagnostics"]["declared_markup_state"] = (
-                        declared_markup_state
-                    )
-                    if declared_markup_state == "user_declared_marked" and not copy_changed:
-                        raise WorkspaceError(
-                            f"{canonical['sample_id']}: user-declared marked copy has no raster/file change"
-                        )
-                    if copy_changed and declared_markup_state != "user_declared_unmarked":
-                        try:
-                            record = import_red_markup_draft(
-                                record,
-                                source_raster=raster,
-                                marked_path=copy_path,
-                            )
-                        except (ValueError, AnnotationError) as error:
-                            raise WorkspaceError(
-                                f"{canonical['sample_id']}: modified work copy cannot be safely imported: {error}"
-                            ) from error
-                        counts["red_drafts"] += 1
-                    else:
-                        record = apply_review_context_slot_semantics(record)
+                    record = apply_review_context_slot_semantics(record)
                 preview = raster.preview_jpeg(
                     levels=record["diagnostics"].get("render_levels")
                 )
@@ -641,6 +493,9 @@ class ReviewWorkspace:
     def index(self) -> dict[str, Any]:
         items: list[dict[str, Any]] = []
         states: dict[str, int] = defaultdict(int)
+        basis_states: dict[str, int] = defaultdict(int)
+        frame_states: dict[str, int] = defaultdict(int)
+        evaluation_roles: dict[str, int] = defaultdict(int)
         for sha, members in sorted(
             self.groups.items(), key=lambda item: int(item[1][0]["sort_index"])
         ):
@@ -649,9 +504,34 @@ class ReviewWorkspace:
                 record = self.load_record(sha)
                 state = str(record["state"])
                 reviewed = list(record["reviewed_task_ids"])
+                basis_summary = line_basis_summary(record)
+                basis_states[str(basis_summary["status"])] += 1
+                frame_summary = frame_state_summary(record)
+                frame_states[str(frame_summary["status"])] += 1
+                role_summary = evaluation_role_summary(record)
+                evaluation_roles[str(role_summary["source_role"])] += 1
+                refinement = record["diagnostics"].get("refinement")
+                refinement_summary = (
+                    {
+                        "refinement_revision": refinement.get(
+                            "refinement_revision"
+                        ),
+                        "moved_line_count": refinement.get("moved_line_count", 0),
+                        "retained_line_count": refinement.get(
+                            "retained_line_count", 0
+                        ),
+                        "moved_line_ids": refinement.get("moved_line_ids", []),
+                    }
+                    if isinstance(refinement, dict)
+                    else None
+                )
             else:
                 state = "not_prepared"
                 reviewed = []
+                basis_summary = None
+                frame_summary = None
+                role_summary = None
+                refinement_summary = None
             states[state] += 1
             canonical = self._canonical_row(members)
             items.append(
@@ -662,6 +542,10 @@ class ReviewWorkspace:
                     "state": state,
                     "prepared": path.is_file(),
                     "reviewed_task_ids": reviewed,
+                    "line_basis_summary": basis_summary,
+                    "frame_state_summary": frame_summary,
+                    "evaluation_role_summary": role_summary,
+                    "refinement_summary": refinement_summary,
                     "tasks": [
                         {"sample_id": row["sample_id"], "count": row["count"]}
                         for row in members
@@ -669,12 +553,15 @@ class ReviewWorkspace:
                 }
             )
         return {
-            "index_schema": "x5crop_source_annotation_index_v3",
+            "index_schema": "x5crop_source_annotation_index_v6",
             "tile_max_render_dimension": MAX_TILE_RENDER_DIMENSION,
             "tile_max_source_dimension": MAX_TILE_SOURCE_DIMENSION,
             "tile_max_source_pixels": MAX_TILE_SOURCE_PIXELS,
             "total_unique_sources": len(items),
             "states": dict(sorted(states.items())),
+            "basis_states": dict(sorted(basis_states.items())),
+            "frame_states": dict(sorted(frame_states.items())),
+            "evaluation_roles": dict(sorted(evaluation_roles.items())),
             "items": items,
         }
 
@@ -692,7 +579,6 @@ class ReviewWorkspace:
         self,
         *,
         identities: Iterable[str] | None,
-        include_confirmed: bool = False,
     ) -> dict[str, int]:
         """Apply explicit nonstructural review metadata without changing geometry."""
         if identities is None:
@@ -703,17 +589,14 @@ class ReviewWorkspace:
         changed_sources = 0
         changed_lines = 0
         changed_slots = 0
-        changed_confirmed = False
         with self._lock:
             for sha in sorted(
                 requested,
                 key=lambda value: int(self.groups[value][0]["sort_index"]),
             ):
                 current = self.load_record(sha)
-                if current["state"] == "user_confirmed" and not include_confirmed:
-                    raise WorkspaceError(
-                        "confirmed review-context correction requires explicit permission"
-                    )
+                if current["state"] == "user_confirmed":
+                    raise WorkspaceError("confirmed annotation is immutable")
                 updated = deepcopy(current)
                 updated["diagnostics"]["review_context"] = self._source_review_context(
                     self.groups[sha]
@@ -755,30 +638,144 @@ class ReviewWorkspace:
                 if updated == current:
                     continue
                 updated["revision"] = int(current["revision"]) + 1
-                updated["diagnostics"]["review_context_reconciliation"] = {
-                    "authority": "explicit_user_review_context",
-                    "corrected_line_ids": corrected,
-                    "corrected_slots": corrected_slots,
-                }
-                if updated["state"] == "user_confirmed":
-                    updated["confirmation"]["proposal_snapshot_sha256"] = (
-                        canonical_record_sha256(geometry_snapshot(updated))
-                    )
-                    changed_confirmed = True
-                else:
-                    updated["reviewed_task_ids"] = []
-                    updated["confirmation"] = None
+                updated["reviewed_task_ids"] = []
+                updated["confirmation"] = None
                 self._save_record(updated)
                 changed_sources += 1
                 changed_lines += len(corrected)
                 changed_slots += len(corrected_slots)
-            if changed_confirmed:
-                self._refresh_confirmed_rows()
         return {
             "changed_sources": changed_sources,
             "changed_lines": changed_lines,
             "changed_slots": changed_slots,
         }
+
+    def refine(
+        self,
+        *,
+        identities: Iterable[str] | None,
+        dry_run: bool = False,
+        progress: Any | None = None,
+    ) -> dict[str, Any]:
+        """Apply reviewable refinements without granting gold authority."""
+
+        requested = (
+            {self.resolve_identity(identity) for identity in identities}
+            if identities is not None
+            else set(self.groups)
+        )
+        counts: dict[str, Any] = {
+            "sources": len(requested),
+            "refined_sources": 0,
+            "unchanged_existing": 0,
+            "skipped_modified_after_refinement": 0,
+            "skipped_confirmed": 0,
+            "moved_lines": 0,
+            "retained_lines": 0,
+            "dry_run": dry_run,
+            "refinement_revision": REFINEMENT_REVISION,
+            "source_results": [],
+        }
+        with self._lock:
+            for offset, sha in enumerate(
+                sorted(
+                    requested,
+                    key=lambda value: int(self.groups[value][0]["sort_index"]),
+                ),
+                start=1,
+            ):
+                members = self.groups[sha]
+                current = self.load_record(sha)
+                sample_ids = [str(row["sample_id"]) for row in members]
+                if current["state"] == "user_confirmed":
+                    counts["skipped_confirmed"] += 1
+                    result = {
+                        "sample_ids": sample_ids,
+                        "status": "skipped_confirmed",
+                        "moved_line_count": 0,
+                        "retained_line_count": 0,
+                    }
+                    counts["source_results"].append(result)
+                    if progress is not None:
+                        progress(offset, len(requested), members, result)
+                    continue
+                if not line_basis_summary(current)["classification_complete"]:
+                    raise WorkspaceError(
+                        f"{sample_ids[0]}: all active line bases must be "
+                        "classified before refinement"
+                    )
+                current_geometry_sha = canonical_record_sha256(
+                    geometry_snapshot(current)
+                )
+                existing = current["diagnostics"].get("refinement")
+                if (
+                    isinstance(existing, dict)
+                    and existing.get("refinement_revision") == REFINEMENT_REVISION
+                ):
+                    line_evidence = existing.get("lines")
+                    if (
+                        existing.get("human_review_state")
+                        not in {"pending", "reviewed", "confirmed"}
+                        or existing.get("current_geometry_sha256")
+                        != current_geometry_sha
+                        or not isinstance(line_evidence, dict)
+                        or any(
+                            not isinstance(evidence, dict)
+                            or evidence.get("human_review_status")
+                            not in {
+                                "pending",
+                                "reviewed",
+                                "confirmed",
+                                "adjusted_after_refinement",
+                            }
+                            for evidence in line_evidence.values()
+                        )
+                    ):
+                        raise WorkspaceError("refinement receipt is not current")
+                    if existing.get("output_geometry_sha256") == current_geometry_sha:
+                        counts["unchanged_existing"] += 1
+                        status = "unchanged_existing"
+                    else:
+                        counts["skipped_modified_after_refinement"] += 1
+                        status = "skipped_modified_after_refinement"
+                    result = {
+                        "sample_ids": sample_ids,
+                        "status": status,
+                        "moved_line_count": int(existing.get("moved_line_count", 0)),
+                        "retained_line_count": int(
+                            existing.get("retained_line_count", 0)
+                        ),
+                    }
+                    counts["source_results"].append(result)
+                    if progress is not None:
+                        progress(offset, len(requested), members, result)
+                    continue
+                source = self._verify_source(self._canonical_row(members))
+                with SourceRaster(source) as raster:
+                    try:
+                        updated, refinement = refine_record(current, raster)
+                    except AnnotationError as error:
+                        raise WorkspaceError(
+                            f"{sample_ids[0]}: refinement failed: {error}"
+                        ) from error
+                moved = int(refinement["moved_line_count"])
+                retained = int(refinement["retained_line_count"])
+                result = {
+                    "sample_ids": sample_ids,
+                    "status": "dry_run" if dry_run else "refined",
+                    "moved_line_count": moved,
+                    "retained_line_count": retained,
+                    "moved_line_ids": list(refinement["moved_line_ids"]),
+                }
+                counts["source_results"].append(result)
+                counts["refined_sources"] += 1
+                counts["moved_lines"] += moved
+                counts["retained_lines"] += retained
+                if not dry_run:
+                    self._save_record(updated)
+                if progress is not None:
+                    progress(offset, len(requested), members, result)
+        return counts
 
     def set_source_reviewed(
         self,
@@ -801,6 +798,32 @@ class ReviewWorkspace:
                 raise WorkspaceError("source reference review state must be boolean")
             task_ids = {task["task_id"] for task in current["tasks"]}
             current["reviewed_task_ids"] = sorted(task_ids) if reviewed else []
+            refinement = current["diagnostics"].get("refinement")
+            if isinstance(refinement, dict):
+                refinement["human_review_state"] = (
+                    "reviewed" if reviewed else "pending"
+                )
+                line_evidence = refinement.get("lines")
+                if isinstance(line_evidence, dict):
+                    current_points = {
+                        line["line_id"]: line["points_raw"]
+                        for line in [
+                            *current["shared_edges"],
+                            *current["boundary_pool"],
+                        ]
+                    }
+                    for line_id, evidence in line_evidence.items():
+                        if not isinstance(evidence, dict):
+                            continue
+                        if reviewed:
+                            evidence["human_review_status"] = "reviewed"
+                        else:
+                            evidence["human_review_status"] = (
+                                "adjusted_after_refinement"
+                                if current_points.get(line_id)
+                                != evidence.get("output_points_raw")
+                                else "pending"
+                            )
             current["revision"] += 1
             self._save_record(current)
             return record_for_client(current)
@@ -843,15 +866,23 @@ class ReviewWorkspace:
                 raise WorkspaceError("bounded source preview changed after preparation")
             source_sha = current["source"]["sha256"]
             self._verify_source(self._canonical_row(self.groups[source_sha]))
+            basis_summary = line_basis_summary(current)
+            if not basis_summary["classification_complete"]:
+                line_ids = ", ".join(
+                    line["line_id"]
+                    for line in basis_summary["attention_lines"]
+                    if line["review_basis"] in {"unclassified", "unresolved_red_stroke"}
+                )
+                raise WorkspaceError(
+                    f"unclassified line basis must be completed before confirmation: {line_ids}"
+                )
             used_boundary_ids = referenced_boundary_ids(current)
             current["boundary_pool"] = [
                 line
                 for line in current["boundary_pool"]
                 if line["line_id"] in used_boundary_ids
             ]
-            for line in [*current["shared_edges"], *current["boundary_pool"]]:
-                if line["review_basis"] == "machine_proposal_pending_review":
-                    line["review_basis"] = "user_accepted_machine_inference"
+            current["diagnostics"]["unresolved"] = []
             proposal_sha = canonical_record_sha256(geometry_snapshot(current))
             artifact = render_review_artifact(preview_path.read_bytes(), current)
             artifact_sha = hashlib.sha256(artifact).hexdigest()
@@ -861,6 +892,14 @@ class ReviewWorkspace:
             )
             artifact_path = self.artifacts_root / artifact_name
             _atomic_write(artifact_path, artifact)
+            refinement = current["diagnostics"].get("refinement")
+            if isinstance(refinement, dict):
+                refinement["human_review_state"] = "confirmed"
+                line_evidence = refinement.get("lines")
+                if isinstance(line_evidence, dict):
+                    for evidence in line_evidence.values():
+                        if isinstance(evidence, dict):
+                            evidence["human_review_status"] = "confirmed"
             current["revision"] += 1
             current["state"] = "user_confirmed"
             current["confirmation"] = {

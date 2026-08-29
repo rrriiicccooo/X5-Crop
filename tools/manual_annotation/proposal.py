@@ -30,6 +30,7 @@ from .model import (
     display_to_raw_point,
     frame_polygons_display,
     raw_to_display_point,
+    refresh_adjacency_kinds,
     referenced_boundary_ids,
     slot_boundary_ids,
     validate_annotation_record,
@@ -505,7 +506,7 @@ def _new_line(
     role: str,
     points_display: list[list[float]],
     origin: str,
-    review_basis: str = "machine_proposal_pending_review",
+    review_basis: str = "unclassified",
 ) -> dict[str, Any]:
     return {
         "line_id": line_id,
@@ -781,29 +782,7 @@ def propose_record(
                 ],
             }
         )
-    pool_by_id = {line["line_id"]: line for line in record["boundary_pool"]}
-    for task in record["tasks"]:
-        for adjacency_index, adjacency in enumerate(task["adjacencies"]):
-            left_pair = slot_boundary_ids(task["slots"][adjacency_index])
-            right_pair = slot_boundary_ids(task["slots"][adjacency_index + 1])
-            if left_pair is None or right_pair is None:
-                raise ValueError("machine proposal unexpectedly lacks a boundary pair")
-            left_id = left_pair[1]
-            right_id = right_pair[0]
-            left_position = _machine_boundary_position(record, pool_by_id[left_id])
-            right_position = _machine_boundary_position(record, pool_by_id[right_id])
-            if left_position <= right_position:
-                continue
-            adjacency["kind"] = "unresolved"
-            record["diagnostics"]["unresolved"].append(
-                {
-                    "kind": "machine_separator_relation_unresolved",
-                    "task_id": task["task_id"],
-                    "left_ordinal": adjacency["left_ordinal"],
-                    "right_ordinal": adjacency["right_ordinal"],
-                    "action": "inspect_both_adjacent_boundaries_at_native_pixels",
-                }
-            )
+    refresh_adjacency_kinds(record)
     record = canonicalize_source_reference_mappings(record)
     validate_annotation_record(record)
     return record, analysis_rgb
@@ -1259,8 +1238,13 @@ def canonicalize_source_reference_mappings(
 ) -> dict[str, Any]:
     """Map every count task onto one bounded source-level Frame set."""
     updated = deepcopy(record)
-    if len(updated["tasks"]) < 2:
+
+    def finalize() -> dict[str, Any]:
+        refresh_adjacency_kinds(updated)
         return updated
+
+    if len(updated["tasks"]) < 2:
+        return finalize()
     canonical = min(
         updated["tasks"],
         key=lambda task: (
@@ -1289,10 +1273,6 @@ def canonicalize_source_reference_mappings(
         return rows
 
     canonical_rows = frame_rows(canonical)
-    canonical_adjacencies = {
-        (int(row["left_ordinal"]), int(row["right_ordinal"])): row["kind"]
-        for row in canonical["adjacencies"]
-    }
     for task in updated["tasks"]:
         if task["task_id"] == canonical["task_id"]:
             continue
@@ -1314,31 +1294,10 @@ def canonicalize_source_reference_mappings(
             ),
             default=(),
         )
-        canonical_ordinal_by_task_ordinal: dict[int, int] = {}
         for task_row, canonical_index in zip(task_rows, selected, strict=True):
             canonical_row = canonical_rows[canonical_index]
             task_row["slot"]["reference_geometry"] = deepcopy(
                 canonical_row["slot"]["reference_geometry"]
-            )
-            canonical_ordinal_by_task_ordinal[int(task_row["slot"]["ordinal"])] = int(
-                canonical_row["slot"]["ordinal"]
-            )
-        for adjacency in task["adjacencies"]:
-            left = int(adjacency["left_ordinal"])
-            right = int(adjacency["right_ordinal"])
-            if (
-                left not in canonical_ordinal_by_task_ordinal
-                or right not in canonical_ordinal_by_task_ordinal
-            ):
-                adjacency["kind"] = "not_applicable"
-                continue
-            canonical_pair = (
-                canonical_ordinal_by_task_ordinal[left],
-                canonical_ordinal_by_task_ordinal[right],
-            )
-            adjacency["kind"] = canonical_adjacencies.get(
-                canonical_pair,
-                "unresolved",
             )
 
     updated["diagnostics"]["source_reference_mapping"] = {
@@ -1354,12 +1313,21 @@ def canonicalize_source_reference_mappings(
         if line["line_id"] in used_ids
         or line.get("review_basis") == "unresolved_red_stroke"
     ]
-    return updated
+    return finalize()
 
 
 def apply_review_context_line_bases(record: dict[str, Any]) -> dict[str, Any]:
-    """Apply explicit user evidence-basis declarations to referenced boundaries."""
+    """Apply explicit user evidence-basis declarations to active annotation lines."""
     updated = deepcopy(record)
+    review_context = updated["diagnostics"].get("review_context", {})
+    if not isinstance(review_context, dict):
+        raise ValueError("review context must be an object")
+    shared_basis = review_context.get("shared_edge_review_basis", "unclassified")
+    if shared_basis not in {"unclassified", "directly_visible"}:
+        raise ValueError("shared-edge review basis is invalid")
+    if shared_basis == "directly_visible":
+        for line in updated["shared_edges"]:
+            line["review_basis"] = shared_basis
     lines = {
         line["line_id"]: line
         for line in [*updated["shared_edges"], *updated["boundary_pool"]]
@@ -1461,13 +1429,6 @@ def apply_review_context_slot_semantics(record: dict[str, Any]) -> dict[str, Any
                 slot["reference_geometry"] = {"kind": "not_applicable"}
                 blank_ordinals.add(int(slot["ordinal"]))
         blank_by_task[task["task_id"]] = blank_ordinals
-        for adjacency in task["adjacencies"]:
-            if (
-                int(adjacency["left_ordinal"]) in blank_ordinals
-                or int(adjacency["right_ordinal"]) in blank_ordinals
-            ):
-                adjacency["kind"] = "not_applicable"
-
     updated = canonicalize_source_reference_mappings(updated)
     updated = apply_review_context_line_bases(updated)
 
@@ -1502,11 +1463,6 @@ def apply_review_context_slot_semantics(record: dict[str, Any]) -> dict[str, Any
             if not retained:
                 continue
             item = {**item, "boundary_role_indices": retained}
-        if item.get("kind") == "machine_separator_relation_unresolved" and (
-            item.get("left_ordinal") in blank_ordinals
-            or item.get("right_ordinal") in blank_ordinals
-        ):
-            continue
         unresolved.append(item)
     updated["diagnostics"]["unresolved"] = unresolved
     red_import = updated["diagnostics"].get("red_markup_import")
@@ -1557,6 +1513,7 @@ def import_red_markup_draft(
     *,
     source_raster: SourceRaster,
     marked_path: Path,
+    marked_relative_path: str,
 ) -> dict[str, Any]:
     with SourceRaster(marked_path) as marked_raster:
         if source_raster.canonical_extent != marked_raster.canonical_extent:
@@ -1724,35 +1681,12 @@ def import_red_markup_draft(
             {
                 "left_ordinal": index,
                 "right_ordinal": index + 1,
-                "kind": (
-                    "not_applicable"
-                    if index in blank_ordinals or index + 1 in blank_ordinals
-                    else "contact"
-                    if index in contact_after
-                    else "overlap"
-                    if index in overlap_after
-                    else "separator"
-                ),
+                "kind": "not_applicable"
+                if index in blank_ordinals or index + 1 in blank_ordinals
+                else "separator",
             }
             for index in range(1, count)
         ]
-        pool_for_positions = {
-            **original_pool,
-            **{line["line_id"]: line for line in observed_lines},
-        }
-        for adjacency_index, adjacency in enumerate(task["adjacencies"]):
-            if adjacency["kind"] != "separator":
-                continue
-            left_pair = slot_boundary_ids(task["slots"][adjacency_index])
-            right_pair = slot_boundary_ids(task["slots"][adjacency_index + 1])
-            if left_pair is None or right_pair is None:
-                raise ValueError("nonblank separator unexpectedly lacks geometry")
-            left_id = left_pair[1]
-            right_id = right_pair[0]
-            left_position = _machine_boundary_position(updated, pool_for_positions[left_id])
-            right_position = _machine_boundary_position(updated, pool_for_positions[right_id])
-            if left_position > right_position:
-                adjacency["kind"] = "unresolved"
         task_diagnostics[task["task_id"]] = {
             "matched_red_role_indices": sorted(index + 1 for index in role_to_observed),
             "machine_retained_role_indices": sorted(
@@ -1831,7 +1765,7 @@ def import_red_markup_draft(
         )
     updated["diagnostics"]["unresolved"] = unresolved
     updated["diagnostics"]["red_markup_import"] = {
-        "marked_path": str(marked_path),
+        "marked_relative_path": marked_relative_path,
         "red_pixel_count": int(np.count_nonzero(canonical_mask)),
         "detected_boundary_count": len(observed_lines),
         "detected_shared_edge_count": len(shared),

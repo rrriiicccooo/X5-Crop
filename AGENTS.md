@@ -99,7 +99,7 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
 - 只在用户明确要求时读写，并只保留当前目标、已验证事实、开放风险和精确下一步。
 - Baseline 必须绑定 source SHA，并由用户在原图坐标中直接确认，或来自独立校准的外部测量。
   用户确认的是最内侧可接受裁切基准，不是内容边界真值或 detector 唯一答案；方向性包含与 5% 外扩
-  预算以 `docs/ARCHITECTURE.md` 为准，并统一适用于 gold v1、v2 和以后版本。OpenCV、SciPy、
+  预算以 `docs/ARCHITECTURE.md` 为准，并统一适用于全部当前与以后用户确认的黄金样片。OpenCV、SciPy、
   X5 Crop、模型视觉、生成 JPG 和算法一致只能产生非权威 proposal。
 - 不让模型查看完整长 TIFF 后代写 reference 边界；边界判断歧义保持 unresolved。
 
@@ -122,7 +122,8 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
   最多一次直接 local advance 并否决非法 placement；不得用模板投影创造自己的 phase authority。
 - 安全层只处理唯一胜出 placement 的联合可行状态，不合并落选位置、不分别相加不能同时发生的
   最大误差、不静默裁掉越界 footprint。具体 bleed 和预算只由 `docs/ARCHITECTURE.md` 定义。
-- Contact 与 overlap 在获得用户确认黄金以前一律 review，不建立第二套 detector 或特殊自动 bleed。
+- Contact 与 overlap 始终属于 challenge；安全 `needs_review` 是合格结果，不要求也不得强行
+  `approved_auto`，不建立第二套 detector 或特殊 bleed。
 - `CandidateGate` 只记录 typed assessment；只有 `DecisionGate` 创建 final status 与 reasons。
 - 任一 slot 不安全时，整个 source `needs_review` 且不写正式照片；不做 slot salvage。
 - 不为减少 blank TIFF 牺牲内容保护或 direct-use 质量。V5 不实现 blank suppression。
@@ -167,6 +168,8 @@ platform | platform-check | platform-package | pre-push
 - `.githooks/pre-commit` 运行 staged hygiene；`.githooks/pre-push` 根据实际 commit range 选择
   documentation 或 full。纯 Markdown 使用 documentation；其余改动和无法识别的范围使用 full。
   不得使用 `--no-verify`。
+- Commit 或 push 前不手工重复运行即将由对应 Hook 覆盖的同一验证。只有 Hook 未覆盖的专项检查，或
+  为诊断已经出现的失败，才额外手工运行；最终以正常 Hook 结果为准。
 - Performance 不属于日常 commit 或 push Gate。只在准备发布时运行，并绑定最终 release commit；
   tree 变化后旧 receipt 立即失效。
 - `Test/` 不受 Git 跟踪，目录布局不是 runtime authority；工具以 cohort 中的相对路径、source SHA、
@@ -175,10 +178,12 @@ platform | platform-check | platform-package | pre-push
   只镜像 cohort authority，任何工具都不得从路径反推。不得把 TIFF、生成输出或 receipt 提交到 Git。
 - 人工校准工作集按 source SHA 去重；同一字节内容只准备一张待标注工作副本，但不同显式 count 的
   sample task 必须分别保留，不能当成重复项合并。Manifest 同时记录 task identity、count 与 source
-  alias；共享工作副本用 `counts-N-M` 镜像全部 task count，不从该文件名反推 authority。只有用户明确
-  确认的原图坐标才能进入黄金基线。
-- Accuracy 只有 `gold_accuracy_blocking` 与 `diagnostic_unreviewed` 两种角色。九张黄金各运行一项，
-  共九项，并逐项携带用户确认 count；不保留 auto 重复任务。
+  alias；活动工作副本统一位于 `Test/manual_review/gold_calibration/<format>/`，用 `counts-N-M` 镜像全部
+  task count，不从目录或文件名反推 authority。只有用户明确确认的原图坐标才能进入黄金基线；不建立
+  平行校准池。
+- Accuracy 只有 `gold_accuracy_blocking` 与 `diagnostic_unreviewed` 两种角色。每个当前用户确认的
+  黄金 task 运行一次并携带明确 count；不保留 auto 重复任务。重置或尚无当前确认时，accuracy 必须
+  明确失败为 `calibration is incomplete`，不得回退旧基线。
   Nominal 必须安全自动批准，challenge 允许安全 `needs_review`。不得新增样片规则、whitelist、
   格式 denylist 或根据当前输出自动晋升黄金。
 - Accuracy、diagnostic、performance 与 platform cohort 的每条记录都必须携带明确 count；工具不得

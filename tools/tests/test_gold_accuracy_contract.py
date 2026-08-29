@@ -1,16 +1,16 @@
 from __future__ import annotations
 
+from contextlib import redirect_stderr
+import io
 import json
 import unittest
 
-from tools.manual_annotation.model import (
-    BASELINE_SCHEMA,
-    canonical_record_sha256,
-)
 from tools.regression.accuracy import (
-    CONFIRMED_GEOMETRY_KEYS,
     GOLD_COHORT_PATH,
+    _validate_evaluation_role,
     _validate_task_result,
+    main as accuracy_main,
+    validate_gold_source_identities,
 )
 from tools.regression.gold_geometry import (
     ordered_gold_mapping,
@@ -30,8 +30,16 @@ def _output(polygon: list[list[float]]) -> dict[str, object]:
     return {"required_source_footprint": polygon}
 
 
-def _basis_line(line_id: str, review_basis: str) -> dict[str, object]:
-    return {"line_id": line_id, "review_basis": review_basis}
+def _basis_line(
+    line_id: str,
+    review_basis: str,
+    points: list[list[float]],
+) -> dict[str, object]:
+    return {
+        "line_id": line_id,
+        "review_basis": review_basis,
+        "points_raw": points,
+    }
 
 
 def _directional_geometry(
@@ -40,14 +48,16 @@ def _directional_geometry(
     start_basis: str = "directly_visible",
 ) -> dict[str, object]:
     return {
+        "format_id": "120-66",
+        "count": 1,
         "strip_orientation": "horizontal",
         "shared_edges": [
-            _basis_line("E1", "directly_visible"),
-            _basis_line("E2", "directly_visible"),
+            _basis_line("E1", "directly_visible", [[0.0, 0.0], [560.0, 0.0]]),
+            _basis_line("E2", "directly_visible", [[0.0, 560.0], [560.0, 560.0]]),
         ],
         "boundary_pool": [
-            _basis_line("B001", start_basis),
-            _basis_line("B002", "directly_visible"),
+            _basis_line("B001", start_basis, [[0.0, 0.0], [0.0, 560.0]]),
+            _basis_line("B002", "directly_visible", [[560.0, 0.0], [560.0, 560.0]]),
         ],
         "slots": [
             {
@@ -60,7 +70,13 @@ def _directional_geometry(
                 },
             }
         ],
+        "adjacencies": [],
         "frames": [_frame(polygon)],
+        "evaluation_role": {
+            "contract": "x5crop_pre_detector_evidence_role_v1",
+            "cohort_role": "nominal",
+            "reasons": [],
+        },
     }
 
 
@@ -90,55 +106,34 @@ def _approved_report(polygon: list[list[float]]) -> dict[str, object]:
 
 
 class GoldAccuracyContractTest(unittest.TestCase):
-    def test_tracked_v1_rows_use_current_directional_schema(self) -> None:
+    def test_cohort_role_must_match_frozen_human_evidence(self) -> None:
+        record = _basis_aware_record()
+        _validate_evaluation_role(record)
+
+        record["cohort_role"] = "challenge"
+        with self.assertRaisesRegex(ValueError, "evaluation role is invalid"):
+            _validate_evaluation_role(record)
+
+        record = _basis_aware_record()
+        record["confirmed_geometry"]["evaluation_role"]["reasons"] = [
+            "manually_overridden"
+        ]
+        with self.assertRaisesRegex(ValueError, "evaluation role is invalid"):
+            _validate_evaluation_role(record)
+
+    def test_tracked_cohort_is_explicitly_incomplete_during_recalibration(self) -> None:
         records = [
             json.loads(line)
             for line in GOLD_COHORT_PATH.read_text(encoding="utf-8").splitlines()
             if line.strip()
         ]
-        self.assertEqual(len(records), 9)
-        for record in records:
-            geometry = record["confirmed_geometry"]
-            self.assertEqual(set(geometry), CONFIRMED_GEOMETRY_KEYS)
-            self.assertEqual(geometry["baseline_schema"], BASELINE_SCHEMA)
-            self.assertEqual(record["acceptance_baseline_schema"], BASELINE_SCHEMA)
-            self.assertEqual(
-                record["geometry_digest"],
-                canonical_record_sha256(geometry),
-            )
-            lines = geometry["shared_edges"] + geometry["boundary_pool"]
-            self.assertEqual(
-                [line["role"] for line in geometry["shared_edges"]],
-                ["short_low", "short_high"],
-            )
-            self.assertTrue(
-                all(line["review_basis"] == "directly_visible" for line in lines)
-            )
-            self.assertTrue(
-                all(slot["slot_kind"] == "image" for slot in geometry["slots"])
-            )
-            self.assertTrue(
-                all(
-                    slot["reference_geometry"]["kind"] == "boundary_pair"
-                    for slot in geometry["slots"]
-                )
-            )
-            boundary_ids = {
-                line["line_id"] for line in geometry["boundary_pool"]
-            }
-            self.assertTrue(
-                all(
-                    {
-                        slot["reference_geometry"]["start_boundary_id"],
-                        slot["reference_geometry"]["end_boundary_id"],
-                    }
-                    <= boundary_ids
-                    for slot in geometry["slots"]
-                )
-            )
-            self.assertTrue(
-                all(item["kind"] == "separator" for item in geometry["adjacencies"])
-            )
+        self.assertEqual(records, [])
+        with self.assertRaisesRegex(ValueError, "calibration is incomplete"):
+            validate_gold_source_identities()
+        error = io.StringIO()
+        with redirect_stderr(error):
+            self.assertEqual(accuracy_main(), 1)
+        self.assertIn("calibration is incomplete", error.getvalue())
 
     def test_incomplete_directional_geometry_is_rejected(self) -> None:
         gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
@@ -165,6 +160,26 @@ class GoldAccuracyContractTest(unittest.TestCase):
 
         self.assertEqual(
             _validate_task_result(_basis_aware_record(), _approved_report(output)),
+            "approved_auto",
+        )
+
+    def test_directly_visible_gold_requires_safe_crop_not_detector_line_match(
+        self,
+    ) -> None:
+        output = [
+            [-20.0, -20.0],
+            [580.0, -20.0],
+            [580.0, 580.0],
+            [-20.0, 580.0],
+        ]
+        report = _approved_report(output)
+        self.assertNotIn("observations", report["photo_geometry"])
+
+        self.assertEqual(
+            _validate_task_result(
+                _basis_aware_record(start_basis="directly_visible"),
+                report,
+            ),
             "approved_auto",
         )
 
@@ -236,6 +251,34 @@ class GoldAccuracyContractTest(unittest.TestCase):
             "exceeds acceptance-baseline direct-use budget",
         ):
             _validate_task_result(_basis_aware_record(), _approved_report(output))
+
+    def test_source_truncated_budget_uses_physical_line_axes(self) -> None:
+        clipped_gold = [
+            [0.0, 0.0],
+            [200.0, 0.0],
+            [560.0, 10.0],
+            [560.0, 560.0],
+            [0.0, 560.0],
+        ]
+        record = {
+            "sample_id": "source-truncated",
+            "format_id": "120-66",
+            "cohort_role": "nominal",
+            "confirmed_geometry": _directional_geometry(clipped_gold),
+        }
+        record["confirmed_geometry"]["slots"][0]["slot_kind"] = "source_truncated"
+        output = [
+            [-45.0, 0.0],
+            [560.0, 0.0],
+            [560.0, 560.0],
+            [-45.0, 560.0],
+        ]
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "exceeds acceptance-baseline direct-use budget",
+        ):
+            _validate_task_result(record, _approved_report(output))
 
     def test_challenge_review_cannot_bypass_candidate_coverage(self) -> None:
         gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
@@ -446,6 +489,89 @@ class GoldAccuracyContractTest(unittest.TestCase):
             ),
             (),
         )
+
+    def test_blank_slot_keeps_runtime_ordinal_without_requiring_gold_geometry(
+        self,
+    ) -> None:
+        slot_polygons = [
+            [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]],
+            [[20.0, 0.0], [30.0, 0.0], [30.0, 10.0], [20.0, 10.0]],
+            [[40.0, 0.0], [50.0, 0.0], [50.0, 10.0], [40.0, 10.0]],
+        ]
+        for blank_ordinal in (1, 2, 3):
+            with self.subTest(blank_ordinal=blank_ordinal):
+                boundary_pool = []
+                slots = []
+                frames = []
+                for ordinal, polygon in enumerate(slot_polygons, start=1):
+                    if ordinal == blank_ordinal:
+                        slots.append(
+                            {
+                                "ordinal": ordinal,
+                                "slot_kind": "blank_exposure",
+                                "reference_geometry": {"kind": "not_applicable"},
+                            }
+                        )
+                        continue
+                    start_id = f"B{ordinal:02d}S"
+                    end_id = f"B{ordinal:02d}E"
+                    boundary_pool.extend(
+                        (
+                            _basis_line(
+                                start_id,
+                                "directly_visible",
+                                [polygon[0], polygon[3]],
+                            ),
+                            _basis_line(
+                                end_id,
+                                "directly_visible",
+                                [polygon[1], polygon[2]],
+                            ),
+                        )
+                    )
+                    slots.append(
+                        {
+                            "ordinal": ordinal,
+                            "slot_kind": "image",
+                            "reference_geometry": {
+                                "kind": "boundary_pair",
+                                "start_boundary_id": start_id,
+                                "end_boundary_id": end_id,
+                            },
+                        }
+                    )
+                    frames.append(
+                        {
+                            "frame_index": ordinal,
+                            "polygon_source_pixel_center_coordinates": polygon,
+                        }
+                    )
+                geometry = {
+                    "strip_orientation": "horizontal",
+                    "shared_edges": [
+                        _basis_line(
+                            "E1", "directly_visible", [[0.0, 0.0], [50.0, 0.0]]
+                        ),
+                        _basis_line(
+                            "E2", "directly_visible", [[0.0, 10.0], [50.0, 10.0]]
+                        ),
+                    ],
+                    "boundary_pool": boundary_pool,
+                    "slots": slots,
+                    "frames": frames,
+                }
+                outputs = [_output(polygon) for polygon in slot_polygons]
+                record = {
+                    "sample_id": f"blank-{blank_ordinal}",
+                    "confirmed_geometry": geometry,
+                }
+                report = {
+                    "photo_geometry": {"lanes": [{"output_footprints": outputs}]},
+                    "output": {"finalization": {"output_footprints": outputs}},
+                }
+
+                self.assertTrue(validate_selected_candidate_coverage(record, report))
+                validate_approved_geometry(record, report)
 
 
 if __name__ == "__main__":

@@ -25,10 +25,21 @@
           </select>
           <select id="stateFilter" aria-label="状态筛选">
             <option value="unfinished">待完成</option>
+            <option value="basis_attention">需分类 / 含非直接可见边界</option>
+            <option value="all_directly_visible">全部为直接可见边界</option>
+            <option value="all_frames_normal">所有 Frame 均为正常照片</option>
+            <option value="has_non_normal_frames">含非正常 Frame</option>
+            <option value="refinement_moved">精修后有移动</option>
+            <option value="refinement_retained">精修后全部保留</option>
             <option value="all">全部状态</option>
             <option value="machine_proposal">机器预标</option>
             <option value="human_adjusted">已调整</option>
             <option value="user_confirmed">已确认</option>
+          </select>
+          <select id="roleFilter" aria-label="评测角色筛选">
+            <option value="all">全部评测角色</option>
+            <option value="nominal">nominal</option>
+            <option value="challenge">challenge</option>
           </select>
         </div>
       </div>
@@ -71,7 +82,6 @@
             <image id="sourceImage" preserveAspectRatio="none"></image>
             <g id="polygonLayer"></g>
             <g id="lineLayer"></g>
-            <g id="handleLayer"></g>
           </svg>
           <div id="emptyState" class="empty-state">
             <strong>从左侧选择样片</strong>
@@ -116,13 +126,10 @@
             <label class="field-control">
               <span>边界依据</span>
               <select id="lineReviewBasisSelect" disabled>
-                <option value="machine_proposal_pending_review" disabled>尚未分类（机器提案）</option>
+                <option value="unclassified">尚未分类</option>
                 <option value="directly_visible">直接可见边界</option>
                 <option value="visible_content_limit">可见内容极限</option>
-                <option value="human_width_estimate">按 frame width 估计（该方向不阻断）</option>
-                <option value="human_adjusted_native_pixel">原生像素人工调整（未分类）</option>
-                <option value="user_accepted_machine_inference" disabled>人工接受机器推断</option>
-                <option value="explicit_prior_user_confirmation" disabled>既有人工确认</option>
+                <option value="human_width_estimate">按同源可见 frame width 估计（完全不阻断）</option>
                 <option value="unresolved_red_stroke" disabled>未解决的红线</option>
               </select>
             </label>
@@ -134,8 +141,34 @@
               <button data-rotate="-1" title="逆时针旋转 0.01°">[ 逆时针</button>
               <button data-rotate="1" title="顺时针旋转 0.01°">顺时针 ]</button>
             </div>
-            <p>方向键平移 1 px，Shift 为 10 px；<kbd>[</kbd> / <kbd>]</kbd> 旋转 0.01°，Shift 为
-              0.1°。整线绕中点旋转；选中端点时绕该端点旋转。</p>
+            <p>直接可见表示人类能从真实像素分界确信内容边缘；证据可以很淡或很短，不要求覆盖整条 H，
+              也不要求 detector 检出同一条线。点击线后直接修改整线：方向键平移 1 px，Shift 为 10 px；
+              <kbd>[</kbd> / <kbd>]</kbd> 绕整线中点旋转 0.01°，Shift 为 0.1°。
+              标注器会阻止正常 Frame 越出 TIFF，并保留已经声明为源截断的 Frame 外推。</p>
+          </div>
+
+          <div class="inspect-card batch-classification-card">
+            <div class="inspect-heading">
+              <h3>批量分类</h3>
+              <span id="batchSelectionSummary">0 / 0 条</span>
+            </div>
+            <div class="batch-classification-actions" aria-label="批量选择线">
+              <button id="selectUnclassifiedLinesButton" class="secondary" type="button">选择待分类</button>
+              <button id="selectAllLinesButton" class="secondary" type="button">全选</button>
+              <button id="clearLineSelectionButton" class="secondary" type="button">清空</button>
+            </div>
+            <div id="batchLineList" class="batch-line-list" role="group" aria-label="可批量分类的活动线"></div>
+            <div class="batch-apply-row">
+              <select id="batchReviewBasisSelect" aria-label="统一边界依据" disabled>
+                <option value="">选择统一依据…</option>
+                <option value="unclassified">尚未分类</option>
+                <option value="directly_visible">直接可见边界</option>
+                <option value="visible_content_limit">可见内容极限</option>
+                <option value="human_width_estimate">按同源可见 frame width 估计（完全不阻断）</option>
+              </select>
+              <button id="applyBatchReviewBasisButton" class="primary" type="button" disabled>应用到已选</button>
+            </div>
+            <p>只修改边界依据；不移动线，不改变 Frame、count 或坐标来源。整批修改可一次撤销。</p>
           </div>
 
           <div class="inspect-card frame-card">
@@ -156,7 +189,16 @@
                 <option value="unknown">未知</option>
               </select>
             </label>
-            <p>残缺曝光仍有可见内容并保留边界；源截断只表示 TIFF 已把 frame 截断。空曝光没有人工几何，不能在这里转换。</p>
+            <p>残缺曝光仍有可见内容并保留边界；源截断允许物理边界外推到 TIFF 之外，彩色 Frame 从交点起沿 TIFF 最外缘闭合。空曝光没有人工几何，不能在这里转换。接触 / 叠片属于下方自动生成的相邻关系，不是 Frame 状态。</p>
+          </div>
+
+          <div class="inspect-card adjacency-card">
+            <div class="inspect-heading">
+              <h3>相邻关系</h3>
+              <span>由当前边界自动生成</span>
+            </div>
+            <div id="adjacencyList" class="adjacency-list" aria-live="polite"></div>
+            <p>共用同一物理线为接触；前一 Frame 的 end 越过后一 Frame 的 start 为重叠；其余为正常。只记录几何事实，不增加人工选择，也不移动任何线。</p>
           </div>
 
           <div id="diagnosticCard" class="inspect-card diagnostic-card">

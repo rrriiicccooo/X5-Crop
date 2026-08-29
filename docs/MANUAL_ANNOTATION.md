@@ -1,31 +1,35 @@
 # 黄金基线标注器
 
-本工具把 tracked diagnostic cohort 逐张转换为可人工审核的边界 proposal。它只服务本地黄金校准，
-不属于 production detector、公开用户界面或发布包；任何机器拟合、红线导入和预览图在用户最终确认
-前都不是 accuracy reference。
+本地标注器把 tracked diagnostic cohort 转为可人工审核的 source-SHA-bound 几何。它不属于 production
+detector、公开界面或发布包；机器 proposal、红线导入、像素精修、预览和确认图都不会自动成为黄金。
 
-## 黄金验收语义
+## 黄金权限与验收
 
-这套语义统一适用于 gold v1、v2 和以后版本：用户确认的 polygon 是**最内侧可接受的无 bleed
-裁切基准**，不是对真实内容边界的 100% 测量，也不是 detector 唯一正确答案。人工审核的目标是尽量
-贴近真实内容边界，并确认按该 polygon 裁切已经可以直接使用。
+用户确认的是**最内侧可接受的无 bleed 裁切基准**：它尽量贴近真实内容边界，并保证按该 polygon 裁切
+可以直接使用；它不是内容边界的绝对测量，也不是 detector 唯一正确答案。
 
-Accuracy 采用单向包含关系，而不是要求检测结果与红线逐像素重合：
+Accuracy 采用方向性包含合同：
 
-- candidate 和正式 `required_source_footprint` 必须完整包住确认 polygon；任一边或角点向其内侧越界
-  都失败。浮点 epsilon 只处理数值计算，不构成可切入的像素容差。
-- 每一侧允许在对应确认 W/H span 的 5% 以内向外形成安全包络；uncertainty、residual、bleed 和命名的
-  sampling allowance 都消耗这份预算。
-- Runtime 的 `enclosing_support_pair` 仍遵守自己的 `1.1H` 自动决策合同；进入黄金 accuracy 时还必须
-  同时满足上述逐侧单向合同，不能用总 span 掩盖单侧过度外扩。
+- candidate 与正式 `required_source_footprint` 必须完整包住确认 polygon；任何边或角点向内越界都失败。
+- 每侧最多向外使用对应确认 W/H span 的 5%；uncertainty、residual、bleed 与命名的 sampling allowance
+  共用这份预算，不能跨边借用。
+- `enclosing_support_pair` 仍须满足 runtime 的 `1.1H` 合同，同时满足黄金逐侧包含与外扩限制。
 
-只有带 `boundary_pair` reference 的内容 Frame 进入几何 accuracy。真正的 `blank_exposure` slot 没有
-可见内容边界，其 `reference_geometry` 明确为 `not_applicable`：人工不画 `start/end`，页面不画绿色
-Frame，也不要求凭空确认位置。这不是漏标或 unresolved；slot ordinal 和显式 count 仍保留，Runtime
-仍按 format/count/template 输出对应空 TIFF。残缺曝光、源截断和肉眼难辨的内容格仍需要成对 reference，
-不能借用 `not_applicable` 跳过审核。
+只有带 `boundary_pair` 的内容 Frame 进入几何 accuracy。`blank_exposure` 没有可见内容边界，必须使用
+`reference_geometry: not_applicable`：人工不画线、不确认虚构位置，但 slot ordinal 与显式 count 仍保留，
+runtime 仍输出对应空 TIFF。残缺曝光、肉眼难辨和源截断 Frame 仍需成对边界。
 
-## 启动
+`source_truncated` 只用于 TIFF 确实截断物理 Frame 的情况。记录保留可能越出 TIFF 的物理直线，审核与
+accuracy polygon 使用“物理 Frame 与 TIFF 栅格的交集”，并沿 TIFF 外缘闭合。普通、残缺曝光和未知
+Frame 必须完整位于源内；只有类型标签、没有实际越界几何的记录不能确认。该规则对四条外缘和
+Orientation 1–8 一致，不建立样片特例。
+
+活动数据只有 `Test/manual_review/gold_calibration/<format>/` 这一套校准池；不区分 v1/v2，也不建立
+archive。一个 source SHA 只有一套物理几何，同源多 count 分别保留 task mapping。只有当前
+`user_confirmed` 记录具备黄金权限；确认集合为空时，accuracy 必须报告
+`calibration is incomplete`，不能回退旧 cohort。
+
+## 启动与文件
 
 在仓库根目录运行：
 
@@ -33,8 +37,7 @@ Frame，也不要求凭空确认位置。这不是漏标或 unresolved；slot or
 python3 -m tools.manual_annotation
 ```
 
-默认操作会先补齐缺失 proposal，再启动仅监听 `127.0.0.1`、带随机 token 的本地页面并打开浏览器。
-首次批量准备也可单独运行：
+默认命令补齐缺失 proposal，再启动只监听 `127.0.0.1`、带随机 token 的页面并打开浏览器。辅助命令：
 
 ```bash
 python3 -m tools.manual_annotation prepare
@@ -42,98 +45,109 @@ python3 -m tools.manual_annotation audit
 ```
 
 `prepare --sample-id S063` 只处理指定 identity；`--force-machine` 只重建未触碰的
-`machine_proposal`，不会覆盖 `human_adjusted` 或 `user_confirmed`。源 TIFF 和校准工作副本始终只读。
+`machine_proposal`，不会覆盖人工工作。源 TIFF 与工作副本始终只读。
+
+本地状态位于 `Test/manual_review/source_annotations/`：
+
+- `records/`：原子 source record；
+- `previews/`：有界导航 JPG；
+- `review_artifacts/`：确认时生成的审阅快照；
+- `confirmed_source_geometry.jsonl`：全部当前确认 task 的派生汇总。
+
+权威坐标为 `raw_tiff_raster_pixel_centers`。页面只用 Orientation 1–8 的可逆映射显示，保存时回到原始
+TIFF 像素中心。Manifest 必须与 tracked diagnostic cohort 的 sample、format、count、相对路径和 source
+SHA 完全一致；工具不从路径猜 count。`Test/` 不受 Git 跟踪，确认不会自动改写 tracked accuracy cohort。
+
+## 边界、Frame 与评测角色
+
+每条活动线必须有一种 `review_basis`：
+
+- `unclassified`：依据尚未确认，阻止 source 审核与最终确认。
+- `directly_visible`：人类能从原 TIFF 的可靠亮度或颜色分界确信真实内容边缘。证据可以很淡、很短，
+  不要求覆盖完整 H，也不要求 detector 检出同一线；验收只看最终裁切是否满足黄金合同。
+- `visible_content_limit`：仍可见内容的极限。裁切进入线内会阻断；相对该线向外不受 5% 阻断。
+- `human_width_estimate`：由同源直接可见 Frame 的一致宽度推算。该侧线内线外都不阻断 accuracy。
+
+`origin` 只记录坐标来自机器、红线、精修还是人工移动，与 `review_basis` 独立。移动坐标不得发明可见
+证据；精修或人工编辑也不得清除已经声明的依据。
+
+Frame 的 `slot_kind` 为 `image`、`partial_exposure`、`source_truncated`、`unknown` 或结构性
+`blank_exposure`。同一物理 Frame 被多个 count 引用时必须共享状态。相邻关系由几何自动派生：共用一条
+end/start 物理线为 `contact`；前一 end 越过后一 start 为 `overlap`；空 slot 邻接为
+`not_applicable`；其余为 `separator`。页面只显示这些事实，不提供手工关系选择框。
+
+`nominal` / `challenge` 也只从确认前的人工证据、Frame 语义、相邻关系和固定模板合同自动派生：
+
+- contact 或 overlap 始终为 challenge；
+- 非空 Frame 两侧均非直接可见，且另一 Frame 还有不同的非直接可见边界时为 challenge；
+- `count <= 3` 时，2 条及以上非直接可见边界为 challenge；`count > 3` 时，4 条及以上为 challenge；
+- 必需依据缺失、没有直接可见的长轴 anchor、未知 Frame、源截断几何未成立或 count 超出固定模板合同
+  时为 challenge。
+
+长轴边按唯一物理 line ID 计数，contact 共用线不重复，空曝光不参与。角色与原因在确认基线中冻结，
+accuracy 会从冻结证据重新推导并核对。Nominal 必须安全自动批准；challenge 允许安全
+`needs_review`，不能通过手工改类、白名单或放宽 Gate 提高通过率。
+
+## 有界精修
+
+所有活动线完成分类后，可以先只读评估，再写回精修 proposal：
+
+```bash
+python3 -m tools.manual_annotation refine --dry-run
+python3 -m tools.manual_annotation refine
+```
+
+`--sample-id S030` 限定一个 source。工具只读取当前人工线附近的原 TIFF 窄带，不读取预览、不把完整
+长图发送给模型，也不修改 TIFF：
+
+- `directly_visible` 与 `visible_content_limit` 仅在存在唯一、稳定局部边缘时微调；歧义、证据不足、
+  搜索触边或当前线已在同一模糊带时保持原位。
+- `human_width_estimate` 不把局部像素冒充可见证据。至少两个同源、两侧均直接可见的 Frame 形成稳健
+  宽度共识后，才从可靠对边反推，或围绕现有中心对称调整；依据仍完全不阻断。
+- 任何会改变 contact/overlap、Frame 顺序、源截断交集或 schema 的移动都被拒绝。
+
+`diagnostics.refinement` 保存逐线输入、输出、位移、证据强度和保留原因。精修不改变 `review_basis`，
+不勾选 source review，也不授予黄金权限。人工随后修改坐标、依据或 Frame 状态会把相应证据标为
+`adjusted_after_refinement`；有人工修改的记录不会被后续批量精修覆盖。
 
 ## 审核流程
 
-1. 在左侧按 format、状态或 sample/SHA 筛选；每次只打开一个有界预览。
-2. 先检查两条共享短轴边，再检查该 source 中适用的每对长轴边。总览中的稳定多色半透明四边形是
-   这些直线交点围成的基础照片区域，不包含产品 bleed；空曝光 slot 没有人工长轴边或四边形。
-3. 点击边界后拖整条线可沿法向移动，拖端点可修正斜率；方向键移动 1 px，按住 Shift 移动
-   10 px。`[` / `]` 每次逆时针/顺时针旋转 0.01°，Shift 为 0.1°；整线绕中点旋转，选中端点时
-   绕该端点旋转。`⌘Z` / `Ctrl+Z` 撤销。选中长轴边后，在“边界依据”中明确选择直接可见边界、
-   可见内容极限或按 Frame 宽度估计；估计线以 `≈` 和虚线标识，该方向不阻断黄金 accuracy。
-   移动估计线只改变坐标来源，不会把证据基础误写为肉眼可见边界。
-4. 鼠标所在位置的右侧局部图直接读取原 TIFF 的 1:1 像素，并叠加该 source 的两条共享边和
-   全部适用的成对长轴边；选中线显示为半透明黄色芯线和轻量深色轮廓，既保持选择状态，又能看清线下的
-   真实像素与物理边缘。总览只负责导航，
-   最终应在局部图中确认边界没有危险切入真实画面。常规窗口下，512×512 原图块使用约
-   512×512 的检查区；窗口较窄时才按可用宽度收缩。不需要拖线时，点击“完整高度审阅”或按 `F`，
-   首次进入会从片带长轴起点开始，横向片带即图片最左端；再次进入沿用当前审阅位置。检查区会占满
-   浏览器内容区，并按当前位置两条共享边计算短轴 H，让完整 H 占可用交叉轴约 94%，
-   上下保留少量余量。该模式直接从原 TIFF 读取所需源区域，再按当前屏幕尺寸缩小，不放大有界总览
-   JPG。每个有内容 reference 的 Frame 由同一套共享边和成对长轴边闭合，并按 Frame ordinal 使用
-   稳定多色轮廓；完整高度审阅不填充画面。`start` 为洋红色，`end` 为橙色，
-   接触 Frame 复用的 `start/end` 物理边显示为两色交替虚线；叠片中的两条独立边仍各自着色，不合并为
-   `contact`。点击任一线可选中整线，并直接用方向键或 `[` / `]` 修改；点击空白处只沿
-   胶片长轴移动，短轴始终回到共享边中间。按 `F` 或 `Esc` 恢复 1:1 标注布局。
-5. 同一 source SHA 若有多个 count，页面仍只显示一个 source reference，不建立 count 页签。最大显式 count
-   任务定义该 source 的物理 Frame 集；其他 count 只能按长轴顺序引用该集合的子集，不能再生成另一套黄金矩形。
-   相同物理 Frame 只画一次。勾选“本 source reference 已审核”一次即覆盖该 source。底层 count 任务仍各自保存
-   明确的 `slots` 与 `adjacencies`，并共用一个 source-level `boundary_pool`，不会把 count 绑定到 SHA。
-   每个有内容 slot 通过 `start_boundary_id` / `end_boundary_id` 明确长轴起止边，并与
-   `shared_edges` 的 `short_low` / `short_high` 共同唯一确定四边；后两者在横向片带中对应
-   top/bottom，在纵向片带中对应显示坐标的 left/right。
-   `contact` 的相邻照片共享同一条物理线；`overlap` 保留交叉的两条边。“当前 Frame”可为共享物理
-   Frame 选择正常照片、残缺曝光、源截断或未知；所有引用它的 count 任务会同步更新，不能产生冲突。
-   `partial_exposure` 仍有可见内容，`source_truncated` 只表示 TIFF 已截断 Frame，两者均保留成对边界。
-   只有 `blank_exposure` 使用 `reference_geometry: not_applicable`，且不能在该控件中转换或通过少输出
-   一格来隐藏。
-6. source reference 审核后，点击“确认整张黄金基线”。最终弹窗只提供取消与确认；一次确认表示共享边、
-   全部适用边界、原生像素和无 bleed 基础裁切安全性均已检查。确认后的 source 立即冻结，页面按队列顺序
-   自动打开下一张未完成样片；全部完成时停留并提示。
+1. 按 format、状态、边界依据、Frame 状态或评测角色筛选；每次只打开一个 source 的有界预览。同源
+   多 count 不建立页签，只显示一套 source reference，并列出各 task 的映射与角色。
+2. 先检查两条共享短轴边，再检查每个内容 Frame 的 start/end。总览用多色半透明区域区分 Frame；
+   `start` 与 `end` 使用不同颜色，contact 共用线以双色虚线显示，overlap 保留两条独立线。
+3. 点击或拖动只编辑整线。方向键沿法向移动 1 px，Shift 为 10 px；`[` / `]` 绕中点旋转 0.01°，
+   Shift 为 0.1°；`⌘Z` / `Ctrl+Z` 撤销。批量分类只改变所选线的 `review_basis`。
+4. 1:1 局部图直接读取原 TIFF，并以半透明选中线保留线下像素。完整高度审阅从片带长轴起点进入，
+   让完整共享短轴 H 落在屏幕内；该视图显示线与 Frame 轮廓，不填充画面。`F` 或 `Esc` 退出。
+5. 普通 Frame 不能被拖出 TIFF；`source_truncated` 可按物理事实外推，但必须保留有效源内交集。页面
+   实时显示派生 Frame polygon 与相邻关系，防止 start/end 混淆。
+6. 全部线分类并在原生像素下确认安全后，勾选 source reference 已审核，再选择“确认整张黄金基线”。
+   弹窗只有取消与确认；确认后记录立即冻结，并自动打开下一张待完成 source。
 
-机器 proposal 只减少起点工作量。遇到 contact、overlap、曲边、老化相机造成的不规则片距或边界
-歧义时，按物理边界修正；无法确定的 source 不确认，保持待审。
+机器 proposal 提示只帮助定位，不是阻断项；确认时会从冻结记录中清除。无法可靠判断的 source 不确认，
+保持待审。
 
-每条线还保存 `review_basis`：肉眼直接可见、可见内容极限、按 frame width 估计、机器补线或原生像素
-人工调整必须可区分。最终确认后，`human_width_estimate` 仍是可审计的安全裁切估计，但不是独立观察到
-的真实边缘：裁切在线内或线外都不产生黄金 accuracy 阻断。`visible_content_limit` 则是仍可见内容的
-安全保护线：裁切进入线内会阻断，向线外扩展不受相对该线的 5% 预算阻断。同一 Frame 其余边仍按各自
-证据基础独立判断，Runtime 的源内安全与 Gate 也不改变。`origin` 与 `review_basis` 相互独立；移动、保存
-和最终冻结都不得清除已经声明的证据基础。红线数量不足时保留机器补线并在页面提示；若拟合出的红色共享边会让任一照片
-离开源栅格，只采用仍能形成源内安全矩形的红线，其余共享边保留机器 proposal 等待人工修正。
+## Review context 与恢复
 
-若用户在确认后补充了某条线的证据基础或有边界 Frame 的类型，只能先把精确 role/slot 写入
-`Test/manual_review/review_context.json`，再显式运行：
+`Test/manual_review/review_context.json` 保存用户提供的空 slot、接触、叠片、估计边、漏光、片夹遮挡和
+正负片等审核上下文。它只服务校准分层与预填，不是 production whitelist、format 推断、Gate authority
+或另一条 detector path。漏光与可舍弃小角只能推动通用证据改进；正负片只用于覆盖统计。
+
+对未确认记录更新 context 后，可显式同步非结构性依据与 Frame 类型：
 
 ```bash
-python3 -m tools.manual_annotation reconcile-context \
-  --sample-id S030 --include-confirmed
+python3 -m tools.manual_annotation reconcile-context --sample-id S030
 ```
 
-该命令只同步非结构性的逐线 `review_basis`、有边界 Frame 的 `slot_kind`、审计上下文和冻结快照摘要，
-不改坐标、状态、确认时间或确认图片；空曝光的无几何结构仍只能在 proposal 准备阶段建立。
-不带 `--include-confirmed` 时拒绝修改已冻结 source。
-
-`Test/manual_review/review_context.json` 保存逐样片审阅上下文，例如空 slot、接触、叠片、猜测边、
-漏光、片夹遮挡和正负片分层。它只帮助校准和审核，不能成为 production whitelist、样片特例、format
-推断或 Gate authority。漏光和可舍弃小角标签用于检查通用二维 content 证据是否造成不必要的 review，
-只能推动适用于全部样片的证据定义改进；标签本身不能放行某张样片。正负片只用于分别统计覆盖面和
-误判，runtime 不读取该标签、不切换阈值，也不选择另一条 detector path。
-
-## 坐标、身份与本地文件
-
-- 权威坐标是 `raw_tiff_raster_pixel_centers`。页面按 TIFF Orientation 1–8 做可逆显示映射，保存时
-  回到原始 TIFF 像素中心，不以缩略图坐标为准。
-- Manifest 必须与 tracked `tools/regression/cohorts/diagnostic_unreviewed.jsonl` 在
-  sample、format、count、相对路径和 source SHA 上完全一致；工具不从文件名或目录猜 count。
-- 记录按 source SHA 去重。同字节、多 count 的样片只解码和标注一次物理边界。
-- 本地状态保存在 `Test/manual_review/source_annotations/`：`records/` 是可恢复的原子 JSON，
-  `previews/` 是有界导航 JPG，`review_artifacts/` 是确认快照，
-  `confirmed_source_geometry.jsonl` 汇总所有已确认任务。汇总行的 `slots` 保留全部 count 语义，
-  `frames` 只包含拥有 `boundary_pair` reference 的 ordinal。
-- `Test/` 不受 Git 跟踪。确认只建立本地、source-SHA-bound 的最内侧可接受裁切基准，不会自动修改 tracked
-  accuracy cohort；纳入阻断黄金仍需一次独立、显式的 cohort 审核。
-
-## 状态与故障恢复
+已确认记录不可由该命令或页面改写。若发现冻结基线有误，应先停止使用该记录，并通过独立、受审计的
+校准重置重新进入待审；当前工具不提供隐式解冻或“修补确认”的入口。
 
 | 状态 | 含义 |
 |---|---|
-| `machine_proposal` | 独立有界像素算法生成，尚无人确认 |
-| `human_adjusted` | 用户红线草稿已恢复，或页面中几何已被人工修改 |
-| `user_confirmed` | source reference 已经最终确认，记录和快照冻结 |
+| `machine_proposal` | 独立有界算法生成，尚无人调整 |
+| `human_adjusted` | 保留的待确认草稿或页面中已修改的几何 |
+| `user_confirmed` | source reference 已明确确认，记录与快照冻结 |
 
-页面每次修改都会带 revision 原子保存；并发或旧页面写入会因 revision conflict 被拒绝。保存失败时
-不能切换样片，浏览器关闭前也会提示。重新运行默认命令会复用已保存状态；不要通过删除记录来修改
-已确认基准。
+每次修改都带 revision 原子保存；并发或旧页面写入会因 revision conflict 被拒绝。保存失败时不能切换
+样片，关闭浏览器前也会提示。重启默认命令会复用已保存状态；不要靠删除记录修改已确认基准。

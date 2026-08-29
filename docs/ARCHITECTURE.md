@@ -221,7 +221,8 @@ role = phase
 单个 material 宽度偏离仍可属于正常扫描变化。只有多个独立、source-wide separator support 的
 两侧 residual 无法由同一个模板解释时，才构成全局矛盾；不能把一条局部窄 band 当成第二次位移。
 
-当前没有用户确认的 overlap 黄金。Contact、overlap 和 unresolved 不自动批准，也不启用额外 bleed。
+Contact 与 overlap 始终属于 challenge；安全 `needs_review` 是合格结果，不要求自动批准，也不启用
+额外 bleed。
 
 ## 8. Cross、outer 与固定 H
 
@@ -497,39 +498,32 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `x5crop/debug/` | 只读诊断 facts 与面板 |
 | `x5crop/io/`、`export/`、`output/` | TIFF domain、affine sampling、metadata 与原子发布 |
 | `tools/verify`、`tools/regression/` | 唯一验证入口、外部 report validator、方向性黄金验收与 accuracy/diagnostic/performance/platform 分层证据 |
-| `tools/manual_annotation/` | source-SHA-bound 的本地 proposal、原图坐标人工审核与最内侧可接受裁切基准冻结；不进入 production 或 release |
+| `tools/manual_annotation/` | source-SHA-bound 的本地 proposal、原 TIFF 有界精修、原图坐标人工审核与最内侧可接受裁切基准冻结；不进入 production 或 release |
 
-人工标注器严格对齐 tracked cohort 与本地 manifest，并以 source SHA 聚合任务。一个 source 只有两条
-共享短轴边和一个物理 `boundary_pool`；不同显式 count 任务各自保存 typed `slots` 与
-`adjacencies`，但页面只提供一个 source-level 审阅视图和一次审核勾选，不为 count 建立切换页签。
-最大显式 count 任务定义 source 的物理 Frame 集；其他 count 任务只能按长轴顺序引用其子集，不得建立平行黄金几何。
-相同边界对只显示一个物理 Frame。
-普通 separator 使用两条边，contact 的前格 END 与后格 START 复用同一物理 boundary，
-overlap 保留顺序交叉的两条边；空曝光、残缺曝光、源截断和未知 slot 不得被静默删除。
-其中只有真正的 `blank_exposure` 没有可见内容边界：其人工 `reference_geometry` 必须明确为
-`not_applicable`，不建立 `start/end` 或 Frame polygon，也不作为缺失标注或 accuracy unresolved。
-该 slot 仍属于显式 count，Runtime 仍由 format/count/template 放置并输出空 TIFF；其它 slot kind
-必须保留 `boundary_pair` reference。`partial_exposure` 表示仍有可见内容但 Frame 不完整，
-`source_truncated` 只表示源 TIFF 已截断 Frame；两者都不是空 slot。同一 source SHA 的多个 count
-任务若引用同一 `boundary_pair`，必须保存相同 `slot_kind`，不能让同一物理 Frame 在不同任务中具有
-冲突语义。
-页面中的 Orientation 只做可逆显示，持久化权威始终是原 TIFF raster pixel-center 坐标。
+人工标注器的 canonical record 按 source SHA 聚合：两条共享短轴边和一个物理 `boundary_pool` 只保存
+一次；每个显式 count task 分别保存 `slots` 与只读派生的 `adjacencies`。最大 count 定义物理 Frame
+集合，其它 task 只能按长轴顺序引用子集。共用 end/start line ID 为 `contact`，独立边反序为
+`overlap`，空 slot 邻接为 `not_applicable`，其余为 `separator`。
 
-独立有界像素拟合、用户红线草稿恢复和有界 JPG 都只能生成 proposal。只有用户在单一 source 视图中审核全部适用物理边界、
-检查 1:1 原生像素并执行一次最终确认，记录才成为不可变 `user_confirmed` 本地验收基线；最终弹窗不重复要求
-逐项勾选。它不声称是
-真实内容边界的 100% 测量或 detector 唯一正确答案。确认不自动改写
-tracked accuracy cohort；完整操作与文件边界见 [MANUAL_ANNOTATION.md](MANUAL_ANNOTATION.md)。
+只有 `blank_exposure` 使用 `reference_geometry: not_applicable`；它仍占显式 count，但没有人工
+start/end 或 accuracy polygon。其它 Frame 必须有 `boundary_pair`。同一物理 Frame 在各 count task 中
+必须共享 `slot_kind`。只有 `source_truncated` 可让物理 Frame 越出 TIFF；冻结 polygon 为物理 Frame 与
+raster pixel-center 域的交集，源外区域不参与黄金包含或 5% 预算。若物理 polygon 没有实际越界，则
+`source_truncated` 标签本身不能通过确认。Orientation 只做可逆显示，持久化始终使用原 TIFF 坐标。
 
-人工审核中故意排除的漏光痕迹或小角只形成校准标签，不产生 ignore mask、whitelist 或样片阈值。
-这些标签只用于检验、改进对所有样片相同的二维 content 定义；若通用证据仍可靠地越过最终 footprint，
-Production `content_veto` 让整张 source 进入 `needs_review` 才是安全行为。正片/负片只允许作为
-source-level 校准分层，用于检查覆盖面和通用证据在两类片材上的一致性，不是 runtime input、
-format/count authority、Gate 分支或 detector 选择器。
+机器拟合、红线导入、有界 JPG 与原 TIFF 窄带精修都只有 proposal 权限。精修不得改变证据基础、物理
+identity、task mapping、Frame 语义或相邻关系；只有用户完成原生像素审核并明确确认，记录才成为不可变
+`user_confirmed` 基线。确认记录冻结 task-level nominal/challenge 角色与原因，accuracy 会从冻结证据
+重新推导核对；确认本身不改写 tracked cohort。完整操作见
+[MANUAL_ANNOTATION.md](MANUAL_ANNOTATION.md)。
+
+漏光、小角与正负片只形成校准分层，不产生 ignore mask、whitelist、样片阈值或 runtime 分支。若通用
+二维 content 证据仍可靠越过最终 footprint，`content_veto` 让整张 source 进入 `needs_review` 才是
+安全行为。
 
 ## 14. 验证边界
 
-- `x5crop_directional_minimum_acceptable_crop_v1` 是 gold v1、v2 和以后 baseline schema 共用的
+- `x5crop_directional_minimum_acceptable_crop_v1` 是全部当前与以后用户确认黄金共用的
   accuracy 合同。用户确认 polygon 表示最内侧可接受的无 bleed 裁切，不表示真实内容边界的 100%
   测量，也不限定 detector 只能产生一个逐像素相同的答案。
 - 黄金比较是方向性的：任何已选 candidate 及 `approved_auto` 的正式 post-bleed
@@ -543,11 +537,17 @@ format/count authority、Gate 分支或 detector 选择器。
   |---|---|---|
   | `visible_content_limit` | 阻断 | 不阻断 |
   | `human_width_estimate` | 不阻断 | 不阻断 |
-  | 其它有效证据基础 | 阻断 | 阻断 |
+  | `directly_visible` | 阻断 | 阻断 |
 
+  `directly_visible` 只表示人类从原 TIFF 的可靠像素分界确信该侧是真实内容边缘；分界可以很淡、很短，
+  不必覆盖完整 H。它不建立 detector edge/trace 命中、observation identity、证据长度、强度或逐像素坐标
+  相等要求。Accuracy 只检查 selected candidate 与正式 `required_source_footprint` 是否满足上表对应的
+  方向性几何合同；检测机制不同但最终安全裁切合格时仍通过。
   `visible_content_limit` 是残缺曝光中仍可见内容的最内侧安全保护线：裁切进入该线以内会丢失可见内容，
   必须阻断；线外没有可见内容证据，因此不能用相对该线的 5% 预算阻断更大的外扩。
-  `human_width_estimate` 只是人工按 Frame 宽度作出的纯估计，线内、线外均不产生 accuracy verdict。
+  `human_width_estimate` 由同一 source 中其它直接可见边界所确定的一致 Frame 宽度推算；它仍不是该侧
+  的直接像素观察，线内、线外均不产生 accuracy verdict。没有足够一致的可见 Frame 宽度时保持未分类，
+  不制造估计线。
   同一 Frame 的其它边仍逐侧独立生效，不能因一侧豁免整格或整张 source。以上权限只属于黄金 accuracy
   比较，不放宽 Runtime 的 source 内安全、format/count、Gate、TIFF 或正式输出合同。`origin` 只记录
   坐标来源，`review_basis` 独立记录证据基础；人工移动或冻结不能改写已经声明的证据基础。
@@ -556,9 +556,26 @@ format/count authority、Gate 分支或 detector 选择器。
   也不改变模板、源内安全和整张 source 决策合同。
 - 上述黄金合同不因 `boundary_use` 改变。`enclosing_support_pair` 的总高度不超过 `1.1H` 仍是 runtime
   自动决策合同，但在黄金 accuracy 中还必须满足逐侧 5% 外扩上限，不能用总 span 隐藏单侧过度外扩。
-  Nominal 必须安全自动批准，challenge 允许安全 review。只有不存在 selected candidate 的安全 review
-  不产生几何 verdict；cosmetic deskew 精度不阻断黄金，affine polygon envelope 与 TIFF 安全合同仍阻断。
+- Nominal 必须安全自动批准，challenge 允许安全 review。角色在运行 detector 前按 evaluation task
+  的证据充分性冻结，不读取 detector 输出，也不进入 runtime：只要人工确认的直接证据与
+  format/count/template 能唯一确定合法 placement 和 source-safe footprint，即使存在残缺曝光、源截断、
+  空 slot 或 `visible_content_limit`，仍可属于 nominal；这些标签本身不是 challenge 原因。
+  只有必要边界权限缺失、存在多个同样合法的 placement、安全闭合无法唯一证明、未知必需 Frame、
+  contact/overlap，或异常数量超出当前固定模板合同等事实使自动安全结论不可靠时，才属于 challenge。
+  长轴直接证据还必须满足逐 task 的结构预算。只统计拥有 `boundary_pair` 的非空 Frame，并将
+  `visible_content_limit` 与 `human_width_estimate` 计为非直接可见边界；按唯一物理 boundary identity
+  计数，contact 共用线不得重复。满足任一条件即为 challenge：某个 Frame 的 start/end 均非直接可见且
+  另一 Frame 还有另一条非直接可见边界；`count <= 3` 且非直接可见边界不少于 2 条；`count > 3` 且
+  不少于 4 条。单个标签或低于预算的分散估计不自动降级，未分类线仍由必要边界权限缺失单独阻断。
+  角色不能在观察失败后修改，也不能成为样片 whitelist。
+  标注器按该合同逐 task 派生并展示角色，不提供人工切换；同一 source 的任一 task 为 challenge 时，
+  source 队列归入 challenge，同时保留各 count task 的独立角色与原因。
+  只有不存在 selected candidate 的安全 review 不产生几何 verdict；cosmetic deskew 精度不阻断黄金，
+  affine polygon envelope 与 TIFF 安全合同仍阻断。
 - 受跟踪的 diagnostic cohort 只证明不崩溃、工作量有界、报告闭合和 TIFF 工程合同，不证明几何正确。
+- 黄金校准只有一个 source-SHA-bound 集合。只有当前 `user_confirmed` 记录可生成
+  blocking cohort；集合被重置或没有当前确认时，accuracy 明确报告 `calibration is incomplete`，不读取
+  旧确认、旧 JPG 或历史 cohort 作为回退。
 - 24-source performance 只证明其绑定 commit、依赖和机器上的完整路径时间与资源；5 秒均值是
   blocking Gate，3 秒均值只是 non-blocking challenge。
 - Platform 聚合必须同时收到同一 commit 的 Apple Silicon macOS、Intel macOS 与 Windows x64

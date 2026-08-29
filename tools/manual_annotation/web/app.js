@@ -7,15 +7,19 @@ const FRAME_COLOR_COUNT = 12;
 const token = new URLSearchParams(window.location.search).get("token") || "";
 
 const lineBasisLabels = {
-  machine_proposal_pending_review: "尚未分类（机器提案）",
+  unclassified: "尚未分类",
   directly_visible: "直接可见边界",
   visible_content_limit: "可见内容极限",
-  human_width_estimate: "按 frame width 估计（该方向不阻断）",
-  human_adjusted_native_pixel: "原生像素人工调整（未分类）",
-  user_accepted_machine_inference: "人工接受机器推断",
-  explicit_prior_user_confirmation: "既有人工确认",
+  human_width_estimate: "按同源可见 frame width 估计（完全不阻断）",
   unresolved_red_stroke: "未解决的红线"
 };
+
+const editableLineReviewBases = new Set([
+  "unclassified",
+  "directly_visible",
+  "visible_content_limit",
+  "human_width_estimate"
+]);
 
 const slotKindLabels = {
   image: "正常照片",
@@ -25,18 +29,40 @@ const slotKindLabels = {
   unknown: "未知"
 };
 
+const adjacencyKindLabels = {
+  separator: "正常",
+  contact: "接触",
+  overlap: "重叠",
+  not_applicable: "不适用（空 slot）"
+};
+
+const evaluationReasonLabels = {
+  required_boundary_basis_missing: "必要边界依据未完成",
+  shared_edges_lack_direct_visibility: "共享上下边缘缺少直接可见依据",
+  no_direct_sequence_anchor: "没有直接可见的长轴定位边",
+  clustered_non_direct_boundaries: "一个 Frame 两侧均非直接可见，且其它 Frame 仍有非直接边界",
+  non_direct_boundary_count_threshold: "非直接可见边界数量达到 challenge 阈值",
+  unknown_required_frame: "存在未知必需 Frame",
+  contact_adjacency: "存在接触 Frame",
+  overlap_adjacency: "存在叠片 Frame",
+  source_truncation_not_geometrically_established: "源截断几何尚未成立",
+  count_outside_fixed_template_contract: "count 超出当前固定模板合同"
+};
+
 const elements = Object.fromEntries([
-  "progressText", "searchInput", "formatFilter", "stateFilter", "sourceList",
+  "progressText", "searchInput", "formatFilter", "stateFilter", "roleFilter", "sourceList",
   "nextButton", "sampleTitle", "stateBadge", "sourceFacts", "saveStatus",
   "undoButton", "redoButton", "resetViewButton", "sourceReferenceSummary", "sourceReviewed",
   "confirmButton", "canvasStage", "annotationSvg", "sourceImage", "polygonLayer",
-  "lineLayer", "handleLayer", "cursorCoordinate", "loupeSvg", "loupeImage",
+  "lineLayer", "cursorCoordinate", "loupeSvg", "loupeImage",
   "loupeCard", "loupeWrap", "loupeTitle", "loupeSelectionLabel", "maximizeLoupeButton", "loupeHelp",
   "loupePolygonLayer", "loupeLineLayer",
   "loupeCrossX", "loupeCrossY", "loupeEmpty", "selectedLineLabel",
   "lineCoordinates", "lineReviewBasisSelect", "frameSelect", "frameSlotKindSelect",
-  "frameAssignmentSummary", "diagnostics", "confirmDialog", "confirmTitle",
-  "finalConfirmButton", "toast"
+  "batchSelectionSummary", "selectUnclassifiedLinesButton", "selectAllLinesButton",
+  "clearLineSelectionButton", "batchLineList", "batchReviewBasisSelect",
+  "applyBatchReviewBasisButton", "frameAssignmentSummary", "adjacencyList", "diagnostics",
+  "confirmDialog", "confirmTitle", "finalConfirmButton", "toast"
 ].map((id) => [id, document.getElementById(id)]));
 
 const stateLabels = {
@@ -50,8 +76,8 @@ let indexData = null;
 let currentItem = null;
 let currentRecord = null;
 let selectedLineId = null;
-let selectedEndpoint = null;
 let selectedFrameKey = null;
+let batchSelectedLineIds = new Set();
 let saveTimer = null;
 let savePromise = null;
 let dirty = false;
@@ -105,31 +131,100 @@ function countsLabel(item) {
   return item.tasks.map((task) => task.count).join("/");
 }
 
+function lineUseLabel(line) {
+  const uses = line.uses || [];
+  if (line.family === "shared") {
+    return uses.includes("short_low") ? "共享边 A" : "共享边 B";
+  }
+  return uses.join(" / ").replaceAll(".start", " start").replaceAll(".end", " end");
+}
+
+function basisAttentionText(summary) {
+  if (!summary) return "尚未准备或等待保存";
+  if (summary.status === "all_directly_visible") return "全部线均为直接可见边界";
+  const lines = summary.attention_lines.map((line) => (
+    `${line.line_id}（${lineUseLabel(line)}：${lineBasisLabels[line.review_basis] || line.review_basis}）`
+  ));
+  const conditions = (summary.source_conditions || []).map((condition) => (
+    `${condition.task_id}#${condition.ordinal}（${slotKindLabels[condition.slot_kind] || condition.slot_kind}）`
+  ));
+  return [...lines, ...conditions].join("；") || "无非直接可见依据";
+}
+
+function evaluationRoleText(summary) {
+  if (!summary) return "评测角色保存后重新计算";
+  const taskRoles = summary.tasks || [];
+  const mixed = new Set(taskRoles.map((task) => task.cohort_role)).size > 1;
+  if (!mixed) return summary.source_role;
+  return `${summary.source_role}（${taskRoles.map((task) => `${task.sample_id}:${task.cohort_role}`).join(" / ")}）`;
+}
+
+function challengeReasonText(summary) {
+  if (!summary) return "保存后重新计算";
+  const challenged = (summary.tasks || []).filter((task) => task.cohort_role === "challenge");
+  return challenged.map((task) => {
+    const reasons = task.reasons.map((reason) => {
+      const label = evaluationReasonLabels[reason] || reason;
+      if (reason === "clustered_non_direct_boundaries") {
+        const frames = task.clustered_non_direct_frame_ordinals || [];
+        return `${label}（Frame ${frames.join("、")}）`;
+      }
+      if (reason === "non_direct_boundary_count_threshold") {
+        return `${label}（${task.non_direct_boundary_count}/${task.non_direct_boundary_challenge_threshold} 条）`;
+      }
+      return label;
+    });
+    return `${task.sample_id}:${reasons.join("、")}`;
+  }).join(" / ") || "无";
+}
+
 function renderIndex() {
   if (!indexData) return;
   const confirmed = indexData.states.user_confirmed || 0;
-  const adjusted = indexData.states.human_adjusted || 0;
-  elements.progressText.textContent = `${confirmed}/${indexData.total_unique_sources} 已确认 · ${adjusted} 已调整`;
+  const needsClassification = indexData.basis_states?.needs_classification || 0;
+  const nonDirect = indexData.basis_states?.has_non_direct_basis || 0;
+  const direct = indexData.basis_states?.all_directly_visible || 0;
+  const nominal = indexData.evaluation_roles?.nominal || 0;
+  const challenge = indexData.evaluation_roles?.challenge || 0;
+  elements.progressText.textContent = `${confirmed}/${indexData.total_unique_sources} 已确认 · ${needsClassification} 待分类 · ${nonDirect} 非直接 · ${direct} 全直接 · ${nominal} nominal · ${challenge} challenge`;
   const query = elements.searchInput.value.trim().toLowerCase();
   const state = elements.stateFilter.value;
   const format = elements.formatFilter.value;
+  const role = elements.roleFilter.value;
   elements.sourceList.replaceChildren();
   const items = indexData.items.filter((item) => {
     const matchesSearch = !query || sourceLabel(item).toLowerCase().includes(query) || item.source_sha256.includes(query);
     const matchesFormat = format === "all" || item.format_id === format;
+    const basisStatus = item.line_basis_summary?.status;
+    const frameStatus = item.frame_state_summary?.status;
+    const refinement = item.refinement_summary;
+    const sourceRole = item.evaluation_role_summary?.source_role;
     const matchesState = state === "all"
       || (state === "unfinished" && item.state !== "user_confirmed")
+      || (state === "basis_attention" && ["needs_classification", "has_non_direct_basis"].includes(basisStatus))
+      || (state === "all_directly_visible" && basisStatus === "all_directly_visible")
+      || (state === "all_frames_normal" && frameStatus === "all_frames_normal")
+      || (state === "has_non_normal_frames" && frameStatus === "has_non_normal_frames")
+      || (state === "refinement_moved" && refinement?.moved_line_count > 0)
+      || (state === "refinement_retained" && refinement && refinement.moved_line_count === 0)
       || item.state === state;
-    return matchesSearch && matchesFormat && matchesState;
+    const matchesRole = role === "all" || sourceRole === role;
+    return matchesSearch && matchesFormat && matchesState && matchesRole;
   });
   for (const item of items) {
     const button = document.createElement("button");
     button.className = `source-item${currentItem?.source_sha256 === item.source_sha256 ? " active" : ""}`;
     button.dataset.sha = item.source_sha256;
+    const basisText = basisAttentionText(item.line_basis_summary);
+    const roleText = evaluationRoleText(item.evaluation_role_summary);
+    const roleClass = ["nominal", "challenge"].includes(item.evaluation_role_summary?.source_role)
+      ? item.evaluation_role_summary.source_role
+      : "pending";
+    button.title = `${roleText} · ${challengeReasonText(item.evaluation_role_summary)} · ${basisText}`;
     button.innerHTML = `
       <span class="state-dot ${item.state}"></span>
-      <span class="source-name"><strong>${escapeHtml(sourceLabel(item))}</strong><small>${escapeHtml(item.format_id)} · ${item.source_sha256.slice(0, 10)}</small></span>
-      <span class="source-count">count ${escapeHtml(countsLabel(item))}</span>`;
+      <span class="source-name"><strong>${escapeHtml(sourceLabel(item))}</strong><small>${escapeHtml(item.format_id)} · ${item.source_sha256.slice(0, 10)}</small><small>${escapeHtml(roleText)}</small><small>${escapeHtml(basisText)}</small></span>
+      <span class="source-tail"><span class="source-role ${roleClass}">${escapeHtml(roleClass === "pending" ? "待计算" : roleClass)}</span><span class="source-count">count ${escapeHtml(countsLabel(item))}</span></span>`;
     button.addEventListener("click", () => openSource(item));
     elements.sourceList.appendChild(button);
   }
@@ -170,8 +265,9 @@ async function openSource(item) {
     currentItem = item;
     currentRecord = await response.json();
     selectedLineId = null;
-    selectedEndpoint = null;
     selectedFrameKey = null;
+    batchSelectedLineIds = new Set();
+    elements.batchReviewBasisSelect.value = "";
     history = [];
     future = [];
     dirty = false;
@@ -208,7 +304,9 @@ function renderRecord() {
   elements.sourceFacts.textContent = `${currentRecord.format_id} · raw ${currentRecord.source.raw_extent.width}×${currentRecord.source.raw_extent.height} · Orientation ${currentRecord.source.orientation_mapping.original_tag} · revision ${currentRecord.revision}`;
   renderReferenceSummary();
   renderGeometry();
+  renderBatchClassification();
   renderFrameControls();
+  renderAdjacencyRelations();
   renderDiagnostics();
   updateControls();
 }
@@ -226,7 +324,8 @@ function renderReferenceSummary() {
   const label = document.createElement("strong");
   label.textContent = "共享 source reference";
   const detail = document.createElement("span");
-  detail.textContent = `${currentRecord.tasks.map((task) => task.sample_id).join(" / ")} · count ${currentRecord.tasks.map((task) => task.count).join("/")}`;
+  const basisSummary = currentRecord.line_basis_summary;
+  detail.textContent = `${currentRecord.tasks.map((task) => task.sample_id).join(" / ")} · count ${currentRecord.tasks.map((task) => task.count).join("/")} · ${evaluationRoleText(currentRecord.evaluation_role_summary)} · ${basisAttentionText(basisSummary)}`;
   elements.sourceReferenceSummary.append(label, detail);
   elements.sourceReferenceSummary.classList.toggle("reviewed", sourceIsReviewed());
 }
@@ -265,7 +364,42 @@ function polygonForReference(reference) {
   return polygon.every(Boolean) ? polygon : null;
 }
 
-function sourceReferenceFrames() {
+function clipPolygonToSourceRaster(polygon) {
+  const width = currentRecord.source.canonical_extent.width;
+  const height = currentRecord.source.canonical_extent.height;
+  const bounds = [
+    [0, -0.5, true],
+    [0, width - 0.5, false],
+    [1, -0.5, true],
+    [1, height - 0.5, false]
+  ];
+  let clipped = polygon.map((point) => [...point]);
+  for (const [axis, boundary, keepGreater] of bounds) {
+    if (!clipped.length) break;
+    const output = [];
+    let previous = clipped[clipped.length - 1];
+    let previousInside = keepGreater ? previous[axis] >= boundary : previous[axis] <= boundary;
+    for (const current of clipped) {
+      const currentInside = keepGreater ? current[axis] >= boundary : current[axis] <= boundary;
+      if (currentInside !== previousInside) {
+        const fraction = (boundary - previous[axis]) / (current[axis] - previous[axis]);
+        const intersectionPoint = [
+          previous[0] + fraction * (current[0] - previous[0]),
+          previous[1] + fraction * (current[1] - previous[1])
+        ];
+        intersectionPoint[axis] = boundary;
+        output.push(intersectionPoint);
+      }
+      if (currentInside) output.push([...current]);
+      previous = current;
+      previousInside = currentInside;
+    }
+    clipped = output;
+  }
+  return clipped;
+}
+
+function sourcePhysicalFrames() {
   if (!currentRecord) return [];
   const byPair = new Map();
   for (const task of currentRecord.tasks) {
@@ -291,17 +425,192 @@ function sourceReferenceFrames() {
   }
   const longIndex = currentRecord.strip_axis_display === "horizontal" ? 0 : 1;
   return [...byPair.values()].map((frame) => {
-    const points = polygonForReference(frame.reference);
-    const position = points
-      ? points.reduce((sum, point) => sum + point[longIndex] / points.length, 0)
+    const physicalPoints = polygonForReference(frame.reference);
+    const slotKind = frame.assignments[0]?.slotKind;
+    const position = physicalPoints
+      ? physicalPoints.reduce((sum, point) => sum + point[longIndex] / physicalPoints.length, 0)
       : Number.POSITIVE_INFINITY;
-    return {...frame, points, position};
-  }).filter((frame) => frame.points).sort((left, right) => left.position - right.position)
+    return {...frame, physicalPoints, position, slotKind};
+  }).sort((left, right) => left.position - right.position)
     .map((frame, index) => ({...frame, sourceOrdinal: index + 1}));
 }
 
+function sourceReferenceFrames() {
+  return sourcePhysicalFrames().map((frame) => ({
+    ...frame,
+    points: frame.physicalPoints && frame.slotKind === "source_truncated"
+      ? clipPolygonToSourceRaster(frame.physicalPoints)
+      : frame.physicalPoints
+  })).filter((frame) => frame.points?.length >= 3);
+}
+
+function pointInsideSourceRaster(point) {
+  const extent = currentRecord.source.canonical_extent;
+  return (
+    Number.isFinite(point[0])
+    && Number.isFinite(point[1])
+    && point[0] >= -0.5
+    && point[0] <= extent.width - 0.5
+    && point[1] >= -0.5
+    && point[1] <= extent.height - 0.5
+  );
+}
+
+function polygonArea(points) {
+  if (!points?.length) return 0;
+  return points.reduce((total, point, index) => {
+    const next = points[(index + 1) % points.length];
+    return total + point[0] * next[1] - next[0] * point[1];
+  }, 0) / 2;
+}
+
+function frameGeometryIssues() {
+  const invalid = [];
+  const pendingSourceTruncation = [];
+  for (const frame of sourcePhysicalFrames()) {
+    const physical = frame.physicalPoints;
+    const assignments = frame.assignments;
+    if (!physical || physical.length < 3 || polygonArea(physical) < 4) {
+      invalid.push(...assignments.map((item) => ({...item, reason: "invalid_polygon"})));
+      continue;
+    }
+    const leavesSource = physical.some((point) => !pointInsideSourceRaster(point));
+    const sourceTruncated = assignments.filter((item) => item.slotKind === "source_truncated");
+    const ordinary = assignments.filter((item) => item.slotKind !== "source_truncated");
+    if (leavesSource && ordinary.length) {
+      invalid.push(...ordinary.map((item) => ({...item, reason: "ordinary_leaves_source"})));
+    }
+    if (!leavesSource && sourceTruncated.length) {
+      pendingSourceTruncation.push(...sourceTruncated);
+    }
+    if (leavesSource && sourceTruncated.length) {
+      const clipped = clipPolygonToSourceRaster(physical);
+      if (clipped.length < 3 || polygonArea(clipped) < 4) {
+        invalid.push(...sourceTruncated.map((item) => ({...item, reason: "no_source_intersection"})));
+      }
+    }
+  }
+  return {invalid, pendingSourceTruncation};
+}
+
+function frameIssueLabels(items) {
+  return [...new Set(items.map((item) => `${item.sampleId}#${item.ordinal}`))].join(" / ");
+}
+
+function frameGeometryBlockingMessage(issues = frameGeometryIssues()) {
+  const ordinary = issues.invalid.filter((item) => item.reason === "ordinary_leaves_source");
+  if (ordinary.length) {
+    return `${frameIssueLabels(ordinary)} 不是源截断，不能越出 TIFF。已停止在最后一个可保存的位置。`;
+  }
+  const missing = issues.invalid.filter((item) => item.reason === "no_source_intersection");
+  if (missing.length) {
+    return `${frameIssueLabels(missing)} 与 TIFF 已没有可用交集。已停止在最后一个可保存的位置。`;
+  }
+  if (issues.invalid.length) {
+    return `${frameIssueLabels(issues.invalid)} 的边界无法形成有效 Frame。已停止在最后一个可保存的位置。`;
+  }
+  return null;
+}
+
+function syncLocalFrameStateSummary() {
+  if (!currentRecord) return;
+  const nonNormalSlots = currentRecord.tasks.flatMap((task) => task.slots
+    .filter((slot) => slot.slot_kind !== "image")
+    .map((slot) => ({task_id: task.task_id, ordinal: slot.ordinal, slot_kind: slot.slot_kind}))
+  );
+  const pending = frameGeometryIssues().pendingSourceTruncation.map((item) => ({
+    task_id: item.taskId,
+    ordinal: item.ordinal
+  }));
+  currentRecord.frame_state_summary = {
+    status: nonNormalSlots.length ? "has_non_normal_frames" : "all_frames_normal",
+    all_frames_normal: nonNormalSlots.length === 0,
+    non_normal_slot_count: nonNormalSlots.length,
+    non_normal_slots: nonNormalSlots,
+    pending_source_truncated_geometry_count: pending.length,
+    pending_source_truncated_geometry: pending
+  };
+}
+
+function applyConstrainedLinePoints(line, points) {
+  const before = line.points_display.map((point) => [...point]);
+  line.points_display = points.map((point) => [...point]);
+  const issues = frameGeometryIssues();
+  const message = frameGeometryBlockingMessage(issues);
+  if (message) {
+    line.points_display = before;
+    return {accepted: false, message};
+  }
+  syncLocalFrameStateSummary();
+  return {accepted: true, message: null};
+}
+
+function canonicalSourceTask() {
+  if (!currentRecord?.tasks?.length) return null;
+  const canonicalTaskId = currentRecord.diagnostics?.source_reference_mapping?.canonical_task_id;
+  return currentRecord.tasks.find((task) => task.task_id === canonicalTaskId)
+    || [...currentRecord.tasks].sort((left, right) => (
+      right.count - left.count || left.task_id.localeCompare(right.task_id)
+    ))[0];
+}
+
+function boundaryAxisPosition(line) {
+  const [[x1, y1], [x2, y2]] = line.points_display;
+  if (currentRecord.strip_axis_display === "horizontal") {
+    const reference = 0.5 * (currentRecord.source.canonical_extent.height - 1);
+    return x1 + (x2 - x1) * (reference - y1) / (y2 - y1);
+  }
+  const reference = 0.5 * (currentRecord.source.canonical_extent.width - 1);
+  return y1 + (y2 - y1) * (reference - x1) / (x2 - x1);
+}
+
+function derivedAdjacenciesForTask(task) {
+  const pool = new Map(currentRecord.boundary_pool.map((line) => [line.line_id, line]));
+  return task.adjacencies.map((adjacency, index) => {
+    const left = task.slots[index].reference_geometry;
+    const right = task.slots[index + 1].reference_geometry;
+    let kind = "not_applicable";
+    if (left?.kind === "boundary_pair" && right?.kind === "boundary_pair") {
+      if (left.end_boundary_id === right.start_boundary_id) {
+        kind = "contact";
+      } else {
+        const leftEnd = pool.get(left.end_boundary_id);
+        const rightStart = pool.get(right.start_boundary_id);
+        kind = leftEnd && rightStart && boundaryAxisPosition(leftEnd) > boundaryAxisPosition(rightStart)
+          ? "overlap"
+          : "separator";
+      }
+    }
+    return {...adjacency, kind};
+  });
+}
+
+function renderAdjacencyRelations() {
+  elements.adjacencyList.replaceChildren();
+  const task = canonicalSourceTask();
+  const adjacencies = task ? derivedAdjacenciesForTask(task) : [];
+  if (!adjacencies.length) {
+    const empty = document.createElement("p");
+    empty.className = "adjacency-empty";
+    empty.textContent = "此 source 只有一个 Frame，没有相邻关系。";
+    elements.adjacencyList.appendChild(empty);
+    return;
+  }
+  for (const adjacency of adjacencies) {
+    const row = document.createElement("div");
+    row.className = "adjacency-row";
+    const pair = document.createElement("span");
+    pair.textContent = `Frame ${adjacency.left_ordinal}–${adjacency.right_ordinal}`;
+    const kind = document.createElement("strong");
+    kind.className = `adjacency-kind ${adjacency.kind}`;
+    kind.textContent = adjacencyKindLabels[adjacency.kind] || adjacency.kind;
+    row.append(pair, kind);
+    elements.adjacencyList.appendChild(row);
+  }
+}
+
 function sourceBoundaryRoles() {
-  return sourceReferenceFrames().flatMap((frame) => [
+  return sourcePhysicalFrames().flatMap((frame) => [
     {identity: frame.reference.start_boundary_id, ordinal: frame.sourceOrdinal, role: "start"},
     {identity: frame.reference.end_boundary_id, ordinal: frame.sourceOrdinal, role: "end"}
   ]);
@@ -335,7 +644,13 @@ function activeLineEntries() {
       const label = assignments.length
         ? assignments.map((entry) => `${entry.ordinal}${entry.role === "end" ? "E" : "S"}`).join("/")
         : line.line_id;
-      return {line, family: "boundary", label, active: used.has(line.line_id), role};
+      return {
+        line,
+        family: "boundary",
+        label,
+        active: used.has(line.line_id) || line.review_basis === "unresolved_red_stroke",
+        role
+      };
     })
   ];
 }
@@ -350,6 +665,114 @@ function roleLabel(entry) {
   })[entry?.role] || "未分类";
 }
 
+function batchLineEntries() {
+  return currentRecord ? activeLineEntries().filter((entry) => entry.active) : [];
+}
+
+function updateBatchSelectionSummary(entries = batchLineEntries()) {
+  const activeIds = new Set(entries.map((entry) => entry.line.line_id));
+  const selectedCount = [...batchSelectedLineIds]
+    .filter((identity) => activeIds.has(identity)).length;
+  elements.batchSelectionSummary.textContent = `${selectedCount} / ${entries.length} 条`;
+}
+
+function renderBatchClassification() {
+  const entries = batchLineEntries();
+  const activeIds = new Set(entries.map((entry) => entry.line.line_id));
+  batchSelectedLineIds = new Set(
+    [...batchSelectedLineIds].filter((identity) => activeIds.has(identity))
+  );
+  elements.batchLineList.replaceChildren();
+  if (!entries.length) {
+    const empty = document.createElement("span");
+    empty.className = "batch-line-empty";
+    empty.textContent = "没有可分类的活动线";
+    elements.batchLineList.appendChild(empty);
+    updateBatchSelectionSummary(entries);
+    return;
+  }
+  const immutable = currentRecord.state === "user_confirmed";
+  for (const entry of entries) {
+    const identity = entry.line.line_id;
+    const selected = batchSelectedLineIds.has(identity);
+    const row = document.createElement("label");
+    row.className = `batch-line-row${selected ? " selected" : ""}`;
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = selected;
+    checkbox.disabled = immutable;
+    checkbox.setAttribute("aria-label", `选择 ${entry.label}`);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) batchSelectedLineIds.add(identity);
+      else batchSelectedLineIds.delete(identity);
+      row.classList.toggle("selected", checkbox.checked);
+      updateBatchSelectionSummary(entries);
+      updateControls();
+    });
+
+    const role = document.createElement("span");
+    role.className = `batch-line-role ${entry.role}`;
+    role.setAttribute("aria-hidden", "true");
+
+    const description = document.createElement("span");
+    description.className = "batch-line-description";
+    const name = document.createElement("strong");
+    name.textContent = entry.label;
+    const basis = document.createElement("small");
+    basis.textContent = `${identity} · ${lineBasisLabels[entry.line.review_basis] || entry.line.review_basis}`;
+    description.append(name, basis);
+    row.append(checkbox, role, description);
+    elements.batchLineList.appendChild(row);
+  }
+  updateBatchSelectionSummary(entries);
+}
+
+function selectBatchLines(predicate) {
+  if (!currentRecord || currentRecord.state === "user_confirmed") return;
+  batchSelectedLineIds = new Set(
+    batchLineEntries()
+      .filter(predicate)
+      .map((entry) => entry.line.line_id)
+  );
+  renderBatchClassification();
+  updateControls();
+}
+
+function applyBatchReviewBasis() {
+  if (!currentRecord || currentRecord.state === "user_confirmed") return;
+  const next = elements.batchReviewBasisSelect.value;
+  if (!editableLineReviewBases.has(next)) {
+    showToast("请先选择统一的边界依据。", true);
+    return;
+  }
+  const targets = batchLineEntries().filter(
+    (entry) => batchSelectedLineIds.has(entry.line.line_id)
+  );
+  if (!targets.length) {
+    showToast("请先选择至少一条线。", true);
+    return;
+  }
+  const changed = targets.filter((entry) => entry.line.review_basis !== next);
+  if (!changed.length) {
+    elements.batchReviewBasisSelect.value = "";
+    updateControls();
+    showToast("所选线已经使用该边界依据。", false);
+    return;
+  }
+  pushHistory();
+  for (const entry of changed) entry.line.review_basis = next;
+  currentRecord.line_basis_summary = null;
+  markDirty();
+  elements.batchReviewBasisSelect.value = "";
+  renderGeometry();
+  renderBatchClassification();
+  renderReferenceSummary();
+  renderDiagnostics();
+  updateControls();
+  showToast(`已批量分类 ${changed.length} 条线。`, false);
+}
+
 function visibleStrokeVariants(entry, selected) {
   return entry.family === "boundary" && entry.role === "start-end" && !selected
     ? ["contact-start", "contact-end"]
@@ -359,7 +782,6 @@ function visibleStrokeVariants(entry, selected) {
 function renderGeometry() {
   elements.polygonLayer.replaceChildren();
   elements.lineLayer.replaceChildren();
-  elements.handleLayer.replaceChildren();
   if (!currentRecord) return;
   sourceReferenceFrames().forEach((frame) => {
     const polygon = svgElement("polygon", {
@@ -369,7 +791,7 @@ function renderGeometry() {
     });
     const title = svgElement("title");
     const assignments = frame.assignments.map((item) => `${item.sampleId}#${item.ordinal}`).join(" / ");
-    title.textContent = `Frame ${frame.sourceOrdinal} · ${assignments}`;
+    title.textContent = `Frame ${frame.sourceOrdinal} · ${assignments}${frame.slotKind === "source_truncated" ? " · 源截断：显示 TIFF 内可用交集" : ""}`;
     polygon.appendChild(title);
     elements.polygonLayer.appendChild(polygon);
   });
@@ -392,6 +814,7 @@ function renderGeometry() {
       const classes = ["annotation-line", entry.family, entry.role];
       if (!entry.active) classes.push("inactive");
       if (entry.line.review_basis === "human_width_estimate") classes.push("estimated");
+      if (["unclassified", "unresolved_red_stroke"].includes(entry.line.review_basis)) classes.push("unclassified");
       if (selected) classes.push("selected");
       if (variant) classes.push(variant);
       const node = svgElement("line", {
@@ -399,41 +822,27 @@ function renderGeometry() {
         class: classes.join(" "), "data-line-id": entry.line.line_id
       });
       node.addEventListener("pointerdown", (event) => startLineDrag(event, entry.line.line_id));
-      node.addEventListener("click", (event) => { event.stopPropagation(); selectLine(entry.line.line_id, null); });
+      node.addEventListener("click", (event) => { event.stopPropagation(); selectLine(entry.line.line_id); });
       elements.lineLayer.appendChild(node);
     }
     if (entry.active) {
       const middle = [(first[0] + second[0]) / 2, (first[1] + second[1]) / 2];
       const label = svgElement("text", {x: middle[0] + 5, y: middle[1] - 5, class: "line-label"});
-      label.textContent = `${entry.line.review_basis === "human_width_estimate" ? "≈" : ""}${entry.label}`;
+      const prefix = entry.line.review_basis === "human_width_estimate"
+        ? "≈"
+        : (["unclassified", "unresolved_red_stroke"].includes(entry.line.review_basis) ? "?" : "");
+      label.textContent = `${prefix}${entry.label}`;
       elements.lineLayer.appendChild(label);
     }
   }
-  renderHandles();
   renderSelectedLine();
-}
-
-function renderHandles() {
-  elements.handleLayer.replaceChildren();
-  const line = lineById(selectedLineId);
-  if (!line) return;
-  line.points_display.forEach((point, endpoint) => {
-    const handle = svgElement("circle", {
-      cx: point[0], cy: point[1], r: 6,
-      class: `endpoint${selectedEndpoint === endpoint ? " active" : ""}`,
-      "data-endpoint": endpoint
-    });
-    handle.addEventListener("pointerdown", (event) => startEndpointDrag(event, line.line_id, endpoint));
-    handle.addEventListener("click", (event) => { event.stopPropagation(); selectLine(line.line_id, endpoint); });
-    elements.handleLayer.appendChild(handle);
-  });
 }
 
 function renderSelectedLine() {
   const line = lineById(selectedLineId);
   const entry = line ? activeLineEntries().find((item) => item.line.line_id === line.line_id) : null;
   elements.loupeSelectionLabel.textContent = line
-    ? `${line.line_id} · ${roleLabel(entry)} · ${lineBasisLabels[line.review_basis] || line.review_basis}${selectedEndpoint === null ? " · 整线" : ` · 端点 ${selectedEndpoint + 1}`}`
+    ? `${line.line_id} · ${roleLabel(entry)} · ${lineBasisLabels[line.review_basis] || line.review_basis}`
     : "未选线";
   elements.loupeSelectionLabel.classList.toggle("active", Boolean(line));
   if (!line) {
@@ -444,7 +853,11 @@ function renderSelectedLine() {
     return;
   }
   const basisLabel = lineBasisLabels[line.review_basis] || line.review_basis;
-  elements.selectedLineLabel.textContent = `${line.line_id} · ${roleLabel(entry)} · ${basisLabel} · ${line.origin}`;
+  const refinement = currentRecord.diagnostics?.refinement?.lines?.[line.line_id];
+  const refinementLabel = refinement
+    ? ` · 精修${String(refinement.decision).startsWith("moved_to_") ? "已移动" : "保留"} · ${refinement.human_review_status || "pending"}`
+    : "";
+  elements.selectedLineLabel.textContent = `${line.line_id} · ${roleLabel(entry)} · ${basisLabel} · ${line.origin}${refinementLabel}`;
   elements.lineReviewBasisSelect.value = line.review_basis;
   const codes = elements.lineCoordinates.querySelectorAll("code");
   line.points_display.forEach((point, index) => {
@@ -454,7 +867,7 @@ function renderSelectedLine() {
 }
 
 function renderFrameControls() {
-  const frames = sourceReferenceFrames();
+  const frames = sourcePhysicalFrames();
   elements.frameSelect.replaceChildren();
   if (!frames.length) {
     selectedFrameKey = null;
@@ -490,6 +903,7 @@ function renderDiagnostics() {
   if (!currentRecord) return;
   const reviewContext = currentRecord.diagnostics.review_context || {};
   const redImport = currentRecord.diagnostics.red_markup_import;
+  const refinement = currentRecord.diagnostics.refinement;
   const taskContexts = reviewContext.tasks || {};
   const taskSummary = currentRecord.tasks
     .map((task) => `${task.sample_id}:${task.count}`)
@@ -509,10 +923,10 @@ function renderDiagnostics() {
     .filter((slot) => slot.reference_geometry?.kind === "not_applicable")
     .map((slot) => `${task.sample_id} ${slot.ordinal}:${slot.slot_kind}`)
   ).join(" / ") || "无";
-  const adjacencySummary = currentRecord.tasks.flatMap((task) => task.adjacencies
+  const adjacencySummary = currentRecord.tasks.flatMap((task) => derivedAdjacenciesForTask(task)
     .filter((adjacency) => adjacency.kind !== "separator")
-    .map((adjacency) => `${task.sample_id} ${adjacency.left_ordinal}-${adjacency.right_ordinal}:${adjacency.kind}`)
-  ).join(" / ") || "全部 separator";
+    .map((adjacency) => `${task.sample_id} ${adjacency.left_ordinal}-${adjacency.right_ordinal}:${adjacencyKindLabels[adjacency.kind] || adjacency.kind}`)
+  ).join(" / ") || "全部正常";
   const notes = [...new Set(currentRecord.tasks.flatMap(
     (task) => taskContexts[task.task_id]?.notes || []
   ))];
@@ -520,22 +934,54 @@ function renderDiagnostics() {
     const retained = redImport?.task_assignments?.[task.task_id]?.machine_retained_role_indices || [];
     return retained.length ? [`${task.sample_id}:角色 ${retained.join(", ")}`] : [];
   });
+  const basisSummary = currentRecord.line_basis_summary;
+  const evaluationSummary = currentRecord.evaluation_role_summary;
+  const pendingSourceTruncation = (
+    currentRecord.frame_state_summary?.pending_source_truncated_geometry || []
+  );
+  const sourceTruncationSummary = pendingSourceTruncation.length
+    ? `待放置：${pendingSourceTruncation.map((item) => `${item.task_id}#${item.ordinal}`).join(" / ")}`
+    : slotSummary.includes("source_truncated")
+      ? "物理 Frame 已越出 TIFF；显示 TIFF 内交集"
+      : "不适用";
+  const basisStateLabel = ({
+    needs_classification: "仍有线未分类",
+    has_non_direct_basis: "含非直接可见边界",
+    all_directly_visible: "全部为直接可见边界"
+  })[basisSummary?.status] || "保存后重新分类";
   const rows = [
     ["来源", currentRecord.origin],
     ["count 任务", `${taskSummary}（共享一套 source reference）`],
     ["胶片极性", reviewContext.film_polarity ? `${reviewContext.film_polarity}（仅校准分层）` : "未记录"],
     ["坐标", "raw TIFF pixel centers"],
-    ["预标版本", currentRecord.diagnostics.proposal_revision || currentRecord.diagnostics.legacy_algorithm_revision || "legacy confirmed"],
-    ["共享边 MAD", (currentRecord.diagnostics.shared_fit_mad_analysis_px || []).map((value) => Number(value).toFixed(2)).join(" / ") || "已确认旧基线"],
+    ["预标版本", currentRecord.diagnostics.proposal_revision || "人工保留草稿"],
+    ["精修版本", refinement?.refinement_revision || "尚未精修"],
+    ["精修结果", refinement ? `${refinement.moved_line_count} 条移动 · ${refinement.retained_line_count} 条保留 · ${refinement.human_review_state || "pending"}` : "尚未生成"],
+    ["共享边 MAD", (currentRecord.diagnostics.shared_fit_mad_analysis_px || []).map((value) => Number(value).toFixed(2)).join(" / ") || "未记录"],
     ["模板分数", templateSummary],
     ["结构标签", caseTags.join(" / ") || "常规"],
     ["Slot 语义", slotSummary],
+    ["源截断几何", sourceTruncationSummary],
     ["无需人工 reference", noReferenceSummary],
     ["相邻关系", adjacencySummary],
     ["人工备注", notes.join("；") || "无"],
-    ["待重点检查", currentRecord.diagnostics.unresolved?.length ? `${currentRecord.diagnostics.unresolved.length} 项` : "无额外提示"],
+    ["评测角色", evaluationRoleText(evaluationSummary)],
+    ["Challenge 依据", challengeReasonText(evaluationSummary)],
+    ["依据分类", basisStateLabel],
+    ["需关注的线", basisAttentionText(basisSummary)],
+    ["机器提案提示（不阻断）", currentRecord.diagnostics.unresolved?.length ? `${currentRecord.diagnostics.unresolved.length} 项` : "无"],
     ["权限", currentRecord.state === "user_confirmed" ? "用户确认" : "仅 proposal"]
   ];
+  const selectedRefinement = selectedLineId
+    ? refinement?.lines?.[selectedLineId]
+    : null;
+  if (selectedRefinement) {
+    const delta = selectedRefinement.endpoint_delta_px || [0, 0];
+    rows.splice(3, 0, [
+      "当前线精修",
+      `${selectedRefinement.decision} · ${selectedRefinement.reason} · 端点 Δ ${Number(delta[0]).toFixed(2)} / ${Number(delta[1]).toFixed(2)} px · ${selectedRefinement.human_review_status || "pending"}`
+    ]);
+  }
   if (redImport) {
     rows.splice(1, 0, ["红线草稿", `${redImport.applied_shared_edge_count}/${redImport.detected_shared_edge_count} 条共享边已采用 · ${redImport.detected_boundary_count} 条长轴边`]);
     rows.splice(2, 0, ["机器补线", machineLines.join(" / ") || "无"]);
@@ -551,18 +997,49 @@ function renderDiagnostics() {
 function updateControls() {
   const immutable = currentRecord?.state === "user_confirmed";
   const allReviewed = sourceIsReviewed();
-  elements.sourceReviewed.disabled = !currentRecord || immutable;
+  const basisComplete = Boolean(currentRecord?.line_basis_summary?.classification_complete);
+  const sourceTruncationReady = (
+    currentRecord?.frame_state_summary?.pending_source_truncated_geometry_count === 0
+  );
+  elements.sourceReviewed.disabled = (
+    !currentRecord || immutable || !basisComplete || !sourceTruncationReady
+  );
   elements.sourceReviewed.checked = allReviewed;
-  elements.confirmButton.disabled = !currentRecord || immutable || !allReviewed || dirty;
+  elements.confirmButton.disabled = (
+    !currentRecord
+    || immutable
+    || !basisComplete
+    || !sourceTruncationReady
+    || !allReviewed
+    || dirty
+  );
   elements.undoButton.disabled = immutable || history.length === 0;
   elements.redoButton.disabled = immutable || future.length === 0;
   elements.maximizeLoupeButton.disabled = !currentRecord || !lastPointer;
-  elements.annotationSvg.style.pointerEvents = immutable ? "auto" : "auto";
   const selectedEntry = selectedLineId
     ? activeLineEntries().find((entry) => entry.line.line_id === selectedLineId)
     : null;
-  elements.lineReviewBasisSelect.disabled = immutable || selectedEntry?.family !== "boundary";
-  elements.frameSelect.disabled = !currentRecord || sourceReferenceFrames().length === 0;
+  elements.lineReviewBasisSelect.disabled = immutable || !selectedEntry;
+  const batchEntries = batchLineEntries();
+  const activeBatchIds = new Set(batchEntries.map((entry) => entry.line.line_id));
+  const selectedBatchCount = [...batchSelectedLineIds]
+    .filter((identity) => activeBatchIds.has(identity)).length;
+  const hasPendingLines = batchEntries.some((entry) => (
+    ["unclassified", "unresolved_red_stroke"].includes(entry.line.review_basis)
+  ));
+  elements.selectUnclassifiedLinesButton.disabled = immutable || !hasPendingLines;
+  elements.selectAllLinesButton.disabled = immutable || batchEntries.length === 0;
+  elements.clearLineSelectionButton.disabled = immutable || selectedBatchCount === 0;
+  elements.batchReviewBasisSelect.disabled = immutable || selectedBatchCount === 0;
+  elements.applyBatchReviewBasisButton.disabled = (
+    immutable
+    || selectedBatchCount === 0
+    || !editableLineReviewBases.has(elements.batchReviewBasisSelect.value)
+  );
+  elements.batchLineList.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+    checkbox.disabled = immutable;
+  });
+  elements.frameSelect.disabled = !currentRecord || sourcePhysicalFrames().length === 0;
   elements.frameSlotKindSelect.disabled = immutable || !selectedFrameKey;
   document.querySelectorAll("[data-nudge],[data-rotate]").forEach((button) => button.disabled = immutable || !selectedLineId);
 }
@@ -591,7 +1068,9 @@ function applySnapshot(snapshot) {
   replaceGeometryFromSnapshot(snapshot);
   markDirty();
   renderGeometry();
+  renderBatchClassification();
   renderFrameControls();
+  renderAdjacencyRelations();
   renderDiagnostics();
   updateControls();
 }
@@ -609,10 +1088,12 @@ function replaceGeometryFromSnapshot(snapshot) {
   currentRecord.tasks.forEach((task) => task.slots.forEach((slot) => {
     slot.slot_kind = incomingSlotKinds.get(`${task.task_id}/${slot.ordinal}`);
   }));
+  currentRecord.line_basis_summary = null;
+  syncLocalFrameStateSummary();
 }
 
-function pushHistory() {
-  history.push(geometrySnapshot());
+function pushHistory(snapshot = geometrySnapshot()) {
+  history.push(snapshot);
   if (history.length > 80) history.shift();
   future = [];
   updateControls();
@@ -634,6 +1115,7 @@ function markDirty() {
   if (currentRecord?.state === "user_confirmed") return;
   const wasDirty = dirty;
   dirty = true;
+  currentRecord.evaluation_role_summary = null;
   editGeneration += 1;
   if (!wasDirty) {
     currentRecord.reviewed_task_ids = [];
@@ -703,31 +1185,61 @@ function updateIndexItemState(state) {
   if (target) {
     target.state = state;
     target.reviewed_task_ids = [...currentRecord.reviewed_task_ids];
+    target.line_basis_summary = currentRecord.line_basis_summary;
+    target.frame_state_summary = currentRecord.frame_state_summary;
+    target.evaluation_role_summary = currentRecord.evaluation_role_summary;
+    target.refinement_summary = currentRecord.diagnostics?.refinement
+      ? {
+          refinement_revision: currentRecord.diagnostics.refinement.refinement_revision,
+          moved_line_count: currentRecord.diagnostics.refinement.moved_line_count,
+          retained_line_count: currentRecord.diagnostics.refinement.retained_line_count,
+          moved_line_ids: currentRecord.diagnostics.refinement.moved_line_ids
+        }
+      : null;
   }
+  currentItem.line_basis_summary = currentRecord.line_basis_summary;
+  currentItem.frame_state_summary = currentRecord.frame_state_summary;
+  currentItem.evaluation_role_summary = currentRecord.evaluation_role_summary;
   indexData.states = {};
   for (const item of indexData.items) indexData.states[item.state] = (indexData.states[item.state] || 0) + 1;
+  indexData.basis_states = {};
+  for (const item of indexData.items) {
+    const basisStatus = item.line_basis_summary?.status;
+    if (basisStatus) indexData.basis_states[basisStatus] = (indexData.basis_states[basisStatus] || 0) + 1;
+  }
+  indexData.frame_states = {};
+  for (const item of indexData.items) {
+    const frameStatus = item.frame_state_summary?.status;
+    if (frameStatus) indexData.frame_states[frameStatus] = (indexData.frame_states[frameStatus] || 0) + 1;
+  }
+  indexData.evaluation_roles = {};
+  for (const item of indexData.items) {
+    const sourceRole = item.evaluation_role_summary?.source_role;
+    if (sourceRole) indexData.evaluation_roles[sourceRole] = (indexData.evaluation_roles[sourceRole] || 0) + 1;
+  }
   renderIndex();
 }
 
-function selectLine(identity, endpoint = null) {
+function selectLine(identity) {
   selectedLineId = identity;
-  selectedEndpoint = endpoint;
   renderGeometry();
+  renderDiagnostics();
   updateControls();
 }
 
 function changeLineReviewBasis() {
   const line = lineById(selectedLineId);
-  const entry = line
-    ? activeLineEntries().find((item) => item.line.line_id === line.line_id)
-    : null;
-  if (!line || entry?.family !== "boundary" || currentRecord.state === "user_confirmed") return;
+  if (!line || currentRecord.state === "user_confirmed") return;
   const next = elements.lineReviewBasisSelect.value;
   if (line.review_basis === next) return;
   pushHistory();
   line.review_basis = next;
+  currentRecord.line_basis_summary = null;
   markDirty();
   renderGeometry();
+  renderBatchClassification();
+  renderReferenceSummary();
+  renderDiagnostics();
   updateControls();
 }
 
@@ -739,18 +1251,38 @@ function changeFrameSelection() {
 
 function changeFrameSlotKind() {
   if (!currentRecord || currentRecord.state === "user_confirmed" || !selectedFrameKey) return;
-  const frame = sourceReferenceFrames().find((item) => item.key === selectedFrameKey);
+  const frame = sourcePhysicalFrames().find((item) => item.key === selectedFrameKey);
   if (!frame) return;
   const next = elements.frameSlotKindSelect.value;
   if (frame.assignments.every((item) => item.slotKind === next)) return;
+  const snapshot = geometrySnapshot();
+  const previousLineBasisSummary = currentRecord.line_basis_summary;
+  const previousFrameStateSummary = currentRecord.frame_state_summary;
   pushHistory();
   const taskById = new Map(currentRecord.tasks.map((task) => [task.task_id, task]));
   for (const assignment of frame.assignments) {
     taskById.get(assignment.taskId).slots[assignment.ordinal - 1].slot_kind = next;
   }
+  const blockingMessage = frameGeometryBlockingMessage();
+  if (blockingMessage) {
+    replaceGeometryFromSnapshot(snapshot);
+    currentRecord.line_basis_summary = previousLineBasisSummary;
+    currentRecord.frame_state_summary = previousFrameStateSummary;
+    history.pop();
+    renderGeometry();
+    renderFrameControls();
+    renderDiagnostics();
+    updateControls();
+    showToast(blockingMessage, true);
+    return;
+  }
+  currentRecord.line_basis_summary = null;
+  syncLocalFrameStateSummary();
   markDirty();
   renderGeometry();
+  renderReferenceSummary();
   renderFrameControls();
+  renderAdjacencyRelations();
   renderDiagnostics();
   updateControls();
 }
@@ -766,25 +1298,25 @@ function clampPoint(point) {
   return [Math.max(0, Math.min(extent.width - 1, point[0])), Math.max(0, Math.min(extent.height - 1, point[1]))];
 }
 
+function clampEditableLinePoint(point) {
+  const extent = currentRecord.source.canonical_extent;
+  const margin = Math.max(64, Math.min(extent.width, extent.height));
+  return [
+    Math.max(-margin, Math.min(extent.width - 1 + margin, point[0])),
+    Math.max(-margin, Math.min(extent.height - 1 + margin, point[1]))
+  ];
+}
+
 function startLineDrag(event, identity) {
   if (currentRecord.state === "user_confirmed") return;
   event.preventDefault(); event.stopPropagation();
-  selectLine(identity, null);
+  selectLine(identity);
   pushHistory();
   const line = lineById(identity);
   const start = screenToSvg(event);
   const [[x1, y1], [x2, y2]] = line.points_display;
   const length = Math.hypot(x2 - x1, y2 - y1) || 1;
-  drag = {mode: "line", identity, start, original: line.points_display.map((point) => [...point]), normal: [-(y2 - y1) / length, (x2 - x1) / length]};
-  elements.annotationSvg.setPointerCapture(event.pointerId);
-}
-
-function startEndpointDrag(event, identity, endpoint) {
-  if (currentRecord.state === "user_confirmed") return;
-  event.preventDefault(); event.stopPropagation();
-  selectLine(identity, endpoint);
-  pushHistory();
-  drag = {mode: "endpoint", identity, endpoint};
+  drag = {mode: "line", identity, start, original: line.points_display.map((point) => [...point]), normal: [-(y2 - y1) / length, (x2 - x1) / length], blockingMessage: null, changed: false};
   elements.annotationSvg.setPointerCapture(event.pointerId);
 }
 
@@ -804,28 +1336,42 @@ function handlePointerMove(event) {
     return;
   }
   const line = lineById(drag.identity);
-  if (drag.mode === "endpoint") {
-    line.points_display[drag.endpoint] = clampPoint([point.x, point.y]);
-  } else {
-    const delta = [point.x - drag.start.x, point.y - drag.start.y];
-    const amount = delta[0] * drag.normal[0] + delta[1] * drag.normal[1];
-    line.points_display = drag.original.map((original) => clampPoint([original[0] + amount * drag.normal[0], original[1] + amount * drag.normal[1]]));
+  const delta = [point.x - drag.start.x, point.y - drag.start.y];
+  const amount = delta[0] * drag.normal[0] + delta[1] * drag.normal[1];
+  const candidate = drag.original.map((original) => clampEditableLinePoint([
+    original[0] + amount * drag.normal[0],
+    original[1] + amount * drag.normal[1]
+  ]));
+  const result = applyConstrainedLinePoints(line, candidate);
+  drag.blockingMessage = result.message;
+  if (!result.accepted) {
+    return;
   }
+  drag.changed = true;
   markDirty();
   renderGeometry();
+  renderAdjacencyRelations();
+  renderDiagnostics();
   updateControls();
 }
 
 function finishDrag(event) {
+  const blockingMessage = drag?.blockingMessage;
+  const discardUnusedHistory = Boolean(drag?.mode === "line" && !drag.changed);
   if (drag) {
     try { elements.annotationSvg.releasePointerCapture(event.pointerId); } catch (_) { /* no-op */ }
   }
   drag = null;
+  if (discardUnusedHistory && history.length) {
+    history.pop();
+    updateControls();
+  }
+  if (blockingMessage) showToast(blockingMessage, true);
 }
 
 function startPan(event) {
-  if (!currentRecord || event.target.closest(".annotation-line,.endpoint")) return;
-  selectedLineId = null; selectedEndpoint = null;
+  if (!currentRecord || event.target.closest(".annotation-line")) return;
+  selectedLineId = null;
   renderGeometry();
   drag = {mode: "pan", clientX: event.clientX, clientY: event.clientY, viewBox: {...viewBox}};
   elements.annotationSvg.setPointerCapture(event.pointerId);
@@ -834,14 +1380,19 @@ function startPan(event) {
 function nudge(dx, dy, multiplier = 1) {
   const line = lineById(selectedLineId);
   if (!line || currentRecord.state === "user_confirmed") return;
-  pushHistory();
-  if (selectedEndpoint !== null) {
-    const point = line.points_display[selectedEndpoint];
-    line.points_display[selectedEndpoint] = clampPoint([point[0] + dx * multiplier, point[1] + dy * multiplier]);
-  } else {
-    line.points_display = line.points_display.map((point) => clampPoint([point[0] + dx * multiplier, point[1] + dy * multiplier]));
+  const snapshot = geometrySnapshot();
+  const candidate = line.points_display.map((point) => clampEditableLinePoint([
+    point[0] + dx * multiplier,
+    point[1] + dy * multiplier
+  ]));
+  const result = applyConstrainedLinePoints(line, candidate);
+  if (!result.accepted) {
+    updateControls();
+    showToast(result.message, true);
+    return;
   }
-  markDirty(); renderGeometry(); updateControls();
+  pushHistory(snapshot);
+  markDirty(); renderGeometry(); renderAdjacencyRelations(); renderDiagnostics(); updateControls();
 }
 
 function rotateSelectedLine(direction, multiplier = 1) {
@@ -849,13 +1400,11 @@ function rotateSelectedLine(direction, multiplier = 1) {
   if (!line || currentRecord.state === "user_confirmed") return;
   const angle = direction * ROTATION_STEP_DEGREES * multiplier * Math.PI / 180;
   const [first, second] = line.points_display;
-  const pivot = selectedEndpoint === null
-    ? [(first[0] + second[0]) / 2, (first[1] + second[1]) / 2]
-    : [...line.points_display[selectedEndpoint]];
+  const snapshot = geometrySnapshot();
+  const pivot = [(first[0] + second[0]) / 2, (first[1] + second[1]) / 2];
   const cosine = Math.cos(angle);
   const sine = Math.sin(angle);
-  const rotated = line.points_display.map((point, index) => {
-    if (index === selectedEndpoint) return [...pivot];
+  const rotated = line.points_display.map((point) => {
     const dx = point[0] - pivot[0];
     const dy = point[1] - pivot[1];
     return [
@@ -863,9 +1412,14 @@ function rotateSelectedLine(direction, multiplier = 1) {
       pivot[1] + dx * sine + dy * cosine
     ];
   });
-  pushHistory();
-  line.points_display = rotated;
-  markDirty(); renderGeometry(); updateControls();
+  const result = applyConstrainedLinePoints(line, rotated.map(clampEditableLinePoint));
+  if (!result.accepted) {
+    updateControls();
+    showToast(result.message, true);
+    return;
+  }
+  pushHistory(snapshot);
+  markDirty(); renderGeometry(); renderAdjacencyRelations(); renderDiagnostics(); updateControls();
 }
 
 function resetView() {
@@ -1008,7 +1562,7 @@ function setLoupeMaximized(maximized, reload = true) {
   elements.maximizeLoupeButton.textContent = next ? "退出审阅" : "完整高度审阅";
   elements.maximizeLoupeButton.title = next ? "退出完整高度审阅（F 或 Esc）" : "完整高度审阅（F）";
   elements.loupeHelp.textContent = next
-    ? "共享短轴 H 占可用高度约 94%。洋红=start，橙色=end，双色虚线=start/end 接触边；彩色轮廓=各个有内容 reference 的 Frame，空曝光 slot 不画边界。点击线可选中并用方向键或 [ ] 修改；点击空白处沿胶片长轴移动。按 F 或 Esc 退出。"
+    ? "共享短轴 H 占可用高度约 94%。洋红=start，橙色=end，双色虚线=start/end 接触边；彩色轮廓=各个有内容 reference 的 Frame，空曝光 slot 不画边界。点击线后直接用方向键平移整线或用 [ ] 绕中点旋转；正常 Frame 将被阻止越出 TIFF。点击空白处沿胶片长轴移动。按 F 或 Esc 退出。"
     : "局部图直接来自原 TIFF 像素。用它检查线是否安全贴合物理边缘；按 F 进入完整高度审阅。";
   renderLoupeGeometry();
   if (reload && lastPointer) requestAnimationFrame(() => loadLoupe(lastPointer));
@@ -1076,7 +1630,7 @@ async function loadLoupe(point) {
 function selectLoupeLine(event, identity) {
   event.preventDefault();
   event.stopPropagation();
-  selectLine(identity, null);
+  selectLine(identity);
   elements.loupeSvg.focus({preventScroll: true});
 }
 
@@ -1084,13 +1638,14 @@ function renderLoupeGeometry() {
   elements.loupePolygonLayer.replaceChildren();
   elements.loupeLineLayer.replaceChildren();
   if (!currentRecord) return;
+  const view = elements.loupeSvg.viewBox.baseVal;
+  const bounds = elements.loupeSvg.getBoundingClientRect();
+  const viewScale = Math.max(
+    view.width / Math.max(1, bounds.width),
+    view.height / Math.max(1, bounds.height)
+  );
   if (loupeMaximized) {
-    const view = elements.loupeSvg.viewBox.baseVal;
-    const bounds = elements.loupeSvg.getBoundingClientRect();
-    const labelScale = Math.max(
-      view.width / Math.max(1, bounds.width),
-      view.height / Math.max(1, bounds.height)
-    );
+    const labelScale = viewScale;
     sourceReferenceFrames().forEach((frame) => {
       const polygon = svgElement("polygon", {
         points: frame.points.map((point) => `${point[0]},${point[1]}`).join(" "),
@@ -1098,7 +1653,7 @@ function renderLoupeGeometry() {
         "data-frame-ordinal": frame.sourceOrdinal
       });
       const title = svgElement("title");
-      title.textContent = `Frame ${frame.sourceOrdinal} · ${frame.assignments.map((item) => `${item.sampleId}#${item.ordinal}`).join(" / ")}`;
+      title.textContent = `Frame ${frame.sourceOrdinal} · ${frame.assignments.map((item) => `${item.sampleId}#${item.ordinal}`).join(" / ")}${frame.slotKind === "source_truncated" ? " · 源截断：显示 TIFF 内可用交集" : ""}`;
       polygon.appendChild(title);
       elements.loupePolygonLayer.appendChild(polygon);
       const center = frame.points.reduce(
@@ -1138,6 +1693,7 @@ function renderLoupeGeometry() {
     for (const variant of visibleStrokeVariants(entry, selected)) {
       const classes = ["loupe-annotation-line", entry.family, entry.role];
       if (entry.line.review_basis === "human_width_estimate") classes.push("estimated");
+      if (["unclassified", "unresolved_red_stroke"].includes(entry.line.review_basis)) classes.push("unclassified");
       if (selected) classes.push("selected");
       if (variant) classes.push(variant);
       const visibleLine = svgElement("line", {
@@ -1210,6 +1766,7 @@ async function nextUnfinished() {
 elements.searchInput.addEventListener("input", renderIndex);
 elements.formatFilter.addEventListener("change", renderIndex);
 elements.stateFilter.addEventListener("change", renderIndex);
+elements.roleFilter.addEventListener("change", renderIndex);
 elements.nextButton.addEventListener("click", nextUnfinished);
 elements.sourceReviewed.addEventListener("change", toggleSourceReview);
 elements.confirmButton.addEventListener("click", openConfirmation);
@@ -1219,6 +1776,13 @@ elements.redoButton.addEventListener("click", redo);
 elements.resetViewButton.addEventListener("click", resetView);
 elements.maximizeLoupeButton.addEventListener("click", () => setLoupeMaximized(!loupeMaximized));
 elements.lineReviewBasisSelect.addEventListener("change", changeLineReviewBasis);
+elements.selectUnclassifiedLinesButton.addEventListener("click", () => selectBatchLines(
+  (entry) => ["unclassified", "unresolved_red_stroke"].includes(entry.line.review_basis)
+));
+elements.selectAllLinesButton.addEventListener("click", () => selectBatchLines(() => true));
+elements.clearLineSelectionButton.addEventListener("click", () => selectBatchLines(() => false));
+elements.batchReviewBasisSelect.addEventListener("change", updateControls);
+elements.applyBatchReviewBasisButton.addEventListener("click", applyBatchReviewBasis);
 elements.frameSelect.addEventListener("change", changeFrameSelection);
 elements.frameSlotKindSelect.addEventListener("change", changeFrameSlotKind);
 elements.annotationSvg.addEventListener("pointerdown", startPan);

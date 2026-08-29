@@ -11,7 +11,10 @@ from typing import Iterable, Sequence
 
 from tools.manual_annotation.model import (
     BASELINE_SCHEMA,
+    EVALUATION_ROLE_CONTRACT,
+    AnnotationError,
     canonical_record_sha256,
+    evaluation_task_role,
 )
 
 from .report_validation import validate_current_report_record
@@ -27,8 +30,7 @@ from .gold_geometry import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 GOLD_COHORT_PATH = Path(__file__).with_name("cohorts") / "gold_accuracy.jsonl"
-EXPECTED_SOURCE_COUNT = 9
-EXPECTED_TASK_COUNT = 9
+GOLD_COHORT_SCHEMA = "x5crop_gold_accuracy_cohort_v6"
 CONFIRMED_GEOMETRY_KEYS = frozenset(
     {
         "baseline_schema",
@@ -49,11 +51,46 @@ CONFIRMED_GEOMETRY_KEYS = frozenset(
         "boundary_pool",
         "slots",
         "adjacencies",
+        "evaluation_role",
         "frames",
         "confirmed_review_artifact",
         "confirmed_review_artifact_sha256",
     }
 )
+
+
+def _validate_evaluation_role(record: dict[str, object]) -> None:
+    """Reject a cohort role that disagrees with its frozen human evidence."""
+    sample_id = str(record.get("sample_id", ""))
+    geometry = record.get("confirmed_geometry")
+    if not isinstance(geometry, dict):
+        raise ValueError(f"gold evaluation role is invalid: {sample_id}")
+    task = {
+        "task_id": sample_id,
+        "sample_id": sample_id,
+        "count": geometry.get("count"),
+        "slots": geometry.get("slots"),
+        "adjacencies": geometry.get("adjacencies"),
+    }
+    try:
+        derived = evaluation_task_role(
+            format_id=str(geometry["format_id"]),
+            shared_edges=geometry["shared_edges"],
+            boundary_pool=geometry["boundary_pool"],
+            task=task,
+        )
+    except (AnnotationError, KeyError, TypeError, ValueError) as error:
+        raise ValueError(f"gold evaluation role is invalid: {sample_id}") from error
+    expected = {
+        "contract": EVALUATION_ROLE_CONTRACT,
+        "cohort_role": derived["cohort_role"],
+        "reasons": derived["reasons"],
+    }
+    if (
+        geometry.get("evaluation_role") != expected
+        or record.get("cohort_role") != derived["cohort_role"]
+    ):
+        raise ValueError(f"gold evaluation role is invalid: {sample_id}")
 
 
 def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
@@ -63,11 +100,12 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
         for line in GOLD_COHORT_PATH.read_text(encoding="utf-8").splitlines()
         if line.strip()
     )
-    if len(records) != EXPECTED_SOURCE_COUNT:
-        raise ValueError("gold accuracy cohort must contain exactly nine sources")
+    if not records:
+        raise ValueError(
+            "gold accuracy calibration is incomplete: no current user-confirmed sources"
+        )
     project_root = PROJECT_ROOT.resolve()
     sample_ids: set[str] = set()
-    task_count = 0
     for record in records:
         expected_keys = {
             "cohort_schema",
@@ -83,7 +121,6 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
             "acceptance_baseline_schema",
             "geometry_digest",
             "confirmed_geometry",
-            "confirmed_geometry_slot_count",
         }
         sample_id = str(record.get("sample_id", ""))
         relative = Path(str(record.get("source_relative_path", "")))
@@ -92,7 +129,7 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
         count = record.get("count")
         if (
             set(record) != expected_keys
-            or record.get("cohort_schema") != "x5crop_gold_accuracy_cohort_v5"
+            or record.get("cohort_schema") != GOLD_COHORT_SCHEMA
             or not sample_id
             or sample_id in sample_ids
             or record.get("validation_role") != "gold_accuracy_blocking"
@@ -129,14 +166,10 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
             or not isinstance(geometry.get("slots"), list)
             or len(geometry["slots"]) != count
             or not isinstance(geometry.get("frames"), list)
-            or len(geometry.get("frames", ()))
-            != int(record.get("confirmed_geometry_slot_count", 0))
         ):
             raise ValueError(f"gold geometry is invalid: {sample_id}")
+        _validate_evaluation_role(record)
         sample_ids.add(sample_id)
-        task_count += 1
-    if task_count != EXPECTED_TASK_COUNT:
-        raise ValueError("gold accuracy cohort must contain exactly nine tasks")
     return records
 
 
@@ -248,10 +281,14 @@ def run_accuracy(records: Iterable[dict[str, object]]) -> tuple[int, int]:
 def main(argv: Sequence[str] | None = None) -> int:
     if argv:
         raise SystemExit("accuracy verifier takes no arguments")
-    records = validate_gold_source_identities()
-    passed, approved = run_accuracy(records)
+    try:
+        records = validate_gold_source_identities()
+        passed, approved = run_accuracy(records)
+    except ValueError as error:
+        print(f"gold accuracy: FAIL: {error}", file=sys.stderr)
+        return 1
     print(
-        f"gold accuracy: {passed}/{EXPECTED_TASK_COUNT} safe; "
+        f"gold accuracy: {passed}/{len(records)} safe; "
         f"approved={approved}"
     )
     return 0

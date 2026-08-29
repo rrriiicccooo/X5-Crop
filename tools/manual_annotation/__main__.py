@@ -26,7 +26,14 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "command",
         nargs="?",
-        choices=("start", "prepare", "serve", "audit", "reconcile-context"),
+        choices=(
+            "start",
+            "prepare",
+            "serve",
+            "audit",
+            "reconcile-context",
+            "refine",
+        ),
         default="start",
         help="start prepares missing proposals and opens the annotator (default)",
     )
@@ -53,9 +60,9 @@ def _parser() -> argparse.ArgumentParser:
         help="replace only existing untouched machine proposals; never replaces human work",
     )
     parser.add_argument(
-        "--include-confirmed",
+        "--dry-run",
         action="store_true",
-        help="allow explicit review-context metadata corrections in frozen records",
+        help="evaluate refinement without changing annotation records",
     )
     parser.add_argument(
         "--repository-root",
@@ -81,6 +88,20 @@ def _progress(
     print(f"[{index:03d}/{total:03d}] {identities}: {state}", flush=True)
 
 
+def _refinement_progress(
+    index: int,
+    total: int,
+    members: list[dict[str, object]],
+    result: dict[str, object],
+) -> None:
+    identities = "/".join(str(row["sample_id"]) for row in members)
+    print(
+        f"[{index:03d}/{total:03d}] {identities}: {result['status']} · "
+        f"moved={result['moved_line_count']} · retained={result['retained_line_count']}",
+        flush=True,
+    )
+
+
 def _prepare(workspace: object, arguments: argparse.Namespace) -> None:
     counts = workspace.prepare(
         identities=arguments.sample_ids,
@@ -88,9 +109,8 @@ def _prepare(workspace: object, arguments: argparse.Namespace) -> None:
         progress=_progress,
     )
     print(
-        "Prepared {prepared}; existing {existing}; imported confirmed {confirmed_imported}; "
-        "recovered red drafts {red_drafts}; normalized shared source references "
-        "{source_references_normalized}.".format(**counts),
+        "Prepared {prepared}; existing {existing}; recovered red drafts "
+        "{red_drafts}.".format(**counts),
         flush=True,
     )
 
@@ -145,11 +165,27 @@ def main(argv: list[str] | None = None) -> int:
         if arguments.command == "reconcile-context":
             counts = workspace.reconcile_review_context(
                 identities=arguments.sample_ids,
-                include_confirmed=arguments.include_confirmed,
             )
             print(
                 "Reconciled {changed_lines} line bases and {changed_slots} slot kinds across "
                 "{changed_sources} sources.".format(**counts)
+            )
+        if arguments.command == "refine":
+            counts = workspace.refine(
+                identities=arguments.sample_ids,
+                dry_run=arguments.dry_run,
+                progress=_refinement_progress,
+            )
+            print(
+                "Refinement {mode}: {refined_sources}/{sources} evaluated; "
+                "moved {moved_lines} lines; retained {retained_lines}; "
+                "existing {unchanged_existing}; human-modified skipped "
+                "{skipped_modified_after_refinement}; confirmed skipped "
+                "{skipped_confirmed}.".format(
+                    mode="dry run" if counts["dry_run"] else "applied",
+                    **counts,
+                ),
+                flush=True,
             )
         return 0
     except (RuntimeError, ValueError, OSError) as error:

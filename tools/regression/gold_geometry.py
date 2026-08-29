@@ -10,7 +10,7 @@ from x5crop.detection.photo_geometry.model import (
     PHOTO_BOUNDARY_MEASUREMENT_SPEC,
 )
 from x5crop.formats import OUTPUT_PROTECTION_SPEC
-from tools.manual_annotation.model import LINE_REVIEW_BASES
+from tools.manual_annotation.model import CONFIRMABLE_LINE_REVIEW_BASES
 
 
 GOLD_ACCEPTANCE_CONTRACT = (
@@ -29,6 +29,8 @@ NON_BLOCKING_OUTWARD_BUDGET_REVIEW_BASES = frozenset(
 class _FrameAccuracySides:
     inward_blocking: frozenset[str]
     outward_budget_blocking: frozenset[str]
+    sequence_axis: tuple[float, float]
+    cross_axis: tuple[float, float]
 
 
 def _line_blocking_permissions(
@@ -39,11 +41,78 @@ def _line_blocking_permissions(
     if not isinstance(line, dict):
         raise ValueError(f"{name} is malformed")
     review_basis = line.get("review_basis")
-    if not isinstance(review_basis, str) or review_basis not in LINE_REVIEW_BASES:
+    if (
+        not isinstance(review_basis, str)
+        or review_basis not in CONFIRMABLE_LINE_REVIEW_BASES
+    ):
         raise ValueError(f"{name} review basis is invalid")
     return (
         review_basis not in NON_BLOCKING_INWARD_REVIEW_BASES,
         review_basis not in NON_BLOCKING_OUTWARD_BUDGET_REVIEW_BASES,
+    )
+
+
+def _line_axis(line: dict[str, object], *, name: str) -> tuple[float, float]:
+    points = line.get("points_raw")
+    if (
+        not isinstance(points, list)
+        or len(points) != 2
+        or any(not isinstance(point, list) or len(point) != 2 for point in points)
+    ):
+        raise ValueError(f"{name} points are malformed")
+    coordinates = tuple(
+        tuple(float(value) for value in point)
+        for point in points
+    )
+    if any(not math.isfinite(value) for point in coordinates for value in point):
+        raise ValueError(f"{name} points are malformed")
+    return _unit_vector(
+        coordinates[1][0] - coordinates[0][0],
+        coordinates[1][1] - coordinates[0][1],
+    )
+
+
+def _line_midpoint(line: dict[str, object], *, name: str) -> tuple[float, float]:
+    points = line.get("points_raw")
+    if (
+        not isinstance(points, list)
+        or len(points) != 2
+        or any(not isinstance(point, list) or len(point) != 2 for point in points)
+    ):
+        raise ValueError(f"{name} points are malformed")
+    return (
+        (float(points[0][0]) + float(points[1][0])) / 2.0,
+        (float(points[0][1]) + float(points[1][1])) / 2.0,
+    )
+
+
+def _mean_line_axis(
+    lines: Sequence[dict[str, object]],
+    *,
+    name: str,
+) -> tuple[float, float]:
+    axes = [_line_axis(line, name=name) for line in lines]
+    reference = axes[0]
+    aligned = [
+        axis
+        if axis[0] * reference[0] + axis[1] * reference[1] >= 0.0
+        else (-axis[0], -axis[1])
+        for axis in axes
+    ]
+    return _unit_vector(
+        sum(axis[0] for axis in aligned),
+        sum(axis[1] for axis in aligned),
+    )
+
+
+def _orient_axis(
+    axis: tuple[float, float],
+    toward: tuple[float, float],
+) -> tuple[float, float]:
+    return (
+        axis
+        if axis[0] * toward[0] + axis[1] * toward[1] >= 0.0
+        else (-axis[0], -axis[1])
     )
 
 
@@ -103,6 +172,16 @@ def _accuracy_sides_by_frame(
             cross_inward.add(side)
         if blocks_outward_budget:
             cross_outward_budget.add(side)
+    shared_sequence_axis = _mean_line_axis(
+        shared_edges,
+        name="gold shared edge",
+    )
+    low_midpoint = _line_midpoint(shared_edges[0], name="gold cross_low")
+    high_midpoint = _line_midpoint(shared_edges[1], name="gold cross_high")
+    cross_toward = (
+        high_midpoint[0] - low_midpoint[0],
+        high_midpoint[1] - low_midpoint[1],
+    )
 
     sides_by_frame: list[_FrameAccuracySides] = []
     for frame in frames:
@@ -125,6 +204,30 @@ def _accuracy_sides_by_frame(
             or end_id not in pool_by_id
         ):
             raise ValueError("gold frame references an unknown boundary")
+        start_line = pool_by_id[start_id]
+        end_line = pool_by_id[end_id]
+        start_midpoint = _line_midpoint(
+            start_line,
+            name=f"gold frame {frame_index} sequence_start",
+        )
+        end_midpoint = _line_midpoint(
+            end_line,
+            name=f"gold frame {frame_index} sequence_end",
+        )
+        sequence_axis = _orient_axis(
+            shared_sequence_axis,
+            (
+                end_midpoint[0] - start_midpoint[0],
+                end_midpoint[1] - start_midpoint[1],
+            ),
+        )
+        cross_axis = _orient_axis(
+            _mean_line_axis(
+                (start_line, end_line),
+                name=f"gold frame {frame_index} long boundary",
+            ),
+            cross_toward,
+        )
         inward_blocking = set(cross_inward)
         outward_budget_blocking = set(cross_outward_budget)
         for side, line_id in (
@@ -143,6 +246,8 @@ def _accuracy_sides_by_frame(
             _FrameAccuracySides(
                 inward_blocking=frozenset(inward_blocking),
                 outward_budget_blocking=frozenset(outward_budget_blocking),
+                sequence_axis=sequence_axis,
+                cross_axis=cross_axis,
             )
         )
     return tuple(sides_by_frame)
@@ -310,18 +415,22 @@ def _assert_direct_use_budget(
     output: Sequence[Sequence[float]],
     strip_orientation: str,
     outward_budget_blocking_sides: frozenset[str] = FRAME_SIDES,
+    *,
+    sequence_axis: tuple[float, float] | None = None,
+    cross_axis: tuple[float, float] | None = None,
 ) -> None:
-    horizontal = strip_orientation == "horizontal"
-    sequence_axis = _mean_edge_axis(
-        gold,
-        (0, 1) if horizontal else (0, 3),
-        (3, 2) if horizontal else (1, 2),
-    )
-    cross_axis = _mean_edge_axis(
-        gold,
-        (0, 3) if horizontal else (0, 1),
-        (1, 2) if horizontal else (3, 2),
-    )
+    if sequence_axis is None or cross_axis is None:
+        horizontal = strip_orientation == "horizontal"
+        sequence_axis = _mean_edge_axis(
+            gold,
+            (0, 1) if horizontal else (0, 3),
+            (3, 2) if horizontal else (1, 2),
+        )
+        cross_axis = _mean_edge_axis(
+            gold,
+            (0, 3) if horizontal else (0, 1),
+            (1, 2) if horizontal else (3, 2),
+        )
     gold_sequence = _projection_bounds(gold, sequence_axis)
     output_sequence = _projection_bounds(output, sequence_axis)
     gold_cross = _projection_bounds(gold, cross_axis)
@@ -405,6 +514,63 @@ def ordered_gold_mapping(
     return tuple(mapping)
 
 
+def _slot_aware_gold_mapping(
+    gold: dict[str, object],
+    output_geometries: Sequence[dict[str, object]],
+    frame_inward_blocking_sides: Sequence[frozenset[str]],
+) -> tuple[int, ...]:
+    """Map referenced Frames to their explicit slot outputs, retaining blank slots."""
+    slots = gold.get("slots")
+    frames = gold.get("frames")
+    strip_orientation = str(gold.get("strip_orientation", ""))
+    if (
+        not isinstance(slots, list)
+        or not isinstance(frames, list)
+        or len(output_geometries) != len(slots)
+        or len(frame_inward_blocking_sides) != len(frames)
+        or strip_orientation not in {"horizontal", "vertical"}
+    ):
+        return ()
+    referenced_ordinals = [
+        slot.get("ordinal")
+        for slot in slots
+        if isinstance(slot, dict)
+        and isinstance(slot.get("reference_geometry"), dict)
+        and slot["reference_geometry"].get("kind") == "boundary_pair"
+    ]
+    frame_ordinals = [
+        frame.get("frame_index") if isinstance(frame, dict) else None
+        for frame in frames
+    ]
+    if frame_ordinals != referenced_ordinals or any(
+        not isinstance(ordinal, int)
+        or isinstance(ordinal, bool)
+        or ordinal < 1
+        or ordinal > len(slots)
+        for ordinal in frame_ordinals
+    ):
+        return ()
+    mapping: list[int] = []
+    for frame, ordinal, blocking_sides in zip(
+        frames,
+        frame_ordinals,
+        frame_inward_blocking_sides,
+        strict=True,
+    ):
+        if not blocking_sides.issubset(FRAME_SIDES):
+            return ()
+        output_index = ordinal - 1
+        if not _respects_blocking_sides(
+            output_geometries[output_index]["required_source_footprint"],
+            frame["polygon_source_pixel_center_coordinates"],
+            strip_orientation,
+            blocking_sides,
+        ):
+            return ()
+        mapping.append(output_index)
+    return tuple(mapping)
+
+
 def validate_selected_candidate_coverage(
     record: dict[str, object],
     report: dict[str, object],
@@ -422,10 +588,9 @@ def validate_selected_candidate_coverage(
     gold = record["confirmed_geometry"]
     frames = gold["frames"]
     accuracy_sides = _accuracy_sides_by_frame(gold, frames)
-    mapping = ordered_gold_mapping(
-        frames,
+    mapping = _slot_aware_gold_mapping(
+        gold,
         outputs,
-        str(gold["strip_orientation"]),
         tuple(sides.inward_blocking for sides in accuracy_sides),
     )
     if len(mapping) != len(frames):
@@ -444,10 +609,9 @@ def validate_approved_geometry(
     frames = gold["frames"]
     outputs = report["output"]["finalization"]["output_footprints"]
     accuracy_sides = _accuracy_sides_by_frame(gold, frames)
-    mapping = ordered_gold_mapping(
-        frames,
+    mapping = _slot_aware_gold_mapping(
+        gold,
         outputs,
-        str(gold["strip_orientation"]),
         tuple(sides.inward_blocking for sides in accuracy_sides),
     )
     if len(mapping) != len(frames):
@@ -466,4 +630,6 @@ def validate_approved_geometry(
             output_polygon,
             str(gold["strip_orientation"]),
             frame_accuracy_sides.outward_budget_blocking,
+            sequence_axis=frame_accuracy_sides.sequence_axis,
+            cross_axis=frame_accuracy_sides.cross_axis,
         )
