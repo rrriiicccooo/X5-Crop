@@ -202,7 +202,8 @@ def alignment_summary(detection: FinalDetection) -> str:
             if width_inference is None
             else (
                 f"{len(width_inference.supporting_frame_ordinals)}F/"
-                f"{len(width_inference.inferred_role_indices)}R"
+                f"{len(width_inference.inferred_role_indices)}R/"
+                f"{len(width_inference.validation_only_role_indices)}V"
                 if width_inference.state.value == "supported"
                 else width_inference.failure_kind.value.upper()
             )

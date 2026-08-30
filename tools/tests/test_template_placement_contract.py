@@ -143,7 +143,10 @@ class TemplatePlacementContractTest(unittest.TestCase):
         placement = _compose(template, _sequence(template, missing=(1,)), _cross(template, direction=_direction()))
         end = placement.frames[0].end
         self.assertEqual(end.position_source.value, "inferred_sequence")
-        self.assertEqual(end.named_position_inference, "end_from_observed_start_and_fixed_template_width")
+        self.assertEqual(
+            end.named_position_inference,
+            "end_from_observed_start_and_correlated_source_frame_width",
+        )
         self.assertEqual(end.position_observation_ids, (ObservationId("sequence:0"),))
         self.assertAlmostEqual(end.canonical_position_px, 200.0)
 

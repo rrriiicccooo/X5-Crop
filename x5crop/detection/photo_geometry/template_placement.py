@@ -253,7 +253,7 @@ def _sequence_pair(
             full_interval=inferred_interval,
             observation_ids=end.observation_ids,
             source=end.source,
-            inference="end_from_observed_start_and_fixed_template_width",
+            inference="end_from_observed_start_and_correlated_source_frame_width",
             line_evidence=_shift_sequence_line_evidence(
                 start.line_evidence,
                 width * template.direction,
@@ -272,7 +272,7 @@ def _sequence_pair(
             full_interval=inferred_interval,
             observation_ids=start.observation_ids,
             source=start.source,
-            inference="start_from_observed_end_and_fixed_template_width",
+            inference="start_from_observed_end_and_correlated_source_frame_width",
             line_evidence=_shift_sequence_line_evidence(
                 end.line_evidence,
                 -width * template.direction,

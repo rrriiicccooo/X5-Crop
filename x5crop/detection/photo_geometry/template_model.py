@@ -432,6 +432,8 @@ class FrameWidthInferenceAssessment:
     canonical_width_px: float | None
     observation_ids: tuple[ObservationId, ...]
     failure_kind: FrameWidthInferenceFailureKind | None
+    validation_only_role_indices: tuple[int, ...] = ()
+    validation_observation_ids: tuple[ObservationId, ...] = ()
 
     def __post_init__(self) -> None:
         supported = self.state == EvidenceState.SUPPORTED
@@ -449,6 +451,24 @@ class FrameWidthInferenceAssessment:
             or any(
                 not isinstance(identity, ObservationId)
                 for identity in self.observation_ids
+            )
+            or tuple(sorted(set(self.validation_only_role_indices)))
+            != self.validation_only_role_indices
+            or any(index < 0 for index in self.validation_only_role_indices)
+            or any(
+                index not in self.inferred_role_indices
+                for index in self.validation_only_role_indices
+            )
+            or len(set(self.validation_observation_ids))
+            != len(self.validation_observation_ids)
+            or any(
+                not isinstance(identity, ObservationId)
+                for identity in self.validation_observation_ids
+            )
+            or len(self.validation_only_role_indices)
+            != len(self.validation_observation_ids)
+            or not set(self.validation_observation_ids).isdisjoint(
+                self.observation_ids
             )
         ):
             raise ValueError("Frame width inference assessment is invalid")
@@ -470,6 +490,8 @@ class FrameWidthInferenceAssessment:
             or self.canonical_width_px is not None
             or self.supporting_frame_ordinals
             or self.observation_ids
+            or self.validation_only_role_indices
+            or self.validation_observation_ids
             or not isinstance(
                 self.failure_kind,
                 FrameWidthInferenceFailureKind,

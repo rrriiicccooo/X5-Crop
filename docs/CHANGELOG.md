@@ -36,8 +36,10 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   首尾输出 Frame 各至少绑定一条直接长轴角色，不能由片夹位置凭空创造整张外侧 Frame。任一已选直接
   START/END 只有获得 source-wide edge、跨高度联合或同一 separator pair 的直接坐标权限后，才能进入
   最终 placement；两条局部 edge 不能仅因间距与 catalog/source W 相容就互相授权。独立 source W 只推导
-  真正缺失的 opposite，不覆盖已经观察到的 native coordinate；局部孤立 edge 保留为观察并产生 typed
-  review，不能反向参与 lattice 自证。两高度 normal separator 只有在一侧已具完整直接权限时，才可向
+  真正缺失的 opposite，不覆盖已经授权的 native coordinate。无权 `LOCAL_REFINEMENT` 只有在同 Frame
+  opposite 已授权、W 完全来自至少两张其它双边授权 Frame、且 W 走廊中只有该 observation 相容时，才让位
+  于完整相关 W；弱线仅保留为 validation provenance，不能收窄 W、增加 rank 或改变 phase。其它局部孤立
+  edge 保留为观察并产生 typed review，不能反向参与 lattice 自证。两高度 normal separator 只有在一侧已具完整直接权限时，才可向
   同一 adjacency 的另一侧传递一次 `partial_height_separator_pair` 权限；传递不能级联，且最终必须使用
   两侧直接的 `aperture_pair` 短轴域。Enclosing support 或单侧推断 aperture 产生 typed
   `direct_role_aperture_domain_unavailable`，不能把两个不完整机制叠加成批准。
@@ -99,9 +101,10 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   阻断原因；报告同时保存全局未知量 constraint rank、逐 adjacency query/trace/coordinate coverage 与
   直接角色/外侧 Frame observation authority，以及 dark/light material、逐区域状态和冲突。Debug 不重新
   求解，也不把 review candidate 伪装为正式输出。当前 report revision 为
-  `x5crop_v5_template_report_24`，并显式报告三层 source footprint、typed saturation、同一状态 cross
+  `x5crop_v5_template_report_25`，并显式报告三层 source footprint、typed saturation、同一状态 cross
   alignment padding、source W/H、相关
-  Frame-width inference、aspect calibration、raw/guarded ratio、两轴 guard、推导 H、Cross typed root
+  Frame-width inference 及 validation-only role/observation provenance、aspect calibration、raw/guarded
+  ratio、两轴 guard、推导 H、Cross typed root
   failure、pair support mode、family resolution 与预算；不保留旧 schema 兼容路径。
 - 正式 TIFF 保真 16-bit RGB、ICC、resolution、支持的 metadata 与无损压缩，并写
   `Orientation=1`。完整 source 先写 staging，再原子发布到尚不存在的目录。

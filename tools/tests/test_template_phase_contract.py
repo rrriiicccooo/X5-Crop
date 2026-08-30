@@ -718,6 +718,17 @@ class TemplatePhaseContractTest(unittest.TestCase):
                         FiniteInterval(0.0, 540.0),
                     ),
                 ),
+                global_lattice_evidence=GlobalLatticeAuthorityEvidence(
+                    frame_width_observation_ids=tuple(
+                        ObservationId(identity)
+                        for identity in (
+                            "start:1",
+                            "end:1",
+                            "start:2",
+                            "end:2",
+                        )
+                    ),
+                ),
             )
         )
 
@@ -731,6 +742,79 @@ class TemplatePhaseContractTest(unittest.TestCase):
             result.direct_role_binding_authority.unsupported_role_indices,
             (4,),
         )
+
+    def test_local_short_edge_yields_to_correlated_source_width(self) -> None:
+        observations = tuple(
+            replace(
+                self._local_line(identity, coordinate, role),
+                fit_residual_px=(
+                    20.0 if identity == "local:start:3" else 0.0
+                ),
+                polarity=(1 if role == BoundaryRole.START else -1),
+            )
+            for identity, coordinate, role in (
+                ("start:1", 100.0, BoundaryRole.START),
+                ("end:1", 200.0, BoundaryRole.END),
+                ("start:2", 220.0, BoundaryRole.START),
+                ("end:2", 320.0, BoundaryRole.END),
+                ("local:start:3", 340.0, BoundaryRole.START),
+                ("end:3", 440.0, BoundaryRole.END),
+                ("start:4", 460.0, BoundaryRole.START),
+                ("end:4", 560.0, BoundaryRole.END),
+            )
+        )
+        local = observations[4]
+        observations = (
+            *observations[:4],
+            replace(
+                local,
+                trace_coordinates_px=(10, 20),
+                support_fraction=0.34,
+                continuous_support_fraction=0.34,
+            ),
+            *observations[5:],
+        )
+        width_ids = tuple(
+            ObservationId(identity)
+            for identity in ("start:1", "end:1", "start:2", "end:2")
+        )
+
+        result = fit_template_phase_with_local_advance(
+            TemplatePhaseInput(
+                observations=observations,
+                separator_bands=(),
+                template=template(4),
+                scale_px_per_mm=PositiveInterval.exact(100.0),
+                holder_span_px=FiniteInterval(0.0, 600.0),
+                phase_authority_px=FiniteInterval.exact(100.0),
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "local-short-to-source-width",
+                        FiniteInterval(0.0, 600.0),
+                    ),
+                ),
+                global_lattice_evidence=GlobalLatticeAuthorityEvidence(
+                    frame_width_observation_ids=width_ids,
+                    pitch_observation_ids=(ObservationId("end:3"),),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertIsNone(result.best.role_bindings[4])
+        inference = result.best.frame_width_inference
+        assert inference is not None
+        self.assertEqual(result.receipt.inferred_role_count, 1)
+        self.assertEqual(inference.validation_only_role_indices, (4,))
+        self.assertEqual(
+            inference.validation_observation_ids,
+            (ObservationId("local:start:3"),),
+        )
+        authority = result.direct_role_binding_authority
+        assert authority is not None
+        self.assertEqual(authority.state, EvidenceState.SUPPORTED)
+        self.assertNotIn(4, tuple(item.role_index for item in authority.facts))
 
     def test_fixed_width_pair_cannot_self_authorize_two_short_edges(self) -> None:
         observations = tuple(

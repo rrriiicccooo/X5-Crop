@@ -786,6 +786,36 @@ def _apply_final_lattice_contract(
 ) -> PhaseFitResult:
     """Require direct-role, global, and local authority for one placement."""
 
+    preliminary_direct_role_authority = (
+        None
+        if result.best is None or not phase_input.sequence_measurement_sets
+        else assess_direct_role_binding_authority(
+            result.best,
+            phase_input.observations,
+            phase_input.separator_bands,
+            phase_input.sequence_measurement_sets,
+        )
+    )
+    if result.best is not None:
+        assessed_best = apply_correlated_frame_width_inference(
+            result.best,
+            frame_width_observation_ids=(
+                phase_input.global_lattice_evidence
+                .frame_width_observation_ids
+            ),
+            direct_role_authority=preliminary_direct_role_authority,
+            sequence_edges=phase_input.observations,
+        )
+        receipt = replace(
+            result.receipt,
+            inferred_role_count=len(assessed_best.unbound_role_indices),
+        )
+        receipt.validate_bounds()
+        result = replace(
+            result,
+            best=assessed_best,
+            receipt=receipt,
+        )
     direct_role_authority = (
         None
         if result.best is None or not phase_input.sequence_measurement_sets
@@ -909,18 +939,7 @@ def _apply_final_lattice_contract(
             winner_basis=None,
         )
     if result.status == PhaseFitStatus.RESOLVED and result.best is not None:
-        assessed = apply_correlated_frame_width_inference(
-            result.best,
-            frame_width_observation_ids=(
-                phase_input.global_lattice_evidence
-                .frame_width_observation_ids
-            ),
-        )
-        result = replace(
-            result,
-            best=assessed,
-        )
-        width_inference = assessed.frame_width_inference
+        width_inference = result.best.frame_width_inference
         if (
             width_inference is not None
             and width_inference.state != EvidenceState.SUPPORTED

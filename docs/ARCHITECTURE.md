@@ -326,13 +326,18 @@ role = phase
 - Placement、local topology、全局 lattice、逐 adjacency coverage 和两端 Frame authority 全部闭合后，
   至少两张具有独立直接双边的完整 Frame 可以收紧该 source 的共同 W。所有物理相容的完整 Frame 都以
   完整 uncertainty 进入一个保守 hull；非相邻 Frame 同样有效，不挑 dominant subset、不取中位 winner，
-  也不覆盖任何直接边界。若每个仍缺角色的 Frame 都至少有一侧直接边缘，同一份相关 W 可以推导多条
-  opposite；这些推导不是多份独立证据。
+  也不覆盖任何已经取得坐标权限的直接边界。若每个仍缺角色的 Frame 都至少有一侧直接边缘，同一份相关
+  W 可以推导多条 opposite；这些推导不是多份独立证据。一个仅由两高度局部 support 形成、没有直接坐标
+  权限的 `LOCAL_REFINEMENT` 不是应当保留的 native coordinate：当同 Frame 的 opposite 已独立授权、W
+  完全来自至少两张其它双边授权 Frame、W 走廊中只有该 observation 与角色相容时，该局部绑定让位于
+  `opposite + correlated W`。局部 observation 只保留为 validation provenance，不能收窄 W 或增加 rank。
 
 | source W 与缺失角色状态 | 结果 |
 |---|---|
 | 没有缺失角色 | 不需要 W 推断，全部直接 native coordinate 保持不变 |
 | 至少两张完整直接 Frame 闭合共同 W，且每个缺失 Frame 仍有一侧直接边缘 | `supported`；同一相关 W 补齐全部 opposite |
+| 无权 `LOCAL_REFINEMENT`，opposite 已授权，W 来自至少两张其它双边授权 Frame，且 W 走廊中只有该线相容 | 该角色成为 `validation_only`；完整相关 W 推导坐标，记录 role index 与 validation observation ID |
+| 弱线参与 W、opposite 未授权、W 走廊多解，或该线承担 `PHASE_ANCHOR` | 不让位；原 `direct_role_binding_authority_unavailable` 保持 |
 | 任一 Frame 的 START/END 都未观察 | `complete_frame_unobserved` → `frame_width_inference_unavailable` |
 | 缺失 opposite，但不足两张完整直接 Frame 建立共同 W | `common_width_authority_unavailable` → `frame_width_inference_unavailable` |
 
@@ -351,6 +356,7 @@ placement；“观察到了”本身不等于“有权决定裁切”。权限�
 | normal separator 在两个独立高度区域成立，且两侧原子绑定到同一 adjacency，其中一侧已由上述任一完整闭环授权 | 只向另一侧传递一次 `partial_height_separator_pair`；该 placement 还必须具有唯一、两侧直接的 `aperture_pair` 短轴域 |
 | 两高度 separator 的两侧都只有局部 edge | 不能互相授权；`direct_role_binding_authority_unavailable` |
 | 两条局部 edge 的间距只与 catalog 或 source W 相容 | 只能证明尺寸未冲突，不能让两条线互相授予 native coordinate |
+| 无权局部 refinement 满足上方独立 W 让位合同 | 弱线不取得 native coordinate；由已授权 opposite 与完整相关 W 推导该角色 |
 | 只覆盖局部高度，且没有上述任一直接闭环 | `direct_role_binding_authority_unavailable` |
 
 短 edge 仍保留为 observation；失败只撤销它的坐标决定权，不删除像素事实。全局 rank 计算必须排除无权
@@ -359,10 +365,10 @@ placement；“观察到了”本身不等于“有权决定裁切”。权限�
 把同一关系计成另一份独立 rank。它只允许 phase/lattice 保留该 native coordinate；最终 selection 若使用
 `enclosing_support_pair` 或由单侧推断的 aperture，则产生
 `direct_role_aperture_domain_unavailable`。这样不能把不完整的长轴空间支持与近似短轴支撑叠加成自动批准。
-独立闭合的 source W 仍只按上表为缺失 opposite 产生相关推断，不覆盖已经观察到的 native coordinate；
-局部观察与该推断竞争时保持 unresolved。该证明由
-`template_direct_role_authority.py` 唯一拥有，短轴联合条件由 `template_selection.py` 检查；两者都不读取新
-像素，也不按强度选择 winner。
+独立闭合的 source W 只覆盖真正有权限的 native coordinate；上表的 validation-only 局部线不是 competing
+placement，也不能反向收窄 W。其它局部观察与相关 W 不唯一相容时保持 unresolved。直接坐标权限由
+`template_direct_role_authority.py` 唯一拥有，让位与相关 W 推断由 `template_frame_width.py` 唯一拥有，
+短轴联合条件由 `template_selection.py` 检查；三者都不读取新像素，也不按强度选择 winner。
 
 未观察 separator 的正常 adjacency 不是 detector miss 的默认值。它只有同时满足以下条件时，才可使用
 `local_delta = 0` 并由已确定 Grid 补齐 START/END：
@@ -465,7 +471,8 @@ interval 相容时该处重叠才合法，任何其它 adjacency 的意外重叠
 共同 Frame width 的权限也只在 topology 唯一闭合后扩展：若同一份独立证据已经闭合 W，每个至少拥有
 一条直接 START/END 的 Frame 可以用同一相关 W 推导另一侧；多张 Frame 的推导共享一份相关状态，不能
 当成多条独立证据。W 不得凭空生成两侧都未观察到的 Frame、决定 contact/overlap、覆盖直接 native
-coordinate，或把 contact 共用线重复计票。
+coordinate，或把 contact 共用线重复计票。这里的 direct native coordinate 只指已经取得坐标权限的边；
+无权 `LOCAL_REFINEMENT` 仍按第 6 节的 validation-only 合同让位。
 
 该合同按四个独立小机制实现并各自形成检查点：先让 `AdjacencyContinuityObservation` 只提供普通
 separator 的 typed 反证，再分别闭合 contact、overlap，最后运行完整黄金集并单独报告安全 challenge
@@ -796,6 +803,7 @@ Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决
 - theoretical template、role-free observations 与跨高度联合观察的 typed resolution；
 - dark/light separator material、逐区域状态、直接角色权限与 material conflict；
 - `partial_height_separator_pair` 角色数、direct aperture domain 条件与对应 typed Gate；
+- source W proof 的支持 Frame、相关推导角色、validation-only 局部角色及其 observation provenance；
 - 每个 bound role 的 residual 和 normal/measured-advances/unresolved pattern；
 - direct 与 inferred 边界；
 - best、runner 及真正不同之处；
@@ -874,7 +882,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/registered_*.py`、`observations.py`、`separator_*.py` | 一次性 measurement、role-free edge 与 material band |
 | `photo_geometry/cross_height_transition_measurement.py`、`cross_height_edge_support.py` | 三区域弱信号联合测量及其与唯一 direct edge 的单次绑定权限 |
 | `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source W/H extent、scan-scale authority 与不增加 direct provenance 的相关 interval 收紧 |
-| `photo_geometry/template_frame_width.py` | selected placement 后的 source W 校准与相关单侧角色推断 |
+| `photo_geometry/template_frame_width.py` | selected placement 后的 source W 校准、无权局部 refinement 让位与相关单侧角色推断 |
 | `photo_geometry/template_aspect_ratio_model.py`、`template_aspect_ratio.py` | 校准 W/H 比例的 typed authority、相关 H 推断、direct H 对账与预算失败 |
 | `photo_geometry/template_phase*.py`、`template_pitch.py`、`template_residual.py` | phase/ordinal 求解、source pitch 与逐 adjacency 的 direct local advance |
 | `photo_geometry/template_direct_role_authority.py` | 已选直接 START/END 的 native coordinate 权限证明 |

@@ -533,11 +533,15 @@ def _validate_frame_width_inference(value: object) -> None:
         "canonical_width_px",
         "observation_ids",
         "failure_kind",
+        "validation_only_role_indices",
+        "validation_observation_ids",
     }:
         raise ValueError("Frame width inference summary is invalid")
     inferred = value["inferred_role_indices"]
     supporting = value["supporting_frame_ordinals"]
     observation_ids = value["observation_ids"]
+    validation_only = value["validation_only_role_indices"]
+    validation_ids = value["validation_observation_ids"]
     supported = value["state"] == "supported"
     if (
         value["state"] not in {"supported", "unavailable"}
@@ -552,6 +556,16 @@ def _validate_frame_width_inference(value: object) -> None:
             for ordinal in supporting
         )
         or not _valid_ids(observation_ids)
+        or not isinstance(validation_only, list)
+        or validation_only != sorted(set(validation_only))
+        or any(
+            not isinstance(index, int) or index < 0
+            for index in validation_only
+        )
+        or any(index not in inferred for index in validation_only)
+        or not _valid_ids(validation_ids)
+        or len(validation_only) != len(validation_ids)
+        or not set(validation_ids).isdisjoint(observation_ids)
     ):
         raise ValueError("Frame width inference ledger is invalid")
     if supported:
@@ -571,6 +585,8 @@ def _validate_frame_width_inference(value: object) -> None:
     elif (
         supporting
         or observation_ids
+        or validation_only
+        or validation_ids
         or value["width_px"] is not None
         or value["canonical_width_px"] is not None
         or value["failure_kind"]
