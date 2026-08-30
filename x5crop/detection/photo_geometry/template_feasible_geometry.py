@@ -387,13 +387,17 @@ def _direct_sequence_solutions(
 
     frame = placement.frames[frame_index]
     direction = placement.sequence_fit.template.direction
-    width = placement.sequence_fit.template.frame_width_px
     start_direct = (
         frame.start.position_source == PositionSource.OBSERVED_TRANSITION
     )
     end_direct = frame.end.position_source == PositionSource.OBSERVED_TRANSITION
     if not start_direct and not end_direct:
         return None
+    width = (
+        placement.sequence_fit.template.frame_width_px
+        if start_direct and end_direct
+        else placement.sequence_fit.pitch_fit.frame_width_px
+    )
 
     candidates: list[tuple[float, float]] = []
     if start_direct and end_direct:

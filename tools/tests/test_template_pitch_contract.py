@@ -11,12 +11,15 @@ from x5crop.detection.photo_geometry.observation_types import (
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.template_model import (
     PhaseLatticeAuthority,
+    SequenceBindingUse,
+    SequenceRoleBinding,
     TemplateSpec,
 )
 from x5crop.detection.photo_geometry.template_phase import fit_template_phase
 from x5crop.detection.photo_geometry.template_pitch import (
     calibrate_template_source_pitch,
     close_separator_phase_hypothesis,
+    refine_common_frame_width,
 )
 from x5crop.domain import FiniteInterval, ObservationId
 
@@ -101,6 +104,106 @@ def separator(
 
 
 class TemplatePitchContractTest(unittest.TestCase):
+    @staticmethod
+    def _width_binding(
+        name: str,
+        coordinate: float,
+        full: FiniteInterval,
+    ) -> SequenceRoleBinding:
+        return SequenceRoleBinding(
+            use=SequenceBindingUse.LOCAL_REFINEMENT,
+            observation_id=ObservationId(f"width:{name}"),
+            independent_support_id=ObservationId(f"support:{name}"),
+            canonical_position_px=coordinate,
+            fit_position_interval_px=FiniteInterval.exact(coordinate),
+            full_position_interval_px=full,
+            line_evidence=None,
+        )
+
+    def test_two_direct_frames_calibrate_one_common_width_interval(self) -> None:
+        calibration = refine_common_frame_width(
+            (
+                (
+                    self._width_binding("1:start", 10.0, FiniteInterval(9.0, 11.0)),
+                    self._width_binding("1:end", 110.0, FiniteInterval(109.0, 111.0)),
+                ),
+                (
+                    self._width_binding("2:start", 210.0, FiniteInterval(209.0, 211.0)),
+                    self._width_binding("2:end", 311.0, FiniteInterval(310.0, 312.0)),
+                ),
+            ),
+            width_authority=FiniteInterval(96.0, 106.0),
+            direction=1,
+        )
+
+        self.assertIsNotNone(calibration)
+        assert calibration is not None
+        self.assertEqual(calibration.width_px, FiniteInterval(99.0, 102.0))
+        self.assertEqual(calibration.canonical_width_px, 100.5)
+        self.assertEqual(len(calibration.observation_ids), 4)
+
+    def test_two_equal_disjoint_width_groups_remain_unresolved(self) -> None:
+        pairs = []
+        for index, width in enumerate((99.0, 99.0, 104.0, 104.0), start=1):
+            start = float(index * 200)
+            pairs.append(
+                (
+                    self._width_binding(
+                        f"{index}:start",
+                        start,
+                        FiniteInterval(start - 0.25, start + 0.25),
+                    ),
+                    self._width_binding(
+                        f"{index}:end",
+                        start + width,
+                        FiniteInterval(
+                            start + width - 0.25,
+                            start + width + 0.25,
+                        ),
+                    ),
+                )
+            )
+
+        self.assertIsNone(
+            refine_common_frame_width(
+                tuple(pairs),
+                width_authority=FiniteInterval(96.0, 106.0),
+                direction=1,
+            )
+        )
+
+    def test_shared_contact_observation_cannot_calibrate_common_width(self) -> None:
+        shared = self._width_binding(
+            "shared",
+            110.0,
+            FiniteInterval(109.0, 111.0),
+        )
+
+        self.assertIsNone(
+            refine_common_frame_width(
+                (
+                    (
+                        self._width_binding(
+                            "1:start",
+                            10.0,
+                            FiniteInterval(9.0, 11.0),
+                        ),
+                        shared,
+                    ),
+                    (
+                        shared,
+                        self._width_binding(
+                            "2:end",
+                            210.0,
+                            FiniteInterval(209.0, 211.0),
+                        ),
+                    ),
+                ),
+                width_authority=FiniteInterval(96.0, 104.0),
+                direction=1,
+            )
+        )
+
     def test_two_adjacent_same_role_advances_authorize_source_pitch(self) -> None:
         observations = (edge("start:1", 40.0), edge("start:2", 160.0), edge("start:3", 280.0))
         phase = fit_template_phase(observations, template())

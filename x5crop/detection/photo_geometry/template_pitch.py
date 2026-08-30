@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import statistics
 from typing import Sequence
 
 from ...domain import FiniteInterval, ObservationId
@@ -13,6 +14,7 @@ from .interval_math import (
 from .model import BoundaryRole, SPATIAL_SUPPORT_REGION_COUNT
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_model import (
+    SequenceRoleBinding,
     TemplateSpec,
     template_role_refinement_radius_px,
 )
@@ -68,6 +70,135 @@ class TemplatePitchCalibration:
             or self.direct_separator_ids
         ):
             raise ValueError("bounded-out pitch calibration cannot carry authority")
+
+
+@dataclass(frozen=True)
+class FrameWidthCalibration:
+    """One uniquely supported common Frame width from direct boundary pairs."""
+
+    width_px: FiniteInterval
+    canonical_width_px: float
+    observation_ids: tuple[ObservationId, ...]
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.width_px, FiniteInterval)
+            or self.width_px.minimum <= 0.0
+            or not self.width_px.contains(
+                self.canonical_width_px,
+                epsilon=1.0e-9,
+            )
+            or len(self.observation_ids) < 4
+            or len(set(self.observation_ids)) != len(self.observation_ids)
+            or any(
+                not isinstance(item, ObservationId)
+                for item in self.observation_ids
+            )
+        ):
+            raise ValueError("Frame width calibration is invalid")
+
+
+@dataclass(frozen=True)
+class _FrameWidthFact:
+    width_px: FiniteInterval
+    canonical_width_px: float
+    observation_ids: tuple[ObservationId, ObservationId]
+
+
+def refine_common_frame_width(
+    frame_bindings: Sequence[
+        tuple[SequenceRoleBinding | None, SequenceRoleBinding | None]
+    ],
+    *,
+    width_authority: FiniteInterval,
+    direction: int,
+) -> FrameWidthCalibration | None:
+    """Calibrate W only when at least two direct Frames form one interval group.
+
+    The operation is set-based, not scored: every contributing START/END pair
+    must be independent and its full measured width must overlap the physical
+    authority.  Two equally supported but disjoint groups remain unresolved.
+    """
+
+    if direction not in {-1, 1}:
+        raise ValueError("Frame width direction must be -1 or 1")
+    if not isinstance(width_authority, FiniteInterval):
+        raise TypeError("Frame width authority must be a finite interval")
+    facts: list[_FrameWidthFact] = []
+    for start, end in frame_bindings:
+        if (
+            start is None
+            or end is None
+            or start.independent_support_id == end.independent_support_id
+        ):
+            continue
+        if direction > 0:
+            measured = FiniteInterval(
+                end.full_position_interval_px.minimum
+                - start.full_position_interval_px.maximum,
+                end.full_position_interval_px.maximum
+                - start.full_position_interval_px.minimum,
+            )
+            canonical = end.canonical_position_px - start.canonical_position_px
+        else:
+            measured = FiniteInterval(
+                start.full_position_interval_px.minimum
+                - end.full_position_interval_px.maximum,
+                start.full_position_interval_px.maximum
+                - end.full_position_interval_px.minimum,
+            )
+            canonical = start.canonical_position_px - end.canonical_position_px
+        common = _intersect(measured, width_authority)
+        if common is None or not width_authority.contains(
+            canonical,
+            epsilon=1.0e-7,
+        ):
+            continue
+        facts.append(
+            _FrameWidthFact(
+                width_px=common,
+                canonical_width_px=canonical,
+                observation_ids=(start.observation_id, end.observation_id),
+            )
+        )
+    if len(facts) < 2:
+        return None
+    support_groups = {
+        tuple(
+            index
+            for index, fact in enumerate(facts)
+            if fact.width_px.contains(point, epsilon=1.0e-9)
+        )
+        for fact in facts
+        for point in (fact.width_px.minimum, fact.width_px.maximum)
+    }
+    maximum_support = max(map(len, support_groups), default=0)
+    winners = tuple(
+        group for group in support_groups if len(group) == maximum_support
+    )
+    if maximum_support < 2 or len(winners) != 1:
+        return None
+    contributors = winners[0]
+    observation_ids = tuple(
+        identity
+        for index in contributors
+        for identity in facts[index].observation_ids
+    )
+    if len(set(observation_ids)) != len(observation_ids):
+        return None
+    width_px = FiniteInterval(
+        max(facts[index].width_px.minimum for index in contributors),
+        min(facts[index].width_px.maximum for index in contributors),
+    )
+    canonical = statistics.median(
+        facts[index].canonical_width_px for index in contributors
+    )
+    canonical = min(max(canonical, width_px.minimum), width_px.maximum)
+    return FrameWidthCalibration(
+        width_px=width_px,
+        canonical_width_px=canonical,
+        observation_ids=observation_ids,
+    )
 
 
 @dataclass(frozen=True)

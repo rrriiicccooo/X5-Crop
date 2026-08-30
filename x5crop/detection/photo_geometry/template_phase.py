@@ -12,6 +12,7 @@ from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_model import (
     LocalAdvanceRelation,
     SequenceFit,
+    SequenceRoleBinding,
     TemplateSearchReceipt,
     TemplateSpec,
     ordered_template_roles,
@@ -51,6 +52,40 @@ def _intervals_overlap(left: FiniteInterval, right: FiniteInterval) -> bool:
     )
 
 
+def _continuous_role_bindings(
+    left: SequenceFit,
+    right: SequenceFit,
+) -> tuple[SequenceRoleBinding | None, ...] | None:
+    """Union complementary facts without collapsing distinct role evidence."""
+
+    merged: list[SequenceRoleBinding | None] = []
+    for left_binding, right_binding in zip(
+        left.role_bindings,
+        right.role_bindings,
+        strict=True,
+    ):
+        if left_binding is None:
+            merged.append(right_binding)
+        elif right_binding is None:
+            merged.append(left_binding)
+        elif (
+            left_binding.observation_id == right_binding.observation_id
+            or left_binding.independent_support_id
+            == right_binding.independent_support_id
+        ):
+            merged.append(left_binding)
+        else:
+            return None
+    identities = tuple(
+        binding.observation_id
+        for binding in merged
+        if binding is not None
+    )
+    if len(set(identities)) != len(identities):
+        return None
+    return tuple(merged)
+
+
 def _same_continuous_placement(
     left: SequenceFit,
     right: SequenceFit,
@@ -63,26 +98,26 @@ def _same_continuous_placement(
         left_binding,
         right_binding,
     ) -> bool:
-        if _intervals_overlap(left_interval, right_interval):
-            return True
         if left_binding is None or right_binding is None:
-            return False
+            return _intervals_overlap(left_interval, right_interval)
         # Several measured edges can describe the two sides or texture inside
         # one directly observed separator.  Once the ordinal lattice is the
         # same, those alternatives are uncertainty about one role position,
         # not two photo placements.  The connected material identity is the
         # authority for that statement; proximity or edge strength is not.
         return (
-            left_binding.independent_support_id
+            left_binding.observation_id == right_binding.observation_id
+            or left_binding.independent_support_id
             == right_binding.independent_support_id
         )
 
+    merged_bindings = _continuous_role_bindings(left, right)
     return (
         left.template == right.template
         and left.phase_lattice_fit.integer_slot_offset
         == right.phase_lattice_fit.integer_slot_offset
         and left.local_advance_relations == right.local_advance_relations
-        and left.independent_support_ids == right.independent_support_ids
+        and merged_bindings is not None
         and _intervals_overlap(
             left.phase_lattice_fit.absolute_phase_interval_px,
             right.phase_lattice_fit.absolute_phase_interval_px,
@@ -122,6 +157,22 @@ def _merge_continuous_placement(
     right = alternative.fit
     if not _same_continuous_placement(left, right):
         raise ValueError("cannot merge discrete phase placements")
+    role_bindings = _continuous_role_bindings(left, right)
+    if role_bindings is None:
+        raise ValueError("continuous phase bindings cannot be combined")
+    observation_ids = tuple(
+        binding.observation_id
+        for binding in role_bindings
+        if binding is not None
+    )
+    left_direct_count = (
+        left.contradicted_observation_count + len(left.bound_observation_ids)
+    )
+    right_direct_count = (
+        right.contradicted_observation_count + len(right.bound_observation_ids)
+    )
+    if left_direct_count != right_direct_count:
+        raise ValueError("continuous phase fits disagree on registered evidence")
     cycle_interval = _interval_hull(
         left.phase_lattice_fit.cycle_phase_interval_px,
         right.phase_lattice_fit.cycle_phase_interval_px,
@@ -138,6 +189,20 @@ def _merge_continuous_placement(
                 right.phase_lattice_fit.absolute_phase_interval_px,
             ),
         ),
+        pitch_fit=replace(
+            left.pitch_fit,
+            pitch_interval_px=PositiveInterval(
+                min(
+                    left.pitch_fit.pitch_interval_px.minimum,
+                    right.pitch_fit.pitch_interval_px.minimum,
+                ),
+                max(
+                    left.pitch_fit.pitch_interval_px.maximum,
+                    right.pitch_fit.pitch_interval_px.maximum,
+                ),
+            ),
+            observation_ids=observation_ids,
+        ),
         model_role_intervals_px=tuple(
             _interval_hull(left_interval, right_interval)
             for left_interval, right_interval in zip(
@@ -153,6 +218,24 @@ def _merge_continuous_placement(
                 right.model_full_role_intervals_px,
                 strict=True,
             )
+        ),
+        role_bindings=role_bindings,
+        contradicted_observation_count=max(
+            0,
+            left_direct_count - len(observation_ids),
+        ),
+        residual_sum_px=sum(
+            abs(binding.canonical_position_px - canonical)
+            for binding, canonical in zip(
+                role_bindings,
+                left.model_role_positions_px,
+                strict=True,
+            )
+            if binding is not None
+        ),
+        phase_support_coverage=max(
+            left.phase_support_coverage,
+            right.phase_support_coverage,
         ),
     )
     return _BoundFit(

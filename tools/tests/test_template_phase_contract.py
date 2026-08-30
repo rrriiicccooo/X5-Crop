@@ -23,11 +23,13 @@ from x5crop.detection.photo_geometry.template_model import (
     TemplateSpec,
 )
 from x5crop.detection.photo_geometry.template_phase import (
+    _merge_continuous_placement,
     _same_continuous_placement,
     fit_template_phase,
     fit_template_phase_with_local_advance,
 )
 from x5crop.detection.photo_geometry.template_phase_candidates import (
+    _BoundFit,
     _facts,
     _match_roles,
 )
@@ -1308,6 +1310,78 @@ class TemplatePhaseContractTest(unittest.TestCase):
             role_bindings=tuple(disconnected_bindings),
         )
         self.assertFalse(_same_continuous_placement(fit, disconnected))
+
+    def test_complementary_endpoint_facts_merge_into_one_continuous_fit(
+        self,
+    ) -> None:
+        observations = tuple(
+            edge(f"complementary:{index}", coordinate)
+            for index, coordinate in enumerate((10.0, 110.0, 130.0, 230.0))
+        )
+        fit = fit_template_phase(observations, template(2)).best
+        assert fit is not None
+        direct_count = (
+            fit.contradicted_observation_count + len(fit.bound_observation_ids)
+        )
+        left_bindings = list(fit.role_bindings)
+        right_bindings = list(fit.role_bindings)
+        left_bindings[0] = None
+        right_bindings[-1] = None
+        left = replace(
+            fit,
+            role_bindings=tuple(left_bindings),
+            contradicted_observation_count=(
+                direct_count
+                - sum(binding is not None for binding in left_bindings)
+            ),
+            phase_support_coverage=min(
+                fit.phase_support_coverage,
+                len(
+                    {
+                        (index + 1) // 2
+                        for index, binding in enumerate(left_bindings)
+                        if binding is not None
+                    }
+                ),
+            ),
+        )
+        right = replace(
+            fit,
+            role_bindings=tuple(right_bindings),
+            contradicted_observation_count=(
+                direct_count
+                - sum(binding is not None for binding in right_bindings)
+            ),
+            phase_support_coverage=min(
+                fit.phase_support_coverage,
+                len(
+                    {
+                        (index + 1) // 2
+                        for index, binding in enumerate(right_bindings)
+                        if binding is not None
+                    }
+                ),
+            ),
+        )
+
+        self.assertNotEqual(
+            left.independent_support_ids,
+            right.independent_support_ids,
+        )
+        self.assertTrue(_same_continuous_placement(left, right))
+        merged = _merge_continuous_placement(
+            _BoundFit(left, True),
+            _BoundFit(right, True),
+        ).fit
+        self.assertEqual(merged.role_bindings, fit.role_bindings)
+        self.assertEqual(
+            merged.pitch_fit.observation_ids,
+            fit.bound_observation_ids,
+        )
+        self.assertEqual(
+            merged.contradicted_observation_count,
+            fit.contradicted_observation_count,
+        )
 
     def test_local_anomaly_prefix_is_transmitted_once_per_competing_fit(
         self,

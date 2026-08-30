@@ -104,6 +104,37 @@ class TemplateFeasibleGeometryContractTest(unittest.TestCase):
             },
         )
 
+    def test_one_direct_side_projects_only_calibrated_width_states(self) -> None:
+        template = replace(
+            _template(1),
+            frame_width_px=FiniteInterval(96.0, 104.0),
+        )
+        sequence = _sequence(template, missing=(1,))
+        sequence = replace(
+            sequence,
+            pitch_fit=replace(
+                sequence.pitch_fit,
+                frame_width_px=FiniteInterval(99.0, 101.0),
+                canonical_frame_width_px=100.5,
+            ),
+        )
+        placement = _compose(
+            template,
+            sequence,
+            _cross(template, direction=_direction()),
+        )
+
+        projection = project_selected_placement(placement)
+
+        self.assertEqual(
+            self._sequence_interval(projection, 0, 0),
+            FiniteInterval.exact(100.0),
+        )
+        self.assertEqual(
+            self._sequence_interval(projection, 0, 1),
+            FiniteInterval(199.0, 201.0),
+        )
+
     def test_fixed_height_keeps_top_and_bottom_correlated(self) -> None:
         template = _template(1)
         cross = replace(

@@ -19,17 +19,20 @@ Challenge 的安全 auto 是能力发现，安全 review 仍合格。
 
 - 黄金 reference 含 106 个唯一 source SHA、110 个显式 count task：96 个 nominal、14 个 challenge，
   优化分层为 66 / 30 / 14。全部 task 已人工确认；同源 count 变体共享物理边界但独立验证。
-- 当前 detector source manifest `499db30bea59e746` 的完整黄金结果为 110/110 完成、分析错误 0、
-  危险自动批准 0；11 个安全
-  `approved_auto`、99 个 `needs_review`。基础 nominal 为 10/66，较难 nominal 为 1/30，challenge
-  14 个均 review。Candidate 为 65 个不可用、25 个安全、20 个不安全；Review candidate 偏差只作机制
-  诊断，不是正式危险输出。
+- 当前 detector source manifest `d19ad96e32594db3` 的完整黄金结果为 110/110 完成、分析错误 0、
+  危险自动批准 0；13 个安全 `approved_auto`、97 个 `needs_review`。基础 nominal 为 12/66，较难
+  nominal 为 1/30，challenge 14 个均 review。Candidate 为 61 个不可用、27 个安全、22 个不安全；
+  Review candidate 偏差只作机制诊断，不是正式危险输出。
 - 直接绑定的 start/end 已保留 native coordinate；Grid 只补未观察角色。Phase anchor 与 post-phase local
   refinement 已分离，后者不能反向取得 phase/pitch 权限。每个唯一 separator 可约束自己的 local
   advance，关系总数不超过 `count - 1`，只作一次 O(count) 传播。Cross 的 fit direction 负责物理成员
   资格，完整方向区间只进入 selected frame span 的输出保护。
+- 同一离散 phase 的互补 endpoint evidence 现在合并为一个连续联合状态；不同 role support 仍保留为
+  runner。恰好缺一条 sequence 边时，两张以上完整直接 Frame 唯一证明的共同 W 只补这一条边；多缺边、
+  冲突宽度或接触共线不启用。Cross pair 也必须共享足够的 selected-frame domain support，局部 opposite
+  不能借 template-wide side 取得全局权限。
 - 对 96 个 nominal 的 v4.2.8 同源机制对照中，旧版 80 个自动批准只有 10 个安全、70 个危险；旧候选
-  总计只有 11 个安全。V5 同批有 25 个安全 candidate，11 个安全自动批准且无危险批准。旧版更高的
+  总计只有 11 个安全。V5 同批有 27 个安全 candidate，13 个安全自动批准且无危险批准。旧版更高的
   表面通过率主要来自未经校准的 confidence/best-score 与 fallback，不能作为迁移目标。
 - v4.2.8 有安全候选而 V5 尚未形成安全自动结果的 9 个任务为 S007、S010、S011、S022、S025、S026、
   S032、S033、S038；它们只提供机制调查入口，不证明旧 geometry owner 或 decision rule 正确。
@@ -43,7 +46,7 @@ Challenge 的安全 auto 是能力发现，安全 review 仍合格。
 
 ## 验证边界与开放风险
 
-- 0 危险自动批准只是首要安全底线，不等于 nominal 能力完成。当前仍有 56 个基础 nominal review；
+- 0 危险自动批准只是首要安全底线，不等于 nominal 能力完成。当前仍有 54 个基础 nominal review；
   phase ambiguity/discontinuity、cross authority、candidate 几何、direct-use budget 与 source authority
   必须分开处理。
 - `+ / -` 的 source-wide 亮带不能仅凭极性和跨度取得 separator material 权限；照片内部能形成相同
@@ -57,7 +60,7 @@ Challenge 的安全 auto 是能力发现，安全 review 仍合格。
 
 ## 精确下一步
 
-1. 按 typed root failure 拆解 56 个基础 nominal review；一次只修改一个通用机制，并对完整黄金保持
+1. 按 typed root failure 拆解 54 个基础 nominal review；一次只修改一个通用机制，并对完整黄金保持
    `unsafe_approved_auto = 0`。
 2. 先调查上述 9 个 v4.2.8 安全候选，区分可吸收的局部 START/END、separator pair、cross observation
    与必须拒绝的 Grid/fallback/旧 score；任何迁移都重新检查全部黄金，而非只看目标样片。

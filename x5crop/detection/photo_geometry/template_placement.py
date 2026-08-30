@@ -239,10 +239,11 @@ def _sequence_pair(
     end = _sequence_boundary(sequence, template, end_index)
     start_direct = start.source == PositionSource.OBSERVED_TRANSITION
     end_direct = end.source == PositionSource.OBSERVED_TRANSITION
+    measured_width = sequence.pitch_fit.frame_width_px
     if start_direct and not end_direct:
         inferred_interval = _advance(
             start.full_interval,
-            template.frame_width_px,
+            measured_width,
             template.direction,
         )
         inferred_canonical = start.canonical + width * template.direction
@@ -261,7 +262,7 @@ def _sequence_pair(
     elif end_direct and not start_direct:
         inferred_interval = _retreat(
             end.full_interval,
-            template.frame_width_px,
+            measured_width,
             template.direction,
         )
         inferred_canonical = end.canonical - width * template.direction

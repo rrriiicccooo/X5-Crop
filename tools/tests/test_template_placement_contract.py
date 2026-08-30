@@ -28,6 +28,9 @@ from x5crop.detection.photo_geometry.template_model import (
     PhaseLatticeAuthority,
     TemplateSpec,
 )
+from x5crop.detection.photo_geometry.template_phase_candidates import (
+    _with_common_frame_width,
+)
 from x5crop.detection.photo_geometry.template_placement import (
     compose_format_placement,
     resolved_sequence_support_domains_px,
@@ -145,6 +148,58 @@ class TemplatePlacementContractTest(unittest.TestCase):
         self.assertEqual(end.named_position_inference, "end_from_observed_start_and_fixed_template_width")
         self.assertEqual(end.position_observation_ids, (ObservationId("sequence:0"),))
         self.assertAlmostEqual(end.canonical_position_px, 200.0)
+
+    def test_missing_role_uses_calibrated_width_not_full_format_prior(self) -> None:
+        template = replace(
+            _template(1),
+            frame_width_px=FiniteInterval(96.0, 104.0),
+        )
+        sequence = _sequence(template, missing=(1,))
+        sequence = replace(
+            sequence,
+            pitch_fit=replace(
+                sequence.pitch_fit,
+                frame_width_px=FiniteInterval(99.0, 101.0),
+                canonical_frame_width_px=100.5,
+            ),
+        )
+
+        placement = _compose(
+            template,
+            sequence,
+            _cross(template, direction=_direction()),
+        )
+
+        self.assertEqual(
+            placement.frames[0].end.full_position_interval_px,
+            FiniteInterval(199.0, 201.0),
+        )
+        self.assertAlmostEqual(
+            placement.frames[0].end.canonical_position_px,
+            200.5,
+        )
+
+    def test_common_width_closes_exactly_one_unobserved_role(self) -> None:
+        template = replace(
+            _template(3),
+            frame_width_px=FiniteInterval(96.0, 104.0),
+        )
+
+        one_missing = _with_common_frame_width(
+            _sequence(template, missing=(3,))
+        )
+        two_missing = _with_common_frame_width(
+            _sequence(template, missing=(1, 3))
+        )
+
+        self.assertEqual(
+            one_missing.pitch_fit.frame_width_px,
+            PositiveInterval(100.0, 100.0),
+        )
+        self.assertEqual(
+            two_missing.pitch_fit.frame_width_px,
+            template.frame_width_px,
+        )
 
     def test_cross_single_side_uses_fixed_height_inference(self) -> None:
         template = _template(1)

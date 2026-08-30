@@ -505,13 +505,22 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                 inputs.longitudinal_support_domains_px,
             )
             >= min(SPATIAL_SUPPORT_REGION_COUNT, inputs.template.count)
-            or _covers_template_domains(
-                candidate.top,
-                inputs.longitudinal_support_domains_px,
-            )
-            or _covers_template_domains(
-                candidate.bottom,
-                inputs.longitudinal_support_domains_px,
+            or (
+                _longitudinal_domain_count(
+                    candidate.support_trace_coordinates_px,
+                    inputs.longitudinal_support_domains_px,
+                )
+                >= min(MINIMUM_INDEPENDENT_SUPPORT_REGIONS, inputs.template.count)
+                and (
+                    _covers_template_domains(
+                        candidate.top,
+                        inputs.longitudinal_support_domains_px,
+                    )
+                    or _covers_template_domains(
+                        candidate.bottom,
+                        inputs.longitudinal_support_domains_px,
+                    )
+                )
             )
         )
     )

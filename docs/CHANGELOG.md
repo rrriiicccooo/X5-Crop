@@ -17,12 +17,16 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   ordinal；每个唯一绑定的直接 separator 可以约束自己的 local advance，全部变化仍只作一次 O(count)
   传播。像素强度、片夹中心或样片规则不能替代 authority。
 - 直接观察到的 start/end 在最终 placement 中保留 native coordinate 与完整 interval；Grid 只补齐缺失
-  角色。Phase support 按物理 lattice location 而非 raw edge 数计数，跨越过长的无观察区明确 review。
+  角色。同一连续 placement 的互补 endpoint evidence 合并为联合可行状态，不伪造 runner。只有恰好缺
+  一个角色、且至少两张完整直接 Frame 唯一证明共同 W 时，才用该 W 补这一条边。Phase support 按物理
+  lattice location 而非 raw edge 数计数，跨越过长的无观察区明确 review。
 - 当前选择仍只使用 typed hard facts；没有启用 score。架构允许未来在硬合法候选之间加入经独立数据
   校准、带高阈值与 abstention 的概率选择，但未经校准的 score 不得拥有最终决定权，runner
   必须继续报告。
-- Cross 不再用片夹短轴中心选择最终边界；它只帮助编译有界测量 corridor。Cross winner basis、source
-  长轴投影与 enclosing-support 的逐侧/联合 padding 预算均进入 typed report 与外部校验。
+- Cross 不再用片夹短轴中心选择最终边界；它只帮助编译有界测量 corridor。直接 pair 必须共享足够的
+  selected-frame domain support，不能把一条局部 opposite 借另一条 template-wide side 外推成全局闭环。
+  Cross winner basis、source 长轴投影与 enclosing-support 的逐侧/联合 padding 预算均进入 typed report
+  与外部校验。
 - 任一 slot 不安全时整张 source `needs_review`，不做 slot salvage。Contact 与 overlap 始终属于
   challenge，但 challenge 不预设终态：标准 detector/Gate 可产生安全自动批准，证据不足时安全 review
   同样合格；不启用第二套 detector 或特殊 bleed。

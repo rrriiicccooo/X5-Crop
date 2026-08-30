@@ -224,6 +224,13 @@ role = phase
   absolute phase；不同解释仍保留为离散 placement。
 - 未标 ordinal 的 separator lattice 只枚举 `直接 band 对 × 有限 ordinal distance`，并在循环前
   检查编译上界；超界直接产生 `producer_bound_exceeded`，不截断候选。
+- 同一 template、integer offset 与 local topology 下，若两个 fit 只分别携带互补的 START/END
+  observation，所有 phase、pitch 与 role interval 都相交，且同一 role 没有绑定不同物理 support，
+  它们是一个连续 placement 的联合证据，不是 runner。合并只取联合可行区间与 observation 并集；
+  ordinal、support identity 或 local relation 不同仍是离散竞争。
+- 当整条 sequence 恰好只缺一个 START/END，至少两张完整 Frame 的直接双边在 format W authority
+  内形成唯一相交宽度组，且没有复用同一 observation 时，该共同 W 只可推导这一个 opposite。
+  已观察边继续保留 native coordinate；缺两条及以上、宽度分组并列/分离或接触共线时不启用该约束。
 
 模板放置后，`template_alignment_diagnostic` 只读比较 theoretical role 与 bound observation，报告
 `normal`、`measured_advances` 或 `unresolved`；它不搜索、不选择、不改变 placement。
@@ -262,6 +269,11 @@ Photo aperture 的候选必须有正确 top/bottom 角色、外侧背景、有�
   单侧 anchor；这只适用于同一个 binding 的 template-wide domain coverage，不降低普通局部
   two-region edge 的要求；
 - 同侧多个相距较远且物理相连的 fragments。
+
+直接 top/bottom pair 只有在共享 direct trace 覆盖至少 3 个 selected frame domain，或其中一侧覆盖
+全部 selected domain 且共享 trace 仍覆盖至少 2 个 domain 时，才拥有整条 template 的 pair authority。
+一侧 template-wide、另一侧仅一个局部 domain 的组合只能保留前者的单侧 authority，不能把局部 opposite
+外推为全局闭环。
 
 一条短局部线不能外推整条片带。两个不同合法 side tracks 是两个 placements；不按梯度、support
 数量或 residual 的未经校准标量硬选。已有 direct top+bottom 闭环时，不再执行“缺失 opposite”的局部精修；
@@ -331,8 +343,9 @@ placement；Grid coordinate 只保留为模型诊断。Placement 仍保持 sourc
 
 当前 production 只使用 typed hard facts 和证据职责，不使用加权总分、confidence 补偿、top-K、
 投票或样片/format 特判。同一 template identity、integer offset、local topology 与独立物理 support
-下，相交的 role interval 是一个连续 placement；不同坐标、ordinal、非等价 observation binding、
-boundary use 或 required source footprint 是离散竞争。硬物理事实不能唯一闭合时进入 review。
+下，相交的 role interval 与互补 observation bindings 可以联合成一个连续 placement；同一 role 的不同
+物理 support、不同坐标、ordinal、local topology、boundary use 或 required source footprint 是离散竞争。
+硬物理事实不能唯一闭合时进入 review。
 
 这是一项当前实现边界，不是对校准概率选择的永久禁令。未经校准的 score 不得拥有最终决定权；
 合法 runner 也不因“仍然合法”而被定义为永久阻断项。
