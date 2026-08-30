@@ -163,15 +163,30 @@ def alignment_summary(detection: FinalDetection) -> str:
             lane.prepared.separator_bands,
         )
         label = diagnostic.pattern.value.upper().replace("_", " ")
+        authority = diagnostic.global_lattice_authority
+        rank = 0 if authority is None else authority.joint_constraint_rank
+        inferred_coverage = tuple(
+            item
+            for item in diagnostic.adjacency_observation_coverage
+            if item.normal_inference_required
+        )
+        complete_coverage = sum(
+            item.state.value == "complete" for item in inferred_coverage
+        )
+        proof = (
+            f"GLOBAL {rank}/3 · ADJ "
+            f"{complete_coverage}/{len(inferred_coverage)}"
+        )
         if diagnostic.pattern.value == "unresolved":
-            values.append(f"{lane.lane_id} {label}")
+            values.append(f"{lane.lane_id} {label} · {proof}")
             continue
         pitch_delta = float(
             diagnostic.pitch_delta_from_compiled_center_px or 0.0
         )
         residual = diagnostic.maximum_absolute_role_residual_px
         values.append(
-            f"{lane.lane_id} {label} · PITCH Δ {pitch_delta:+.2f}px · "
+            f"{lane.lane_id} {label} · {proof} · "
+            f"PITCH Δ {pitch_delta:+.2f}px · "
             f"ROLE RESIDUAL {'N/A' if residual is None else f'{residual:.2f}px'}"
         )
     return "ALIGNMENT · " + " | ".join(values)

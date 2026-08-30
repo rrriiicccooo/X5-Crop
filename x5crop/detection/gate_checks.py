@@ -22,7 +22,12 @@ class GateGap(str, Enum):
     SOURCE_SCAN_GEOMETRY_UNAVAILABLE = "source_scan_geometry_unavailable"
     PLACEMENT_UNRESOLVED = "placement_unresolved"
     PHASE_ANCHOR_UNAVAILABLE = "phase_anchor_unavailable"
-    PHASE_SUPPORT_DISCONTINUITY = "phase_support_discontinuity"
+    GLOBAL_LATTICE_AUTHORITY_UNAVAILABLE = (
+        "global_lattice_authority_unavailable"
+    )
+    ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE = (
+        "adjacency_observation_coverage_incomplete"
+    )
     PHASE_TEMPLATE_MISMATCH = "phase_template_mismatch"
     PHASE_PLACEMENT_AMBIGUOUS = "phase_placement_ambiguous"
     CROSS_AUTHORITY_UNAVAILABLE = "cross_authority_unavailable"
@@ -48,7 +53,8 @@ class MinimumMissingFact(str, Enum):
     COUNT_AUTHORITY = "count_authority"
     COMPLETE_SCAN_CANVAS = "complete_scan_canvas"
     ABSOLUTE_PHASE_ANCHOR = "absolute_phase_anchor"
-    LOCAL_PHASE_CONTINUITY = "local_phase_continuity"
+    GLOBAL_LATTICE_AUTHORITY = "global_lattice_authority"
+    ADJACENCY_OBSERVATION_COVERAGE = "adjacency_observation_coverage"
     PITCH_CLOSURE = "pitch_closure"
     CROSS_POSITION = "cross_position"
     REGISTERED_QUERY_COVERAGE = "registered_query_coverage"
@@ -142,10 +148,15 @@ def failure_fact(
             MinimumMissingFact.ABSOLUTE_PHASE_ANCHOR,
             RecoveryAction.RERUN_MEASUREMENT,
         ),
-        GateGap.PHASE_SUPPORT_DISCONTINUITY: (
+        GateGap.GLOBAL_LATTICE_AUTHORITY_UNAVAILABLE: (
             FailureRecovery.REMEASURE,
-            MinimumMissingFact.LOCAL_PHASE_CONTINUITY,
-            RecoveryAction.RERUN_MEASUREMENT,
+            MinimumMissingFact.GLOBAL_LATTICE_AUTHORITY,
+            RecoveryAction.OPEN_DEBUG_ANALYSIS,
+        ),
+        GateGap.ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE: (
+            FailureRecovery.REMEASURE,
+            MinimumMissingFact.ADJACENCY_OBSERVATION_COVERAGE,
+            RecoveryAction.OPEN_DEBUG_ANALYSIS,
         ),
         GateGap.PHASE_TEMPLATE_MISMATCH: (
             FailureRecovery.REMEASURE,

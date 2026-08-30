@@ -30,6 +30,10 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     TemplateCrossInput,
 )
 from x5crop.detection.photo_geometry.template_phase import fit_template_phase
+from x5crop.detection.photo_geometry.template_phase_model import (
+    PhaseFailureKind,
+    PhaseFitStatus,
+)
 from x5crop.detection.photo_geometry.template_selection import (
     select_lane_template_placement,
     select_template_source,
@@ -155,6 +159,44 @@ class TemplateSelectionContractTest(unittest.TestCase):
             competition.failure.minimum_missing_fact,
             MinimumMissingFact.PITCH_CLOSURE,
         )
+
+    def test_inferred_adjacency_failures_keep_distinct_typed_facts(self) -> None:
+        phase, cross, _placement = _resolved()
+        cases = (
+            (
+                PhaseFailureKind.GLOBAL_LATTICE_AUTHORITY_UNAVAILABLE,
+                GateGap.GLOBAL_LATTICE_AUTHORITY_UNAVAILABLE,
+                MinimumMissingFact.GLOBAL_LATTICE_AUTHORITY,
+            ),
+            (
+                PhaseFailureKind.ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE,
+                GateGap.ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE,
+                MinimumMissingFact.ADJACENCY_OBSERVATION_COVERAGE,
+            ),
+        )
+        for failure_kind, expected_gap, expected_fact in cases:
+            with self.subTest(failure_kind=failure_kind.value):
+                unresolved = replace(
+                    phase,
+                    status=PhaseFitStatus.UNRESOLVED,
+                    ambiguity_reason=failure_kind.value,
+                    failure_kind=failure_kind,
+                    winner_basis=None,
+                )
+                competition = select_lane_template_placement(
+                    lane_id="lane:0",
+                    best=None,
+                    runner_up=None,
+                    phase=unresolved,
+                    cross=cross,
+                    content_assessment=None,
+                )
+                assert competition.failure is not None
+                self.assertEqual(competition.failure.gap, expected_gap)
+                self.assertEqual(
+                    competition.failure.minimum_missing_fact,
+                    expected_fact,
+                )
 
     def test_discrete_phase_runner_reports_unique_placement(self) -> None:
         _phase, cross, _placement = _resolved()

@@ -26,7 +26,7 @@ from .measurement_model import (
     PhotoBoundaryMeasurementSet,
     PhotoBoundaryTransition,
 )
-from .model import BoundaryRole
+from .model import BoundaryRole, QueryPurpose
 from .observations import build_sequence_observations
 from .output_model import ResolvedOutputSlots, SharedStripDirection
 from .profile_adapters import cross_profile_from_regions, sequence_profile_from_regions
@@ -52,6 +52,7 @@ from .template_phase import (
     fit_template_phase_with_local_advance,
 )
 from .template_phase_model import (
+    GlobalLatticeAuthorityEvidence,
     PhaseFailureKind,
     PhaseFitResult,
     PhaseFitStatus,
@@ -514,6 +515,7 @@ def prepare_template_lane(
         holder_span_px=width_authority,
         max_lattice_hypotheses=measurement_plan.phase_bounds.max_hypotheses,
     )
+    registered_pitch_authority_ids = pitch_calibration.pitch_observation_ids
     pitch_lattice_hypothesis_count = (
         pitch_calibration.lattice_hypothesis_count
     )
@@ -577,6 +579,14 @@ def prepare_template_lane(
         refine_from_bound_roles=True,
         max_lattice_hypotheses=measurement_plan.phase_bounds.max_hypotheses,
     )
+    registered_pitch_authority_ids = tuple(
+        dict.fromkeys(
+            (
+                *registered_pitch_authority_ids,
+                *pitch_calibration.pitch_observation_ids,
+            )
+        )
+    )
     pitch_lattice_hypothesis_count += (
         pitch_calibration.lattice_hypothesis_count
     )
@@ -595,6 +605,22 @@ def prepare_template_lane(
         pitch_calibration,
         base_phase,
     )
+    phase_authority_observation_ids = (
+        ()
+        if phase_search_authority is None
+        else tuple(
+            dict.fromkeys(
+                (
+                    *pitch_calibration.direct_separator_ids,
+                    *(
+                        ()
+                        if base_phase.best is None
+                        else base_phase.best.independent_support_ids
+                    ),
+                )
+            )
+        )
+    )
     phase_input = TemplatePhaseInput(
         observations=sequence_edges,
         separator_bands=separator_bands,
@@ -602,6 +628,18 @@ def prepare_template_lane(
         scale_px_per_mm=scales.width_axis_px_per_mm,
         holder_span_px=width_authority,
         phase_authority_px=phase_search_authority,
+        sequence_measurement_sets=tuple(
+            item
+            for item in measurement_sets
+            if item.query.purpose == QueryPurpose.SEQUENCE_ANCHOR_WINDOW
+        ),
+        global_lattice_evidence=GlobalLatticeAuthorityEvidence(
+            phase_observation_ids=phase_authority_observation_ids,
+            frame_width_observation_ids=(
+                source_geometry.width_state.observation_ids
+            ),
+            pitch_observation_ids=registered_pitch_authority_ids,
+        ),
     )
     phase = fit_template_phase_with_local_advance(phase_input)
     phase = account_prior_phase_fit(phase, base_phase)

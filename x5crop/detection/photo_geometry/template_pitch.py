@@ -29,6 +29,7 @@ class TemplatePitchCalibration:
     phase_authority_px: FiniteInterval | None
     phase_hypothesis_px: FiniteInterval | None
     direct_separator_ids: tuple[ObservationId, ...]
+    pitch_observation_ids: tuple[ObservationId, ...]
     lattice_hypothesis_count: int
     bound_exceeded: bool
 
@@ -41,6 +42,15 @@ class TemplatePitchCalibration:
             self.direct_separator_ids
         ):
             raise ValueError("separator calibration identities must be unique")
+        if (
+            len(set(self.pitch_observation_ids))
+            != len(self.pitch_observation_ids)
+            or any(
+                not isinstance(identity, ObservationId)
+                for identity in self.pitch_observation_ids
+            )
+        ):
+            raise ValueError("pitch calibration identities must be unique and typed")
         for value, name in (
             (self.phase_authority_px, "phase authority"),
             (self.phase_hypothesis_px, "phase hypothesis"),
@@ -649,6 +659,7 @@ def calibrate_template_source_pitch(
             phase_authority_px=None,
             phase_hypothesis_px=None,
             direct_separator_ids=(),
+            pitch_observation_ids=(),
             lattice_hypothesis_count=lattice_hypothesis_count,
             bound_exceeded=True,
         )
@@ -733,6 +744,7 @@ def calibrate_template_source_pitch(
             phase_authority_px=None,
             phase_hypothesis_px=None,
             direct_separator_ids=(),
+            pitch_observation_ids=(),
             lattice_hypothesis_count=lattice_hypothesis_count,
             bound_exceeded=False,
         )
@@ -750,6 +762,7 @@ def calibrate_template_source_pitch(
             phase_authority_px=None,
             phase_hypothesis_px=None,
             direct_separator_ids=(),
+            pitch_observation_ids=(),
             lattice_hypothesis_count=lattice_hypothesis_count,
             bound_exceeded=False,
         )
@@ -780,6 +793,10 @@ def calibrate_template_source_pitch(
         if separator_lattice is None
         else _axis_interval(separator_lattice.phase_px, template.direction)
     )
+    separator_owns_pitch = (
+        separator_lattice is not None
+        and measured_pitch == band_pitch
+    )
     return TemplatePitchCalibration(
         template=calibrated,
         phase_authority_px=(
@@ -795,6 +812,11 @@ def calibrate_template_source_pitch(
                 or separator_proposes_absolute_phase
             )
             else separator_lattice.direct_separator_ids
+        ),
+        pitch_observation_ids=(
+            separator_lattice.direct_separator_ids
+            if separator_owns_pitch
+            else ()
         ),
         lattice_hypothesis_count=lattice_hypothesis_count,
         bound_exceeded=False,

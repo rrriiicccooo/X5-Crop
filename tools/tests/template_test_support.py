@@ -3,8 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import math
 
-from x5crop.detection.photo_geometry.model import BoundaryAxis, BoundaryRole
+from x5crop.detection.photo_geometry.measurement_model import (
+    PhotoBoundaryCoverageReceipt,
+    PhotoBoundaryMeasurementQuery,
+    PhotoBoundaryMeasurementSet,
+)
+from x5crop.detection.photo_geometry.model import (
+    BoundaryAxis,
+    BoundaryRole,
+    QueryPurpose,
+)
 from x5crop.detection.photo_geometry.observation_types import (
     BoundaryEdgeObservation,
     SeparatorBandObservation,
@@ -33,7 +43,12 @@ from x5crop.detection.photo_geometry.template_placement import (
     FormatPlacement,
     compose_format_placement,
 )
-from x5crop.domain import FiniteInterval, ObservationId, PositiveInterval
+from x5crop.domain import (
+    EvidenceState,
+    FiniteInterval,
+    ObservationId,
+    PositiveInterval,
+)
 from x5crop.formats import FramePhysicalSpec
 
 
@@ -150,6 +165,60 @@ def phase_separator(
         texture_contrast=0.75,
         texture_contrast_interval=FiniteInterval(0.5, 1.0),
         material_regions=material,
+    )
+
+
+def phase_sequence_measurement(
+    name: str,
+    ownership_interval_px: FiniteInterval,
+    *,
+    trace_positions_px: tuple[int, ...] = (0, 10, 20),
+    complete: bool = True,
+) -> PhotoBoundaryMeasurementSet:
+    """Create one pre-registered sequence-window coverage fixture."""
+
+    query_id = f"query:{name}"
+    query = PhotoBoundaryMeasurementQuery(
+        query_id=query_id,
+        registration_index=0,
+        lane_id="lane:test",
+        purpose=QueryPurpose.SEQUENCE_ANCHOR_WINDOW,
+        boundary_axis=BoundaryAxis.X,
+        trace_positions_px=trace_positions_px,
+        search_intervals_px=tuple(
+            ownership_interval_px for _trace in trace_positions_px
+        ),
+        transition_ownership_intervals_px=tuple(
+            ownership_interval_px for _trace in trace_positions_px
+        ),
+        expected_support_px=100.0,
+        boundary_axis_scale_px_per_mm=PositiveInterval.exact(10.0),
+        trace_axis_scale_px_per_mm=PositiveInterval.exact(10.0),
+        measurement_halo_px=1,
+        registration_provenance_ids=(f"intent:{name}",),
+    )
+    coordinate_count = len(trace_positions_px) * max(
+        0,
+        int(math.floor(ownership_interval_px.maximum))
+        - int(math.ceil(ownership_interval_px.minimum))
+        + 1,
+    )
+    coverage = PhotoBoundaryCoverageReceipt(
+        query_id=query_id,
+        registered_trace_count=len(trace_positions_px),
+        completed_trace_count=(len(trace_positions_px) if complete else 0),
+        registered_coordinate_count=coordinate_count,
+        completed_coordinate_count=(coordinate_count if complete else 0),
+        pixel_query_count=(coordinate_count if complete else 0),
+        streaming_block_count=(1 if complete else 0),
+        peak_temporary_bytes=0,
+        complete=complete,
+    )
+    return PhotoBoundaryMeasurementSet(
+        query=query,
+        state=(EvidenceState.SUPPORTED if complete else EvidenceState.UNAVAILABLE),
+        transitions=(),
+        coverage=coverage,
     )
 
 

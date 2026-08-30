@@ -105,6 +105,13 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                     "local_advance_relations": typed_read_model(
                         alignments[lane.lane_id].local_advance_relations
                     ),
+                    "global_lattice_authority": typed_read_model(
+                        alignments[lane.lane_id].global_lattice_authority
+                    ),
+                    "adjacency_observation_coverage": typed_read_model(
+                        alignments[lane.lane_id]
+                        .adjacency_observation_coverage
+                    ),
                     "unbound_direct_observation_count": len(
                         alignments[lane.lane_id]
                         .unbound_direct_observation_ids

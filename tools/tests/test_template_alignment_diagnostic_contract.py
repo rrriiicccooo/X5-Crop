@@ -7,18 +7,24 @@ from x5crop.domain import FiniteInterval, ObservationId
 from x5crop.detection.photo_geometry.template_alignment_diagnostic import (
     template_alignment_diagnostic,
 )
+from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.template_model import (
     LocalAdvanceKind,
     LocalAdvanceRelation,
 )
-from x5crop.detection.photo_geometry.template_phase import fit_template_phase
+from x5crop.detection.photo_geometry.template_phase import (
+    fit_template_phase,
+    fit_template_phase_with_local_advance,
+)
 from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseFailureKind,
     PhaseFitStatus,
+    TemplatePhaseInput,
 )
 from x5crop.detection.photo_geometry.template_residual import ResidualPattern
 from tools.tests.template_test_support import (
     phase_edge as edge,
+    phase_sequence_measurement,
     phase_separator as separator,
     phase_template as template,
 )
@@ -62,6 +68,51 @@ class TemplateAlignmentDiagnosticContractTest(unittest.TestCase):
         self.assertLessEqual(
             diagnostic.maximum_absolute_role_residual_px or 0.0,
             1.0e-7,
+        )
+
+    def test_diagnostic_exposes_unknown_rank_and_adjacency_corridor(self) -> None:
+        observations = tuple(
+            replace(
+                edge(name, coordinate),
+                qualified_anchor_roles=(role,),
+            )
+            for name, coordinate, role in (
+                ("start:1", 40.0, BoundaryRole.START),
+                ("end:1", 140.0, BoundaryRole.END),
+                ("start:3", 280.0, BoundaryRole.START),
+            )
+        )
+        phase = fit_template_phase_with_local_advance(
+            TemplatePhaseInput(
+                observations=observations,
+                separator_bands=(),
+                template=template(3),
+                scale_px_per_mm=None,
+                holder_span_px=FiniteInterval(0.0, 400.0),
+                phase_authority_px=FiniteInterval.exact(40.0),
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "alignment-coverage",
+                        FiniteInterval(0.0, 400.0),
+                    ),
+                ),
+            )
+        )
+        self.assertEqual(phase.status, PhaseFitStatus.RESOLVED)
+
+        diagnostic = template_alignment_diagnostic(phase, observations)
+
+        assert diagnostic.global_lattice_authority is not None
+        self.assertEqual(
+            diagnostic.global_lattice_authority.joint_constraint_rank,
+            3,
+        )
+        self.assertEqual(len(diagnostic.adjacency_observation_coverage), 2)
+        self.assertTrue(
+            all(
+                item.state.value == "complete"
+                for item in diagnostic.adjacency_observation_coverage
+            )
         )
 
     def test_one_direct_suffix_shift_is_named_without_new_search(self) -> None:

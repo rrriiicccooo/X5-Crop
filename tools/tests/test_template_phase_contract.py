@@ -6,6 +6,7 @@ import unittest
 
 from tools.tests.template_test_support import (
     phase_edge as edge,
+    phase_sequence_measurement,
     phase_separator as separator,
     phase_template as template,
     transformed_phase_edge as transformed_edge,
@@ -37,6 +38,8 @@ from x5crop.detection.photo_geometry.template_phase_candidates import (
     _separator_role_authority,
 )
 from x5crop.detection.photo_geometry.template_phase_model import (
+    GlobalLatticeAuthorityEvidence,
+    GlobalLatticeAuthorityBasis,
     PhaseFailureKind,
     PhaseFitStatus,
     PhaseWinnerBasis,
@@ -120,7 +123,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(result.receipt.local_refinement_binding_count, 3)
         self.assertEqual(result.receipt.inferred_role_count, 0)
 
-    def test_multiple_local_fixed_width_pairs_remain_unbound(self) -> None:
+    def test_multiple_local_fixed_width_pairs_lack_global_authority(self) -> None:
         anchor = replace(
             self._local_line("anchor:start:1", 100.0, BoundaryRole.START),
             fit_residual_px=0.0,
@@ -153,7 +156,11 @@ class TemplatePhaseContractTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            PhaseFailureKind.GLOBAL_LATTICE_AUTHORITY_UNAVAILABLE,
+        )
         assert result.best is not None
         self.assertEqual(
             result.best.binding_observation_ids,
@@ -409,7 +416,9 @@ class TemplatePhaseContractTest(unittest.TestCase):
             35.0,
         )
 
-    def test_two_consecutive_unobserved_adjacencies_withhold_phase(self) -> None:
+    def test_consecutive_unobserved_adjacencies_use_proven_grid_when_covered(
+        self,
+    ) -> None:
         specs = (
             ("gap:start:2", 160.0, BoundaryRole.START),
             ("gap:end:2", 260.0, BoundaryRole.END),
@@ -427,20 +436,130 @@ class TemplatePhaseContractTest(unittest.TestCase):
             for identity, coordinate, role in specs
         )
 
-        result = fit_template_phase(
-            observations,
-            template(6),
-            holder_span_px=FiniteInterval(0.0, 800.0),
+        result = fit_template_phase_with_local_advance(
+            TemplatePhaseInput(
+                observations=observations,
+                separator_bands=(),
+                template=template(6),
+                scale_px_per_mm=None,
+                holder_span_px=FiniteInterval(0.0, 800.0),
+                phase_authority_px=None,
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "complete-consecutive-gap",
+                        FiniteInterval(0.0, 800.0),
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertEqual(result.best.phase_support_locations, (1, 2, 3, 6))
+        assert result.global_lattice_authority is not None
+        self.assertEqual(result.global_lattice_authority.joint_constraint_rank, 3)
+        self.assertEqual(
+            result.global_lattice_authority.basis,
+            GlobalLatticeAuthorityBasis.DIRECT_ROLE_SYSTEM,
+        )
+        self.assertTrue(
+            all(
+                item.state.value == "complete"
+                for item in result.adjacency_observation_coverage
+                if item.normal_inference_required
+            )
+        )
+
+    def test_inferred_normal_adjacency_requires_full_registered_corridor(
+        self,
+    ) -> None:
+        observations = tuple(
+            replace(
+                edge(identity, coordinate),
+                qualified_anchor_roles=(role,),
+                polarity=1 if role == BoundaryRole.START else -1,
+            )
+            for identity, coordinate, role in (
+                ("start:1", 40.0, BoundaryRole.START),
+                ("end:1", 140.0, BoundaryRole.END),
+                ("start:3", 280.0, BoundaryRole.START),
+            )
+        )
+        result = fit_template_phase_with_local_advance(
+            TemplatePhaseInput(
+                observations=observations,
+                separator_bands=(),
+                template=template(4),
+                scale_px_per_mm=None,
+                holder_span_px=FiniteInterval(0.0, 520.0),
+                phase_authority_px=FiniteInterval.exact(40.0),
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "partial-corridor",
+                        FiniteInterval(0.0, 200.0),
+                    ),
+                ),
+            )
         )
 
         self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
         self.assertEqual(
             result.failure_kind,
-            PhaseFailureKind.PHASE_SUPPORT_DISCONTINUITY,
+            PhaseFailureKind.ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE,
         )
-        assert result.best is not None
-        self.assertEqual(result.best.phase_support_locations, (1, 2, 3, 6))
-        self.assertEqual(result.best.maximum_internal_phase_gap, 2)
+        assert result.global_lattice_authority is not None
+        self.assertEqual(result.global_lattice_authority.joint_constraint_rank, 3)
+        incomplete = tuple(
+            item
+            for item in result.adjacency_observation_coverage
+            if item.state.value == "incomplete"
+        )
+        self.assertTrue(incomplete)
+        self.assertTrue(
+            any(
+                trace.covered_coordinate_count
+                < trace.required_coordinate_count
+                for item in incomplete
+                for trace in item.trace_coverage
+            )
+        )
+
+    def test_edge_count_cannot_replace_phase_width_pitch_rank(self) -> None:
+        observations = tuple(
+            replace(
+                edge(f"start:{slot}", 40.0 + 120.0 * slot),
+                qualified_anchor_roles=(BoundaryRole.START,),
+            )
+            for slot in range(4)
+        )
+        result = fit_template_phase_with_local_advance(
+            TemplatePhaseInput(
+                observations=observations,
+                separator_bands=(),
+                template=template(4),
+                scale_px_per_mm=None,
+                holder_span_px=FiniteInterval(0.0, 520.0),
+                phase_authority_px=FiniteInterval.exact(40.0),
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "rank-two-complete",
+                        FiniteInterval(0.0, 520.0),
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            PhaseFailureKind.GLOBAL_LATTICE_AUTHORITY_UNAVAILABLE,
+        )
+        assert result.global_lattice_authority is not None
+        self.assertEqual(
+            result.global_lattice_authority.direct_role_constraint_rank,
+            2,
+        )
+        self.assertEqual(result.global_lattice_authority.joint_constraint_rank, 2)
 
     def test_direct_phase_authority_preserves_calibrated_placement(self) -> None:
         observations = (
@@ -990,7 +1109,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         # by pitch authority belonging to later inferred roles.
         self.assertLess(result.best.model_role_intervals_px[0].width, 2.0)
 
-    def test_far_separated_roles_narrow_pitch_but_leave_local_gap_unresolved(
+    def test_far_separated_roles_narrow_pitch_without_gap_count_block(
         self,
     ) -> None:
         compiled = TemplateSpec(
@@ -1020,13 +1139,8 @@ class TemplatePhaseContractTest(unittest.TestCase):
             compiled,
             holder_span_px=FiniteInterval(0.0, 800.0),
         )
-        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
-        self.assertEqual(
-            result.failure_kind,
-            PhaseFailureKind.PHASE_SUPPORT_DISCONTINUITY,
-        )
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
         assert result.best is not None
-        self.assertEqual(result.best.maximum_internal_phase_gap, 2)
         self.assertEqual(
             result.best.binding_observation_ids,
             (
@@ -1093,6 +1207,12 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 scale_px_per_mm=None,
                 holder_span_px=None,
                 phase_authority_px=None,
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "bounded-stability",
+                        FiniteInterval(0.0, 400.0),
+                    ),
+                ),
             ),
         )
         self.assertEqual(
@@ -1124,6 +1244,15 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 scale_px_per_mm=None,
                 holder_span_px=None,
                 phase_authority_px=None,
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "separator-stability",
+                        FiniteInterval(0.0, 400.0),
+                    ),
+                ),
+                global_lattice_evidence=GlobalLatticeAuthorityEvidence(
+                    pitch_observation_ids=(band.observation_id,),
+                ),
             ),
         )
 
@@ -1170,7 +1299,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             ),
         )
 
-    def test_leave_one_anchor_out_reports_continuous_shift(self) -> None:
+    def test_leave_one_anchor_out_reports_lost_unknown_closure(self) -> None:
         coordinates = (
             36.149664229248124,
             135.74929537674714,
@@ -1193,12 +1322,21 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 scale_px_per_mm=None,
                 holder_span_px=None,
                 phase_authority_px=None,
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "continuous-stability",
+                        FiniteInterval(0.0, 400.0),
+                    ),
+                ),
             ),
         )
 
-        self.assertIn(
-            AnchorDependencyEffect.CONTINUOUS_SHIFT,
-            tuple(item.effect for item in analysis.dependencies),
+        self.assertTrue(
+            all(
+                item.effect
+                == AnchorDependencyEffect.UNRESOLVED_WITHOUT_ANCHOR
+                for item in analysis.dependencies
+            )
         )
 
     def test_only_anchor_is_not_a_resolved_phase(self) -> None:
@@ -1438,10 +1576,25 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 scale_px_per_mm=None,
                 holder_span_px=None,
                 phase_authority_px=None,
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "wide-local-advance",
+                        FiniteInterval(0.0, 400.0),
+                    ),
+                ),
             )
         )
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
         assert result.best is not None
+        assert result.global_lattice_authority is not None
+        self.assertEqual(result.global_lattice_authority.joint_constraint_rank, 3)
+        self.assertTrue(
+            all(
+                item.state.value == "complete"
+                for item in result.adjacency_observation_coverage
+                if item.normal_inference_required
+            )
+        )
         anomalies = tuple(
             relation
             for relation in result.best.local_advance_relations
@@ -1476,6 +1629,12 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 scale_px_per_mm=None,
                 holder_span_px=None,
                 phase_authority_px=None,
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "narrow-local-advance",
+                        FiniteInterval(0.0, 400.0),
+                    ),
+                ),
             )
         )
 

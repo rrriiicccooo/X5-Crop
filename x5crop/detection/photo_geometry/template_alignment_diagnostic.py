@@ -10,7 +10,12 @@ from .model import BoundaryRole, SPATIAL_SUPPORT_REGION_COUNT
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_evidence import separator_support_authority
 from .template_model import LocalAdvanceRelation, SequenceFit
-from .template_phase_model import PhaseFitResult, PhaseFitStatus
+from .template_adjacency_coverage import AdjacencyObservationCoverage
+from .template_phase_model import (
+    GlobalLatticeAuthority,
+    PhaseFitResult,
+    PhaseFitStatus,
+)
 from .template_residual import ResidualPattern
 
 
@@ -62,6 +67,10 @@ class TemplateAlignmentDiagnostic:
     pitch_delta_from_compiled_center_px: float | None
     role_residuals: tuple[TemplateRoleResidual, ...]
     local_advance_relations: tuple[LocalAdvanceRelation, ...]
+    global_lattice_authority: GlobalLatticeAuthority | None
+    adjacency_observation_coverage: tuple[
+        AdjacencyObservationCoverage, ...
+    ]
     unbound_direct_observation_ids: tuple[ObservationId, ...]
     incompatible_separator_support_ids: tuple[ObservationId, ...]
     maximum_absolute_role_residual_px: float | None
@@ -82,6 +91,15 @@ class TemplateAlignmentDiagnostic:
             != len(self.unbound_direct_observation_ids)
             or len(set(self.incompatible_separator_support_ids))
             != len(self.incompatible_separator_support_ids)
+            or self.global_lattice_authority is not None
+            and not isinstance(
+                self.global_lattice_authority,
+                GlobalLatticeAuthority,
+            )
+            or any(
+                not isinstance(item, AdjacencyObservationCoverage)
+                for item in self.adjacency_observation_coverage
+            )
             or (self.pattern == ResidualPattern.NORMAL and self.local_advance_relations)
             or (
                 self.pattern == ResidualPattern.MEASURED_ADVANCES
@@ -272,6 +290,10 @@ def template_alignment_diagnostic(
         role_residuals=role_residuals,
         local_advance_relations=(
             () if fit is None else fit.local_advance_relations
+        ),
+        global_lattice_authority=phase.global_lattice_authority,
+        adjacency_observation_coverage=(
+            phase.adjacency_observation_coverage
         ),
         unbound_direct_observation_ids=unbound,
         incompatible_separator_support_ids=incompatible,

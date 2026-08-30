@@ -53,6 +53,19 @@ _OBSERVED_DESKEW_SKIP_REASONS = {
     DeskewSkipReason.ROTATION_NOT_NEEDED.value,
     DeskewSkipReason.ROTATION_EXCEEDS_CLEANUP_LIMIT.value,
 }
+_TEMPLATE_ALIGNMENT_FIELDS = {
+    "path",
+    "pattern",
+    "absolute_phase_px",
+    "canonical_pitch_px",
+    "pitch_delta_from_compiled_center_px",
+    "maximum_absolute_role_residual_px",
+    "local_advance_relations",
+    "global_lattice_authority",
+    "adjacency_observation_coverage",
+    "unbound_direct_observation_count",
+    "unresolved_reason",
+}
 
 
 def _finite_number(value: object) -> bool:
@@ -61,6 +74,258 @@ def _finite_number(value: object) -> bool:
         and not isinstance(value, bool)
         and math.isfinite(float(value))
     )
+
+
+def _valid_ids(value: object, *, allow_empty: bool = True) -> bool:
+    return (
+        isinstance(value, list)
+        and (allow_empty or bool(value))
+        and all(isinstance(item, str) and item for item in value)
+        and len(set(value)) == len(value)
+    )
+
+
+def _constraint_rank(rows: list[list[float]]) -> int:
+    matrix = [list(map(float, row)) for row in rows]
+    rank = 0
+    for column in range(3):
+        pivot = next(
+            (
+                index
+                for index in range(rank, len(matrix))
+                if abs(matrix[index][column]) > 1.0e-12
+            ),
+            None,
+        )
+        if pivot is None:
+            continue
+        matrix[rank], matrix[pivot] = matrix[pivot], matrix[rank]
+        divisor = matrix[rank][column]
+        matrix[rank] = [value / divisor for value in matrix[rank]]
+        for index, row in enumerate(matrix):
+            if index == rank or abs(row[column]) <= 1.0e-12:
+                continue
+            factor = row[column]
+            matrix[index] = [
+                value - factor * pivot_value
+                for value, pivot_value in zip(
+                    row,
+                    matrix[rank],
+                    strict=True,
+                )
+            ]
+        rank += 1
+        if rank == 3:
+            break
+    return rank
+
+
+def _validate_global_lattice_authority(value: object) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict) or set(value) != {
+        "state",
+        "direct_role_constraint_rank",
+        "joint_constraint_rank",
+        "constraints",
+        "role_observation_ids",
+        "registered_evidence",
+        "basis",
+        "reason",
+    }:
+        raise ValueError("global lattice authority summary is invalid")
+    constraints = value["constraints"]
+    evidence = value["registered_evidence"]
+    if (
+        not isinstance(constraints, list)
+        or not isinstance(evidence, dict)
+        or set(evidence)
+        != {
+            "phase_observation_ids",
+            "frame_width_observation_ids",
+            "pitch_observation_ids",
+        }
+        or any(not _valid_ids(evidence[key]) for key in evidence)
+        or not _valid_ids(value["role_observation_ids"])
+    ):
+        raise ValueError("global lattice provenance summary is invalid")
+    allowed_kinds = {
+        "direct_role_coordinate",
+        "absolute_phase",
+        "frame_width",
+        "source_pitch",
+    }
+    rows: list[list[float]] = []
+    direct_rows: list[list[float]] = []
+    direct_ids: list[str] = []
+    constraint_ids: list[str] = []
+    for constraint in constraints:
+        if (
+            not isinstance(constraint, dict)
+            or set(constraint)
+            != {
+                "constraint_id",
+                "kind",
+                "coefficients",
+                "observation_ids",
+            }
+            or not isinstance(constraint["constraint_id"], str)
+            or not constraint["constraint_id"]
+            or constraint["kind"] not in allowed_kinds
+            or not isinstance(constraint["coefficients"], list)
+            or len(constraint["coefficients"]) != 3
+            or any(
+                not _finite_number(item)
+                for item in constraint["coefficients"]
+            )
+            or not any(
+                abs(float(item)) > 1.0e-12
+                for item in constraint["coefficients"]
+            )
+            or not _valid_ids(
+                constraint["observation_ids"],
+                allow_empty=False,
+            )
+        ):
+            raise ValueError("global lattice constraint summary is invalid")
+        constraint_ids.append(constraint["constraint_id"])
+        rows.append(constraint["coefficients"])
+        if constraint["kind"] == "direct_role_coordinate":
+            direct_rows.append(constraint["coefficients"])
+            direct_ids.extend(constraint["observation_ids"])
+    direct_rank = value["direct_role_constraint_rank"]
+    joint_rank = value["joint_constraint_rank"]
+    supported = value["state"] == "supported"
+    if (
+        len(set(constraint_ids)) != len(constraint_ids)
+        or direct_ids != value["role_observation_ids"]
+        or not isinstance(direct_rank, int)
+        or not isinstance(joint_rank, int)
+        or direct_rank != _constraint_rank(direct_rows)
+        or joint_rank != _constraint_rank(rows)
+        or not 0 <= direct_rank <= joint_rank <= 3
+        or value["state"] not in {"supported", "unavailable"}
+        or supported != (joint_rank == 3)
+        or supported
+        != (
+            value["basis"]
+            in {
+                "direct_role_system",
+                "complementary_direct_evidence",
+            }
+        )
+        or supported != (value["reason"] is None)
+    ):
+        raise ValueError("global lattice closure summary is invalid")
+
+
+def _valid_interval(value: object) -> bool:
+    return (
+        isinstance(value, dict)
+        and set(value) == {"minimum", "maximum"}
+        and _finite_number(value["minimum"])
+        and _finite_number(value["maximum"])
+        and float(value["minimum"]) <= float(value["maximum"])
+    )
+
+
+def _validate_adjacency_coverage(value: object) -> None:
+    if not isinstance(value, list):
+        raise ValueError("adjacency coverage summary is invalid")
+    ordinals: list[int] = []
+    for coverage in value:
+        if not isinstance(coverage, dict) or set(coverage) != {
+            "relation_ordinal",
+            "required_interval_px",
+            "covering_query_ids",
+            "trace_coverage",
+            "required_trace_count",
+            "covered_trace_count",
+            "required_coordinate_count",
+            "covered_coordinate_count",
+            "normal_inference_required",
+            "state",
+        }:
+            raise ValueError("adjacency coverage item is invalid")
+        ordinal = coverage["relation_ordinal"]
+        required = coverage["required_interval_px"]
+        traces = coverage["trace_coverage"]
+        if (
+            not isinstance(ordinal, int)
+            or ordinal <= 0
+            or not _valid_interval(required)
+            or not _valid_ids(coverage["covering_query_ids"])
+            or coverage["covering_query_ids"]
+            != sorted(coverage["covering_query_ids"])
+            or not isinstance(traces, list)
+            or not isinstance(coverage["normal_inference_required"], bool)
+            or coverage["state"] not in {"complete", "incomplete"}
+        ):
+            raise ValueError("adjacency coverage item is invalid")
+        ordinals.append(ordinal)
+        trace_positions: list[int] = []
+        trace_query_ids: set[str] = set()
+        required_coordinates = 0
+        covered_coordinates = 0
+        complete_traces = 0
+        for trace in traces:
+            if (
+                not isinstance(trace, dict)
+                or set(trace)
+                != {
+                    "trace_position_px",
+                    "covering_query_ids",
+                    "covered_intervals_px",
+                    "required_coordinate_count",
+                    "covered_coordinate_count",
+                    "complete",
+                }
+                or not isinstance(trace["trace_position_px"], int)
+                or not _valid_ids(trace["covering_query_ids"])
+                or trace["covering_query_ids"]
+                != sorted(trace["covering_query_ids"])
+                or not isinstance(trace["covered_intervals_px"], list)
+                or any(
+                    not _valid_interval(interval)
+                    or float(interval["minimum"])
+                    < float(required["minimum"])
+                    or float(interval["maximum"])
+                    > float(required["maximum"])
+                    for interval in trace["covered_intervals_px"]
+                )
+                or not isinstance(trace["required_coordinate_count"], int)
+                or not isinstance(trace["covered_coordinate_count"], int)
+                or not 0
+                <= trace["covered_coordinate_count"]
+                <= trace["required_coordinate_count"]
+                or not isinstance(trace["complete"], bool)
+                or trace["complete"]
+                and trace["covered_coordinate_count"]
+                != trace["required_coordinate_count"]
+            ):
+                raise ValueError("adjacency trace coverage is invalid")
+            trace_positions.append(trace["trace_position_px"])
+            trace_query_ids.update(trace["covering_query_ids"])
+            required_coordinates += trace["required_coordinate_count"]
+            covered_coordinates += trace["covered_coordinate_count"]
+            complete_traces += int(trace["complete"])
+        complete = (
+            bool(traces)
+            and complete_traces == len(traces)
+            and covered_coordinates == required_coordinates
+        )
+        if (
+            trace_positions != sorted(set(trace_positions))
+            or sorted(trace_query_ids) != coverage["covering_query_ids"]
+            or coverage["required_trace_count"] != len(traces)
+            or coverage["covered_trace_count"] != complete_traces
+            or coverage["required_coordinate_count"] != required_coordinates
+            or coverage["covered_coordinate_count"] != covered_coordinates
+            or complete != (coverage["state"] == "complete")
+        ):
+            raise ValueError("adjacency aggregate coverage is invalid")
+    if ordinals != list(range(1, len(ordinals) + 1)):
+        raise ValueError("adjacency coverage ordinals are invalid")
 
 
 def _validate_polygon(value: object, label: str) -> list[list[float]]:
@@ -411,18 +676,7 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             or coarse["short_authority"]
             not in {"pixel_observed", "holder_conservative"}
             or not isinstance(alignment, dict)
-            or set(alignment)
-            != {
-                "path",
-                "pattern",
-                "absolute_phase_px",
-                "canonical_pitch_px",
-                "pitch_delta_from_compiled_center_px",
-                "maximum_absolute_role_residual_px",
-                "local_advance_relations",
-                "unbound_direct_observation_count",
-                "unresolved_reason",
-            }
+            or set(alignment) != _TEMPLATE_ALIGNMENT_FIELDS
             or alignment["pattern"]
             not in {"normal", "measured_advances", "unresolved"}
             or alignment["path"]
@@ -437,6 +691,12 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             not in {None, "aperture_pair", "enclosing_support_pair"}
         ):
             raise ValueError("template alignment summary is invalid")
+        _validate_global_lattice_authority(
+            alignment["global_lattice_authority"]
+        )
+        _validate_adjacency_coverage(
+            alignment["adjacency_observation_coverage"]
+        )
         if {item["geometry_id"] for item in outputs} != {
             item["geometry_id"] for item in budgets
         }:

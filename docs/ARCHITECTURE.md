@@ -144,8 +144,9 @@ Coarse pass 对每个 lane 只执行一个长轴和一个短轴 aggregate query�
 aggregate interval 本身没有角色、ordinal、placement 或输出 deskew authority。短轴 query 的各条
 已注册 trace 若能直接闭合为双侧 track，可以在满足第 8.2 节全部条件时建立 enclosing support；
 这份 authority 来自逐 trace 直接观察，不来自 aggregate interval。Long-axis precision 使用固定 lattice 在两个有限 origin
-上生成互不重叠的理论窗口；没有 direct coarse observation 时才退回一个保守全长窗口。所有可能被
-选中位置使用的精测查询随后一次登记、一次读取；不能为某个 candidate 重读 TIFF、扩张全图搜索或
+上生成互不重叠的理论窗口；没有 direct coarse observation 时才退回一个保守全长窗口。所有计划内的
+精测窗口随后一次登记、一次读取；某个 selected placement 是否真正被覆盖，必须在测量后按第 7 节逐
+adjacency 证明，不能从“查询已全部执行”反推。不能为某个 candidate 重读 TIFF、扩张全图搜索或
 winner-specific requery。
 
 同一 trace lattice 只建立一次全局 normalization baseline，再由理论窗口切出局部测量。Baseline
@@ -213,8 +214,10 @@ role = phase
 - 模板投影可以补齐缺失 first/last 或 separator，但 phase 必须来自其它独立 direct anchor。
 - 已绑定的直接角色在最终 placement 中保留自己的 native canonical coordinate、完整 observation interval
   与 observation identity；固定 Grid 只组织 ordinal 并补齐未观察角色，不能覆盖直接位置。
-- Phase support 按物理 lattice location 计数，不按原始 edge 数计票；同一 separator 的 END/START 共同
-  描述一个位置。两个 direct anchors 之间若连续缺少超过一个物理 adjacency，phase 保持 unresolved。
+- 全局未知量固定为 `(phase, W, source_pitch)`。每条已绑定直接 START/END 形成一行带 observation
+  provenance 的线性约束；外部直接 phase、共同 W 或 pitch authority 也只能各形成自己拥有的一行。
+  `GlobalLatticeAuthority` 保存全部约束与矩阵秩，只有 joint rank 为 3 才表示三个未知量独立闭合。
+  Raw edge 数、同一位置的重复支持和连续缺失 adjacency 数都不是闭合证明。
 - Source pitch 必须由至少两个不同直接 separator 位置或独立同角色 advance 支持。一个 separator
   只能证明自己所在 adjacency。
 - 两个 separator 可以收紧 pitch，但不能用同一对事实自证 absolute phase。短片条中的两点投影
@@ -232,8 +235,31 @@ role = phase
   内形成唯一相交宽度组，且没有复用同一 observation 时，该共同 W 只可推导这一个 opposite。
   已观察边继续保留 native coordinate；缺两条及以上、宽度分组并列/分离或接触共线时不启用该约束。
 
-模板放置后，`template_alignment_diagnostic` 只读比较 theoretical role 与 bound observation，报告
-`normal`、`measured_advances` 或 `unresolved`；它不搜索、不选择、不改变 placement。
+未观察 separator 的正常 adjacency 不是 detector miss 的默认值。它只有同时满足以下条件时，才可使用
+`local_delta = 0` 并由已确定 Grid 补齐 START/END：
+
+1. `GlobalLatticeAuthority` 已用独立直接证据达到 rank 3；Grid 没有参与创造 phase 或 ordinal mapping；
+2. 该 adjacency 的 END/START 完整传播区间形成 `required_interval`，每条预登记 sequence trace 上都由
+   已完整执行的 `SEQUENCE_ANCHOR_WINDOW` ownership interval 连续覆盖；
+3. 同一 adjacency 没有直接 wide/narrow gap、contact、overlap、角色冲突或其它 typed 反证。
+
+| 全局 constraint rank | adjacency coverage | 直接局部反证 | 结果 |
+|---:|---|---|---|
+| 3 | complete | 无 | 允许既定 Grid 使用 `local_delta = 0` |
+| 0–2 | complete | 无 | `global_lattice_authority_unavailable` |
+| 3 | incomplete | 无 | `adjacency_observation_coverage_incomplete` |
+| 3 | complete | 有 | 直接 wide/narrow advance 优先；contact/overlap/conflict 保持 unresolved |
+
+`AdjacencyObservationCoverage` 逐关系保存 `relation_ordinal`、`required_interval`、参与覆盖的 query ID、
+逐 trace 的已覆盖区间与 coordinate count，以及 `complete | incomplete`。全长 normalization baseline
+不产生 transition，因此不能充当 separator coverage。覆盖只映射既有 candidate-independent 查询，不增加
+TIFF 读取；测量全局完成但某个合法走廊未覆盖时产生
+`adjacency_observation_coverage_incomplete`，全局矩阵不足时产生
+`global_lattice_authority_unavailable`。两者都保留完整传播不确定性，并先于输出预算进入 review。
+
+模板放置后，`template_alignment_diagnostic` 只读比较 theoretical role 与 bound observation，并报告
+全局 constraint rank、逐 adjacency coverage、`normal`、`measured_advances` 或 `unresolved`；它不搜索、
+不选择、不改变 placement。
 
 每个 adjacency 只有一个 `LocalAdvanceRelation`：
 
@@ -579,7 +605,9 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/template_measurement_plan*.py` | pixel-free 模板、有限 query intents、停止与工作上界 |
 | `photo_geometry/registered_*.py`、`observations.py`、`separator_*.py` | 一次性 measurement、role-free edge 与 material band |
 | `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source 共享 W/H/scale authority |
-| `photo_geometry/template_phase*.py`、`template_pitch.py`、`template_residual.py` | phase、ordinal、source pitch 与逐 adjacency 的 direct local advance |
+| `photo_geometry/template_phase*.py`、`template_pitch.py`、`template_residual.py` | phase/ordinal 求解、source pitch 与逐 adjacency 的 direct local advance |
+| `photo_geometry/template_lattice_authority.py` | `(phase, W, pitch)` 直接约束矩阵与独立闭合证明 |
+| `photo_geometry/template_adjacency_coverage.py` | selected adjacency 合法走廊到既有 query/trace/coordinate 的覆盖证明 |
 | `photo_geometry/template_alignment_diagnostic.py` | theoretical-vs-observed residual 的只读诊断 |
 | `photo_geometry/interval_math.py`、`template_cross*.py`、`template_cross_support.py` | 共享 interval 运算、fixed-H aperture、局部 top/bottom 方向闭合与 enclosing support |
 | `photo_geometry/template_placement.py`、`template_selection.py` | source-axis frame 的一次 compose 与离散 winner/runner |

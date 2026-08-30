@@ -9,6 +9,7 @@ from ...domain import ObservationId
 from .template_model import SequenceFit
 from .template_phase import fit_template_phase_with_local_advance
 from .template_phase_model import (
+    GlobalLatticeAuthorityEvidence,
     PhaseFitResult,
     PhaseFitStatus,
     TemplatePhaseInput,
@@ -118,6 +119,11 @@ def leave_one_anchor_out_phase_stability(
                 )
             )
         )
+        reduced_ledger_ids = {
+            item.observation_id for item in reduced
+        }.union(
+            band.observation_id for band in reduced_bands
+        )
         refit = fit_template_phase_with_local_advance(
             replace(
                 phase_input,
@@ -127,6 +133,24 @@ def leave_one_anchor_out_phase_stability(
                 # from the removed atom.  Reusing it would make the
                 # leave-one-out check circular.
                 phase_authority_px=None,
+                global_lattice_evidence=GlobalLatticeAuthorityEvidence(
+                    frame_width_observation_ids=tuple(
+                        identity
+                        for identity in (
+                            phase_input.global_lattice_evidence
+                            .frame_width_observation_ids
+                        )
+                        if identity in reduced_ledger_ids
+                    ),
+                    pitch_observation_ids=tuple(
+                        identity
+                        for identity in (
+                            phase_input.global_lattice_evidence
+                            .pitch_observation_ids
+                        )
+                        if identity in reduced_ledger_ids
+                    ),
+                ),
             )
         )
         if refit.status != PhaseFitStatus.RESOLVED or refit.best is None:

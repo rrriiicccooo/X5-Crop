@@ -69,8 +69,11 @@ def select_lane_template_placement(
             PhaseFailureKind.DIRECT_PHASE_ANCHOR_UNAVAILABLE: (
                 GateGap.PHASE_ANCHOR_UNAVAILABLE
             ),
-            PhaseFailureKind.PHASE_SUPPORT_DISCONTINUITY: (
-                GateGap.PHASE_SUPPORT_DISCONTINUITY
+            PhaseFailureKind.GLOBAL_LATTICE_AUTHORITY_UNAVAILABLE: (
+                GateGap.GLOBAL_LATTICE_AUTHORITY_UNAVAILABLE
+            ),
+            PhaseFailureKind.ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE: (
+                GateGap.ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE
             ),
             PhaseFailureKind.FIXED_TEMPLATE_MISMATCH: (
                 GateGap.PHASE_TEMPLATE_MISMATCH

@@ -6,7 +6,7 @@ from bisect import bisect_left
 from dataclasses import replace
 from typing import Sequence
 
-from ...domain import FiniteInterval, ObservationId, PositiveInterval
+from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
 from .model import BoundaryRole, PHOTO_BOUNDARY_MEASUREMENT_SPEC
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_model import (
@@ -34,6 +34,11 @@ from .template_phase_candidates import (
     _with_separator_role_authority,
 )
 from .template_evidence import separator_support_authority
+from .template_adjacency_coverage import (
+    AdjacencyCoverageState,
+    assess_adjacency_observation_coverage,
+)
+from .template_lattice_authority import assess_global_lattice_authority
 from .template_phase_model import (
     PhaseFailureKind,
     PhaseFitResult,
@@ -41,9 +46,6 @@ from .template_phase_model import (
     PhaseWinnerBasis,
     TemplatePhaseInput,
 )
-
-
-_MAX_CONSECUTIVE_UNOBSERVED_PHASE_LOCATIONS = 1
 
 
 def _intervals_overlap(left: FiniteInterval, right: FiniteInterval) -> bool:
@@ -666,19 +668,7 @@ def fit_template_phase(
         winner_basis = PhaseWinnerBasis.ONLY_PHYSICAL_FIT
     else:
         winner_basis = _clear_winner_basis(best, runner)
-    if (
-        winner_basis is not None
-        and best.fit.maximum_internal_phase_gap
-        > _MAX_CONSECUTIVE_UNOBSERVED_PHASE_LOCATIONS
-    ):
-        status = PhaseFitStatus.UNRESOLVED
-        reason = (
-            "direct phase support skips more than one consecutive physical "
-            "adjacency"
-        )
-        failure_kind = PhaseFailureKind.PHASE_SUPPORT_DISCONTINUITY
-        winner_basis = None
-    elif winner_basis is not None:
+    if winner_basis is not None:
         status = PhaseFitStatus.RESOLVED
         reason = None
         failure_kind = None
@@ -773,6 +763,81 @@ def _with_local_role_refinement(
     return replace(result, best=refinement.fit, receipt=receipt)
 
 
+def _apply_final_lattice_contract(
+    result: PhaseFitResult,
+    phase_input: TemplatePhaseInput,
+    *,
+    directly_observed_ordinals: tuple[int, ...],
+) -> PhaseFitResult:
+    """Require both global closure and local coverage for inferred adjacency."""
+
+    authority = (
+        None
+        if result.best is None
+        else assess_global_lattice_authority(result.best, phase_input)
+    )
+    coverage = (
+        ()
+        if result.best is None
+        else assess_adjacency_observation_coverage(
+            result.best,
+            phase_input.sequence_measurement_sets,
+            directly_observed_ordinals=directly_observed_ordinals,
+        )
+    )
+    result = replace(
+        result,
+        global_lattice_authority=authority,
+        adjacency_observation_coverage=coverage,
+    )
+    inferred = tuple(item for item in coverage if item.normal_inference_required)
+    if (
+        result.status == PhaseFitStatus.RESOLVED
+        and inferred
+        and (
+            authority is None
+            or authority.state != EvidenceState.SUPPORTED
+        )
+    ):
+        return replace(
+            result,
+            status=PhaseFitStatus.UNRESOLVED,
+            ambiguity_reason=(
+                "an inferred normal adjacency requires independently closed "
+                "global phase, W, and pitch authority"
+            ),
+            failure_kind=(
+                PhaseFailureKind.GLOBAL_LATTICE_AUTHORITY_UNAVAILABLE
+            ),
+            winner_basis=None,
+        )
+    if (
+        result.status == PhaseFitStatus.RESOLVED
+        and any(
+            item.state != AdjacencyCoverageState.COMPLETE
+            for item in inferred
+        )
+    ):
+        missing = ", ".join(
+            str(item.relation_ordinal)
+            for item in inferred
+            if item.state != AdjacencyCoverageState.COMPLETE
+        )
+        return replace(
+            result,
+            status=PhaseFitStatus.UNRESOLVED,
+            ambiguity_reason=(
+                "registered sequence queries do not fully cover inferred "
+                f"normal adjacency ordinals: {missing}"
+            ),
+            failure_kind=(
+                PhaseFailureKind.ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE
+            ),
+            winner_basis=None,
+        )
+    return result
+
+
 def fit_template_phase_with_local_advance(
     phase_input: TemplatePhaseInput,
 ) -> PhaseFitResult:
@@ -798,7 +863,11 @@ def fit_template_phase_with_local_advance(
         max_observations=max_observations,
     )
     if normal.status != PhaseFitStatus.RESOLVED or normal.best is None:
-        return normal
+        return _apply_final_lattice_contract(
+            normal,
+            phase_input,
+            directly_observed_ordinals=(),
+        )
     normal = _with_local_role_refinement(
         normal,
         observations,
@@ -816,8 +885,11 @@ def fit_template_phase_with_local_advance(
         ),
         separator_bands,
     )
+    directly_observed_ordinals = tuple(
+        item.relation_ordinal for item in analysis.adjacency_facts
+    )
     if analysis.unresolved_reason is not None:
-        return replace(
+        unresolved = replace(
             normal,
             status=PhaseFitStatus.UNRESOLVED,
             ambiguity_reason=analysis.unresolved_reason,
@@ -830,8 +902,13 @@ def fit_template_phase_with_local_advance(
                 ),
             ),
         )
+        return _apply_final_lattice_contract(
+            unresolved,
+            phase_input,
+            directly_observed_ordinals=directly_observed_ordinals,
+        )
     if not analysis.relations:
-        return replace(
+        measured = replace(
             normal,
             receipt=replace(
                 normal.receipt,
@@ -839,6 +916,11 @@ def fit_template_phase_with_local_advance(
                     analysis.evaluated_adjacency_count
                 ),
             ),
+        )
+        return _apply_final_lattice_contract(
+            measured,
+            phase_input,
+            directly_observed_ordinals=directly_observed_ordinals,
         )
     adjusted = fit_template_phase(
         observations,
@@ -855,10 +937,15 @@ def fit_template_phase_with_local_advance(
         observations,
         separator_bands,
     )
-    return _aggregate_phase_work(
+    adjusted = _aggregate_phase_work(
         adjusted,
         normal.receipt,
         local_relation_evaluation_count=analysis.evaluated_adjacency_count,
+    )
+    return _apply_final_lattice_contract(
+        adjusted,
+        phase_input,
+        directly_observed_ordinals=directly_observed_ordinals,
     )
 
 

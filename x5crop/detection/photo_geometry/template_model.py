@@ -583,21 +583,6 @@ class SequenceFit:
         return len(self.phase_support_locations)
 
     @property
-    def maximum_internal_phase_gap(self) -> int:
-        """Number of consecutive unsupported lattice locations between anchors."""
-
-        return max(
-            (
-                right - left - 1
-                for left, right in zip(
-                    self.phase_support_locations,
-                    self.phase_support_locations[1:],
-                )
-            ),
-            default=0,
-        )
-
-    @property
     def binding_observation_ids(self) -> tuple[ObservationId | None, ...]:
         return tuple(
             None if binding is None else binding.observation_id
