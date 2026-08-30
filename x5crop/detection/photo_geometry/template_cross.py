@@ -319,8 +319,6 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         if support_checked:
             return enclosing_support_fit
         support_checked = True
-        if inferred_height is None or inferred_canonical_height is None:
-            return None
         # Prefer one already closed coarse pair.  If none was compiled, only
         # role-unknown source support lines may form an enclosing output pair;
         # photo-aperture roles are never reinterpreted here.
@@ -343,8 +341,8 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             )
         competition = fit_enclosing_support(
             template=inputs.template,
-            fixed_height=inferred_height,
-            canonical_height_px=inferred_canonical_height,
+            fixed_height=fixed_height,
+            canonical_height_px=float(inputs.canonical_fixed_height_px),
             reference_trace_px=inputs.lane_reference_trace_px,
             top_bindings=support_top,
             bottom_bindings=support_bottom,
@@ -362,22 +360,22 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             candidate.bottom_binding.full_interval_px,
         )
         center = midpoint.center
-        canonical_height = inferred_canonical_height
+        canonical_height = float(inputs.canonical_fixed_height_px)
         top_canonical = center - canonical_height / 2.0
         bottom_canonical = center + canonical_height / 2.0
         top_full = FiniteInterval(
-            center - inferred_height.maximum / 2.0,
-            center - inferred_height.minimum / 2.0,
+            center - fixed_height.maximum / 2.0,
+            center - fixed_height.minimum / 2.0,
         )
         bottom_full = FiniteInterval(
-            center + inferred_height.minimum / 2.0,
-            center + inferred_height.maximum / 2.0,
+            center + fixed_height.minimum / 2.0,
+            center + fixed_height.maximum / 2.0,
         )
         direction = candidate.selected_direction
         enclosing_support_fit = CrossFit(
             template_id=inputs.template.template_id,
             lane_reference_trace_px=inputs.lane_reference_trace_px,
-            fixed_height_px=inferred_height,
+            fixed_height_px=fixed_height,
             top_canonical_px=top_canonical,
             bottom_canonical_px=bottom_canonical,
             top_fit_interval_px=FiniteInterval.exact(top_canonical),
@@ -399,7 +397,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             ),
             boundary_use=OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR,
             enclosing_support_pair=candidate.pair,
-            height_compatibility_px=inferred_height,
+            height_compatibility_px=fixed_height,
             shift_interval_px=top_full,
             parallel_direction_interval_degrees=(
                 direction.full_angle_interval_degrees
@@ -463,9 +461,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                 reason=None,
                 receipt=receipt,
                 aperture_aspect_ratio_authority=(
-                    consume_aperture_aspect_ratio_for_cross(
-                        aspect_ratio_authority
-                    )
+                    inputs.aperture_aspect_ratio_authority
                 ),
             ),
             receipt,

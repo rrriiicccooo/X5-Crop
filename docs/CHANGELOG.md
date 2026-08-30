@@ -55,7 +55,8 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
 - Cross 不再用片夹短轴中心选择最终边界；它只帮助编译有界测量 corridor。直接 pair 必须共享足够的
   selected-frame domain support，不能把一条局部 opposite 借另一条 template-wide side 外推成全局闭环。
   Cross winner basis、source 长轴投影与 enclosing-support 的逐侧/联合 padding 预算均进入 typed report
-  与外部校验。
+  与外部校验。已经由 fixed H 与 `1.1H` 合同预闭合的唯一 enclosing-support pair 直接拥有两侧输出权限，
+  不再错误依赖或消费只用于缺失 aperture side 的 W/H 比例推导。
 - 任一 slot 不安全时整张 source `needs_review`，不做 slot salvage。Contact 与 overlap 始终属于
   challenge，但 challenge 不预设终态：标准 detector/Gate 可产生安全自动批准，证据不足时安全 review
   同样合格。当前尚未启用异常 topology；后续只允许在同一 adjacency/placement 中加入显式关系，并让

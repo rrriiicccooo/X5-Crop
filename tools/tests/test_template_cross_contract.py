@@ -1960,6 +1960,9 @@ class TemplateCrossContractTest(unittest.TestCase):
         )
         self.assertIsNotNone(result.best.enclosing_support_pair)
         self.assertFalse(result.best.single_side_inferred)
+        self.assertFalse(
+            result.aperture_aspect_ratio_authority.consumed_for_cross_inference
+        )
         source = SourceScanGeometry.create(
             FramePhysicalSpec(10.0, 24.0, None),
             width_scale_px_per_mm=PositiveInterval.exact(10.0),
@@ -1969,6 +1972,102 @@ class TemplateCrossContractTest(unittest.TestCase):
             calibrate_source_frame_height(source, result),
             source,
         )
+
+    def test_preclosed_enclosing_pair_uses_fixed_height_without_ratio_authority(
+        self,
+    ) -> None:
+        result = fit_template_cross(
+            _TemplateCrossInput(
+                template=template(),
+                fixed_height_px=FiniteInterval(238.0, 242.0),
+                canonical_fixed_height_px=240.0,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "support-top",
+                        100.0,
+                        role_authorized=False,
+                        enclosing_pair_id="support:fixed-height",
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "support-bottom",
+                        350.0,
+                        role_authorized=False,
+                        enclosing_pair_id="support:fixed-height",
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        self.assertEqual(
+            result.winner_basis,
+            CrossWinnerBasis.UNIQUE_ENCLOSING_SUPPORT,
+        )
+        assert result.best is not None
+        self.assertEqual(
+            result.best.fixed_height_px,
+            FiniteInterval(238.0, 242.0),
+        )
+        self.assertEqual(
+            result.best.boundary_use,
+            OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR,
+        )
+        self.assertEqual(
+            result.aperture_aspect_ratio_authority.state,
+            EvidenceState.UNAVAILABLE,
+        )
+        self.assertFalse(
+            result.aperture_aspect_ratio_authority.blocks_cross_resolution
+        )
+
+    def test_multiple_preclosed_enclosing_pairs_remain_unresolved(self) -> None:
+        result = fit_template_cross(
+            _TemplateCrossInput(
+                template=template(),
+                fixed_height_px=FiniteInterval(238.0, 242.0),
+                canonical_fixed_height_px=240.0,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "support-top-a",
+                        100.0,
+                        role_authorized=False,
+                        enclosing_pair_id="support:a",
+                    ),
+                    binding(
+                        BoundaryRole.TOP,
+                        "support-top-b",
+                        101.0,
+                        role_authorized=False,
+                        enclosing_pair_id="support:b",
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "support-bottom-a",
+                        350.0,
+                        role_authorized=False,
+                        enclosing_pair_id="support:a",
+                    ),
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "support-bottom-b",
+                        351.0,
+                        role_authorized=False,
+                        enclosing_pair_id="support:b",
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertIsNone(result.winner_basis)
+        self.assertEqual(result.receipt.evaluated_fit_count, 2)
 
     def test_enclosing_support_evaluations_share_the_cross_fit_bound(self) -> None:
         result = fit_template_cross(

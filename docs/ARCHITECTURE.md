@@ -532,6 +532,10 @@ domain、把两个不连通 fragments 合计覆盖、role 未授权或方向不�
 唯一且直接证明的 enclosing pair 可以成为更强的输出 authority。Enclosing pair 不声称自己是
 照片 aperture，只证明它完整包住可接受的照片区域。
 
+Enclosing pair 以 source 已闭合的 `fixed_height_px` 与 canonical H 检查包含关系；它的两条直接支撑
+本身拥有输出权限，不读取、消费或阻断于 `ApertureAspectRatioAuthority`。比例 authority 只在 aperture
+缺少一侧、需要由 W 推导 H 时生效，不能重复接管已经预闭合的 enclosing support。
+
 这里的 `support_span` 只由这对直接 observation 的 `observed_span.maximum` 拥有。输出 footprint
 是同一 placement 多个联合可行状态的并集，不能把不同状态的 top 与 bottom 组合成新的高度，因而
 不能用其包围盒反向计算 enclosing budget。

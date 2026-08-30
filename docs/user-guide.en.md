@@ -68,9 +68,10 @@ top/bottom = 0.25 mm
 
 Measurement uncertainty, local residual, and bleed share a maximum 5% W/H outward budget per side. Sides cannot
 borrow budget from one another. A directly observed continuous outer-support pair may replace unavailable aperture
-top/bottom when it fully encloses fixed H and its total height is no greater than `1.1H`; that mode adds no 0.25 mm
-cross bleed, while per-side and joint alignment padding remain inside the 5% budget. Any genuinely required source-space
-footprint outside authority enters review instead of being clipped.
+top/bottom when it fully encloses fixed H and its total height is no greater than `1.1H`; this direct pair does not
+depend on W/H ratio inference. That mode adds no 0.25 mm cross bleed, while per-side and joint alignment padding remain
+inside the 5% budget. Any genuinely required source-space footprint outside authority enters review instead of being
+clipped.
 
 Two-dimensional content is a conservative veto on the final post-bleed polygon. Picture structure inside bleed may be
 retained; reliable content crossing the final crop boundary blocks automatic output. Dust, aliasing, and tiny corner
