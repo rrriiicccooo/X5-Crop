@@ -31,6 +31,10 @@ V5 先从整条片带建立粗略支撑和共同方向，再把 format/count 编
 separator 与 top/bottom 附近做有界局部测量。像素证据用于对准模板和否决危险裁切，不能凭自身创造
 format、count 或 placement。
 
+同一已登记窗口会把多个高度的弱 gradient、tone 与 texture 信号联合检查。只有三个独立高度区域一致、
+且唯一加强同一条直接边缘时，它才获得裁切坐标权限；未绑定或有多种解释的联合线只显示在 Debug 中，
+不会生成新的 placement。
+
 正常片带使用一个共享 pitch；每个直接且 ordinal 唯一的 separator 可以约束自己的宽/窄间隔，后续
 Frame 只累加一次该处实测差值。多个已证明的间隔变化仍以一次有界传播处理；任一间隔存在多种解释、
 缺少必要 authority、存在多个同样合法答案或未知必需 Frame 时保持 `needs_review`。

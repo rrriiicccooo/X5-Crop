@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .measurement_model import PhotoBoundaryTransition
+from .measurement_model import SequenceTransitionObservation
 
 
 @dataclass(frozen=True)
 class TransitionPoint:
-    transition: PhotoBoundaryTransition
+    transition: SequenceTransitionObservation
     trace: float
     coordinate: float

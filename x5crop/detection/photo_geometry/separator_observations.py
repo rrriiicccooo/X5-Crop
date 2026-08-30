@@ -18,7 +18,7 @@ from .model import (
 )
 from .measurement_model import (
     PhotoBoundaryMeasurementField,
-    PhotoBoundaryTransition,
+    SequenceTransitionObservation,
 )
 from .observation_types import (
     BasicAxisProfile,
@@ -41,7 +41,7 @@ def _separator_core_material(
     *,
     field: PhotoBoundaryMeasurementField,
     boundary_axis: BoundaryAxis,
-    transitions: dict[str, PhotoBoundaryTransition],
+    transitions: dict[str, SequenceTransitionObservation],
     trace_coordinates_px: tuple[int, ...],
 ) -> tuple[tuple[int, float, float], ...] | None:
     """Measure the whole directly visible band, not only its two edges."""
@@ -87,7 +87,7 @@ def _separator_band_from_edges(
     *,
     profile: BasicAxisProfile,
     runs_by_id: dict[str, ProfileRun],
-    transitions: dict[str, PhotoBoundaryTransition],
+    transitions: dict[str, SequenceTransitionObservation],
     field: PhotoBoundaryMeasurementField,
     boundary_axis: BoundaryAxis,
     frame_width_px: PositiveInterval,
@@ -289,7 +289,7 @@ def _separator_band_from_edges(
 def build_format_separator_bands(
     profile: BasicAxisProfile,
     edges: tuple[BoundaryEdgeObservation, ...],
-    transitions: dict[str, PhotoBoundaryTransition],
+    transitions: dict[str, SequenceTransitionObservation],
     field: PhotoBoundaryMeasurementField,
     boundary_axis: BoundaryAxis,
     frame_width_px: PositiveInterval,

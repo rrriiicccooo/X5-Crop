@@ -24,14 +24,17 @@ from .coarse_enclosing_model import (
 from .measurement_model import (
     PhotoBoundaryMeasurementField,
     PhotoBoundaryMeasurementSet,
-    PhotoBoundaryTransition,
+    SequenceTransitionObservation,
 )
 from .model import BoundaryRole, QueryPurpose
-from .observations import build_sequence_observations
+from .observations import build_sequence_edge_observations
+from .cross_height_edge_support import resolve_cross_height_edge_support
 from .output_model import ResolvedOutputSlots, SharedStripDirection
 from .profile_adapters import cross_profile_from_regions, sequence_profile_from_regions
 from .registered_measurement import measure_registered_queries
 from .sequence_edge_families import merge_sequence_edge_families
+from .separator_observations import build_format_separator_bands
+from .observation_types import BoundaryEdgeMeasurementBasis
 from .template_evidence import template_evidence_use_ledger
 from .template_runtime_model import (
     PreparedTemplateLane,
@@ -64,7 +67,10 @@ from .template_pitch import (
 )
 from .template_placement import resolved_sequence_support_domains_px
 from .source_geometry import SourceScanGeometry
-from .transition_tracking import track_side_transition_regions
+from .transition_tracking import (
+    track_cross_height_transition_regions,
+    track_side_transition_regions,
+)
 
 
 def _canonical_height_from_shared_scale(
@@ -324,6 +330,31 @@ def _physical_transition_regions(
     )
 
 
+def _physical_cross_height_regions(
+    measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
+    *,
+    reference_trace_px: float,
+    boundary_axis_scale_px_per_mm,
+):
+    retained = {}
+    for measurement_set in measurement_sets:
+        values = track_cross_height_transition_regions(
+            (measurement_set,),
+            reference_trace_px=reference_trace_px,
+            boundary_axis_scale_px_per_mm=boundary_axis_scale_px_per_mm,
+        )
+        retained.update({item.region_id: item for item in values})
+    return tuple(
+        sorted(
+            retained.values(),
+            key=lambda item: (
+                item.position_interval_px.center,
+                item.region_id,
+            ),
+        )
+    )
+
+
 def prepare_template_lane(
     field: PhotoBoundaryMeasurementField,
     lane: SourceLaneEvidence,
@@ -405,12 +436,20 @@ def prepare_template_lane(
         registration_start=len(coarse_measurement_sets),
     )
     measurement_sets = (*coarse_measurement_sets, *precision_measurement_sets)
-    transition_by_id: dict[str, PhotoBoundaryTransition] = {
+    transition_by_id: dict[str, SequenceTransitionObservation] = {
         str(item.transition_id): item
         for measurement_set in measurement_sets
-        for item in measurement_set.transitions
+        for item in (
+            *measurement_set.transitions,
+            *measurement_set.cross_height_transitions,
+        )
     }
     side_regions = _physical_transition_regions(
+        precision_measurement_sets[2:],
+        reference_trace_px=height_authority.center,
+        boundary_axis_scale_px_per_mm=scales.width_axis_px_per_mm,
+    )
+    cross_height_regions = _physical_cross_height_regions(
         precision_measurement_sets[2:],
         reference_trace_px=height_authority.center,
         boundary_axis_scale_px_per_mm=scales.width_axis_px_per_mm,
@@ -427,13 +466,24 @@ def prepare_template_lane(
         boundary_axis_scale_px_per_mm=scales.height_axis_px_per_mm,
         minimum_independent_support_regions=1,
     )
-    sequence_profile = sequence_profile_from_regions(
+    direct_sequence_profile = sequence_profile_from_regions(
         side_regions,
         coordinate_count=coordinate_count(width_authority),
         transition_by_id=transition_by_id,
     )
-    sequence_profile = merge_sequence_edge_families(
-        sequence_profile,
+    direct_sequence_profile = merge_sequence_edge_families(
+        direct_sequence_profile,
+        transition_by_id,
+        reference_trace_px=height_authority.center,
+        boundary_axis_scale_px_per_mm=scales.width_axis_px_per_mm,
+    )
+    cross_height_profile = sequence_profile_from_regions(
+        cross_height_regions,
+        coordinate_count=coordinate_count(width_authority),
+        transition_by_id=transition_by_id,
+    )
+    cross_height_profile = merge_sequence_edge_families(
+        cross_height_profile,
         transition_by_id,
         reference_trace_px=height_authority.center,
         boundary_axis_scale_px_per_mm=scales.width_axis_px_per_mm,
@@ -444,14 +494,41 @@ def prepare_template_lane(
         coordinate_count=coordinate_count(height_authority),
         transition_by_id=transition_by_id,
     )
-    sequence_edges, separator_bands = build_sequence_observations(
+    direct_sequence_edges = build_sequence_edge_observations(
+        direct_sequence_profile,
+        transition_by_id,
+        reference_trace_px=height_authority.center,
+        boundary_axis_scale_px_per_mm=scales.width_axis_px_per_mm,
+        measurement_basis=BoundaryEdgeMeasurementBasis.DIRECT_TRACE,
+    )
+    cross_height_edges = build_sequence_edge_observations(
+        cross_height_profile,
+        transition_by_id,
+        reference_trace_px=height_authority.center,
+        boundary_axis_scale_px_per_mm=scales.width_axis_px_per_mm,
+        measurement_basis=(
+            BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE
+        ),
+    )
+    (
+        sequence_edges,
+        cross_height_edge_resolutions,
+    ) = resolve_cross_height_edge_support(
+        direct_sequence_edges,
+        cross_height_edges,
+        transition_by_id,
+        registered_trace_lattice=(
+            precision_measurement_sets[2].query.trace_positions_px
+        ),
+    )
+    sequence_profile = direct_sequence_profile
+    separator_bands = build_format_separator_bands(
         sequence_profile,
+        sequence_edges,
         transition_by_id,
         field,
         width_axis,
-        scales.width_axis_px_per_mm,
-        reference_trace_px=height_authority.center,
-        frame_width_px=measurement_plan.template_spec.frame_width_px,
+        measurement_plan.template_spec.frame_width_px,
     )
     coverage = tuple(item.coverage for item in measurement_sets)
     work = TemplateMeasurementWorkReceipt(
@@ -480,6 +557,11 @@ def prepare_template_lane(
         anchor_domain=anchor_domain,
         measurement_sets=measurement_sets,
         side_regions=side_regions,
+        cross_height_regions=cross_height_regions,
+        cross_height_edges=cross_height_edges,
+        cross_height_edge_resolutions=(
+            cross_height_edge_resolutions
+        ),
         top_regions=top_regions,
         bottom_regions=bottom_regions,
         transition_by_id=transition_by_id,
@@ -789,5 +871,6 @@ def prepare_template_lane(
             cross.observations,
             phase,
             cross_competition,
+            cross_height_edge_resolutions,
         ),
     )

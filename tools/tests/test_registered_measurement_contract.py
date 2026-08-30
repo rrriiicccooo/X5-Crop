@@ -1,9 +1,199 @@
 from __future__ import annotations
 
 from tools.tests.photo_geometry_support import *
+from x5crop.detection.photo_geometry.cross_height_transition_measurement import (
+    measure_cross_height_transition_regions,
+)
+from x5crop.detection.photo_geometry.registered_transition_measurement import (
+    TraceMeasurement,
+    measured_transition_peaks,
+)
+from x5crop.detection.photo_geometry.transition_tracking import (
+    track_cross_height_transition_regions,
+)
+from x5crop.detection.robust_statistics import positive_mad_z
 
 
 class RegisteredMeasurementContractTest(unittest.TestCase):
+    @staticmethod
+    def _cross_height_query() -> PhotoBoundaryMeasurementQuery:
+        traces = tuple(range(0, 81, 10))
+        return PhotoBoundaryMeasurementQuery(
+            query_id="query:cross-height",
+            registration_index=0,
+            lane_id="lane:0",
+            purpose=QueryPurpose.SEQUENCE_ANCHOR_WINDOW,
+            boundary_axis=BoundaryAxis.X,
+            trace_positions_px=traces,
+            search_intervals_px=(FiniteInterval(0.0, 100.0),) * len(traces),
+            transition_ownership_intervals_px=(
+                FiniteInterval(0.0, 100.0),
+            )
+            * len(traces),
+            expected_support_px=100.0,
+            boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
+            trace_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
+            measurement_halo_px=4,
+            registration_provenance_ids=("anchor-domain:cross-height",),
+        )
+
+    @staticmethod
+    def _weak_trace(seed: int, signal: float) -> TraceMeasurement:
+        coordinates = np.arange(101, dtype=np.int32)
+        signed_gradient = np.random.default_rng(seed).integers(
+            -4,
+            5,
+            size=coordinates.size,
+        ).astype(np.float64)
+        signed_gradient[50] = signal
+        gradient_z = positive_mad_z(
+            np.abs(signed_gradient),
+            minimum_scale=1.0,
+        )
+        texture_difference = np.random.default_rng(seed + 1000).integers(
+            0,
+            9,
+            size=coordinates.size,
+        ).astype(np.float64)
+        texture_difference[50] = 11.0
+        zeros = np.zeros(coordinates.size, dtype=np.float64)
+        left_tone = np.full(coordinates.size, 10.0)
+        right_tone = np.full(coordinates.size, 20.0)
+        left_texture = np.full(coordinates.size, 1.0)
+        right_texture = left_texture + texture_difference
+        texture_z = positive_mad_z(
+            texture_difference,
+            minimum_scale=1.0,
+        )
+        return TraceMeasurement(
+            coordinates=coordinates,
+            gradient_z=gradient_z,
+            tone_z=zeros,
+            texture_z=texture_z,
+            signed_gradient=signed_gradient,
+            left_tone=left_tone,
+            right_tone=right_tone,
+            left_texture=left_texture,
+            right_texture=right_texture,
+            temporary_bytes=sum(
+                item.nbytes
+                for item in (
+                    coordinates,
+                    gradient_z,
+                    zeros,
+                    texture_z,
+                    signed_gradient,
+                    left_tone,
+                    right_tone,
+                    left_texture,
+                    right_texture,
+                )
+            ),
+        )
+
+    def test_cross_height_union_recovers_one_common_subthreshold_line(
+        self,
+    ) -> None:
+        query = self._cross_height_query()
+        traces = tuple(self._weak_trace(100 + index, 6.0) for index in range(9))
+        self.assertTrue(
+            all(
+                all(
+                    abs(item.canonical_coordinate - 50.0) > 0.5
+                    for item in measured_transition_peaks(
+                        trace,
+                        PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+                        split_gradient_reversals=False,
+                    )
+                )
+                for trace in traces
+            )
+        )
+
+        transitions, peak_temporary = measure_cross_height_transition_regions(
+            query,
+            traces,
+        )
+        common = tuple(
+            item
+            for item in transitions
+            if abs(item.canonical_coordinate_px - 50.0) <= 0.5
+        )
+        self.assertEqual(len(common), 3)
+        self.assertEqual(
+            tuple(item.spatial_region_index for item in common),
+            (0, 1, 2),
+        )
+        self.assertTrue(all(item.polarity == 1 for item in common))
+        self.assertGreater(peak_temporary, 0)
+
+        coverage = PhotoBoundaryCoverageReceipt(
+            query_id=query.query_id,
+            registered_trace_count=9,
+            completed_trace_count=9,
+            registered_coordinate_count=909,
+            completed_coordinate_count=909,
+            pixel_query_count=909,
+            streaming_block_count=1,
+            peak_temporary_bytes=peak_temporary,
+            complete=True,
+        )
+        regions = track_cross_height_transition_regions(
+            (
+                PhotoBoundaryMeasurementSet(
+                    query=query,
+                    state=EvidenceState.SUPPORTED,
+                    transitions=(),
+                    cross_height_transitions=transitions,
+                    coverage=coverage,
+                ),
+            ),
+            reference_trace_px=40.0,
+            boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
+        )
+        self.assertEqual(len(regions), 1)
+        self.assertEqual(regions[0].independent_support_region_count, 3)
+
+    def test_cross_height_union_rejects_opposite_region_polarity(self) -> None:
+        query = self._cross_height_query()
+        traces = tuple(
+            self._weak_trace(
+                200 + index,
+                -6.0 if 3 <= index < 6 else 6.0,
+            )
+            for index in range(9)
+        )
+        transitions, peak_temporary = measure_cross_height_transition_regions(
+            query,
+            traces,
+        )
+        coverage = PhotoBoundaryCoverageReceipt(
+            query_id=query.query_id,
+            registered_trace_count=9,
+            completed_trace_count=9,
+            registered_coordinate_count=909,
+            completed_coordinate_count=909,
+            pixel_query_count=909,
+            streaming_block_count=1,
+            peak_temporary_bytes=peak_temporary,
+            complete=True,
+        )
+
+        regions = track_cross_height_transition_regions(
+            (
+                PhotoBoundaryMeasurementSet(
+                    query=query,
+                    state=EvidenceState.SUPPORTED,
+                    transitions=(),
+                    cross_height_transitions=transitions,
+                    coverage=coverage,
+                ),
+            ),
+            reference_trace_px=40.0,
+            boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
+        )
+
+        self.assertEqual(regions, ())
     def test_measurement_spec_contains_only_production_values(self) -> None:
         spec = PHOTO_BOUNDARY_MEASUREMENT_SPEC
         self.assertEqual(spec.lattice_spacing_mm(12.0), 2.0)
@@ -56,6 +246,7 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
             query=query,
             state=EvidenceState.UNAVAILABLE,
             transitions=(),
+            cross_height_transitions=(),
             coverage=coverage,
         )
         self.assertEqual(measurement.state, EvidenceState.UNAVAILABLE)
@@ -64,6 +255,7 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
                 query=query,
                 state=EvidenceState.SUPPORTED,
                 transitions=(),
+                cross_height_transitions=(),
                 coverage=coverage,
             )
 

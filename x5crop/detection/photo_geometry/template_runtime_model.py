@@ -20,12 +20,15 @@ from .line_observations import PhotoBoundaryObservation, SideTransitionRegion
 from .measurement_model import (
     PhotoBoundaryCoverageReceipt,
     PhotoBoundaryMeasurementSet,
-    PhotoBoundaryTransition,
+    SequenceTransitionObservation,
 )
 from .model import BoundaryAxis, QueryPurpose
 from .observation_types import (
     BasicAxisProfile,
+    BoundaryEdgeMeasurementBasis,
     BoundaryEdgeObservation,
+    CrossHeightEdgeResolution,
+    CrossHeightEdgeResolutionKind,
     SeparatorBandObservation,
 )
 from .output_model import (
@@ -102,9 +105,15 @@ class RegisteredTemplateLane:
     anchor_domain: SequenceAnchorDiscoveryDomain
     measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...]
     side_regions: tuple[SideTransitionRegion, ...]
+    cross_height_regions: tuple[SideTransitionRegion, ...]
+    cross_height_edges: tuple[BoundaryEdgeObservation, ...]
+    cross_height_edge_resolutions: tuple[
+        CrossHeightEdgeResolution,
+        ...,
+    ]
     top_regions: tuple[SideTransitionRegion, ...]
     bottom_regions: tuple[SideTransitionRegion, ...]
-    transition_by_id: Mapping[str, PhotoBoundaryTransition]
+    transition_by_id: Mapping[str, SequenceTransitionObservation]
     sequence_profile: BasicAxisProfile
     cross_profile: BasicAxisProfile
     sequence_edges: tuple[BoundaryEdgeObservation, ...]
@@ -180,11 +189,100 @@ class RegisteredTemplateLane:
         if receipt_ids != query_ids:
             raise ValueError("measurement receipts must cover registered queries once")
         transition_ids = tuple(self.transition_by_id)
+        registered_transition_ids = {
+            str(transition.transition_id)
+            for measurement_set in self.measurement_sets
+            for transition in (
+                *measurement_set.transitions,
+                *measurement_set.cross_height_transitions,
+            )
+        }
         if len(set(transition_ids)) != len(transition_ids) or any(
             str(item.transition_id) != key
             for key, item in self.transition_by_id.items()
-        ):
+        ) or set(transition_ids) != registered_transition_ids:
             raise ValueError("transition ledger keys must match transition identities")
+        direct_transition_ids = {
+            item.transition_id
+            for measurement_set in self.measurement_sets
+            for item in measurement_set.transitions
+        }
+        aggregate_transition_ids = {
+            item.transition_id
+            for measurement_set in self.measurement_sets
+            for item in measurement_set.cross_height_transitions
+        }
+        if any(
+            not set(item.transition_ids).issubset(direct_transition_ids)
+            for item in self.side_regions
+        ) or any(
+            not set(item.transition_ids).issubset(aggregate_transition_ids)
+            for item in self.cross_height_regions
+        ):
+            raise ValueError("tracked transition regions cross evidence sources")
+        if len(
+            {
+                item.region_id
+                for item in self.cross_height_regions
+            }
+        ) != len(self.cross_height_regions):
+            raise ValueError("cross-height regions must be registered once")
+        resolution_ids = tuple(
+            item.support_observation_id
+            for item in self.cross_height_edge_resolutions
+        )
+        if len(set(resolution_ids)) != len(resolution_ids):
+            raise ValueError(
+                "cross-height edge supports must be resolved once"
+            )
+        if set(resolution_ids) != {
+            item.observation_id for item in self.cross_height_edges
+        }:
+            raise ValueError(
+                "cross-height edges and resolutions must share identity"
+            )
+        if any(
+            item.measurement_basis
+            != BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE
+            for item in self.cross_height_edges
+        ):
+            raise ValueError("cross-height edge ledger changed measurement basis")
+        resolution_by_id = {
+            item.support_observation_id: item
+            for item in self.cross_height_edge_resolutions
+        }
+        edge_ids = {item.observation_id for item in self.sequence_edges}
+        if any(
+            item.final_edge_observation_id is not None
+            and item.final_edge_observation_id not in edge_ids
+            for item in self.cross_height_edge_resolutions
+        ):
+            raise ValueError(
+                "cross-height resolution leaves the final edge ledger"
+            )
+        for edge in self.sequence_edges:
+            if (
+                edge.measurement_basis
+                == BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE
+            ):
+                raise ValueError(
+                    "standalone cross-height candidate entered placement"
+                )
+            elif (
+                edge.measurement_basis
+                == BoundaryEdgeMeasurementBasis.DIRECT_WITH_CROSS_HEIGHT
+            ):
+                resolution = resolution_by_id.get(edge.cross_height_support_id)
+                if (
+                    resolution is None
+                    or resolution.kind
+                    != CrossHeightEdgeResolutionKind.BOUND_DIRECT_EDGE
+                    or resolution.final_edge_observation_id
+                    != edge.observation_id
+                ):
+                    raise ValueError(
+                        "bound cross-height support leaves its direct edge"
+                    )
         if self.sequence_profile.axis_name != "sequence" or self.cross_profile.axis_name != "cross":
             raise ValueError("template profiles must retain sequence and cross axes")
         if len({item.observation_id for item in self.sequence_edges}) != len(self.sequence_edges):

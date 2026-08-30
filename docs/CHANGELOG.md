@@ -20,6 +20,10 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   反向 edge 必须在同一高度区域同时满足 oriented tone contrast 与 core texture 合同；局部两区域 support
   不能冒充 source-wide role authority，完整三区域反证产生 typed `separator_material_conflict`。超出 normal
   gap 上界的 material 仍保留为事实，但不能创造 phase、ordinal 或直接角色权限。
+- 已登记 sequence trace 的弱 gradient、tone 与 texture 可在三个固定高度区域内联合成一份 typed
+  observation。只有位置、方向、polarity 与角色相容的三区域结果唯一绑定同一条局部 direct edge 时，
+  才以 `cross_height_union` 加强该 edge；standalone、重复或多解联合线只进入 development report 与
+  Debug，不进入 phase、separator、outer 或 placement，也不重复计票或增加 TIFF 读取。
 - 直接观察到的 start/end 在最终 placement 中保留 native coordinate 与完整 interval；Grid 只补齐缺失
   角色。同一连续 placement 的互补 endpoint evidence 合并为联合可行状态，不伪造 runner。只有恰好缺
   一个角色、且至少两张完整直接 Frame 唯一证明共同 W 时，才用该 W 补这一条边。缺失 separator 只有在
@@ -56,7 +60,7 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   阻断原因；报告同时保存全局未知量 constraint rank、逐 adjacency query/trace/coordinate coverage 与
   直接角色/外侧 Frame observation authority，以及 dark/light material、逐区域状态和冲突。Debug 不重新
   求解，也不把 review candidate 伪装为正式输出。当前 report revision 为
-  `x5crop_v5_template_report_16`，不保留旧 schema 兼容路径。
+  `x5crop_v5_template_report_17`，不保留旧 schema 兼容路径。
 - 正式 TIFF 保真 16-bit RGB、ICC、resolution、支持的 metadata 与无损压缩，并写
   `Orientation=1`。完整 source 先写 staging，再原子发布到尚不存在的目录。
 - Report、Gate 与 final geometry 各有唯一 owner；`CandidateGate` 只记录事实，`DecisionGate` 创建终态。
@@ -101,12 +105,12 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
 - `tools/verify` 是 Hook、CI 与本地验证的唯一入口。Diagnostic 只证明工程合同；gold accuracy、性能与
   platform receipt 分层记录，不互相冒充。
 - 正式性能 Gate 为 24-source 完整用户路径 mean 不超过 5 秒；3 秒只是不阻断的 challenge。
-- 当前 polarity-complete separator checkpoint 的 detector source manifest 为 `f6614793d27e8be6`。
+- 当前跨高度弱边缘联合 checkpoint 的 detector source manifest 为 `550c8672bd5eaf14`。
   Development gold 110/110 完成、分析错误 0、危险自动批准 0；安全 auto 为基础 nominal 10/66、较难
-  nominal 0/30、challenge 0/14。7 个 `separator_material_conflict` 明确进入 review；S075、S089 不再由
-  同角色竞争边形成危险选择，S080 的照片内部亮带没有误伤合法 placement。S003 的 fixed-W 缺口与 S073
-  的 wide-gap/outer authority 缺口保持 review，留给独立物理机制处理。Clean-commit 24-source 性能继续
-  以 5 秒 mean 为 Gate、3 秒为不阻断目标。
+  nominal 0/30、challenge 0/14。`direct_role_binding_authority_unavailable` 从 24 降为 16，8 个样片继续
+  暴露下游 blocker；没有新增安全自动覆盖。全部 candidate 为 85 个不可用、19 个安全、6 个不安全，
+  其中不安全 candidate 均保持 review。Clean-commit 24-source 性能继续以 5 秒 mean 为 Gate、3 秒为
+  不阻断目标。
 - Apple Silicon macOS、Intel macOS 与 Windows x64 必须在同一最终 commit 取得实机 receipt。Accuracy、
   性能与平台证据未全部绑定该 commit 前，不创建 RC、tag、Release 或公开 ZIP。
 - 发布包由唯一 manifest 构建，不包含 modular source、tests、tools、内部文档或开发输出。

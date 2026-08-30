@@ -22,6 +22,12 @@ def _measurement_set_read_model(measurement_set: object) -> dict[str, object]:
         "coverage": typed_read_model(measurement_set.coverage),
         "transition_count": len(measurement_set.transitions),
         "transitions": typed_read_model(measurement_set.transitions),
+        "cross_height_transition_count": len(
+            measurement_set.cross_height_transitions
+        ),
+        "cross_height_transitions": typed_read_model(
+            measurement_set.cross_height_transitions
+        ),
     }
 
 
@@ -104,6 +110,15 @@ def development_report_facts(
                     ),
                     "side_transition_regions": typed_read_model(
                         lane.prepared.side_regions
+                    ),
+                    "cross_height_transition_regions": typed_read_model(
+                        lane.prepared.cross_height_regions
+                    ),
+                    "cross_height_edges": typed_read_model(
+                        lane.prepared.cross_height_edges
+                    ),
+                    "cross_height_edge_resolutions": typed_read_model(
+                        lane.prepared.cross_height_edge_resolutions
                     ),
                     "raw_top_bottom_lines": typed_read_model(
                         lane.prepared.raw_cross_observations
@@ -189,6 +204,17 @@ def development_report_facts(
                     ),
                     "registered_sequence_observation_count": (
                         len(lane.prepared.sequence_edges)
+                    ),
+                    "registered_cross_height_transition_count": sum(
+                        len(item.cross_height_transitions)
+                        for item in lane.prepared.measurement_sets
+                    ),
+                    "registered_cross_height_edge_count": len(
+                        lane.prepared.cross_height_edges
+                    ),
+                    "cross_height_resolution_failure_count": sum(
+                        item.state.value == "contradicted"
+                        for item in lane.prepared.cross_height_edge_resolutions
                     ),
                     "phase_hypothesis_count": (
                         lane.prepared.phase_competition.receipt

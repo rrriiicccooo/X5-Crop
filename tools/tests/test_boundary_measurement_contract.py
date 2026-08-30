@@ -14,10 +14,6 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
     def test_role_qualified_continuous_bend_requires_unanimous_role_relation(
         self,
     ) -> None:
-        from x5crop.detection.photo_geometry.observations import (
-            build_sequence_observations,
-        )
-
         traces = (0, 100, 200, 300, 400)
         coordinates = (100.0, 101.0, 100.0, 101.0, 114.0)
 
@@ -66,18 +62,15 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
         )
         profile = BasicAxisProfile("sequence", 300, traces, (run,))
 
-        edges, bands = build_sequence_observations(
+        edges = build_sequence_edge_observations(
             profile,
             {str(item.transition_id): item for item in values},
-            mock.Mock(),
-            BoundaryAxis.X,
-            PositiveInterval(10.0, 10.0),
             reference_trace_px=200.0,
-            frame_width_px=PositiveInterval(90.0, 110.0),
+            boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
+            measurement_basis=BoundaryEdgeMeasurementBasis.DIRECT_TRACE,
         )
 
         self.assertEqual(len(edges), 1)
-        self.assertEqual(bands, ())
         self.assertEqual(
             edges[0].transition_ids,
             tuple(item.transition_id for item in values[:-1]),
@@ -95,24 +88,17 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
             ),
             *values[1:],
         )
-        edges, bands = build_sequence_observations(
+        edges = build_sequence_edge_observations(
             profile,
             {str(item.transition_id): item for item in inconsistent},
-            mock.Mock(),
-            BoundaryAxis.X,
-            PositiveInterval(10.0, 10.0),
             reference_trace_px=200.0,
-            frame_width_px=PositiveInterval(90.0, 110.0),
+            boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
+            measurement_basis=BoundaryEdgeMeasurementBasis.DIRECT_TRACE,
         )
 
         self.assertEqual(edges, ())
-        self.assertEqual(bands, ())
 
     def test_unqualified_bend_does_not_create_sequence_authority(self) -> None:
-        from x5crop.detection.photo_geometry.observations import (
-            build_sequence_observations,
-        )
-
         traces = (0, 100, 200, 300)
         values = tuple(
             PhotoBoundaryTransition(
@@ -159,18 +145,15 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
             pair_qualified=False,
         )
 
-        edges, bands = build_sequence_observations(
+        edges = build_sequence_edge_observations(
             BasicAxisProfile("sequence", 300, traces, (run,)),
             {str(item.transition_id): item for item in values},
-            mock.Mock(),
-            BoundaryAxis.X,
-            PositiveInterval(10.0, 10.0),
             reference_trace_px=150.0,
-            frame_width_px=PositiveInterval(90.0, 110.0),
+            boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
+            measurement_basis=BoundaryEdgeMeasurementBasis.DIRECT_TRACE,
         )
 
         self.assertEqual(edges, ())
-        self.assertEqual(bands, ())
 
     def test_impossible_sequence_family_skips_robust_refit(self) -> None:
         def transition(
@@ -527,6 +510,9 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
                 canonical_direction_degrees=None,
                 fit_direction_interval_degrees=None,
                 full_direction_interval_degrees=None,
+                measurement_basis=(
+                    BoundaryEdgeMeasurementBasis.DIRECT_TRACE
+                ),
             )
 
         profile = BasicAxisProfile(
@@ -652,6 +638,9 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
                 canonical_direction_degrees=None,
                 fit_direction_interval_degrees=None,
                 full_direction_interval_degrees=None,
+                measurement_basis=(
+                    BoundaryEdgeMeasurementBasis.DIRECT_TRACE
+                ),
             )
 
         marker = mock.Mock()
@@ -720,6 +709,9 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
                 canonical_direction_degrees=None,
                 fit_direction_interval_degrees=None,
                 full_direction_interval_degrees=None,
+                measurement_basis=(
+                    BoundaryEdgeMeasurementBasis.DIRECT_TRACE
+                ),
             )
 
         with mock.patch(
@@ -739,10 +731,6 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
         builder.assert_not_called()
 
     def test_polarity_ambiguous_edge_remains_an_observation(self) -> None:
-        from x5crop.detection.photo_geometry.observations import (
-            build_sequence_observations,
-        )
-
         run = ProfileRun(
             run_id="mixed-polarity-edge",
             coordinate_interval_px=FiniteInterval(80.0, 120.0),
@@ -799,14 +787,12 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
             ),
         }
 
-        edges, bands = build_sequence_observations(
+        edges = build_sequence_edge_observations(
             profile,
             transitions,
-            mock.Mock(),
-            BoundaryAxis.X,
-            PositiveInterval(10.0, 10.0),
             reference_trace_px=50.0,
-            frame_width_px=PositiveInterval(90.0, 110.0),
+            boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
+            measurement_basis=BoundaryEdgeMeasurementBasis.DIRECT_TRACE,
         )
 
         self.assertEqual(len(edges), 1)
@@ -822,7 +808,6 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
                 edges[0].fit_position_interval_px.minimum
             )
         )
-        self.assertEqual(bands, ())
 
     def test_separator_material_cannot_skip_an_internal_transition(self) -> None:
         traces = (0, 50, 100)
@@ -869,6 +854,9 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
                 canonical_direction_degrees=None,
                 fit_direction_interval_degrees=None,
                 full_direction_interval_degrees=None,
+                measurement_basis=(
+                    BoundaryEdgeMeasurementBasis.DIRECT_TRACE
+                ),
             )
 
         edges = (

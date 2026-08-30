@@ -195,13 +195,36 @@ texture 上界时才为 `supported`；否则明确为 `tone_unresolved` 或 `mat
 明确 adjacency 时，实测宽度才能约束该处 local advance。亮、暗两种 polarity 使用完全相同的权限和
 失败合同；极性本身不参与 winner 评分。
 
-### 6.3 Cross observation
+### 6.3 跨高度弱边缘联合观察
+
+同一个已登记 `SEQUENCE_ANCHOR_WINDOW` 的 trace lattice 固定分成三个高度区域。每个区域只在原有
+signed gradient、tone 与 texture 坐标上求联合测量，并继续使用同一 robust-z、peak localization 和
+polarity 合同；不降低单 trace 阈值、不读取新像素，也不建立 enhanced image 或第二 detector。
+
+三区域联合观察仍不知道 role、ordinal 或 placement。它只有在三个区域的位置区间、方向区间、polarity
+和可承担的 START/END 角色均相容时，才形成一个 `CROSS_HEIGHT_AGGREGATE` edge。其进入 placement 的
+权限由 `cross_height_edge_support.py` 唯一决定：
+
+| 联合观察与直接 edge 的关系 | typed resolution | 权限 |
+|---|---|---|
+| 唯一匹配一条局部 direct edge | `bound_direct_edge` | 保留 direct native coordinate，以 `cross_height_union` 补足空间支持，只计一份证据 |
+| 没有匹配 direct edge | `standalone_candidate` | 只进入 evidence、report 与 Debug，不进入 phase、separator、outer 或 placement |
+| 匹配的 direct edge 已覆盖三个独立区域 | `redundant_direct_edge` | 保留原 direct edge，不重复计票 |
+| 同一联合 edge 匹配多条 direct edge | `multiple_compatible_direct_edges` | typed contradiction，不授予联合权限 |
+| 多条联合 edge 竞争同一局部 direct edge | `multiple_supports_for_one_direct_edge` | typed contradiction，不授予联合权限 |
+| 少于三个区域、区域 polarity 冲突或 query coverage 不完整 | 无合格联合 edge | `unavailable`，保持原 direct evidence |
+
+联合观察只能加强已经存在且唯一的直接物理边缘，不能凭自身创造相位候选。其完整原始 transition、edge、
+resolution 与工作量只保存在 development report；Debug 用独立颜色显示原始联合线，并明确区分已绑定、
+冗余、standalone 与 ambiguous 状态。
+
+### 6.4 Cross observation
 
 Top/bottom observation 的局部线段先保持独立。方向相同、坐标接近、残差较小或 trace 较多都不足以
 证明多个 fragment 属于同一物理 side track；必须有 source-spanning 连续性，或明确的空间连接和
 独立长轴支持。
 
-### 6.4 Content observation
+### 6.5 Content observation
 
 内容层保存二维占用单元或连通区域，只作 negative veto。它不能移动边界、选择 winner、创造
 placement、平分照片或把内容 bbox 当 crop。角落擦边、锯齿、尘点、黑片和低纹理保持中性；只有
@@ -251,6 +274,7 @@ placement；“观察到了”本身不等于“有权决定裁切”。权限�
 | edge 空间支持与关系 | 角色坐标权限 |
 |---|---|
 | 同一 edge 直接覆盖三个独立高度区域 | `source_wide_edge`，允许 |
+| 一条局部 direct edge 唯一绑定三区域联合观察 | `cross_height_union`，允许；两者仍是一份相关证据 |
 | 同一 source-wide separator 的两侧 edge 原子绑定到一个 adjacency | `separator_pair`，两侧均允许 |
 | 同一 Frame 的两条不同物理 edge，其直接宽度区间与固定 W 相交 | `frame_width_pair`，两侧均允许 |
 | 只覆盖局部高度，且没有上述任一闭环 | `direct_role_binding_authority_unavailable` |
@@ -635,7 +659,7 @@ validator 位于 `tools/regression/`，不进入用户 standalone。
 
 Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决定、不写正式 TIFF。它必须展示：
 
-- theoretical template 与 role-free observations；
+- theoretical template、role-free observations 与跨高度联合观察的 typed resolution；
 - dark/light separator material、逐区域状态、直接角色权限与 material conflict；
 - 每个 bound role 的 residual 和 normal/measured-advances/unresolved pattern；
 - direct 与 inferred 边界；
@@ -711,6 +735,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/template_measurement_plan*.py` | pixel-free 模板、有限 query intents、停止与工作上界 |
 | `photo_geometry/corridors.py` | 候选无关 top/bottom 与完整 `W/pitch` sequence 查询走廊 |
 | `photo_geometry/registered_*.py`、`observations.py`、`separator_*.py` | 一次性 measurement、role-free edge 与 material band |
+| `photo_geometry/cross_height_transition_measurement.py`、`cross_height_edge_support.py` | 三区域弱信号联合测量及其与唯一 direct edge 的单次绑定权限 |
 | `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source 共享 W/H/scale authority |
 | `photo_geometry/template_phase*.py`、`template_pitch.py`、`template_residual.py` | phase/ordinal 求解、source pitch 与逐 adjacency 的 direct local advance |
 | `photo_geometry/template_direct_role_authority.py` | 已选直接 START/END 的 native coordinate 权限证明 |

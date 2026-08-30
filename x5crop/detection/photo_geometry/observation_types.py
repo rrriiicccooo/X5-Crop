@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 import math
 
-from ...domain import FiniteInterval, ObservationId
+from ...domain import EvidenceState, FiniteInterval, ObservationId
 from .model import (
     BoundaryEvidenceState,
     BoundaryRole,
@@ -69,6 +69,12 @@ class ProfileRun:
         return role in self.qualified_anchor_roles
 
 
+class BoundaryEdgeMeasurementBasis(str, Enum):
+    DIRECT_TRACE = "direct_trace"
+    CROSS_HEIGHT_AGGREGATE = "cross_height_aggregate"
+    DIRECT_WITH_CROSS_HEIGHT = "direct_with_cross_height"
+
+
 @dataclass(frozen=True)
 class BoundaryEdgeObservation:
     observation_id: ObservationId
@@ -87,6 +93,8 @@ class BoundaryEdgeObservation:
     canonical_direction_degrees: float | None
     fit_direction_interval_degrees: FiniteInterval | None
     full_direction_interval_degrees: FiniteInterval | None
+    measurement_basis: BoundaryEdgeMeasurementBasis
+    cross_height_support_id: ObservationId | None = None
     qualified_anchor_roles: tuple[BoundaryRole, ...] = ()
     evidence_state: BoundaryEvidenceState = BoundaryEvidenceState.SUPPORT
 
@@ -115,6 +123,19 @@ class BoundaryEdgeObservation:
             or not 0.0 <= self.continuous_support_fraction <= 1.0
             or not math.isfinite(self.fit_residual_px)
             or self.fit_residual_px < 0.0
+            or not isinstance(
+                self.measurement_basis,
+                BoundaryEdgeMeasurementBasis,
+            )
+            or (
+                self.measurement_basis
+                == BoundaryEdgeMeasurementBasis.DIRECT_WITH_CROSS_HEIGHT
+            )
+            != (self.cross_height_support_id is not None)
+            or (
+                self.cross_height_support_id is not None
+                and self.cross_height_support_id == self.observation_id
+            )
             or (
                 (self.canonical_direction_degrees is None)
                 != (self.fit_direction_interval_degrees is None)
@@ -150,6 +171,105 @@ class BoundaryEdgeObservation:
             )
         ):
             raise ValueError("boundary edge observation is invalid")
+
+
+class CrossHeightEdgeResolutionKind(str, Enum):
+    BOUND_DIRECT_EDGE = "bound_direct_edge"
+    STANDALONE_CANDIDATE = "standalone_candidate"
+    REDUNDANT_DIRECT_EDGE = "redundant_direct_edge"
+    AMBIGUOUS_DIRECT_MATCH = "ambiguous_direct_match"
+
+
+class CrossHeightEdgeResolutionFailureKind(str, Enum):
+    MULTIPLE_COMPATIBLE_DIRECT_EDGES = (
+        "multiple_compatible_direct_edges"
+    )
+    MULTIPLE_SUPPORTS_FOR_ONE_DIRECT_EDGE = (
+        "multiple_supports_for_one_direct_edge"
+    )
+
+
+@dataclass(frozen=True)
+class CrossHeightEdgeResolution:
+    """How one three-region aggregate may enter the edge ledger."""
+
+    support_observation_id: ObservationId
+    state: EvidenceState
+    kind: CrossHeightEdgeResolutionKind
+    compatible_direct_edge_ids: tuple[ObservationId, ...]
+    final_edge_observation_id: ObservationId | None
+    failure_kind: CrossHeightEdgeResolutionFailureKind | None
+
+    def __post_init__(self) -> None:
+        ambiguous = self.kind == (
+            CrossHeightEdgeResolutionKind.AMBIGUOUS_DIRECT_MATCH
+        )
+        standalone = self.kind == (
+            CrossHeightEdgeResolutionKind.STANDALONE_CANDIDATE
+        )
+        if (
+            not isinstance(self.support_observation_id, ObservationId)
+            or not isinstance(self.state, EvidenceState)
+            or not isinstance(self.kind, CrossHeightEdgeResolutionKind)
+            or tuple(sorted(set(self.compatible_direct_edge_ids)))
+            != self.compatible_direct_edge_ids
+            or any(
+                not isinstance(item, ObservationId)
+                for item in self.compatible_direct_edge_ids
+            )
+            or ambiguous != (self.state == EvidenceState.CONTRADICTED)
+            or (not ambiguous) != (self.state == EvidenceState.SUPPORTED)
+            or ambiguous != (self.failure_kind is not None)
+            or (ambiguous or standalone) != (
+                self.final_edge_observation_id is None
+            )
+            or (
+                self.failure_kind is not None
+                and not isinstance(
+                    self.failure_kind,
+                    CrossHeightEdgeResolutionFailureKind,
+                )
+            )
+            or (
+                self.failure_kind
+                == CrossHeightEdgeResolutionFailureKind
+                .MULTIPLE_COMPATIBLE_DIRECT_EDGES
+                and len(self.compatible_direct_edge_ids) <= 1
+            )
+            or (
+                self.failure_kind
+                == CrossHeightEdgeResolutionFailureKind
+                .MULTIPLE_SUPPORTS_FOR_ONE_DIRECT_EDGE
+                and len(self.compatible_direct_edge_ids) != 1
+            )
+            or (
+                self.kind
+                in {
+                    CrossHeightEdgeResolutionKind.BOUND_DIRECT_EDGE,
+                    CrossHeightEdgeResolutionKind.REDUNDANT_DIRECT_EDGE,
+                }
+                and len(self.compatible_direct_edge_ids) != 1
+            )
+            or (
+                self.kind
+                == CrossHeightEdgeResolutionKind.STANDALONE_CANDIDATE
+                and (
+                    self.compatible_direct_edge_ids
+                    or self.final_edge_observation_id is not None
+                )
+            )
+            or (
+                self.kind
+                not in {
+                    CrossHeightEdgeResolutionKind.STANDALONE_CANDIDATE,
+                    CrossHeightEdgeResolutionKind.AMBIGUOUS_DIRECT_MATCH,
+                }
+                and self.final_edge_observation_id is not None
+                and self.final_edge_observation_id
+                not in self.compatible_direct_edge_ids
+            )
+        ):
+            raise ValueError("cross-height edge resolution is invalid")
 
 
 class SeparatorMaterialPolarity(str, Enum):

@@ -16,6 +16,7 @@ from x5crop.detection.photo_geometry.model import (
     QueryPurpose,
 )
 from x5crop.detection.photo_geometry.observation_types import (
+    BoundaryEdgeMeasurementBasis,
     BoundaryEdgeObservation,
     SeparatorBandObservation,
     SeparatorMaterialPolarity,
@@ -79,6 +80,7 @@ def phase_edge(
         canonical_direction_degrees=None,
         fit_direction_interval_degrees=None,
         full_direction_interval_degrees=None,
+        measurement_basis=BoundaryEdgeMeasurementBasis.DIRECT_TRACE,
         qualified_anchor_roles=(BoundaryRole.START, BoundaryRole.END),
     )
 
@@ -225,6 +227,7 @@ def phase_sequence_measurement(
         query=query,
         state=(EvidenceState.SUPPORTED if complete else EvidenceState.UNAVAILABLE),
         transitions=(),
+        cross_height_transitions=(),
         coverage=coverage,
     )
 

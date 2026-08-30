@@ -16,6 +16,7 @@ from x5crop.detection.photo_geometry.model import (
     BoundaryRole,
 )
 from x5crop.detection.photo_geometry.observation_types import (
+    BoundaryEdgeMeasurementBasis,
     BoundaryEdgeObservation,
     SeparatorMaterialPolarity,
     SeparatorMaterialRegionObservation,
@@ -546,6 +547,59 @@ class TemplatePhaseContractTest(unittest.TestCase):
             result.outer_frame_observation_authority.last_frame_observation_ids
         )
 
+    def test_pure_cross_height_edge_has_no_direct_role_authority(
+        self,
+    ) -> None:
+        observations = tuple(
+            replace(
+                edge(identity, coordinate),
+                qualified_anchor_roles=(role,),
+                polarity=1 if role == BoundaryRole.START else -1,
+                measurement_basis=(
+                    BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE
+                    if identity == "joint:start:1"
+                    else BoundaryEdgeMeasurementBasis.DIRECT_TRACE
+                ),
+            )
+            for identity, coordinate, role in (
+                ("joint:start:1", 40.0, BoundaryRole.START),
+                ("start:2", 160.0, BoundaryRole.START),
+                ("end:2", 260.0, BoundaryRole.END),
+                ("start:3", 280.0, BoundaryRole.START),
+                ("end:3", 380.0, BoundaryRole.END),
+                ("start:4", 400.0, BoundaryRole.START),
+                ("end:6", 740.0, BoundaryRole.END),
+            )
+        )
+
+        result = fit_template_phase_with_local_advance(
+            TemplatePhaseInput(
+                observations=observations,
+                separator_bands=(),
+                template=template(6),
+                scale_px_per_mm=None,
+                holder_span_px=FiniteInterval(0.0, 800.0),
+                phase_authority_px=None,
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "cross-height-outer-anchor",
+                        FiniteInterval(0.0, 800.0),
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE,
+        )
+        assert result.direct_role_binding_authority is not None
+        self.assertEqual(
+            result.direct_role_binding_authority.unsupported_role_indices,
+            (0,),
+        )
+
     def test_short_unpaired_edge_cannot_own_a_direct_role_coordinate(self) -> None:
         observations = tuple(
             replace(
@@ -657,6 +711,73 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 "frame_width_pair" in tuple(basis.value for basis in item.bases)
                 for item in short_pair
             )
+        )
+
+    def test_cross_height_union_authorizes_one_short_direct_edge(self) -> None:
+        observations = tuple(
+            replace(
+                edge(identity, coordinate),
+                qualified_anchor_roles=(role,),
+                polarity=1 if role == BoundaryRole.START else -1,
+                trace_coordinates_px=(
+                    (10, 20) if identity.startswith("joint:") else (0, 10, 20)
+                ),
+                support_fraction=(
+                    2.0 / 3.0 if identity.startswith("joint:") else 1.0
+                ),
+                continuous_support_fraction=(
+                    2.0 / 3.0 if identity.startswith("joint:") else 1.0
+                ),
+                measurement_basis=(
+                    BoundaryEdgeMeasurementBasis.DIRECT_WITH_CROSS_HEIGHT
+                    if identity.startswith("joint:")
+                    else BoundaryEdgeMeasurementBasis.DIRECT_TRACE
+                ),
+                cross_height_support_id=(
+                    ObservationId("cross-height:joint:start:3")
+                    if identity.startswith("joint:")
+                    else None
+                ),
+            )
+            for identity, coordinate, role in (
+                ("start:1", 40.0, BoundaryRole.START),
+                ("end:1", 140.0, BoundaryRole.END),
+                ("start:2", 160.0, BoundaryRole.START),
+                ("end:2", 260.0, BoundaryRole.END),
+                ("joint:start:3", 280.0, BoundaryRole.START),
+                ("start:4", 400.0, BoundaryRole.START),
+                ("end:4", 500.0, BoundaryRole.END),
+            )
+        )
+
+        result = fit_template_phase_with_local_advance(
+            TemplatePhaseInput(
+                observations=observations,
+                separator_bands=(),
+                template=template(4),
+                scale_px_per_mm=None,
+                holder_span_px=FiniteInterval(0.0, 540.0),
+                phase_authority_px=None,
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "cross-height-union-direct-role",
+                        FiniteInterval(0.0, 540.0),
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        assert result.direct_role_binding_authority is not None
+        joint = tuple(
+            item
+            for item in result.direct_role_binding_authority.facts
+            if item.role_index == 4
+        )
+        self.assertEqual(len(joint), 1)
+        self.assertEqual(
+            tuple(item.value for item in joint[0].bases),
+            ("cross_height_union",),
         )
 
     def test_inferred_normal_adjacency_requires_full_registered_corridor(

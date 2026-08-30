@@ -17,7 +17,7 @@ from .model import (
     PHOTO_BOUNDARY_MEASUREMENT_SPEC,
     PhotoBoundaryMeasurementSpec,
 )
-from .measurement_model import PhotoBoundaryTransition
+from .measurement_model import SequenceTransitionObservation
 from .observation_types import BasicAxisProfile, ProfileRun
 from .robust_line_fit import fit_transition_line, physical_slope_interval
 from .sequence_direction_measurement import sequence_run_direction_measurement
@@ -29,7 +29,7 @@ from .trace_support import (
 
 def _dominant_polarity(
     run: ProfileRun,
-    transitions: dict[str, PhotoBoundaryTransition],
+    transitions: dict[str, SequenceTransitionObservation],
 ) -> int:
     value = sum(
         transitions[str(identity)].polarity for identity in run.transition_ids
@@ -39,7 +39,7 @@ def _dominant_polarity(
 
 def _reference_position_interval(
     runs: tuple[ProfileRun, ...],
-    transitions: dict[str, PhotoBoundaryTransition],
+    transitions: dict[str, SequenceTransitionObservation],
     *,
     slope: float,
     reference_trace_px: float,
@@ -60,7 +60,7 @@ def _reference_position_interval(
 
 def merge_sequence_edge_families(
     profile: BasicAxisProfile,
-    transitions: dict[str, PhotoBoundaryTransition],
+    transitions: dict[str, SequenceTransitionObservation],
     *,
     reference_trace_px: float,
     boundary_axis_scale_px_per_mm: PositiveInterval,

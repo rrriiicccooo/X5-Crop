@@ -22,8 +22,12 @@ from .model import (
     independent_spatial_support_count,
 )
 from .measurement_model import PhotoBoundaryMeasurementSet
+from .cross_height_transition_measurement import (
+    cross_height_region_trace_ordinals,
+)
 from .line_observations import SideTransitionRegion
 from .physical_identity import physical_observation_id
+
 
 @dataclass
 class _SideTrack:
@@ -126,7 +130,7 @@ def _maximum_coverage_intervals(
     return maximum, alternatives
 
 
-def track_side_transition_regions(
+def _track_transition_regions(
     measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
     *,
     reference_trace_px: float,
@@ -136,8 +140,9 @@ def track_side_transition_regions(
         MINIMUM_INDEPENDENT_SUPPORT_REGIONS
     ),
     spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+    use_cross_height_transitions: bool,
 ) -> tuple[SideTransitionRegion, ...]:
-    """Track finite local side segments without assigning boundary roles.
+    """Track one typed transition source without assigning boundary roles.
 
     Sequence edges remain source/lane observations and therefore request two
     independent support regions here.  Top/bottom measurement may request one
@@ -158,13 +163,21 @@ def track_side_transition_regions(
     transition_by_id = {
         str(transition.transition_id): transition
         for item in measurement_sets
-        for transition in item.transitions
+        for transition in (
+            item.cross_height_transitions
+            if use_cross_height_transitions
+            else item.transitions
+        )
     }
     transitions = tuple(
         sorted(
             (
                 transition
                 for transition in transition_by_id.values()
+                if (
+                    not use_cross_height_transitions
+                    or transition.polarity != 0
+                )
                 if support_interval_px is None
                 or support_interval_px.contains(
                     float(transition.trace_coordinate_px),
@@ -178,17 +191,35 @@ def track_side_transition_regions(
             ),
         )
     )
+    if use_cross_height_transitions:
+        trace_lattices = {
+            item.query.trace_positions_px for item in measurement_sets
+        }
+        if len(trace_lattices) != 1:
+            return ()
+        lattice = next(iter(trace_lattices))
+        regions = cross_height_region_trace_ordinals(lattice)
+        if not regions:
+            return ()
+        source_traces = tuple(
+            lattice[region[len(region) // 2]] for region in regions
+        )
+    else:
+        source_traces = tuple(
+            sorted(
+                {
+                    trace
+                    for item in measurement_sets
+                    for trace in item.query.trace_positions_px
+                }
+            )
+        )
     queried_traces = tuple(
-        sorted(
-            {
-                trace
-                for item in measurement_sets
-                for trace in item.query.trace_positions_px
-                if support_interval_px is None
-                or support_interval_px.contains(
-                    float(trace), epsilon=PIXEL_CENTER_HALF_EXTENT_PX
-                )
-            }
+        trace
+        for trace in source_traces
+        if support_interval_px is None
+        or support_interval_px.contains(
+            float(trace), epsilon=PIXEL_CENTER_HALF_EXTENT_PX
         )
     )
     if not transitions or not queried_traces:
@@ -268,6 +299,11 @@ def track_side_transition_regions(
                     (abs(point.coordinate - last.coordinate), point_index)
                     for point_index, point in enumerate(current)
                     if point_index not in connected_points
+                    and (
+                        not use_cross_height_transitions
+                        or point.transition.polarity
+                        == last.transition.polarity
+                    )
                     and abs(point.coordinate - last.coordinate)
                     <= allowance + 1.0e-12
                 ]
@@ -438,4 +474,50 @@ def track_side_transition_regions(
                 item.region_id,
             ),
         )
+    )
+
+
+def track_side_transition_regions(
+    measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
+    *,
+    reference_trace_px: float,
+    boundary_axis_scale_px_per_mm: PositiveInterval,
+    support_interval_px: FiniteInterval | None = None,
+    minimum_independent_support_regions: int = (
+        MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+    ),
+    spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+) -> tuple[SideTransitionRegion, ...]:
+    """Track direct single-trace transitions into physical segments."""
+
+    return _track_transition_regions(
+        measurement_sets,
+        reference_trace_px=reference_trace_px,
+        boundary_axis_scale_px_per_mm=boundary_axis_scale_px_per_mm,
+        support_interval_px=support_interval_px,
+        minimum_independent_support_regions=(
+            minimum_independent_support_regions
+        ),
+        spec=spec,
+        use_cross_height_transitions=False,
+    )
+
+
+def track_cross_height_transition_regions(
+    measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
+    *,
+    reference_trace_px: float,
+    boundary_axis_scale_px_per_mm: PositiveInterval,
+    spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+) -> tuple[SideTransitionRegion, ...]:
+    """Require all three fixed height regions for one weak joint line."""
+
+    return _track_transition_regions(
+        measurement_sets,
+        reference_trace_px=reference_trace_px,
+        boundary_axis_scale_px_per_mm=boundary_axis_scale_px_per_mm,
+        support_interval_px=None,
+        minimum_independent_support_regions=SPATIAL_SUPPORT_REGION_COUNT,
+        spec=spec,
+        use_cross_height_transitions=True,
     )

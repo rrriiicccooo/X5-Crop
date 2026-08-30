@@ -16,7 +16,11 @@ from ...domain import (
     PositiveInterval,
     WorkspaceExtent,
 )
-from .model import BoundaryAxis, QueryPurpose
+from .model import (
+    BoundaryAxis,
+    QueryPurpose,
+    SPATIAL_SUPPORT_REGION_COUNT,
+)
 
 
 @dataclass(frozen=True)
@@ -179,6 +183,113 @@ class PhotoBoundaryTransition:
 
 
 @dataclass(frozen=True)
+class CrossHeightTransitionRegionObservation:
+    """One fixed height-region aggregate from a registered sequence query.
+
+    This is not a synthetic single-trace transition.  Its representative
+    trace only locates the aggregate in line geometry; the complete tuple of
+    contributing registered traces remains explicit provenance.
+    """
+
+    transition_id: ObservationId
+    query_id: str
+    spatial_region_index: int
+    trace_ordinal: int
+    trace_coordinate_px: int
+    contributing_trace_ordinals: tuple[int, ...]
+    contributing_trace_coordinates_px: tuple[int, ...]
+    canonical_coordinate_px: float
+    localization_interval_px: FiniteInterval
+    physical_position_interval_px: FiniteInterval
+    gradient_z: float
+    tone_z: float
+    texture_z: float
+    left_tone_mean: float
+    right_tone_mean: float
+    left_texture_mean: float
+    right_texture_mean: float
+    polarity: int
+    polarity_support_count: int
+    peak_width_px: float
+    prominence: float
+    local_noise: float
+
+    def __post_init__(self) -> None:
+        numeric = (
+            self.gradient_z,
+            self.tone_z,
+            self.texture_z,
+            self.left_tone_mean,
+            self.right_tone_mean,
+            self.left_texture_mean,
+            self.right_texture_mean,
+            self.peak_width_px,
+            self.prominence,
+            self.local_noise,
+        )
+        if (
+            not self.query_id
+            or not 0
+            <= self.spatial_region_index
+            < SPATIAL_SUPPORT_REGION_COUNT
+            or self.trace_ordinal < 0
+            or self.polarity not in {-1, 0, 1}
+            or len(self.contributing_trace_ordinals) < 2
+            or tuple(sorted(set(self.contributing_trace_ordinals)))
+            != self.contributing_trace_ordinals
+            or len(self.contributing_trace_ordinals)
+            != len(self.contributing_trace_coordinates_px)
+            or tuple(sorted(set(self.contributing_trace_coordinates_px)))
+            != self.contributing_trace_coordinates_px
+            or self.trace_ordinal not in self.contributing_trace_ordinals
+            or self.trace_coordinate_px
+            not in self.contributing_trace_coordinates_px
+            or not 0
+            <= self.polarity_support_count
+            <= len(self.contributing_trace_ordinals)
+            or (
+                self.polarity == 0
+                and self.polarity_support_count != 0
+            )
+            or (
+                self.polarity != 0
+                and self.polarity_support_count
+                <= len(self.contributing_trace_ordinals) // 2
+            )
+            or not math.isfinite(self.canonical_coordinate_px)
+            or not self.localization_interval_px.contains(
+                self.canonical_coordinate_px,
+                epsilon=1.0e-12,
+            )
+            or not self.physical_position_interval_px.contains(
+                self.localization_interval_px.minimum,
+                epsilon=1.0e-12,
+            )
+            or not self.physical_position_interval_px.contains(
+                self.localization_interval_px.maximum,
+                epsilon=1.0e-12,
+            )
+            or any(
+                not math.isfinite(value) or value < 0.0
+                for value in numeric
+            )
+            or self.peak_width_px <= 0.0
+        ):
+            raise ValueError(
+                "cross-height transition-region observation is invalid"
+            )
+
+    @property
+    def coordinate_px(self) -> float:
+        return self.canonical_coordinate_px
+
+
+SequenceTransitionObservation = (
+    PhotoBoundaryTransition | CrossHeightTransitionRegionObservation
+)
+
+
+@dataclass(frozen=True)
 class PhotoBoundaryCoverageReceipt:
     query_id: str
     registered_trace_count: int
@@ -218,6 +329,10 @@ class PhotoBoundaryMeasurementSet:
     query: PhotoBoundaryMeasurementQuery
     state: EvidenceState
     transitions: tuple[PhotoBoundaryTransition, ...]
+    cross_height_transitions: tuple[
+        CrossHeightTransitionRegionObservation,
+        ...,
+    ]
     coverage: PhotoBoundaryCoverageReceipt
 
     def __post_init__(self) -> None:
@@ -228,13 +343,43 @@ class PhotoBoundaryMeasurementSet:
                 raise ValueError(
                     "supported measurement requires complete coverage"
                 )
-        elif self.transitions:
+        elif self.transitions or self.cross_height_transitions:
             raise ValueError("incomplete measurement cannot expose transitions")
-        identities = tuple(item.transition_id for item in self.transitions)
+        if (
+            self.cross_height_transitions
+            and self.query.purpose != QueryPurpose.SEQUENCE_ANCHOR_WINDOW
+        ):
+            raise ValueError(
+                "cross-height transitions require a sequence window"
+            )
+        identities = tuple(
+            item.transition_id
+            for item in (
+                *self.transitions,
+                *self.cross_height_transitions,
+            )
+        )
         if len(set(identities)) != len(identities):
             raise ValueError("transition identities must be unique")
         if any(
             item.query_id != self.query.query_id
-            for item in self.transitions
+            for item in (
+                *self.transitions,
+                *self.cross_height_transitions,
+            )
         ):
             raise ValueError("measurement set contains a foreign transition")
+        for item in self.cross_height_transitions:
+            expected_coordinates = tuple(
+                self.query.trace_positions_px[index]
+                for index in item.contributing_trace_ordinals
+            )
+            if (
+                expected_coordinates
+                != item.contributing_trace_coordinates_px
+                or self.query.trace_positions_px[item.trace_ordinal]
+                != item.trace_coordinate_px
+            ):
+                raise ValueError(
+                    "cross-height transition leaves its registered traces"
+                )

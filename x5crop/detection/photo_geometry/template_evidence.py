@@ -13,7 +13,11 @@ from enum import Enum
 from ...domain import ObservationId
 from .line_observations import PhotoBoundaryObservation
 from .model import BoundaryEvidenceState
-from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
+from .observation_types import (
+    BoundaryEdgeObservation,
+    CrossHeightEdgeResolution,
+    SeparatorBandObservation,
+)
 from .template_cross_model import CrossFitCompetition
 from .template_phase_model import PhaseFitResult
 
@@ -90,6 +94,10 @@ def template_evidence_use_ledger(
     cross_observations: tuple[PhotoBoundaryObservation, ...],
     phase: PhaseFitResult,
     cross: CrossFitCompetition,
+    cross_height_edge_resolutions: tuple[
+        CrossHeightEdgeResolution,
+        ...,
+    ],
 ) -> tuple[EvidenceUseFact, ...]:
     """Return one non-compensating use for every registered observation."""
 
@@ -173,6 +181,19 @@ def template_evidence_use_ledger(
                 owner,
             )
         )
+    used_ids = {item.observation_id for item in values}
+    for resolution in cross_height_edge_resolutions:
+        identity = resolution.support_observation_id
+        if identity in used_ids:
+            continue
+        values.append(
+            EvidenceUseFact(
+                identity,
+                EvidenceUse.VALIDATION,
+                PhysicalUnknown.LOCAL_BOUNDARY,
+            )
+        )
+        used_ids.add(identity)
     identities = tuple(item.observation_id for item in values)
     if len(set(identities)) != len(identities):
         raise ValueError("one physical observation cannot have multiple template uses")

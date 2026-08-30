@@ -451,31 +451,38 @@ def _draw_detected_start_end(
         if source_lane is None:
             continue
         lane_box = source_lane_box(source_lane, layout)
-        for region in lane.prepared.side_regions:
-            coordinate = region.position_interval_px.center
-            source_points = (
-                ((coordinate, lane_box.top), (coordinate, lane_box.bottom))
-                if layout == "horizontal"
-                else ((lane_box.left, coordinate), (lane_box.right, coordinate))
-            )
-            projected = tuple(
-                selected_viewport.point(point) for point in source_points
-            )
-            clipped = clip_segment_to_box(
-                projected[0], projected[1], selected_viewport.target_box
-            )
-            if clipped is None:
-                continue
-            draw_dashed_polyline(
-                draw,
-                clipped,
-                style.detected_transition_color,
-                style.raw_transition_line_width,
-                style.line_dash_length,
-                style.line_dash_gap,
-                closed=False,
-            )
-            found = True
+        for regions, color in (
+            (lane.prepared.side_regions, style.detected_transition_color),
+            (lane.prepared.cross_height_regions, style.joint_transition_color),
+        ):
+            for region in regions:
+                coordinate = region.position_interval_px.center
+                source_points = (
+                    ((coordinate, lane_box.top), (coordinate, lane_box.bottom))
+                    if layout == "horizontal"
+                    else (
+                        (lane_box.left, coordinate),
+                        (lane_box.right, coordinate),
+                    )
+                )
+                projected = tuple(
+                    selected_viewport.point(point) for point in source_points
+                )
+                clipped = clip_segment_to_box(
+                    projected[0], projected[1], selected_viewport.target_box
+                )
+                if clipped is None:
+                    continue
+                draw_dashed_polyline(
+                    draw,
+                    clipped,
+                    color,
+                    style.raw_transition_line_width,
+                    style.line_dash_length,
+                    style.line_dash_gap,
+                    closed=False,
+                )
+                found = True
     return found
 
 

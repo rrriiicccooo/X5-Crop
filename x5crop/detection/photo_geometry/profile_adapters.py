@@ -7,7 +7,7 @@ from .model import (
     MINIMUM_INDEPENDENT_SUPPORT_REGIONS,
     PHOTO_BOUNDARY_MEASUREMENT_SPEC,
 )
-from .measurement_model import PhotoBoundaryTransition
+from .measurement_model import SequenceTransitionObservation
 from .line_observations import SideTransitionRegion
 from .observation_types import BasicAxisProfile, ProfileRun
 
@@ -42,7 +42,7 @@ def sequence_profile_from_regions(
     regions: tuple[SideTransitionRegion, ...],
     *,
     coordinate_count: int,
-    transition_by_id: dict[str, PhotoBoundaryTransition],
+    transition_by_id: dict[str, SequenceTransitionObservation],
 ) -> BasicAxisProfile:
     spec = PHOTO_BOUNDARY_MEASUREMENT_SPEC
     runs = tuple(
@@ -101,7 +101,7 @@ def cross_profile_from_regions(
     bottom_regions: tuple[SideTransitionRegion, ...],
     *,
     coordinate_count: int,
-    transition_by_id: dict[str, PhotoBoundaryTransition],
+    transition_by_id: dict[str, SequenceTransitionObservation],
 ) -> BasicAxisProfile:
     values: list[ProfileRun] = []
     spec = PHOTO_BOUNDARY_MEASUREMENT_SPEC

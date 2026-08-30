@@ -9,7 +9,7 @@ import numpy as np
 
 from ...domain import FiniteInterval, ObservationId
 from .measurement_points import TransitionPoint
-from .measurement_model import PhotoBoundaryTransition
+from .measurement_model import SequenceTransitionObservation
 from .model import (
     BoundaryRole,
     MINIMUM_INDEPENDENT_SUPPORT_REGIONS,
@@ -131,7 +131,7 @@ class SequenceRunLineMeasurement:
 
 def _sequence_run_fit(
     run: ProfileRun,
-    transitions: dict[str, PhotoBoundaryTransition],
+    transitions: dict[str, SequenceTransitionObservation],
     *,
     queried_trace_coordinates_px: tuple[int, ...],
     boundary_axis_scale_px_per_mm: float,
@@ -290,7 +290,7 @@ def _direction_from_fit(
 
 def sequence_run_line_measurement(
     run: ProfileRun,
-    transitions: dict[str, PhotoBoundaryTransition],
+    transitions: dict[str, SequenceTransitionObservation],
     *,
     reference_trace_px: float,
     queried_trace_coordinates_px: tuple[int, ...],
@@ -381,7 +381,7 @@ def sequence_run_line_measurement(
 
 def sequence_run_direction_measurement(
     run: ProfileRun,
-    transitions: dict[str, PhotoBoundaryTransition],
+    transitions: dict[str, SequenceTransitionObservation],
     *,
     queried_trace_coordinates_px: tuple[int, ...],
     boundary_axis_scale_px_per_mm: float,

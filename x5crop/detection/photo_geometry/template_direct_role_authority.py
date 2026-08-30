@@ -12,7 +12,11 @@ from .model import (
     SPATIAL_SUPPORT_REGION_COUNT,
     independent_spatial_support_count,
 )
-from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
+from .observation_types import (
+    BoundaryEdgeMeasurementBasis,
+    BoundaryEdgeObservation,
+    SeparatorBandObservation,
+)
 from .separator_material import (
     normal_separator_material_bands,
     normal_separator_material_conflicts,
@@ -22,6 +26,7 @@ from .template_model import SequenceFit
 
 class DirectRoleAuthorityBasis(str, Enum):
     SOURCE_WIDE_EDGE = "source_wide_edge"
+    CROSS_HEIGHT_UNION = "cross_height_union"
     SEPARATOR_PAIR = "separator_pair"
     FRAME_WIDTH_PAIR = "frame_width_pair"
 
@@ -198,8 +203,20 @@ def assess_direct_role_binding_authority(
         for role_index, observation in selected.items()
     }
     for role_index, count in region_counts.items():
-        if count == SPATIAL_SUPPORT_REGION_COUNT:
+        observation = selected[role_index]
+        if (
+            count == SPATIAL_SUPPORT_REGION_COUNT
+            and observation.measurement_basis
+            == BoundaryEdgeMeasurementBasis.DIRECT_TRACE
+        ):
             bases[role_index].add(DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE)
+        if (
+            observation.measurement_basis
+            == BoundaryEdgeMeasurementBasis.DIRECT_WITH_CROSS_HEIGHT
+        ):
+            bases[role_index].add(
+                DirectRoleAuthorityBasis.CROSS_HEIGHT_UNION
+            )
 
     role_authority_bands = normal_separator_material_bands(
         separator_bands,

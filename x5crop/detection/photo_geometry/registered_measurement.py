@@ -15,6 +15,9 @@ from .measurement_model import (
     PhotoBoundaryMeasurementSet,
     PhotoBoundaryTransition,
 )
+from .cross_height_transition_measurement import (
+    measure_cross_height_transition_regions,
+)
 from .model import (
     BoundaryAxis,
     PHOTO_BOUNDARY_MEASUREMENT_SPEC,
@@ -53,6 +56,7 @@ def _measure_query(
         for interval in query.search_intervals_px
     )
     transitions: list[PhotoBoundaryTransition] = []
+    cross_height_transitions = ()
     peak_temporary = 0
     pixel_query_count = 0
     completed_coordinates = 0
@@ -166,6 +170,19 @@ def _measure_query(
                         local_noise=peak.local_noise,
                     )
                 )
+        if premeasured is not None:
+            (
+                cross_height_transitions,
+                cross_height_temporary,
+            ) = measure_cross_height_transition_regions(
+                query,
+                premeasured,
+                spec,
+            )
+            peak_temporary = max(
+                peak_temporary,
+                cross_height_temporary,
+            )
     except Exception:
         receipt = _coverage_receipt(
             query,
@@ -181,6 +198,7 @@ def _measure_query(
             query=query,
             state=EvidenceState.UNAVAILABLE,
             transitions=(),
+            cross_height_transitions=(),
             coverage=receipt,
         )
     receipt = _coverage_receipt(
@@ -197,6 +215,7 @@ def _measure_query(
         query=query,
         state=EvidenceState.SUPPORTED,
         transitions=tuple(transitions),
+        cross_height_transitions=cross_height_transitions,
         coverage=receipt,
     )
 

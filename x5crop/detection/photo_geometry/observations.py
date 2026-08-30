@@ -4,24 +4,21 @@ from __future__ import annotations
 
 from ...domain import ObservationId, PositiveInterval
 from ...run_local_identity import run_local_id
-from .model import BoundaryAxis
 from .measurement_model import (
-    PhotoBoundaryMeasurementField,
-    PhotoBoundaryTransition,
+    SequenceTransitionObservation,
 )
 from .observation_types import (
     BasicAxisProfile,
+    BoundaryEdgeMeasurementBasis,
     BoundaryEdgeObservation,
     ProfileRun,
-    SeparatorBandObservation,
 )
-from .separator_observations import build_format_separator_bands
 from .sequence_direction_measurement import sequence_run_line_measurement
 
 
 def _dominant_polarity(
     transition_ids: tuple[ObservationId, ...],
-    transitions: dict[str, PhotoBoundaryTransition],
+    transitions: dict[str, SequenceTransitionObservation],
 ) -> int:
     value = sum(
         transitions[str(identity)].polarity for identity in transition_ids
@@ -29,19 +26,16 @@ def _dominant_polarity(
     return 1 if value > 0 else -1 if value < 0 else 0
 
 
-def build_sequence_observations(
+def build_sequence_edge_observations(
     profile: BasicAxisProfile,
-    transitions: dict[str, PhotoBoundaryTransition],
-    field: PhotoBoundaryMeasurementField,
-    boundary_axis: BoundaryAxis,
-    boundary_axis_scale_px_per_mm: PositiveInterval,
+    transitions: dict[str, SequenceTransitionObservation],
     *,
     reference_trace_px: float,
-    frame_width_px: PositiveInterval,
-) -> tuple[
-    tuple[BoundaryEdgeObservation, ...],
-    tuple[SeparatorBandObservation, ...],
-]:
+    boundary_axis_scale_px_per_mm: PositiveInterval,
+    measurement_basis: BoundaryEdgeMeasurementBasis,
+) -> tuple[BoundaryEdgeObservation, ...]:
+    """Fit role-free sequence runs without measuring separator material."""
+
     edges: list[BoundaryEdgeObservation] = []
     for run in profile.runs:
         polarity = _dominant_polarity(run.transition_ids, transitions)
@@ -78,23 +72,29 @@ def build_sequence_observations(
                 full_position_interval_px=line.full_position_interval_px,
                 transition_ids=line.transition_ids,
                 trace_coordinates_px=line.trace_coordinates_px,
-                polarity=_dominant_polarity(line.transition_ids, transitions),
+                polarity=_dominant_polarity(
+                    line.transition_ids,
+                    transitions,
+                ),
                 support_fraction=line.support_fraction,
                 continuous_support_fraction=(
                     line.continuous_support_fraction
                 ),
                 fit_residual_px=line.fit_residual_px,
-                canonical_direction_degrees=line.canonical_direction_degrees,
+                canonical_direction_degrees=(
+                    line.canonical_direction_degrees
+                ),
                 fit_direction_interval_degrees=(
                     line.fit_direction_interval_degrees
                 ),
                 full_direction_interval_degrees=(
                     line.full_direction_interval_degrees
                 ),
+                measurement_basis=measurement_basis,
                 qualified_anchor_roles=run.qualified_anchor_roles,
             )
         )
-    ordered = tuple(
+    return tuple(
         sorted(
             edges,
             key=lambda item: (
@@ -103,12 +103,3 @@ def build_sequence_observations(
             ),
         )
     )
-    bands = build_format_separator_bands(
-        profile,
-        ordered,
-        transitions,
-        field,
-        boundary_axis,
-        frame_width_px,
-    )
-    return ordered, bands

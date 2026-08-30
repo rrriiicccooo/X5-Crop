@@ -110,6 +110,7 @@ def runtime_measurement_set(
         query=query,
         state=EvidenceState.SUPPORTED,
         transitions=(),
+        cross_height_transitions=(),
         coverage=coverage,
     )
 
@@ -184,6 +185,9 @@ def prepared_template_lane() -> PreparedTemplateLane:
         ),
         measurement_sets=(coarse_long, coarse_short),
         side_regions=(),
+        cross_height_regions=(),
+        cross_height_edges=(),
+        cross_height_edge_resolutions=(),
         top_regions=(),
         bottom_regions=(),
         transition_by_id={},

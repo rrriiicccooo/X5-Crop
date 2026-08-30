@@ -37,11 +37,15 @@ from x5crop.detection.photo_geometry.measurement_model import (
 )
 from x5crop.detection.photo_geometry.observation_types import (
     BasicAxisProfile,
+    BoundaryEdgeMeasurementBasis,
     BoundaryEdgeObservation,
     ProfileRun,
     SeparatorMaterialPolarity,
     SeparatorMaterialRegionObservation,
     SeparatorMaterialRegionState,
+)
+from x5crop.detection.photo_geometry.observations import (
+    build_sequence_edge_observations,
 )
 from x5crop.detection.photo_geometry.line_observations import (
     SideTransitionRegion,
@@ -183,6 +187,7 @@ def make_side_measurement_set(
         query=query,
         state=EvidenceState.SUPPORTED,
         transitions=tuple(transitions),
+        cross_height_transitions=(),
         coverage=coverage,
     )
 

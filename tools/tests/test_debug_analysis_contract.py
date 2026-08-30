@@ -501,6 +501,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
                 "DETECTED TOP/BOTTOM",
                 "SELECTED TOP/BOTTOM",
                 "DETECTED START/END",
+                "JOINT START/END",
                 "SELECTED START/END",
                 "RUNNER / COMPETITOR",
                 "FINAL OUTPUT",
@@ -592,6 +593,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertIn(" · DIRECT ", summary)
         self.assertIn(" · OUTER ", summary)
         self.assertIn(" · SEP D ", summary)
+        self.assertIn(" · JOINT ", summary)
         self.assertTrue(
             selected_output_safety_summary(detection).startswith(
                 "SELECTED OUTPUT SAFETY · "

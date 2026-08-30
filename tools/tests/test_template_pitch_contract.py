@@ -4,6 +4,7 @@ from dataclasses import replace
 import unittest
 
 from x5crop.detection.photo_geometry.observation_types import (
+    BoundaryEdgeMeasurementBasis,
     BoundaryEdgeObservation,
     SeparatorBandObservation,
     SeparatorMaterialPolarity,
@@ -45,6 +46,7 @@ def edge(name: str, coordinate: float) -> BoundaryEdgeObservation:
         canonical_direction_degrees=None,
         fit_direction_interval_degrees=None,
         full_direction_interval_degrees=None,
+        measurement_basis=BoundaryEdgeMeasurementBasis.DIRECT_TRACE,
         qualified_anchor_roles=(BoundaryRole.START,),
     )
 

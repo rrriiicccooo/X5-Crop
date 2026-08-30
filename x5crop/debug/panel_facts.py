@@ -208,6 +208,15 @@ def alignment_summary(detection: FinalDetection) -> str:
             )
             for polarity in ("dark", "light")
         }
+        joint_total = len(lane.prepared.cross_height_edge_resolutions)
+        joint_authority = sum(
+            item.kind.value == "bound_direct_edge"
+            for item in lane.prepared.cross_height_edge_resolutions
+        )
+        joint_ambiguous = sum(
+            item.state.value == "contradicted"
+            for item in lane.prepared.cross_height_edge_resolutions
+        )
         proof = (
             f"GLOBAL {rank}/3 · ADJ "
             f"{complete_coverage}/{len(inferred_coverage)} · DIRECT "
@@ -216,7 +225,8 @@ def alignment_summary(detection: FinalDetection) -> str:
             f"D {separator_counts['dark'][0]}/{separator_counts['dark'][1]}"
             f" C{separator_counts['dark'][2]} "
             f"L {separator_counts['light'][0]}/{separator_counts['light'][1]}"
-            f" C{separator_counts['light'][2]}"
+            f" C{separator_counts['light'][2]} · JOINT "
+            f"{joint_authority}/{joint_total} A{joint_ambiguous}"
         )
         if diagnostic.pattern.value == "unresolved":
             values.append(f"{lane.lane_id} {label} · {proof}")

@@ -17,6 +17,10 @@ from x5crop.detection.photo_geometry.template_evidence import (
     PhysicalUnknown,
     template_evidence_use_ledger,
 )
+from x5crop.detection.photo_geometry.observation_types import (
+    CrossHeightEdgeResolution,
+    CrossHeightEdgeResolutionKind,
+)
 from x5crop.detection.photo_geometry.template_phase import (
     fit_template_phase,
     fit_template_phase_with_local_advance,
@@ -24,7 +28,12 @@ from x5crop.detection.photo_geometry.template_phase import (
 from x5crop.detection.photo_geometry.template_phase_model import (
     TemplatePhaseInput,
 )
-from x5crop.domain import FiniteInterval, ObservationId, PositiveInterval
+from x5crop.domain import (
+    EvidenceState,
+    FiniteInterval,
+    ObservationId,
+    PositiveInterval,
+)
 
 
 class TemplateEvidenceContractTest(unittest.TestCase):
@@ -69,6 +78,7 @@ class TemplateEvidenceContractTest(unittest.TestCase):
             (),
             phase,
             cross,
+            (),
         )
 
         by_id = {item.observation_id: item for item in ledger}
@@ -100,6 +110,7 @@ class TemplateEvidenceContractTest(unittest.TestCase):
             (),
             phase,
             cross,
+            (),
         )
 
         self.assertEqual(len(ledger), len(observations))
@@ -132,7 +143,44 @@ class TemplateEvidenceContractTest(unittest.TestCase):
                 (),
                 phase,
                 cross,
+                (),
             )
+
+    def test_bound_cross_height_support_has_one_validation_owner(self) -> None:
+        observation = edge("edge:joint", 40.0)
+        spec = template(1)
+        phase = fit_template_phase((observation,), spec)
+        cross = fit_template_cross(
+            TemplateCrossInput(template=spec, fixed_height_px=240.0)
+        )
+        support_id = ObservationId("cross-height:support")
+
+        ledger = template_evidence_use_ledger(
+            (observation,),
+            (),
+            (),
+            phase,
+            cross,
+            (
+                CrossHeightEdgeResolution(
+                    support_observation_id=support_id,
+                    state=EvidenceState.SUPPORTED,
+                    kind=CrossHeightEdgeResolutionKind.BOUND_DIRECT_EDGE,
+                    compatible_direct_edge_ids=(observation.observation_id,),
+                    final_edge_observation_id=observation.observation_id,
+                    failure_kind=None,
+                ),
+            ),
+        )
+
+        support_fact = next(
+            item for item in ledger if item.observation_id == support_id
+        )
+        self.assertEqual(support_fact.use, EvidenceUse.VALIDATION)
+        self.assertEqual(
+            support_fact.physical_owner,
+            PhysicalUnknown.LOCAL_BOUNDARY,
+        )
 
 
 if __name__ == "__main__":

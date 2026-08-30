@@ -294,6 +294,7 @@ def _aggregate_measurement_set(
             query=query,
             state=EvidenceState.SUPPORTED,
             transitions=(),
+            cross_height_transitions=(),
             coverage=coverage,
         ),
         profile,

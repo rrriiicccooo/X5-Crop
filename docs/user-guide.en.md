@@ -31,6 +31,10 @@ V5 first establishes coarse support and a common direction from the whole strip.
 fixed W/H template and makes bounded local measurements only near theoretical outer, separator, and top/bottom
 positions. Pixel evidence aligns or rejects the template; it cannot invent format, count, or placement authority.
 
+Within one registered window, weak gradient, tone, and texture signals are also checked jointly across height. They may
+own a crop coordinate only when three independent height regions agree and uniquely reinforce the same direct edge.
+Unbound or multiply explained joint lines remain Debug evidence and cannot create another placement.
+
 Normal strips use one shared pitch. Every directly proven, ordinal-unique separator may constrain its own wide or narrow
 gap; later Frames apply that measured delta once. Multiple proven gap changes still use one bounded pass. An ambiguous
 gap, missing authority, multiple equally legal answers, or an unknown required Frame remains `needs_review`. Contact and
