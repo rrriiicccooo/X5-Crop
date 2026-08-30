@@ -121,8 +121,8 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   批准 0；安全 auto 为基础 nominal 10/66、较难 nominal 0/30、challenge 0/14。S003 因安全的相关 W
   推断新增通过；S087 因移除无依据的精确 W→H 换算而由 content veto 安全回到 review，它是下一阶段
   有界比例 authority 的真实正例，不证明两轴不存在物理相关性。全部 candidate 为 86 个不可用、18 个
-  安全、6 个不安全，其中不安全 candidate 均保持 review。正式性能仍以 clean commit 的 24-source
-  receipt 为准，5 秒 mean 为 Gate、3 秒为不阻断目标。
+  安全、6 个不安全，其中不安全 candidate 均保持 review。检查点 `f8760091` 的 pre-push Hook 为 549 项
+  通过、2 项按设计跳过；24-source 正式 mean 为 3.437 秒，5 秒 Gate 通过，3 秒不阻断目标未达到。
 - Apple Silicon macOS、Intel macOS 与 Windows x64 必须在同一最终 commit 取得实机 receipt。Accuracy、
   性能与平台证据未全部绑定该 commit 前，不创建 RC、tag、Release 或公开 ZIP。
 - 发布包由唯一 manifest 构建，不包含 modular source、tests、tools、内部文档或开发输出。
