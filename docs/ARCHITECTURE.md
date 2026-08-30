@@ -795,6 +795,7 @@ Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决
 
 - theoretical template、role-free observations 与跨高度联合观察的 typed resolution；
 - dark/light separator material、逐区域状态、直接角色权限与 material conflict；
+- `partial_height_separator_pair` 角色数、direct aperture domain 条件与对应 typed Gate；
 - 每个 bound role 的 residual 和 normal/measured-advances/unresolved pattern；
 - direct 与 inferred 边界；
 - best、runner 及真正不同之处；
