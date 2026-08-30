@@ -10,8 +10,12 @@ from typing import Sequence
 import numpy as np
 
 from ...domain import FiniteInterval, ObservationId, PositiveInterval
-from .model import BoundaryRole, SPATIAL_SUPPORT_REGION_COUNT
+from .model import (
+    BoundaryRole,
+    SPATIAL_SUPPORT_REGION_COUNT,
+)
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
+from .separator_material import normal_separator_material_bands
 from .template_model import (
     LocalAdvanceRelation,
     PitchFit,
@@ -315,7 +319,7 @@ def _separator_role_authority(
         source_wide = tuple(
             band
             for band in component
-            if band.independent_support_region_count
+            if band.material_support_region_count
             >= SPATIAL_SUPPORT_REGION_COUNT
         )
         if source_wide:
@@ -345,17 +349,21 @@ def _with_separator_role_authority(
     *,
     maximum_material_gap_px: float,
 ) -> tuple[BoundaryEdgeObservation, ...]:
-    authority = _separator_role_authority(observations, separator_bands)
-    if not authority and not separator_bands:
+    eligible_bands = normal_separator_material_bands(
+        tuple(separator_bands),
+        maximum_material_gap_px=maximum_material_gap_px,
+    )
+    authority = _separator_role_authority(observations, eligible_bands)
+    if not authority and not eligible_bands:
         return tuple(observations)
     by_id = {
         observation.observation_id: observation
         for observation in observations
         if isinstance(observation, BoundaryEdgeObservation)
     }
-    support_ids = separator_support_authority(tuple(separator_bands))
+    support_ids = separator_support_authority(eligible_bands)
     components: dict[ObservationId, list[SeparatorBandObservation]] = {}
-    for band in separator_bands:
+    for band in eligible_bands:
         support_id = support_ids.get(band.left_edge_observation_id)
         if support_id is None:
             raise ValueError("separator band has no physical support identity")
@@ -375,7 +383,7 @@ def _with_separator_role_authority(
         # discrete evidence and must not be hulled into a huge interval.
         if (
             any(
-                band.independent_support_region_count
+                band.material_support_region_count
                 >= SPATIAL_SUPPORT_REGION_COUNT
                 for band in component
             )
@@ -426,13 +434,13 @@ def _with_separator_role_authority(
                 observation = replace(
                     observation,
                     qualified_anchor_roles=(
-                        observation.qualified_anchor_roles
-                        if roles is None
-                        else tuple(
+                        tuple(
                             role
                             for role in (BoundaryRole.START, BoundaryRole.END)
                             if role in roles
                         )
+                        if roles is not None
+                        else observation.qualified_anchor_roles
                     ),
                     full_position_interval_px=full,
                 )
@@ -460,7 +468,10 @@ def _separator_phase_seeds(
 
     by_id = {item.observation_id: item for item in direct}
     seeds: set[_PhaseSeed] = set()
-    for band in separator_bands:
+    for band in normal_separator_material_bands(
+        tuple(separator_bands),
+        maximum_material_gap_px=template.gap_prior_px.maximum,
+    ):
         left = by_id.get(band.left_edge_observation_id)
         right = by_id.get(band.right_edge_observation_id)
         if (
@@ -495,6 +506,8 @@ def _separator_phase_seeds(
 def _separator_pair_facts(
     separator_bands: Sequence[SeparatorBandObservation],
     direct: tuple[_AnchorFact, ...],
+    *,
+    maximum_material_gap_px: float,
 ) -> tuple[tuple[_AnchorFact, _AnchorFact], ...]:
     """Retain exact END/START pairs proved by separator material."""
 
@@ -503,7 +516,10 @@ def _separator_pair_facts(
         tuple[ObservationId, ObservationId],
         tuple[_AnchorFact, _AnchorFact],
     ] = {}
-    for band in separator_bands:
+    for band in normal_separator_material_bands(
+        tuple(separator_bands),
+        maximum_material_gap_px=maximum_material_gap_px,
+    ):
         left = by_id.get(band.left_edge_observation_id)
         right = by_id.get(band.right_edge_observation_id)
         if (
@@ -539,7 +555,11 @@ def _refine_local_role_bindings(
         separator_bands,
         maximum_material_gap_px=fit.template.gap_prior_px.maximum,
     )
-    support_ids = separator_support_authority(tuple(separator_bands))
+    eligible_bands = normal_separator_material_bands(
+        tuple(separator_bands),
+        maximum_material_gap_px=fit.template.gap_prior_px.maximum,
+    )
+    support_ids = separator_support_authority(eligible_bands)
     facts = _facts(
         observations,
         separator_support_ids=support_ids,
@@ -647,7 +667,7 @@ def _refine_local_role_bindings(
     relation_pairs: dict[int, set[tuple[ObservationId, ObservationId]]] = {}
     for band in separator_bands:
         if (
-            band.independent_support_region_count < SPATIAL_SUPPORT_REGION_COUNT
+            band.material_support_region_count < SPATIAL_SUPPORT_REGION_COUNT
             or max(
                 band.gap_interval_px.minimum,
                 fit.template.gap_prior_px.minimum,

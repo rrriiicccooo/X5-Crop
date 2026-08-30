@@ -208,10 +208,10 @@ def _incompatible_separator_supports(
     for band in separator_bands:
         support_id = support_by_edge.get(band.left_edge_observation_id)
         if support_id is None:
-            raise ValueError("separator band has no physical support identity")
+            continue
         support_region_count[support_id] = max(
             support_region_count.get(support_id, 0),
-            band.independent_support_region_count,
+            band.material_support_region_count,
         )
     grouped: dict[ObservationId, list[FiniteInterval]] = {}
     for residual in residuals:

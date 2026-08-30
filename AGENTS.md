@@ -130,7 +130,8 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
   最大误差、不静默裁掉越界 footprint。具体 bleed 和预算只由 `docs/ARCHITECTURE.md` 定义。
 - Contact 与 overlap 始终属于 challenge。Challenge 是预检测评测角色，不预设 runtime 终态：标准
   detector 与 Gate 能唯一证明安全时可以 `approved_auto`，证据不足时 `needs_review` 同样合格。不得为
-  提高通过率强推自动批准，也不建立第二套 detector 或特殊 bleed。
+  提高通过率强推自动批准，也不建立第二套 detector 或独立特殊 bleed 预算；未来显式 topology
+  protection 只能作用于已证明关系的边界，并消耗同一 5% 总预算。
 - `CandidateGate` 只记录 typed assessment；只有 `DecisionGate` 创建 final status 与 reasons。
 - 任一 slot 不安全时，整个 source `needs_review` 且不写正式照片；不做 slot salvage。
 - 不为减少 blank TIFF 牺牲内容保护或 direct-use 质量。V5 不实现 blank suppression。

@@ -13,6 +13,10 @@ from .model import (
     independent_spatial_support_count,
 )
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
+from .separator_material import (
+    normal_separator_material_bands,
+    normal_separator_material_conflicts,
+)
 from .template_model import SequenceFit
 
 
@@ -32,6 +36,7 @@ class DirectRoleAuthorityFact:
     observation_id: ObservationId
     independent_support_region_count: int
     bases: tuple[DirectRoleAuthorityBasis, ...]
+    blocking_material_conflict_ids: tuple[ObservationId, ...]
     state: EvidenceState
 
     def __post_init__(self) -> None:
@@ -50,8 +55,27 @@ class DirectRoleAuthorityFact:
             <= SPATIAL_SUPPORT_REGION_COUNT
             or tuple(dict.fromkeys(self.bases)) != self.bases
             or any(not isinstance(item, DirectRoleAuthorityBasis) for item in self.bases)
-            or self.state not in {EvidenceState.SUPPORTED, EvidenceState.UNAVAILABLE}
-            or (self.state == EvidenceState.SUPPORTED) != bool(self.bases)
+            or tuple(sorted(set(self.blocking_material_conflict_ids)))
+            != self.blocking_material_conflict_ids
+            or any(
+                not isinstance(item, ObservationId)
+                for item in self.blocking_material_conflict_ids
+            )
+            or self.state
+            not in {
+                EvidenceState.SUPPORTED,
+                EvidenceState.CONTRADICTED,
+                EvidenceState.UNAVAILABLE,
+            }
+            or (self.state == EvidenceState.CONTRADICTED)
+            != bool(self.blocking_material_conflict_ids)
+            or (self.state == EvidenceState.SUPPORTED)
+            != (
+                bool(self.bases)
+                and not self.blocking_material_conflict_ids
+            )
+            or (self.state == EvidenceState.UNAVAILABLE)
+            != (not self.bases and not self.blocking_material_conflict_ids)
         ):
             raise ValueError("direct-role authority fact is invalid")
 
@@ -70,15 +94,23 @@ class DirectRoleBindingAuthority:
         unsupported = tuple(
             item.role_index
             for item in self.facts
-            if item.state == EvidenceState.UNAVAILABLE
+            if item.state != EvidenceState.SUPPORTED
         )
-        supported = self.state == EvidenceState.SUPPORTED
+        expected_state = (
+            EvidenceState.CONTRADICTED
+            if any(
+                item.state == EvidenceState.CONTRADICTED
+                for item in self.facts
+            )
+            else EvidenceState.UNAVAILABLE
+            if unsupported
+            else EvidenceState.SUPPORTED
+        )
         if (
-            self.state not in {EvidenceState.SUPPORTED, EvidenceState.UNAVAILABLE}
+            self.state != expected_state
             or indices != tuple(sorted(set(indices)))
             or self.unsupported_role_indices != unsupported
-            or supported != (not unsupported)
-            or supported != (self.reason is None)
+            or (self.state == EvidenceState.SUPPORTED) != (self.reason is None)
         ):
             raise ValueError("direct-role binding authority is invalid")
 
@@ -169,12 +201,25 @@ def assess_direct_role_binding_authority(
         if count == SPATIAL_SUPPORT_REGION_COUNT:
             bases[role_index].add(DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE)
 
+    role_authority_bands = normal_separator_material_bands(
+        separator_bands,
+        maximum_material_gap_px=fit.template.gap_prior_px.maximum,
+    )
     source_wide_pairs = {
         frozenset(
             (band.left_edge_observation_id, band.right_edge_observation_id)
         )
-        for band in separator_bands
-        if band.independent_support_region_count == SPATIAL_SUPPORT_REGION_COUNT
+        for band in role_authority_bands
+        if band.material_support_region_count == SPATIAL_SUPPORT_REGION_COUNT
+    }
+    supported_material_roles = {
+        (band.left_edge_observation_id, BoundaryRole.END)
+        for band in role_authority_bands
+        if band.material_support_region_count == SPATIAL_SUPPORT_REGION_COUNT
+    } | {
+        (band.right_edge_observation_id, BoundaryRole.START)
+        for band in role_authority_bands
+        if band.material_support_region_count == SPATIAL_SUPPORT_REGION_COUNT
     }
     for adjacency_index in range(max(0, fit.template.count - 1)):
         end_index = 2 * adjacency_index + 1
@@ -213,6 +258,52 @@ def assess_direct_role_binding_authority(
         bases[start_index].add(DirectRoleAuthorityBasis.FRAME_WIDTH_PAIR)
         bases[end_index].add(DirectRoleAuthorityBasis.FRAME_WIDTH_PAIR)
 
+    conflicts_by_edge_role: dict[
+        tuple[ObservationId, BoundaryRole],
+        set[ObservationId],
+    ] = {}
+    for conflict in normal_separator_material_conflicts(
+        separator_bands,
+        maximum_material_gap_px=fit.template.gap_prior_px.maximum,
+    ):
+        for edge_id, alternative_id in (
+            (
+                conflict.left_edge_observation_id,
+                conflict.right_edge_observation_id,
+            ),
+            (
+                conflict.right_edge_observation_id,
+                conflict.left_edge_observation_id,
+            ),
+        ):
+            alternative = by_id.get(alternative_id)
+            if alternative is None:
+                raise ValueError(
+                    "separator material conflict references an unregistered edge"
+                )
+            for role in alternative.qualified_anchor_roles:
+                conflicts_by_edge_role.setdefault((edge_id, role), set()).add(
+                    conflict.observation_id
+                )
+
+    blocking_conflicts = {
+        role_index: tuple(
+            sorted(
+                conflicts_by_edge_role.get(
+                    (
+                        observation.observation_id,
+                        fit.template.roles[role_index].role,
+                    ),
+                    set(),
+                )
+            )
+        )
+        if (observation.observation_id, fit.template.roles[role_index].role)
+        not in supported_material_roles
+        else ()
+        for role_index, observation in selected.items()
+    }
+
     facts = tuple(
         DirectRoleAuthorityFact(
             role_index=role_index,
@@ -225,8 +316,11 @@ def assess_direct_role_binding_authority(
                 for item in DirectRoleAuthorityBasis
                 if item in bases[role_index]
             ),
+            blocking_material_conflict_ids=blocking_conflicts[role_index],
             state=(
-                EvidenceState.SUPPORTED
+                EvidenceState.CONTRADICTED
+                if blocking_conflicts[role_index]
+                else EvidenceState.SUPPORTED
                 if bases[role_index]
                 else EvidenceState.UNAVAILABLE
             ),
@@ -236,23 +330,40 @@ def assess_direct_role_binding_authority(
     unsupported = tuple(
         item.role_index
         for item in facts
+        if item.state != EvidenceState.SUPPORTED
+    )
+    contradicted = tuple(
+        item.role_index
+        for item in facts
+        if item.state == EvidenceState.CONTRADICTED
+    )
+    unavailable = tuple(
+        item.role_index
+        for item in facts
         if item.state == EvidenceState.UNAVAILABLE
     )
+    state = (
+        EvidenceState.CONTRADICTED
+        if contradicted
+        else EvidenceState.UNAVAILABLE
+        if unavailable
+        else EvidenceState.SUPPORTED
+    )
+    reason = (
+        "selected direct edge has an unresolved same-role separator-material "
+        "alternative at role indices: " + ", ".join(map(str, contradicted))
+        if contradicted
+        else "selected short edge has no source-wide, separator-pair, or "
+        "fixed-W authority at role indices: "
+        + ", ".join(map(str, unavailable))
+        if unavailable
+        else None
+    )
     return DirectRoleBindingAuthority(
-        state=(
-            EvidenceState.SUPPORTED
-            if not unsupported
-            else EvidenceState.UNAVAILABLE
-        ),
+        state=state,
         facts=facts,
         unsupported_role_indices=unsupported,
-        reason=(
-            None
-            if not unsupported
-            else "selected short edge has no source-wide, separator-pair, or "
-            "fixed-W authority at role indices: "
-            + ", ".join(map(str, unsupported))
-        ),
+        reason=reason,
     )
 
 

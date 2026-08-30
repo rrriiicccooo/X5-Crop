@@ -87,7 +87,9 @@ def leave_one_anchor_out_phase_stability(
     separator_atoms = separator_support_authority(separator_bands)
     separator_members: dict[ObservationId, set[ObservationId]] = {}
     for band in separator_bands:
-        atom = separator_atoms[band.left_edge_observation_id]
+        atom = separator_atoms.get(band.left_edge_observation_id)
+        if atom is None:
+            continue
         separator_members.setdefault(atom, set()).update(
             (
                 band.left_edge_observation_id,

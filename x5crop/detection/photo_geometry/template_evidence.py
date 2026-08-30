@@ -12,6 +12,7 @@ from enum import Enum
 
 from ...domain import ObservationId
 from .line_observations import PhotoBoundaryObservation
+from .model import BoundaryEvidenceState
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_cross_model import CrossFitCompetition
 from .template_phase_model import PhaseFitResult
@@ -67,9 +68,14 @@ def separator_support_authority(
         if left_root != right_root:
             parent[max(left_root, right_root)] = min(left_root, right_root)
 
-    for band in separator_bands:
+    supported_bands = tuple(
+        band
+        for band in separator_bands
+        if band.evidence_state == BoundaryEvidenceState.SUPPORT
+    )
+    for band in supported_bands:
         union(band.left_edge_observation_id, band.right_edge_observation_id)
-    for band in separator_bands:
+    for band in supported_bands:
         root = find(band.left_edge_observation_id)
         band_ids.setdefault(root, set()).add(band.observation_id)
     return {

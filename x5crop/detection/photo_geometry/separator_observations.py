@@ -10,7 +10,9 @@ from ...domain import FiniteInterval, ObservationId, PositiveInterval
 from ...run_local_identity import run_local_id
 from .model import (
     BoundaryAxis,
+    BoundaryEvidenceState,
     MINIMUM_INDEPENDENT_SUPPORT_REGIONS,
+    SPATIAL_SUPPORT_REGION_COUNT,
     independent_spatial_support_count,
     spatial_support_region_index,
 )
@@ -23,9 +25,14 @@ from .observation_types import (
     BoundaryEdgeObservation,
     ProfileRun,
     SeparatorBandObservation,
+    SeparatorMaterialPolarity,
     SeparatorMaterialRegionObservation,
+    SeparatorMaterialRegionState,
 )
-from .separator_material import repeated_dark_material_supported
+from .separator_material import (
+    classify_separator_material_region,
+    repeated_separator_material_supported,
+)
 
 
 def _separator_core_material(
@@ -90,9 +97,13 @@ def _separator_band_from_edges(
     if (
         left.fit_position_interval_px.center
         >= right.fit_position_interval_px.center
-        or left.polarity != -1
-        or right.polarity != 1
     ):
+        return None
+    polarity = {
+        (-1, 1): SeparatorMaterialPolarity.DARK,
+        (1, -1): SeparatorMaterialPolarity.LIGHT,
+    }.get((left.polarity, right.polarity))
+    if polarity is None:
         return None
     shared_traces = tuple(
         sorted(set(left.trace_coordinates_px) & set(right.trace_coordinates_px))
@@ -132,11 +143,11 @@ def _separator_band_from_edges(
     )
     if material is None:
         return None
-    material_support_region_count = independent_spatial_support_count(
+    observed_material_region_count = independent_spatial_support_count(
         profile.trace_coordinates_px,
         tuple(item[0] for item in material),
     )
-    if material_support_region_count < MINIMUM_INDEPENDENT_SUPPORT_REGIONS:
+    if observed_material_region_count < MINIMUM_INDEPENDENT_SUPPORT_REGIONS:
         return None
     left_by_trace = {
         transitions[str(identity)].trace_coordinate_px: transitions[str(identity)]
@@ -146,33 +157,26 @@ def _separator_band_from_edges(
         transitions[str(identity)].trace_coordinate_px: transitions[str(identity)]
         for identity in right_run.transition_ids
     }
-    darkness_samples = tuple(
-        max(
-            0.0,
+    material_contrast_samples = tuple(
+        (
             min(
                 left_by_trace[trace].left_tone_mean,
                 right_by_trace[trace].right_tone_mean,
             )
-            - core_tone,
+            - core_tone
+            if polarity == SeparatorMaterialPolarity.DARK
+            else core_tone
+            - max(
+                left_by_trace[trace].left_tone_mean,
+                right_by_trace[trace].right_tone_mean,
+            )
         )
         for trace, core_tone, _core_texture in material
     )
-    texture_samples = tuple(
-        max(
-            0.0,
-            min(
-                left_by_trace[trace].left_texture_mean,
-                right_by_trace[trace].right_texture_mean,
-            )
-            - core_texture,
-        )
-        for trace, _core_tone, core_texture in material
-    )
     samples_by_region: dict[int, list[tuple[float, float]]] = {}
-    for (trace, _core_tone, _core_texture), darkness, texture in zip(
+    for (trace, _core_tone, core_texture), contrast in zip(
         material,
-        darkness_samples,
-        texture_samples,
+        material_contrast_samples,
         strict=True,
     ):
         region_index = spatial_support_region_index(
@@ -180,29 +184,54 @@ def _separator_band_from_edges(
             trace,
         )
         samples_by_region.setdefault(region_index, []).append(
-            (darkness, texture)
+            (contrast, core_texture)
         )
-    material_regions = tuple(
-        SeparatorMaterialRegionObservation(
-            region_index=region_index,
-            sample_count=len(values),
-            darkness_contrast_interval=FiniteInterval(
-                min(item[0] for item in values),
-                max(item[0] for item in values),
-            ),
-            texture_contrast_interval=FiniteInterval(
-                min(item[1] for item in values),
-                max(item[1] for item in values),
+    material_regions_list: list[SeparatorMaterialRegionObservation] = []
+    for region_index, values in sorted(samples_by_region.items()):
+        contrast_interval = FiniteInterval(
+            min(item[0] for item in values),
+            max(item[0] for item in values),
+        )
+        core_texture_interval = FiniteInterval(
+            min(item[1] for item in values),
+            max(item[1] for item in values),
+        )
+        material_regions_list.append(
+            SeparatorMaterialRegionObservation(
+                region_index=region_index,
+                sample_count=len(values),
+                material_contrast_interval=contrast_interval,
+                core_texture_interval=core_texture_interval,
+                state=classify_separator_material_region(
+                    contrast_interval,
+                    core_texture_interval,
+                ),
             ),
         )
-        for region_index, values in sorted(samples_by_region.items())
+    material_regions = tuple(material_regions_list)
+    material_support_region_count = sum(
+        item.state == SeparatorMaterialRegionState.SUPPORTED
+        for item in material_regions
     )
-    if not repeated_dark_material_supported(material_regions):
+    repeated_material = repeated_separator_material_supported(
+        material_regions
+    )
+    source_wide_conflict = (
+        len(material_regions) == SPATIAL_SUPPORT_REGION_COUNT
+        and not repeated_material
+    )
+    if (
+        not repeated_material
+        and not source_wide_conflict
+    ):
         return None
-    darkness = float(np.median(np.asarray(darkness_samples, dtype=np.float64)))
-    texture = float(np.median(np.asarray(texture_samples, dtype=np.float64)))
-    if darkness == 0.0 and texture == 0.0:
-        return None
+    material_contrast = float(
+        np.median(np.asarray(material_contrast_samples, dtype=np.float64))
+    )
+    core_texture_samples = tuple(item[2] for item in material)
+    core_texture = float(
+        np.median(np.asarray(core_texture_samples, dtype=np.float64))
+    )
     transition_ids = tuple(
         sorted(
             {
@@ -217,6 +246,7 @@ def _separator_band_from_edges(
     identity = ObservationId(
         run_local_id(
             "separator-band",
+            polarity.value,
             left.observation_id,
             right.observation_id,
             gap.minimum.hex(),
@@ -229,24 +259,30 @@ def _separator_band_from_edges(
         right_edge_observation_id=right.observation_id,
         left_run_id=left.run_id,
         right_run_id=right.run_id,
+        material_polarity=polarity,
         gap_interval_px=gap,
         transition_ids=transition_ids,
-        independent_support_region_count=material_support_region_count,
+        material_support_region_count=material_support_region_count,
         continuous_support_fraction=min(
             left.continuous_support_fraction,
             right.continuous_support_fraction,
         ),
-        darkness_contrast=darkness,
-        darkness_contrast_interval=FiniteInterval(
-            min(darkness_samples),
-            max(darkness_samples),
+        material_contrast=material_contrast,
+        material_contrast_interval=FiniteInterval(
+            min(material_contrast_samples),
+            max(material_contrast_samples),
         ),
-        texture_contrast=texture,
-        texture_contrast_interval=FiniteInterval(
-            min(texture_samples),
-            max(texture_samples),
+        core_texture=core_texture,
+        core_texture_interval=FiniteInterval(
+            min(core_texture_samples),
+            max(core_texture_samples),
         ),
         material_regions=material_regions,
+        evidence_state=(
+            BoundaryEvidenceState.CONTRADICTION
+            if source_wide_conflict
+            else BoundaryEvidenceState.SUPPORT
+        ),
     )
 
 
@@ -258,10 +294,10 @@ def build_format_separator_bands(
     boundary_axis: BoundaryAxis,
     frame_width_px: PositiveInterval,
 ) -> tuple[SeparatorBandObservation, ...]:
-    """Verify adjacent dark-valley edge families as separator material.
+    """Verify adjacent dark-valley or light-peak edges as material.
 
     Format gap priors never filter observations.  A normal, very wide or
-    otherwise abnormal directly visible black band enters the same material
+    otherwise abnormal directly visible band enters the same material
     measurement while it remains narrower than one complete format frame.
     A region wide enough to contain a frame cannot prove one adjacency.
     Placement authority is assigned only after role binding.
@@ -294,10 +330,8 @@ def build_format_separator_bands(
         )
         for left_run, right_run in zip(trace_runs, trace_runs[1:]):
             left = edges_by_run_id[left_run.run_id]
-            if left.polarity != -1:
-                continue
             right = edges_by_run_id[right_run.run_id]
-            if right.polarity == 1:
+            if (left.polarity, right.polarity) in {(-1, 1), (1, -1)}:
                 candidate_pairs.add((left.run_id, right.run_id))
 
     values: dict[str, SeparatorBandObservation] = {}

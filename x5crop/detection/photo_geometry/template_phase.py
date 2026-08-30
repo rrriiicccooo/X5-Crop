@@ -33,6 +33,7 @@ from .template_phase_candidates import (
     _separator_phase_seeds,
     _with_separator_role_authority,
 )
+from .separator_material import normal_separator_material_bands
 from .template_evidence import separator_support_authority
 from .template_adjacency_coverage import (
     AdjacencyCoverageState,
@@ -267,9 +268,11 @@ def fit_template_phase(
 
     if max_observations <= 0:
         raise ValueError("phase observation bound must be positive")
-    separator_support_ids = separator_support_authority(
-        tuple(separator_bands)
+    phase_separator_bands = normal_separator_material_bands(
+        tuple(separator_bands),
+        maximum_material_gap_px=template.gap_prior_px.maximum,
     )
+    separator_support_ids = separator_support_authority(phase_separator_bands)
     observations = _with_separator_role_authority(
         observations,
         separator_bands,
@@ -280,7 +283,11 @@ def fit_template_phase(
         separator_support_ids=separator_support_ids,
     )
     direct = tuple(item for item in facts if item.direct)
-    separator_pairs = _separator_pair_facts(separator_bands, direct)
+    separator_pairs = _separator_pair_facts(
+        phase_separator_bands,
+        direct,
+        maximum_material_gap_px=template.gap_prior_px.maximum,
+    )
     roles = ordered_template_roles(template.count)
     relations = _relations(local_advance_relations, template.count)
     base = TemplateSearchReceipt(
@@ -387,7 +394,7 @@ def fit_template_phase(
         )
 
     for seed in _separator_phase_seeds(
-            separator_bands,
+            phase_separator_bands,
             direct,
             roles,
             template,
@@ -829,7 +836,9 @@ def _apply_final_lattice_contract(
             status=PhaseFitStatus.UNRESOLVED,
             ambiguity_reason=direct_role_authority.reason,
             failure_kind=(
-                PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE
+                PhaseFailureKind.SEPARATOR_MATERIAL_CONFLICT
+                if direct_role_authority.state == EvidenceState.CONTRADICTED
+                else PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE
             ),
             winner_basis=None,
         )

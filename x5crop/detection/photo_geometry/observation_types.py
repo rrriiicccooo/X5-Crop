@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 import math
 
 from ...domain import FiniteInterval, ObservationId
@@ -151,28 +152,40 @@ class BoundaryEdgeObservation:
             raise ValueError("boundary edge observation is invalid")
 
 
+class SeparatorMaterialPolarity(str, Enum):
+    DARK = "dark"
+    LIGHT = "light"
+
+
+class SeparatorMaterialRegionState(str, Enum):
+    SUPPORTED = "supported"
+    TONE_UNRESOLVED = "tone_unresolved"
+    MATERIAL_NON_UNIFORM = "material_non_uniform"
+
+
 @dataclass(frozen=True)
 class SeparatorMaterialRegionObservation:
     region_index: int
     sample_count: int
-    darkness_contrast_interval: FiniteInterval
-    texture_contrast_interval: FiniteInterval
+    material_contrast_interval: FiniteInterval
+    core_texture_interval: FiniteInterval
+    state: SeparatorMaterialRegionState
 
     def __post_init__(self) -> None:
         if (
             not 0 <= self.region_index < SPATIAL_SUPPORT_REGION_COUNT
             or self.sample_count <= 0
-            or self.darkness_contrast_interval.minimum < 0.0
-            or self.texture_contrast_interval.minimum < 0.0
+            or self.core_texture_interval.minimum < 0.0
+            or not isinstance(self.state, SeparatorMaterialRegionState)
         ):
             raise ValueError("separator material region observation is invalid")
 
 
 @dataclass(frozen=True)
 class SeparatorBandObservation:
-    """Directly visible positive-width dark separator material.
+    """Directly visible positive-width separator material.
 
-    Contact and overlap have no positive black material band and therefore
+    Contact and overlap have no positive material band and therefore
     travel through role-bound edge/local-advance evidence instead.  Keeping
     this interval non-negative is a type boundary, not a clamp on ``g[i]``.
     """
@@ -182,14 +195,15 @@ class SeparatorBandObservation:
     right_edge_observation_id: ObservationId
     left_run_id: str
     right_run_id: str
+    material_polarity: SeparatorMaterialPolarity
     gap_interval_px: FiniteInterval
     transition_ids: tuple[ObservationId, ...]
-    independent_support_region_count: int
+    material_support_region_count: int
     continuous_support_fraction: float
-    darkness_contrast: float
-    darkness_contrast_interval: FiniteInterval
-    texture_contrast: float
-    texture_contrast_interval: FiniteInterval
+    material_contrast: float
+    material_contrast_interval: FiniteInterval
+    core_texture: float
+    core_texture_interval: FiniteInterval
     material_regions: tuple[SeparatorMaterialRegionObservation, ...]
     evidence_state: BoundaryEvidenceState = BoundaryEvidenceState.SUPPORT
 
@@ -197,33 +211,60 @@ class SeparatorBandObservation:
         if (
             not self.left_run_id
             or not self.right_run_id
+            or not isinstance(
+                self.material_polarity,
+                SeparatorMaterialPolarity,
+            )
             or self.gap_interval_px.minimum < 0.0
             or not self.transition_ids
             or len(set(self.transition_ids)) != len(self.transition_ids)
-            or not MINIMUM_INDEPENDENT_SUPPORT_REGIONS
-            <= self.independent_support_region_count
+            or not 0
+            <= self.material_support_region_count
             <= SPATIAL_SUPPORT_REGION_COUNT
             or not 0.0 <= self.continuous_support_fraction <= 1.0
-            or not math.isfinite(self.darkness_contrast)
-            or not math.isfinite(self.texture_contrast)
-            or self.darkness_contrast < 0.0
-            or self.texture_contrast < 0.0
-            or not self.darkness_contrast_interval.contains(
-                self.darkness_contrast,
+            or not math.isfinite(self.material_contrast)
+            or not math.isfinite(self.core_texture)
+            or self.core_texture < 0.0
+            or not self.material_contrast_interval.contains(
+                self.material_contrast,
                 epsilon=1.0e-9,
             )
-            or not self.texture_contrast_interval.contains(
-                self.texture_contrast,
+            or not self.core_texture_interval.contains(
+                self.core_texture,
                 epsilon=1.0e-9,
             )
-            or self.darkness_contrast_interval.minimum < 0.0
-            or self.texture_contrast_interval.minimum < 0.0
-            or len(self.material_regions) != self.independent_support_region_count
+            or self.core_texture_interval.minimum < 0.0
+            or not MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+            <= len(self.material_regions)
+            <= SPATIAL_SUPPORT_REGION_COUNT
             or tuple(sorted(item.region_index for item in self.material_regions))
             != tuple(item.region_index for item in self.material_regions)
             or len({item.region_index for item in self.material_regions})
             != len(self.material_regions)
-            or self.evidence_state != BoundaryEvidenceState.SUPPORT
+            or self.material_support_region_count
+            != sum(
+                item.state == SeparatorMaterialRegionState.SUPPORTED
+                for item in self.material_regions
+            )
+            or self.evidence_state
+            not in {
+                BoundaryEvidenceState.SUPPORT,
+                BoundaryEvidenceState.CONTRADICTION,
+            }
+            or (
+                self.evidence_state == BoundaryEvidenceState.SUPPORT
+                and self.material_support_region_count
+                < MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+            )
+            or (
+                self.evidence_state == BoundaryEvidenceState.CONTRADICTION
+                and (
+                    len(self.material_regions)
+                    != SPATIAL_SUPPORT_REGION_COUNT
+                    or self.material_support_region_count
+                    >= MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+                )
+            )
         ):
             raise ValueError("separator band observation is invalid")
 

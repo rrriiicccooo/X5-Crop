@@ -591,6 +591,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertTrue(summary.startswith("ALIGNMENT · "))
         self.assertIn(" · DIRECT ", summary)
         self.assertIn(" · OUTER ", summary)
+        self.assertIn(" · SEP D ", summary)
         self.assertTrue(
             selected_output_safety_summary(detection).startswith(
                 "SELECTED OUTPUT SAFETY · "

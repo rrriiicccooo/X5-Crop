@@ -16,6 +16,10 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   outer、separator 与 top/bottom 邻域一次测量。固定 W/H 与 typed evidence 决定 phase、pitch、cross 和
   ordinal；每个唯一绑定的直接 separator 可以约束自己的 local advance，全部变化仍只作一次 O(count)
   传播。像素强度、片夹中心或样片规则不能替代 authority。
+- Separator material 在同一个 registered measurement owner 内完整支持 `dark | light` polarity。相邻
+  反向 edge 必须在同一高度区域同时满足 oriented tone contrast 与 core texture 合同；局部两区域 support
+  不能冒充 source-wide role authority，完整三区域反证产生 typed `separator_material_conflict`。超出 normal
+  gap 上界的 material 仍保留为事实，但不能创造 phase、ordinal 或直接角色权限。
 - 直接观察到的 start/end 在最终 placement 中保留 native coordinate 与完整 interval；Grid 只补齐缺失
   角色。同一连续 placement 的互补 endpoint evidence 合并为联合可行状态，不伪造 runner。只有恰好缺
   一个角色、且至少两张完整直接 Frame 唯一证明共同 W 时，才用该 W 补这一条边。缺失 separator 只有在
@@ -35,7 +39,8 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   与外部校验。
 - 任一 slot 不安全时整张 source `needs_review`，不做 slot salvage。Contact 与 overlap 始终属于
   challenge，但 challenge 不预设终态：标准 detector/Gate 可产生安全自动批准，证据不足时安全 review
-  同样合格；不启用第二套 detector 或特殊 bleed。
+  同样合格。当前尚未启用异常 topology；后续只允许在同一 adjacency/placement 中加入显式关系，并让
+  受影响边界的 topology protection 消耗既有 5% 总预算，不建立第二套 detector 或独立特殊 bleed 预算。
 - Placement 保持 source-axis；局部直线 slope 只扩大安全包络。Deskew 是批准后的可选整理，不参与
   placement、Gate 或黄金准确性；证据不足或超限时保持原始倾斜。
 - 安全层只处理唯一 selected placement 的联合可行状态。Aperture 每侧共用 5% 外扩预算；直接 enclosing
@@ -49,8 +54,9 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   裁固定 W×H。AABB 的 no-data 角落不是检测失败。
 - Debug Analysis 只可视化同次检测事实：理论模板、观察、winner/runner、最终 footprint、预算和首个
   阻断原因；报告同时保存全局未知量 constraint rank、逐 adjacency query/trace/coordinate coverage 与
-  直接角色/外侧 Frame observation authority。Debug 不重新求解，也不把 review candidate 伪装为正式
-  输出。
+  直接角色/外侧 Frame observation authority，以及 dark/light material、逐区域状态和冲突。Debug 不重新
+  求解，也不把 review candidate 伪装为正式输出。当前 report revision 为
+  `x5crop_v5_template_report_16`，不保留旧 schema 兼容路径。
 - 正式 TIFF 保真 16-bit RGB、ICC、resolution、支持的 metadata 与无损压缩，并写
   `Orientation=1`。完整 source 先写 staging，再原子发布到尚不存在的目录。
 - Report、Gate 与 final geometry 各有唯一 owner；`CandidateGate` 只记录事实，`DecisionGate` 创建终态。
@@ -95,10 +101,12 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
 - `tools/verify` 是 Hook、CI 与本地验证的唯一入口。Diagnostic 只证明工程合同；gold accuracy、性能与
   platform receipt 分层记录，不互相冒充。
 - 正式性能 Gate 为 24-source 完整用户路径 mean 不超过 5 秒；3 秒只是不阻断的 challenge。
-- 当前查询走廊阶段的 development gold 为 110/110 完成、分析错误 0、危险自动批准 0；安全 auto 为
-  基础 nominal 11/66、较难 nominal 1/30，challenge 0/14。原 23 个 adjacency coverage failure 已归零，
-  S004 在完整走廊下恢复为安全 auto；扩大观察同时暴露 22 个直接角色坐标权限缺口，S034 的局部孤立
-  edge 不再造成危险自动批准。Clean-commit 24-source 性能继续以 5 秒 mean 为 Gate、3 秒为不阻断目标。
+- 当前 polarity-complete separator checkpoint 的 detector source manifest 为 `f6614793d27e8be6`。
+  Development gold 110/110 完成、分析错误 0、危险自动批准 0；安全 auto 为基础 nominal 10/66、较难
+  nominal 0/30、challenge 0/14。7 个 `separator_material_conflict` 明确进入 review；S075、S089 不再由
+  同角色竞争边形成危险选择，S080 的照片内部亮带没有误伤合法 placement。S003 的 fixed-W 缺口与 S073
+  的 wide-gap/outer authority 缺口保持 review，留给独立物理机制处理。Clean-commit 24-source 性能继续
+  以 5 秒 mean 为 Gate、3 秒为不阻断目标。
 - Apple Silicon macOS、Intel macOS 与 Windows x64 必须在同一最终 commit 取得实机 receipt。Accuracy、
   性能与平台证据未全部绑定该 commit 前，不创建 RC、tag、Release 或公开 ZIP。
 - 发布包由唯一 manifest 构建，不包含 modular source、tests、tools、内部文档或开发输出。

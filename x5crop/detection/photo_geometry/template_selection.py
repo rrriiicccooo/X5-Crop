@@ -78,6 +78,9 @@ def select_lane_template_placement(
             PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE: (
                 GateGap.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE
             ),
+            PhaseFailureKind.SEPARATOR_MATERIAL_CONFLICT: (
+                GateGap.SEPARATOR_MATERIAL_CONFLICT
+            ),
             PhaseFailureKind.OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE: (
                 GateGap.OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE
             ),

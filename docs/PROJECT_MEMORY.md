@@ -11,26 +11,31 @@
 `approved_auto`。不得改样片角色、放宽黄金合同、隐藏 runner 或牺牲正式 mean `<= 5s` 来提高覆盖。
 
 每次只闭合一个通用物理机制，并同时交付合同与真值表、canonical owner、typed evidence/failure、
-Debug、正反例、少量真实样片和完整黄金验收。全局 lattice authority、逐 adjacency coverage 与完整
-候选无关查询走廊已经闭合；下一机制只扩展 polarity-complete separator material observation。
+Debug、正反例、少量真实样片和完整黄金验收。全局 lattice authority、逐 adjacency coverage、完整
+候选无关查询走廊和 polarity-complete separator material 已经闭合。先继续完成 nominal 检测能力；
+Contact/Overlap 随后只扩展同一 adjacency/placement 模型，不建立第二套 detector。
 
 ## 已验证事实
 
 - 黄金集为 106 个唯一 source SHA、110 个显式 count task：96 个 nominal、14 个 challenge；优化分层为
   66 / 30 / 14。全部 task 已人工确认，同源 count 变体共享物理边界但独立验证。
-- 当前 detector source manifest `a3d3fc81c3e727ce` 的黄金分析为 110/110 完成、分析错误 0、危险自动
-  批准 0。安全 `approved_auto` 为 12 个：基础 nominal 11/66、较难 nominal 1/30；14 个 challenge 均
-  安全 review。Candidate 为 80 个不可用、22 个安全、8 个不安全；Review candidate 只作机制诊断。
+- 当前 detector source manifest `f6614793d27e8be6` 的黄金分析为 110/110 完成、分析错误 0、危险自动
+  批准 0。安全 `approved_auto` 为 10 个，全部位于基础 nominal：10/66；较难 nominal 为 0/30，14 个
+  challenge 均安全 review。全部 candidate 为 86 个不可用、19 个安全、5 个不安全；其中 review candidate
+  为 86 个不可用、9 个安全、5 个不安全，只作机制诊断。
 - `SequenceAnchorDiscoveryDomain` 从左右 holder 端分别投影完整且相关的 `W/pitch` 状态，合并并预登记
   全部候选无关 role corridor；不增加 TIFF 读取，不读取 winner。原 23 个
   `adjacency_observation_coverage_incomplete` 已归零，S004 恢复为安全 auto。
-- 扩大的观察域同时揭示了原先被窄窗口隐藏的安全缺口。直接 START/END 只有获得 source-wide edge、
-  同一 separator pair 或独立 fixed-W Frame pair 的坐标权限后才能进入 placement；当前 22 个
-  `direct_role_binding_authority_unavailable` 保持 review。S034 的局部孤立 edge 不再造成危险自动批准。
-- 当前其它 typed phase root failure 为 `global_lattice_authority_unavailable` 2 个、
-  `outer_frame_observation_authority_unavailable` 3 个、`discrete_phase_ambiguous` 32 个、
-  `fixed_template_mismatch` 5 个和 `local_advance_ambiguous` 3 个。失败迁移来自通用证据合同，没有样片
-  特例、format denylist、winner-specific requery 或第二 detector。
+- Separator material 由同一个 registered measurement owner 同时观察 dark/light polarity、两侧相邻
+  edge、逐高度 oriented contrast 与 core texture。局部两区域 support 不冒充 source-wide authority；
+  完整三区域反证和同角色竞争产生 typed `separator_material_conflict`。超出 normal gap 的 material 保留
+  原始事实，但不能自创 phase、ordinal 或直接角色权限。
+- 当前 typed phase root failure 为 `direct_role_binding_authority_unavailable` 24、
+  `discrete_phase_ambiguous` 24、`separator_material_conflict` 7、`fixed_template_mismatch` 7、
+  `outer_frame_observation_authority_unavailable` 4、`local_advance_ambiguous` 4 和
+  `global_lattice_authority_unavailable` 1。S075、S089 的同角色冲突安全进入 review；S080 的照片内部亮带
+  没有误伤合法边界。失败迁移来自通用证据合同，没有样片特例、format denylist、winner-specific requery
+  或第二 detector。
 - 24-source clean-commit 正式性能继续以 5 秒 mean 为阻断 Gate，并检查 3 秒不阻断目标；精确数值、
   commit 与机器 identity 只以 `build/v5-performance/performance_receipt.json` 为准。黄金 diagnostic 时间
   不充当性能证据。
@@ -39,19 +44,25 @@ Debug、正反例、少量真实样片和完整黄金验收。全局 lattice aut
 
 ## 开放风险
 
-- 96 个 nominal 中仍有 84 个 review。22 个直接角色权限缺口说明机器看见了局部 edge，却没有足够的
-  material 或 fixed-W 关系让它决定裁切；不能通过恢复弱线单独授权来消除失败。
-- 当前 separator material authority 仍只接受暗谷。亮 separator、欠曝或阴影中的弱边缘，以及宽缓
-  outer/cross material transition 仍缺少通用 observation；它们必须依次闭环，不能合并成平行 detector。
+- 96 个 nominal 中仍有 86 个 review。基础 nominal 主要缺口是 14 个离散 phase 竞争、13 个直接角色
+  权限不足、4 个 material 冲突，以及少量 cross/outer/W 闭合；不能通过恢复弱线单独授权或放宽 Grid
+  消除失败。
+- Polarity-complete observation 揭示了两个原有证明缺口：S003 的直接末端使实际 Frame width 低于当前
+  fixed-W 下界，S073 的直接 separator gap 超出当前 normal 上界；二者都安全回到 review。黄金物理统计
+  还显示多个 format 的直接 Frame ratio 与 separator gap 系统性超出当前先验，必须区分设计尺寸、真实
+  aperture 变化和 observation uncertainty 后再调整 canonical prior，不能直接扩大容差。
+- 欠曝、阴影或短边缘仍缺候选无关的跨高度弱信号联合；宽缓 outer/cross material transition 也尚未
+  typed 闭合。两者必须分别实现，不能合并为 enhanced detector。
 - 当前开发集不能事后兼任概率 calibration 或 sealed acceptance。未来 scorer 仍需预先冻结的新数据、
   OOD、abstention 和独立风险阈值；当前不创建占位评分器。
 
 ## 精确下一步
 
-1. 在现有 registered measurement owner 内增加 typed `SeparatorMaterialPolarity = dark | light`；两种
-   polarity 都必须由两侧直接 edge、至少三个独立高度区域和一致 material 状态共同证明，冲突保持
-   unresolved。
-2. 固定该机制的真值表、唯一 owner、typed failure、Debug、最小亮 band 正例与照片内部亮带安全反例；
-   只用少量相关真实样片验证后再运行完整黄金集和性能 Gate。
-3. 该检查点闭合并推送后，才分别进入弱边缘跨高度联合观察、宽缓 outer/cross material observation；
-   不恢复 enhanced detector、fallback 或未经校准且拥有最终决定权的 score。
+1. 在现有 registered sequence trace 上闭合跨高度弱边缘联合观察：多个独立区域只能在位置与 polarity
+   相容时共同形成带完整 uncertainty 的一个 edge；冲突或覆盖不足保持 typed unresolved，不新增 TIFF
+   读取或第二 detector。
+2. 单独审计并闭合 W、separator gap 与真实 aperture 的 authority。黄金分布只提出偏差，不能直接生成
+   runtime 常量；任何 prior 修正都须有物理 owner、反例、Debug、全黄金安全与性能证明。
+3. 再闭合宽缓 outer/cross material transition。Nominal 能力完成后，依次实现 adjacency continuity
+   negative、contact、overlap；三者共用 `AdjacencyRelation`、O(count) `local_prefix` 和统一 5% 输出预算，
+   不建立异常图专用 detector 或独立 bleed 预算。

@@ -243,6 +243,7 @@ class PhaseFailureKind(str, Enum):
     DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE = (
         "direct_role_binding_authority_unavailable"
     )
+    SEPARATOR_MATERIAL_CONFLICT = "separator_material_conflict"
     OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE = (
         "outer_frame_observation_authority_unavailable"
     )

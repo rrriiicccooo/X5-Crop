@@ -6,7 +6,9 @@ import unittest
 from x5crop.detection.photo_geometry.observation_types import (
     BoundaryEdgeObservation,
     SeparatorBandObservation,
+    SeparatorMaterialPolarity,
     SeparatorMaterialRegionObservation,
+    SeparatorMaterialRegionState,
 )
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.template_model import (
@@ -72,8 +74,9 @@ def separator(
         SeparatorMaterialRegionObservation(
             region_index=index,
             sample_count=3,
-            darkness_contrast_interval=FiniteInterval(1.0, 2.0),
-            texture_contrast_interval=FiniteInterval(0.5, 1.0),
+            material_contrast_interval=FiniteInterval(2.0, 3.0),
+            core_texture_interval=FiniteInterval(0.5, 0.75),
+            state=SeparatorMaterialRegionState.SUPPORTED,
         )
         for index in range(3)
     )
@@ -83,6 +86,7 @@ def separator(
         right_edge_observation_id=right.observation_id,
         left_run_id=left.run_id,
         right_run_id=right.run_id,
+        material_polarity=SeparatorMaterialPolarity.DARK,
         gap_interval_px=FiniteInterval(
             right.fit_position_interval_px.minimum
             - left.fit_position_interval_px.maximum,
@@ -93,12 +97,12 @@ def separator(
             ObservationId(f"transition:{name}:left"),
             ObservationId(f"transition:{name}:right"),
         ),
-        independent_support_region_count=3,
+        material_support_region_count=3,
         continuous_support_fraction=1.0,
-        darkness_contrast=1.5,
-        darkness_contrast_interval=FiniteInterval(1.0, 2.0),
-        texture_contrast=0.75,
-        texture_contrast_interval=FiniteInterval(0.5, 1.0),
+        material_contrast=2.5,
+        material_contrast_interval=FiniteInterval(2.0, 3.0),
+        core_texture=0.625,
+        core_texture_interval=FiniteInterval(0.5, 0.75),
         material_regions=material,
     )
 

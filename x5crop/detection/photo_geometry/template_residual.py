@@ -14,6 +14,7 @@ from enum import Enum
 
 from ...domain import FiniteInterval, ObservationId
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
+from .model import BoundaryEvidenceState
 from .template_model import (
     LocalAdvanceKind,
     LocalAdvanceRelation,
@@ -125,6 +126,8 @@ def _bands_by_bound_pair(
 ) -> dict[frozenset[ObservationId], tuple[SeparatorBandObservation, ...]]:
     values: dict[frozenset[ObservationId], list[SeparatorBandObservation]] = {}
     for band in bands:
+        if band.evidence_state != BoundaryEvidenceState.SUPPORT:
+            continue
         pair = frozenset(
             (band.left_edge_observation_id, band.right_edge_observation_id)
         )

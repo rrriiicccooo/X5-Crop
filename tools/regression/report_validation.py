@@ -375,7 +375,8 @@ def _validate_direct_role_binding_authority(value: object) -> None:
     if not isinstance(facts, list) or not isinstance(unsupported, list):
         raise ValueError("direct-role binding authority ledger is invalid")
     indices: list[int] = []
-    unavailable: list[int] = []
+    blocked: list[int] = []
+    contradicted = False
     allowed_bases = {
         "source_wide_edge",
         "separator_pair",
@@ -389,12 +390,15 @@ def _validate_direct_role_binding_authority(value: object) -> None:
             "observation_id",
             "independent_support_region_count",
             "bases",
+            "blocking_material_conflict_ids",
             "state",
         }:
             raise ValueError("direct-role authority fact is invalid")
         index = fact["role_index"]
         bases = fact["bases"]
+        conflicts = fact["blocking_material_conflict_ids"]
         supported = fact["state"] == "supported"
+        conflict = fact["state"] == "contradicted"
         if (
             not isinstance(index, int)
             or index < 0
@@ -406,20 +410,29 @@ def _validate_direct_role_binding_authority(value: object) -> None:
             or not isinstance(bases, list)
             or bases != list(dict.fromkeys(bases))
             or any(item not in allowed_bases for item in bases)
-            or fact["state"] not in {"supported", "unavailable"}
-            or supported != bool(bases)
+            or not isinstance(conflicts, list)
+            or conflicts != sorted(set(conflicts))
+            or any(not isinstance(item, str) or not item for item in conflicts)
+            or fact["state"]
+            not in {"supported", "contradicted", "unavailable"}
+            or conflict != bool(conflicts)
+            or supported != (bool(bases) and not conflicts)
+            or (fact["state"] == "unavailable")
+            != (not bases and not conflicts)
         ):
             raise ValueError("direct-role authority fact is invalid")
         indices.append(index)
         if not supported:
-            unavailable.append(index)
-    supported = value["state"] == "supported"
+            blocked.append(index)
+        contradicted = contradicted or conflict
+    expected_state = (
+        "contradicted" if contradicted else "unavailable" if blocked else "supported"
+    )
     if (
         indices != sorted(set(indices))
-        or unsupported != unavailable
-        or value["state"] not in {"supported", "unavailable"}
-        or supported != (not unavailable)
-        or supported != (value["reason"] is None)
+        or unsupported != blocked
+        or value["state"] != expected_state
+        or (expected_state == "supported") != (value["reason"] is None)
         or value["reason"] is not None
         and (not isinstance(value["reason"], str) or not value["reason"])
     ):

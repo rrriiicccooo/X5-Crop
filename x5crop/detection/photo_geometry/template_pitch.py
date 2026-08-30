@@ -317,7 +317,7 @@ def _independent_separator_centers(
         band
         for band in bands
         if (
-            band.independent_support_region_count
+            band.material_support_region_count
             >= SPATIAL_SUPPORT_REGION_COUNT
             and band.gap_interval_px.minimum <= maximum_normal_gap_px
         )

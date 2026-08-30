@@ -39,7 +39,9 @@ from x5crop.detection.photo_geometry.observation_types import (
     BasicAxisProfile,
     BoundaryEdgeObservation,
     ProfileRun,
+    SeparatorMaterialPolarity,
     SeparatorMaterialRegionObservation,
+    SeparatorMaterialRegionState,
 )
 from x5crop.detection.photo_geometry.line_observations import (
     SideTransitionRegion,
@@ -48,7 +50,8 @@ from x5crop.detection.photo_geometry.profile_adapters import (
     cross_profile_from_regions,
 )
 from x5crop.detection.photo_geometry.separator_material import (
-    repeated_dark_material_supported,
+    classify_separator_material_region,
+    repeated_separator_material_supported,
 )
 from x5crop.detection.photo_geometry.separator_observations import (
     build_format_separator_bands,

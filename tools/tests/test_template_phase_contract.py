@@ -11,9 +11,15 @@ from tools.tests.template_test_support import (
     phase_template as template,
     transformed_phase_edge as transformed_edge,
 )
-from x5crop.detection.photo_geometry.model import BoundaryRole
+from x5crop.detection.photo_geometry.model import (
+    BoundaryEvidenceState,
+    BoundaryRole,
+)
 from x5crop.detection.photo_geometry.observation_types import (
     BoundaryEdgeObservation,
+    SeparatorMaterialPolarity,
+    SeparatorMaterialRegionObservation,
+    SeparatorMaterialRegionState,
 )
 from x5crop.detection.photo_geometry.template_model import (
     LocalAdvanceKind,
@@ -53,7 +59,12 @@ from x5crop.detection.photo_geometry.template_stability import (
     AnchorDependencyEffect,
     leave_one_anchor_out_phase_stability,
 )
-from x5crop.domain import FiniteInterval, ObservationId, PositiveInterval
+from x5crop.domain import (
+    EvidenceState,
+    FiniteInterval,
+    ObservationId,
+    PositiveInterval,
+)
 
 
 class TemplatePhaseContractTest(unittest.TestCase):
@@ -1220,6 +1231,175 @@ class TemplatePhaseContractTest(unittest.TestCase):
             (band.observation_id,),
         )
         self.assertAlmostEqual(result.best.phase_support_coverage, 0.2)
+
+    def test_source_wide_light_separator_establishes_the_same_phase_roles(
+        self,
+    ) -> None:
+        left = replace(
+            edge("light-band:end", 260.0, support_fraction=0.2),
+            qualified_anchor_roles=(),
+            polarity=1,
+        )
+        right = replace(
+            edge("light-band:start", 280.0, support_fraction=0.2),
+            qualified_anchor_roles=(),
+            polarity=-1,
+        )
+        band = separator(
+            "light-band",
+            left,
+            right,
+            FiniteInterval(19.0, 21.0),
+            material_polarity=SeparatorMaterialPolarity.LIGHT,
+        )
+
+        result = fit_template_phase(
+            (left, right),
+            template(3),
+            separator_bands=(band,),
+            holder_span_px=FiniteInterval(0.0, 400.0),
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertAlmostEqual(
+            result.best.phase_lattice_fit.canonical_absolute_phase_px,
+            40.0,
+        )
+        self.assertEqual(
+            result.best.binding_observation_ids,
+            (None, None, None, left.observation_id, right.observation_id, None),
+        )
+
+    def test_source_wide_light_photo_region_cannot_create_separator_phase(
+        self,
+    ) -> None:
+        left = replace(
+            edge("bright-photo-region:left", 260.0, support_fraction=0.2),
+            qualified_anchor_roles=(),
+            polarity=1,
+        )
+        right = replace(
+            edge("bright-photo-region:right", 320.0, support_fraction=0.2),
+            qualified_anchor_roles=(),
+            polarity=-1,
+        )
+        band = separator(
+            "bright-photo-region",
+            left,
+            right,
+            FiniteInterval(59.0, 61.0),
+            material_polarity=SeparatorMaterialPolarity.LIGHT,
+        )
+
+        result = fit_template_phase(
+            (left, right),
+            template(3),
+            separator_bands=(band,),
+            holder_span_px=FiniteInterval(0.0, 400.0),
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            PhaseFailureKind.DIRECT_PHASE_ANCHOR_UNAVAILABLE,
+        )
+
+    def test_source_wide_material_conflict_blocks_selected_direct_roles(
+        self,
+    ) -> None:
+        observations = tuple(
+            replace(
+                edge(identity, coordinate),
+                qualified_anchor_roles=(role,),
+                polarity=1 if role == BoundaryRole.START else -1,
+            )
+            for identity, coordinate, role in (
+                ("start:1", 40.0, BoundaryRole.START),
+                ("end:1", 140.0, BoundaryRole.END),
+                ("start:2", 160.0, BoundaryRole.START),
+                ("end:2", 260.0, BoundaryRole.END),
+                ("start:3", 280.0, BoundaryRole.START),
+                ("end:3", 380.0, BoundaryRole.END),
+                ("alternate:end:3", 390.0, BoundaryRole.END),
+                ("start:4", 400.0, BoundaryRole.START),
+                ("end:4", 500.0, BoundaryRole.END),
+            )
+        )
+        by_id = {item.observation_id: item for item in observations}
+        supported = SeparatorMaterialRegionObservation(
+            region_index=0,
+            sample_count=2,
+            material_contrast_interval=FiniteInterval(3.0, 4.0),
+            core_texture_interval=FiniteInterval(0.0, 1.0),
+            state=SeparatorMaterialRegionState.SUPPORTED,
+        )
+        conflict = replace(
+            separator(
+                "material-conflict",
+                by_id[ObservationId("end:3")],
+                by_id[ObservationId("alternate:end:3")],
+                FiniteInterval(9.0, 11.0),
+            ),
+            material_support_region_count=1,
+            material_regions=(
+                supported,
+                replace(
+                    supported,
+                    region_index=1,
+                    state=SeparatorMaterialRegionState.TONE_UNRESOLVED,
+                ),
+                replace(
+                    supported,
+                    region_index=2,
+                    state=SeparatorMaterialRegionState.TONE_UNRESOLVED,
+                ),
+            ),
+            evidence_state=BoundaryEvidenceState.CONTRADICTION,
+        )
+
+        result = fit_template_phase_with_local_advance(
+            TemplatePhaseInput(
+                observations=observations,
+                separator_bands=(conflict,),
+                template=template(4),
+                scale_px_per_mm=None,
+                holder_span_px=FiniteInterval(0.0, 540.0),
+                phase_authority_px=None,
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "material-conflict",
+                        FiniteInterval(0.0, 540.0),
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            PhaseFailureKind.SEPARATOR_MATERIAL_CONFLICT,
+        )
+        authority = result.direct_role_binding_authority
+        assert authority is not None
+        self.assertEqual(authority.state, EvidenceState.CONTRADICTED)
+        self.assertEqual(authority.unsupported_role_indices, (5,))
+        conflicted = tuple(
+            item
+            for item in authority.facts
+            if item.state == EvidenceState.CONTRADICTED
+        )
+        self.assertEqual(
+            tuple(item.role_index for item in conflicted),
+            (5,),
+        )
+        self.assertTrue(
+            all(
+                item.blocking_material_conflict_ids
+                == (conflict.observation_id,)
+                for item in conflicted
+            )
+        )
 
     def test_internal_edges_preserve_discrete_ordinal_mappings(self) -> None:
         observations = tuple(

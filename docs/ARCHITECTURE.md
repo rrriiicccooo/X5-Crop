@@ -172,21 +172,28 @@ measurement。它们共同描述同一个 observation，可以互相加强、否
 
 ### 6.2 `SeparatorBandObservation`
 
-当前 material authority 只接受相邻 `- / +` edge 直接闭合的暗谷。Band 保留 material 宽度、位置区间
-和两侧 edge identity。一个 separator 的两条边、band、多条 trace 和全部梯度像素是一份物理证据，
-不能变成多票。
+`SeparatorMaterialPolarity = dark | light`。同一个 candidate-independent registered measurement
+owner 只配对每条 trace 中相邻的反向 edge：`- / +` 描述暗 material，`+ / -` 描述亮 material；不得跳过
+中间 transition 拼出更有利的 pair。Band 保留 polarity、material 宽度、位置区间、两侧 edge identity，
+以及三个固定高度区域各自的 oriented tone contrast、core texture 和 typed state。一个 separator 的两条
+edge、band、多条 trace 和全部梯度像素仍是一份物理证据，不能变成多票或第二 detector。
 
-`+ / -` 亮峰仍保留为两条 edge observation，但当前不能仅凭“长距离亮带”自动成为 separator：照片
-内部也能形成相同极性和空间支持，且宽度可以接近一个 Frame。下一项观察机制可以把 material polarity
-显式扩展为 `dark | light`，但必须仍由同一个 registered measurement owner 产生，并同时证明两侧直接
-edge、至少三个独立高度区域、band 内部 material 一致性和同一 polarity；区域冲突保持 unresolved。
-它必须先通过 development 安全反例和未来 sealed 验证，不能形成第二 detector 或按 profile 分数选择
-geometry。
+每个高度区域只有在 oriented material contrast 的完整下界同时高于 uint8 量化步长与该区域 core
+texture 上界时才为 `supported`；否则明确为 `tone_unresolved` 或 `material_non_uniform`。不同区域不能各自
+贡献 tone、texture 或 polarity 后拼成一份支持：
 
-同一物理 material support 中，只有 source-wide band 可以自行授予 END→START 角色。局部 band 只能
-连接两条已经由各自像素观察取得相容角色的 edge，不能覆盖或创造角色；存在多个局部解释时不按强度或
-距离挑选。Band 可以提供 phase anchor；只有它的两侧 edge 已共同绑定到同一个明确 adjacency 时，实测
-宽度才能约束该处 local advance。
+| 已观察区域与 material 状态 | `SeparatorBandObservation` | 权限 |
+|---|---|---|
+| 至少 2 个独立区域一致支持同一 polarity | `support` | 只形成局部 material support |
+| 3 个区域全部支持 | `support` | 可建立 source-wide END→START pair authority |
+| 3 个区域均已观察，但支持少于 2 个 | `contradiction` | 不授予正向权限；同角色 edge 竞争产生 `separator_material_conflict` |
+| 少于 2 个区域支持且没有完整三区域反证 | 无 band | `unavailable`，不得推断缺失证据 |
+| material gap 超出当前 normal gap 上界 | 保留原始 material fact | 不得创造 normal phase、ordinal 或直接角色权限 |
+
+局部 band 只能连接两条已经由各自像素观察取得相容角色的 edge，不能覆盖或创造角色；存在多个局部解释
+时不按强度或距离挑选。正常范围内的 band 可以提供 phase anchor；只有它的两侧 edge 已共同绑定到同一个
+明确 adjacency 时，实测宽度才能约束该处 local advance。亮、暗两种 polarity 使用完全相同的权限和
+失败合同；极性本身不参与 winner 评分。
 
 ### 6.3 Cross observation
 
@@ -293,7 +300,7 @@ ownership 不增加 TIFF 读取，不读取 winner，也不授予 phase、ordina
 直接角色权限、全局 constraint rank、逐 adjacency coverage、外侧 Frame observation authority、
 `normal`、`measured_advances` 或 `unresolved`；它不搜索、不选择、不改变 placement。
 
-每个 adjacency 只有一个 `LocalAdvanceRelation`：
+当前每个 adjacency 只有一个 `LocalAdvanceRelation`：
 
 - 直接、ordinal 唯一的 END → material → START 可产生 wide/narrow advance；
 - 该差值从下一格开始累加一次，后续仍共享同一个 source pitch；
@@ -306,8 +313,60 @@ ownership 不增加 TIFF 读取，不读取 winner，也不授予 phase、ordina
 共同 lattice authority，separator 宽度只拥有其已直接证明的局部 advance，不能反向改写全局 W 或 pitch。
 
 Contact 与 overlap 始终属于 challenge。Challenge 是运行前的评测角色，不是终态：标准 detector 与
-Gate 能唯一证明安全时可以 `approved_auto`，证据不足时 `needs_review` 同样合格；不启用额外 bleed、
-第二套 detector 或强制批准。
+Gate 能唯一证明安全时可以 `approved_auto`，证据不足时 `needs_review` 同样合格；当前尚未闭合异常
+topology，因而保持 unresolved，不以普通 Grid、基础 bleed 或强制批准替代证明。
+
+### 7.1 已确认、尚未启用的 adjacency topology 合同
+
+异常 topology 进入 production 时仍使用第 7 节唯一 placement 模型，不建立“发布版式 detector”或第二套
+Grid。`LocalAdvanceRelation` 将 current-only 升级为一个 `AdjacencyRelation` sum type：
+
+```text
+AdjacencyRelation
+├── SeparatorRelation(normal | wide | narrow)
+├── ContactRelation
+└── OverlapRelation
+```
+
+三种关系都保存一个有界 `delta_interval`，并继续由同一次 O(count) `local_prefix` 传播：
+
+```text
+signed_gap = next.START - current.END
+delta = signed_gap - nominal_gap
+```
+
+正的 `signed_gap` 属于 separator，零表示 contact，负值表示 overlap。`SeparatorRelation` 保存正 gap 与
+material identity；`ContactRelation` 必须保存 END/START 共用的唯一 physical edge identity；
+`OverlapRelation` 必须保存两条独立、角色相反且顺序反转的 edge 与 overlap interval。同一 contact 共用线
+只能计作一份 rank support。
+
+`AdjacencyContinuityObservation` 是进入 topology 前的唯一候选无关观察。它只读取已经预登记并执行的同一
+窗口，记录 separator material、跨理论间隔的 tone/texture/content continuity、共享 edge 或两条反序 edge；
+不新增 TIFF query，不成为第二条 content detector：
+
+| 直接观察 | 关系结果 |
+|---|---|
+| END、separator material、START 正序且唯一 | `SeparatorRelation` |
+| 同一 physical edge 唯一绑定 END 与下一张 START | `ContactRelation` |
+| 两条独立角色 edge，且 `START(next) < END(current)` | `OverlapRelation` |
+| 没有直接 edge、coverage 完整、全局 lattice 已闭合且无反证 | inferred normal Grid |
+| 内容连续但 edge 不能唯一绑定 | `adjacency_topology_unresolved` |
+| 存在多组同样合法的 contact/overlap 解释 | `adjacency_topology_ambiguous` |
+
+内容连续只能否定普通 separator，不能单独证明 contact 或 overlap。没有 topology relation 却发生 Frame
+domain overlap 时继续产生 `fixed_template_mismatch`；只有唯一 `OverlapRelation` 与 realized overlap
+interval 相容时该处重叠才合法，任何其它 adjacency 的意外重叠仍是 topology contradiction。
+
+共同 Frame width 的权限也只在 topology 唯一闭合后扩展：若同一份独立证据已经闭合 W，每个至少拥有
+一条直接 START/END 的 Frame 可以用同一相关 W 推导另一侧；多张 Frame 的推导共享一份相关状态，不能
+当成多条独立证据。W 不得凭空生成两侧都未观察到的 Frame、决定 contact/overlap、覆盖直接 native
+coordinate，或把 contact 共用线重复计票。
+
+该合同按四个独立小机制实现并各自形成检查点：先让 `AdjacencyContinuityObservation` 只提供普通
+separator 的 typed 反证，再分别闭合 contact、overlap，最后运行完整黄金集并单独报告安全 challenge
+能力。以上合同在对应 type、owner、Gate、Debug、正反例、真实样片、性能和黄金安全验收闭合前，不授予
+runtime 自动批准权限。开始实现时由单一 `photo_geometry/template_adjacency_topology.py` 拥有 observation
+到 relation 的闭合；当前不为尚未启用的能力建立占位模块。
 
 ## 8. Cross、outer 与固定 H
 
@@ -504,6 +563,19 @@ cross：0.25 mm
 `APERTURE_PAIR` 四边的完整 expansion（联合不确定性 + 直线 residual + bleed）各自不得超过对应
 format 尺寸的 5%。四边不能借额度；刚好达到上限通过。
 
+第 7.1 节的 topology 获准进入 runtime 后，contact/overlap 只在参与该关系的两侧增加显式
+`topology_protection`：前一 Frame 的 END 朝后一格、后一 Frame 的 START 朝前一格，其它边仍使用基础
+bleed。它不是新的预算，也不能选择或证明 topology；每侧可用的额外保护至多为：
+
+```text
+max(0, 5% W - joint uncertainty - line residual - base sequence bleed)
+```
+
+因此 contact/overlap 可以产生彼此重叠的两个安全 OutputFootprint，但每侧完整 expansion 仍不得超过
+5% W。source containment、content veto 或剩余预算不能闭合时进入 review；不确定 topology 也不能先按
+普通切分再靠扩大 bleed 自动批准。Debug 必须把基础 bleed、topology protection、uncertainty 与 residual
+分别显示。当前 runtime 尚未产生 `topology_protection`。
+
 `ENCLOSING_SUPPORT_PAIR` 的 top/bottom 使用直接 support 边，不再添加 cross bleed；除总 span
 `<= 1.1H` 外，每侧自身 expansion 仍不得超过 5%，两侧为对齐同一直接支撑状态而增加的 cross padding
 之和也不得超过一个 5% 短轴预算。Start/end 使用正常 sequence bleed 和各自 5% 预算。
@@ -543,6 +615,7 @@ complete/selected placement 后重复建立同义 Gate fact。它不读取 deske
 
 - `no_legal_placement`
 - `placement_unresolved`
+- `separator_material_conflict`
 - `content_protection_conflict`
 - `local_advance_unresolved`
 - `producer_bound_exceeded`
@@ -563,6 +636,7 @@ validator 位于 `tools/regression/`，不进入用户 standalone。
 Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决定、不写正式 TIFF。它必须展示：
 
 - theoretical template 与 role-free observations；
+- dark/light separator material、逐区域状态、直接角色权限与 material conflict；
 - 每个 bound role 的 residual 和 normal/measured-advances/unresolved pattern；
 - direct 与 inferred 边界；
 - best、runner 及真正不同之处；

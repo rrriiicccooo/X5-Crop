@@ -7,6 +7,7 @@ from tools.tests.photo_geometry_support import *
 from x5crop.detection.photo_geometry.sequence_direction_measurement import (
     sequence_run_direction_measurement,
 )
+from x5crop.detection.photo_geometry.model import BoundaryEvidenceState
 
 
 class BoundaryMeasurementContractTest(unittest.TestCase):
@@ -401,30 +402,207 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
         self.assertTrue(profile.runs[0].pair_qualified)
         self.assertEqual(profile.runs[0].qualified_anchor_roles, ())
 
-    def test_separator_material_requires_repeated_resolved_darkness(self) -> None:
-        def region(index: int, minimum: float, maximum: float):
+    def test_separator_material_requires_repeated_resolved_uniform_regions(
+        self,
+    ) -> None:
+        def region(
+            index: int,
+            minimum: float,
+            maximum: float,
+            *,
+            core_texture: float = 0.0,
+        ):
+            contrast = FiniteInterval(minimum, maximum)
+            texture = FiniteInterval.exact(core_texture)
             return SeparatorMaterialRegionObservation(
                 region_index=index,
                 sample_count=2,
-                darkness_contrast_interval=FiniteInterval(minimum, maximum),
-                texture_contrast_interval=FiniteInterval.exact(0.0),
+                material_contrast_interval=contrast,
+                core_texture_interval=texture,
+                state=classify_separator_material_region(contrast, texture),
             )
 
         self.assertTrue(
-            repeated_dark_material_supported(
-                (region(0, 2.0, 4.0), region(2, 3.0, 5.0))
+            repeated_separator_material_supported(
+                (region(0, 3.0, 4.0), region(2, 4.0, 5.0))
             )
         )
         self.assertFalse(
-            repeated_dark_material_supported(
-                (region(0, 2.0, 4.0), region(2, 0.0, 5.0))
+            repeated_separator_material_supported(
+                (region(0, 3.0, 4.0), region(2, 0.0, 5.0))
             )
         )
         self.assertFalse(
-            repeated_dark_material_supported(
-                (region(0, 1.0, 4.0), region(2, 1.0, 5.0))
+            repeated_separator_material_supported(
+                (
+                    region(0, 3.0, 4.0, core_texture=3.0),
+                    region(2, 4.0, 5.0, core_texture=4.0),
+                )
             )
         )
+
+    @staticmethod
+    def _separator_material_fixture(
+        *,
+        non_uniform_traces: tuple[int, ...] = (),
+    ):
+        traces = (0, 50, 100)
+        pixels = np.full((101, 240), 20, dtype=np.uint8)
+        pixels[:, 100:120] = 220
+        for trace in non_uniform_traces:
+            pixels[trace, 100:120:2] = 20
+
+        def transition(side: str, trace_ordinal: int, trace: int):
+            left = side == "left"
+            return PhotoBoundaryTransition(
+                transition_id=ObservationId(f"transition:{side}:{trace}"),
+                query_id="query:light-band",
+                trace_ordinal=trace_ordinal,
+                trace_coordinate_px=trace,
+                canonical_coordinate_px=100.0 if left else 119.0,
+                localization_interval_px=FiniteInterval.exact(
+                    100.0 if left else 119.0
+                ),
+                physical_position_interval_px=FiniteInterval.exact(
+                    100.0 if left else 119.0
+                ),
+                gradient_z=10.0,
+                tone_z=10.0,
+                texture_z=10.0,
+                left_tone_mean=20.0 if left else 220.0,
+                right_tone_mean=220.0 if left else 20.0,
+                left_texture_mean=0.0,
+                right_texture_mean=0.0,
+                polarity=1 if left else -1,
+                peak_width_px=1.0,
+                prominence=10.0,
+                local_noise=0.0,
+            )
+
+        transition_values = tuple(
+            transition(side, trace_ordinal, trace)
+            for trace_ordinal, trace in enumerate(traces)
+            for side in ("left", "right")
+        )
+        transition_by_id = {
+            str(item.transition_id): item for item in transition_values
+        }
+
+        def run(side: str, coordinate: float):
+            identities = tuple(
+                ObservationId(f"transition:{side}:{trace}") for trace in traces
+            )
+            return ProfileRun(
+                run_id=f"run:{side}",
+                coordinate_interval_px=FiniteInterval.exact(coordinate),
+                transition_ids=identities,
+                trace_coordinates_px=traces,
+                role_hint=None,
+                qualified_anchor_roles=(),
+                support_fraction=1.0,
+                continuous_support_fraction=1.0,
+                fit_residual_px=0.0,
+                evidence_strength=10.0,
+            )
+
+        left_run = run("left", 100.0)
+        right_run = run("right", 119.0)
+
+        def edge(value: ProfileRun, polarity: int):
+            interval = value.coordinate_interval_px
+            return BoundaryEdgeObservation(
+                observation_id=ObservationId(f"edge:{value.run_id}"),
+                run_id=value.run_id,
+                discovery_interval_px=interval,
+                reference_trace_px=50.0,
+                canonical_position_px=interval.center,
+                fit_position_interval_px=interval,
+                full_position_interval_px=interval,
+                transition_ids=value.transition_ids,
+                trace_coordinates_px=traces,
+                polarity=polarity,
+                support_fraction=1.0,
+                continuous_support_fraction=1.0,
+                fit_residual_px=0.0,
+                canonical_direction_degrees=None,
+                fit_direction_interval_degrees=None,
+                full_direction_interval_degrees=None,
+            )
+
+        profile = BasicAxisProfile(
+            "sequence",
+            pixels.shape[1],
+            traces,
+            (left_run, right_run),
+        )
+        bands = build_format_separator_bands(
+            profile,
+            (edge(left_run, 1), edge(right_run, -1)),
+            transition_by_id,
+            PhotoBoundaryMeasurementField(pixels, "horizontal"),
+            BoundaryAxis.X,
+            PositiveInterval(90.0, 110.0),
+        )
+        return bands
+
+    def test_source_wide_light_separator_has_typed_material_authority(self) -> None:
+        (band,) = self._separator_material_fixture()
+
+        self.assertEqual(band.material_polarity, SeparatorMaterialPolarity.LIGHT)
+        self.assertEqual(band.material_support_region_count, 3)
+        self.assertTrue(
+            all(
+                item.state == SeparatorMaterialRegionState.SUPPORTED
+                for item in band.material_regions
+            )
+        )
+
+    def test_non_uniform_photo_interior_light_band_cannot_be_source_wide(
+        self,
+    ) -> None:
+        (band,) = self._separator_material_fixture(
+            non_uniform_traces=(50,),
+        )
+
+        self.assertEqual(band.material_polarity, SeparatorMaterialPolarity.LIGHT)
+        self.assertEqual(band.material_support_region_count, 2)
+        self.assertEqual(
+            band.evidence_state,
+            BoundaryEvidenceState.SUPPORT,
+        )
+        self.assertEqual(
+            band.material_regions[1].state,
+            SeparatorMaterialRegionState.MATERIAL_NON_UNIFORM,
+        )
+
+    def test_source_wide_material_without_repeated_support_is_conflicted(
+        self,
+    ) -> None:
+        (band,) = self._separator_material_fixture(
+            non_uniform_traces=(0, 50),
+        )
+
+        self.assertEqual(band.material_support_region_count, 1)
+        self.assertEqual(
+            band.evidence_state,
+            BoundaryEvidenceState.CONTRADICTION,
+        )
+
+    def test_repeated_material_support_cannot_be_typed_as_contradiction(
+        self,
+    ) -> None:
+        (band,) = self._separator_material_fixture(
+            non_uniform_traces=(50,),
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "separator band observation is invalid",
+        ):
+            replace(
+                band,
+                evidence_state=BoundaryEvidenceState.CONTRADICTION,
+            )
 
     def test_separator_pairing_accepts_direct_wide_material_below_one_frame(
         self,
@@ -712,10 +890,10 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
                 ),
                 left_edge_observation_id=left.observation_id,
                 right_edge_observation_id=right.observation_id,
-                independent_support_region_count=3 if is_outer else 2,
+                material_support_region_count=3 if is_outer else 2,
                 continuous_support_fraction=1.0,
-                darkness_contrast_interval=FiniteInterval.exact(1.0),
-                texture_contrast_interval=FiniteInterval.exact(1.0),
+                material_contrast_interval=FiniteInterval.exact(1.0),
+                core_texture_interval=FiniteInterval.exact(1.0),
             )
             markers[(left.run_id, right.run_id)] = marker
             return marker
@@ -738,6 +916,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
             set(markers),
             {
                 ("outer-left", "inner-right"),
+                ("inner-right", "inner-left"),
                 ("inner-left", "outer-right"),
             },
         )

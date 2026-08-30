@@ -5,6 +5,7 @@ from __future__ import annotations
 from PIL import Image
 
 from ..detection.final.model import FinalDetection
+from ..detection.photo_geometry.model import SPATIAL_SUPPORT_REGION_COUNT
 from ..detection.photo_geometry.output_model import OutputFootprint
 from ..detection.photo_geometry.template_alignment_diagnostic import (
     template_alignment_diagnostic,
@@ -187,11 +188,35 @@ def alignment_summary(detection: FinalDetection) -> str:
             else int(bool(outer.first_frame_observation_ids))
             + int(bool(outer.last_frame_observation_ids))
         )
+        separator_counts = {
+            polarity: (
+                sum(
+                    item.material_support_region_count
+                    == SPATIAL_SUPPORT_REGION_COUNT
+                    for item in lane.prepared.separator_bands
+                    if item.material_polarity.value == polarity
+                ),
+                sum(
+                    item.material_polarity.value == polarity
+                    for item in lane.prepared.separator_bands
+                ),
+                sum(
+                    item.material_polarity.value == polarity
+                    and item.evidence_state.value == "contradiction"
+                    for item in lane.prepared.separator_bands
+                ),
+            )
+            for polarity in ("dark", "light")
+        }
         proof = (
             f"GLOBAL {rank}/3 · ADJ "
             f"{complete_coverage}/{len(inferred_coverage)} · DIRECT "
             f"{direct_supported}/{direct_total} · OUTER "
-            f"{outer_count}/2"
+            f"{outer_count}/2 · SEP "
+            f"D {separator_counts['dark'][0]}/{separator_counts['dark'][1]}"
+            f" C{separator_counts['dark'][2]} "
+            f"L {separator_counts['light'][0]}/{separator_counts['light'][1]}"
+            f" C{separator_counts['light'][2]}"
         )
         if diagnostic.pattern.value == "unresolved":
             values.append(f"{lane.lane_id} {label} · {proof}")

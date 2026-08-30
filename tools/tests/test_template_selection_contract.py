@@ -179,6 +179,11 @@ class TemplateSelectionContractTest(unittest.TestCase):
                 MinimumMissingFact.DIRECT_ROLE_BINDING_AUTHORITY,
             ),
             (
+                PhaseFailureKind.SEPARATOR_MATERIAL_CONFLICT,
+                GateGap.SEPARATOR_MATERIAL_CONFLICT,
+                MinimumMissingFact.SEPARATOR_MATERIAL_AUTHORITY,
+            ),
+            (
                 PhaseFailureKind.OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE,
                 GateGap.OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE,
                 MinimumMissingFact.OUTER_FRAME_OBSERVATION_AUTHORITY,

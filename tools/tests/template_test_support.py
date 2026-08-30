@@ -18,7 +18,9 @@ from x5crop.detection.photo_geometry.model import (
 from x5crop.detection.photo_geometry.observation_types import (
     BoundaryEdgeObservation,
     SeparatorBandObservation,
+    SeparatorMaterialPolarity,
     SeparatorMaterialRegionObservation,
+    SeparatorMaterialRegionState,
 )
 from x5crop.detection.photo_geometry.output_model import (
     OutputBoundaryUse,
@@ -137,13 +139,17 @@ def phase_separator(
     gap: FiniteInterval,
     *,
     region_count: int = 3,
+    material_polarity: SeparatorMaterialPolarity = (
+        SeparatorMaterialPolarity.DARK
+    ),
 ) -> SeparatorBandObservation:
     material = tuple(
         SeparatorMaterialRegionObservation(
             region_index=index,
             sample_count=3,
-            darkness_contrast_interval=FiniteInterval(1.0, 2.0),
-            texture_contrast_interval=FiniteInterval(0.5, 1.0),
+            material_contrast_interval=FiniteInterval(2.0, 3.0),
+            core_texture_interval=FiniteInterval(0.5, 0.75),
+            state=SeparatorMaterialRegionState.SUPPORTED,
         )
         for index in range(region_count)
     )
@@ -153,17 +159,18 @@ def phase_separator(
         right_edge_observation_id=right.observation_id,
         left_run_id=left.run_id,
         right_run_id=right.run_id,
+        material_polarity=material_polarity,
         gap_interval_px=gap,
         transition_ids=(
             ObservationId(f"transition:{name}:left"),
             ObservationId(f"transition:{name}:right"),
         ),
-        independent_support_region_count=region_count,
+        material_support_region_count=region_count,
         continuous_support_fraction=1.0,
-        darkness_contrast=1.5,
-        darkness_contrast_interval=FiniteInterval(1.0, 2.0),
-        texture_contrast=0.75,
-        texture_contrast_interval=FiniteInterval(0.5, 1.0),
+        material_contrast=2.5,
+        material_contrast_interval=FiniteInterval(2.0, 3.0),
+        core_texture=0.625,
+        core_texture_interval=FiniteInterval(0.5, 0.75),
         material_regions=material,
     )
 
