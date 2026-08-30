@@ -14,13 +14,14 @@ from .model import BoundaryRole, SPATIAL_SUPPORT_REGION_COUNT
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_model import (
     LocalAdvanceRelation,
-    PhaseLatticeFit,
     PitchFit,
     SequenceFit,
+    SequenceBindingUse,
     SequenceRoleBinding,
     SequenceRoleLineEvidence,
     TemplateRole,
     TemplateSpec,
+    phase_lattice_fit_from_absolute,
     template_role_refinement_radius_px,
 )
 from .template_phase_model import PhaseWinnerBasis
@@ -51,6 +52,13 @@ class _AnchorFact:
 class _BoundFit:
     fit: SequenceFit
     residual_compatible: bool
+
+
+@dataclass(frozen=True)
+class _LocalRoleRefinement:
+    fit: SequenceFit
+    role_lookup_count: int
+    binding_count: int
 
 
 @dataclass(frozen=True)
@@ -225,49 +233,6 @@ def _inferred_role_interval(
     return FiniteInterval(
         phase.minimum - relative_maximum,
         phase.maximum - relative_minimum,
-    )
-
-
-def _phase_lattice_fit(
-    template: TemplateSpec,
-    *,
-    absolute_phase_px: float,
-    period_px: float,
-    uncertainty_px: float,
-) -> PhaseLatticeFit | None:
-    authority = template.phase_lattice_authority
-    normalized = template.direction * (
-        absolute_phase_px - authority.cycle_origin_px
-    )
-    offset = math.floor(normalized / period_px)
-    if not authority.contains_offset(offset):
-        return None
-    cycle = normalized - offset * period_px
-    if cycle >= period_px - 1.0e-9:
-        cycle = 0.0
-        offset += 1
-        if not authority.contains_offset(offset):
-            return None
-    radius = min(
-        max(0.0, uncertainty_px),
-        cycle,
-        period_px - cycle,
-    )
-    cycle_interval = FiniteInterval(cycle - radius, cycle + radius)
-    projected = tuple(
-        authority.cycle_origin_px
-        + template.direction * (value + offset * period_px)
-        for value in (cycle_interval.minimum, cycle_interval.maximum)
-    )
-    return PhaseLatticeFit(
-        authority=authority,
-        cycle_phase_interval_px=cycle_interval,
-        canonical_cycle_phase_px=cycle,
-        integer_slot_offset=offset,
-        canonical_period_px=period_px,
-        absolute_phase_interval_px=FiniteInterval(min(projected), max(projected)),
-        canonical_absolute_phase_px=absolute_phase_px,
-        direction=template.direction,
     )
 
 
@@ -518,6 +483,331 @@ def _separator_pair_facts(
     return tuple(
         pairs[key]
         for key in sorted(pairs, key=lambda value: tuple(map(str, value)))
+    )
+
+
+def _refine_local_role_bindings(
+    fit: SequenceFit,
+    observations: Sequence[BoundaryEdgeObservation],
+    separator_bands: Sequence[SeparatorBandObservation],
+) -> _LocalRoleRefinement:
+    """Bind uniquely closed local edges after global phase is immutable.
+
+    The global fit remains the sole owner of phase and pitch.  This pass only
+    replaces an unbound role near that fixed grid when source pixels provide
+    one role-qualified fitted line and physical W or separator material makes
+    its local interpretation unique.  It performs no pixel query, ranking, or
+    candidate Cartesian product.
+    """
+
+    observations = _with_separator_role_authority(
+        observations,
+        separator_bands,
+        maximum_material_gap_px=fit.template.gap_prior_px.maximum,
+    )
+    support_ids = separator_support_authority(tuple(separator_bands))
+    facts = _facts(
+        observations,
+        separator_support_ids=support_ids,
+    )
+    by_id = {item.observation_id: item for item in facts}
+    roles = fit.template.roles
+    corridor = template_role_refinement_radius_px(
+        fit.pitch_fit.canonical_pitch_px
+    )
+    bindings = list(fit.role_bindings)
+    bound_ids = {
+        binding.observation_id
+        for binding in bindings
+        if binding is not None
+    }
+
+    # One observation may refine at most one already placed role.  A line that
+    # falls in more than one role corridor retains validation-only authority.
+    candidate_roles: dict[ObservationId, list[int]] = {}
+    for role, expected in zip(
+        roles,
+        fit.model_role_positions_px,
+        strict=True,
+    ):
+        for fact in facts:
+            if (
+                fit.role_bindings[role.role_index] is None
+                and fact.observation_id not in bound_ids
+                and fact.line_evidence is not None
+                and role.role in fact.qualified_anchor_roles
+                and abs(fact.coordinate_px - expected) <= corridor
+            ):
+                candidate_roles.setdefault(fact.observation_id, []).append(
+                    role.role_index
+                )
+    candidate_lists: dict[int, list[_AnchorFact]] = {
+        role.role_index: [] for role in roles
+    }
+    for identity, role_indices in candidate_roles.items():
+        if len(role_indices) == 1:
+            candidate_lists[role_indices[0]].append(by_id[identity])
+    candidates_by_role = {
+        role_index: tuple(
+            sorted(
+                values,
+                key=lambda item: (
+                    fit.template.direction * item.coordinate_px,
+                    str(item.observation_id),
+                ),
+            )
+        )
+        for role_index, values in candidate_lists.items()
+    }
+
+    def binding_for(fact: _AnchorFact) -> SequenceRoleBinding:
+        return SequenceRoleBinding(
+            use=SequenceBindingUse.LOCAL_REFINEMENT,
+            observation_id=fact.observation_id,
+            independent_support_id=fact.independent_support_id,
+            canonical_position_px=fact.coordinate_px,
+            fit_position_interval_px=fact.interval_px,
+            full_position_interval_px=fact.full_interval_px,
+            line_evidence=fact.line_evidence,
+        )
+
+    def width_compatible(start_px: float, end_px: float) -> bool:
+        width = fit.template.direction * (end_px - start_px)
+        return (
+            fit.template.frame_width_px.minimum - 1.0e-9
+            <= width
+            <= fit.template.frame_width_px.maximum + 1.0e-9
+        )
+
+    def fact_fits_bound_frame(role_index: int, fact: _AnchorFact) -> bool:
+        other_index = role_index + 1 if role_index % 2 == 0 else role_index - 1
+        other = bindings[other_index]
+        if other is None:
+            return True
+        if other.independent_support_id == fact.independent_support_id:
+            return False
+        if role_index % 2 == 0:
+            return width_compatible(
+                fact.coordinate_px,
+                other.canonical_position_px,
+            )
+        return width_compatible(
+            other.canonical_position_px,
+            fact.coordinate_px,
+        )
+
+    def bind(role_index: int, fact: _AnchorFact) -> None:
+        if bindings[role_index] is not None or fact.observation_id in bound_ids:
+            raise ValueError("local refinement attempted a duplicate binding")
+        bindings[role_index] = binding_for(fact)
+        bound_ids.add(fact.observation_id)
+
+    # A source-spanning separator is an atomic END -> material -> START fact.
+    # Apply it before individual frame closure so its two sides cannot be
+    # mixed with another band interpretation.
+    bound_role_by_id = {
+        binding.observation_id: role_index
+        for role_index, binding in enumerate(bindings)
+        if binding is not None
+    }
+    relation_pairs: dict[int, set[tuple[ObservationId, ObservationId]]] = {}
+    for band in separator_bands:
+        if (
+            band.independent_support_region_count < SPATIAL_SUPPORT_REGION_COUNT
+            or max(
+                band.gap_interval_px.minimum,
+                fit.template.gap_prior_px.minimum,
+            )
+            > min(
+                band.gap_interval_px.maximum,
+                fit.template.gap_prior_px.maximum,
+            )
+        ):
+            continue
+        left = by_id.get(band.left_edge_observation_id)
+        right = by_id.get(band.right_edge_observation_id)
+        if (
+            left is None
+            or right is None
+            or left.line_evidence is None
+            or right.line_evidence is None
+            or left.independent_support_id != right.independent_support_id
+        ):
+            continue
+        left_roles = (
+            [bound_role_by_id[left.observation_id]]
+            if left.observation_id in bound_role_by_id
+            else candidate_roles.get(left.observation_id, [])
+        )
+        right_roles = (
+            [bound_role_by_id[right.observation_id]]
+            if right.observation_id in bound_role_by_id
+            else candidate_roles.get(right.observation_id, [])
+        )
+        if len(left_roles) != 1 or len(right_roles) != 1:
+            continue
+        left_role = left_roles[0]
+        right_role = right_roles[0]
+        if (
+            left_role % 2 != 1
+            or right_role != left_role + 1
+            or not fact_fits_bound_frame(left_role, left)
+            or not fact_fits_bound_frame(right_role, right)
+        ):
+            continue
+        relation_pairs.setdefault(left_role // 2, set()).add(
+            (left.observation_id, right.observation_id)
+        )
+    for adjacency_index in range(max(0, fit.template.count - 1)):
+        pairs = relation_pairs.get(adjacency_index, set())
+        if len(pairs) != 1:
+            continue
+        left_id, right_id = next(iter(pairs))
+        left_role = 2 * adjacency_index + 1
+        right_role = left_role + 1
+        if bindings[left_role] is None:
+            bind(left_role, by_id[left_id])
+        if bindings[right_role] is None:
+            bind(right_role, by_id[right_id])
+
+    def remaining(role_index: int) -> tuple[_AnchorFact, ...]:
+        return tuple(
+            item
+            for item in candidates_by_role[role_index]
+            if item.observation_id not in bound_ids
+        )
+
+    def normalized(value: float) -> float:
+        return fit.template.direction * value
+
+    def unique_missing(
+        candidates: tuple[_AnchorFact, ...],
+        *,
+        other: SequenceRoleBinding,
+        missing_start: bool,
+    ) -> _AnchorFact | None:
+        values = tuple(normalized(item.coordinate_px) for item in candidates)
+        other_px = normalized(other.canonical_position_px)
+        if missing_start:
+            minimum = other_px - fit.template.frame_width_px.maximum
+            maximum = other_px - fit.template.frame_width_px.minimum
+        else:
+            minimum = other_px + fit.template.frame_width_px.minimum
+            maximum = other_px + fit.template.frame_width_px.maximum
+        begin = bisect_left(values, minimum - 1.0e-9)
+        end = bisect_right(values, maximum + 1.0e-9)
+        if end - begin != 1:
+            return None
+        selected = candidates[begin]
+        if selected.independent_support_id == other.independent_support_id:
+            return None
+        return selected
+
+    def unique_pair(
+        starts: tuple[_AnchorFact, ...],
+        ends: tuple[_AnchorFact, ...],
+    ) -> tuple[_AnchorFact, _AnchorFact] | None:
+        end_values = tuple(normalized(item.coordinate_px) for item in ends)
+        selected: tuple[_AnchorFact, _AnchorFact] | None = None
+        for start in starts:
+            start_px = normalized(start.coordinate_px)
+            begin = bisect_left(
+                end_values,
+                start_px + fit.template.frame_width_px.minimum - 1.0e-9,
+            )
+            end = bisect_right(
+                end_values,
+                start_px + fit.template.frame_width_px.maximum + 1.0e-9,
+            )
+            if end - begin > 1:
+                return None
+            if end == begin:
+                continue
+            candidate = ends[begin]
+            if candidate.independent_support_id == start.independent_support_id:
+                continue
+            if selected is not None:
+                return None
+            selected = (start, candidate)
+        return selected
+
+    for slot_index in range(fit.template.count):
+        start_index = 2 * slot_index
+        end_index = start_index + 1
+        start = bindings[start_index]
+        end = bindings[end_index]
+        if start is None and end is None:
+            pair = unique_pair(
+                remaining(start_index),
+                remaining(end_index),
+            )
+            if pair is not None:
+                bind(start_index, pair[0])
+                bind(end_index, pair[1])
+        elif start is None:
+            candidate = unique_missing(
+                remaining(start_index),
+                other=end,
+                missing_start=True,
+            )
+            if candidate is not None:
+                bind(start_index, candidate)
+        elif end is None:
+            candidate = unique_missing(
+                remaining(end_index),
+                other=start,
+                missing_start=False,
+            )
+            if candidate is not None:
+                bind(end_index, candidate)
+
+    added = tuple(
+        binding
+        for old, binding in zip(fit.role_bindings, bindings, strict=True)
+        if old is None and binding is not None
+    )
+    if not added:
+        return _LocalRoleRefinement(fit, len(roles) * len(facts), 0)
+    added_ids = {item.observation_id for item in added}
+    role_intervals = list(fit.model_role_intervals_px)
+    full_role_intervals = list(fit.model_full_role_intervals_px)
+    for role_index, binding in enumerate(bindings):
+        if binding is None or binding.observation_id not in added_ids:
+            continue
+        canonical = fit.model_role_positions_px[role_index]
+        current = role_intervals[role_index]
+        role_intervals[role_index] = FiniteInterval(
+            min(current.minimum, binding.fit_position_interval_px.minimum, canonical),
+            max(current.maximum, binding.fit_position_interval_px.maximum, canonical),
+        )
+        current_full = full_role_intervals[role_index]
+        full_role_intervals[role_index] = FiniteInterval(
+            min(
+                current_full.minimum,
+                binding.full_position_interval_px.minimum,
+                canonical,
+            ),
+            max(
+                current_full.maximum,
+                binding.full_position_interval_px.maximum,
+                canonical,
+            ),
+        )
+    direct_added = sum(by_id[item.observation_id].direct for item in added)
+    refined = replace(
+        fit,
+        model_role_intervals_px=tuple(role_intervals),
+        model_full_role_intervals_px=tuple(full_role_intervals),
+        role_bindings=tuple(bindings),
+        contradicted_observation_count=max(
+            0,
+            fit.contradicted_observation_count - direct_added,
+        ),
+    )
+    return _LocalRoleRefinement(
+        refined,
+        len(roles) * len(facts),
+        len(added),
     )
 
 
@@ -1124,6 +1414,7 @@ def _fit_seed(
             )
             role_bindings.append(
                 SequenceRoleBinding(
+                    use=SequenceBindingUse.PHASE_ANCHOR,
                     observation_id=observed.observation_id,
                     independent_support_id=observed.independent_support_id,
                     canonical_position_px=observed.coordinate_px,
@@ -1147,7 +1438,7 @@ def _fit_seed(
         for group in support_groups.values()
     )
     phase_uncertainty = uncertainty
-    lattice_fit = _phase_lattice_fit(
+    lattice_fit = phase_lattice_fit_from_absolute(
         template,
         absolute_phase_px=phase,
         period_px=pitch,

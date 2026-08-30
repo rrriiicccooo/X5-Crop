@@ -51,6 +51,22 @@ class _Candidate:
     source_direction: SharedStripDirection | None = None
 
 
+def _fits_source_direction(
+    binding: CrossRoleBinding,
+    source_direction: SharedStripDirection,
+) -> bool:
+    """Use fitted local slope for membership, full slope only for safety."""
+
+    return (
+        binding.fit_direction_interval_degrees is not None
+        and _intersect(
+            binding.fit_direction_interval_degrees,
+            source_direction.observed_angle_interval_degrees,
+        )
+        is not None
+    )
+
+
 def _direct_candidate(
     top: CrossRoleBinding,
     bottom: CrossRoleBinding,
@@ -84,12 +100,7 @@ def _direct_candidate(
             return None
     else:
         if any(
-            item.observed_direction_interval_degrees is None
-            or _intersect(
-                item.observed_direction_interval_degrees,
-                source_direction.observed_angle_interval_degrees,
-            )
-            is None
+            not _fits_source_direction(item, source_direction)
             for item in (top, bottom)
         ):
             return None
@@ -143,6 +154,10 @@ def _single_candidate(
         or (
             source_direction is None
             and not _single_direction_ready(binding)
+        )
+        or (
+            source_direction is not None
+            and not _fits_source_direction(binding, source_direction)
         )
         or (
             not binding.source_spanning_continuous

@@ -211,6 +211,14 @@ def development_report_facts(
                         lane.prepared.phase_competition.receipt
                         .local_relation_evaluation_count
                     ),
+                    "local_refinement_lookup_count": (
+                        lane.prepared.phase_competition.receipt
+                        .local_refinement_lookup_count
+                    ),
+                    "local_refinement_binding_count": (
+                        lane.prepared.phase_competition.receipt
+                        .local_refinement_binding_count
+                    ),
                     "cross_registered_run_count": (
                         lane.prepared.cross_competition.receipt
                         .registered_run_count

@@ -331,6 +331,8 @@ class V5PerformanceContractTest(unittest.TestCase):
             phase_role_lookup_count=4,
             phase_role_binding_count=24,
             local_relation_evaluation_count=4,
+            local_refinement_lookup_count=6,
+            local_refinement_binding_count=3,
             domain_pixels=100,
         )
         report = {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import unittest
 
 from tools.tests.template_test_support import (
@@ -10,15 +11,76 @@ from x5crop.detection.photo_geometry.template_cross import fit_template_cross
 from x5crop.detection.photo_geometry.template_cross_model import (
     TemplateCrossInput,
 )
+from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.template_evidence import (
     EvidenceUse,
     PhysicalUnknown,
     template_evidence_use_ledger,
 )
-from x5crop.detection.photo_geometry.template_phase import fit_template_phase
+from x5crop.detection.photo_geometry.template_phase import (
+    fit_template_phase,
+    fit_template_phase_with_local_advance,
+)
+from x5crop.detection.photo_geometry.template_phase_model import (
+    TemplatePhaseInput,
+)
+from x5crop.domain import FiniteInterval, ObservationId, PositiveInterval
 
 
 class TemplateEvidenceContractTest(unittest.TestCase):
+    def test_local_boundary_is_not_reported_as_phase_or_pitch(self) -> None:
+        direction = FiniteInterval.exact(0.0)
+        start = replace(
+            edge("phase:start", 100.0),
+            qualified_anchor_roles=(BoundaryRole.START,),
+            canonical_direction_degrees=0.0,
+            fit_direction_interval_degrees=direction,
+            full_direction_interval_degrees=direction,
+        )
+        end = replace(
+            edge("local:end", 201.0),
+            qualified_anchor_roles=(BoundaryRole.END,),
+            canonical_direction_degrees=0.0,
+            fit_direction_interval_degrees=direction,
+            full_direction_interval_degrees=direction,
+            fit_residual_px=20.0,
+        )
+        spec = replace(
+            template(1),
+            frame_width_px=PositiveInterval(98.0, 102.0),
+        )
+        phase = fit_template_phase_with_local_advance(
+            TemplatePhaseInput(
+                observations=(start, end),
+                separator_bands=(),
+                template=spec,
+                scale_px_per_mm=PositiveInterval.exact(100.0),
+                holder_span_px=None,
+                phase_authority_px=FiniteInterval.exact(100.0),
+            )
+        )
+        cross = fit_template_cross(
+            TemplateCrossInput(template=spec, fixed_height_px=240.0)
+        )
+
+        ledger = template_evidence_use_ledger(
+            (start, end),
+            (),
+            (),
+            phase,
+            cross,
+        )
+
+        by_id = {item.observation_id: item for item in ledger}
+        self.assertEqual(
+            by_id[ObservationId("phase:start")].physical_owner,
+            PhysicalUnknown.PHASE,
+        )
+        self.assertEqual(
+            by_id[ObservationId("local:end")].physical_owner,
+            PhysicalUnknown.LOCAL_BOUNDARY,
+        )
+
     def test_sequence_observations_have_one_fit_or_validation_owner(self) -> None:
         observations = tuple(
             edge(f"edge:{index}", coordinate)

@@ -527,11 +527,10 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         ]
         candidates = spanning_pairs
     elif bool(spanning_top) != bool(spanning_bottom):
-        # One domain-spanning role owns the cross coordinate.  A fragmented
-        # opposite observation participates only when it directly closes H,
-        # shared trace support, and direction with that anchor.  Otherwise
-        # fixed H supplies the missing side.  Distinct direct closures remain
-        # distinct answers and are never averaged.
+        # One source-spanning role owns the cross coordinate. Fixed H supplies
+        # the opposite side when several local fragments remain. One unique
+        # direct closure may retain its measured native height, but ambiguous
+        # fragments cannot move geometry fixed by whole-strip evidence.
         spanning = spanning_top or spanning_bottom
         spanning_ids = {item.observation_id for item in spanning}
         spanning_pairs = [
@@ -540,16 +539,20 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             if candidate.top.observation_id in spanning_ids
             or candidate.bottom.observation_id in spanning_ids
         ]
-        candidates = spanning_pairs or [
-            candidate
-            for item in spanning
-            if (candidate := _single_candidate(
-                item,
-                fixed_height=fixed_height,
-                canonical_height_px=float(inputs.canonical_fixed_height_px),
-                source_direction=inputs.source_direction,
-            )) is not None
-        ]
+        candidates = (
+            spanning_pairs
+            if len(spanning_pairs) == 1
+            else [
+                candidate
+                for item in spanning
+                if (candidate := _single_candidate(
+                    item,
+                    fixed_height=fixed_height,
+                    canonical_height_px=float(inputs.canonical_fixed_height_px),
+                    source_direction=inputs.source_direction,
+                )) is not None
+            ]
+        )
     elif role_authorized_direct_pairs:
         candidates = list(role_authorized_direct_pairs)
     elif template_spanning_top or template_spanning_bottom:

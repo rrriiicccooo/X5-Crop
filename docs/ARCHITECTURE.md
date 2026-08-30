@@ -11,7 +11,8 @@ X5 Crop 是已知胶片模板的自动对准器，不是通用照片边界检测
 用户 format + 用户确认 count
 → 固定 W/H 模板
 → 从整条片带到局部边界的有界对准
-→ 唯一 placement
+→ 合法 placement 竞争
+→ 唯一获准的 selected placement，或拒绝自动选择
 → selected-only source-space 安全 polygon
 → CandidateGate / DecisionGate
 → 可选 lightweight deskew
@@ -120,7 +121,8 @@ column 支撑至少 1%，outer 长轴至少 100 px；沿长轴约每 350 px 取�
 
 ## 5. 从整体到局部的模板编译
 
-V5 吸收 v4.2.8 的有效行为，不复制其代码、分数、Grid fallback 或 content equal-split：
+V5 吸收 v4.2.8 的有效行为，不复制其代码、未经校准且直接决定终态的任意加权分数、Grid fallback
+或 content equal-split：
 
 ```text
 format/count/holder 编译固定模板、coarse intents 与工作上界
@@ -163,11 +165,19 @@ Registered measurement 一次生成 role-free、候选无关、数量有界的�
 保存局部转变的位置区间、方向区间、极性、内外背景关系、空间支持和唯一 observation ID。Raw edge
 不知道自己属于哪一格或哪个角色；模板只能在位置与职责相容后绑定它。
 
+同一份 registered 灰度窄带一次产生 gradient、tone、texture、polarity 与纵向一致性等 typed
+measurement。它们共同描述同一个 observation，可以互相加强、否定或形成 missing/conflict；不能把增强图、
+另一套阈值或另一次读取包装成平行 detector，再按最高分挑赢家。
+
 ### 6.2 `SeparatorBandObservation`
 
-方向、极性和空间支持相容的相邻 END/START edge 才组成 band。Band 保留 material 宽度、位置区间
+当前 material authority 只接受相邻 `- / +` edge 直接闭合的暗谷。Band 保留 material 宽度、位置区间
 和两侧 edge identity。一个 separator 的两条边、band、多条 trace 和全部梯度像素是一份物理证据，
 不能变成多票。
+
+`+ / -` 亮峰仍保留为两条 edge observation，但不能仅凭“长距离亮带”自动成为 separator：照片内部
+也能形成相同极性和空间支持，且宽度可以接近一个 Frame。未来若要授予亮 material 权限，必须先增加
+能够普遍区分 separator 与照片内容的独立物理事实，并重新通过 development 与 sealed 安全验证。
 
 同一物理 material support 中，只有 source-wide band 可以自行授予 END→START 角色。局部 band 只能
 连接两条已经由各自像素观察取得相容角色的 edge，不能覆盖或创造角色；存在多个局部解释时不按强度或
@@ -254,7 +264,7 @@ Photo aperture 的候选必须有正确 top/bottom 角色、外侧背景、有�
 - 同侧多个相距较远且物理相连的 fragments。
 
 一条短局部线不能外推整条片带。两个不同合法 side tracks 是两个 placements；不按梯度、support
-数量或 residual 标量硬选。已有 direct top+bottom 闭环时，不再执行“缺失 opposite”的局部精修；
+数量或 residual 的未经校准标量硬选。已有 direct top+bottom 闭环时，不再执行“缺失 opposite”的局部精修；
 同一批 raw transitions 的重复拟合不能成为第二个 placement。
 
 Direct top+bottom 的局部方向只验证两侧能否属于同一 fixed-H aperture，并计算逐 trace outward
@@ -317,10 +327,68 @@ placement；Grid coordinate 只保留为模型诊断。Placement 仍保持 sourc
 相加。只有一侧直接可见时，固定 W 推导 opposite，并平移同一条直线证据；两侧都直接可见时各自保留
 独立 observation，不把远处 model residual 复制到本 Frame。
 
-选择只使用 typed hard facts 和证据职责，不使用加权总分、confidence 补偿、top-K、投票或
-样片/format 特判。同一 template identity、integer offset、local topology 与独立物理 support 下，
-相交的 role interval 是一个连续 placement；不同坐标、ordinal、非等价 observation binding、
-boundary use 或 required source footprint 是离散竞争。不能明显分胜负就 review。
+### 9.1 当前选择合同
+
+当前 production 只使用 typed hard facts 和证据职责，不使用加权总分、confidence 补偿、top-K、
+投票或样片/format 特判。同一 template identity、integer offset、local topology 与独立物理 support
+下，相交的 role interval 是一个连续 placement；不同坐标、ordinal、非等价 observation binding、
+boundary use 或 required source footprint 是离散竞争。硬物理事实不能唯一闭合时进入 review。
+
+这是一项当前实现边界，不是对校准概率选择的永久禁令。未经校准的 score 不得拥有最终决定权；
+合法 runner 也不因“仍然合法”而被定义为永久阻断项。
+
+### 9.2 校准概率选择层的准入合同（当前未启用）
+
+检测能力与数据条件成熟后，可以在硬物理合同之后加入带拒绝选项的概率选择：
+
+```text
+registered evidence
+→ 固定模板生成有界候选
+→ 硬物理合法性、source containment、输出预算与 content veto
+→ 对剩余合法候选估计校准后的可接受概率
+→ winner / runner + 绝对概率 + margin + evidence coverage + OOD
+→ selected placement，或 abstain / needs_review
+```
+
+概率层不能创建、移动或修补 geometry，不能重新读取像素，不能让被硬合同淘汰的候选复活，也不能
+使用 sample ID、文件名、nominal/challenge 角色或黄金答案作为 runtime feature。这里的训练标签是
+“该候选最终 footprint 是否满足统一的方向性黄金安全合同”；多个候选可以同时可接受，因此候选概率
+不要求总和为 1。危险裁切的代价远高于 review，自动批准必须同时满足预先冻结的高绝对概率阈值、
+winner/runner margin、证据覆盖和 OOD 组成的冻结联合准入规则；绝对概率与 margin 不能再被
+任意加权成一个 confidence。合法 runner 本身不是硬阻断，但必须进入联合规则和 report；未被校准数据
+覆盖的低 margin 区域必须 abstain，而不是普通 `argmax`。
+
+准入前必须冻结以下 versioned schema 与 artifact：
+
+| 合同 | 必需内容 |
+|---|---|
+| score schema | `feature_schema_id`、`model_id`、`calibration_id`、`decision_rule_id`、candidate/placement identity、带单位与 missingness 的 typed features、evidence provenance、校准概率 |
+| selection assessment | winner/runner identity 与概率、margin、absolute-threshold、coverage、OOD、abstention 和 hard-legality receipt；runner 始终保留在 report |
+| calibration manifest | source-SHA 分区、同 SHA count 绑定、候选生成 commit、label contract、拟合方法、样本量、阈值、可靠性曲线、自动区危险率的单侧上界与适用 format/profile/topology |
+| work receipt | 合法候选数、feature 数、feature evaluation、OOD evaluation、临时内存和编译上界 |
+
+现有 106 个已查看 source 可用于 feature/model development、训练与反例发现，不能事后伪装成独立
+calibration 或 sealed 证据。启用前必须补充在查看 scorer 输出前按 source SHA 冻结的新
+calibration source；同 SHA 的全部 count 变体同分区。Calibration 只拟合概率、联合准入规则与风险上界，
+sealed acceptance 不参与拟合、调参或 feature 选择。Sealed 在不暴露逐样片结果的情况下只检查
+全部角色 `unsafe_approved_auto = 0`、sealed nominal 全部安全自动通过、校准可靠性和 OOD/abstention
+合同。Model、feature、decision rule 或物理候选生成任一变化都会使旧 calibration 与 sealed receipt 失效。
+
+OOD 至少覆盖未校准的 format/holder profile/count/topology、必要 feature 缺失、measurement saturation、
+超出校准支持范围的连续 feature 与未知候选结构；任一命中直接 abstain。具体阈值只有在预先声明风险
+预算、校准样本量与可靠性检验后才能冻结，不能从 development 或 sealed 的单张结果反调。
+
+失败以 typed facts 表达：`probability_selector_unavailable`、`probability_contract_mismatch`、
+`probability_out_of_distribution`、`probability_evidence_coverage_insufficient`、
+`probability_below_auto_threshold` 或 `probability_margin_insufficient`。它们由 `CandidateGate` 汇总，
+`DecisionGate` 仍独占最终状态；不得退化成“低 confidence”这一条不可解释文案。
+
+评分工作量必须是 `O(K × F)`：`K` 为编译时有界的合法 placement 数，`F` 为冻结 feature 数。不得为
+评分层新增 pixel query、候选笛卡尔积、beam/DP、winner-specific requery 或第二 detector；正式
+24-source mean 仍须 `<= 5s`，`<= 3s` 继续作为优化目标。当前没有 calibration pool、sealed cohort
+与准入 receipt，因此本节不授予任何 runtime score 权限。
+
+### 9.3 Holder fill
 
 `PhotoGroupOuter` 只在 selection 后生成。`HolderFillAssessment` 逐侧计算 outer 与 lane authority
 之间的空余，并仅用 W 判断：
@@ -335,7 +403,10 @@ boundary use 或 required source footprint 是离散竞争。不能明显分胜�
 
 ## 10. 联合输出保护、bleed 与预算
 
-安全计算严格晚于唯一 placement：
+当前 runtime 的完整安全计算严格晚于唯一获准的 selected placement。若第 9.2 节未来获准启用，
+每个有界合法候选必须先用同一 source containment、预算与已注册 content observation 形成只读 eligibility
+receipt；这不产生正式 OutputFootprint，也不允许 candidate-dependent 像素读取。概率选择后仍只有 selected
+placement 能进入下列完整联合几何与输出流：
 
 ```text
 selected placement
@@ -391,7 +462,8 @@ Decision 后 finalization 才执行并评估 lightweight deskew。`needs_review`
 ## 11. Gate、report 与 Debug Analysis
 
 `CandidateGate` 只汇总 typed facts：输入 authority、measurement completeness、producer bounds、
-local advance、唯一 placement、content、holder fill、source-space 联合 footprint 和 budget。Phase、
+local advance、获准的 selected placement、content、holder fill、source-space 联合 footprint 和 budget；
+未来概率层若启用，还包括其 versioned selection assessment 与 abstention facts。Phase、
 cross continuity/direction 与 ordinal 的真实失败作为 placement 的 typed root failure 传递，不在已有
 complete/selected placement 后重复建立同义 Gate fact。它不读取 deskew observation，不选择 geometry，
 也不创建最终文案。
@@ -440,13 +512,14 @@ phase hypotheses / lookups / bindings / fit passes
 local adjacency evaluations
 cross runs / fits
 placement / boundary / content evaluations
+probability candidates / features / OOD evaluations（仅在第 9.2 节获准启用后）
 domain pixels / peak temporary bytes
 ```
 
 任何上界不足都显式产生 `producer_bound_exceeded`，不得 silent first-N。像素工作上限为
 `128 × source_pixels`，峰值临时内存上限为 `10 × source_pixels + 32 MiB`。不得恢复通用 DP、
 beam、Grid、phase vote、候选笛卡尔积、完整链 materialization/cache、逐帧尺寸、candidate-dependent
-query 或 content-driven placement。
+query 或 content-driven placement；概率层也只能消费已经生成且硬合法的有界候选。
 
 性能合同是 24-source 完整用户路径平均不超过 5 秒；同一均值不超过 3 秒是明确记录但不阻断
 提交、发布或平台 receipt 的 challenge。正式计时子进程同时由外部观察未插桩 peak RSS；该值与
@@ -591,6 +664,9 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
 - Development 验证分开报告四个维度：任何角色均须为 0 的 `unsafe_approved_auto`、不产生正式输出的
   candidate geometry conformance、nominal 自动覆盖，以及 challenge capability。决定分布、candidate
   偏差、自动覆盖与安全准确性不得合并为单一“准确率”。
+- 发布能力底线是 development nominal 与未来 sealed nominal 全部安全 `approved_auto`，全部角色
+  `unsafe_approved_auto = 0`；不得把失败 nominal 改成 challenge、放宽黄金合同或隐藏 runner 来达标。
+  Challenge 的安全 auto 是能力发现，安全 review 仍合格，但不能替代 nominal 覆盖。
 - 受跟踪的 `development_diagnostic` cohort 只证明不崩溃、工作量有界、报告闭合和 TIFF 工程合同，
   不证明几何正确或未见来源泛化。
 - 黄金 reference 只有一个 source-SHA-bound 权威集合；人工确认只授予 reference，不自动决定 evaluation
@@ -604,6 +680,10 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   aggregate receipt。显式打开 sealed source 调试后，该 source 永久转入 development，并补充新的 sealed
   source。分区共享同一 reference authority，不建立 v1/v2 或其它平行校准池。当前尚无 sealed cohort，
   因而不能作未见 X5 扫描的泛化或发布准确性声明。
+- 概率选择层还需要独立 calibration source，且必须在查看 scorer 输出前冻结；calibration 与 sealed
+  不能互相替代。只有 feature/model/threshold、风险预算、OOD 合同和候选生成 commit 全部冻结后，才能
+  运行 sealed aggregate acceptance。任何改动都使两类 receipt 同时失效；sealed 失败不得用于逐样片
+  调参，打开 source 调试则按既有规则永久转入 development。
 - `tools.regression.gold_analysis` 只在 development gold 上生成优化分层与 diagnostic；不进入
   runtime、Gate 或黄金 verdict。分层只读取冻结人工事实：结构正常、全部直接可见、`count >= 3` 且人工
   几何对最佳固定 `phase + pitch + W` lattice 的最大 role residual 不超过 `0.02W` 时进入基础 nominal

@@ -531,6 +531,60 @@ class TemplateOutputContractTest(unittest.TestCase):
             ),
         )
 
+    def test_opposite_side_projection_cannot_erase_uncovered_edge_position(self) -> None:
+        template = _template(3)
+        cross = _cross(template, direction=_direction())
+        top, bottom = cross.direct_bindings
+        top = replace(
+            top,
+            trace_coordinates_px=(0, 50, 100),
+            canonical_direction_degrees=0.0,
+            fit_direction_interval_degrees=FiniteInterval.exact(0.0),
+            full_direction_interval_degrees=FiniteInterval.exact(0.0),
+            observed_direction_interval_degrees=FiniteInterval.exact(0.0),
+        )
+        bottom = replace(
+            bottom,
+            trace_coordinates_px=(0, 200, 400),
+            canonical_direction_degrees=1.0,
+            fit_direction_interval_degrees=FiniteInterval.exact(1.0),
+            full_direction_interval_degrees=FiniteInterval.exact(1.0),
+            observed_direction_interval_degrees=FiniteInterval.exact(1.0),
+        )
+        direction = replace(
+            _direction(),
+            selected_observation_ids=(top.observation_id, bottom.observation_id),
+            full_angle_interval_degrees=FiniteInterval(0.0, 1.0),
+            observed_angle_interval_degrees=FiniteInterval(0.0, 1.0),
+            canonical_angle_degrees=0.5,
+        )
+        cross = replace(
+            cross,
+            direct_bindings=(top, bottom),
+            selected_direction=direction,
+        )
+        placement = _compose(template, _sequence(template), cross)
+        frame = placement.frames[2]
+        output = output_footprint_from_template_placement(
+            placement,
+            project_selected_placement(placement),
+            lane=_lane(),
+            lane_ordinal=3,
+            layout="horizontal",
+        )
+        protection = next(
+            item
+            for item in output.boundary_protections
+            if item.role == BoundaryRole.TOP
+        )
+        projected_offset = frame.top.canonical_position_px - top.full_interval_px.center
+
+        self.assertGreater(projected_offset, 4.0)
+        self.assertGreaterEqual(
+            protection.local_boundary_residual_px,
+            projected_offset + 1.0,
+        )
+
     def test_sequence_line_departure_protects_axis_aligned_output(self) -> None:
         template = _template(1)
         sequence = _sequence(template)

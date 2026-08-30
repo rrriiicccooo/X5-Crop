@@ -29,6 +29,7 @@ from .output_model import (
     OutputFootprint,
 )
 from .template_placement import FormatPlacement, TemplateFrame
+from .template_cross_model import CrossRoleBinding
 from .trace_support import PIXEL_CENTER_EXTENT_PX
 
 
@@ -185,13 +186,11 @@ def _state_cross_outward_departure_px(
 ) -> float:
     """Evaluate one cross-edge residual against the same feasible state.
 
-    A trace interval and the role position come from one observation family.
-    Measuring their outward difference at each retained state avoids the false
-    Cartesian sum of an extreme position with an independently extreme local
-    departure.  Direction uncertainty is used only when raw trace intervals do
-    not cover the frame support. Aperture output uses the compatible physical
-    direction family; enclosing support retains the wider direction directly
-    observed on that material edge outside its sampled trace span.
+    Aperture output retains the complete fitted line family over this frame's
+    source span, plus any directly measured trace departures.  This is safety
+    evidence only: it cannot rotate or move the selected source-axis frame.
+    Enclosing support instead retains the same-state material-edge slope owned
+    by its joint feasible projection.
     """
 
     direct = {item.role: item for item in placement.cross_fit.direct_bindings}
@@ -223,6 +222,25 @@ def _state_cross_outward_departure_px(
         if source_role == BoundaryRole.TOP
         else state.bottom_at_lane_reference_px
     )
+    support = (
+        frame.top.line.support_projection_px
+        if role == BoundaryRole.TOP
+        else frame.bottom.line.support_projection_px
+    )
+    if placement.cross_fit.boundary_use == OutputBoundaryUse.APERTURE_PAIR:
+        possible_positions = _aperture_binding_positions(
+            binding,
+            lane_reference_trace_px=placement.cross_fit.lane_reference_trace_px,
+            support=support,
+        )
+        if not possible_positions:
+            return 0.0
+        return (
+            max(0.0, state_source_position - min(possible_positions))
+            if role == BoundaryRole.TOP
+            else max(0.0, max(possible_positions) - state_source_position)
+        )
+
     target_trace_px = (
         frame.top.reference_trace_px
         if role == BoundaryRole.TOP
@@ -239,11 +257,6 @@ def _state_cross_outward_departure_px(
             binding.full_interval_px.minimum + binding_shift,
         ),
         binding.full_interval_px.maximum + binding_shift,
-    )
-    support = (
-        frame.top.line.support_projection_px
-        if role == BoundaryRole.TOP
-        else frame.bottom.line.support_projection_px
     )
     raw_departure = 0.0
     covered_traces: list[float] = []
@@ -268,19 +281,10 @@ def _state_cross_outward_departure_px(
         raw_departure = max(raw_departure, departure)
         covered_traces.append(trace_px)
 
-    direction_uncertainty = (
-        binding.observed_direction_interval_degrees
-        if placement.cross_fit.boundary_use
-        == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
-        else binding.full_direction_interval_degrees
-    )
+    direction_uncertainty = binding.observed_direction_interval_degrees
     if direction_uncertainty is None:
         return max(0.0, raw_departure)
-    if (
-        placement.cross_fit.boundary_use
-        == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
-        and binding.trace_coordinates_px
-    ):
+    if binding.trace_coordinates_px:
         lower = float(binding.trace_coordinates_px[0])
         upper = float(binding.trace_coordinates_px[-1])
         extrapolation_deltas = tuple(
@@ -313,6 +317,42 @@ def _state_cross_outward_departure_px(
         else max(0.0, max(shifts, default=0.0))
     )
     return max(0.0, raw_departure + direction_departure)
+
+
+def _aperture_binding_positions(
+    binding: CrossRoleBinding,
+    *,
+    lane_reference_trace_px: float,
+    support: FiniteInterval,
+) -> tuple[float, ...]:
+    """Bound one direct aperture edge over a selected frame support."""
+
+    positions: list[float] = []
+    direction = binding.full_direction_interval_degrees
+    if direction is not None:
+        positions.extend(
+            value
+            + math.tan(math.radians(angle))
+            * (trace - lane_reference_trace_px)
+            for value in (
+                binding.full_interval_px.minimum,
+                binding.full_interval_px.maximum,
+            )
+            for angle in (direction.minimum, direction.maximum)
+            for trace in (support.minimum, support.maximum)
+        )
+    if binding.trace_position_intervals_px:
+        positions.extend(
+            value
+            for trace, interval in zip(
+                binding.trace_coordinates_px,
+                binding.trace_position_intervals_px,
+                strict=True,
+            )
+            if support.contains(float(trace))
+            for value in (interval.minimum, interval.maximum)
+        )
+    return tuple(positions)
 
 
 def _state_bleed_px(

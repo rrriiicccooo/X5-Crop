@@ -28,6 +28,7 @@ class PhysicalUnknown(str, Enum):
     DIRECTION = "direction"
     CROSS_POSITION = "cross_position"
     LOCAL_GAP_DELTA = "local_gap_delta"
+    LOCAL_BOUNDARY = "local_boundary"
 
 
 @dataclass(frozen=True)
@@ -91,13 +92,18 @@ def template_evidence_use_ledger(
         for relation in (() if phase.best is None else phase.best.local_advance_relations)
         for identity in relation.observation_ids
     }
+    local_boundary_ids = set(
+        ()
+        if phase.best is None
+        else phase.best.local_refinement_observation_ids
+    )
     ordered_sequence_ids = tuple(
         dict.fromkeys(
             ()
             if phase.best is None
             else (
                 identity
-                for identity in phase.best.binding_observation_ids
+                for identity in phase.best.phase_anchor_observation_ids
                 if identity is not None and identity not in local_ids
             )
         )
@@ -125,6 +131,8 @@ def template_evidence_use_ledger(
         owner = (
             PhysicalUnknown.LOCAL_GAP_DELTA
             if identity in local_ids
+            else PhysicalUnknown.LOCAL_BOUNDARY
+            if identity in local_boundary_ids
             else PhysicalUnknown.PHASE
             if identity == phase_id
             else PhysicalUnknown.PITCH

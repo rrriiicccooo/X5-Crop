@@ -27,6 +27,8 @@ WORK_FIELDS = (
     "phase_role_lookup_count",
     "phase_role_binding_count",
     "local_relation_evaluation_count",
+    "local_refinement_lookup_count",
+    "local_refinement_binding_count",
     "cross_registered_run_count",
     "cross_fit_evaluation_count",
     "placement_evaluation_count",
@@ -90,6 +92,10 @@ def bounded_work(
         <= MAX_PHASE_OBSERVATIONS * max(6, count * 2) * 2
         and int(row["local_relation_evaluation_count"])
         <= max(0, count - 1) * int(row["phase_fit_pass_count"])
+        and int(row["local_refinement_lookup_count"])
+        <= MAX_PHASE_OBSERVATIONS * count * 2 * int(row["phase_fit_pass_count"])
+        and int(row["local_refinement_binding_count"])
+        <= count * 2 * int(row["phase_fit_pass_count"])
         and int(row["placement_evaluation_count"]) <= 2
         and int(row["boundary_evaluation_count"])
         <= int(row["placement_evaluation_count"]) * count * 4

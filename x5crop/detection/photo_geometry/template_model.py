@@ -156,6 +156,47 @@ class PhaseLatticeFit:
             raise ValueError("phase lattice absolute projection is inconsistent")
 
 
+def phase_lattice_fit_from_absolute(
+    template: "TemplateSpec",
+    *,
+    absolute_phase_px: float,
+    period_px: float,
+    uncertainty_px: float,
+) -> PhaseLatticeFit | None:
+    """Project one absolute pixel phase into the compiled lattice authority."""
+
+    authority = template.phase_lattice_authority
+    normalized = template.direction * (
+        absolute_phase_px - authority.cycle_origin_px
+    )
+    offset = math.floor(normalized / period_px)
+    if not authority.contains_offset(offset):
+        return None
+    cycle = normalized - offset * period_px
+    if cycle >= period_px - 1.0e-9:
+        cycle = 0.0
+        offset += 1
+        if not authority.contains_offset(offset):
+            return None
+    radius = min(max(0.0, uncertainty_px), cycle, period_px - cycle)
+    cycle_interval = FiniteInterval(cycle - radius, cycle + radius)
+    projected = tuple(
+        authority.cycle_origin_px
+        + template.direction * (value + offset * period_px)
+        for value in (cycle_interval.minimum, cycle_interval.maximum)
+    )
+    return PhaseLatticeFit(
+        authority=authority,
+        cycle_phase_interval_px=cycle_interval,
+        canonical_cycle_phase_px=cycle,
+        integer_slot_offset=offset,
+        canonical_period_px=period_px,
+        absolute_phase_interval_px=FiniteInterval(min(projected), max(projected)),
+        canonical_absolute_phase_px=absolute_phase_px,
+        direction=template.direction,
+    )
+
+
 class LocalAdvanceKind(str, Enum):
     """A local departure from the normal pitch relation."""
 
@@ -407,10 +448,18 @@ class SequenceRoleLineEvidence:
             raise ValueError("sequence role line evidence is invalid")
 
 
+class SequenceBindingUse(str, Enum):
+    """Authority granted to one observation after fixed-template fitting."""
+
+    PHASE_ANCHOR = "phase_anchor"
+    LOCAL_REFINEMENT = "local_refinement"
+
+
 @dataclass(frozen=True)
 class SequenceRoleBinding:
     """One template role bound atomically to one native observation."""
 
+    use: SequenceBindingUse
     observation_id: ObservationId
     independent_support_id: ObservationId
     canonical_position_px: float
@@ -420,7 +469,8 @@ class SequenceRoleBinding:
 
     def __post_init__(self) -> None:
         if (
-            not isinstance(self.observation_id, ObservationId)
+            not isinstance(self.use, SequenceBindingUse)
+            or not isinstance(self.observation_id, ObservationId)
             or not isinstance(self.independent_support_id, ObservationId)
             or not math.isfinite(self.canonical_position_px)
             or not isinstance(self.fit_position_interval_px, FiniteInterval)
@@ -494,6 +544,24 @@ class SequenceFit:
         )
 
     @property
+    def phase_anchor_observation_ids(self) -> tuple[ObservationId, ...]:
+        return tuple(
+            binding.observation_id
+            for binding in self.role_bindings
+            if binding is not None
+            and binding.use == SequenceBindingUse.PHASE_ANCHOR
+        )
+
+    @property
+    def local_refinement_observation_ids(self) -> tuple[ObservationId, ...]:
+        return tuple(
+            binding.observation_id
+            for binding in self.role_bindings
+            if binding is not None
+            and binding.use == SequenceBindingUse.LOCAL_REFINEMENT
+        )
+
+    @property
     def phase_support_locations(self) -> tuple[int, ...]:
         """Independent lattice locations, not raw edges, with direct evidence."""
 
@@ -505,6 +573,7 @@ class SequenceFit:
                     (role_index + 1) // 2
                     for role_index, binding in enumerate(self.role_bindings)
                     if binding is not None
+                    and binding.use == SequenceBindingUse.PHASE_ANCHOR
                 }
             )
         )
@@ -594,11 +663,15 @@ class SequenceFit:
             )
         ):
             raise ValueError("sequence full role interval excludes fit interval")
-        bound_role_count = sum(binding is not None for binding in self.role_bindings)
+        phase_authority_role_count = sum(
+            binding is not None
+            and binding.use == SequenceBindingUse.PHASE_ANCHOR
+            for binding in self.role_bindings
+        )
         if (
             not self.independent_support_ids
             or not self.phase_support_locations
-            or self.phase_support_count > bound_role_count
+            or self.phase_support_count > phase_authority_role_count
         ):
             raise ValueError("sequence independent support ledger is invalid")
         if self.contradicted_observation_count < 0:
@@ -749,6 +822,8 @@ class TemplateSearchReceipt:
     phase_lookup_count: int
     role_binding_count: int
     local_relation_evaluation_count: int
+    local_refinement_lookup_count: int
+    local_refinement_binding_count: int
     phase_hypothesis_count: int
     phase_offset_lookup_count: int
     direct_observation_count: int
@@ -764,6 +839,8 @@ class TemplateSearchReceipt:
             self.phase_lookup_count,
             self.role_binding_count,
             self.local_relation_evaluation_count,
+            self.local_refinement_lookup_count,
+            self.local_refinement_binding_count,
             self.phase_hypothesis_count,
             self.phase_offset_lookup_count,
             self.direct_observation_count,
@@ -780,6 +857,11 @@ class TemplateSearchReceipt:
             raise ValueError("direct observations exceed registrations")
         if self.inferred_role_count > self.role_count:
             raise ValueError("inferred roles exceed template roles")
+        if (
+            self.local_refinement_binding_count
+            > self.role_count * self.fit_pass_count
+        ):
+            raise ValueError("local refinement bindings exceed template roles")
         if self.fit_pass_count <= 0:
             raise ValueError("template fit pass count must be positive")
         if self.phase_offset_lookup_count > self.phase_hypothesis_count:
@@ -824,6 +906,8 @@ class TemplateSearchReceipt:
             or self.role_binding_count > self.phase_hypothesis_count * r
             or self.local_relation_evaluation_count
             > max(0, slot_count - 1) * self.fit_pass_count
+            or self.local_refinement_lookup_count
+            > self.observation_count * r * self.fit_pass_count
             or self.phase_offset_lookup_count > max_hypotheses
             or self.separator_lattice_hypothesis_count > max_hypotheses
         ):

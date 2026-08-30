@@ -26,6 +26,7 @@ from .template_phase_candidates import (
     _positive,
     _prefixes,
     _rank,
+    _refine_local_role_bindings,
     _relations,
     _separator_pair_facts,
     _separator_phase_seeds,
@@ -197,6 +198,8 @@ def fit_template_phase(
         phase_lookup_count=0,
         role_binding_count=0,
         local_relation_evaluation_count=len(relations),
+        local_refinement_lookup_count=0,
+        local_refinement_binding_count=0,
         phase_hypothesis_count=0,
         phase_offset_lookup_count=0,
         direct_observation_count=len(direct),
@@ -418,7 +421,7 @@ def fit_template_phase(
         for seed in seed_values.values()
         if seed is not None
     )
-    maximum_hypotheses = len(facts) * max(6, len(roles))
+    maximum_hypotheses = max(1, len(facts)) * max(6, len(roles))
     if len(seeds) > maximum_hypotheses:
         receipt = TemplateSearchReceipt(
             observation_count=len(facts),
@@ -426,6 +429,8 @@ def fit_template_phase(
             phase_lookup_count=len(seeds),
             role_binding_count=0,
             local_relation_evaluation_count=len(relations),
+            local_refinement_lookup_count=0,
+            local_refinement_binding_count=0,
             phase_hypothesis_count=len(seeds),
             phase_offset_lookup_count=len(seeds),
             direct_observation_count=len(direct),
@@ -443,7 +448,7 @@ def fit_template_phase(
             PhaseFailureKind.HYPOTHESIS_BOUND_EXCEEDED,
         )
     holder_limits = _holder_limits(holder_span_px)
-    candidates = tuple(
+    local_candidates = tuple(
         value
         for value in (
             _fit_seed(
@@ -489,8 +494,11 @@ def fit_template_phase(
             )
         )
     )
-    by_binding: dict[tuple[int, tuple[ObservationId | None, ...]], _BoundFit] = {}
-    for candidate in candidates:
+    by_binding: dict[
+        tuple[int, tuple[ObservationId | None, ...]],
+        _BoundFit,
+    ] = {}
+    for candidate in local_candidates:
         key = (
             candidate.fit.phase_lattice_fit.integer_slot_offset,
             candidate.fit.binding_observation_ids,
@@ -507,17 +515,11 @@ def fit_template_phase(
     ordered = tuple(sorted(compatible, key=_rank, reverse=True))
     best = ordered[0] if ordered else None
     if len(ordered) > 1:
-        discrete: list[_BoundFit] = []
-        original_best = ordered[0]
+        discrete = []
         for candidate in ordered[1:]:
-            if _same_continuous_placement(
-                original_best.fit,
-                candidate.fit,
-            ):
-                best = _merge_continuous_placement(
-                    best,
-                    candidate,
-                )
+            assert best is not None
+            if _same_continuous_placement(best.fit, candidate.fit):
+                best = _merge_continuous_placement(best, candidate)
             else:
                 discrete.append(candidate)
         runner = discrete[0] if discrete else None
@@ -529,6 +531,8 @@ def fit_template_phase(
         phase_lookup_count=len(seeds),
         role_binding_count=len(seeds) * len(roles),
         local_relation_evaluation_count=len(relations),
+        local_refinement_lookup_count=0,
+        local_refinement_binding_count=0,
         phase_hypothesis_count=len(seeds),
         phase_offset_lookup_count=len(seeds),
         direct_observation_count=len(direct),
@@ -632,6 +636,12 @@ def _aggregate_phase_work(
             if local_relation_evaluation_count is None
             else local_relation_evaluation_count
         ),
+        local_refinement_lookup_count=sum(
+            item.local_refinement_lookup_count for item in receipts
+        ),
+        local_refinement_binding_count=sum(
+            item.local_refinement_binding_count for item in receipts
+        ),
         phase_hypothesis_count=sum(
             item.phase_hypothesis_count for item in receipts
         ),
@@ -650,6 +660,34 @@ def _aggregate_phase_work(
     )
     receipt.validate_bounds()
     return replace(result, receipt=receipt)
+
+
+def _with_local_role_refinement(
+    result: PhaseFitResult,
+    observations: Sequence[BoundaryEdgeObservation],
+    separator_bands: Sequence[SeparatorBandObservation],
+) -> PhaseFitResult:
+    if result.status != PhaseFitStatus.RESOLVED or result.best is None:
+        return result
+    refinement = _refine_local_role_bindings(
+        result.best,
+        observations,
+        separator_bands,
+    )
+    receipt = replace(
+        result.receipt,
+        local_refinement_lookup_count=(
+            result.receipt.local_refinement_lookup_count
+            + refinement.role_lookup_count
+        ),
+        local_refinement_binding_count=(
+            result.receipt.local_refinement_binding_count
+            + refinement.binding_count
+        ),
+        inferred_role_count=len(refinement.fit.unbound_role_indices),
+    )
+    receipt.validate_bounds()
+    return replace(result, best=refinement.fit, receipt=receipt)
 
 
 def fit_template_phase_with_local_advance(
@@ -678,6 +716,12 @@ def fit_template_phase_with_local_advance(
     )
     if normal.status != PhaseFitStatus.RESOLVED or normal.best is None:
         return normal
+    normal = _with_local_role_refinement(
+        normal,
+        observations,
+        separator_bands,
+    )
+    assert normal.best is not None
     # Import here keeps the residual owner dependent on the canonical phase
     # types without creating a module import cycle.
     from .template_residual import derive_bounded_local_advances
@@ -722,6 +766,11 @@ def fit_template_phase_with_local_advance(
         phase_authority_px=phase_authority_px,
         local_advance_relations=analysis.relations,
         max_observations=max_observations,
+    )
+    adjusted = _with_local_role_refinement(
+        adjusted,
+        observations,
+        separator_bands,
     )
     return _aggregate_phase_work(
         adjusted,

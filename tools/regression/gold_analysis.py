@@ -46,8 +46,8 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v4"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v4"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v5"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v5"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
 SOURCE_TIMEOUT_SECONDS = 600
@@ -959,7 +959,21 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         ),
         "source_placement_state": placement_state,
         "phase_status": production_lanes[0]["phase_status"],
+        "phase_failure_kind": development_lanes[0]["phase_competition"].get(
+            "failure_kind"
+        ),
         "cross_status": production_lanes[0]["cross_status"],
+        "cross_failure_reason": development_lanes[0][
+            "cross_competition"
+        ].get("reason"),
+        "placement_failure_gap": (
+            None
+            if development_lanes[0]["placement_competition"]["failure"]
+            is None
+            else development_lanes[0]["placement_competition"]["failure"][
+                "gap"
+            ]
+        ),
         "selected_cross_boundary_use": production_lanes[0][
             "selected_cross_boundary_use"
         ],
@@ -1447,6 +1461,18 @@ def _summary(
         "count_variant_diagnostics": variants,
         "physical_prior_validation": _physical_prior_validation(records),
         "decision_status_counts": _counter(records, "decision_status"),
+        "phase_failure_kind_counts": _counter(
+            records,
+            "phase_failure_kind",
+        ),
+        "cross_failure_reason_counts": _counter(
+            records,
+            "cross_failure_reason",
+        ),
+        "placement_failure_gap_counts": _counter(
+            records,
+            "placement_failure_gap",
+        ),
         "stage_counts": dict(
             sorted(
                 (stage, len(items)) for stage, items in by_stage.items()
@@ -1593,7 +1619,10 @@ def run_gold_analysis(
                 "challenge_capability_outcome": None,
                 "source_placement_state": None,
                 "phase_status": None,
+                "phase_failure_kind": None,
                 "cross_status": None,
+                "cross_failure_reason": None,
+                "placement_failure_gap": None,
                 "selected_cross_boundary_use": None,
                 "duration_seconds": 0.0,
                 "boundary_diagnostics": [],

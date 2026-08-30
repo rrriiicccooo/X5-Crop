@@ -25,6 +25,7 @@ from x5crop.detection.photo_geometry.template_model import (
     PhaseLatticeFit,
     PitchFit,
     SequenceFit,
+    SequenceBindingUse,
     SequenceRoleBinding,
     TemplateSpec,
 )
@@ -257,6 +258,7 @@ def placement_sequence(
         None
         if identity is None
         else SequenceRoleBinding(
+            use=SequenceBindingUse.PHASE_ANCHOR,
             observation_id=identity,
             independent_support_id=identity,
             canonical_position_px=positions[index],

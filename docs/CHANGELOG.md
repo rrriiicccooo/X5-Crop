@@ -18,6 +18,9 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   传播。像素强度、片夹中心或样片规则不能替代 authority。
 - 直接观察到的 start/end 在最终 placement 中保留 native coordinate 与完整 interval；Grid 只补齐缺失
   角色。Phase support 按物理 lattice location 而非 raw edge 数计数，跨越过长的无观察区明确 review。
+- 当前选择仍只使用 typed hard facts；没有启用 score。架构允许未来在硬合法候选之间加入经独立数据
+  校准、带高阈值与 abstention 的概率选择，但未经校准的 score 不得拥有最终决定权，runner
+  必须继续报告。
 - Cross 不再用片夹短轴中心选择最终边界；它只帮助编译有界测量 corridor。Cross winner basis、source
   长轴投影与 enclosing-support 的逐侧/联合 padding 预算均进入 typed report 与外部校验。
 - 任一 slot 不安全时整张 source `needs_review`，不做 slot salvage。Contact 与 overlap 始终属于
@@ -92,8 +95,8 @@ V4.9 建立 fixed-format template-first、source geometry、两级 Gate 与 sour
 ## v4.2.8（当前稳定发布）
 
 v4.2.8 证明“先看整条片带，再在理论位置附近找 outer 和 separator”可以快速覆盖规则片条。V5 继承
-理论 pitch、material band、有限局部搜索与缺边投影，不恢复旧 confidence、best-score、Grid 自证、
-content equal-split、固定像素 bleed 或 separator-center crop。
+理论 pitch、material band、有限局部搜索与缺边投影，不恢复旧版未经校准且直接决定终态的 confidence /
+best-score、Grid 自证、content equal-split、固定像素 bleed 或 separator-center crop。
 
 ## 回滚
 

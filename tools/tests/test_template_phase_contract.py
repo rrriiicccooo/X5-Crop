@@ -18,6 +18,7 @@ from x5crop.detection.photo_geometry.template_model import (
     LocalAdvanceKind,
     LocalAdvanceRelation,
     PhaseLatticeAuthority,
+    SequenceBindingUse,
     TemplateSearchReceipt,
     TemplateSpec,
 )
@@ -47,10 +48,161 @@ from x5crop.detection.photo_geometry.template_stability import (
     AnchorDependencyEffect,
     leave_one_anchor_out_phase_stability,
 )
-from x5crop.domain import FiniteInterval, ObservationId
+from x5crop.domain import FiniteInterval, ObservationId, PositiveInterval
 
 
 class TemplatePhaseContractTest(unittest.TestCase):
+    @staticmethod
+    def _local_line(
+        name: str,
+        coordinate: float,
+        role: BoundaryRole,
+    ) -> BoundaryEdgeObservation:
+        direction = FiniteInterval.exact(0.0)
+        return replace(
+            edge(name, coordinate),
+            qualified_anchor_roles=(role,),
+            canonical_direction_degrees=0.0,
+            fit_direction_interval_degrees=direction,
+            full_direction_interval_degrees=direction,
+            # Exclude this line from global phase fitting while retaining its
+            # typed local line evidence.
+            fit_residual_px=20.0,
+        )
+
+    def test_unique_local_closure_refines_roles_without_phase_authority(
+        self,
+    ) -> None:
+        anchor = replace(
+            self._local_line("anchor:start:1", 100.0, BoundaryRole.START),
+            fit_residual_px=0.0,
+        )
+        end1 = self._local_line("local:end:1", 201.0, BoundaryRole.END)
+        start2 = self._local_line("local:start:2", 221.0, BoundaryRole.START)
+        end2 = self._local_line("local:end:2", 321.0, BoundaryRole.END)
+        spec = replace(
+            template(2),
+            frame_width_px=PositiveInterval(98.0, 102.0),
+        )
+        result = fit_template_phase_with_local_advance(
+            TemplatePhaseInput(
+                observations=(anchor, end1, start2, end2),
+                separator_bands=(
+                    separator(
+                        "separator:1",
+                        end1,
+                        start2,
+                        FiniteInterval(19.0, 21.0),
+                    ),
+                ),
+                template=spec,
+                scale_px_per_mm=PositiveInterval.exact(100.0),
+                holder_span_px=None,
+                phase_authority_px=FiniteInterval.exact(100.0),
+            )
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertEqual(result.best.phase_support_locations, (0,))
+        self.assertEqual(
+            tuple(binding.use for binding in result.best.role_bindings),
+            (
+                SequenceBindingUse.PHASE_ANCHOR,
+                SequenceBindingUse.LOCAL_REFINEMENT,
+                SequenceBindingUse.LOCAL_REFINEMENT,
+                SequenceBindingUse.LOCAL_REFINEMENT,
+            ),
+        )
+        self.assertEqual(result.receipt.local_refinement_lookup_count, 16)
+        self.assertEqual(result.receipt.local_refinement_binding_count, 3)
+        self.assertEqual(result.receipt.inferred_role_count, 0)
+
+    def test_multiple_local_fixed_width_pairs_remain_unbound(self) -> None:
+        anchor = replace(
+            self._local_line("anchor:start:1", 100.0, BoundaryRole.START),
+            fit_residual_px=0.0,
+        )
+        result = fit_template_phase_with_local_advance(
+            TemplatePhaseInput(
+                observations=(
+                    anchor,
+                    self._local_line(
+                        "local:start:2:a", 221.0, BoundaryRole.START
+                    ),
+                    self._local_line(
+                        "local:start:2:b", 223.0, BoundaryRole.START
+                    ),
+                    self._local_line(
+                        "local:end:2:a", 321.0, BoundaryRole.END
+                    ),
+                    self._local_line(
+                        "local:end:2:b", 323.0, BoundaryRole.END
+                    ),
+                ),
+                separator_bands=(),
+                template=replace(
+                    template(2),
+                    frame_width_px=PositiveInterval(99.0, 101.0),
+                ),
+                scale_px_per_mm=PositiveInterval.exact(100.0),
+                holder_span_px=None,
+                phase_authority_px=FiniteInterval.exact(100.0),
+            )
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertEqual(
+            result.best.binding_observation_ids,
+            (ObservationId("anchor:start:1"), None, None, None),
+        )
+        self.assertEqual(result.receipt.local_refinement_lookup_count, 20)
+        self.assertEqual(result.receipt.local_refinement_binding_count, 0)
+
+    def test_locally_bound_separator_drives_one_wide_advance(self) -> None:
+        anchor = replace(
+            self._local_line("anchor:start:1", 100.0, BoundaryRole.START),
+            fit_residual_px=0.0,
+        )
+        end1 = self._local_line("local:end:1", 201.0, BoundaryRole.END)
+        start2 = self._local_line("local:start:2", 231.0, BoundaryRole.START)
+        end2 = self._local_line("local:end:2", 331.0, BoundaryRole.END)
+        result = fit_template_phase_with_local_advance(
+            TemplatePhaseInput(
+                observations=(anchor, end1, start2, end2),
+                separator_bands=(
+                    separator(
+                        "separator:wide",
+                        end1,
+                        start2,
+                        FiniteInterval(29.0, 31.0),
+                    ),
+                ),
+                template=replace(
+                    template(2),
+                    frame_width_px=PositiveInterval(98.0, 102.0),
+                ),
+                scale_px_per_mm=PositiveInterval.exact(100.0),
+                holder_span_px=None,
+                phase_authority_px=FiniteInterval.exact(100.0),
+            )
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertEqual(result.best.phase_support_locations, (0,))
+        self.assertEqual(len(result.best.local_advance_relations), 1)
+        relation = result.best.local_advance_relations[0]
+        self.assertEqual(relation.kind, LocalAdvanceKind.WIDE)
+        self.assertEqual(relation.canonical_delta_px, 10.0)
+        self.assertEqual(
+            result.best.model_role_positions_px,
+            (100.0, 200.0, 230.0, 330.0),
+        )
+        self.assertEqual(result.receipt.local_refinement_lookup_count, 32)
+        self.assertEqual(result.receipt.local_refinement_binding_count, 6)
+
     def test_local_bend_binds_role_without_recalibrating_global_template(
         self,
     ) -> None:
@@ -1518,6 +1670,8 @@ class TemplatePhaseContractTest(unittest.TestCase):
             phase_lookup_count=4,
             role_binding_count=4,
             local_relation_evaluation_count=0,
+            local_refinement_lookup_count=0,
+            local_refinement_binding_count=0,
             phase_hypothesis_count=4,
             phase_offset_lookup_count=4,
             direct_observation_count=2,

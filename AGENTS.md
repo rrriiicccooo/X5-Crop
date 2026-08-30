@@ -121,6 +121,11 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
   有界固定模板，只在理论 outer、separator 和 top/bottom 附近精修。独立像素观察负责对准、约束每个
   已唯一绑定 adjacency 的直接 local advance，并否决非法 placement；不得用模板投影创造自己的 phase
   authority。全部 local advance 的数量始终不超过 `count - 1`，且只作一次 O(count) 传播。
+- 当前 production 只用 typed hard facts 选择 placement。未来可以在全部硬物理合法性、source
+  containment、输出预算和 content veto 之后加入经独立数据校准且带 abstention 的概率选择，但未经校准
+  的 score 不得拥有最终决定权。启用前必须冻结 feature/model/calibration schema、绝对概率与 margin
+  阈值、evidence coverage、OOD、typed failure、source-SHA calibration/sealed 分区和 `O(K × F)` 工作上界；
+  runner 必须保留在报告中，评分不得新增像素读取或复活非法候选。
 - 安全层只处理唯一胜出 placement 的联合可行状态，不合并落选位置、不分别相加不能同时发生的
   最大误差、不静默裁掉越界 footprint。具体 bleed 和预算只由 `docs/ARCHITECTURE.md` 定义。
 - Contact 与 overlap 始终属于 challenge。Challenge 是预检测评测角色，不预设 runtime 终态：标准
@@ -193,6 +198,8 @@ platform | platform-check | platform-package | pre-push
   危险输出；nominal 的目标是安全自动批准；challenge 的安全 `approved_auto` 与安全 `needs_review` 都是
   合格结果，前者单独记录为能力发现。不得新增样片规则、whitelist、格式 denylist 或根据当前输出自动
   晋升黄金。
+  发布底线要求 development nominal 与未来 sealed nominal 全部安全 `approved_auto`，且全部角色
+  `unsafe_approved_auto = 0`；不得把失败 nominal 改成 challenge、隐藏 runner 或放宽安全合同来达标。
   对 count 小于 format 最大完整格数的单片带，若人工确认的照片组在 source 长轴两侧都至少留有一个
   固定 W，且首张 START 与末张 END 不是两条都直接可见，则属于
   `two_sided_floating_partial_sequence` challenge；该事实只能从冻结前的 source 几何推导，不能读取

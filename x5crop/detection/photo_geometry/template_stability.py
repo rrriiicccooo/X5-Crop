@@ -76,7 +76,7 @@ def leave_one_anchor_out_phase_stability(
     separator_bands = phase_input.separator_bands
     ids = tuple(
         sorted(
-            {item for item in baseline.binding_observation_ids if item is not None},
+            set(baseline.phase_anchor_observation_ids),
             key=str,
         )
     )

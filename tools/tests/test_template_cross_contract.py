@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from tools.tests.template_test_support import (
     cross_binding as binding,
     cross_template as template,
+    placement_direction,
 )
 from x5crop.domain import FiniteInterval, ObservationId
 from x5crop.detection.photo_geometry.model import BoundaryRole
@@ -26,6 +27,51 @@ from x5crop.detection.photo_geometry.trace_support import (
 
 
 class TemplateCrossContractTest(unittest.TestCase):
+    def test_source_direction_rejects_a_locally_fitted_wrong_slope(self) -> None:
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(),
+                fixed_height_px=FiniteInterval(236.0, 244.0),
+                source_direction=placement_direction(),
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "direction-matched-top",
+                        100.0,
+                        angle=-0.1,
+                        angle_interval=FiniteInterval(-0.15, -0.05),
+                    ),
+                    binding(
+                        BoundaryRole.TOP,
+                        "wrong-fit-wide-full-top",
+                        104.0,
+                        angle=0.4,
+                        angle_interval=FiniteInterval(0.3, 0.5),
+                        full_angle_interval=FiniteInterval(-0.1, 0.5),
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "direction-matched-bottom",
+                        340.0,
+                        angle=-0.1,
+                        angle_interval=FiniteInterval(-0.15, -0.05),
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertEqual(
+            result.best.bound_observation_ids,
+            (
+                ObservationId("observation:direction-matched-top"),
+                ObservationId("observation:direction-matched-bottom"),
+            ),
+        )
+
     def test_touching_frame_domains_are_valid_but_overlap_is_not(self) -> None:
         TemplateCrossInput(
             template=template(count=2),
@@ -1216,6 +1262,42 @@ class TemplateCrossContractTest(unittest.TestCase):
                 ObservationId("observation:spanning-top"),
             },
         )
+
+    def test_spanning_side_infers_when_local_closures_are_ambiguous(self) -> None:
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(),
+                fixed_height_px=FiniteInterval(238.0, 242.0),
+                top_bindings=(
+                    binding(BoundaryRole.TOP, "spanning-top", 100.0),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "local-bottom-a",
+                        339.0,
+                        source_spanning=False,
+                    ),
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "local-bottom-b",
+                        341.0,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        self.assertIsNone(result.runner_up)
+        assert result.best is not None
+        self.assertFalse(result.best.direct_pair)
+        self.assertEqual(
+            result.best.direct_provenance_ids,
+            (ObservationId("observation:spanning-top"),),
+        )
+        self.assertAlmostEqual(result.best.top_canonical_px, 100.0)
+        self.assertAlmostEqual(result.best.bottom_canonical_px, 340.0)
 
     def test_spanning_side_rejects_wrong_role_local_closure(self) -> None:
         result = fit_template_cross(
