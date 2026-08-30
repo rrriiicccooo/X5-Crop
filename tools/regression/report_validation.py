@@ -603,7 +603,7 @@ def _validate_direct_role_binding_authority(value: object) -> None:
         "source_wide_edge",
         "cross_height_union",
         "separator_pair",
-        "frame_width_pair",
+        "partial_height_separator_pair",
     }
     for fact in facts:
         if not isinstance(fact, dict) or set(fact) != {
@@ -633,6 +633,13 @@ def _validate_direct_role_binding_authority(value: object) -> None:
             or not isinstance(bases, list)
             or bases != list(dict.fromkeys(bases))
             or any(item not in allowed_bases for item in bases)
+            or (
+                "partial_height_separator_pair" in bases
+                and (
+                    bases != ["partial_height_separator_pair"]
+                    or fact["independent_support_region_count"] != 2
+                )
+            )
             or not isinstance(conflicts, list)
             or conflicts != sorted(set(conflicts))
             or any(not isinstance(item, str) or not item for item in conflicts)

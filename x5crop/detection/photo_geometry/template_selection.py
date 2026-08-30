@@ -5,6 +5,7 @@ from __future__ import annotations
 from ...domain import EvidenceState
 from ..gate_checks import DetectionFailureFact, GateGap, failure_fact
 from .content_veto_model import ContentVetoAssessment
+from .output_model import OutputBoundaryUse
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import CrossFitCompetition, CrossFitStatus
 from .template_aspect_ratio_model import ApertureAspectRatioFailureKind
@@ -151,6 +152,30 @@ def select_lane_template_placement(
         )
     if best.sequence_fit != phase.best or best.cross_fit != cross.best:
         raise ValueError("template placement does not use the selected fits")
+    direct_role_authority = phase.direct_role_binding_authority
+    aperture_required_roles = (
+        ()
+        if direct_role_authority is None
+        else direct_role_authority.direct_aperture_required_role_indices
+    )
+    if aperture_required_roles and (
+        cross.best.boundary_use != OutputBoundaryUse.APERTURE_PAIR
+        or not cross.best.direct_pair
+    ):
+        return TemplatePlacementCompetition(
+            placements,
+            None,
+            None if runner_up is None else runner_up.placement_id,
+            EvidenceState.UNAVAILABLE,
+            failure_fact(
+                GateGap.DIRECT_ROLE_APERTURE_DOMAIN_UNAVAILABLE,
+                detail=(
+                    "partial-height separator-pair role authority requires "
+                    "a direct aperture pair for role indices: "
+                    + ", ".join(map(str, aperture_required_roles))
+                ),
+            ),
+        )
     if content_assessment is not None and content_assessment.vetoed:
         return TemplatePlacementCompetition(
             placements, None,

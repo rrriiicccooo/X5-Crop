@@ -798,6 +798,139 @@ class TemplatePhaseContractTest(unittest.TestCase):
             all(not item.bases for item in short_pair)
         )
 
+    def test_two_region_separator_transfers_one_direct_role_authority(
+        self,
+    ) -> None:
+        observations = tuple(
+            replace(
+                edge(identity, coordinate),
+                qualified_anchor_roles=(role,),
+                polarity=1 if role == BoundaryRole.START else -1,
+                trace_coordinates_px=(
+                    (10, 20) if identity.startswith("short:") else (0, 10, 20)
+                ),
+                support_fraction=(
+                    2.0 / 3.0 if identity.startswith("short:") else 1.0
+                ),
+                continuous_support_fraction=(
+                    2.0 / 3.0 if identity.startswith("short:") else 1.0
+                ),
+            )
+            for identity, coordinate, role in (
+                ("start:1", 40.0, BoundaryRole.START),
+                ("end:1", 140.0, BoundaryRole.END),
+                ("start:2", 160.0, BoundaryRole.START),
+                ("end:2", 260.0, BoundaryRole.END),
+                ("short:start:3", 280.0, BoundaryRole.START),
+                ("end:3", 380.0, BoundaryRole.END),
+                ("start:4", 400.0, BoundaryRole.START),
+                ("end:4", 500.0, BoundaryRole.END),
+            )
+        )
+        result = fit_template_phase_with_local_advance(
+            TemplatePhaseInput(
+                observations=observations,
+                separator_bands=(
+                    separator(
+                        "two-region:end-2:start-3",
+                        observations[3],
+                        observations[4],
+                        FiniteInterval(19.8, 20.2),
+                        region_count=2,
+                    ),
+                ),
+                template=template(4),
+                scale_px_per_mm=None,
+                holder_span_px=FiniteInterval(0.0, 540.0),
+                phase_authority_px=None,
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "two-region-transfer",
+                        FiniteInterval(0.0, 540.0),
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        authority = result.direct_role_binding_authority
+        assert authority is not None
+        self.assertEqual(
+            authority.direct_aperture_required_role_indices,
+            (4,),
+        )
+        transferred = next(
+            item for item in authority.facts if item.role_index == 4
+        )
+        self.assertEqual(
+            tuple(item.value for item in transferred.bases),
+            ("partial_height_separator_pair",),
+        )
+
+    def test_two_region_separator_cannot_self_authorize_two_short_edges(
+        self,
+    ) -> None:
+        observations = tuple(
+            replace(
+                edge(identity, coordinate),
+                qualified_anchor_roles=(role,),
+                polarity=1 if role == BoundaryRole.START else -1,
+                trace_coordinates_px=(
+                    (10, 20) if identity.startswith("short:") else (0, 10, 20)
+                ),
+                support_fraction=(
+                    2.0 / 3.0 if identity.startswith("short:") else 1.0
+                ),
+                continuous_support_fraction=(
+                    2.0 / 3.0 if identity.startswith("short:") else 1.0
+                ),
+            )
+            for identity, coordinate, role in (
+                ("start:1", 40.0, BoundaryRole.START),
+                ("end:1", 140.0, BoundaryRole.END),
+                ("start:2", 160.0, BoundaryRole.START),
+                ("short:end:2", 260.0, BoundaryRole.END),
+                ("short:start:3", 280.0, BoundaryRole.START),
+                ("end:3", 380.0, BoundaryRole.END),
+                ("start:4", 400.0, BoundaryRole.START),
+                ("end:4", 500.0, BoundaryRole.END),
+            )
+        )
+        result = fit_template_phase_with_local_advance(
+            TemplatePhaseInput(
+                observations=observations,
+                separator_bands=(
+                    separator(
+                        "two-region:two-short",
+                        observations[3],
+                        observations[4],
+                        FiniteInterval(19.8, 20.2),
+                        region_count=2,
+                    ),
+                ),
+                template=template(4),
+                scale_px_per_mm=None,
+                holder_span_px=FiniteInterval(0.0, 540.0),
+                phase_authority_px=None,
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "two-region-no-self-authority",
+                        FiniteInterval(0.0, 540.0),
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE,
+        )
+        authority = result.direct_role_binding_authority
+        assert authority is not None
+        self.assertEqual(authority.unsupported_role_indices, (3, 4))
+        self.assertFalse(authority.direct_aperture_required_role_indices)
+
     def test_cross_height_union_authorizes_one_short_direct_edge(self) -> None:
         observations = tuple(
             replace(

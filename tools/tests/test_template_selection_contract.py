@@ -8,6 +8,7 @@ from tools.tests.template_test_support import (
     phase_edge as edge,
     phase_template as template,
     placement_compose as _compose,
+    placement_cross,
 )
 from x5crop.detection.candidate.assessment.candidate_gate import (
     candidate_gate_assessment,
@@ -35,12 +36,17 @@ from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseFailureKind,
     PhaseFitStatus,
 )
+from x5crop.detection.photo_geometry.template_direct_role_authority import (
+    DirectRoleAuthorityBasis,
+    DirectRoleAuthorityFact,
+    DirectRoleBindingAuthority,
+)
 from x5crop.detection.photo_geometry.template_selection import (
     select_lane_template_placement,
     select_template_source,
     withhold_lane_winner,
 )
-from x5crop.domain import EvidenceState, FiniteInterval
+from x5crop.domain import EvidenceState, FiniteInterval, ObservationId
 
 
 def _resolved():
@@ -67,6 +73,29 @@ def _resolved():
         lane_id="lane:0",
     )
     return phase, cross, placement
+
+
+def _with_partial_height_role_authority(phase):
+    authority = DirectRoleBindingAuthority(
+        state=EvidenceState.SUPPORTED,
+        facts=(
+            DirectRoleAuthorityFact(
+                role_index=0,
+                lane_ordinal=1,
+                role=BoundaryRole.START,
+                observation_id=ObservationId("edge:start"),
+                independent_support_region_count=2,
+                bases=(
+                    DirectRoleAuthorityBasis.PARTIAL_HEIGHT_SEPARATOR_PAIR,
+                ),
+                blocking_material_conflict_ids=(),
+                state=EvidenceState.SUPPORTED,
+            ),
+        ),
+        unsupported_role_indices=(),
+        reason=None,
+    )
+    return replace(phase, direct_role_binding_authority=authority)
 
 
 class TemplateSelectionContractTest(unittest.TestCase):
@@ -115,6 +144,58 @@ class TemplateSelectionContractTest(unittest.TestCase):
         self.assertEqual(competition.state, EvidenceState.SUPPORTED)
         self.assertEqual(competition.selected_placement_id, placement.placement_id)
         self.assertIsNone(competition.failure)
+
+    def test_partial_height_role_accepts_a_direct_aperture_pair(self) -> None:
+        phase, cross, placement = _resolved()
+        phase = _with_partial_height_role_authority(phase)
+
+        competition = select_lane_template_placement(
+            lane_id="lane:0",
+            best=placement,
+            runner_up=None,
+            phase=phase,
+            cross=cross,
+            content_assessment=None,
+        )
+
+        self.assertEqual(competition.state, EvidenceState.SUPPORTED)
+        self.assertEqual(competition.selected_placement_id, placement.placement_id)
+
+    def test_partial_height_role_rejects_an_inferred_aperture_side(self) -> None:
+        phase, cross, _placement = _resolved()
+        phase = _with_partial_height_role_authority(phase)
+        assert phase.best is not None
+        inferred_cross_fit = placement_cross(
+            phase.template,
+            one_sided=True,
+        )
+        inferred_cross = replace(cross, best=inferred_cross_fit)
+        placement = _compose(
+            phase.template,
+            phase.best,
+            inferred_cross_fit,
+            lane_id="lane:0",
+        )
+
+        competition = select_lane_template_placement(
+            lane_id="lane:0",
+            best=placement,
+            runner_up=None,
+            phase=phase,
+            cross=inferred_cross,
+            content_assessment=None,
+        )
+
+        self.assertEqual(competition.state, EvidenceState.UNAVAILABLE)
+        assert competition.failure is not None
+        self.assertEqual(
+            competition.failure.gap,
+            GateGap.DIRECT_ROLE_APERTURE_DOMAIN_UNAVAILABLE,
+        )
+        self.assertEqual(
+            competition.failure.minimum_missing_fact,
+            MinimumMissingFact.DIRECT_APERTURE_DOMAIN,
+        )
 
     def test_unresolved_phase_has_one_typed_minimum_missing_fact(self) -> None:
         _phase, cross, _placement = _resolved()

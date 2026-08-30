@@ -31,6 +31,9 @@ class GateGap(str, Enum):
     DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE = (
         "direct_role_binding_authority_unavailable"
     )
+    DIRECT_ROLE_APERTURE_DOMAIN_UNAVAILABLE = (
+        "direct_role_aperture_domain_unavailable"
+    )
     SEPARATOR_MATERIAL_CONFLICT = "separator_material_conflict"
     OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE = (
         "outer_frame_observation_authority_unavailable"
@@ -75,6 +78,7 @@ class MinimumMissingFact(str, Enum):
     GLOBAL_LATTICE_AUTHORITY = "global_lattice_authority"
     ADJACENCY_OBSERVATION_COVERAGE = "adjacency_observation_coverage"
     DIRECT_ROLE_BINDING_AUTHORITY = "direct_role_binding_authority"
+    DIRECT_APERTURE_DOMAIN = "direct_aperture_domain"
     SEPARATOR_MATERIAL_AUTHORITY = "separator_material_authority"
     OUTER_FRAME_OBSERVATION_AUTHORITY = "outer_frame_observation_authority"
     PITCH_CLOSURE = "pitch_closure"
@@ -184,6 +188,11 @@ def failure_fact(
         GateGap.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE: (
             FailureRecovery.UNRECOVERABLE,
             MinimumMissingFact.DIRECT_ROLE_BINDING_AUTHORITY,
+            RecoveryAction.REVIEW_PLACEMENT,
+        ),
+        GateGap.DIRECT_ROLE_APERTURE_DOMAIN_UNAVAILABLE: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.DIRECT_APERTURE_DOMAIN,
             RecoveryAction.REVIEW_PLACEMENT,
         ),
         GateGap.SEPARATOR_MATERIAL_CONFLICT: (

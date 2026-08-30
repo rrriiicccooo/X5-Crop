@@ -341,21 +341,28 @@ Source H 的直接 authority 仍只来自 selected、唯一且直接的 aperture
 不增加独立 rank，且 direct H 始终优先。
 
 被模板选中的 edge 仍须取得 `DirectRoleBindingAuthority`，才能让自己的 native coordinate 进入最终
-placement；“观察到了”本身不等于“有权决定裁切”。权限只来自以下三种独立物理闭环：
+placement；“观察到了”本身不等于“有权决定裁切”。权限只来自以下独立物理闭环：
 
 | edge 空间支持与关系 | 角色坐标权限 |
 |---|---|
 | 同一 edge 直接覆盖三个独立高度区域 | `source_wide_edge`，允许 |
 | 一条局部 direct edge 唯一绑定三区域联合观察 | `cross_height_union`，允许；两者仍是一份相关证据 |
 | 同一 source-wide separator 的两侧 edge 原子绑定到一个 adjacency | `separator_pair`，两侧均允许 |
+| normal separator 在两个独立高度区域成立，且两侧原子绑定到同一 adjacency，其中一侧已由上述任一完整闭环授权 | 只向另一侧传递一次 `partial_height_separator_pair`；该 placement 还必须具有唯一、两侧直接的 `aperture_pair` 短轴域 |
+| 两高度 separator 的两侧都只有局部 edge | 不能互相授权；`direct_role_binding_authority_unavailable` |
 | 两条局部 edge 的间距只与 catalog 或 source W 相容 | 只能证明尺寸未冲突，不能让两条线互相授予 native coordinate |
 | 只覆盖局部高度，且没有上述任一直接闭环 | `direct_role_binding_authority_unavailable` |
 
 短 edge 仍保留为 observation；失败只撤销它的坐标决定权，不删除像素事实。全局 rank 计算必须排除无权
 角色，不能先让短线闭合 lattice，再由该 lattice、catalog W 或同一 Frame 的另一条短线反向证明短线。
+两高度 separator 的权限传递只执行一遍，`partial_height_separator_pair` 不能继续为相邻关系播种，也不能
+把同一关系计成另一份独立 rank。它只允许 phase/lattice 保留该 native coordinate；最终 selection 若使用
+`enclosing_support_pair` 或由单侧推断的 aperture，则产生
+`direct_role_aperture_domain_unavailable`。这样不能把不完整的长轴空间支持与近似短轴支撑叠加成自动批准。
 独立闭合的 source W 仍只按上表为缺失 opposite 产生相关推断，不覆盖已经观察到的 native coordinate；
 局部观察与该推断竞争时保持 unresolved。该证明由
-`template_direct_role_authority.py` 唯一拥有，不读取新像素，也不按强度选择 winner。
+`template_direct_role_authority.py` 唯一拥有，短轴联合条件由 `template_selection.py` 检查；两者都不读取新
+像素，也不按强度选择 winner。
 
 未观察 separator 的正常 adjacency 不是 detector miss 的默认值。它只有同时满足以下条件时，才可使用
 `local_delta = 0` 并由已确定 Grid 补齐 START/END：

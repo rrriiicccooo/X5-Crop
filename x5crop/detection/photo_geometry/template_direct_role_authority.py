@@ -28,6 +28,16 @@ class DirectRoleAuthorityBasis(str, Enum):
     SOURCE_WIDE_EDGE = "source_wide_edge"
     CROSS_HEIGHT_UNION = "cross_height_union"
     SEPARATOR_PAIR = "separator_pair"
+    PARTIAL_HEIGHT_SEPARATOR_PAIR = "partial_height_separator_pair"
+
+
+_UNCONDITIONAL_DIRECT_ROLE_BASES = frozenset(
+    {
+        DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE,
+        DirectRoleAuthorityBasis.CROSS_HEIGHT_UNION,
+        DirectRoleAuthorityBasis.SEPARATOR_PAIR,
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -59,6 +69,18 @@ class DirectRoleAuthorityFact:
             <= SPATIAL_SUPPORT_REGION_COUNT
             or tuple(dict.fromkeys(self.bases)) != self.bases
             or any(not isinstance(item, DirectRoleAuthorityBasis) for item in self.bases)
+            or (
+                DirectRoleAuthorityBasis.PARTIAL_HEIGHT_SEPARATOR_PAIR
+                in self.bases
+                and (
+                    self.bases
+                    != (
+                        DirectRoleAuthorityBasis.PARTIAL_HEIGHT_SEPARATOR_PAIR,
+                    )
+                    or self.independent_support_region_count
+                    != SPATIAL_SUPPORT_REGION_COUNT - 1
+                )
+            )
             or tuple(sorted(set(self.blocking_material_conflict_ids)))
             != self.blocking_material_conflict_ids
             or any(
@@ -124,6 +146,18 @@ class DirectRoleBindingAuthority:
             item.role_index
             for item in self.facts
             if item.state == EvidenceState.SUPPORTED
+        )
+
+    @property
+    def direct_aperture_required_role_indices(self) -> tuple[int, ...]:
+        """Roles whose local-height proof requires a direct short-axis pair."""
+
+        return tuple(
+            item.role_index
+            for item in self.facts
+            if item.state == EvidenceState.SUPPORTED
+            and DirectRoleAuthorityBasis.PARTIAL_HEIGHT_SEPARATOR_PAIR
+            in item.bases
         )
 
 
@@ -203,6 +237,14 @@ def assess_direct_role_binding_authority(
         for band in role_authority_bands
         if band.material_support_region_count == SPATIAL_SUPPORT_REGION_COUNT
     }
+    partial_height_pairs = {
+        frozenset(
+            (band.left_edge_observation_id, band.right_edge_observation_id)
+        )
+        for band in role_authority_bands
+        if band.material_support_region_count
+        == SPATIAL_SUPPORT_REGION_COUNT - 1
+    }
     supported_material_roles = {
         (band.left_edge_observation_id, BoundaryRole.END)
         for band in role_authority_bands
@@ -225,6 +267,45 @@ def assess_direct_role_binding_authority(
         if selected_pair in source_wide_pairs:
             bases[end_index].add(DirectRoleAuthorityBasis.SEPARATOR_PAIR)
             bases[start_index].add(DirectRoleAuthorityBasis.SEPARATOR_PAIR)
+
+    # A material band seen in only two independent height regions cannot make
+    # two short edges authoritative by itself.  It may transfer coordinate
+    # authority from one already-authoritative side to the other side of the
+    # same normal adjacency.  This pass is intentionally non-recursive: a
+    # transferred role cannot seed another transfer.
+    for adjacency_index in range(max(0, fit.template.count - 1)):
+        end_index = 2 * adjacency_index + 1
+        start_index = end_index + 1
+        end = selected.get(end_index)
+        start = selected.get(start_index)
+        if end is None or start is None:
+            continue
+        selected_pair = frozenset(
+            (end.observation_id, start.observation_id)
+        )
+        if (
+            selected_pair not in partial_height_pairs
+            or selected_pair in source_wide_pairs
+            or region_counts[end_index]
+            < SPATIAL_SUPPORT_REGION_COUNT - 1
+            or region_counts[start_index]
+            < SPATIAL_SUPPORT_REGION_COUNT - 1
+        ):
+            continue
+        end_unconditional = bool(
+            bases[end_index] & _UNCONDITIONAL_DIRECT_ROLE_BASES
+        )
+        start_unconditional = bool(
+            bases[start_index] & _UNCONDITIONAL_DIRECT_ROLE_BASES
+        )
+        if end_unconditional and not start_unconditional:
+            bases[start_index].add(
+                DirectRoleAuthorityBasis.PARTIAL_HEIGHT_SEPARATOR_PAIR
+            )
+        elif start_unconditional and not end_unconditional:
+            bases[end_index].add(
+                DirectRoleAuthorityBasis.PARTIAL_HEIGHT_SEPARATOR_PAIR
+            )
 
     conflicts_by_edge_role: dict[
         tuple[ObservationId, BoundaryRole],

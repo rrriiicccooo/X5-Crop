@@ -184,6 +184,11 @@ def alignment_summary(detection: FinalDetection) -> str:
             else len(direct.facts) - len(direct.unsupported_role_indices)
         )
         direct_total = 0 if direct is None else len(direct.facts)
+        direct_aperture_required = (
+            0
+            if direct is None
+            else len(direct.direct_aperture_required_role_indices)
+        )
         outer = diagnostic.outer_frame_observation_authority
         outer_count = (
             0
@@ -234,7 +239,8 @@ def alignment_summary(detection: FinalDetection) -> str:
         proof = (
             f"GLOBAL {rank}/3 · ADJ "
             f"{complete_coverage}/{len(inferred_coverage)} · DIRECT "
-            f"{direct_supported}/{direct_total} · OUTER "
+            f"{direct_supported}/{direct_total} · APERTURE DOMAIN "
+            f"{direct_aperture_required} · OUTER "
             f"{outer_count}/2 · W {width_proof} · SEP "
             f"D {separator_counts['dark'][0]}/{separator_counts['dark'][1]}"
             f" C{separator_counts['dark'][2]} "
