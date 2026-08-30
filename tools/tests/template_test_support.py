@@ -437,7 +437,7 @@ def placement_cross(
             fit_interval_px=FiniteInterval.exact(250.0),
             full_interval_px=FiniteInterval.exact(250.0),
             trace_coordinates_px=top.trace_coordinates_px,
-            evidence=CrossEvidence.FIXED_HEIGHT_INFERRED,
+            evidence=CrossEvidence.ASPECT_RATIO_HEIGHT_INFERRED,
             source_observation_ids=(top.observation_id,),
         ),
     ) if one_sided else ()

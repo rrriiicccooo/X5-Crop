@@ -36,9 +36,12 @@ Pixel evidence aligns or rejects the template; it cannot invent format, count, o
 
 A missing single start/end side may be inferred only after at least two complete direct Frames close source W and that
 Frame still has its opposite direct side. Grid cannot create a Frame whose two sides are both unseen. Direct W and H
-retain separate evidence. A gold-calibrated format aspect-ratio interval may eventually let W constrain H with full
-uncertainty, but that authority is not enabled in the current build; it cannot impersonate direct top/bottom or apply
-the nominal ratio as an exact conversion.
+retain separate evidence. A gold-calibrated aspect-ratio authority may let W constrain H with full uncertainty. Every
+format uses the same physical-millimetre-floor plus relative-ratio method for W/H compatibility, while the propagated
+axis guards produce a bounded ratio interval specific to that format. This authority cannot impersonate direct
+top/bottom, add independent evidence, or apply the nominal ratio as an exact conversion. Missing calibration, a true
+conflict, or exhaustion of the per-side five-percent budget keeps the entire source in review. Direct top/bottom always
+retains its native position and priority.
 
 Within one registered window, weak gradient, tone, and texture signals are also checked jointly across height. They may
 own a crop coordinate only when three independent height regions agree and uniquely reinforce the same direct edge.
@@ -145,7 +148,8 @@ Each input has exactly one terminal state:
 - `needs_review`: writes no photos and retains the minimum missing fact and suggested action;
 - `runtime_error`: this input failed while other inputs continue.
 
-Debug Analysis shows the template, observations, winner/runner, final footprint, budget, and first blocking reason,
+Debug Analysis shows the template, observations, winner/runner, raw and guarded aspect-ratio intervals, inferred H,
+the final footprint, budget, and first blocking reason,
 plus `DESKEW APPLIED`, `ROTATION NOT NEEDED`, or a typed `DESKEW SKIPPED`. It reads the same detection facts and
 never solves geometry again.
 

@@ -32,6 +32,9 @@ from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
 from x5crop.detection.photo_geometry.template_measurement_plan import (
     compile_template_measurement_plan,
 )
+from x5crop.detection.photo_geometry.template_model import (
+    generic_separator_gap_interval_px,
+)
 from x5crop.detection.photo_geometry.model import (
     BoundaryRole,
     PHOTO_BOUNDARY_MEASUREMENT_SPEC,
@@ -45,7 +48,11 @@ from x5crop.domain import (
     FiniteInterval,
     PositiveInterval,
 )
-from x5crop.formats import FORMAT_CHOICES, format_spec
+from x5crop.formats import (
+    APERTURE_COMPATIBILITY_SPEC,
+    FORMAT_CHOICES,
+    format_spec,
+)
 from x5crop.formats.scan_canvas import (
     SCAN_CANVAS_PHYSICAL_SPECS,
     ScanCanvasPhysicalSpec,
@@ -77,6 +84,14 @@ def product_rgb_input(gray: np.ndarray) -> tuple[np.ndarray, ImageProfile]:
 
 
 class PhysicalAuthorityContractTest(unittest.TestCase):
+    def test_generic_separator_gap_has_one_search_prior_owner(self) -> None:
+        self.assertEqual(
+            generic_separator_gap_interval_px(
+                PositiveInterval(100.0, 110.0)
+            ),
+            FiniteInterval(2.0, 22.0),
+        )
+
     def test_every_public_format_builds_one_matching_configuration(self) -> None:
         for format_id in FORMAT_CHOICES:
             with self.subTest(format_id=format_id):
@@ -130,17 +145,64 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
             )
             self.assertEqual(spec.maximum_full_count, values[-1])
             self.assertFalse(hasattr(spec, "partial_mode_supported"))
-            self.assertLessEqual(spec.frame.frame_width_factor_minimum, 1.0)
-            self.assertGreaterEqual(spec.frame.frame_width_factor_maximum, 1.0)
-            self.assertLessEqual(spec.frame.frame_height_factor_minimum, 1.0)
-            self.assertGreaterEqual(spec.frame.frame_height_factor_maximum, 1.0)
+            width_minimum, width_maximum = spec.frame.width_factor_bounds
+            height_minimum, height_maximum = spec.frame.height_factor_bounds
+            self.assertLessEqual(width_minimum, 1.0)
+            self.assertGreaterEqual(width_maximum, 1.0)
+            self.assertLessEqual(height_minimum, 1.0)
+            self.assertGreaterEqual(height_maximum, 1.0)
+            self.assertAlmostEqual(
+                (1.0 - width_minimum) * spec.frame.frame_width_mm,
+                APERTURE_COMPATIBILITY_SPEC.width.guard_mm(
+                    spec.frame.frame_width_mm
+                ),
+            )
+            self.assertAlmostEqual(
+                (1.0 - height_minimum) * spec.frame.frame_height_mm,
+                APERTURE_COMPATIBILITY_SPEC.height.guard_mm(
+                    spec.frame.frame_height_mm
+                ),
+            )
         self.assertEqual(
-            format_spec("half").frame.frame_width_factor_minimum,
-            0.965,
+            APERTURE_COMPATIBILITY_SPEC.width.guard_mm(18.0),
+            0.95,
+        )
+        self.assertAlmostEqual(
+            APERTURE_COMPATIBILITY_SPEC.width.guard_mm(70.0),
+            1.68,
         )
         self.assertEqual(
-            format_spec("135").frame.frame_width_factor_minimum,
-            0.9875,
+            APERTURE_COMPATIBILITY_SPEC.height.guard_mm(24.0),
+            0.70,
+        )
+        self.assertAlmostEqual(
+            APERTURE_COMPATIBILITY_SPEC.height.guard_mm(56.0),
+            1.008,
+        )
+        ratio = format_spec("120-66").frame.aperture_aspect_ratio
+        self.assertIsNotNone(ratio)
+        assert ratio is not None
+        guarded = ratio.guarded_bounds(
+            nominal_width_mm=56.0,
+            nominal_height_mm=56.0,
+        )
+        self.assertAlmostEqual(
+            guarded[0],
+            ratio.raw_width_over_height_minimum
+            * (1.0 - 0.024)
+            / (1.0 + 0.018),
+        )
+        self.assertAlmostEqual(
+            guarded[1],
+            ratio.raw_width_over_height_maximum
+            * (1.0 + 0.024)
+            / (1.0 - 0.018),
+        )
+        self.assertIsNone(format_spec("xpan").frame.aperture_aspect_ratio)
+        self.assertIsNone(format_spec("120-645").frame.aperture_aspect_ratio)
+        self.assertIs(
+            format_spec("135-dual").frame.aperture_aspect_ratio,
+            format_spec("135").frame.aperture_aspect_ratio,
         )
 
     def test_source_geometry_propagates_shared_scale_and_tolerance(
@@ -154,10 +216,10 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
         )
         width = geometry.width_state.extent_projection_px()
         height = geometry.height_state.extent_projection_px()
-        self.assertAlmostEqual(width.minimum, 355.5)
-        self.assertAlmostEqual(width.maximum, 364.5)
-        self.assertAlmostEqual(height.minimum, 239.04)
-        self.assertAlmostEqual(height.maximum, 240.96)
+        self.assertAlmostEqual(width.minimum, 350.5)
+        self.assertAlmostEqual(width.maximum, 369.5)
+        self.assertAlmostEqual(height.minimum, 233.0)
+        self.assertAlmostEqual(height.maximum, 247.0)
         self.assertFalse(
             hasattr(
                 PHOTO_BOUNDARY_MEASUREMENT_SPEC,

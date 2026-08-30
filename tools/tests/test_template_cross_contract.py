@@ -9,7 +9,12 @@ from tools.tests.template_test_support import (
     cross_template as template,
     placement_direction,
 )
-from x5crop.domain import FiniteInterval, ObservationId, PositiveInterval
+from x5crop.domain import (
+    EvidenceState,
+    FiniteInterval,
+    ObservationId,
+    PositiveInterval,
+)
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
 from x5crop.detection.photo_geometry.template_cross import (
@@ -21,7 +26,10 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     CrossFitStatus,
     CrossWinnerBasis,
     CrossRoleBinding,
-    TemplateCrossInput,
+    TemplateCrossInput as _TemplateCrossInput,
+)
+from x5crop.detection.photo_geometry.template_aspect_ratio_model import (
+    ApertureAspectRatioAuthority,
 )
 from x5crop.detection.photo_geometry.output_model import OutputBoundaryUse
 from x5crop.detection.photo_geometry.model import PHOTO_BOUNDARY_MEASUREMENT_SPEC
@@ -31,10 +39,53 @@ from x5crop.detection.photo_geometry.trace_support import (
 from x5crop.formats import FramePhysicalSpec
 
 
+def _interval(value: FiniteInterval | float) -> FiniteInterval:
+    return value if isinstance(value, FiniteInterval) else FiniteInterval.exact(value)
+
+
+def _supported_aspect_ratio(
+    height: FiniteInterval | float,
+) -> ApertureAspectRatioAuthority:
+    interval = _interval(height)
+    return ApertureAspectRatioAuthority(
+        authority_id="test-aspect-ratio",
+        state=EvidenceState.SUPPORTED,
+        calibration_id="test-aspect-ratio-calibration",
+        axis_guard_calibration_id="test-axis-guard-calibration",
+        raw_width_over_height=PositiveInterval.exact(1.0),
+        guarded_width_over_height=PositiveInterval.exact(1.0),
+        width_guard_mm=0.1,
+        height_guard_mm=0.1,
+        width_guard_ratio=0.01,
+        height_guard_ratio=0.01,
+        scale_height_over_width=PositiveInterval.exact(1.0),
+        source_width_px=interval,
+        inferred_height_px=interval,
+        effective_height_px=interval,
+        canonical_height_px=interval.center,
+        width_observation_ids=tuple(
+            ObservationId(f"test-width:{index}") for index in range(4)
+        ),
+        minimum_output_expansion_mm=0.0,
+        output_expansion_limit_mm=1.0,
+        failure_kind=None,
+        failure_detail=None,
+    )
+
+
+def aspect_input(**values) -> _TemplateCrossInput:
+    height = values.get("fixed_height_px")
+    if height is None:
+        template_spec = values["template"]
+        height = template_spec.frame_height_px
+    values["aperture_aspect_ratio_authority"] = _supported_aspect_ratio(height)
+    return _TemplateCrossInput(**values)
+
+
 class TemplateCrossContractTest(unittest.TestCase):
     def test_source_direction_rejects_a_locally_fitted_wrong_slope(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=FiniteInterval(236.0, 244.0),
                 source_direction=placement_direction(),
@@ -78,7 +129,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         )
 
     def test_touching_frame_domains_are_valid_but_overlap_is_not(self) -> None:
-        TemplateCrossInput(
+        aspect_input(
             template=template(count=2),
             fixed_height_px=240.0,
             longitudinal_support_domains_px=(
@@ -90,7 +141,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             ValueError,
             "longitudinal support domains",
         ):
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=2),
                 fixed_height_px=240.0,
                 longitudinal_support_domains_px=(
@@ -145,7 +196,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_unique_direct_pair_wins(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=240.0,
                 top_bindings=(binding(BoundaryRole.TOP, "top", 100.0),),
@@ -185,7 +236,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             full_angle_interval=FiniteInterval(-0.2, 0.2),
         )
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=240.0,
                 top_bindings=(top,),
@@ -219,7 +270,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             source_spanning=False,
         )
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=240.0,
                 top_bindings=(top,),
@@ -257,7 +308,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             role_authorized=False,
         )
         rejected = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=2),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(0, 50, 100),
@@ -272,7 +323,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertEqual(rejected.status, CrossFitStatus.UNRESOLVED)
 
         supported = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=2),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(0, 50, 100),
@@ -295,7 +346,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_two_domain_pair_cannot_own_three_frame_shared_edges(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=3),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(0, 20, 40, 60, 80, 100),
@@ -353,7 +404,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             source_spanning=False,
         )
         local = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=fixed_template,
                 fixed_height_px=FiniteInterval(230.0, 250.0),
                 canonical_fixed_height_px=245.0,
@@ -370,7 +421,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             238.0,
         )
         spanning = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=fixed_template,
                 fixed_height_px=FiniteInterval(230.0, 250.0),
                 canonical_fixed_height_px=245.0,
@@ -391,7 +442,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_single_side_infers_opposite_fixed_height(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=240.0,
                 top_bindings=(binding(BoundaryRole.TOP, "top", 100.0),),
@@ -402,7 +453,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertFalse(result.best.direct_pair)
         self.assertAlmostEqual(result.best.top_canonical_px, 100.0)
         self.assertAlmostEqual(result.best.bottom_canonical_px, 340.0)
-        self.assertEqual(result.best.inferred_bindings[0].evidence, CrossEvidence.FIXED_HEIGHT_INFERRED)
+        self.assertEqual(result.best.inferred_bindings[0].evidence, CrossEvidence.ASPECT_RATIO_HEIGHT_INFERRED)
         self.assertEqual(
             result.best.inferred_bindings[0].source_observation_ids,
             (ObservationId("observation:top"),),
@@ -419,7 +470,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_single_side_does_not_recalibrate_fixed_height(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
                 top_bindings=(binding(BoundaryRole.TOP, "top-offset", 105.0),),
@@ -439,12 +490,12 @@ class TemplateCrossContractTest(unittest.TestCase):
         )
         self.assertEqual(
             result.best.bottom_full_interval_px,
-            FiniteInterval.exact(345.0),
+            FiniteInterval(343.0, 347.0),
         )
 
     def test_two_region_fragment_cannot_supply_single_side_direction(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
                 registered_trace_coordinates_px=(0, 20, 40, 60, 80, 100),
@@ -463,7 +514,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_local_discrete_single_sides_have_no_placement_authority(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
                 top_bindings=(
@@ -488,7 +539,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_three_region_direct_pair_narrows_fixed_height(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
                 longitudinal_support_domains_px=(FiniteInterval(0.0, 100.0),),
@@ -538,7 +589,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_shared_anchor_does_not_merge_distinct_opposite_boundaries(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
                 registered_trace_coordinates_px=(0, 20, 40, 60, 80, 100),
@@ -582,7 +633,7 @@ class TemplateCrossContractTest(unittest.TestCase):
     def test_exact_registered_trace_subset_dominates_despite_disjoint_direction(self) -> None:
         registered = tuple(range(0, 101, 10))
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(236.0, 240.0),
                 registered_trace_coordinates_px=registered,
@@ -647,7 +698,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         )
         registered = tuple(range(0, 101, 10))
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(236.0, 240.0),
                 registered_trace_coordinates_px=registered,
@@ -699,7 +750,7 @@ class TemplateCrossContractTest(unittest.TestCase):
     def test_equal_domain_side_tracks_remain_discrete(self) -> None:
         registered = tuple(range(0, 101, 10))
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(236.0, 240.0),
                 registered_trace_coordinates_px=registered,
@@ -746,7 +797,7 @@ class TemplateCrossContractTest(unittest.TestCase):
     def test_disjoint_side_track_extents_remain_discrete(self) -> None:
         registered = tuple(range(0, 111, 10))
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=4),
                 fixed_height_px=FiniteInterval(236.0, 240.0),
                 registered_trace_coordinates_px=registered,
@@ -794,7 +845,7 @@ class TemplateCrossContractTest(unittest.TestCase):
     def test_disconnected_broader_side_track_cannot_dominate(self) -> None:
         registered = tuple(range(0, 101, 10))
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(236.0, 240.0),
                 registered_trace_coordinates_px=registered,
@@ -840,7 +891,7 @@ class TemplateCrossContractTest(unittest.TestCase):
     def test_disconnected_local_side_track_cannot_be_discarded(self) -> None:
         registered = tuple(range(0, 101, 10))
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(236.0, 240.0),
                 registered_trace_coordinates_px=registered,
@@ -886,7 +937,7 @@ class TemplateCrossContractTest(unittest.TestCase):
     def test_different_opposite_bindings_remain_discrete(self) -> None:
         registered = tuple(range(0, 101, 10))
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=3),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=registered,
@@ -941,7 +992,7 @@ class TemplateCrossContractTest(unittest.TestCase):
     def test_direction_disjoint_side_tracks_remain_discrete(self) -> None:
         registered = tuple(range(0, 101, 10))
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(236.0, 240.0),
                 registered_trace_coordinates_px=registered,
@@ -993,7 +1044,7 @@ class TemplateCrossContractTest(unittest.TestCase):
     def test_two_domain_side_cannot_gain_global_dominance(self) -> None:
         registered = tuple(range(0, 101, 10))
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(236.0, 240.0),
                 registered_trace_coordinates_px=registered,
@@ -1051,7 +1102,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         for name, local_traces, local_regions, bottom_traces in local_cases:
             with self.subTest(name=name):
                 result = fit_template_cross(
-                    TemplateCrossInput(
+                    aspect_input(
                         template=template(count=4),
                         fixed_height_px=FiniteInterval(236.0, 240.0),
                         registered_trace_coordinates_px=registered,
@@ -1093,7 +1144,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_broader_side_dominates_one_domain_supported_fragment(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=4),
                 fixed_height_px=FiniteInterval(236.0, 240.0),
                 registered_trace_coordinates_px=tuple(range(0, 101, 10)),
@@ -1157,7 +1208,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         ):
             with self.subTest(name=name):
                 result = fit_template_cross(
-                    TemplateCrossInput(
+                    aspect_input(
                         template=template(count=3),
                         fixed_height_px=FiniteInterval(236.0, 240.0),
                         registered_trace_coordinates_px=registered,
@@ -1199,7 +1250,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_disconnected_local_pairs_remain_discrete_answers(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
                 registered_trace_coordinates_px=(0, 20, 40, 60, 80, 100),
@@ -1254,7 +1305,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_spanning_side_infers_opposite_without_fragment_authority(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
                 top_bindings=(
@@ -1288,7 +1339,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_spanning_side_infers_when_local_closures_are_ambiguous(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
                 top_bindings=(
@@ -1324,7 +1375,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_spanning_side_rejects_wrong_role_local_closure(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
                 top_bindings=(
@@ -1365,7 +1416,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             FiniteInterval(80.0, 100.0),
         )
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=3),
                 fixed_height_px=240.0,
                 longitudinal_support_domains_px=domains,
@@ -1413,7 +1464,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             FiniteInterval(80.0, 100.0),
         )
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=3),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(10, 50, 90),
@@ -1448,7 +1499,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             FiniteInterval(80.0, 100.0),
         )
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=3),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(10, 50, 90),
@@ -1478,7 +1529,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             FiniteInterval(80.0, 100.0),
         )
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=3),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(10, 50, 51, 90),
@@ -1523,7 +1574,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             FiniteInterval(40.0, 60.0),
         )
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=2),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(10, 50),
@@ -1550,7 +1601,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             FiniteInterval(80.0, 100.0),
         )
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=3),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(10, 50, 90),
@@ -1577,7 +1628,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             FiniteInterval(80.0, 100.0),
         )
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=3),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(10, 50, 90),
@@ -1607,7 +1658,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             FiniteInterval(80.0, 100.0),
         )
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=3),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(10, 50, 90),
@@ -1635,7 +1686,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             FiniteInterval(80.0, 100.0),
         )
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=3),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(10, 50, 90),
@@ -1670,7 +1721,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             FiniteInterval(80.0, 100.0),
         )
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(230.0, 250.0),
                 canonical_fixed_height_px=240.0,
@@ -1711,7 +1762,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertFalse(result.best.direct_pair)
         self.assertEqual(
             result.best.inferred_bindings[0].evidence,
-            CrossEvidence.FIXED_HEIGHT_INFERRED,
+            CrossEvidence.ASPECT_RATIO_HEIGHT_INFERRED,
         )
 
     def test_role_unknown_outer_lines_do_not_compete_with_fixed_height(self) -> None:
@@ -1721,7 +1772,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             FiniteInterval(80.0, 100.0),
         )
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(230.0, 250.0),
                 canonical_fixed_height_px=240.0,
@@ -1769,7 +1820,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             FiniteInterval(80.0, 100.0),
         )
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=3),
                 fixed_height_px=240.0,
                 longitudinal_support_domains_px=domains,
@@ -1800,7 +1851,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_fragment_only_group_cannot_compete_with_spanning_closure(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
                 top_bindings=(
@@ -1838,7 +1889,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_equally_strong_non_equivalent_fits_keep_runner_up_unresolved(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=240.0,
                 top_bindings=(
@@ -1858,7 +1909,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_nearby_exact_pairs_remain_discrete_without_shared_identity(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=240.0,
                 top_bindings=(
@@ -1879,7 +1930,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_role_authorized_line_can_join_one_uniform_enclosing_pair(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
                 canonical_fixed_height_px=240.0,
@@ -1921,7 +1972,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_enclosing_support_evaluations_share_the_cross_fit_bound(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=240.0,
                 maximum_evaluated_fits=1,
@@ -1965,7 +2016,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_preclosed_enclosing_pair_cannot_detach_and_recombine(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=240.0,
                 canonical_fixed_height_px=240.0,
@@ -2038,7 +2089,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             ),
         )
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=240.0,
                 canonical_fixed_height_px=240.0,
@@ -2061,7 +2112,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_local_role_line_cannot_compete_with_source_wide_support(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(235.0, 245.0),
                 canonical_fixed_height_px=240.0,
@@ -2115,7 +2166,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_distinct_exact_bindings_are_not_hulled_into_uncertainty(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
                 top_bindings=(
@@ -2136,7 +2187,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_two_sided_spanning_closure_excludes_local_false_pair(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
                 top_bindings=(
@@ -2166,7 +2217,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_far_groups_are_not_hulled_and_keep_runner_up(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=240.0,
                 top_bindings=(
@@ -2195,7 +2246,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_discrete_direct_aperture_pairs_remain_unresolved(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=240.0,
                 top_bindings=(
@@ -2219,7 +2270,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_unique_direct_aperture_pair_owns_measured_offset(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=240.0,
                 top_bindings=(binding(BoundaryRole.TOP, "top", 300.0),),
@@ -2236,7 +2287,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_direct_height_contradiction_does_not_recalibrate_or_resolve(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=FiniteInterval.exact(240.0),
                 top_bindings=(binding(BoundaryRole.TOP, "top", 100.0),),
@@ -2249,7 +2300,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_receipt_bound_overflow_is_explicit(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=240.0,
                 top_bindings=(binding(BoundaryRole.TOP, "top", 100.0),),
@@ -2266,9 +2317,36 @@ class TemplateCrossContractTest(unittest.TestCase):
                 }
             ).validate_bounds()
 
+    def test_registration_overflow_is_a_typed_cross_result(self) -> None:
+        result = fit_template_cross(
+            aspect_input(
+                template=template(),
+                fixed_height_px=240.0,
+                registered_run_count=513,
+                maximum_registered_runs=512,
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.BOUND_EXCEEDED)
+        self.assertEqual(result.reason, "cross registration bound exceeded")
+        self.assertEqual(result.receipt.registered_run_count, 513)
+        self.assertEqual(result.receipt.registered_run_bound, 512)
+
+    def test_input_receipt_includes_late_registered_bindings(self) -> None:
+        cross_input = aspect_input(
+            template=template(),
+            fixed_height_px=240.0,
+            top_bindings=(binding(BoundaryRole.TOP, "coarse-top", 100.0),),
+            registered_run_count=0,
+            fitted_observation_count=0,
+        )
+
+        self.assertEqual(cross_input.registered_run_count, 1)
+        self.assertEqual(cross_input.fitted_observation_count, 1)
+
     def test_direction_provenance_retains_selected_observations_and_interval(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=240.0,
                 top_bindings=(
@@ -2313,7 +2391,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_local_opposite_edge_does_not_expand_source_direction(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
                 top_bindings=(
@@ -2348,7 +2426,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_missing_direction_cannot_resolve(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=240.0,
                 top_bindings=(
@@ -2376,7 +2454,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_single_side_requires_spanning_independent_regions(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=240.0,
                 top_bindings=(
@@ -2395,7 +2473,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_support_and_residual_do_not_choose_discrete_groups(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=240.0,
                 top_bindings=(
@@ -2431,7 +2509,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_support_across_three_template_frames_rejects_local_runner(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(count=4),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(0, 20, 40, 60, 80, 100),
@@ -2491,7 +2569,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_all_h_compatible_pairs_are_retained_until_bound(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=FiniteInterval(240.0, 242.0),
                 maximum_compatible_pairs=2,
@@ -2530,7 +2608,7 @@ class TemplateCrossContractTest(unittest.TestCase):
 
     def test_staggered_trace_lattices_can_share_independent_regions(self) -> None:
         result = fit_template_cross(
-            TemplateCrossInput(
+            aspect_input(
                 template=template(),
                 fixed_height_px=240.0,
                 top_bindings=(

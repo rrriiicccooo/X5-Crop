@@ -7,6 +7,7 @@ from ..gate_checks import DetectionFailureFact, GateGap, failure_fact
 from .content_veto_model import ContentVetoAssessment
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import CrossFitCompetition, CrossFitStatus
+from .template_aspect_ratio_model import ApertureAspectRatioFailureKind
 from .template_phase_model import PhaseFailureKind, PhaseFitResult, PhaseFitStatus
 from .template_placement import FormatPlacement
 from .template_runtime_model import (
@@ -104,15 +105,41 @@ def select_lane_template_placement(
             ),
         )
     if cross.status != CrossFitStatus.RESOLVED or cross.best is None:
+        aspect = cross.aperture_aspect_ratio_authority
+        aspect_gap = (
+            {
+                ApertureAspectRatioFailureKind.AUTHORITY_UNAVAILABLE: (
+                    GateGap.APERTURE_ASPECT_RATIO_AUTHORITY_UNAVAILABLE
+                ),
+                ApertureAspectRatioFailureKind.PHYSICAL_PRIOR_CONFLICT: (
+                    GateGap.APERTURE_ASPECT_RATIO_PHYSICAL_PRIOR_CONFLICT
+                ),
+                ApertureAspectRatioFailureKind.DIRECT_CONFLICT: (
+                    GateGap.APERTURE_ASPECT_RATIO_DIRECT_CONFLICT
+                ),
+                ApertureAspectRatioFailureKind.BUDGET_EXHAUSTED: (
+                    GateGap.APERTURE_ASPECT_RATIO_BUDGET_EXHAUSTED
+                ),
+            }.get(aspect.failure_kind)
+            if aspect.blocks_cross_resolution
+            else None
+        )
         return TemplatePlacementCompetition(
             placements, None,
             None if runner_up is None else runner_up.placement_id,
             EvidenceState.UNAVAILABLE,
             failure_fact(
-                GateGap.PLACEMENT_UNRESOLVED
-                if cross.runner_up is not None
-                else GateGap.CROSS_AUTHORITY_UNAVAILABLE,
-                detail=cross.reason,
+                aspect_gap
+                or (
+                    GateGap.PLACEMENT_UNRESOLVED
+                    if cross.runner_up is not None
+                    else GateGap.CROSS_AUTHORITY_UNAVAILABLE
+                ),
+                detail=(
+                    aspect.failure_detail
+                    if aspect_gap is not None
+                    else cross.reason
+                ),
             ),
         )
     if best is None:

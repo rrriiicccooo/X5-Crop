@@ -38,6 +38,18 @@ class GateGap(str, Enum):
     PHASE_TEMPLATE_MISMATCH = "phase_template_mismatch"
     PHASE_PLACEMENT_AMBIGUOUS = "phase_placement_ambiguous"
     CROSS_AUTHORITY_UNAVAILABLE = "cross_authority_unavailable"
+    APERTURE_ASPECT_RATIO_AUTHORITY_UNAVAILABLE = (
+        "aperture_aspect_ratio_authority_unavailable"
+    )
+    APERTURE_ASPECT_RATIO_PHYSICAL_PRIOR_CONFLICT = (
+        "aperture_aspect_ratio_physical_prior_conflict"
+    )
+    APERTURE_ASPECT_RATIO_DIRECT_CONFLICT = (
+        "aperture_aspect_ratio_direct_conflict"
+    )
+    APERTURE_ASPECT_RATIO_BUDGET_EXHAUSTED = (
+        "aperture_aspect_ratio_budget_exhausted"
+    )
     SHARED_AUTHORITY_UNAVAILABLE = "shared_authority_unavailable"
     CONTENT_VETO_REJECTED = "content_veto_rejected"
     LOCAL_ADVANCE_UNRESOLVED = "local_advance_unresolved"
@@ -67,6 +79,7 @@ class MinimumMissingFact(str, Enum):
     OUTER_FRAME_OBSERVATION_AUTHORITY = "outer_frame_observation_authority"
     PITCH_CLOSURE = "pitch_closure"
     CROSS_POSITION = "cross_position"
+    APERTURE_ASPECT_RATIO_AUTHORITY = "aperture_aspect_ratio_authority"
     REGISTERED_QUERY_COVERAGE = "registered_query_coverage"
     LOCAL_GAP_ORDINAL = "local_gap_ordinal"
     UNIQUE_PLACEMENT = "unique_placement"
@@ -197,6 +210,26 @@ def failure_fact(
             FailureRecovery.REMEASURE,
             MinimumMissingFact.CROSS_POSITION,
             RecoveryAction.RERUN_MEASUREMENT,
+        ),
+        GateGap.APERTURE_ASPECT_RATIO_AUTHORITY_UNAVAILABLE: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.APERTURE_ASPECT_RATIO_AUTHORITY,
+            RecoveryAction.REVIEW_PLACEMENT,
+        ),
+        GateGap.APERTURE_ASPECT_RATIO_PHYSICAL_PRIOR_CONFLICT: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.SOURCE_PHYSICAL_COMPATIBILITY,
+            RecoveryAction.REVIEW_PLACEMENT,
+        ),
+        GateGap.APERTURE_ASPECT_RATIO_DIRECT_CONFLICT: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.SOURCE_PHYSICAL_COMPATIBILITY,
+            RecoveryAction.REVIEW_PLACEMENT,
+        ),
+        GateGap.APERTURE_ASPECT_RATIO_BUDGET_EXHAUSTED: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.DIRECT_USE_PRECISION,
+            RecoveryAction.REVIEW_PLACEMENT,
         ),
         GateGap.SHARED_AUTHORITY_UNAVAILABLE: (
             FailureRecovery.UNRECOVERABLE,

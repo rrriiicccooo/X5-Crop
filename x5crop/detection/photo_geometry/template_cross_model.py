@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 import math
 
@@ -16,6 +16,10 @@ from .model import (
 )
 from .observation_types import ProfileRun
 from .output_model import OutputBoundaryUse, SharedStripDirection
+from .template_aspect_ratio_model import (
+    ApertureAspectRatioAuthority,
+    unavailable_aperture_aspect_ratio_authority,
+)
 from .template_model import TemplateSpec
 
 def _interval(value: FiniteInterval | PositiveInterval | float | int) -> FiniteInterval:
@@ -83,7 +87,7 @@ class CrossEvidence(str, Enum):
 
     DIRECT = "direct"
     TEMPLATE_LOCAL_REFINEMENT = "template_local_refinement"
-    FIXED_HEIGHT_INFERRED = "fixed_height_inferred"
+    ASPECT_RATIO_HEIGHT_INFERRED = "aspect_ratio_height_inferred"
 
 
 @dataclass(frozen=True)
@@ -453,11 +457,21 @@ class TemplateCrossInput:
     maximum_fitted_observations: int = 256
     maximum_compatible_pairs: int = 4096
     maximum_evaluated_fits: int = 4096
+    registered_run_count: int | None = None
+    fitted_observation_count: int | None = None
     minimum_shared_trace_support: int = 2
+    aperture_aspect_ratio_authority: ApertureAspectRatioAuthority = field(
+        default_factory=unavailable_aperture_aspect_ratio_authority
+    )
 
     def __post_init__(self) -> None:
         if not isinstance(self.template, TemplateSpec):
             raise TypeError("template cross input requires TemplateSpec")
+        if not isinstance(
+            self.aperture_aspect_ratio_authority,
+            ApertureAspectRatioAuthority,
+        ):
+            raise TypeError("cross input requires typed aspect-ratio authority")
         if self.source_direction is not None and not isinstance(
             self.source_direction,
             SharedStripDirection,
@@ -515,7 +529,42 @@ class TemplateCrossInput:
         )
         if any(not isinstance(value, int) or value <= 0 for value in bounds):
             raise ValueError("cross work bounds must be positive integers")
-        if not isinstance(self.minimum_shared_trace_support, int) or self.minimum_shared_trace_support < 0:
+        binding_run_count = len(
+            {item.run_id for item in (*self.top_bindings, *self.bottom_bindings)}
+        )
+        observation_count = len(
+            {
+                item.observation_id
+                for item in (*self.top_bindings, *self.bottom_bindings)
+            }
+        )
+        registered_run_count = self.registered_run_count
+        fitted_observation_count = self.fitted_observation_count
+        if (
+            registered_run_count is not None
+            and (not isinstance(registered_run_count, int) or registered_run_count < 0)
+        ) or (
+            fitted_observation_count is not None
+            and (
+                not isinstance(fitted_observation_count, int)
+                or fitted_observation_count < 0
+            )
+        ):
+            raise ValueError("cross input registration receipt is invalid")
+        object.__setattr__(
+            self,
+            "registered_run_count",
+            max(binding_run_count, registered_run_count or 0),
+        )
+        object.__setattr__(
+            self,
+            "fitted_observation_count",
+            max(observation_count, fitted_observation_count or 0),
+        )
+        if (
+            not isinstance(self.minimum_shared_trace_support, int)
+            or self.minimum_shared_trace_support < 0
+        ):
             raise ValueError("cross shared-support minimum cannot be negative")
 
 
@@ -646,7 +695,10 @@ class CrossFit:
             for item in self.direct_bindings
         ):
             raise ValueError("direct ledger contains inferred binding")
-        if any(item.evidence != CrossEvidence.FIXED_HEIGHT_INFERRED for item in self.inferred_bindings):
+        if any(
+            item.evidence != CrossEvidence.ASPECT_RATIO_HEIGHT_INFERRED
+            for item in self.inferred_bindings
+        ):
             raise ValueError("inferred ledger contains direct binding")
         if self.boundary_use == OutputBoundaryUse.APERTURE_PAIR:
             if self.enclosing_support_pair is not None:
@@ -747,8 +799,16 @@ class CrossFitCompetition:
     winner_basis: CrossWinnerBasis | None
     reason: str | None
     receipt: CrossSearchReceipt
+    aperture_aspect_ratio_authority: ApertureAspectRatioAuthority = field(
+        default_factory=unavailable_aperture_aspect_ratio_authority
+    )
 
     def __post_init__(self) -> None:
+        if not isinstance(
+            self.aperture_aspect_ratio_authority,
+            ApertureAspectRatioAuthority,
+        ):
+            raise TypeError("cross competition requires aspect-ratio authority")
         if self.status == CrossFitStatus.RESOLVED and (
             self.best is None
             or not isinstance(self.winner_basis, CrossWinnerBasis)

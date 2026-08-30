@@ -406,6 +406,58 @@ def axis_authority_summaries(
         bool(lane.prepared.source_scan_geometry.height_state.observation_ids)
         for lane in lanes
     )
+    aspect_labels: set[str] = set()
+    for lane in lanes:
+        authority = (
+            lane.prepared.cross_competition.aperture_aspect_ratio_authority
+        )
+        if authority.state.value == "supported":
+            raw_ratio = authority.raw_width_over_height
+            ratio = authority.guarded_width_over_height
+            height = authority.effective_height_px
+            assert raw_ratio is not None and ratio is not None and height is not None
+            use = (
+                "USED"
+                if authority.consumed_for_cross_inference
+                else "DIRECT"
+                if authority.direct_height_px is not None
+                else "READY"
+            )
+            aspect_labels.add(
+                f"{use} Rraw{raw_ratio.minimum:.3f}-{raw_ratio.maximum:.3f} "
+                f"Rguard{ratio.minimum:.3f}-{ratio.maximum:.3f} "
+                f"gW{authority.width_guard_ratio:.3%} "
+                f"gH{authority.height_guard_ratio:.3%} "
+                f"H{height.minimum:.1f}-{height.maximum:.1f}px"
+            )
+        else:
+            failure = authority.failure_kind
+            label = (
+                "DIRECT RATIO-NOT-USED"
+                if authority.direct_height_px is not None
+                else "UNAVAILABLE"
+                if failure is None
+                else failure.value.upper()
+            )
+            raw_ratio = authority.raw_width_over_height
+            ratio = authority.guarded_width_over_height
+            height = authority.effective_height_px
+            if raw_ratio is not None:
+                label += (
+                    f" Rraw{raw_ratio.minimum:.3f}-{raw_ratio.maximum:.3f}"
+                )
+            if ratio is not None:
+                label += (
+                    f" Rguard{ratio.minimum:.3f}-{ratio.maximum:.3f}"
+                    f" gW{authority.width_guard_ratio:.3%}"
+                    f" gH{authority.height_guard_ratio:.3%}"
+                )
+            if height is not None:
+                label += f" H{height.minimum:.1f}-{height.maximum:.1f}px"
+            if authority.blocks_cross_resolution:
+                label += " BLOCK"
+            aspect_labels.add(label)
+    aspect_summary = "/".join(sorted(aspect_labels))
     if selection.state.value != "supported":
         competitors = sum(
             len(item.placement_competition.placements) for item in lanes
@@ -424,7 +476,8 @@ def axis_authority_summaries(
             f"RUNNER {phase_runners}",
             f"SOURCE FIT · {competitors} PLACEMENTS · APERTURE "
             f"W {width_calibrated}/{len(lanes)} H "
-            f"{height_calibrated}/{len(lanes)} · {detail}",
+            f"{height_calibrated}/{len(lanes)} · RATIO {aspect_summary} · "
+            f"{detail}",
         )
     direct_sequence = sum(
         len(item.prepared.phase_competition.best.bound_observation_ids)
@@ -469,7 +522,7 @@ def axis_authority_summaries(
         f"DIRECT {direct_sequence} · INFERRED {inferred_sequence}",
         f"SOURCE FIT · LANES {len(lanes)} · APERTURE W "
         f"{width_calibrated}/{len(lanes)} H {height_calibrated}/{len(lanes)} · "
-        f"RUNNERS {runners} · GATE SUPPORTED",
+        f"RATIO {aspect_summary} · RUNNERS {runners} · GATE SUPPORTED",
     )
 
 

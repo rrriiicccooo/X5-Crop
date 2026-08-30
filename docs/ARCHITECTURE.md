@@ -57,14 +57,23 @@ SlotCountRequest
 | `120-66` | 56 × 56 mm | 无 | 3 |
 | `120-67` | 70 × 56 mm | 无 | 普通片夹 3，短片夹 2 |
 
-片夹画布提供大致 px/mm、有效区域和 format/count 相容性，不提供照片组长轴中心。数值合同：
+片夹画布提供大致 px/mm、有效区域和 format/count 相容性，不提供照片组长轴中心。Frame 兼容范围由
+`ApertureCompatibilitySpec` 以同一混合物理模型计算，不为 format 或样片保存独立 tolerance：
 
 ```text
-W compatibility：通常为 format 名义宽度 -1.25% / +1.25%
-half W compatibility：format 名义宽度 -3.5% / +1.25%
-H compatibility：format 名义高度 ±0.40%
-holder extent：物理名义范围 ±3.5%
+guard_W = max(0.95 mm, 2.4% × nominal_W)
+guard_H = max(0.70 mm, 1.8% × nominal_H)
+W compatibility = nominal_W ± guard_W
+H compatibility = nominal_H ± guard_H
+holder extent = 物理名义范围 ±3.5%
 ```
+
+W 与 H 使用不同参数，但所有 format 共用公式与 owner。当前数值使用 105 个合格 source、494 个完整
+Frame 校准：只接受 `slot_kind=image` 且 START、END、共享 top/bottom 全为 `directly_visible` 的记录，
+自然排除 `source_truncated`、`human_width_estimate`、残缺曝光与空 slot；先对每个 source 取中位尺寸，
+再按名义轴长分组计算相对名义值的绝对偏差 q95，以最小总 guard 拟合混合式，最后分别向外量化到
+0.05 mm 与 0.001 ratio。全部合格 source 都参与统计，超出 q95 guard 的 source 进入 review 诊断，不变成
+format 或样片例外。该 development 校准仍须由未来 sealed 数据验证。
 
 设计 W/H 是跨相机的有界搜索先验，不是每台相机共享的绝对片门尺寸。唯一 placement 闭合后，同一
 source 的直接 START/END 可以收紧共同 W，唯一直接 aperture top/bottom pair 可以收紧共同 H。Direct
@@ -74,31 +83,49 @@ W/H observation 分别保留自己的 identity；直接可见边界的 native co
 
 `G_format` 只决定首次理论搜索位置，不能单独建立 phase、pitch 或 placement。X5 长图不依赖齿孔。
 
-### 2.1 已确认、尚未启用的画幅比例 authority
+### 2.1 画幅比例 authority
 
-Format 的 `actual_W / actual_H` 是强物理先验，但不是零不确定性的常量。当前 runtime 已删除旧的
-“观测 W 等于纯扫描比例，再乘名义 H”换算；在 `ApertureAspectRatioAuthority` 完成前，W 不参与 H
-推断，证据不足的 source 保守 review。下一小机制必须使用全部 development gold 的 source-level
-实际比例分布建立 format-specific `R_interval`，以后再由预先冻结的 sealed 数据验证：
+Format 的 `actual_W / actual_H` 是强物理先验，但不是零不确定性的常量。当前
+`ApertureAspectRatioAuthority` 使用各 format 的合格 source-level 中位比例与设计比例形成
+`R_raw` 包络，再把第 2 节两轴混合 guard 传播成该 format 自己的 `R_guarded`：
 
 ```text
 W_px = actual_W × scale_W
 H_px = actual_H × scale_H
 R = actual_W / actual_H
-H_px ∈ W_px × (scale_H / scale_W) / R_interval
+gW = guard_W / nominal_W
+gH = guard_H / nominal_H
+R_min = R_raw_min × (1 - gW) / (1 + gH)
+R_max = R_raw_max × (1 + gW) / (1 - gH)
+H_px ∈ W_px × (scale_H / scale_W) / R_guarded
 ```
+
+`135`、`half`、`120-66` 与 `120-67` 已注册 development calibration；没有合格黄金 observation 的
+`xpan`、`120-645` 保持 unavailable，`135-dual` 复用同一 135 Frame 物理定义。不同 format 得到不同
+数值，但只能通过上述同一公式复算。旧的固定 `0.01`、统一 `1%` 外扩和按名义比例零误差换算都不存在。
 
 | 证据状态 | 结果 |
 |---|---|
 | direct top/bottom 唯一闭合 H | 保留 native coordinate；direct H 优先 |
-| source W、两轴 scale authority 与 `R_interval` 均完整 | 产生一份相关 H interval；不冒充 direct H，不增加 constraint rank |
-| ratio authority 不可用、scale ratio 不闭合或存在多个不等价 interval | `aperture_aspect_ratio_authority_unavailable` |
-| ratio 推断与 direct H 冲突 | `aperture_aspect_ratio_direct_conflict` |
+| 至少两张完整直接 Frame 闭合 source W、共享 scale identity 与 `R_guarded` 均完整 | 产生一份相关 H interval；不冒充 direct H，不增加 constraint rank |
+| ratio calibration、direct source W 或共享 scale identity 不可用 | `aperture_aspect_ratio_authority_unavailable` |
+| ratio 推断与 format H compatibility 不相交 | `aperture_aspect_ratio_physical_prior_conflict` |
+| 已支持的 ratio 推断与唯一 direct H 不相交 | `aperture_aspect_ratio_direct_conflict` |
 | 推断 uncertainty、residual 与 bleed 耗尽逐侧 5% 预算 | `aperture_aspect_ratio_budget_exhausted` |
 
-该 authority 只能在硬合法 placement 之后消费既有 source W 与 scan-canvas scale，不读取新 TIFF、不选择
-phase/ordinal、不创造双侧都不可见的 Frame。Report 与 Debug 必须显示 calibration identity、比例区间、
-W/scale provenance、推导 H interval、相关性和 typed failure；不得建立样片规则或另一个 detector。
+Direct H 存在时优先承担 cross；ratio authority 的 unavailable、physical-prior conflict 或 budget failure
+不会覆盖 direct H。只有一份本来受支持的 ratio interval 与 direct H 真正冲突时才阻断。该 authority
+只能消费既有 source W 与共享 scan-scale identity，不读取新 TIFF、不选择 phase/ordinal、不创造双侧都
+不可见的 Frame。Report 与 Debug 显示 calibration identity、`R_raw/R_guarded`、`gW/gH`、W provenance、
+推导与有效 H interval、预算、是否被 cross 消费、相关性和 typed failure。
+
+Separator 不复用 aperture compatibility。`G_format` 是理论搜索中心；实际 separator gap 由 material
+两侧直接 START/END 与 local advance 拥有。黄金 gap 的局部与跨 source 变化远大于 aperture 轴尺寸，
+用名义 gap 周围的对称混合 guard 会同时过窄又接近零下界；后续如需扩大召回，应单独校准非对称的
+候选无关搜索 coverage，不改变已观察 gap。Holder extent 目前只有独立的片夹设计范围 ±3.5%；同一批
+holder-normalized 黄金尺寸不能反过来独立校准它，除非以后取得外部 holder metrology。`1.1H` enclosing
+support、lattice residual、`max(0.15 mm, 0.7%W)` bleed 与逐侧 5% 输出上限分别拥有输出包络、统计残差、
+产品 bleed 和最终风险预算，不能合并成 aperture tolerance。
 
 ## 3. 几何词汇与权限
 
@@ -310,8 +337,8 @@ role = phase
 | 缺失 opposite，但不足两张完整直接 Frame 建立共同 W | `common_width_authority_unavailable` → `frame_width_inference_unavailable` |
 
 Source H 的直接 authority 仍只来自 selected、唯一且直接的 aperture top/bottom pair；enclosing support
-或单侧 fixed-H 推断不能冒充 direct H。完成第 2.1 节后，source W 只能经校准比例区间产生一份相关 H
-推断；它不增加独立 rank，且 direct H 始终优先。
+或单侧 fixed-H 推断不能冒充 direct H。Source W 只能经第 2.1 节校准比例区间产生一份相关 H 推断；它
+不增加独立 rank，且 direct H 始终优先。
 
 被模板选中的 edge 仍须取得 `DirectRoleBindingAuthority`，才能让自己的 native coordinate 进入最终
 placement；“观察到了”本身不等于“有权决定裁切”。权限只来自以下三种独立物理闭环：
@@ -688,6 +715,10 @@ complete/selected placement 后重复建立同义 Gate fact。它不读取 deske
 - `content_protection_conflict`
 - `local_advance_unresolved`
 - `producer_bound_exceeded`
+- `aperture_aspect_ratio_authority_unavailable`
+- `aperture_aspect_ratio_physical_prior_conflict`
+- `aperture_aspect_ratio_direct_conflict`
+- `aperture_aspect_ratio_budget_exhausted`
 - `direct_use_budget_exceeded`
 - `source_lane_authority_unavailable`
 
@@ -710,6 +741,8 @@ Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决
 - direct 与 inferred 边界；
 - best、runner 及真正不同之处；
 - `APERTURE_PAIR` 或 `ENCLOSING_SUPPORT_PAIR`；
+- aspect calibration identity、`R_raw/R_guarded`、`gW/gH`、W 与推导 H interval、cross 消费状态、
+  输出预算和 typed failure；
 - selected-only OutputFootprint，以分帧颜色半透明填充最终 required polygon，不另画白色虚线框，
   并显示四边 bleed/联合 expansion/预算；
 - `DESKEW APPLIED`、`ROTATION NOT NEEDED` 或 typed `DESKEW SKIPPED`；
@@ -773,7 +806,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 
 | 路径 | 唯一职责 |
 |---|---|
-| `x5crop/formats/` | format 设计 W/H、分格式 aperture 先验、gap 搜索先验、holder count 与输出保护常量 |
+| `x5crop/formats/` | format 设计 W/H、统一混合 W/H compatibility、分格式 raw aspect calibration、gap 搜索中心、holder count 与输出保护常量 |
 | `x5crop/configuration/`、`x5crop/runtime/` | format/count/deskew mode 输入、matched-holder resolution 与 source workflow |
 | `x5crop/detection/source_core.py`、`evidence/scan_canvas.py` | source/lane 与 matched-holder authority |
 | `photo_geometry/coarse_strip_support.py`、`coarse_enclosing_model.py`、`coarse_enclosing_support.py` | 两个 role-free aggregate query、粗片带 interval、source-wide 双侧 track 与 receipt |
@@ -781,15 +814,16 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/corridors.py` | 候选无关 top/bottom 与完整 `W/pitch` sequence 查询走廊 |
 | `photo_geometry/registered_*.py`、`observations.py`、`separator_*.py` | 一次性 measurement、role-free edge 与 material band |
 | `photo_geometry/cross_height_transition_measurement.py`、`cross_height_edge_support.py` | 三区域弱信号联合测量及其与唯一 direct edge 的单次绑定权限 |
-| `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source W/H direct extent 与 scan-scale authority；不执行隐式精确跨轴换算 |
+| `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source W/H extent、scan-scale authority 与不增加 direct provenance 的相关 interval 收紧 |
 | `photo_geometry/template_frame_width.py` | selected placement 后的 source W 校准与相关单侧角色推断 |
+| `photo_geometry/template_aspect_ratio_model.py`、`template_aspect_ratio.py` | 校准 W/H 比例的 typed authority、相关 H 推断、direct H 对账与预算失败 |
 | `photo_geometry/template_phase*.py`、`template_pitch.py`、`template_residual.py` | phase/ordinal 求解、source pitch 与逐 adjacency 的 direct local advance |
 | `photo_geometry/template_direct_role_authority.py` | 已选直接 START/END 的 native coordinate 权限证明 |
 | `photo_geometry/template_lattice_authority.py` | `(phase, W, pitch)` 直接约束矩阵与独立闭合证明 |
 | `photo_geometry/template_adjacency_coverage.py` | selected adjacency 合法走廊到既有 query/trace/coordinate 的覆盖证明 |
 | `photo_geometry/template_outer_frame_authority.py` | 带 Grid 推断时首尾输出 Frame 的直接长轴角色证明 |
 | `photo_geometry/template_alignment_diagnostic.py` | theoretical-vs-observed residual 的只读诊断 |
-| `photo_geometry/interval_math.py`、`template_cross*.py`、`template_cross_support.py` | 共享 interval 运算、source H 校准、局部 top/bottom 方向闭合与 enclosing support |
+| `photo_geometry/interval_math.py`、`template_cross*.py`、`template_cross_support.py` | 共享 interval 运算、source H 校准、局部 top/bottom 方向闭合、typed producer bound 与 enclosing support |
 | `photo_geometry/template_placement.py`、`template_selection.py` | source-axis frame 的一次 compose 与离散 winner/runner |
 | `photo_geometry/template_holder_fill.py` | selected PhotoGroupOuter 与 W-only fill assessment |
 | `photo_geometry/content_*.py` | 最终 post-bleed polygon 上的二维 negative veto |

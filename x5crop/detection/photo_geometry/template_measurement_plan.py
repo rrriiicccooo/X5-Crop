@@ -36,7 +36,11 @@ from .template_measurement_plan_model import (
     TemplateRoleBounds,
     TemplateWorkBounds,
 )
-from .template_model import PhaseLatticeAuthority, TemplateSpec
+from .template_model import (
+    PhaseLatticeAuthority,
+    TemplateSpec,
+    generic_separator_gap_interval_px,
+)
 
 
 def compile_template_measurement_plan(
@@ -65,17 +69,23 @@ def compile_template_measurement_plan(
         lane_authority.authority_profile_id,
         layout,
     )
+    width_factor_minimum, width_factor_maximum = (
+        frame_spec.width_factor_bounds
+    )
+    height_factor_minimum, height_factor_maximum = (
+        frame_spec.height_factor_bounds
+    )
     frame_width_px = _scaled_extent(
         frame_spec.frame_width_mm,
         scale_authority.width_axis_px_per_mm,
-        frame_spec.frame_width_factor_minimum,
-        frame_spec.frame_width_factor_maximum,
+        width_factor_minimum,
+        width_factor_maximum,
     )
     frame_height_px = _scaled_extent(
         frame_spec.frame_height_mm,
         scale_authority.height_axis_px_per_mm,
-        frame_spec.frame_height_factor_minimum,
-        frame_spec.frame_height_factor_maximum,
+        height_factor_minimum,
+        height_factor_maximum,
     )
     gap_px = _gap_interval_px(
         frame_spec,
@@ -218,7 +228,7 @@ def _gap_interval_px(
         )
     # An absent format prior remains a bounded generic physical interval.  It
     # does not identify a format or authorize placement by itself.
-    return FiniteInterval(width_px.minimum * 0.02, width_px.maximum * 0.20)
+    return generic_separator_gap_interval_px(width_px)
 
 
 def _lattice_positions(

@@ -228,6 +228,29 @@ class JointAxisGeometry:
             vertices=clipped.vertices,
         )
 
+    def intersect_inferred_extent(
+        self,
+        extent_interval_px: FiniteInterval,
+    ) -> "JointAxisGeometry":
+        """Clip one correlated inference without adding direct provenance."""
+
+        if not isinstance(extent_interval_px, FiniteInterval):
+            raise TypeError("inferred extent must be a finite interval")
+        clipped = self._clip_affine_interval(
+            extent_interval_px,
+            q_coefficient=self.design_extent_mm,
+            scale_coefficient=0.0,
+        )
+        return JointAxisGeometry(
+            axis_name=self.axis_name,
+            design_extent_mm=self.design_extent_mm,
+            scale_authority=self.scale_authority,
+            factor_authority=self.factor_authority,
+            observed_normalized_extent=self.observed_normalized_extent,
+            observation_ids=self.observation_ids,
+            vertices=clipped,
+        )
+
     def intersect_affine_observation(
         self,
         observed_interval_px: FiniteInterval,
@@ -253,35 +276,11 @@ class JointAxisGeometry:
         ):
             raise ValueError("joint affine observation is invalid")
 
-        def projected(point: tuple[float, float]) -> float:
-            scale, normalized = point
-            return (
-                scale_coefficient * scale
-                + q_coefficient * normalized
-            )
-
-        polygon = self.vertices
-        for value, keep_above in (
-            (observed_interval_px.minimum, True),
-            (observed_interval_px.maximum, False),
-        ):
-            polygon = _clip_joint_polygon(
-                polygon,
-                inside=(
-                    (lambda point, bound=value: projected(point) >= bound - 1.0e-12)
-                    if keep_above
-                    else (lambda point, bound=value: projected(point) <= bound + 1.0e-12)
-                ),
-                intersect=lambda left, right, bound=value: _intersect_affine_boundary(
-                    left,
-                    right,
-                    q_coefficient=q_coefficient,
-                    scale_coefficient=scale_coefficient,
-                    value=bound,
-                ),
-            )
-        if not polygon:
-            raise ValueError("joint affine observation is infeasible")
+        polygon = self._clip_affine_interval(
+            observed_interval_px,
+            q_coefficient=q_coefficient,
+            scale_coefficient=scale_coefficient,
+        )
         identities = tuple(
             ObservationId(value)
             for value in sorted(
@@ -300,6 +299,41 @@ class JointAxisGeometry:
             observation_ids=identities,
             vertices=tuple(polygon),
         )
+
+    def _clip_affine_interval(
+        self,
+        interval: FiniteInterval,
+        *,
+        q_coefficient: float,
+        scale_coefficient: float,
+    ) -> tuple[tuple[float, float], ...]:
+        def projected(point: tuple[float, float]) -> float:
+            scale, normalized = point
+            return scale_coefficient * scale + q_coefficient * normalized
+
+        polygon = self.vertices
+        for value, keep_above in (
+            (interval.minimum, True),
+            (interval.maximum, False),
+        ):
+            polygon = _clip_joint_polygon(
+                polygon,
+                inside=(
+                    (lambda point, bound=value: projected(point) >= bound - 1.0e-12)
+                    if keep_above
+                    else (lambda point, bound=value: projected(point) <= bound + 1.0e-12)
+                ),
+                intersect=lambda left, right, bound=value: _intersect_affine_boundary(
+                    left,
+                    right,
+                    q_coefficient=q_coefficient,
+                    scale_coefficient=scale_coefficient,
+                    value=bound,
+                ),
+            )
+        if not polygon:
+            raise ValueError("joint affine interval is infeasible")
+        return tuple(polygon)
 
     def intersect_state(self, other: "JointAxisGeometry") -> "JointAxisGeometry":
         if (

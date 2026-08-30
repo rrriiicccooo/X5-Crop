@@ -28,6 +28,7 @@ from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
 from x5crop.detection.source_core import SourceStripValidationDomain
 from x5crop.domain import Box
 from x5crop.formats import (
+    APERTURE_COMPATIBILITY_SPEC,
     format_spec,
 )
 from x5crop.formats.scan_canvas import scan_canvas_specs_for_format
@@ -46,8 +47,8 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v6"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v6"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v7"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v7"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
 SOURCE_TIMEOUT_SECONDS = 600
@@ -1141,6 +1142,216 @@ def _unique_source_physical_diagnostics(
     )
 
 
+def _round_outward(value: float, quantum: float) -> float:
+    if min(value, quantum) <= 0.0:
+        raise ValueError("calibration rounding requires positive values")
+    return math.ceil((value - 1.0e-12) / quantum) * quantum
+
+
+def _fit_mixed_axis_guard(
+    points: Sequence[tuple[float, float]],
+) -> tuple[float, float, float]:
+    """Fit max(absolute floor, relative * nominal) to grouped q95 facts."""
+
+    ordered = tuple(sorted(points))
+    if len(ordered) < 2 or len({item[0] for item in ordered}) != len(ordered):
+        raise ValueError("mixed axis guard needs two unique nominal extents")
+    candidates: list[tuple[float, int, float, float]] = []
+    for split in range(1, len(ordered)):
+        absolute_floor = max(value for _nominal, value in ordered[:split])
+        relative_ratio = max(
+            value / nominal for nominal, value in ordered[split:]
+        )
+        total_guard = sum(
+            max(absolute_floor, relative_ratio * nominal)
+            for nominal, _value in ordered
+        )
+        candidates.append(
+            (total_guard, split, absolute_floor, relative_ratio)
+        )
+    _score, _split, absolute_floor, relative_ratio = min(candidates)
+    return absolute_floor, relative_ratio, _score
+
+
+def _axis_guard_calibration(
+    diagnostics: Sequence[dict[str, Any]],
+    *,
+    axis: str,
+) -> dict[str, Any]:
+    if axis not in {"width", "height"}:
+        raise ValueError("aperture guard axis is invalid")
+    measurement_key = (
+        "holder_normalized_frame_width_estimates_mm"
+        if axis == "width"
+        else "holder_normalized_frame_height_estimates_mm"
+    )
+    nominal_attr = "frame_width_mm" if axis == "width" else "frame_height_mm"
+    by_nominal: dict[float, list[dict[str, Any]]] = defaultdict(list)
+    for diagnostic in diagnostics:
+        values = tuple(float(value) for value in diagnostic[measurement_key])
+        if not values:
+            continue
+        center = statistics.median(values)
+        nominal = float(
+            getattr(format_spec(str(diagnostic["format_id"])).frame, nominal_attr)
+        )
+        by_nominal[nominal].append(
+            {
+                "sample_id": str(diagnostic["sample_id"]),
+                "frame_count": len(values),
+                "source_center_mm": center,
+                "absolute_deviation_from_nominal_mm": abs(center - nominal),
+            }
+        )
+    quantile = APERTURE_COMPATIBILITY_SPEC.source_center_deviation_quantile
+    groups = []
+    for nominal, sources in sorted(by_nominal.items()):
+        deviations = tuple(
+            float(source["absolute_deviation_from_nominal_mm"])
+            for source in sources
+        )
+        groups.append(
+            {
+                "nominal_axis_mm": nominal,
+                "source_count": len(sources),
+                "frame_count": sum(int(source["frame_count"]) for source in sources),
+                "source_center_deviation_from_nominal_mm": _distribution(
+                    deviations
+                ),
+                "q95_source_center_deviation_mm": float(
+                    np.percentile(deviations, quantile * 100.0)
+                ),
+            }
+        )
+    configured = (
+        APERTURE_COMPATIBILITY_SPEC.width
+        if axis == "width"
+        else APERTURE_COMPATIBILITY_SPEC.height
+    )
+    fit_points = tuple(
+        (
+            float(group["nominal_axis_mm"]),
+            float(group["q95_source_center_deviation_mm"]),
+        )
+        for group in groups
+    )
+    fit = None if len(fit_points) < 2 else _fit_mixed_axis_guard(fit_points)
+    raw_floor = None if fit is None else fit[0]
+    raw_ratio = None if fit is None else fit[1]
+    fit_score = None if fit is None else fit[2]
+    expected_floor = (
+        None
+        if raw_floor is None
+        else _round_outward(
+            raw_floor,
+            APERTURE_COMPATIBILITY_SPEC.absolute_rounding_mm,
+        )
+    )
+    expected_ratio = (
+        None
+        if raw_ratio is None
+        else _round_outward(
+            raw_ratio,
+            APERTURE_COMPATIBILITY_SPEC.relative_rounding_ratio,
+        )
+    )
+    outliers = []
+    for nominal, sources in sorted(by_nominal.items()):
+        guard = configured.guard_mm(nominal)
+        outliers.extend(
+            {
+                "sample_id": str(source["sample_id"]),
+                "nominal_axis_mm": nominal,
+                "source_center_mm": float(source["source_center_mm"]),
+                "absolute_deviation_from_nominal_mm": float(
+                    source["absolute_deviation_from_nominal_mm"]
+                ),
+                "configured_guard_mm": guard,
+            }
+            for source in sources
+            if float(source["absolute_deviation_from_nominal_mm"]) > guard
+        )
+    return {
+        "source_count": sum(len(values) for values in by_nominal.values()),
+        "frame_count": sum(
+            int(source["frame_count"])
+            for values in by_nominal.values()
+            for source in values
+        ),
+        "nominal_groups": groups,
+        "raw_mixed_fit": {
+            "absolute_floor_mm": raw_floor,
+            "relative_ratio": raw_ratio,
+            "total_guard_mm_across_nominal_groups": fit_score,
+        },
+        "outward_quantized_fit": {
+            "absolute_floor_mm": expected_floor,
+            "relative_ratio": expected_ratio,
+        },
+        "configured_guard": {
+            "absolute_floor_mm": configured.absolute_floor_mm,
+            "relative_ratio": configured.relative_ratio,
+        },
+        "configured_matches_calibration": (
+            expected_floor is not None
+            and expected_ratio is not None
+            and math.isclose(configured.absolute_floor_mm, expected_floor)
+            and math.isclose(configured.relative_ratio, expected_ratio)
+        ),
+        "source_center_deviation_outlier_count": len(outliers),
+        "source_center_deviation_outliers": sorted(
+            outliers,
+            key=lambda item: (str(item["sample_id"]), float(item["nominal_axis_mm"])),
+        ),
+    }
+
+
+def _aperture_compatibility_calibration(
+    diagnostics: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
+    width = _axis_guard_calibration(diagnostics, axis="width")
+    height = _axis_guard_calibration(diagnostics, axis="height")
+    return {
+        "calibration_id": APERTURE_COMPATIBILITY_SPEC.calibration_id,
+        "method": (
+            "per-source eligible direct Frame median; absolute deviation from "
+            "format nominal; q95 by nominal extent; minimum-total mixed guard; "
+            "outward quantization"
+        ),
+        "eligibility": (
+            "slot_kind=image; START/END/shared edges directly_visible; at least "
+            "one complete eligible Frame per source"
+        ),
+        "source_center_deviation_quantile": (
+            APERTURE_COMPATIBILITY_SPEC.source_center_deviation_quantile
+        ),
+        "absolute_rounding_mm": APERTURE_COMPATIBILITY_SPEC.absolute_rounding_mm,
+        "relative_rounding_ratio": (
+            APERTURE_COMPATIBILITY_SPEC.relative_rounding_ratio
+        ),
+        "width": width,
+        "height": height,
+        "configured_source_count": (
+            APERTURE_COMPATIBILITY_SPEC.development_source_count
+        ),
+        "configured_frame_count": (
+            APERTURE_COMPATIBILITY_SPEC.development_frame_count
+        ),
+        "configured_counts_match": (
+            width["source_count"]
+            == height["source_count"]
+            == APERTURE_COMPATIBILITY_SPEC.development_source_count
+            and width["frame_count"]
+            == height["frame_count"]
+            == APERTURE_COMPATIBILITY_SPEC.development_frame_count
+        ),
+        "configured_matches_calibration": (
+            bool(width["configured_matches_calibration"])
+            and bool(height["configured_matches_calibration"])
+        ),
+    }
+
+
 def _physical_format_summary(
     format_id: str,
     diagnostics: Sequence[dict[str, Any]],
@@ -1148,16 +1359,42 @@ def _physical_format_summary(
     physical = format_spec(format_id)
     frame = physical.frame
     nominal_ratio = frame.frame_width_mm / frame.frame_height_mm
-    minimum_ratio = nominal_ratio * (
-        frame.frame_width_factor_minimum
-    ) / frame.frame_height_factor_maximum
-    maximum_ratio = nominal_ratio * (
-        frame.frame_width_factor_maximum
-    ) / frame.frame_height_factor_minimum
+    width_factor_minimum, width_factor_maximum = frame.width_factor_bounds
+    height_factor_minimum, height_factor_maximum = frame.height_factor_bounds
+    minimum_ratio = (
+        nominal_ratio * width_factor_minimum / height_factor_maximum
+    )
+    maximum_ratio = (
+        nominal_ratio * width_factor_maximum / height_factor_minimum
+    )
     frame_ratios = tuple(
         ratio
         for diagnostic in diagnostics
         for ratio in diagnostic["frame_ratio_measurements"]
+    )
+    source_ratio_centers = tuple(
+        statistics.median(diagnostic["frame_ratio_measurements"])
+        for diagnostic in diagnostics
+        if diagnostic["frame_ratio_measurements"]
+    )
+    raw_ratio_minimum = min((nominal_ratio, *source_ratio_centers))
+    raw_ratio_maximum = max((nominal_ratio, *source_ratio_centers))
+    ratio_spec = frame.aperture_aspect_ratio
+    registered_raw = (
+        None
+        if ratio_spec is None
+        else (
+            ratio_spec.raw_width_over_height_minimum,
+            ratio_spec.raw_width_over_height_maximum,
+        )
+    )
+    registered_guarded = (
+        None
+        if ratio_spec is None
+        else ratio_spec.guarded_bounds(
+            nominal_width_mm=frame.frame_width_mm,
+            nominal_height_mm=frame.frame_height_mm,
+        )
     )
     frame_width_containment = tuple(
         contained
@@ -1211,21 +1448,76 @@ def _physical_format_summary(
             diagnostic["scan_canvas_scale_authority_supported"]
             for diagnostic in diagnostics
         ),
-        "frame_ratio_catalog": {
+        "axis_guard_implied_design_ratio_interval": {
             "nominal": nominal_ratio,
             "minimum": minimum_ratio,
             "maximum": maximum_ratio,
         },
         "directly_visible_frame_ratio": _distribution(frame_ratios),
-        "directly_visible_frame_ratio_within_catalog_count": sum(
-            minimum_ratio <= ratio <= maximum_ratio for ratio in frame_ratios
-        ),
-        "directly_visible_frame_ratio_below_catalog_count": sum(
-            ratio < minimum_ratio for ratio in frame_ratios
-        ),
-        "directly_visible_frame_ratio_above_catalog_count": sum(
-            ratio > maximum_ratio for ratio in frame_ratios
-        ),
+        "source_center_frame_ratio": _distribution(source_ratio_centers),
+        "aperture_aspect_ratio_calibration": {
+            "eligibility": (
+                "source median of slot_kind=image Frames whose START/END and "
+                "shared edges are directly_visible"
+            ),
+            "eligible_source_count": len(source_ratio_centers),
+            "eligible_frame_count": len(frame_ratios),
+            "design_ratio": nominal_ratio,
+            "derived_raw_interval": {
+                "minimum": raw_ratio_minimum,
+                "maximum": raw_ratio_maximum,
+            },
+            "registered_calibration_id": (
+                None if ratio_spec is None else ratio_spec.calibration_id
+            ),
+            "registered_raw_interval": (
+                None
+                if registered_raw is None
+                else {
+                    "minimum": registered_raw[0],
+                    "maximum": registered_raw[1],
+                }
+            ),
+            "axis_guard_calibration_id": (
+                APERTURE_COMPATIBILITY_SPEC.calibration_id
+            ),
+            "width_guard_mm": (
+                APERTURE_COMPATIBILITY_SPEC.width.guard_mm(
+                    frame.frame_width_mm
+                )
+            ),
+            "height_guard_mm": (
+                APERTURE_COMPATIBILITY_SPEC.height.guard_mm(
+                    frame.frame_height_mm
+                )
+            ),
+            "width_guard_ratio": (
+                APERTURE_COMPATIBILITY_SPEC.width.relative_guard(
+                    frame.frame_width_mm
+                )
+            ),
+            "height_guard_ratio": (
+                APERTURE_COMPATIBILITY_SPEC.height.relative_guard(
+                    frame.frame_height_mm
+                )
+            ),
+            "registered_guarded_interval": (
+                None
+                if registered_guarded is None
+                else {
+                    "minimum": registered_guarded[0],
+                    "maximum": registered_guarded[1],
+                }
+            ),
+            "registered_matches_derived": (
+                registered_raw is not None
+                and math.isclose(registered_raw[0], raw_ratio_minimum)
+                and math.isclose(registered_raw[1], raw_ratio_maximum)
+                and ratio_spec.development_source_count
+                == len(source_ratio_centers)
+                and ratio_spec.development_frame_count == len(frame_ratios)
+            ),
+        },
         "holder_normalized_dimension_estimate_basis": (
             "gold_native_geometry_divided_by_selected_nominal_holder_axis_scale"
         ),
@@ -1344,6 +1636,9 @@ def _physical_prior_validation(
                 (format_id, len(items))
                 for format_id, items in by_format.items()
             )
+        ),
+        "aperture_compatibility_calibration": (
+            _aperture_compatibility_calibration(diagnostics)
         ),
         "formats": {
             format_id: _physical_format_summary(format_id, items)

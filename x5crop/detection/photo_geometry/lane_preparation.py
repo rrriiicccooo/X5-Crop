@@ -37,6 +37,10 @@ from .separator_observations import build_format_separator_bands
 from .observation_types import BoundaryEdgeMeasurementBasis
 from .template_evidence import template_evidence_use_ledger
 from .template_frame_width import calibrate_source_frame_width
+from .template_aspect_ratio import (
+    apply_inferred_aperture_height,
+    derive_aperture_aspect_ratio_authority,
+)
 from .template_runtime_model import (
     PreparedTemplateLane,
     RegisteredTemplateLane,
@@ -733,6 +737,9 @@ def prepare_template_lane(
     source_direction = _shared_direction_from_coarse(
         coarse_support.shared_direction
     )
+    aperture_aspect_ratio = derive_aperture_aspect_ratio_authority(
+        source_geometry
+    )
     cross_input = TemplateCrossInput(
         template=template,
         fixed_height_px=fixed_height,
@@ -750,8 +757,15 @@ def prepare_template_lane(
         maximum_fitted_observations=measurement_plan.cross_bounds.max_fitted_observations,
         maximum_compatible_pairs=measurement_plan.cross_bounds.max_compatible_pairs,
         maximum_evaluated_fits=measurement_plan.cross_bounds.max_evaluated_fits,
+        registered_run_count=cross.registered_run_count,
+        fitted_observation_count=cross.fitted_observation_count,
+        aperture_aspect_ratio_authority=aperture_aspect_ratio,
     )
     cross_competition = fit_template_cross(cross_input)
+    source_geometry = apply_inferred_aperture_height(
+        source_geometry,
+        cross_competition.aperture_aspect_ratio_authority,
+    )
     source_geometry = calibrate_source_frame_height(
         source_geometry,
         cross_competition,

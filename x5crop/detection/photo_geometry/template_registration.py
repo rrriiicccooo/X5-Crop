@@ -21,7 +21,11 @@ from .line_observations import PhotoBoundaryObservation
 from .physical_identity import physical_fact_id
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import CrossEvidence, CrossRoleBinding
-from .template_model import PhaseLatticeAuthority, TemplateSpec
+from .template_model import (
+    PhaseLatticeAuthority,
+    TemplateSpec,
+    generic_separator_gap_interval_px,
+)
 from .trace_support import trace_support_is_one_connected_run
 
 
@@ -46,7 +50,7 @@ def template_spec_from_physical_authority(
     height = source_geometry.height_state.extent_projection_px()
     calibrated_scale = source_geometry.width_state.feasible_scale_interval()
     if frame_spec.format_gap_prior_mm is None:
-        gap = FiniteInterval(width.minimum * 0.02, width.maximum * 0.20)
+        gap = generic_separator_gap_interval_px(width)
     else:
         gap = FiniteInterval(
             frame_spec.format_gap_prior_mm * calibrated_scale.minimum,
@@ -74,6 +78,8 @@ class RegisteredCrossEvidence:
     bottom_bindings: tuple[CrossRoleBinding, ...]
     observations: tuple[PhotoBoundaryObservation, ...]
     fit_attempt_count: int
+    registered_run_count: int | None = None
+    fitted_observation_count: int | None = None
 
     def __post_init__(self) -> None:
         identities = tuple(item.observation_id for item in self.observations)
@@ -81,6 +87,35 @@ class RegisteredCrossEvidence:
             raise ValueError("cross observations must be registered once")
         if self.fit_attempt_count < len(self.observations):
             raise ValueError("cross fit-attempt receipt is incomplete")
+        binding_run_count = len(
+            {
+                item.run_id
+                for item in (*self.top_bindings, *self.bottom_bindings)
+            }
+        )
+        registered_run_count = (
+            binding_run_count
+            if self.registered_run_count is None
+            else self.registered_run_count
+        )
+        fitted_observation_count = (
+            len(self.observations)
+            if self.fitted_observation_count is None
+            else self.fitted_observation_count
+        )
+        if (
+            not isinstance(registered_run_count, int)
+            or registered_run_count < binding_run_count
+            or not isinstance(fitted_observation_count, int)
+            or fitted_observation_count < len(self.observations)
+        ):
+            raise ValueError("cross registration receipt is invalid")
+        object.__setattr__(self, "registered_run_count", registered_run_count)
+        object.__setattr__(
+            self,
+            "fitted_observation_count",
+            fitted_observation_count,
+        )
 
 
 def _interval_distance(
@@ -322,7 +357,14 @@ def register_cross_evidence(
         and (run.pair_qualified or run.anchor_qualified_for(run.role_hint))
     )
     if len(qualified) > maximum_runs:
-        raise ValueError("cross registration bound exceeded")
+        return RegisteredCrossEvidence(
+            top_bindings=(),
+            bottom_bindings=(),
+            observations=(),
+            fit_attempt_count=0,
+            registered_run_count=len(qualified),
+            fitted_observation_count=0,
+        )
     observations_by_role: dict[BoundaryRole, dict[str, PhotoBoundaryObservation]] = {
         BoundaryRole.TOP: {},
         BoundaryRole.BOTTOM: {},
@@ -403,6 +445,8 @@ def register_cross_evidence(
         ),
         observations=tuple(observation for _binding, observation in ordered),
         fit_attempt_count=fit_attempt_count,
+        registered_run_count=len(qualified),
+        fitted_observation_count=len(ordered),
     )
 
 
@@ -618,7 +662,17 @@ def register_template_local_cross_refinements(
         bindings.setdefault(key, binding)
 
     if len(bindings) > maximum_bindings:
-        raise ValueError("cross refinement binding bound exceeded")
+        return RegisteredCrossEvidence(
+            top_bindings=registered.top_bindings,
+            bottom_bindings=registered.bottom_bindings,
+            observations=registered.observations,
+            fit_attempt_count=fit_attempt_count,
+            registered_run_count=max(
+                int(registered.registered_run_count),
+                len(bindings),
+            ),
+            fitted_observation_count=len(bindings),
+        )
     ordered = tuple(
         bindings[key]
         for key in sorted(
@@ -641,4 +695,9 @@ def register_template_local_cross_refinements(
         ),
         observations=ordered_observations,
         fit_attempt_count=fit_attempt_count,
+        registered_run_count=max(
+            int(registered.registered_run_count),
+            len({item.run_id for item in ordered}),
+        ),
+        fitted_observation_count=len(ordered_observations),
     )

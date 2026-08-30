@@ -34,8 +34,10 @@ separator 与 top/bottom 附近做有界局部测量。Format 尺寸是跨相机
 
 缺失的单侧 start/end 只有在至少两张完整直接 Frame 已闭合 source W、且该 Frame 的另一侧直接可见时
 才可推断；双侧都不可见的 Frame 不能由 Grid 凭空生成。Direct W/H 分别取证。Format 画幅比例可以在
-经过黄金集校准、保留完整不确定性后让 W 约束 H，但当前版本尚未启用这项 authority；它不能冒充直接
-top/bottom，也不能用名义比例作零误差换算。
+经过黄金集校准、保留完整不确定性后让 W 约束 H：W/H compatibility 对所有 format 使用同一个“物理
+毫米下限 + 相对比例”的计算方法，再由两轴 guard 推导各 format 的有界比例区间。它不能冒充直接
+top/bottom、增加独立证据或用名义比例作零误差换算；比例校准不可用、与直接边界冲突或耗尽逐侧 5%
+预算时，整张 source 保守进入 review。直接 top/bottom 始终优先保留原生位置。
 
 同一已登记窗口会把多个高度的弱 gradient、tone 与 texture 信号联合检查。只有三个独立高度区域一致、
 且唯一加强同一条直接边缘时，它才获得裁切坐标权限；未绑定或有多种解释的联合线只显示在 Debug 中，
@@ -137,7 +139,8 @@ python3 X5_Crop.py /path/to/scans --format 120-66 --count 2
 - `needs_review`：不写照片，保留最小缺失事实与建议操作；
 - `runtime_error`：该输入失败，其它输入继续。
 
-Debug Analysis 显示模板、实际观察、winner/runner、最终 footprint、预算与首个阻断原因，并标明
+Debug Analysis 显示模板、实际观察、winner/runner、画幅比例原始/保护区间及推导 H、最终 footprint、
+预算与首个阻断原因，并标明
 `DESKEW APPLIED`、`ROTATION NOT NEEDED` 或 typed `DESKEW SKIPPED`。它只读取同次检测事实，不会
 重新求解。
 

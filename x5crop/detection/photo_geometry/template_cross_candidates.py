@@ -171,7 +171,7 @@ def _single_candidate(
         top_full = binding.full_interval_px
         bottom_full = _add(
             top_full,
-            FiniteInterval.exact(canonical_height_px),
+            fixed_height,
         )
     else:
         top = binding
@@ -179,7 +179,7 @@ def _single_candidate(
         bottom_full = binding.full_interval_px
         top_full = _subtract(
             bottom_full,
-            FiniteInterval.exact(canonical_height_px),
+            fixed_height,
         )
     shift = top_full
     return _Candidate(
@@ -231,7 +231,6 @@ def _fit_from_candidate(
     candidate: _Candidate,
     *,
     template: TemplateSpec,
-    fixed_height: FiniteInterval,
     lane_reference_trace_px: float,
 ) -> CrossFit:
     top = candidate.top
@@ -296,7 +295,7 @@ def _fit_from_candidate(
                     top.fit_direction_interval_degrees
                 ),
                 full_direction_interval_degrees=top.full_direction_interval_degrees,
-                evidence=CrossEvidence.FIXED_HEIGHT_INFERRED,
+                evidence=CrossEvidence.ASPECT_RATIO_HEIGHT_INFERRED,
                 source_observation_ids=(top.observation_id,),
                 independent_support_region_count=top.independent_support_region_count,
                 source_spanning_continuous=top.source_spanning_continuous,
@@ -339,7 +338,7 @@ def _fit_from_candidate(
                     bottom.fit_direction_interval_degrees
                 ),
                 full_direction_interval_degrees=bottom.full_direction_interval_degrees,
-                evidence=CrossEvidence.FIXED_HEIGHT_INFERRED,
+                evidence=CrossEvidence.ASPECT_RATIO_HEIGHT_INFERRED,
                 source_observation_ids=(bottom.observation_id,),
                 independent_support_region_count=bottom.independent_support_region_count,
                 source_spanning_continuous=bottom.source_spanning_continuous,
@@ -356,7 +355,7 @@ def _fit_from_candidate(
     return CrossFit(
         template_id=template.template_id,
         lane_reference_trace_px=lane_reference_trace_px,
-        fixed_height_px=fixed_height,
+        fixed_height_px=candidate.height_compatibility,
         top_canonical_px=top_canonical,
         bottom_canonical_px=bottom_canonical,
         top_fit_interval_px=top_fit,
@@ -396,7 +395,6 @@ def _fit_from_group(
     group: Sequence[_Candidate],
     *,
     template: TemplateSpec,
-    fixed_height: FiniteInterval,
     lane_reference_trace_px: float,
     registered_trace_coordinates_px: tuple[int, ...],
     longitudinal_support_domains_px: tuple[FiniteInterval, ...],
@@ -454,7 +452,6 @@ def _fit_from_group(
     representative = _fit_from_candidate(
         group[0],
         template=template,
-        fixed_height=fixed_height,
         lane_reference_trace_px=lane_reference_trace_px,
     )
 

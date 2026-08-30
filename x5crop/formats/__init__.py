@@ -7,36 +7,184 @@ from ..utils import require_positive
 
 
 @dataclass(frozen=True, order=True)
+class ApertureAxisGuardSpec:
+    """One axis guard shared by every format through a mixed physical rule."""
+
+    absolute_floor_mm: float
+    relative_ratio: float
+
+    def __post_init__(self) -> None:
+        require_positive("aperture-axis absolute guard", self.absolute_floor_mm)
+        if not 0.0 < self.relative_ratio < 1.0:
+            raise ValueError(
+                "aperture-axis relative guard must be between zero and one"
+            )
+
+    def guard_mm(self, nominal_axis_mm: float) -> float:
+        require_positive("nominal aperture axis", nominal_axis_mm)
+        return max(
+            self.absolute_floor_mm,
+            self.relative_ratio * nominal_axis_mm,
+        )
+
+    def relative_guard(self, nominal_axis_mm: float) -> float:
+        return self.guard_mm(nominal_axis_mm) / nominal_axis_mm
+
+    def factor_bounds(self, nominal_axis_mm: float) -> tuple[float, float]:
+        guard = self.relative_guard(nominal_axis_mm)
+        if guard >= 1.0:
+            raise ValueError("aperture-axis guard exhausts its nominal extent")
+        return 1.0 - guard, 1.0 + guard
+
+    @property
+    def identity_fields(self) -> tuple[str, ...]:
+        return (
+            self.absolute_floor_mm.hex(),
+            self.relative_ratio.hex(),
+        )
+
+
+@dataclass(frozen=True, order=True)
+class ApertureCompatibilitySpec:
+    """Gold-calibrated W/H compatibility method shared by all formats."""
+
+    calibration_id: str
+    width: ApertureAxisGuardSpec
+    height: ApertureAxisGuardSpec
+    development_source_count: int
+    development_frame_count: int
+    source_center_deviation_quantile: float
+    absolute_rounding_mm: float
+    relative_rounding_ratio: float
+
+    def __post_init__(self) -> None:
+        if not self.calibration_id:
+            raise ValueError("aperture compatibility calibration needs an identity")
+        if (
+            self.development_source_count <= 0
+            or self.development_frame_count < self.development_source_count
+            or not 0.0 < self.source_center_deviation_quantile < 1.0
+        ):
+            raise ValueError("aperture compatibility calibration is invalid")
+        require_positive(
+            "absolute guard calibration rounding",
+            self.absolute_rounding_mm,
+        )
+        if not 0.0 < self.relative_rounding_ratio < 1.0:
+            raise ValueError("relative guard calibration rounding is invalid")
+
+    @property
+    def identity_fields(self) -> tuple[str, ...]:
+        return (
+            self.calibration_id,
+            *self.width.identity_fields,
+            *self.height.identity_fields,
+            str(self.development_source_count),
+            str(self.development_frame_count),
+            self.source_center_deviation_quantile.hex(),
+            self.absolute_rounding_mm.hex(),
+            self.relative_rounding_ratio.hex(),
+        )
+
+
+APERTURE_COMPATIBILITY_SPEC = ApertureCompatibilitySpec(
+    calibration_id=(
+        "x5crop_aperture_compatibility:development_gold_source_center_deviation_"
+        "q95_mixed_guard_outward_0p05mm_0p001ratio_v1"
+    ),
+    width=ApertureAxisGuardSpec(absolute_floor_mm=0.95, relative_ratio=0.024),
+    height=ApertureAxisGuardSpec(absolute_floor_mm=0.70, relative_ratio=0.018),
+    development_source_count=105,
+    development_frame_count=494,
+    source_center_deviation_quantile=0.95,
+    absolute_rounding_mm=0.05,
+    relative_rounding_ratio=0.001,
+)
+
+
+@dataclass(frozen=True, order=True)
+class ApertureAspectRatioSpec:
+    """Source-centred raw aperture W/H interval for one frame format."""
+
+    calibration_id: str
+    raw_width_over_height_minimum: float
+    raw_width_over_height_maximum: float
+    development_source_count: int
+    development_frame_count: int
+
+    def __post_init__(self) -> None:
+        if not self.calibration_id:
+            raise ValueError("aperture aspect-ratio calibration needs an identity")
+        require_positive(
+            "raw aperture aspect-ratio minimum",
+            self.raw_width_over_height_minimum,
+        )
+        if (
+            self.raw_width_over_height_maximum
+            < self.raw_width_over_height_minimum
+            or self.development_source_count <= 0
+            or self.development_frame_count < self.development_source_count
+        ):
+            raise ValueError("aperture aspect-ratio calibration is invalid")
+
+    def guarded_bounds(
+        self,
+        *,
+        nominal_width_mm: float,
+        nominal_height_mm: float,
+    ) -> tuple[float, float]:
+        width_guard = APERTURE_COMPATIBILITY_SPEC.width.relative_guard(
+            nominal_width_mm
+        )
+        height_guard = APERTURE_COMPATIBILITY_SPEC.height.relative_guard(
+            nominal_height_mm
+        )
+        return (
+            self.raw_width_over_height_minimum
+            * (1.0 - width_guard)
+            / (1.0 + height_guard),
+            self.raw_width_over_height_maximum
+            * (1.0 + width_guard)
+            / (1.0 - height_guard),
+        )
+
+    @property
+    def identity_fields(self) -> tuple[str, ...]:
+        return (
+            self.calibration_id,
+            self.raw_width_over_height_minimum.hex(),
+            self.raw_width_over_height_maximum.hex(),
+            str(self.development_source_count),
+            str(self.development_frame_count),
+        )
+
+
+@dataclass(frozen=True, order=True)
 class FramePhysicalSpec:
     """One format's design aperture and bounded cross-camera prior."""
 
     frame_width_mm: float
     frame_height_mm: float
     format_gap_prior_mm: float | None
-    frame_width_factor_minimum: float = 0.9875
-    frame_width_factor_maximum: float = 1.0125
-    frame_height_factor_minimum: float = 0.9960
-    frame_height_factor_maximum: float = 1.0040
+    aperture_aspect_ratio: ApertureAspectRatioSpec | None = None
 
     def __post_init__(self) -> None:
         require_positive("frame design width", self.frame_width_mm)
         require_positive("frame design height", self.frame_height_mm)
         if self.format_gap_prior_mm is not None:
             require_positive("format gap search prior", self.format_gap_prior_mm)
-        for name, minimum, maximum in (
-            (
-                "frame width factor",
-                self.frame_width_factor_minimum,
-                self.frame_width_factor_maximum,
-            ),
-            (
-                "frame height factor",
-                self.frame_height_factor_minimum,
-                self.frame_height_factor_maximum,
-            ),
-        ):
-            if not 0.0 < minimum <= 1.0 <= maximum:
-                raise ValueError(f"{name} prior must contain design unity")
+
+    @property
+    def width_factor_bounds(self) -> tuple[float, float]:
+        return APERTURE_COMPATIBILITY_SPEC.width.factor_bounds(
+            self.frame_width_mm
+        )
+
+    @property
+    def height_factor_bounds(self) -> tuple[float, float]:
+        return APERTURE_COMPATIBILITY_SPEC.height.factor_bounds(
+            self.frame_height_mm
+        )
 
     @property
     def identity_fields(self) -> tuple[str, ...]:
@@ -46,15 +194,18 @@ class FramePhysicalSpec:
             "none"
             if self.format_gap_prior_mm is None
             else self.format_gap_prior_mm.hex(),
-            self.frame_width_factor_minimum.hex(),
-            self.frame_width_factor_maximum.hex(),
-            self.frame_height_factor_minimum.hex(),
-            self.frame_height_factor_maximum.hex(),
+            *APERTURE_COMPATIBILITY_SPEC.identity_fields,
+            *(
+                ("aspect-ratio-unavailable",)
+                if self.aperture_aspect_ratio is None
+                else self.aperture_aspect_ratio.identity_fields
+            ),
         )
 
     @property
     def frame_spec_id(self) -> str:
         return "frame-spec:" + ":".join(self.identity_fields)
+
 
 @dataclass(frozen=True, order=True)
 class OutputProtectionSpec:
@@ -158,10 +309,46 @@ class FormatSpec:
     def maximum_full_count(self) -> int:
         return max(item.full_count for item in self.scan_canvas_fits)
 
-FRAME_135 = FramePhysicalSpec(36.0, 24.0, 2.0)
+ASPECT_RATIO_CALIBRATION_METHOD = (
+    "development_gold_source_median_direct_frame_and_design_hull_v1"
+)
 
 
-FORMAT_CATALOG_REVISION = "x5crop_format_catalog_v3"
+def _aspect_ratio_spec(
+    format_id: str,
+    minimum: float,
+    maximum: float,
+    *,
+    source_count: int,
+    frame_count: int,
+) -> ApertureAspectRatioSpec:
+    return ApertureAspectRatioSpec(
+        calibration_id=(
+            f"x5crop_aperture_aspect_ratio:{format_id}:"
+            f"{ASPECT_RATIO_CALIBRATION_METHOD}"
+        ),
+        raw_width_over_height_minimum=minimum,
+        raw_width_over_height_maximum=maximum,
+        development_source_count=source_count,
+        development_frame_count=frame_count,
+    )
+
+
+FRAME_135 = FramePhysicalSpec(
+    36.0,
+    24.0,
+    2.0,
+    aperture_aspect_ratio=_aspect_ratio_spec(
+        "135",
+        1.4644888926698973,
+        1.5075456582394127,
+        source_count=57,
+        frame_count=289,
+    ),
+)
+
+
+FORMAT_CATALOG_REVISION = "x5crop_format_catalog_v5"
 
 
 _FORMAT_SPECS: dict[str, FormatSpec] = {
@@ -186,7 +373,13 @@ _FORMAT_SPECS: dict[str, FormatSpec] = {
             18.0,
             24.0,
             1.0,
-            frame_width_factor_minimum=0.965,
+            aperture_aspect_ratio=_aspect_ratio_spec(
+                "half",
+                0.6987076104149175,
+                0.75,
+                source_count=14,
+                frame_count=108,
+            ),
         ),
         ScanLayoutSpec(),
         (
@@ -216,7 +409,18 @@ _FORMAT_SPECS: dict[str, FormatSpec] = {
     ),
     "120-66": FormatSpec(
         "120-66",
-        FramePhysicalSpec(56.0, 56.0, None),
+        FramePhysicalSpec(
+            56.0,
+            56.0,
+            None,
+            aperture_aspect_ratio=_aspect_ratio_spec(
+                "120-66",
+                0.9922863201007389,
+                1.0081672375873374,
+                source_count=31,
+                frame_count=88,
+            ),
+        ),
         ScanLayoutSpec(),
         (
             ScanCanvasFit("120_standard", 3),
@@ -227,7 +431,18 @@ _FORMAT_SPECS: dict[str, FormatSpec] = {
     ),
     "120-67": FormatSpec(
         "120-67",
-        FramePhysicalSpec(70.0, 56.0, None),
+        FramePhysicalSpec(
+            70.0,
+            56.0,
+            None,
+            aperture_aspect_ratio=_aspect_ratio_spec(
+                "120-67",
+                1.2211302564012225,
+                1.25,
+                source_count=3,
+                frame_count=9,
+            ),
+        ),
         ScanLayoutSpec(),
         (
             ScanCanvasFit("120_standard", 3),

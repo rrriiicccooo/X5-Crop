@@ -12,6 +12,9 @@ from tools.regression.accuracy import DEVELOPMENT_GOLD_COHORT_PATH
 from tools.regression.gold_analysis import (
     ANALYSIS_RECORD_SCHEMA,
     _analysis_identity,
+    _axis_guard_calibration,
+    _fit_mixed_axis_guard,
+    _round_outward,
     _source_variation_summary,
     _summary,
     line_axis_position,
@@ -272,8 +275,8 @@ class GoldAnalysisContractTest(unittest.TestCase):
         self.assertEqual(summary["physical_prior_validation"]["source_count"], 1)
         self.assertEqual(
             summary["physical_prior_validation"]["formats"]["135"][
-                "directly_visible_frame_ratio_within_catalog_count"
-            ],
+                "aperture_aspect_ratio_calibration"
+            ]["eligible_source_count"],
             1,
         )
         self.assertEqual(
@@ -302,6 +305,55 @@ class GoldAnalysisContractTest(unittest.TestCase):
             summary["pooled_within_source_relative_rms"],
         )
         self.assertGreater(summary["between_to_within_ratio"], 1.0)
+
+    def test_mixed_axis_guard_fit_keeps_one_shared_physical_formula(self) -> None:
+        floor, ratio, _score = _fit_mixed_axis_guard(
+            (
+                (18.0, 0.9213557897170552),
+                (36.0, 0.6425946864386389),
+                (56.0, 1.2681724501607903),
+                (70.0, 1.677706763109518),
+            )
+        )
+
+        self.assertAlmostEqual(floor, 0.9213557897170552)
+        self.assertAlmostEqual(ratio, 0.023967239472993115)
+        self.assertAlmostEqual(_round_outward(floor, 0.05), 0.95)
+        self.assertAlmostEqual(_round_outward(ratio, 0.001), 0.024)
+
+    def test_axis_guard_uses_source_centers_and_keeps_single_frame_sources(
+        self,
+    ) -> None:
+        calibration = _axis_guard_calibration(
+            (
+                {
+                    "sample_id": "half-single",
+                    "format_id": "half",
+                    "holder_normalized_frame_width_estimates_mm": [17.0],
+                },
+                {
+                    "sample_id": "135-multiple",
+                    "format_id": "135",
+                    "holder_normalized_frame_width_estimates_mm": [36.4, 36.6],
+                },
+            ),
+            axis="width",
+        )
+
+        self.assertEqual(calibration["source_count"], 2)
+        self.assertEqual(calibration["frame_count"], 3)
+        groups = {
+            item["nominal_axis_mm"]: item
+            for item in calibration["nominal_groups"]
+        }
+        self.assertEqual(
+            groups[18.0]["q95_source_center_deviation_mm"],
+            1.0,
+        )
+        self.assertAlmostEqual(
+            groups[36.0]["q95_source_center_deviation_mm"],
+            0.5,
+        )
 
     def test_analysis_artifact_binds_comparator_and_reaggregates(self) -> None:
         identity = _analysis_identity()

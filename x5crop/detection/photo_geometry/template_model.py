@@ -18,6 +18,8 @@ from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInte
 MAX_TEMPLATE_FIT_PASSES = 5
 TEMPLATE_ROLE_REFINEMENT_RADIUS_RATIO = 0.11
 MIN_TEMPLATE_ROLE_REFINEMENT_RADIUS_PX = 3.0
+GENERIC_SEPARATOR_GAP_MINIMUM_FRAME_RATIO = 0.02
+GENERIC_SEPARATOR_GAP_MAXIMUM_FRAME_RATIO = 0.20
 from .model import BoundaryRole
 
 
@@ -34,6 +36,28 @@ def template_role_refinement_radius_px(pitch_px: float) -> float:
     return max(
         MIN_TEMPLATE_ROLE_REFINEMENT_RADIUS_PX,
         pitch_px * TEMPLATE_ROLE_REFINEMENT_RADIUS_RATIO,
+    )
+
+
+def generic_separator_gap_interval_px(
+    frame_width_px: FiniteInterval | PositiveInterval,
+) -> FiniteInterval:
+    """Return the bounded search prior for formats without a gap seed.
+
+    This interval only compiles candidate-independent search and lattice work.
+    It is not aperture compatibility, does not override a measured separator,
+    and cannot authorize a local advance by itself.
+    """
+
+    if not isinstance(frame_width_px, (FiniteInterval, PositiveInterval)):
+        raise TypeError("generic separator gap requires an interval width")
+    if frame_width_px.minimum <= 0.0:
+        raise ValueError("generic separator gap requires a positive width")
+    return FiniteInterval(
+        frame_width_px.minimum
+        * GENERIC_SEPARATOR_GAP_MINIMUM_FRAME_RATIO,
+        frame_width_px.maximum
+        * GENERIC_SEPARATOR_GAP_MAXIMUM_FRAME_RATIO,
     )
 
 

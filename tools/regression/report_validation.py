@@ -69,6 +69,33 @@ _TEMPLATE_ALIGNMENT_FIELDS = {
     "unbound_direct_observation_count",
     "unresolved_reason",
 }
+_APERTURE_ASPECT_RATIO_FIELDS = {
+    "authority_id",
+    "state",
+    "calibration_id",
+    "axis_guard_calibration_id",
+    "raw_width_over_height",
+    "guarded_width_over_height",
+    "width_guard_mm",
+    "height_guard_mm",
+    "width_guard_ratio",
+    "height_guard_ratio",
+    "scale_height_over_width",
+    "source_width_px",
+    "inferred_height_px",
+    "effective_height_px",
+    "canonical_height_px",
+    "width_observation_ids",
+    "minimum_output_expansion_mm",
+    "output_expansion_limit_mm",
+    "failure_kind",
+    "failure_detail",
+    "consumed_for_cross_inference",
+    "blocks_cross_resolution",
+    "direct_height_px",
+    "correlated_inference",
+    "independent_constraint_rank",
+}
 
 
 def _finite_number(value: object) -> bool:
@@ -230,6 +257,137 @@ def _valid_interval(value: object) -> bool:
         and _finite_number(value["maximum"])
         and float(value["minimum"]) <= float(value["maximum"])
     )
+
+
+def _validate_aperture_aspect_ratio_authority(value: object) -> None:
+    if not isinstance(value, dict) or set(value) != _APERTURE_ASPECT_RATIO_FIELDS:
+        raise ValueError("aperture aspect-ratio authority is incomplete")
+    state = value["state"]
+    supported = state == "supported"
+    failed = state in {"unavailable", "contradicted"}
+    if (
+        not (supported or failed)
+        or not isinstance(value["authority_id"], str)
+        or not value["authority_id"]
+        or value["correlated_inference"] is not True
+        or value["independent_constraint_rank"] != 0
+        or not isinstance(value["consumed_for_cross_inference"], bool)
+        or not isinstance(value["blocks_cross_resolution"], bool)
+        or (
+            value["consumed_for_cross_inference"]
+            and value["blocks_cross_resolution"]
+        )
+        or not _valid_ids(value["width_observation_ids"])
+    ):
+        raise ValueError("aperture aspect-ratio authority state is invalid")
+    interval_fields = (
+        "raw_width_over_height",
+        "guarded_width_over_height",
+        "scale_height_over_width",
+        "source_width_px",
+        "inferred_height_px",
+        "effective_height_px",
+    )
+    for key in interval_fields:
+        if value[key] is not None and not _valid_interval(value[key]):
+            raise ValueError("aperture aspect-ratio interval is invalid")
+    for key in (
+        "width_guard_mm",
+        "height_guard_mm",
+        "width_guard_ratio",
+        "height_guard_ratio",
+        "minimum_output_expansion_mm",
+        "output_expansion_limit_mm",
+    ):
+        if value[key] is not None and (
+            not _finite_number(value[key]) or float(value[key]) < 0.0
+        ):
+            raise ValueError("aperture aspect-ratio scalar is invalid")
+    for key in ("width_guard_ratio", "height_guard_ratio"):
+        if value[key] is not None and not 0.0 < float(value[key]) < 1.0:
+            raise ValueError("aperture aspect-ratio guard is invalid")
+    if supported:
+        if (
+            not isinstance(value["calibration_id"], str)
+            or not value["calibration_id"]
+            or not isinstance(value["axis_guard_calibration_id"], str)
+            or not value["axis_guard_calibration_id"]
+            or any(value[key] is None for key in interval_fields)
+            or any(
+                value[key] is None
+                for key in (
+                    "width_guard_mm",
+                    "height_guard_mm",
+                    "width_guard_ratio",
+                    "height_guard_ratio",
+                )
+            )
+            or not _finite_number(value["canonical_height_px"])
+            or not _finite_number(value["minimum_output_expansion_mm"])
+            or not _finite_number(value["output_expansion_limit_mm"])
+            or value["failure_kind"] is not None
+            or value["failure_detail"] is not None
+            or len(value["width_observation_ids"]) < 4
+        ):
+            raise ValueError("supported aspect-ratio authority is invalid")
+    elif (
+        value["failure_kind"]
+        not in {
+            "aperture_aspect_ratio_authority_unavailable",
+            "aperture_aspect_ratio_physical_prior_conflict",
+            "aperture_aspect_ratio_direct_conflict",
+            "aperture_aspect_ratio_budget_exhausted",
+        }
+        or not isinstance(value["failure_detail"], str)
+        or not value["failure_detail"]
+    ):
+        raise ValueError("failed aspect-ratio authority is invalid")
+    if value["calibration_id"] is not None and (
+        not isinstance(value["calibration_id"], str)
+        or not value["calibration_id"]
+        or not isinstance(value["axis_guard_calibration_id"], str)
+        or not value["axis_guard_calibration_id"]
+        or any(
+            value[key] is None
+            for key in (
+                "raw_width_over_height",
+                "guarded_width_over_height",
+                "scale_height_over_width",
+                "source_width_px",
+                "inferred_height_px",
+                "width_guard_mm",
+                "height_guard_mm",
+                "width_guard_ratio",
+                "height_guard_ratio",
+                "output_expansion_limit_mm",
+            )
+        )
+    ):
+        raise ValueError("calibrated aspect-ratio failure lost provenance")
+    if value["calibration_id"] is None and any(
+        value[key] is not None
+        for key in (
+            "axis_guard_calibration_id",
+            "raw_width_over_height",
+            "guarded_width_over_height",
+            "scale_height_over_width",
+            "source_width_px",
+            "inferred_height_px",
+            "effective_height_px",
+            "canonical_height_px",
+            "width_guard_mm",
+            "height_guard_mm",
+            "width_guard_ratio",
+            "height_guard_ratio",
+            "minimum_output_expansion_mm",
+            "output_expansion_limit_mm",
+        )
+    ):
+        raise ValueError("uncalibrated aspect-ratio failure has derived state")
+    if value["direct_height_px"] is not None and not _valid_interval(
+        value["direct_height_px"]
+    ):
+        raise ValueError("direct aspect-ratio comparison is invalid")
 
 
 def _validate_adjacency_coverage(value: object) -> None:
@@ -835,6 +993,9 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         budgets = lane["direct_use_budget_assessments"]
         alignment = lane.get("template_alignment")
         coarse = lane.get("coarse_strip_support")
+        _validate_aperture_aspect_ratio_authority(
+            lane.get("aperture_aspect_ratio_authority")
+        )
         if (
             not isinstance(coarse, dict)
             or set(coarse)
@@ -1005,6 +1166,10 @@ def _validate_development(record: dict[str, Any]) -> None:
             != len(placement.get("placements", ()))
             or not isinstance(lane.get("phase_competition"), dict)
             or not isinstance(lane.get("cross_competition"), dict)
+            or lane.get("aperture_aspect_ratio_authority")
+            != lane.get("cross_competition", {}).get(
+                "aperture_aspect_ratio_authority"
+            )
             or not isinstance(lane.get("template_alignment"), dict)
             or not isinstance(winner, dict)
             or set(winner)

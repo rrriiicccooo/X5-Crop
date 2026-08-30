@@ -155,6 +155,10 @@ def development_report_facts(
                 "cross_competition": typed_read_model(
                     lane.prepared.cross_competition
                 ),
+                "aperture_aspect_ratio_authority": typed_read_model(
+                    lane.prepared.cross_competition
+                    .aperture_aspect_ratio_authority
+                ),
                 "placement_competition": typed_read_model(
                     lane.placement_competition
                 ),

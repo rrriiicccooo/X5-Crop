@@ -63,13 +63,19 @@ class SourceScanGeometry:
             shared_scale_minimum,
             shared_scale_maximum,
         )
+        width_factor_minimum, width_factor_maximum = (
+            frame_spec.width_factor_bounds
+        )
+        height_factor_minimum, height_factor_maximum = (
+            frame_spec.height_factor_bounds
+        )
         width = JointAxisGeometry.create(
             axis_name="width",
             design_extent_mm=frame_spec.frame_width_mm,
             scale_interval_px_per_mm=shared_scale,
             factor_interval=PositiveInterval(
-                frame_spec.frame_width_factor_minimum,
-                frame_spec.frame_width_factor_maximum,
+                width_factor_minimum,
+                width_factor_maximum,
             ),
         )
         height = JointAxisGeometry.create(
@@ -77,8 +83,8 @@ class SourceScanGeometry:
             design_extent_mm=frame_spec.frame_height_mm,
             scale_interval_px_per_mm=shared_scale,
             factor_interval=PositiveInterval(
-                frame_spec.frame_height_factor_minimum,
-                frame_spec.frame_height_factor_maximum,
+                height_factor_minimum,
+                height_factor_maximum,
             ),
         )
         return cls(
@@ -120,9 +126,9 @@ class SourceScanGeometry:
         difference and a small scan-scale difference are indistinguishable to
         this cropper.  Direct width evidence therefore narrows W_px and direct
         height evidence narrows H_px.  This constructor never turns one into
-        evidence for the other; any future cross-axis inference must belong to
-        a separately calibrated, typed aspect-ratio authority and remain
-        correlated.  Both direct states are intersected across lanes below.
+        evidence for the other; the separate ``ApertureAspectRatioAuthority``
+        may later derive one correlated H interval without adding direct rank.
+        Both direct states are intersected across lanes below.
         """
 
         if (

@@ -5,7 +5,7 @@ from __future__ import annotations
 from bisect import bisect_left
 from dataclasses import replace
 import math
-from ...domain import FiniteInterval
+from ...domain import EvidenceState, FiniteInterval
 from .interval_math import (
     add as _add,
     intersect as _intersect,
@@ -39,6 +39,12 @@ from .template_cross_support import (
     SupportFitStatus,
     fit_enclosing_support,
 )
+from .template_aspect_ratio import (
+    consume_aperture_aspect_ratio_for_cross,
+    reconcile_direct_aperture_height,
+    require_aperture_aspect_ratio_for_cross,
+)
+from .template_aspect_ratio_model import ApertureAspectRatioFailureKind
 from .trace_support import trace_support_is_one_connected_run
 
 
@@ -224,9 +230,15 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     all_ids = tuple(item.observation_id for item in (*top, *bottom))
     if len(set(all_ids)) != len(all_ids):
         raise ValueError("cross observation registered more than once")
-    registered_run_ids = {item.run_id for item in (*top, *bottom)}
-    registered_runs = len(registered_run_ids)
-    fitted_observations = len(all_ids)
+    registered_runs = max(
+        int(inputs.registered_run_count),
+        len({item.run_id for item in (*top, *bottom)}),
+    )
+    fitted_observations = max(
+        int(inputs.fitted_observation_count),
+        len(all_ids),
+    )
+    aspect_ratio_authority = inputs.aperture_aspect_ratio_authority
     empty_receipt = lambda: _receipt(
         inputs=inputs,
         registered_runs=registered_runs,
@@ -244,6 +256,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             winner_basis=None,
             reason="cross registration bound exceeded",
             receipt=empty_receipt(),
+            aperture_aspect_ratio_authority=aspect_ratio_authority,
         )
     if not top and not bottom:
         return CrossFitCompetition(
@@ -254,9 +267,35 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             winner_basis=None,
             reason="cross fit requires top or bottom direct evidence",
             receipt=empty_receipt(),
+            aperture_aspect_ratio_authority=aspect_ratio_authority,
         )
     fixed_height = inputs.fixed_height_px
     assert isinstance(fixed_height, FiniteInterval)
+    inferred_height = (
+        aspect_ratio_authority.effective_height_px
+        if aspect_ratio_authority.state == EvidenceState.SUPPORTED
+        else None
+    )
+    inferred_canonical_height = (
+        aspect_ratio_authority.canonical_height_px
+        if inferred_height is not None
+        else None
+    )
+
+    def inferred_candidate(
+        binding,
+        *,
+        template_domain_complete: bool = False,
+    ):
+        if inferred_height is None or inferred_canonical_height is None:
+            return None
+        return _single_candidate(
+            binding,
+            fixed_height=inferred_height,
+            canonical_height_px=inferred_canonical_height,
+            source_direction=inputs.source_direction,
+            template_domain_complete=template_domain_complete,
+        )
     registered_trace_coordinates = (
         inputs.registered_trace_coordinates_px
         or tuple(
@@ -280,6 +319,8 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         if support_checked:
             return enclosing_support_fit
         support_checked = True
+        if inferred_height is None or inferred_canonical_height is None:
+            return None
         # Prefer one already closed coarse pair.  If none was compiled, only
         # role-unknown source support lines may form an enclosing output pair;
         # photo-aperture roles are never reinterpreted here.
@@ -302,8 +343,8 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             )
         competition = fit_enclosing_support(
             template=inputs.template,
-            fixed_height=fixed_height,
-            canonical_height_px=float(inputs.canonical_fixed_height_px),
+            fixed_height=inferred_height,
+            canonical_height_px=inferred_canonical_height,
             reference_trace_px=inputs.lane_reference_trace_px,
             top_bindings=support_top,
             bottom_bindings=support_bottom,
@@ -321,22 +362,22 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             candidate.bottom_binding.full_interval_px,
         )
         center = midpoint.center
-        canonical_height = float(inputs.canonical_fixed_height_px)
+        canonical_height = inferred_canonical_height
         top_canonical = center - canonical_height / 2.0
         bottom_canonical = center + canonical_height / 2.0
         top_full = FiniteInterval(
-            center - fixed_height.maximum / 2.0,
-            center - fixed_height.minimum / 2.0,
+            center - inferred_height.maximum / 2.0,
+            center - inferred_height.minimum / 2.0,
         )
         bottom_full = FiniteInterval(
-            center + fixed_height.minimum / 2.0,
-            center + fixed_height.maximum / 2.0,
+            center + inferred_height.minimum / 2.0,
+            center + inferred_height.maximum / 2.0,
         )
         direction = candidate.selected_direction
         enclosing_support_fit = CrossFit(
             template_id=inputs.template.template_id,
             lane_reference_trace_px=inputs.lane_reference_trace_px,
-            fixed_height_px=fixed_height,
+            fixed_height_px=inferred_height,
             top_canonical_px=top_canonical,
             bottom_canonical_px=bottom_canonical,
             top_fit_interval_px=FiniteInterval.exact(top_canonical),
@@ -358,7 +399,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             ),
             boundary_use=OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR,
             enclosing_support_pair=candidate.pair,
-            height_compatibility_px=fixed_height,
+            height_compatibility_px=inferred_height,
             shift_interval_px=top_full,
             parallel_direction_interval_degrees=(
                 direction.full_angle_interval_degrees
@@ -405,6 +446,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                     winner_basis=None,
                     reason="cross evaluated-fit bound exceeded",
                     receipt=receipt,
+                    aperture_aspect_ratio_authority=aspect_ratio_authority,
                 ),
                 receipt,
             )
@@ -420,6 +462,11 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                 winner_basis=CrossWinnerBasis.UNIQUE_ENCLOSING_SUPPORT,
                 reason=None,
                 receipt=receipt,
+                aperture_aspect_ratio_authority=(
+                    consume_aperture_aspect_ratio_for_cross(
+                        aspect_ratio_authority
+                    )
+                ),
             ),
             receipt,
         )
@@ -442,6 +489,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             winner_basis=None,
             reason=reason,
             receipt=receipt,
+            aperture_aspect_ratio_authority=aspect_ratio_authority,
         )
 
     required_support_regions = inputs.minimum_shared_trace_support
@@ -493,6 +541,9 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                             winner_basis=None,
                             reason="cross compatible-pair bound exceeded",
                             receipt=receipt,
+                            aperture_aspect_ratio_authority=(
+                                aspect_ratio_authority
+                            ),
                         )
                 index += 1
     spanning_top = tuple(
@@ -583,12 +634,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             else [
                 candidate
                 for item in spanning
-                if (candidate := _single_candidate(
-                    item,
-                    fixed_height=fixed_height,
-                    canonical_height_px=float(inputs.canonical_fixed_height_px),
-                    source_direction=inputs.source_direction,
-                )) is not None
+                if (candidate := inferred_candidate(item)) is not None
             ]
         )
     elif role_authorized_direct_pairs:
@@ -622,11 +668,8 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             candidates = [
                 candidate
                 for item in (*template_spanning_top, *template_spanning_bottom)
-                if (candidate := _single_candidate(
+                if (candidate := inferred_candidate(
                     item,
-                    fixed_height=fixed_height,
-                    canonical_height_px=float(inputs.canonical_fixed_height_px),
-                    source_direction=inputs.source_direction,
                     template_domain_complete=(
                         len(inputs.longitudinal_support_domains_px)
                         >= SPATIAL_SUPPORT_REGION_COUNT
@@ -644,12 +687,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         candidates = [
             candidate
             for item in one_sided
-            if (candidate := _single_candidate(
-                item,
-                fixed_height=fixed_height,
-                canonical_height_px=float(inputs.canonical_fixed_height_px),
-                source_direction=inputs.source_direction,
-            ))
+            if (candidate := inferred_candidate(item))
             is not None
         ]
     candidate_count_before_track_dominance = len(candidates)
@@ -680,9 +718,14 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             winner_basis=None,
             reason="cross evaluated-fit bound exceeded",
             receipt=receipt,
+            aperture_aspect_ratio_authority=aspect_ratio_authority,
         )
     receipt.validate_bounds()
     if not candidates:
+        if inferred_height is None:
+            aspect_ratio_authority = require_aperture_aspect_ratio_for_cross(
+                aspect_ratio_authority
+            )
         reason = (
             "direct top/bottom evidence contradicts fixed height"
             if top and bottom
@@ -713,7 +756,6 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         _fit_from_group(
             group,
             template=inputs.template,
-            fixed_height=fixed_height,
             lane_reference_trace_px=inputs.lane_reference_trace_px,
             registered_trace_coordinates_px=registered_trace_coordinates,
             longitudinal_support_domains_px=(
@@ -799,6 +841,38 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             best=best,
             runner_up=runner,
         )
+    resolved_aspect_ratio_authority = aspect_ratio_authority
+    if best.direct_pair:
+        if (
+            best.boundary_use == OutputBoundaryUse.APERTURE_PAIR
+            and best.height_compatibility_px is not None
+        ):
+            resolved_aspect_ratio_authority = reconcile_direct_aperture_height(
+                aspect_ratio_authority,
+                best.height_compatibility_px,
+            )
+            if (
+                resolved_aspect_ratio_authority.failure_kind
+                == ApertureAspectRatioFailureKind.DIRECT_CONFLICT
+            ):
+                return CrossFitCompetition(
+                    template_id=inputs.template.template_id,
+                    best=best,
+                    runner_up=runner,
+                    status=CrossFitStatus.UNRESOLVED,
+                    winner_basis=None,
+                    reason=resolved_aspect_ratio_authority.failure_detail,
+                    receipt=receipt,
+                    aperture_aspect_ratio_authority=(
+                        resolved_aspect_ratio_authority
+                    ),
+                )
+    else:
+        resolved_aspect_ratio_authority = (
+            consume_aperture_aspect_ratio_for_cross(
+                aspect_ratio_authority
+            )
+        )
     return CrossFitCompetition(
         template_id=inputs.template.template_id,
         best=best,
@@ -807,4 +881,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         winner_basis=CrossWinnerBasis.ONLY_AUTHORITATIVE_FIT,
         reason=None,
         receipt=receipt,
+        aperture_aspect_ratio_authority=(
+            resolved_aspect_ratio_authority
+        ),
     )

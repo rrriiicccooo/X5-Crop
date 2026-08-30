@@ -371,6 +371,41 @@ class PreparedTemplateLane(RegisteredTemplateLane):
             raise TypeError("cross competition must be the canonical cross fit")
         if self.cross_competition.template_id != self.template_spec.template_id:
             raise ValueError("cross fit and template spec disagree")
+        aspect_input = self.cross_input.aperture_aspect_ratio_authority
+        aspect_result = (
+            self.cross_competition.aperture_aspect_ratio_authority
+        )
+        if (
+            aspect_input.authority_id != aspect_result.authority_id
+            or aspect_input.calibration_id != aspect_result.calibration_id
+            or aspect_input.axis_guard_calibration_id
+            != aspect_result.axis_guard_calibration_id
+            or aspect_input.raw_width_over_height
+            != aspect_result.raw_width_over_height
+            or aspect_input.guarded_width_over_height
+            != aspect_result.guarded_width_over_height
+            or aspect_input.width_guard_mm != aspect_result.width_guard_mm
+            or aspect_input.height_guard_mm != aspect_result.height_guard_mm
+            or aspect_input.width_guard_ratio
+            != aspect_result.width_guard_ratio
+            or aspect_input.height_guard_ratio
+            != aspect_result.height_guard_ratio
+            or aspect_input.source_width_px != aspect_result.source_width_px
+        ):
+            raise ValueError("cross fit changed aperture aspect-ratio authority")
+        if aspect_result.consumed_for_cross_inference:
+            effective_height = aspect_result.effective_height_px
+            retained_height = (
+                self.source_scan_geometry.height_state.extent_projection_px()
+            )
+            if (
+                effective_height is None
+                or retained_height.minimum
+                < effective_height.minimum - 1.0e-9
+                or retained_height.maximum
+                > effective_height.maximum + 1.0e-9
+            ):
+                raise ValueError("source H lost consumed aspect-ratio inference")
         if len({item.observation_id for item in self.evidence_use_ledger}) != len(
             self.evidence_use_ledger
         ):

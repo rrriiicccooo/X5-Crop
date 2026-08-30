@@ -36,11 +36,19 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   首尾输出 Frame 各至少绑定一条直接长轴角色，不能由片夹位置凭空创造整张外侧 Frame。任一已选直接
   START/END 只有获得 source-wide edge、同一 separator pair 或独立 fixed-W Frame pair 的坐标权限后，
   才能进入最终 placement；局部孤立 edge 保留为观察并产生 typed review，不能反向参与 lattice 自证。
-- Format W/H 现在保存分格式、可非对称的跨相机 aperture prior；`half` 的 W 下界按黄金物理分布扩展为
-  名义值的 96.5%。Direct complete Frames 以完整 uncertainty 收紧 source W；唯一直接 aperture pair
-  收紧 source H。旧的“W 是纯扫描比例并按名义比例精确换算 H”已删除；当前尚未启用经黄金校准的
-  `ApertureAspectRatioAuthority`，因此比例证据不足时保守 review。未来 W→H 只能产生不增加独立 rank
-  的相关 interval，direct native boundary 仍优先且不被 catalog 拉回。
+- Format W/H compatibility 由一个 current-only 混合物理合同统一计算：
+  `guard_W=max(0.95 mm, 2.4%W)`、`guard_H=max(0.70 mm, 1.8%H)`。参数来自 105 个合格黄金 source、
+  494 个完整且全部直接可见 Frame 的 source-level 中位尺寸、分轴长 q95 与向外量化；不再保存 `half`
+  或其它 format 的 tolerance 特例。Direct complete Frames 以完整 uncertainty 收紧 source W，唯一直接
+  aperture pair 收紧 source H，native boundary 始终优先。
+- `ApertureAspectRatioAuthority` 已启用：各 format 的 source-level raw W/H 包络由两轴混合 guard 传播成
+  format-specific guarded ratio，再从至少两张完整直接 Frame 闭合的 W 推导一份 rank 0 相关 H。
+  Calibration/共同 scale/W authority 不足、physical prior 冲突、direct H 冲突与 5% 预算耗尽均有 typed
+  failure；direct H 存在时优先承担 cross。没有合格黄金数据的 format 保守 review，不作精确名义比例换算。
+- Separator 仍以 catalog gap 为搜索中心，实际宽度由直接 material edges 与 local advance 拥有；holder
+  extent 保留独立的外部 ±3.5% 设计先验。二者都没有为了复用 aperture guard 而改变物理含义。
+- Cross 注册超过编译上界时不再抛出 runtime error；完整实际计数进入 typed `producer_bound_exceeded`
+  receipt，并由 Gate 安全 review，不截断观察或提高魔法上限。
 - 当前选择仍只使用 typed hard facts；没有启用 score。架构允许未来在硬合法候选之间加入经独立数据
   校准、带高阈值与 abstention 的概率选择，但未经校准的 score 不得拥有最终决定权，runner
   必须继续报告。
@@ -67,8 +75,8 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   阻断原因；报告同时保存全局未知量 constraint rank、逐 adjacency query/trace/coordinate coverage 与
   直接角色/外侧 Frame observation authority，以及 dark/light material、逐区域状态和冲突。Debug 不重新
   求解，也不把 review candidate 伪装为正式输出。当前 report revision 为
-  `x5crop_v5_template_report_18`，并显式报告 source W/H 状态与相关 Frame-width inference；不保留旧
-  schema 兼容路径。
+  `x5crop_v5_template_report_19`，并显式报告 source W/H、相关 Frame-width inference、aspect calibration、
+  raw/guarded ratio、两轴 guard、推导 H、预算与 typed failure；不保留旧 schema 兼容路径。
 - 正式 TIFF 保真 16-bit RGB、ICC、resolution、支持的 metadata 与无损压缩，并写
   `Orientation=1`。完整 source 先写 staging，再原子发布到尚不存在的目录。
 - Report、Gate 与 final geometry 各有唯一 owner；`CandidateGate` 只记录事实，`DecisionGate` 创建终态。
