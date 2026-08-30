@@ -137,6 +137,27 @@ def _footprint(
     return convex_hull(tuple(points))
 
 
+def _maximum_same_state_cross_alignment_padding_px(
+    placement: FormatPlacement,
+    frame: TemplateFrame,
+    projection: FeasiblePlacementProjection,
+) -> float | None:
+    """Bound added top+bottom line padding in one feasible support state."""
+
+    if (
+        placement.cross_fit.boundary_use
+        != OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
+    ):
+        return None
+    return max(
+        residuals[BoundaryRole.TOP] + residuals[BoundaryRole.BOTTOM]
+        for state in projection.frame_states[frame.lane_ordinal - 1]
+        for residuals in (
+            _state_boundary_residuals(placement, frame, state),
+        )
+    )
+
+
 def _canonical_boundaries(
     frame: TemplateFrame,
 ) -> dict[BoundaryRole, FrameBoundaryGeometry]:
@@ -602,6 +623,13 @@ def output_footprint_from_template_placement(
         )
         for role in _ROLES
     )
+    maximum_same_state_cross_alignment_padding_px = (
+        _maximum_same_state_cross_alignment_padding_px(
+            placement,
+            frame,
+            projection,
+        )
+    )
     return OutputFootprint(
         geometry_id=run_local_id(
             "template-output-footprint",
@@ -613,6 +641,9 @@ def output_footprint_from_template_placement(
         requested_source_footprint=requested,
         required_source_footprint=required,
         boundary_protections=protections,
+        maximum_same_state_cross_alignment_padding_px=(
+            maximum_same_state_cross_alignment_padding_px
+        ),
         saturation_facts=saturation,
         sampling_authority_box=authority,
         authority_profile_id=lane.domain.authority_profile_id,
@@ -668,9 +699,10 @@ def template_direct_use_budget_assessment(
         )
         for role in _ROLES
     }
-    support_cross_alignment_padding_mm = (
-        expansion_mm[BoundaryRole.TOP]
-        + expansion_mm[BoundaryRole.BOTTOM]
+    maximum_same_state_cross_alignment_padding_mm = (
+        height_state.worst_case_mm(
+            float(output.maximum_same_state_cross_alignment_padding_px)
+        )
         if support_output
         else None
     )
@@ -703,15 +735,16 @@ def template_direct_use_budget_assessment(
             support_ratio
             <= OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio
         )
-    support_cross_alignment_within_limit = (
+    maximum_same_state_cross_alignment_padding_within_limit = (
         None
-        if support_cross_alignment_padding_mm is None
-        else support_cross_alignment_padding_mm <= limit_mm[BoundaryRole.TOP]
+        if maximum_same_state_cross_alignment_padding_mm is None
+        else maximum_same_state_cross_alignment_padding_mm
+        <= limit_mm[BoundaryRole.TOP]
     )
     supported = (
         all(item.within_limit for item in edge_assessments)
         and support_within_limit is not False
-        and support_cross_alignment_within_limit is not False
+        and maximum_same_state_cross_alignment_padding_within_limit is not False
     )
     return DirectUseBudgetAssessment(
         geometry_id=output.geometry_id,
@@ -719,11 +752,11 @@ def template_direct_use_budget_assessment(
         edge_assessments=edge_assessments,
         enclosing_support_height_ratio=support_ratio,
         enclosing_support_within_limit=support_within_limit,
-        support_cross_alignment_padding_mm=(
-            support_cross_alignment_padding_mm
+        maximum_same_state_cross_alignment_padding_mm=(
+            maximum_same_state_cross_alignment_padding_mm
         ),
-        support_cross_alignment_within_limit=(
-            support_cross_alignment_within_limit
+        maximum_same_state_cross_alignment_padding_within_limit=(
+            maximum_same_state_cross_alignment_padding_within_limit
         ),
         state=(
             EvidenceState.SUPPORTED

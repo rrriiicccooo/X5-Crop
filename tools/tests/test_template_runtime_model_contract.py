@@ -209,6 +209,7 @@ def _output_footprint():
                 BoundaryRole.BOTTOM,
             )
         ),
+        maximum_same_state_cross_alignment_padding_px=None,
         saturation_facts=(),
         sampling_authority_box=Box(0, 0, 10, 10),
         authority_profile_id="135_standard",

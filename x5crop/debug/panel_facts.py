@@ -278,6 +278,15 @@ def selected_output_safety_summary(detection: FinalDetection) -> str:
         for budget in budgets
         for edge in budget.edge_assessments
         if edge.limit_applies and edge.limit_mm > 0.0
+    ) + tuple(
+        float(budget.maximum_same_state_cross_alignment_padding_mm)
+        / min(
+            edge.limit_mm
+            for edge in budget.edge_assessments
+            if edge.role.value in {"top", "bottom"}
+        )
+        for budget in budgets
+        if budget.maximum_same_state_cross_alignment_padding_mm is not None
     )
     protections = tuple(
         protection

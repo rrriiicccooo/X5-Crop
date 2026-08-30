@@ -173,13 +173,22 @@ def protected_output_panel(
                 for edge in budget.edge_assessments
                 if not edge.within_limit
             )
+            failed_parts = [failed_roles] if failed_roles else []
+            if budget.enclosing_support_within_limit is False:
+                failed_parts.append("SUPPORT HEIGHT")
+            if (
+                budget.maximum_same_state_cross_alignment_padding_within_limit
+                is False
+            ):
+                failed_parts.append("CROSS STATE")
             budget_labels.append(
                 (
                     max(
                         target_box[0],
                         int(math.floor(min(point[0] for point in final_output))),
                     ),
-                    f"F{identity.global_output_ordinal} · BUDGET {failed_roles}",
+                    f"F{identity.global_output_ordinal} · BUDGET "
+                    + "/".join(failed_parts),
                 )
             )
         left = max(

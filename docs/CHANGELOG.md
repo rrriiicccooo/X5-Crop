@@ -55,6 +55,9 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   外缘只限定不存在的源像素，并按 `source_boundary_optional_bleed | source_boundary_joint_protection`
   显式记录；内部 dual-lane 边界仍按 `lane_boundary_*` 阻断，不能借裁小获得批准。5% 预算继续使用未裁小
   requested footprint，Debug 以虚线保留完整请求，不静默丢失保护事实。
+- Enclosing support 的 direct-use 预算不再把 top/bottom 的位置不确定性重复计入联合 alignment padding，
+  也不再相加不同可行状态的边缘极值。逐侧完整 expansion、`1.1H` support span 与同一状态额外直线
+  alignment padding 仍分别受原有上限约束；报告和 Debug 显式保存该同一状态最大值，未放宽 5% 产品预算。
 - Cross registration 现在是同角色边界 family identity 的唯一 owner。只有一次 robust refit 精确保留完整
   transition union 时，多个局部 fragment 才合并为一个 canonical observation；refit 丢失任一 transition
   时全部成员原样保留，并报告 typed `complete_transition_union_refit_rejected`。Selection 中旧的
@@ -93,7 +96,8 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   阻断原因；报告同时保存全局未知量 constraint rank、逐 adjacency query/trace/coordinate coverage 与
   直接角色/外侧 Frame observation authority，以及 dark/light material、逐区域状态和冲突。Debug 不重新
   求解，也不把 review candidate 伪装为正式输出。当前 report revision 为
-  `x5crop_v5_template_report_22`，并显式报告三层 source footprint、typed saturation、source W/H、相关
+  `x5crop_v5_template_report_23`，并显式报告三层 source footprint、typed saturation、同一状态 cross
+  alignment padding、source W/H、相关
   Frame-width inference、aspect calibration、raw/guarded ratio、两轴 guard、推导 H、Cross typed root
   failure、pair support mode、family resolution 与预算；不保留旧 schema 兼容路径。
 - 正式 TIFF 保真 16-bit RGB、ICC、resolution、支持的 metadata 与无损压缩，并写

@@ -278,7 +278,9 @@ class OutputFootprint:
     true TIFF boundary, which is the absolute limit of available source
     pixels.  The typed saturation fact preserves whether this bounded optional
     bleed or joint protection.  Internal lane boundaries are never clipped
-    into approval.
+    into approval.  Enclosing support also retains the maximum added line-
+    alignment padding from one feasible state; support-position uncertainty
+    remains owned by the separate per-side expansions.
     """
 
     geometry_id: str
@@ -287,6 +289,7 @@ class OutputFootprint:
     requested_source_footprint: ConvexPolygon
     required_source_footprint: ConvexPolygon
     boundary_protections: tuple[BoundaryProtectionFact, ...]
+    maximum_same_state_cross_alignment_padding_px: float | None
     saturation_facts: tuple[FootprintSaturationFact, ...]
     sampling_authority_box: Box
     authority_profile_id: str
@@ -318,6 +321,21 @@ class OutputFootprint:
             BoundaryRole.BOTTOM,
         ):
             raise ValueError("output footprint requires four ordered protections")
+        support = (
+            self.envelope.boundary_use
+            == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
+        )
+        if support != (
+            self.maximum_same_state_cross_alignment_padding_px is not None
+        ):
+            raise ValueError("same-state cross padding requires enclosing support")
+        if support and (
+            not math.isfinite(
+                float(self.maximum_same_state_cross_alignment_padding_px)
+            )
+            or float(self.maximum_same_state_cross_alignment_padding_px) < 0.0
+        ):
+            raise ValueError("same-state cross padding is invalid")
         if len({fact.authority_side for fact in self.saturation_facts}) != len(
             self.saturation_facts
         ):
@@ -404,15 +422,16 @@ class DirectUseBudgetAssessment:
     edge_assessments: tuple[DirectUseBudgetEdgeAssessment, ...]
     enclosing_support_height_ratio: float | None
     enclosing_support_within_limit: bool | None
-    support_cross_alignment_padding_mm: float | None
-    support_cross_alignment_within_limit: bool | None
+    maximum_same_state_cross_alignment_padding_mm: float | None
+    maximum_same_state_cross_alignment_padding_within_limit: bool | None
     state: EvidenceState
 
     def __post_init__(self) -> None:
         supported = all(item.within_limit for item in self.edge_assessments) and (
             self.enclosing_support_within_limit is not False
         ) and (
-            self.support_cross_alignment_within_limit is not False
+            self.maximum_same_state_cross_alignment_padding_within_limit
+            is not False
         )
         if (
             not self.geometry_id
@@ -435,9 +454,10 @@ class DirectUseBudgetAssessment:
         if support != (self.enclosing_support_height_ratio is not None) or support != (
             self.enclosing_support_within_limit is not None
         ) or support != (
-            self.support_cross_alignment_padding_mm is not None
+            self.maximum_same_state_cross_alignment_padding_mm is not None
         ) or support != (
-            self.support_cross_alignment_within_limit is not None
+            self.maximum_same_state_cross_alignment_padding_within_limit
+            is not None
         ):
             raise ValueError("enclosing-support budget fields are inconsistent")
         if support and (
@@ -446,7 +466,9 @@ class DirectUseBudgetAssessment:
         ):
             raise ValueError("enclosing-support height ratio is invalid")
         if support:
-            padding = float(self.support_cross_alignment_padding_mm)
+            padding = float(
+                self.maximum_same_state_cross_alignment_padding_mm
+            )
             cross_limit = min(
                 item.limit_mm
                 for item in self.edge_assessments
@@ -455,10 +477,12 @@ class DirectUseBudgetAssessment:
             if (
                 not math.isfinite(padding)
                 or padding < 0.0
-                or bool(self.support_cross_alignment_within_limit)
+                or bool(
+                    self.maximum_same_state_cross_alignment_padding_within_limit
+                )
                 != (padding <= cross_limit)
             ):
-                raise ValueError("support cross-alignment budget is invalid")
+                raise ValueError("same-state cross padding budget is invalid")
 
 
 @dataclass(frozen=True)

@@ -92,6 +92,7 @@ def sampling_footprint(authority: Box) -> OutputFootprint:
                 BoundaryRole.BOTTOM,
             )
         ),
+        maximum_same_state_cross_alignment_padding_px=None,
         saturation_facts=(),
         sampling_authority_box=authority,
         authority_profile_id="sampling-fixture",

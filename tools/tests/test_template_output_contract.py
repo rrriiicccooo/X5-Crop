@@ -393,6 +393,63 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         self.assertTrue(assessment.enclosing_support_within_limit)
 
+    def test_support_position_uncertainty_is_not_alignment_padding(self) -> None:
+        placement = _enclosing_support_placement(
+            support_span_px=248.0,
+            support_position_uncertainty_px=2.0,
+        )
+        output = output_footprint_from_template_placement(
+            placement,
+            project_selected_placement(placement),
+            lane=_lane(),
+            lane_ordinal=1,
+            layout="horizontal",
+        )
+
+        assessment = template_direct_use_budget_assessment(placement, output)
+        edges = {item.role: item for item in assessment.edge_assessments}
+        cross_limit = edges[BoundaryRole.TOP].limit_mm
+
+        self.assertGreater(
+            edges[BoundaryRole.TOP].expansion_mm
+            + edges[BoundaryRole.BOTTOM].expansion_mm,
+            cross_limit,
+        )
+        self.assertTrue(edges[BoundaryRole.TOP].within_limit)
+        self.assertTrue(edges[BoundaryRole.BOTTOM].within_limit)
+        self.assertLessEqual(
+            assessment.maximum_same_state_cross_alignment_padding_mm,
+            cross_limit,
+        )
+        self.assertTrue(
+            assessment.maximum_same_state_cross_alignment_padding_within_limit
+        )
+        self.assertEqual(assessment.state, EvidenceState.SUPPORTED)
+
+    def test_same_state_cross_alignment_padding_has_one_joint_limit(self) -> None:
+        placement = _enclosing_support_placement(
+            frame_count=3,
+            support_span_px=241.0,
+            observed_direction_half_width_degrees=3.0,
+        )
+        output = output_footprint_from_template_placement(
+            placement,
+            project_selected_placement(placement),
+            lane=_lane(),
+            lane_ordinal=3,
+            layout="horizontal",
+        )
+
+        assessment = template_direct_use_budget_assessment(placement, output)
+        edges = {item.role: item for item in assessment.edge_assessments}
+
+        self.assertTrue(edges[BoundaryRole.TOP].within_limit)
+        self.assertTrue(edges[BoundaryRole.BOTTOM].within_limit)
+        self.assertFalse(
+            assessment.maximum_same_state_cross_alignment_padding_within_limit
+        )
+        self.assertEqual(assessment.state, EvidenceState.CONTRADICTED)
+
     def test_selected_placement_produces_supported_output_footprint(self) -> None:
         placement = _placement()
         output = output_footprint_from_template_placement(

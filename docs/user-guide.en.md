@@ -77,7 +77,9 @@ Measurement uncertainty, local residual, and bleed share a maximum 5% W/H outwar
 borrow budget from one another. A directly observed continuous outer-support pair may replace unavailable aperture
 top/bottom when it fully encloses fixed H and its total height is no greater than `1.1H`; this direct pair does not
 depend on W/H ratio inference. That mode adds no 0.25 mm cross bleed, while per-side and joint alignment padding remain
-inside the 5% budget. A true TIFF edge explicitly bounds sampling to source pixels that actually exist; the report says
+inside their 5% budgets. The joint term uses line-alignment padding from one feasible state only; support-position
+uncertainty remains in the per-side budgets and incompatible top/bottom extrema are never added. A true TIFF edge
+explicitly bounds sampling to source pixels that actually exist; the report says
 whether bleed alone or joint protection reached that edge, while the complete unbounded request still owns the 5%
 budget. Crossing an internal dual-lane boundary or any other authority still enters review, and no bounding is silent.
 

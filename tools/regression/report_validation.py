@@ -39,8 +39,8 @@ _DIRECT_USE_BUDGET_FIELDS = {
     "edge_assessments",
     "enclosing_support_height_ratio",
     "enclosing_support_within_limit",
-    "support_cross_alignment_padding_mm",
-    "support_cross_alignment_within_limit",
+    "maximum_same_state_cross_alignment_padding_mm",
+    "maximum_same_state_cross_alignment_padding_within_limit",
     "state",
 }
 _DIRECT_USE_EDGE_FIELDS = {
@@ -757,6 +757,18 @@ def validate_output_footprint_authority(output: dict[str, Any]) -> None:
         output.get("sampling_authority_box"),
         "sampling authority box",
     )
+    envelope = output.get("envelope")
+    boundary_use = (
+        envelope.get("boundary_use") if isinstance(envelope, dict) else None
+    )
+    same_state_cross_padding = output.get(
+        "maximum_same_state_cross_alignment_padding_px"
+    )
+    support_output = boundary_use == "enclosing_support_pair"
+    if support_output != _finite_number(same_state_cross_padding) or (
+        support_output and float(same_state_cross_padding) < 0.0
+    ):
+        raise ValueError("same-state cross padding is invalid")
     expected = set(_outside_authority_sides(requested, authority))
     facts = output.get("saturation_facts")
     if not isinstance(facts, list):
@@ -1086,6 +1098,7 @@ def _validate_geometry(record: dict[str, Any]) -> None:
     for lane in geometry["lanes"]:
         outputs = lane["output_footprints"]
         budgets = lane["direct_use_budget_assessments"]
+        outputs_by_id = {item["geometry_id"]: item for item in outputs}
         alignment = lane.get("template_alignment")
         coarse = lane.get("coarse_strip_support")
         _validate_aperture_aspect_ratio_authority(
@@ -1178,10 +1191,13 @@ def _validate_geometry(record: dict[str, Any]) -> None:
                     budget["enclosing_support_within_limit"], bool
                 )
                 and _finite_number(
-                    budget["support_cross_alignment_padding_mm"]
+                    budget["maximum_same_state_cross_alignment_padding_mm"]
                 )
                 and isinstance(
-                    budget["support_cross_alignment_within_limit"], bool
+                    budget[
+                        "maximum_same_state_cross_alignment_padding_within_limit"
+                    ],
+                    bool,
                 )
             )
             if support != support_fields_present:
@@ -1191,16 +1207,49 @@ def _validate_geometry(record: dict[str, Any]) -> None:
                 for key in (
                     "enclosing_support_height_ratio",
                     "enclosing_support_within_limit",
-                    "support_cross_alignment_padding_mm",
-                    "support_cross_alignment_within_limit",
+                    "maximum_same_state_cross_alignment_padding_mm",
+                    "maximum_same_state_cross_alignment_padding_within_limit",
                 )
             ):
                 raise ValueError("aperture budget carries support fields")
             if support:
+                output = outputs_by_id.get(budget["geometry_id"])
+                source_geometry = lane.get("source_scan_geometry")
+                height_state = (
+                    None
+                    if not isinstance(source_geometry, dict)
+                    else source_geometry.get("height_state")
+                )
+                height_vertices = (
+                    None
+                    if not isinstance(height_state, dict)
+                    else height_state.get("vertices")
+                )
+                if (
+                    not isinstance(output, dict)
+                    or not isinstance(height_vertices, list)
+                    or not height_vertices
+                    or any(
+                        not isinstance(vertex, list)
+                        or len(vertex) != 2
+                        or not _finite_number(vertex[0])
+                        or float(vertex[0]) <= 0.0
+                        for vertex in height_vertices
+                    )
+                ):
+                    raise ValueError("same-state cross padding source is invalid")
                 cross_limit = min(
                     float(edge["limit_mm"])
                     for edge in edges
                     if edge["role"] in {"top", "bottom"}
+                )
+                padding_px = output.get(
+                    "maximum_same_state_cross_alignment_padding_px"
+                )
+                if not _finite_number(padding_px) or float(padding_px) < 0.0:
+                    raise ValueError("same-state cross padding is invalid")
+                expected_padding_mm = float(padding_px) / min(
+                    float(vertex[0]) for vertex in height_vertices
                 )
                 if (
                     float(budget["enclosing_support_height_ratio"]) <= 1.0
@@ -1209,12 +1258,29 @@ def _validate_geometry(record: dict[str, Any]) -> None:
                         float(budget["enclosing_support_height_ratio"])
                         <= OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio
                     )
-                    or float(budget["support_cross_alignment_padding_mm"])
+                    or abs(
+                        float(
+                            budget[
+                                "maximum_same_state_cross_alignment_padding_mm"
+                            ]
+                        )
+                        - expected_padding_mm
+                    )
+                    > 1.0e-8
+                    or float(
+                        budget[
+                            "maximum_same_state_cross_alignment_padding_mm"
+                        ]
+                    )
                     < 0.0
-                    or budget["support_cross_alignment_within_limit"]
+                    or budget[
+                        "maximum_same_state_cross_alignment_padding_within_limit"
+                    ]
                     != (
                         float(
-                            budget["support_cross_alignment_padding_mm"]
+                            budget[
+                                "maximum_same_state_cross_alignment_padding_mm"
+                            ]
                         )
                         <= cross_limit
                     )
@@ -1223,7 +1289,10 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             supported = all(edge["within_limit"] for edge in edges) and (
                 budget["enclosing_support_within_limit"] is not False
             ) and (
-                budget["support_cross_alignment_within_limit"] is not False
+                budget[
+                    "maximum_same_state_cross_alignment_padding_within_limit"
+                ]
+                is not False
             )
             if (budget["state"] == "supported") != supported:
                 raise ValueError("direct-use budget state is invalid")

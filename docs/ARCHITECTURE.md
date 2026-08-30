@@ -703,11 +703,22 @@ max(0, 5% W - joint uncertainty - line residual - base sequence bleed)
 普通切分再靠扩大 bleed 自动批准。Debug 必须把基础 bleed、topology protection、uncertainty 与 residual
 分别显示。当前 runtime 尚未产生 `topology_protection`。
 
-`ENCLOSING_SUPPORT_PAIR` 的 top/bottom 使用直接 support 边，不再添加 cross bleed；除总 span
-`<= 1.1H` 外，每侧自身 expansion 仍不得超过 5%，两侧为对齐同一直接支撑状态而增加的 cross padding
-之和也不得超过一个 5% 短轴预算。Start/end 使用正常 sequence bleed 和各自 5% 预算。
+`ENCLOSING_SUPPORT_PAIR` 的 top/bottom 使用直接 support 边，不再添加 cross bleed。其预算由三个不重叠的
+合同共同组成：直接 support span 不超过 `1.1H`；top/bottom 各自的完整 expansion 不超过 `5%H`；同一
+可行状态中，为覆盖两条 support 直线局部 departure 与 pixel-center span 而额外加入的 alignment padding
+之和不超过 `5%H`。Support 的位置不确定性已经进入逐侧完整 expansion，不能再次算入 alignment padding；
+也不能把两个不同可行状态的 top/bottom 极值相加。Start/end 使用正常 sequence bleed 和各自 5% 预算。
 
-`OutputFootprint` 同时保存三层 source-space polygon：`mandatory_source_footprint` 含联合测量不确定性、
+| enclosing support 状态 | 结果 |
+|---|---|
+| span `<= 1.1H`，四边逐侧预算成立，同一状态 alignment padding `<= 5%H` | `supported` |
+| 任一边完整 expansion 超过自己的 5% | `direct_use_budget_exceeded` |
+| support span 超过 `1.1H` | `direct_use_budget_exceeded` |
+| 每侧各自成立，但同一状态 alignment padding 合计超过 `5%H` | `direct_use_budget_exceeded` |
+| 只有不同状态的 top/bottom 极值相加才超过 5% | 不据此阻断 |
+
+`OutputFootprint` 同时保存三层 source-space polygon，以及
+`maximum_same_state_cross_alignment_padding_px`：`mandatory_source_footprint` 含联合测量不确定性、
 直线 residual 与完整 pixel-center span；`requested_source_footprint` 再加入完整产品 bleed；
 `required_source_footprint` 是最终实际采样范围。完整 5% 预算始终按 requested 层评估，不能因源边界而
 收窄或掩盖超预算。
