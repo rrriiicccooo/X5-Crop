@@ -26,14 +26,18 @@ adjacency/placement 模型。
 - `b54ac17f` 把输出保护拆为 mandatory、完整 requested 与实际 required 三层 polygon。真实 TIFF 外缘
   显式限定不存在的源像素，并区分 optional bleed 与 joint protection saturation；内部 dual-lane 边界
   两种情况都继续阻断。5% 预算使用未限定 requested 层，Debug 与 report 保留完整请求、kind 和越界距离。
-  S083、S084、S085、S092 因此安全 auto；S094 仍由独立预算阻断，S088 仍无 placement。
+  S083、S084、S085、S092 因此安全 auto；S088 仍无 placement。
+- `b7ab6d40` 修正 enclosing support 的 direct-use 预算：top/bottom 各自完整 expansion 继续受逐侧
+  5% 限制，support span 继续受 `1.1H` 限制；联合项只计算同一可行状态中额外的直线 alignment
+  padding，不再重复收费 support 位置 uncertainty 或相加互斥极值。S094 因此安全 auto；S017 的真实
+  超预算候选仍被 Gate 阻断。
 - 完整 development gold 为 110/110 完成、分析错误 0、`unsafe_approved_auto = 0`。安全 auto 为基础
-  nominal 10/66、较难 nominal 1/30、challenge 0/14；基础 nominal candidate 为 54 个不可用、11 个安全、
+  nominal 11/66、较难 nominal 1/30、challenge 0/14；基础 nominal candidate 为 54 个不可用、11 个安全、
   1 个不安全，较难 nominal 为 29 个不可用、1 个安全。安全 auto 为 S022、S025、S063、S064、S067、
-  S083、S084、S085、S087、S092、S095；全部 challenge 均安全 review。
-- 黄金 receipt 的 detector、comparator 与 cohort 均精确匹配 `b54ac17f`；detector manifest 为
-  `e20f6ac108a410eea3cf172045ada1545baf34c9678f8e3da93255bc111ffc8d`。24-source 正式性能 mean 为
-  2.756 秒，p95 为 4.544 秒，最慢 S109 为 4.781 秒；5 秒 Gate 通过且 3 秒 non-blocking 目标达到。
+  S083、S084、S085、S087、S092、S094、S095；全部 challenge 均安全 review。
+- 黄金 receipt 的 detector、comparator 与 cohort 均精确匹配 `b7ab6d40`；detector manifest 为
+  `bff3e2c9065456739f5d6f2facd42a45ba9111348a6fda98a7a73085656996a3`。24-source 正式性能 mean 为
+  2.754 秒，p95 为 4.542 秒，最慢 S109 为 4.778 秒；5 秒 Gate 通过且 3 秒 non-blocking 目标达到。
   Receipt 只证明该 commit、记录的依赖和 M2 Max 主机。
 
 ## 当前物理证据
@@ -52,14 +56,13 @@ adjacency/placement 模型。
 
 ## 开放风险
 
-- 基础 nominal 仍有 56/66 review，较难 nominal 有 29/30 review。当前完整集有 34 个
+- 基础 nominal 仍有 55/66 review，较难 nominal 有 29/30 review。当前完整集有 34 个
   `direct_role_binding_authority_unavailable`、29 个 `discrete_phase_ambiguous`、18 个
   `non_equivalent_fits`、9 个 `fixed_template_mismatch`、6 个 `global_lattice_authority_unavailable` 与 6 个
   `aperture_aspect_ratio_budget_exhausted`。竞争必须由新的直接观察 identity、权限或相关安全状态闭合；
   不得恢复 W 自授权、缩窄 guard、精确 W→H 或改 challenge 分类。
-- 当前唯一几何安全但最终 review 的 candidate 是 S094（`direct_use_budget_exceeded`）；唯一不安全
-  candidate 是同样被预算阻断的 S017。它们构成下一机制的正反例。其余 97 个 task 没有 selected
-  candidate，不能把“没有输出”误当成精度问题。
+- 当前唯一不安全 candidate 是 S017，并继续由 `direct_use_budget_exceeded` 阻断；其余 97 个 task 没有
+  selected candidate，不能把“没有输出”误当成精度问题。
 - 当前黄金同时参与 development calibration 与 development 验收，只能证明该集合上的安全与可复算性；
   尚无 sealed acceptance，也没有 `xpan`、`120-645`、`135-dual` 的独立黄金覆盖。
 - 当前开发集不能事后兼任概率 calibration。未来 scorer 仍需预先冻结的新数据、OOD、abstention 和独立
@@ -67,10 +70,7 @@ adjacency/placement 模型。
 
 ## 精确下一步
 
-1. 先用 S094（安全）与 S017（不安全）闭合 `direct_use_budget_exceeded`：审计同一 placement 的相关
-   measurement state、line residual 与逐侧 expansion，消除互斥极值的重复计算；不得扩大 5% 上限、缩窄
-   原始 uncertainty 或为 S094 建例外。
-2. 再拆解 34 个 `direct_role_binding_authority_unavailable`。新增能力必须来自同一 registered 像素的通用
+1. 拆解 34 个 `direct_role_binding_authority_unavailable`。新增能力必须来自同一 registered 像素的通用
    source-wide、跨高度或 separator physical identity，不能让两个弱局部边界重新凭 W 互相授权。
-3. 随后按独立未知量拆解 `discrete_phase_ambiguous` 与 `non_equivalent_fits`，完善候选无关 separator
+2. 随后按独立未知量拆解 `discrete_phase_ambiguous` 与 `non_equivalent_fits`，完善候选无关 separator
    coverage、局部片距和弱边缘权限；contact/overlap 仍在 nominal 机制稳定后作为同一 adjacency 模型扩展。
