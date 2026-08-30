@@ -1256,7 +1256,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
     def test_more_supported_lattice_locations_outrank_more_local_edges(
         self,
     ) -> None:
-        coordinates = (10.0, 127.0, 227.0, 247.0, 350.0, 370.0, 470.0)
+        coordinates = (10.0, 126.0, 227.0, 247.0, 350.0, 370.0, 470.0)
         roles = (
             BoundaryRole.START,
             BoundaryRole.START,
@@ -1286,6 +1286,40 @@ class TemplatePhaseContractTest(unittest.TestCase):
             result.best.phase_support_count,
             result.runner_up.phase_support_count,
         )
+
+    def test_residual_limit_is_inclusive_across_numeric_backends(self) -> None:
+        coordinates = (10.0, 127.0, 227.0, 247.0, 350.0, 370.0, 470.0)
+        roles = (
+            BoundaryRole.START,
+            BoundaryRole.START,
+            BoundaryRole.END,
+            BoundaryRole.START,
+            BoundaryRole.END,
+            BoundaryRole.START,
+            BoundaryRole.END,
+        )
+        observations = tuple(
+            replace(
+                edge(f"threshold:{index}", coordinate),
+                qualified_anchor_roles=(role,),
+                polarity=1 if role == BoundaryRole.START else -1,
+            )
+            for index, (coordinate, role) in enumerate(
+                zip(coordinates, roles, strict=True)
+            )
+        )
+
+        result = fit_template_phase(observations, template(3))
+
+        self.assertEqual(result.status, PhaseFitStatus.AMBIGUOUS)
+        self.assertEqual(
+            result.failure_kind,
+            PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS,
+        )
+        assert result.best is not None and result.runner_up is not None
+        self.assertEqual(result.best.phase_support_count, 4)
+        self.assertEqual(result.runner_up.phase_support_count, 4)
+        self.assertAlmostEqual(result.runner_up.residual_sum_px, 12.0)
 
     def test_fixed_width_pair_rejects_nearer_interior_end_edge(self) -> None:
         observations = (

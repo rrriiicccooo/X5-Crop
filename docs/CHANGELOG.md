@@ -120,6 +120,9 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
 
 - `tifffile + imagecodecs` 独占正式 TIFF I/O；OpenCV 只作有界像素测量，SciPy 只作数值与 sampling，
   Pillow 只在 Debug Analysis 延迟导入。生产默认 `--jobs 1`、上限 3，内部数值线程固定为 1。
+- Phase residual compatibility 在物理阈值处保持包含语义，并只吸收 `1e-9 px` 的浮点舍入误差；不同
+  NumPy/LAPACK 构建不得因此改变 `resolved/ambiguous`。对应阈值与独立支持回归随 full/pre-push
+  验证执行。
 - Registered gray、affine crop buffer 与 source-local cache 按阶段释放；这些优化不得改变 observation、
   placement、Gate、footprint 或输出像素。
 - `tools/verify` 是 Hook、CI 与本地验证的唯一入口。Diagnostic 只证明工程合同；gold accuracy、性能与

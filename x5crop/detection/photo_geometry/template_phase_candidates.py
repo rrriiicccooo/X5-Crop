@@ -33,6 +33,9 @@ from .template_pitch import refine_placement_pitch_interval
 from .template_evidence import separator_support_authority
 
 
+_NUMERIC_RESIDUAL_EPSILON_PX = 1.0e-9
+
+
 @dataclass(frozen=True)
 class _AnchorFact:
     observation_id: ObservationId
@@ -1376,7 +1379,15 @@ def _fit_seed(
     )
     residual_sum = sum(residuals)
     residual_mean = residual_sum / len(residuals)
-    residual_compatible = residual_mean <= max(2.0, width * 0.015)
+    residual_compatibility_limit = max(2.0, width * 0.015)
+    # The physical contract is inclusive at the residual limit.  LAPACK
+    # implementations can place the same least-squares result a few ulps on
+    # either side of that exact boundary, so absorb only numerically negligible
+    # pixel error here; this is not an additional geometry tolerance.
+    residual_compatible = (
+        residual_mean
+        <= residual_compatibility_limit + _NUMERIC_RESIDUAL_EPSILON_PX
+    )
     # One role's residual belongs to that role.  Smearing the largest residual
     # over every boundary turns one local observation into source-wide
     # uncertainty and can exceed the direct-use budget even when the template
