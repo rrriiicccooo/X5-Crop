@@ -34,8 +34,10 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   布尔值代替证明。候选无关 sequence 窗口按左右 holder 端分别投影完整且相关的 `W/pitch` 状态，覆盖
   传播走廊但不重复相加互斥极值；扩大 ownership 不增加 TIFF 读取。带 Grid 推断的 placement 还要求
   首尾输出 Frame 各至少绑定一条直接长轴角色，不能由片夹位置凭空创造整张外侧 Frame。任一已选直接
-  START/END 只有获得 source-wide edge、同一 separator pair 或独立 fixed-W Frame pair 的坐标权限后，
-  才能进入最终 placement；局部孤立 edge 保留为观察并产生 typed review，不能反向参与 lattice 自证。
+  START/END 只有获得 source-wide edge、跨高度联合或同一 separator pair 的直接坐标权限后，才能进入
+  最终 placement；两条局部 edge 不能仅因间距与 catalog/source W 相容就互相授权。独立 source W 只推导
+  真正缺失的 opposite，不覆盖已经观察到的 native coordinate；局部孤立 edge 保留为观察并产生 typed
+  review，不能反向参与 lattice 自证。
 - Format W/H compatibility 由一个 current-only 混合物理合同统一计算：
   `guard_W=max(0.95 mm, 2.4%W)`、`guard_H=max(0.70 mm, 1.8%H)`。参数来自 105 个合格黄金 source、
   494 个完整且全部直接可见 Frame 的 source-level 中位尺寸、分轴长 q95 与向外量化；不再保存 `half`
@@ -86,7 +88,7 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   阻断原因；报告同时保存全局未知量 constraint rank、逐 adjacency query/trace/coordinate coverage 与
   直接角色/外侧 Frame observation authority，以及 dark/light material、逐区域状态和冲突。Debug 不重新
   求解，也不把 review candidate 伪装为正式输出。当前 report revision 为
-  `x5crop_v5_template_report_20`，并显式报告 source W/H、相关 Frame-width inference、aspect calibration、
+  `x5crop_v5_template_report_21`，并显式报告 source W/H、相关 Frame-width inference、aspect calibration、
   raw/guarded ratio、两轴 guard、推导 H、Cross typed root failure、pair support mode、family resolution 与
   预算；不保留旧 schema 兼容路径。
 - 正式 TIFF 保真 16-bit RGB、ICC、resolution、支持的 metadata 与无损压缩，并写

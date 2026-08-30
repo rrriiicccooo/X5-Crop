@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from ...domain import EvidenceState, FiniteInterval, ObservationId
+from ...domain import EvidenceState, ObservationId
 from .measurement_model import PhotoBoundaryMeasurementSet
 from .model import (
     BoundaryRole,
@@ -28,7 +28,6 @@ class DirectRoleAuthorityBasis(str, Enum):
     SOURCE_WIDE_EDGE = "source_wide_edge"
     CROSS_HEIGHT_UNION = "cross_height_union"
     SEPARATOR_PAIR = "separator_pair"
-    FRAME_WIDTH_PAIR = "frame_width_pair"
 
 
 @dataclass(frozen=True)
@@ -128,30 +127,6 @@ class DirectRoleBindingAuthority:
         )
 
 
-def _width_interval(
-    start: BoundaryEdgeObservation,
-    end: BoundaryEdgeObservation,
-    *,
-    direction: int,
-) -> FiniteInterval:
-    values = tuple(
-        direction * (end_value - start_value)
-        for start_value in (
-            start.fit_position_interval_px.minimum,
-            start.fit_position_interval_px.maximum,
-        )
-        for end_value in (
-            end.fit_position_interval_px.minimum,
-            end.fit_position_interval_px.maximum,
-        )
-    )
-    return FiniteInterval(min(values), max(values))
-
-
-def _overlaps(left: FiniteInterval, right: FiniteInterval) -> bool:
-    return max(left.minimum, right.minimum) <= min(left.maximum, right.maximum)
-
-
 def assess_direct_role_binding_authority(
     fit: SequenceFit,
     observations: tuple[BoundaryEdgeObservation, ...],
@@ -161,10 +136,11 @@ def assess_direct_role_binding_authority(
     """Authorize a short line only through another independent physical fact.
 
     A source-wide edge owns its coordinate directly.  A source-wide separator
-    atomically owns its END/START pair.  Two independent, role-opposite edges
-    whose measured separation intersects fixed ``W`` own one complete Frame
-    pair.  A short line without any of those relations remains observation,
-    not final crop-coordinate authority.
+    atomically owns its END/START pair.  Source ``W`` may infer an unobserved
+    opposite after independent closure, but it cannot turn two selected local
+    observations into native-coordinate authority.  A short line without a
+    direct spatial or material relation remains observation, not final
+    crop-coordinate authority.
     """
 
     if not isinstance(fit, SequenceFit):
@@ -182,7 +158,6 @@ def assess_direct_role_binding_authority(
         raise ValueError("direct-role observations must be unique")
 
     selected: dict[int, BoundaryEdgeObservation] = {}
-    selected_support_ids: dict[int, ObservationId] = {}
     for role, binding in zip(fit.template.roles, fit.role_bindings, strict=True):
         if binding is None:
             continue
@@ -190,7 +165,6 @@ def assess_direct_role_binding_authority(
         if observation is None:
             raise ValueError("selected direct role is absent from the observation ledger")
         selected[role.role_index] = observation
-        selected_support_ids[role.role_index] = binding.independent_support_id
 
     bases: dict[int, set[DirectRoleAuthorityBasis]] = {
         role_index: set() for role_index in selected
@@ -251,29 +225,6 @@ def assess_direct_role_binding_authority(
         if selected_pair in source_wide_pairs:
             bases[end_index].add(DirectRoleAuthorityBasis.SEPARATOR_PAIR)
             bases[start_index].add(DirectRoleAuthorityBasis.SEPARATOR_PAIR)
-
-    width_authority = FiniteInterval(
-        fit.template.frame_width_px.minimum,
-        fit.template.frame_width_px.maximum,
-    )
-    for slot_index in range(fit.template.count):
-        start_index = 2 * slot_index
-        end_index = start_index + 1
-        start = selected.get(start_index)
-        end = selected.get(end_index)
-        if (
-            start is None
-            or end is None
-            or selected_support_ids[start_index]
-            == selected_support_ids[end_index]
-            or not _overlaps(
-                _width_interval(start, end, direction=fit.template.direction),
-                width_authority,
-            )
-        ):
-            continue
-        bases[start_index].add(DirectRoleAuthorityBasis.FRAME_WIDTH_PAIR)
-        bases[end_index].add(DirectRoleAuthorityBasis.FRAME_WIDTH_PAIR)
 
     conflicts_by_edge_role: dict[
         tuple[ObservationId, BoundaryRole],
@@ -370,8 +321,8 @@ def assess_direct_role_binding_authority(
         "selected direct edge has an unresolved same-role separator-material "
         "alternative at role indices: " + ", ".join(map(str, contradicted))
         if contradicted
-        else "selected short edge has no source-wide, separator-pair, or "
-        "fixed-W authority at role indices: "
+        else "selected short edge has no source-wide, cross-height-union, "
+        "or separator-pair authority at role indices: "
         + ", ".join(map(str, unavailable))
         if unavailable
         else None

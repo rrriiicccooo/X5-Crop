@@ -348,11 +348,13 @@ placement；“观察到了”本身不等于“有权决定裁切”。权限�
 | 同一 edge 直接覆盖三个独立高度区域 | `source_wide_edge`，允许 |
 | 一条局部 direct edge 唯一绑定三区域联合观察 | `cross_height_union`，允许；两者仍是一份相关证据 |
 | 同一 source-wide separator 的两侧 edge 原子绑定到一个 adjacency | `separator_pair`，两侧均允许 |
-| 同一 Frame 的两条不同物理 edge，其直接宽度区间与固定 W 相交 | `frame_width_pair`，两侧均允许 |
-| 只覆盖局部高度，且没有上述任一闭环 | `direct_role_binding_authority_unavailable` |
+| 两条局部 edge 的间距只与 catalog 或 source W 相容 | 只能证明尺寸未冲突，不能让两条线互相授予 native coordinate |
+| 只覆盖局部高度，且没有上述任一直接闭环 | `direct_role_binding_authority_unavailable` |
 
 短 edge 仍保留为 observation；失败只撤销它的坐标决定权，不删除像素事实。全局 rank 计算必须排除无权
-角色，不能先让短线闭合 lattice，再由该 lattice 反向证明短线。该证明由
+角色，不能先让短线闭合 lattice，再由该 lattice、catalog W 或同一 Frame 的另一条短线反向证明短线。
+独立闭合的 source W 仍只按上表为缺失 opposite 产生相关推断，不覆盖已经观察到的 native coordinate；
+局部观察与该推断竞争时保持 unresolved。该证明由
 `template_direct_role_authority.py` 唯一拥有，不读取新像素，也不按强度选择 winner。
 
 未观察 separator 的正常 adjacency 不是 detector miss 的默认值。它只有同时满足以下条件时，才可使用

@@ -732,16 +732,22 @@ class TemplatePhaseContractTest(unittest.TestCase):
             (4,),
         )
 
-    def test_fixed_width_pair_authorizes_two_independent_short_edges(self) -> None:
+    def test_fixed_width_pair_cannot_self_authorize_two_short_edges(self) -> None:
         observations = tuple(
             replace(
                 edge(identity, coordinate),
                 qualified_anchor_roles=(role,),
                 polarity=1 if role == BoundaryRole.START else -1,
-                trace_coordinates_px=(10, 20) if identity == "short:start:3" else (0, 10, 20),
-                support_fraction=2.0 / 3.0 if identity == "short:start:3" else 1.0,
+                trace_coordinates_px=(
+                    (10, 20)
+                    if identity.startswith("short:")
+                    else (0, 10, 20)
+                ),
+                support_fraction=(
+                    2.0 / 3.0 if identity.startswith("short:") else 1.0
+                ),
                 continuous_support_fraction=(
-                    2.0 / 3.0 if identity == "short:start:3" else 1.0
+                    2.0 / 3.0 if identity.startswith("short:") else 1.0
                 ),
             )
             for identity, coordinate, role in (
@@ -772,11 +778,15 @@ class TemplatePhaseContractTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE,
+        )
         assert result.direct_role_binding_authority is not None
         self.assertEqual(
             result.direct_role_binding_authority.unsupported_role_indices,
-            (),
+            (4, 5),
         )
         short_pair = tuple(
             item
@@ -785,10 +795,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         self.assertEqual(len(short_pair), 2)
         self.assertTrue(
-            all(
-                "frame_width_pair" in tuple(basis.value for basis in item.bases)
-                for item in short_pair
-            )
+            all(not item.bases for item in short_pair)
         )
 
     def test_cross_height_union_authorizes_one_short_direct_edge(self) -> None:
