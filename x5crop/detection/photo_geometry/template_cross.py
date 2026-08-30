@@ -18,6 +18,7 @@ from .model import (
     SPATIAL_SUPPORT_REGION_COUNT,
 )
 from .output_model import OutputBoundaryUse
+from .source_geometry import SourceScanGeometry
 from .template_cross_candidates import (
     _covers_template_domains,
     _direct_candidate,
@@ -39,6 +40,34 @@ from .template_cross_support import (
     fit_enclosing_support,
 )
 from .trace_support import trace_support_is_one_connected_run
+
+
+def calibrate_source_frame_height(
+    source_geometry: SourceScanGeometry,
+    competition: CrossFitCompetition,
+) -> SourceScanGeometry:
+    """Narrow source H only from one selected direct aperture pair."""
+
+    fit = competition.best
+    if (
+        competition.status != CrossFitStatus.RESOLVED
+        or fit is None
+        or not fit.direct_pair
+        or fit.boundary_use != OutputBoundaryUse.APERTURE_PAIR
+    ):
+        return source_geometry
+    observation_ids = fit.bound_observation_ids
+    if len(observation_ids) != 2:
+        return source_geometry
+    height_state = source_geometry.height_state.intersect_observed_extent(
+        fit.height_compatibility_px,
+        observation_ids=observation_ids,
+    )
+    return SourceScanGeometry.from_axis_states(
+        source_geometry.frame_spec,
+        source_geometry.width_state,
+        height_state,
+    )
 
 
 def _receipt(

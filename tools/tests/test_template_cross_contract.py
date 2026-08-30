@@ -9,9 +9,13 @@ from tools.tests.template_test_support import (
     cross_template as template,
     placement_direction,
 )
-from x5crop.domain import FiniteInterval, ObservationId
+from x5crop.domain import FiniteInterval, ObservationId, PositiveInterval
 from x5crop.detection.photo_geometry.model import BoundaryRole
-from x5crop.detection.photo_geometry.template_cross import fit_template_cross
+from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
+from x5crop.detection.photo_geometry.template_cross import (
+    calibrate_source_frame_height,
+    fit_template_cross,
+)
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossEvidence,
     CrossFitStatus,
@@ -24,6 +28,7 @@ from x5crop.detection.photo_geometry.model import PHOTO_BOUNDARY_MEASUREMENT_SPE
 from x5crop.detection.photo_geometry.trace_support import (
     source_spanning_continuous_trace_support,
 )
+from x5crop.formats import FramePhysicalSpec
 
 
 class TemplateCrossContractTest(unittest.TestCase):
@@ -511,6 +516,24 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertEqual(
             result.best.height_compatibility_px,
             FiniteInterval.exact(240.0),
+        )
+
+        source = SourceScanGeometry.create(
+            FramePhysicalSpec(10.0, 24.0, None),
+            width_scale_px_per_mm=PositiveInterval.exact(10.0),
+            height_scale_px_per_mm=PositiveInterval.exact(10.0),
+        )
+        calibrated = calibrate_source_frame_height(source, result)
+        self.assertEqual(
+            calibrated.height_state.extent_projection_px(),
+            FiniteInterval.exact(240.0),
+        )
+        self.assertEqual(
+            calibrated.height_state.observation_ids,
+            (
+                ObservationId("observation:fragmented-bottom"),
+                ObservationId("observation:fragmented-top"),
+            ),
         )
 
     def test_shared_anchor_does_not_merge_distinct_opposite_boundaries(self) -> None:
@@ -1886,6 +1909,15 @@ class TemplateCrossContractTest(unittest.TestCase):
         )
         self.assertIsNotNone(result.best.enclosing_support_pair)
         self.assertFalse(result.best.single_side_inferred)
+        source = SourceScanGeometry.create(
+            FramePhysicalSpec(10.0, 24.0, None),
+            width_scale_px_per_mm=PositiveInterval.exact(10.0),
+            height_scale_px_per_mm=PositiveInterval.exact(10.0),
+        )
+        self.assertEqual(
+            calibrate_source_frame_height(source, result),
+            source,
+        )
 
     def test_enclosing_support_evaluations_share_the_cross_fit_bound(self) -> None:
         result = fit_template_cross(

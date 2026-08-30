@@ -17,6 +17,7 @@ from x5crop.detection.photo_geometry.template_phase import (
     fit_template_phase_with_local_advance,
 )
 from x5crop.detection.photo_geometry.template_phase_model import (
+    GlobalLatticeAuthorityEvidence,
     PhaseFailureKind,
     PhaseFitStatus,
     TemplatePhaseInput,
@@ -79,6 +80,8 @@ class TemplateAlignmentDiagnosticContractTest(unittest.TestCase):
             for name, coordinate, role in (
                 ("start:1", 40.0, BoundaryRole.START),
                 ("end:1", 140.0, BoundaryRole.END),
+                ("start:2", 160.0, BoundaryRole.START),
+                ("end:2", 260.0, BoundaryRole.END),
                 ("start:3", 280.0, BoundaryRole.START),
             )
         )
@@ -94,6 +97,17 @@ class TemplateAlignmentDiagnosticContractTest(unittest.TestCase):
                     phase_sequence_measurement(
                         "alignment-coverage",
                         FiniteInterval(0.0, 400.0),
+                    ),
+                ),
+                global_lattice_evidence=GlobalLatticeAuthorityEvidence(
+                    frame_width_observation_ids=tuple(
+                        ObservationId(identity)
+                        for identity in (
+                            "start:1",
+                            "end:1",
+                            "start:2",
+                            "end:2",
+                        )
                     ),
                 ),
             )
@@ -122,6 +136,11 @@ class TemplateAlignmentDiagnosticContractTest(unittest.TestCase):
         assert diagnostic.outer_frame_observation_authority is not None
         self.assertEqual(
             diagnostic.outer_frame_observation_authority.state.value,
+            "supported",
+        )
+        assert diagnostic.frame_width_inference is not None
+        self.assertEqual(
+            diagnostic.frame_width_inference.state.value,
             "supported",
         )
 

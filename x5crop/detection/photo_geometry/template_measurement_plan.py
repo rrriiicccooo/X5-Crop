@@ -8,7 +8,6 @@ import math
 from ...domain import Box, FiniteInterval, PositiveInterval
 from ...formats import (
     FORMAT_CATALOG_REVISION,
-    FRAME_DIMENSION_TOLERANCE_SPEC,
     FormatSpec,
     FramePhysicalSpec,
     OUTPUT_PROTECTION_SPEC,
@@ -69,12 +68,14 @@ def compile_template_measurement_plan(
     frame_width_px = _scaled_extent(
         frame_spec.frame_width_mm,
         scale_authority.width_axis_px_per_mm,
-        FRAME_DIMENSION_TOLERANCE_SPEC.frame_width_tolerance_ratio,
+        frame_spec.frame_width_factor_minimum,
+        frame_spec.frame_width_factor_maximum,
     )
     frame_height_px = _scaled_extent(
         frame_spec.frame_height_mm,
         scale_authority.height_axis_px_per_mm,
-        FRAME_DIMENSION_TOLERANCE_SPEC.frame_height_tolerance_ratio,
+        frame_spec.frame_height_factor_minimum,
+        frame_spec.frame_height_factor_maximum,
     )
     gap_px = _gap_interval_px(
         frame_spec,
@@ -196,11 +197,12 @@ def compile_template_measurement_plan(
 def _scaled_extent(
     design_mm: float,
     scale: PositiveInterval,
-    tolerance_ratio: float,
+    factor_minimum: float,
+    factor_maximum: float,
 ) -> PositiveInterval:
     return PositiveInterval(
-        design_mm * (1.0 - tolerance_ratio) * scale.minimum,
-        design_mm * (1.0 + tolerance_ratio) * scale.maximum,
+        design_mm * factor_minimum * scale.minimum,
+        design_mm * factor_maximum * scale.maximum,
     )
 
 

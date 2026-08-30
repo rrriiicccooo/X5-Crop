@@ -10,6 +10,7 @@ from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInte
 from .model import BoundaryRole, PHOTO_BOUNDARY_MEASUREMENT_SPEC
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_model import (
+    FrameWidthInferenceFailureKind,
     LocalAdvanceRelation,
     SequenceFit,
     SequenceRoleBinding,
@@ -35,6 +36,7 @@ from .template_phase_candidates import (
 )
 from .separator_material import normal_separator_material_bands
 from .template_evidence import separator_support_authority
+from .template_frame_width import apply_correlated_frame_width_inference
 from .template_adjacency_coverage import (
     AdjacencyCoverageState,
     assess_adjacency_observation_coverage,
@@ -906,6 +908,39 @@ def _apply_final_lattice_contract(
             ),
             winner_basis=None,
         )
+    if result.status == PhaseFitStatus.RESOLVED and result.best is not None:
+        assessed = apply_correlated_frame_width_inference(
+            result.best,
+            frame_width_observation_ids=(
+                phase_input.global_lattice_evidence
+                .frame_width_observation_ids
+            ),
+        )
+        result = replace(
+            result,
+            best=assessed,
+        )
+        width_inference = assessed.frame_width_inference
+        if (
+            width_inference is not None
+            and width_inference.state != EvidenceState.SUPPORTED
+        ):
+            return replace(
+                result,
+                status=PhaseFitStatus.UNRESOLVED,
+                ambiguity_reason=(
+                    "a Frame with two unobserved sequence roles cannot be "
+                    "created from the Grid"
+                    if width_inference.failure_kind
+                    == FrameWidthInferenceFailureKind.COMPLETE_FRAME_UNOBSERVED
+                    else "missing opposite Frame roles require one independently "
+                    "closed source-level common W"
+                ),
+                failure_kind=(
+                    PhaseFailureKind.FRAME_WIDTH_INFERENCE_UNAVAILABLE
+                ),
+                winner_basis=None,
+            )
     return result
 
 

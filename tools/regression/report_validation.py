@@ -65,6 +65,7 @@ _TEMPLATE_ALIGNMENT_FIELDS = {
     "adjacency_observation_coverage",
     "direct_role_binding_authority",
     "outer_frame_observation_authority",
+    "frame_width_inference",
     "unbound_direct_observation_count",
     "unresolved_reason",
 }
@@ -358,6 +359,66 @@ def _validate_outer_frame_observation_authority(value: object) -> None:
         and (not isinstance(value["reason"], str) or not value["reason"])
     ):
         raise ValueError("outer-frame observation authority summary is invalid")
+
+
+def _validate_frame_width_inference(value: object) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict) or set(value) != {
+        "state",
+        "inferred_role_indices",
+        "supporting_frame_ordinals",
+        "width_px",
+        "canonical_width_px",
+        "observation_ids",
+        "failure_kind",
+    }:
+        raise ValueError("Frame width inference summary is invalid")
+    inferred = value["inferred_role_indices"]
+    supporting = value["supporting_frame_ordinals"]
+    observation_ids = value["observation_ids"]
+    supported = value["state"] == "supported"
+    if (
+        value["state"] not in {"supported", "unavailable"}
+        or not isinstance(inferred, list)
+        or inferred != sorted(set(inferred))
+        or not inferred
+        or any(not isinstance(index, int) or index < 0 for index in inferred)
+        or not isinstance(supporting, list)
+        or supporting != sorted(set(supporting))
+        or any(
+            not isinstance(ordinal, int) or ordinal <= 0
+            for ordinal in supporting
+        )
+        or not _valid_ids(observation_ids)
+    ):
+        raise ValueError("Frame width inference ledger is invalid")
+    if supported:
+        width = value["width_px"]
+        canonical = value["canonical_width_px"]
+        if (
+            len(supporting) < 2
+            or len(observation_ids) < 4
+            or not _valid_interval(width)
+            or not _finite_number(canonical)
+            or not float(width["minimum"])
+            <= float(canonical)
+            <= float(width["maximum"])
+            or value["failure_kind"] is not None
+        ):
+            raise ValueError("supported Frame width inference is invalid")
+    elif (
+        supporting
+        or observation_ids
+        or value["width_px"] is not None
+        or value["canonical_width_px"] is not None
+        or value["failure_kind"]
+        not in {
+            "complete_frame_unobserved",
+            "common_width_authority_unavailable",
+        }
+    ):
+        raise ValueError("unavailable Frame width inference is invalid")
 
 
 def _validate_direct_role_binding_authority(value: object) -> None:
@@ -814,6 +875,9 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         )
         _validate_outer_frame_observation_authority(
             alignment["outer_frame_observation_authority"]
+        )
+        _validate_frame_width_inference(
+            alignment["frame_width_inference"]
         )
         if {item["geometry_id"] for item in outputs} != {
             item["geometry_id"] for item in budgets

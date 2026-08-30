@@ -3,10 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ...domain import FiniteInterval, PositiveInterval
-from ...formats import (
-    FRAME_DIMENSION_TOLERANCE_SPEC,
-    FramePhysicalSpec,
-)
+from ...formats import FramePhysicalSpec
 from .joint_axis_geometry import JointAxisGeometry
 from .physical_identity import physical_fact_id
 
@@ -52,7 +49,6 @@ class SourceScanGeometry:
         width_scale_px_per_mm: PositiveInterval,
         height_scale_px_per_mm: PositiveInterval,
     ) -> "SourceScanGeometry":
-        tolerance = FRAME_DIMENSION_TOLERANCE_SPEC
         shared_scale_minimum = max(
             width_scale_px_per_mm.minimum,
             height_scale_px_per_mm.minimum,
@@ -72,8 +68,8 @@ class SourceScanGeometry:
             design_extent_mm=frame_spec.frame_width_mm,
             scale_interval_px_per_mm=shared_scale,
             factor_interval=PositiveInterval(
-                1.0 - tolerance.frame_width_tolerance_ratio,
-                1.0 + tolerance.frame_width_tolerance_ratio,
+                frame_spec.frame_width_factor_minimum,
+                frame_spec.frame_width_factor_maximum,
             ),
         )
         height = JointAxisGeometry.create(
@@ -81,8 +77,8 @@ class SourceScanGeometry:
             design_extent_mm=frame_spec.frame_height_mm,
             scale_interval_px_per_mm=shared_scale,
             factor_interval=PositiveInterval(
-                1.0 - tolerance.frame_height_tolerance_ratio,
-                1.0 + tolerance.frame_height_tolerance_ratio,
+                frame_spec.frame_height_factor_minimum,
+                frame_spec.frame_height_factor_maximum,
             ),
         )
         return cls(
@@ -122,10 +118,11 @@ class SourceScanGeometry:
         The holder establishes one nominal scan scale when ``create`` is
         called.  Once photograph edges are observed, a small camera-aperture
         difference and a small scan-scale difference are indistinguishable to
-        this cropper.  Width evidence therefore narrows the source-shared W_px
-        state, and height evidence narrows the source-shared H_px state; neither
-        observation is allowed to recalibrate the other axis.  Both states are
-        still source owners and are intersected across lanes below.
+        this cropper.  Direct width evidence therefore narrows W_px and direct
+        height evidence narrows H_px.  This constructor never turns one into
+        evidence for the other; any future cross-axis inference must belong to
+        a separately calibrated, typed aspect-ratio authority and remain
+        correlated.  Both direct states are intersected across lanes below.
         """
 
         if (

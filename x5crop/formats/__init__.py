@@ -8,55 +8,53 @@ from ..utils import require_positive
 
 @dataclass(frozen=True, order=True)
 class FramePhysicalSpec:
-    """The single fixed frame rectangle owned by one format."""
+    """One format's design aperture and bounded cross-camera prior."""
 
     frame_width_mm: float
     frame_height_mm: float
     format_gap_prior_mm: float | None
+    frame_width_factor_minimum: float = 0.9875
+    frame_width_factor_maximum: float = 1.0125
+    frame_height_factor_minimum: float = 0.9960
+    frame_height_factor_maximum: float = 1.0040
 
     def __post_init__(self) -> None:
         require_positive("frame design width", self.frame_width_mm)
         require_positive("frame design height", self.frame_height_mm)
         if self.format_gap_prior_mm is not None:
             require_positive("format gap search prior", self.format_gap_prior_mm)
+        for name, minimum, maximum in (
+            (
+                "frame width factor",
+                self.frame_width_factor_minimum,
+                self.frame_width_factor_maximum,
+            ),
+            (
+                "frame height factor",
+                self.frame_height_factor_minimum,
+                self.frame_height_factor_maximum,
+            ),
+        ):
+            if not 0.0 < minimum <= 1.0 <= maximum:
+                raise ValueError(f"{name} prior must contain design unity")
 
     @property
-    def identity_fields(self) -> tuple[str, str, str]:
+    def identity_fields(self) -> tuple[str, ...]:
         return (
             self.frame_width_mm.hex(),
             self.frame_height_mm.hex(),
             "none"
             if self.format_gap_prior_mm is None
             else self.format_gap_prior_mm.hex(),
+            self.frame_width_factor_minimum.hex(),
+            self.frame_width_factor_maximum.hex(),
+            self.frame_height_factor_minimum.hex(),
+            self.frame_height_factor_maximum.hex(),
         )
 
     @property
     def frame_spec_id(self) -> str:
         return "frame-spec:" + ":".join(self.identity_fields)
-
-
-@dataclass(frozen=True, order=True)
-class FrameDimensionToleranceSpec:
-    """Global design-template separation tolerance.
-
-    The ratios decide whether measured opposite edges can belong to the same
-    design template.  They are neither search allowance nor output padding.
-    """
-
-    frame_width_tolerance_ratio: float = 0.0125
-    frame_height_tolerance_ratio: float = 0.0040
-
-    def __post_init__(self) -> None:
-        for name, value in (
-            ("frame width tolerance ratio", self.frame_width_tolerance_ratio),
-            ("frame height tolerance ratio", self.frame_height_tolerance_ratio),
-        ):
-            if not 0.0 < value < 1.0:
-                raise ValueError(f"{name} must be between zero and one")
-
-
-FRAME_DIMENSION_TOLERANCE_SPEC = FrameDimensionToleranceSpec()
-
 
 @dataclass(frozen=True, order=True)
 class OutputProtectionSpec:
@@ -163,7 +161,7 @@ class FormatSpec:
 FRAME_135 = FramePhysicalSpec(36.0, 24.0, 2.0)
 
 
-FORMAT_CATALOG_REVISION = "x5crop_format_catalog_v2"
+FORMAT_CATALOG_REVISION = "x5crop_format_catalog_v3"
 
 
 _FORMAT_SPECS: dict[str, FormatSpec] = {
@@ -184,7 +182,12 @@ _FORMAT_SPECS: dict[str, FormatSpec] = {
     ),
     "half": FormatSpec(
         "half",
-        FramePhysicalSpec(18.0, 24.0, 1.0),
+        FramePhysicalSpec(
+            18.0,
+            24.0,
+            1.0,
+            frame_width_factor_minimum=0.965,
+        ),
         ScanLayoutSpec(),
         (
             ScanCanvasFit("135_standard", 12),

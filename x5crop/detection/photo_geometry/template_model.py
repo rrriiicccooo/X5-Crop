@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 import math
-from ...domain import FiniteInterval, ObservationId, PositiveInterval
+from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
 
 
 MAX_TEMPLATE_FIT_PASSES = 5
@@ -388,6 +388,72 @@ class PitchFit:
         )
 
 
+class FrameWidthInferenceFailureKind(str, Enum):
+    """Why one required correlated-W inference has no direct authority."""
+
+    COMPLETE_FRAME_UNOBSERVED = "complete_frame_unobserved"
+    COMMON_WIDTH_AUTHORITY_UNAVAILABLE = (
+        "common_width_authority_unavailable"
+    )
+
+
+@dataclass(frozen=True)
+class FrameWidthInferenceAssessment:
+    """One correlated common-W authority shared by all inferred roles."""
+
+    state: EvidenceState
+    inferred_role_indices: tuple[int, ...]
+    supporting_frame_ordinals: tuple[int, ...]
+    width_px: PositiveInterval | None
+    canonical_width_px: float | None
+    observation_ids: tuple[ObservationId, ...]
+    failure_kind: FrameWidthInferenceFailureKind | None
+
+    def __post_init__(self) -> None:
+        supported = self.state == EvidenceState.SUPPORTED
+        unavailable = self.state == EvidenceState.UNAVAILABLE
+        if (
+            not (supported or unavailable)
+            or not self.inferred_role_indices
+            or tuple(sorted(set(self.inferred_role_indices)))
+            != self.inferred_role_indices
+            or any(index < 0 for index in self.inferred_role_indices)
+            or tuple(sorted(set(self.supporting_frame_ordinals)))
+            != self.supporting_frame_ordinals
+            or any(ordinal <= 0 for ordinal in self.supporting_frame_ordinals)
+            or len(set(self.observation_ids)) != len(self.observation_ids)
+            or any(
+                not isinstance(identity, ObservationId)
+                for identity in self.observation_ids
+            )
+        ):
+            raise ValueError("Frame width inference assessment is invalid")
+        if supported:
+            if (
+                not isinstance(self.width_px, PositiveInterval)
+                or self.width_px.minimum <= 0.0
+                or self.canonical_width_px is None
+                or not self.width_px.minimum - 1.0e-9
+                <= self.canonical_width_px
+                <= self.width_px.maximum + 1.0e-9
+                or len(self.supporting_frame_ordinals) < 2
+                or len(self.observation_ids) < 4
+                or self.failure_kind is not None
+            ):
+                raise ValueError("supported Frame width inference is incomplete")
+        elif (
+            self.width_px is not None
+            or self.canonical_width_px is not None
+            or self.supporting_frame_ordinals
+            or self.observation_ids
+            or not isinstance(
+                self.failure_kind,
+                FrameWidthInferenceFailureKind,
+            )
+        ):
+            raise ValueError("unavailable Frame width inference carries authority")
+
+
 @dataclass(frozen=True)
 class LocalAdvanceRelation:
     """One adjacency's prefix adjustment from the nominal pitch.
@@ -518,6 +584,7 @@ class SequenceFit:
     model_role_intervals_px: tuple[FiniteInterval, ...]
     model_full_role_intervals_px: tuple[FiniteInterval, ...]
     role_bindings: tuple[SequenceRoleBinding | None, ...]
+    frame_width_inference: FrameWidthInferenceAssessment | None = None
     local_advance_relations: tuple[LocalAdvanceRelation, ...] = ()
     contradicted_observation_count: int = 0
     residual_sum_px: float = 0.0
@@ -648,6 +715,37 @@ class SequenceFit:
             )
         ):
             raise ValueError("sequence full role interval excludes fit interval")
+        width_inference = self.frame_width_inference
+        if width_inference is not None:
+            if (
+                not isinstance(
+                    width_inference,
+                    FrameWidthInferenceAssessment,
+                )
+                or width_inference.inferred_role_indices
+                != self.unbound_role_indices
+            ):
+                raise ValueError("sequence common-W inference ledger is invalid")
+            if width_inference.state == EvidenceState.SUPPORTED:
+                assert width_inference.width_px is not None
+                assert width_inference.canonical_width_px is not None
+                if (
+                    self.pitch_fit.frame_width_px
+                    != PositiveInterval(
+                        width_inference.width_px.minimum,
+                        width_inference.width_px.maximum,
+                    )
+                    or self.pitch_fit.canonical_frame_width_px
+                    != width_inference.canonical_width_px
+                    or any(
+                        self.role_bindings[index // 2 * 2] is None
+                        and self.role_bindings[index // 2 * 2 + 1] is None
+                        for index in width_inference.inferred_role_indices
+                    )
+                ):
+                    raise ValueError(
+                        "supported common-W inference disagrees with sequence"
+                    )
         phase_authority_role_count = sum(
             binding is not None
             and binding.use == SequenceBindingUse.PHASE_ANCHOR

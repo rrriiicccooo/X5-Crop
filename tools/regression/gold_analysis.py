@@ -24,10 +24,10 @@ from x5crop.detection.evidence.scan_canvas import observe_scan_canvas
 from x5crop.detection.photo_geometry.template_measurement_plan import (
     compile_template_measurement_plan,
 )
+from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
 from x5crop.detection.source_core import SourceStripValidationDomain
 from x5crop.domain import Box
 from x5crop.formats import (
-    FRAME_DIMENSION_TOLERANCE_SPEC,
     format_spec,
 )
 from x5crop.formats.scan_canvas import scan_canvas_specs_for_format
@@ -46,8 +46,8 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v5"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v5"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v6"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v6"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
 SOURCE_TIMEOUT_SECONDS = 600
@@ -185,6 +185,15 @@ def _physical_prior_diagnostic(record: dict[str, Any]) -> dict[str, Any]:
     )
     selected_profile = canvas_evidence.selected_profile
     scale_authority = canvas_evidence.axis_scales
+    source_geometry = (
+        None
+        if scale_authority is None
+        else SourceScanGeometry.create(
+            frame,
+            width_scale_px_per_mm=scale_authority.width_axis_px_per_mm,
+            height_scale_px_per_mm=scale_authority.height_axis_px_per_mm,
+        )
+    )
     plan = None
     if selected_profile is not None and scale_authority is not None:
         holder_count = physical.holder_full_count(selected_profile.profile_id)
@@ -209,7 +218,21 @@ def _physical_prior_diagnostic(record: dict[str, Any]) -> dict[str, Any]:
     pairs = _boundary_pair_by_ordinal(geometry)
     shared = geometry["shared_edges"]
     cross_reference = (cross_extent - 1.0) / 2.0
+    sequence_scale_px_per_nominal_mm = (
+        None
+        if selected_profile is None
+        else long_extent / selected_profile.long_axis_mm
+    )
+    cross_scale_px_per_nominal_mm = (
+        None
+        if selected_profile is None
+        else cross_extent / selected_profile.short_axis_mm
+    )
     frame_ratio_measurements: list[float] = []
+    frame_width_estimates_mm: list[float] = []
+    frame_height_estimates_mm: list[float] = []
+    frame_width_prior_containment: list[bool] = []
+    frame_height_prior_containment: list[bool] = []
     excluded_frame_count = 0
     for start, end, slot_kind in pairs.values():
         if (
@@ -249,10 +272,31 @@ def _physical_prior_diagnostic(record: dict[str, Any]) -> dict[str, Any]:
         if min(width, height) <= 0.0:
             raise ValueError("gold frame has non-positive physical extent")
         frame_ratio_measurements.append(width / height)
+        if (
+            sequence_scale_px_per_nominal_mm is not None
+            and cross_scale_px_per_nominal_mm is not None
+        ):
+            frame_width_estimates_mm.append(
+                width / sequence_scale_px_per_nominal_mm
+            )
+            frame_height_estimates_mm.append(
+                height / cross_scale_px_per_nominal_mm
+            )
+        if source_geometry is not None:
+            frame_width_prior_containment.append(
+                source_geometry.width_state.extent_projection_px().contains(
+                    width
+                )
+            )
+            frame_height_prior_containment.append(
+                source_geometry.height_state.extent_projection_px().contains(
+                    height
+                )
+            )
 
-    gap_measurements_mm: list[float] = []
+    gap_estimates_mm: list[float] = []
     gap_prior_containment: list[bool] = []
-    pitch_measurements_mm: list[float] = []
+    pitch_estimates_mm: list[float] = []
     pitch_prior_containment: list[bool] = []
     excluded_separator_count = 0
     for adjacency in geometry["adjacencies"]:
@@ -280,24 +324,13 @@ def _physical_prior_diagnostic(record: dict[str, Any]) -> dict[str, Any]:
             axis="sequence",
             reference_trace_px=cross_reference,
         )
-        long_reference = (left_end + right_start) / 2.0
-        top = line_axis_position(
-            geometry,
-            shared[0],
-            axis="cross",
-            reference_trace_px=long_reference,
-        )
-        bottom = line_axis_position(
-            geometry,
-            shared[1],
-            axis="cross",
-            reference_trace_px=long_reference,
-        )
-        height = abs(bottom - top)
         gap = right_start - left_end
-        if height <= 0.0 or gap < 0.0:
+        if gap < 0.0:
             raise ValueError("gold separator contradicts physical order")
-        gap_measurements_mm.append(gap * frame.frame_height_mm / height)
+        if sequence_scale_px_per_nominal_mm is not None:
+            gap_estimates_mm.append(
+                gap / sequence_scale_px_per_nominal_mm
+            )
         if (
             left[0]["review_basis"] == "directly_visible"
             and right[1]["review_basis"] == "directly_visible"
@@ -319,9 +352,10 @@ def _physical_prior_diagnostic(record: dict[str, Any]) -> dict[str, Any]:
             ) / 2.0
             if pitch <= 0.0:
                 raise ValueError("gold pitch contradicts physical order")
-            pitch_measurements_mm.append(
-                pitch * frame.frame_height_mm / height
-            )
+            if sequence_scale_px_per_nominal_mm is not None:
+                pitch_estimates_mm.append(
+                    pitch / sequence_scale_px_per_nominal_mm
+                )
             if plan is not None:
                 pitch_prior_containment.append(
                     plan.template_spec.pitch_px.minimum
@@ -394,11 +428,26 @@ def _physical_prior_diagnostic(record: dict[str, Any]) -> dict[str, Any]:
         "nearest_scan_canvas_profile_id": nearest_profile.profile_id,
         "scan_canvas_aspect_error_ratio": aspect_error,
         "scan_canvas_scale_authority_supported": scale_authority is not None,
+        "dimension_estimate_basis": (
+            "gold_native_geometry_divided_by_selected_nominal_holder_axis_scale"
+        ),
+        "sequence_scale_px_per_nominal_mm": (
+            sequence_scale_px_per_nominal_mm
+        ),
+        "cross_scale_px_per_nominal_mm": cross_scale_px_per_nominal_mm,
         "frame_ratio_measurements": frame_ratio_measurements,
+        "holder_normalized_frame_width_estimates_mm": (
+            frame_width_estimates_mm
+        ),
+        "holder_normalized_frame_height_estimates_mm": (
+            frame_height_estimates_mm
+        ),
+        "frame_width_prior_containment": frame_width_prior_containment,
+        "frame_height_prior_containment": frame_height_prior_containment,
         "excluded_frame_count": excluded_frame_count,
-        "separator_gap_measurements_mm": gap_measurements_mm,
+        "holder_normalized_separator_gap_estimates_mm": gap_estimates_mm,
         "separator_gap_prior_containment": gap_prior_containment,
-        "pitch_measurements_mm": pitch_measurements_mm,
+        "holder_normalized_pitch_estimates_mm": pitch_estimates_mm,
         "pitch_prior_containment": pitch_prior_containment,
         "excluded_separator_count": excluded_separator_count,
         "cross_corridor": corridor,
@@ -1009,6 +1058,63 @@ def _distribution(values: Iterable[float]) -> dict[str, float | int | None]:
     }
 
 
+def _source_variation_summary(
+    diagnostics: Sequence[dict[str, Any]],
+    measurement_key: str,
+) -> dict[str, Any]:
+    """Separate per-source aperture variation from between-source variation."""
+
+    source_values = tuple(
+        tuple(float(value) for value in diagnostic[measurement_key])
+        for diagnostic in diagnostics
+        if diagnostic[measurement_key]
+    )
+    centers = tuple(statistics.median(values) for values in source_values)
+    within_source = tuple(values for values in source_values if len(values) >= 2)
+    relative_ranges = tuple(
+        (max(values) - min(values)) / statistics.median(values)
+        for values in within_source
+    )
+    relative_residuals = tuple(
+        (value - center) / center
+        for values in within_source
+        for center in (statistics.median(values),)
+        for value in values
+    )
+    pooled_within_rms = (
+        None
+        if not relative_residuals
+        else math.sqrt(
+            sum(value * value for value in relative_residuals)
+            / len(relative_residuals)
+        )
+    )
+    between_relative_std = (
+        None
+        if len(centers) < 2
+        else statistics.pstdev(centers) / statistics.median(centers)
+    )
+    return {
+        "measurement_count": sum(len(values) for values in source_values),
+        "source_count": len(source_values),
+        "multi_measurement_source_count": len(within_source),
+        "measurement_distribution": _distribution(
+            value for values in source_values for value in values
+        ),
+        "source_center_distribution": _distribution(centers),
+        "within_source_relative_range": _distribution(relative_ranges),
+        "pooled_within_source_relative_rms": pooled_within_rms,
+        "between_source_relative_std": between_relative_std,
+        "between_to_within_ratio": (
+            None
+            if between_relative_std is None
+            or pooled_within_rms is None
+            or pooled_within_rms <= 0.0
+            else between_relative_std / pooled_within_rms
+        ),
+    }
+
+
 def _unique_source_physical_diagnostics(
     records: Sequence[dict[str, Any]],
 ) -> tuple[dict[str, Any], ...]:
@@ -1043,30 +1149,30 @@ def _physical_format_summary(
     frame = physical.frame
     nominal_ratio = frame.frame_width_mm / frame.frame_height_mm
     minimum_ratio = nominal_ratio * (
-        1.0 - FRAME_DIMENSION_TOLERANCE_SPEC.frame_width_tolerance_ratio
-    ) / (1.0 + FRAME_DIMENSION_TOLERANCE_SPEC.frame_height_tolerance_ratio)
+        frame.frame_width_factor_minimum
+    ) / frame.frame_height_factor_maximum
     maximum_ratio = nominal_ratio * (
-        1.0 + FRAME_DIMENSION_TOLERANCE_SPEC.frame_width_tolerance_ratio
-    ) / (1.0 - FRAME_DIMENSION_TOLERANCE_SPEC.frame_height_tolerance_ratio)
+        frame.frame_width_factor_maximum
+    ) / frame.frame_height_factor_minimum
     frame_ratios = tuple(
         ratio
         for diagnostic in diagnostics
         for ratio in diagnostic["frame_ratio_measurements"]
     )
-    gap_measurements = tuple(
-        gap
+    frame_width_containment = tuple(
+        contained
         for diagnostic in diagnostics
-        for gap in diagnostic["separator_gap_measurements_mm"]
+        for contained in diagnostic["frame_width_prior_containment"]
+    )
+    frame_height_containment = tuple(
+        contained
+        for diagnostic in diagnostics
+        for contained in diagnostic["frame_height_prior_containment"]
     )
     gap_containment = tuple(
         contained
         for diagnostic in diagnostics
         for contained in diagnostic["separator_gap_prior_containment"]
-    )
-    pitch_measurements = tuple(
-        pitch
-        for diagnostic in diagnostics
-        for pitch in diagnostic["pitch_measurements_mm"]
     )
     pitch_containment = tuple(
         contained
@@ -1120,15 +1226,54 @@ def _physical_format_summary(
         "directly_visible_frame_ratio_above_catalog_count": sum(
             ratio > maximum_ratio for ratio in frame_ratios
         ),
+        "holder_normalized_dimension_estimate_basis": (
+            "gold_native_geometry_divided_by_selected_nominal_holder_axis_scale"
+        ),
+        "holder_normalized_frame_width_mm": _source_variation_summary(
+            diagnostics,
+            "holder_normalized_frame_width_estimates_mm",
+        ),
+        "holder_normalized_frame_height_mm": _source_variation_summary(
+            diagnostics,
+            "holder_normalized_frame_height_estimates_mm",
+        ),
+        "frame_width_within_runtime_prior_count": sum(
+            frame_width_containment
+        ),
+        "frame_width_runtime_prior_comparison_count": len(
+            frame_width_containment
+        ),
+        "source_with_frame_width_outside_runtime_prior_count": sum(
+            bool(diagnostic["frame_width_prior_containment"])
+            and not all(diagnostic["frame_width_prior_containment"])
+            for diagnostic in diagnostics
+        ),
+        "frame_height_within_runtime_prior_count": sum(
+            frame_height_containment
+        ),
+        "frame_height_runtime_prior_comparison_count": len(
+            frame_height_containment
+        ),
+        "source_with_frame_height_outside_runtime_prior_count": sum(
+            bool(diagnostic["frame_height_prior_containment"])
+            and not all(diagnostic["frame_height_prior_containment"])
+            for diagnostic in diagnostics
+        ),
         "excluded_frame_count": sum(
             int(diagnostic["excluded_frame_count"])
             for diagnostic in diagnostics
         ),
         "separator_gap_prior_mm": frame.format_gap_prior_mm,
-        "directly_visible_separator_gap_mm": _distribution(gap_measurements),
+        "holder_normalized_separator_gap_mm": _source_variation_summary(
+            diagnostics,
+            "holder_normalized_separator_gap_estimates_mm",
+        ),
         "separator_gap_within_runtime_prior_count": sum(gap_containment),
         "separator_gap_runtime_prior_comparison_count": len(gap_containment),
-        "directly_visible_pitch_mm": _distribution(pitch_measurements),
+        "holder_normalized_pitch_mm": _source_variation_summary(
+            diagnostics,
+            "holder_normalized_pitch_estimates_mm",
+        ),
         "pitch_within_runtime_interval_count": sum(pitch_containment),
         "pitch_runtime_interval_comparison_count": len(pitch_containment),
         "excluded_separator_count": sum(

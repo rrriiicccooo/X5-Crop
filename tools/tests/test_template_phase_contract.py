@@ -23,6 +23,7 @@ from x5crop.detection.photo_geometry.observation_types import (
     SeparatorMaterialRegionState,
 )
 from x5crop.detection.photo_geometry.template_model import (
+    FrameWidthInferenceFailureKind,
     LocalAdvanceKind,
     LocalAdvanceRelation,
     PhaseLatticeAuthority,
@@ -438,6 +439,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             ("gap:start:3", 280.0, BoundaryRole.START),
             ("gap:end:3", 380.0, BoundaryRole.END),
             ("gap:start:4", 400.0, BoundaryRole.START),
+            ("gap:start:5", 520.0, BoundaryRole.START),
             ("gap:end:6", 740.0, BoundaryRole.END),
         )
         observations = tuple(
@@ -463,12 +465,32 @@ class TemplatePhaseContractTest(unittest.TestCase):
                         FiniteInterval(0.0, 800.0),
                     ),
                 ),
+                global_lattice_evidence=GlobalLatticeAuthorityEvidence(
+                    frame_width_observation_ids=(
+                        ObservationId("gap:start:2"),
+                        ObservationId("gap:end:2"),
+                        ObservationId("gap:start:3"),
+                        ObservationId("gap:end:3"),
+                    ),
+                ),
             )
         )
 
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
         assert result.best is not None
-        self.assertEqual(result.best.phase_support_locations, (0, 1, 2, 3, 6))
+        self.assertEqual(
+            result.best.phase_support_locations,
+            (0, 1, 2, 3, 4, 6),
+        )
+        assert result.best.frame_width_inference is not None
+        self.assertEqual(
+            result.best.frame_width_inference.state,
+            EvidenceState.SUPPORTED,
+        )
+        self.assertEqual(
+            result.best.frame_width_inference.supporting_frame_ordinals,
+            (2, 3),
+        )
         assert result.global_lattice_authority is not None
         self.assertEqual(result.global_lattice_authority.joint_constraint_rank, 3)
         self.assertEqual(
@@ -486,6 +508,62 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(
             result.outer_frame_observation_authority.state.value,
             "supported",
+        )
+
+    def test_grid_cannot_create_an_unobserved_internal_frame(self) -> None:
+        specs = (
+            ("internal:start:1", 40.0, BoundaryRole.START),
+            ("internal:start:2", 160.0, BoundaryRole.START),
+            ("internal:end:2", 260.0, BoundaryRole.END),
+            ("internal:start:3", 280.0, BoundaryRole.START),
+            ("internal:end:3", 380.0, BoundaryRole.END),
+            ("internal:start:4", 400.0, BoundaryRole.START),
+            ("internal:end:6", 740.0, BoundaryRole.END),
+        )
+        observations = tuple(
+            replace(
+                edge(identity, coordinate),
+                qualified_anchor_roles=(role,),
+                polarity=1 if role == BoundaryRole.START else -1,
+            )
+            for identity, coordinate, role in specs
+        )
+
+        result = fit_template_phase_with_local_advance(
+            TemplatePhaseInput(
+                observations=observations,
+                separator_bands=(),
+                template=template(6),
+                scale_px_per_mm=None,
+                holder_span_px=FiniteInterval(0.0, 800.0),
+                phase_authority_px=None,
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "complete-internal-frame-gap",
+                        FiniteInterval(0.0, 800.0),
+                    ),
+                ),
+                global_lattice_evidence=GlobalLatticeAuthorityEvidence(
+                    frame_width_observation_ids=(
+                        ObservationId("internal:start:2"),
+                        ObservationId("internal:end:2"),
+                        ObservationId("internal:start:3"),
+                        ObservationId("internal:end:3"),
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            PhaseFailureKind.FRAME_WIDTH_INFERENCE_UNAVAILABLE,
+        )
+        assert result.best is not None
+        assert result.best.frame_width_inference is not None
+        self.assertEqual(
+            result.best.frame_width_inference.failure_kind,
+            FrameWidthInferenceFailureKind.COMPLETE_FRAME_UNOBSERVED,
         )
 
     def test_grid_cannot_invent_an_entire_unanchored_outer_frame(self) -> None:
@@ -762,6 +840,14 @@ class TemplatePhaseContractTest(unittest.TestCase):
                     phase_sequence_measurement(
                         "cross-height-union-direct-role",
                         FiniteInterval(0.0, 540.0),
+                    ),
+                ),
+                global_lattice_evidence=GlobalLatticeAuthorityEvidence(
+                    frame_width_observation_ids=(
+                        ObservationId("start:1"),
+                        ObservationId("end:1"),
+                        ObservationId("start:2"),
+                        ObservationId("end:2"),
                     ),
                 ),
             )

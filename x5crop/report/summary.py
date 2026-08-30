@@ -52,6 +52,9 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
             {
                 "lane_id": lane.lane_id,
                 "template_id": lane.prepared.template_spec.template_id,
+                "source_scan_geometry": typed_read_model(
+                    lane.prepared.source_scan_geometry
+                ),
                 "coarse_strip_support": {
                     "long_authority": (
                         lane.prepared.coarse_support.long_axis.authority.value
@@ -119,6 +122,9 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                     "outer_frame_observation_authority": typed_read_model(
                         alignments[lane.lane_id]
                         .outer_frame_observation_authority
+                    ),
+                    "frame_width_inference": typed_read_model(
+                        alignments[lane.lane_id].frame_width_inference
                     ),
                     "unbound_direct_observation_count": len(
                         alignments[lane.lane_id]

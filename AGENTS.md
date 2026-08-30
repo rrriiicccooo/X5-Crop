@@ -98,9 +98,11 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
   `NEXT_ACTIONS.md`、`DECISIONS.md` 或同类文件。
 - 只在用户明确要求时读写，并只保留当前目标、已验证事实、开放风险和精确下一步。
 - Baseline 必须绑定 source SHA，并由用户在原图坐标中直接确认，或来自独立校准的外部测量。
-  用户确认的是最内侧可接受裁切基准，不是内容边界真值或 detector 唯一答案；方向性包含与 5% 外扩
-  预算以 `docs/ARCHITECTURE.md` 为准，并统一适用于全部当前与以后用户确认的黄金样片。OpenCV、SciPy、
-  X5 Crop、模型视觉、生成 JPG 和算法一致只能产生非权威 proposal。
+  用户红线是尽量贴近该 source 真实有效成像边界的最内侧可接受裁切基准，基本可作为该 source 的
+  aperture 尺寸观测；它不是跨相机固定常量、实验室级绝对测量或 detector 唯一答案。红线可以校准
+  W/H、separator 与 aperture 的分布和 source-level authority，但不得由开发集直接压成适用于所有相机的
+  单一尺寸。方向性包含与 5% 外扩预算以 `docs/ARCHITECTURE.md` 为准，并统一适用于全部当前与以后用户
+  确认的黄金样片。OpenCV、SciPy、X5 Crop、模型视觉、生成 JPG 和算法一致只能产生非权威 proposal。
 - 不让模型查看完整长 TIFF 后代写 reference 边界；边界判断歧义保持 unresolved。
 
 ## 当前产品边界
@@ -121,6 +123,9 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
   有界固定模板，只在理论 outer、separator 和 top/bottom 附近精修。独立像素观察负责对准、约束每个
   已唯一绑定 adjacency 的直接 local advance，并否决非法 placement；不得用模板投影创造自己的 phase
   authority。全部 local advance 的数量始终不超过 `count - 1`，且只作一次 O(count) 传播。
+- Format 画幅比例是强物理先验，但不能作为零不确定性的 W→H 等式。跨轴推断必须由黄金集校准的
+  format-specific ratio interval、typed authority 和完整相关 uncertainty 单独拥有；它不冒充 direct H、
+  不增加独立 constraint rank，并继续受 5% 预算、反证和 sealed acceptance 约束。
 - 当前 production 只用 typed hard facts 选择 placement。未来可以在全部硬物理合法性、source
   containment、输出预算和 content veto 之后加入经独立数据校准且带 abstention 的概率选择，但未经校准
   的 score 不得拥有最终决定权。启用前必须冻结 feature/model/calibration schema、绝对概率与 margin

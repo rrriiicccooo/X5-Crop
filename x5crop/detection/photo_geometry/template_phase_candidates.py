@@ -29,10 +29,7 @@ from .template_model import (
     template_role_refinement_radius_px,
 )
 from .template_phase_model import PhaseWinnerBasis
-from .template_pitch import (
-    refine_common_frame_width,
-    refine_placement_pitch_interval,
-)
+from .template_pitch import refine_placement_pitch_interval
 from .template_evidence import separator_support_authority
 
 
@@ -88,37 +85,6 @@ class _PhaseSeed:
             or len(set(observation_ids)) != len(observation_ids)
         ):
             raise ValueError("phase seed identity is invalid")
-
-
-def _with_common_frame_width(fit: SequenceFit) -> SequenceFit:
-    """Close one missing role from a uniquely measured common Frame width."""
-
-    if len(fit.unbound_role_indices) != 1:
-        return fit
-    calibration = refine_common_frame_width(
-        tuple(zip(fit.role_bindings[0::2], fit.role_bindings[1::2], strict=True)),
-        width_authority=FiniteInterval(
-            fit.template.frame_width_px.minimum,
-            fit.template.frame_width_px.maximum,
-        ),
-        direction=fit.template.direction,
-    )
-    if calibration is None:
-        return fit
-    observation_ids = tuple(
-        dict.fromkeys(
-            (*fit.pitch_fit.observation_ids, *calibration.observation_ids)
-        )
-    )
-    return replace(
-        fit,
-        pitch_fit=replace(
-            fit.pitch_fit,
-            frame_width_px=calibration.width_px,
-            canonical_frame_width_px=calibration.canonical_width_px,
-            observation_ids=observation_ids,
-        ),
-    )
 
 
 def _interval(value: FiniteInterval | PositiveInterval | float | int) -> FiniteInterval:
@@ -822,7 +788,7 @@ def _refine_local_role_bindings(
     )
     if not added:
         return _LocalRoleRefinement(
-            _with_common_frame_width(fit),
+            fit,
             len(roles) * len(facts),
             0,
         )
@@ -863,7 +829,7 @@ def _refine_local_role_bindings(
         ),
     )
     return _LocalRoleRefinement(
-        _with_common_frame_width(refined),
+        refined,
         len(roles) * len(facts),
         len(added),
     )

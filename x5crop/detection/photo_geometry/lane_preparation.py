@@ -6,7 +6,7 @@ from dataclasses import replace
 import math
 
 from ...configuration.model import DetectionConfiguration, ResolvedSlotCount
-from ...domain import FiniteInterval, ObservationId
+from ...domain import FiniteInterval
 from ...formats import OUTPUT_PROTECTION_SPEC
 from ..source_core import SourceLaneEvidence
 from .axis_layout import axis_interval, coordinate_count, source_axes
@@ -36,6 +36,7 @@ from .sequence_edge_families import merge_sequence_edge_families
 from .separator_observations import build_format_separator_bands
 from .observation_types import BoundaryEdgeMeasurementBasis
 from .template_evidence import template_evidence_use_ledger
+from .template_frame_width import calibrate_source_frame_width
 from .template_runtime_model import (
     PreparedTemplateLane,
     RegisteredTemplateLane,
@@ -47,7 +48,10 @@ from .template_registration import (
     register_template_local_cross_refinements,
     template_spec_from_physical_authority,
 )
-from .template_cross import fit_template_cross
+from .template_cross import (
+    calibrate_source_frame_height,
+    fit_template_cross,
+)
 from .template_cross_model import CrossRoleBinding, TemplateCrossInput
 from .template_phase import (
     account_prior_phase_fit,
@@ -71,28 +75,6 @@ from .transition_tracking import (
     track_cross_height_transition_regions,
     track_side_transition_regions,
 )
-
-
-def _canonical_height_from_shared_scale(
-    source_geometry: SourceScanGeometry,
-) -> float:
-    """Project a directly calibrated source scale onto fixed format H.
-
-    Width and height retain separate tolerance intervals, but the scan has one
-    pixel/mm scale.  Once direct frame-width spans calibrate that scale, the
-    fixed template supplies the normal-path canonical height.  Cross pixels
-    still validate and locate the midpoint; they do not resize the format.
-    """
-
-    height = source_geometry.height_state.extent_projection_px()
-    observed_scale = source_geometry.width_state.observed_normalized_extent
-    if observed_scale is None:
-        return height.center
-    canonical = (
-        observed_scale.center
-        * source_geometry.frame_spec.frame_height_mm
-    )
-    return min(height.maximum, max(height.minimum, canonical))
 
 
 def _coarse_enclosing_binding(
@@ -173,90 +155,6 @@ def _enclosing_support_for_canonical_height(
     ):
         return None
     return enclosing
-
-
-def _calibrated_width_geometry(
-    source_geometry: SourceScanGeometry,
-    phase: PhaseFitResult,
-    sequence_edges,
-    *,
-    holder_span_px: FiniteInterval,
-) -> SourceScanGeometry:
-    """Conservatively narrow W after one unique placement is established.
-
-    Each directly bound frame contributes one physical span.  Real scans and
-    straight-line annotation can differ slightly across the strip, so all
-    compatible spans are retained in one hull; they are never averaged or
-    reduced to the prettiest intersecting subset.  W calibration therefore
-    cannot discard a direct endpoint or select between placements.
-    """
-
-    fit = phase.best
-    if phase.status != PhaseFitStatus.RESOLVED or fit is None:
-        return source_geometry
-    by_id = {item.observation_id: item for item in sequence_edges}
-    physical = source_geometry.width_state.extent_projection_px()
-    spans: list[
-        tuple[int, FiniteInterval, tuple[ObservationId, ObservationId]]
-    ] = []
-    for ordinal in range(fit.template.count):
-        start_id, end_id = fit.binding_observation_ids[2 * ordinal : 2 * ordinal + 2]
-        if start_id is None or end_id is None:
-            continue
-        start = by_id[start_id].fit_position_interval_px
-        end = by_id[end_id].fit_position_interval_px
-        if fit.template.direction > 0:
-            measured = FiniteInterval(
-                end.minimum - start.maximum,
-                end.maximum - start.minimum,
-            )
-        else:
-            measured = FiniteInterval(
-                start.minimum - end.maximum,
-                start.maximum - end.minimum,
-            )
-        minimum = max(measured.minimum, physical.minimum)
-        maximum = min(measured.maximum, physical.maximum)
-        if maximum >= minimum:
-            spans.append(
-                (
-                    ordinal,
-                    FiniteInterval(minimum, maximum),
-                    (start_id, end_id),
-                )
-            )
-    if len(spans) < 2:
-        return source_geometry
-    ordinals = tuple(item[0] for item in spans)
-    if not any(right == left + 1 for left, right in zip(ordinals, ordinals[1:])):
-        return source_geometry
-    observed = FiniteInterval(
-        min(item[1].minimum for item in spans),
-        max(item[1].maximum for item in spans),
-    )
-    full_span_minimum = (
-        observed.minimum
-        + fit.pitch_fit.pitch_interval_px.minimum
-        * max(0, fit.template.count - 1)
-    )
-    if full_span_minimum > holder_span_px.width * 1.04:
-        return source_geometry
-    identities = tuple(
-        dict.fromkeys(
-            identity
-            for _ordinal, _interval, pair in spans
-            for identity in pair
-        )
-    )
-    width_state = source_geometry.width_state.intersect_observed_extent(
-        observed,
-        observation_ids=identities,
-    )
-    return SourceScanGeometry.from_axis_states(
-        source_geometry.frame_spec,
-        width_state,
-        source_geometry.height_state,
-    )
 
 
 def _profile_capacity(
@@ -638,7 +536,7 @@ def prepare_template_lane(
                 base_phase,
                 proposed_base_phase,
             )
-    source_geometry = _calibrated_width_geometry(
+    source_geometry = calibrate_source_frame_width(
         source_geometry,
         base_phase,
         sequence_edges,
@@ -778,6 +676,8 @@ def prepare_template_lane(
         lane_reference_trace_px=width_authority.center,
         maximum_runs=measurement_plan.cross_bounds.max_registered_runs,
     )
+    fixed_height = source_geometry.height_state.extent_projection_px()
+    canonical_height = fixed_height.center
     cross = register_template_local_cross_refinements(
         cross,
         top_measurement=precision_measurement_sets[0],
@@ -786,12 +686,11 @@ def prepare_template_lane(
         height_axis=height_axis,
         height_scale_px_per_mm=scales.height_axis_px_per_mm,
         lane_reference_trace_px=width_authority.center,
-        fixed_height_px=source_geometry.height_state.extent_projection_px(),
-        canonical_height_px=_canonical_height_from_shared_scale(source_geometry),
+        fixed_height_px=fixed_height,
+        canonical_height_px=canonical_height,
         longitudinal_support_domains_px=longitudinal_support_domains_px,
         maximum_bindings=measurement_plan.cross_bounds.max_fitted_observations,
     )
-    canonical_height = _canonical_height_from_shared_scale(source_geometry)
     # Coarse measurement happens before sequence scale calibration. Direction
     # remains direct evidence, but boundary use is classified against final H.
     enclosing = _enclosing_support_for_canonical_height(
@@ -836,7 +735,7 @@ def prepare_template_lane(
     )
     cross_input = TemplateCrossInput(
         template=template,
-        fixed_height_px=source_geometry.height_state.extent_projection_px(),
+        fixed_height_px=fixed_height,
         canonical_fixed_height_px=canonical_height,
         lane_reference_trace_px=width_authority.center,
         source_direction=source_direction,
@@ -853,6 +752,10 @@ def prepare_template_lane(
         maximum_evaluated_fits=measurement_plan.cross_bounds.max_evaluated_fits,
     )
     cross_competition = fit_template_cross(cross_input)
+    source_geometry = calibrate_source_frame_height(
+        source_geometry,
+        cross_competition,
+    )
     registered_values = dict(registered.__dict__)
     registered_values["top_cross_bindings"] = top_bindings
     registered_values["bottom_cross_bindings"] = bottom_bindings

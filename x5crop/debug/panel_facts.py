@@ -188,6 +188,17 @@ def alignment_summary(detection: FinalDetection) -> str:
             else int(bool(outer.first_frame_observation_ids))
             + int(bool(outer.last_frame_observation_ids))
         )
+        width_inference = diagnostic.frame_width_inference
+        width_proof = (
+            "N/A"
+            if width_inference is None
+            else (
+                f"{len(width_inference.supporting_frame_ordinals)}F/"
+                f"{len(width_inference.inferred_role_indices)}R"
+                if width_inference.state.value == "supported"
+                else width_inference.failure_kind.value.upper()
+            )
+        )
         separator_counts = {
             polarity: (
                 sum(
@@ -221,7 +232,7 @@ def alignment_summary(detection: FinalDetection) -> str:
             f"GLOBAL {rank}/3 · ADJ "
             f"{complete_coverage}/{len(inferred_coverage)} · DIRECT "
             f"{direct_supported}/{direct_total} · OUTER "
-            f"{outer_count}/2 · SEP "
+            f"{outer_count}/2 · W {width_proof} · SEP "
             f"D {separator_counts['dark'][0]}/{separator_counts['dark'][1]}"
             f" C{separator_counts['dark'][2]} "
             f"L {separator_counts['light'][0]}/{separator_counts['light'][1]}"
@@ -387,6 +398,14 @@ def axis_authority_summaries(
         lane.prepared.cross_competition.runner_up is not None
         for lane in lanes
     )
+    width_calibrated = sum(
+        bool(lane.prepared.source_scan_geometry.width_state.observation_ids)
+        for lane in lanes
+    )
+    height_calibrated = sum(
+        bool(lane.prepared.source_scan_geometry.height_state.observation_ids)
+        for lane in lanes
+    )
     if selection.state.value != "supported":
         competitors = sum(
             len(item.placement_competition.placements) for item in lanes
@@ -403,7 +422,9 @@ def axis_authority_summaries(
             f"RUNNER {cross_runners}",
             f"SEQUENCE FIT · {phase_status} · COARSE {coarse_long} · "
             f"RUNNER {phase_runners}",
-            f"SOURCE FIT · {competitors} PLACEMENTS · {detail}",
+            f"SOURCE FIT · {competitors} PLACEMENTS · APERTURE "
+            f"W {width_calibrated}/{len(lanes)} H "
+            f"{height_calibrated}/{len(lanes)} · {detail}",
         )
     direct_sequence = sum(
         len(item.prepared.phase_competition.best.bound_observation_ids)
@@ -446,7 +467,9 @@ def axis_authority_summaries(
         + f" · DIRECT {direct_cross} · INFERRED {inferred_cross}",
         f"SEQUENCE FIT · {phase_status} · COARSE {coarse_long} → "
         f"DIRECT {direct_sequence} · INFERRED {inferred_sequence}",
-        f"SOURCE FIT · LANES {len(lanes)} · RUNNERS {runners} · GATE SUPPORTED",
+        f"SOURCE FIT · LANES {len(lanes)} · APERTURE W "
+        f"{width_calibrated}/{len(lanes)} H {height_calibrated}/{len(lanes)} · "
+        f"RUNNERS {runners} · GATE SUPPORTED",
     )
 
 

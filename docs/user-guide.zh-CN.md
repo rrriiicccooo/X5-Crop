@@ -6,8 +6,8 @@
 
 ## 产品行为
 
-X5 Crop 把已知 format 的固定物理模板对准扫描片带，而不是做通用照片边界识别。只有当整张 source 的
-每个 slot 都能形成唯一、安全、可直接使用的裁切时，才写出正式 TIFF；否则整张进入
+X5 Crop 用已知 format 的设计尺寸先验建立该 source 的有界物理模板，而不是做通用照片边界识别。只有
+当整张 source 的每个 slot 都能形成唯一、安全、可直接使用的裁切时，才写出正式 TIFF；否则整张进入
 `needs_review`，不单独抢救部分 slot。
 
 ### Format 与 count
@@ -27,9 +27,15 @@ V5 没有 full/partial mode。
 
 ### 自动批准与人工检查
 
-V5 先从整条片带建立粗略支撑和共同方向，再把 format/count 编译成固定 W/H 模板，只在理论 outer、
-separator 与 top/bottom 附近做有界局部测量。像素证据用于对准模板和否决危险裁切，不能凭自身创造
-format、count 或 placement。
+V5 先从整条片带建立粗略支撑和共同方向，再把 format/count 编译成有界 W/H 模板，只在理论 outer、
+separator 与 top/bottom 附近做有界局部测量。Format 尺寸是跨相机先验，不是要求每台相机严格相同的
+片门常量；唯一 placement 中的直接边缘可分别闭合该 source 的共同 W/H，并保留原生位置。像素证据用于
+对准模板和否决危险裁切，不能凭自身创造 format、count 或 placement。
+
+缺失的单侧 start/end 只有在至少两张完整直接 Frame 已闭合 source W、且该 Frame 的另一侧直接可见时
+才可推断；双侧都不可见的 Frame 不能由 Grid 凭空生成。Direct W/H 分别取证。Format 画幅比例可以在
+经过黄金集校准、保留完整不确定性后让 W 约束 H，但当前版本尚未启用这项 authority；它不能冒充直接
+top/bottom，也不能用名义比例作零误差换算。
 
 同一已登记窗口会把多个高度的弱 gradient、tone 与 texture 信号联合检查。只有三个独立高度区域一致、
 且唯一加强同一条直接边缘时，它才获得裁切坐标权限；未绑定或有多种解释的联合线只显示在 Debug 中，

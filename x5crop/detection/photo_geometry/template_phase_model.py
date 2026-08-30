@@ -247,6 +247,9 @@ class PhaseFailureKind(str, Enum):
     OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE = (
         "outer_frame_observation_authority_unavailable"
     )
+    FRAME_WIDTH_INFERENCE_UNAVAILABLE = (
+        "frame_width_inference_unavailable"
+    )
     FIXED_TEMPLATE_MISMATCH = "fixed_template_mismatch"
     DISCRETE_PHASE_AMBIGUOUS = "discrete_phase_ambiguous"
     LOCAL_ADVANCE_AMBIGUOUS = "local_advance_ambiguous"

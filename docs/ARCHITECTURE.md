@@ -9,7 +9,7 @@ X5 Crop 是已知胶片模板的自动对准器，不是通用照片边界检测
 
 ```text
 用户 format + 用户确认 count
-→ 固定 W/H 模板
+→ format 设计先验与 source-level W/H 模板
 → 从整条片带到局部边界的有界对准
 → 合法 placement 竞争
 → 唯一获准的 selected placement，或拒绝自动选择
@@ -47,7 +47,7 @@ SlotCountRequest
 
 尺寸按照片长轴 × 短轴记录：
 
-| format | 固定 W × H | `G_format` 局部搜索先验 | 默认完整格数 |
+| format | 设计 W × H | `G_format` 局部搜索先验 | 默认完整格数 |
 |---|---:|---:|---:|
 | `135` | 36 × 24 mm | 2 mm | 6 |
 | `135-dual` | 每 lane 36 × 24 mm | 2 mm | 12，6/lane |
@@ -60,13 +60,45 @@ SlotCountRequest
 片夹画布提供大致 px/mm、有效区域和 format/count 相容性，不提供照片组长轴中心。数值合同：
 
 ```text
-W compatibility：format 名义宽度 ±1.25%
+W compatibility：通常为 format 名义宽度 -1.25% / +1.25%
+half W compatibility：format 名义宽度 -3.5% / +1.25%
 H compatibility：format 名义高度 ±0.40%
 holder extent：物理名义范围 ±3.5%
 ```
 
-`G_format` 只决定首次理论搜索位置，不能单独建立 phase、pitch 或 placement。相机片门偏差与扫描
-比例偏差对本项目等价，不尝试区分。X5 长图不依赖齿孔。
+设计 W/H 是跨相机的有界搜索先验，不是每台相机共享的绝对片门尺寸。唯一 placement 闭合后，同一
+source 的直接 START/END 可以收紧共同 W，唯一直接 aperture top/bottom pair 可以收紧共同 H。Direct
+W/H observation 分别保留自己的 identity；直接可见边界的 native coordinate 始终优先，catalog 或
+比例推断都不能把它拉回名义尺寸。相机 aperture 差异与该轴扫描比例差异在像素域可能不可区分，本项目
+只保存能够安全证明的 source-level extent 与相关推断。
+
+`G_format` 只决定首次理论搜索位置，不能单独建立 phase、pitch 或 placement。X5 长图不依赖齿孔。
+
+### 2.1 已确认、尚未启用的画幅比例 authority
+
+Format 的 `actual_W / actual_H` 是强物理先验，但不是零不确定性的常量。当前 runtime 已删除旧的
+“观测 W 等于纯扫描比例，再乘名义 H”换算；在 `ApertureAspectRatioAuthority` 完成前，W 不参与 H
+推断，证据不足的 source 保守 review。下一小机制必须使用全部 development gold 的 source-level
+实际比例分布建立 format-specific `R_interval`，以后再由预先冻结的 sealed 数据验证：
+
+```text
+W_px = actual_W × scale_W
+H_px = actual_H × scale_H
+R = actual_W / actual_H
+H_px ∈ W_px × (scale_H / scale_W) / R_interval
+```
+
+| 证据状态 | 结果 |
+|---|---|
+| direct top/bottom 唯一闭合 H | 保留 native coordinate；direct H 优先 |
+| source W、两轴 scale authority 与 `R_interval` 均完整 | 产生一份相关 H interval；不冒充 direct H，不增加 constraint rank |
+| ratio authority 不可用、scale ratio 不闭合或存在多个不等价 interval | `aperture_aspect_ratio_authority_unavailable` |
+| ratio 推断与 direct H 冲突 | `aperture_aspect_ratio_direct_conflict` |
+| 推断 uncertainty、residual 与 bleed 耗尽逐侧 5% 预算 | `aperture_aspect_ratio_budget_exhausted` |
+
+该 authority 只能在硬合法 placement 之后消费既有 source W 与 scan-canvas scale，不读取新 TIFF、不选择
+phase/ordinal、不创造双侧都不可见的 Frame。Report 与 Debug 必须显示 calibration identity、比例区间、
+W/scale provenance、推导 H interval、相关性和 typed failure；不得建立样片规则或另一个 detector。
 
 ## 3. 几何词汇与权限
 
@@ -264,9 +296,22 @@ role = phase
   observation，所有 phase、pitch 与 role interval 都相交，且同一 role 没有绑定不同物理 support，
   它们是一个连续 placement 的联合证据，不是 runner。合并只取联合可行区间与 observation 并集；
   ordinal、support identity 或 local relation 不同仍是离散竞争。
-- 当整条 sequence 恰好只缺一个 START/END，至少两张完整 Frame 的直接双边在 format W authority
-  内形成唯一相交宽度组，且没有复用同一 observation 时，该共同 W 只可推导这一个 opposite。
-  已观察边继续保留 native coordinate；缺两条及以上、宽度分组并列/分离或接触共线时不启用该约束。
+- Placement、local topology、全局 lattice、逐 adjacency coverage 和两端 Frame authority 全部闭合后，
+  至少两张具有独立直接双边的完整 Frame 可以收紧该 source 的共同 W。所有物理相容的完整 Frame 都以
+  完整 uncertainty 进入一个保守 hull；非相邻 Frame 同样有效，不挑 dominant subset、不取中位 winner，
+  也不覆盖任何直接边界。若每个仍缺角色的 Frame 都至少有一侧直接边缘，同一份相关 W 可以推导多条
+  opposite；这些推导不是多份独立证据。
+
+| source W 与缺失角色状态 | 结果 |
+|---|---|
+| 没有缺失角色 | 不需要 W 推断，全部直接 native coordinate 保持不变 |
+| 至少两张完整直接 Frame 闭合共同 W，且每个缺失 Frame 仍有一侧直接边缘 | `supported`；同一相关 W 补齐全部 opposite |
+| 任一 Frame 的 START/END 都未观察 | `complete_frame_unobserved` → `frame_width_inference_unavailable` |
+| 缺失 opposite，但不足两张完整直接 Frame 建立共同 W | `common_width_authority_unavailable` → `frame_width_inference_unavailable` |
+
+Source H 的直接 authority 仍只来自 selected、唯一且直接的 aperture top/bottom pair；enclosing support
+或单侧 fixed-H 推断不能冒充 direct H。完成第 2.1 节后，source W 只能经校准比例区间产生一份相关 H
+推断；它不增加独立 rank，且 direct H 始终优先。
 
 被模板选中的 edge 仍须取得 `DirectRoleBindingAuthority`，才能让自己的 native coordinate 进入最终
 placement；“观察到了”本身不等于“有权决定裁切”。权限只来自以下三种独立物理闭环：
@@ -728,7 +773,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 
 | 路径 | 唯一职责 |
 |---|---|
-| `x5crop/formats/` | 固定 W/H、容差、gap 搜索先验、holder count 与输出保护常量 |
+| `x5crop/formats/` | format 设计 W/H、分格式 aperture 先验、gap 搜索先验、holder count 与输出保护常量 |
 | `x5crop/configuration/`、`x5crop/runtime/` | format/count/deskew mode 输入、matched-holder resolution 与 source workflow |
 | `x5crop/detection/source_core.py`、`evidence/scan_canvas.py` | source/lane 与 matched-holder authority |
 | `photo_geometry/coarse_strip_support.py`、`coarse_enclosing_model.py`、`coarse_enclosing_support.py` | 两个 role-free aggregate query、粗片带 interval、source-wide 双侧 track 与 receipt |
@@ -736,14 +781,15 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/corridors.py` | 候选无关 top/bottom 与完整 `W/pitch` sequence 查询走廊 |
 | `photo_geometry/registered_*.py`、`observations.py`、`separator_*.py` | 一次性 measurement、role-free edge 与 material band |
 | `photo_geometry/cross_height_transition_measurement.py`、`cross_height_edge_support.py` | 三区域弱信号联合测量及其与唯一 direct edge 的单次绑定权限 |
-| `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source 共享 W/H/scale authority |
+| `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source W/H direct extent 与 scan-scale authority；不执行隐式精确跨轴换算 |
+| `photo_geometry/template_frame_width.py` | selected placement 后的 source W 校准与相关单侧角色推断 |
 | `photo_geometry/template_phase*.py`、`template_pitch.py`、`template_residual.py` | phase/ordinal 求解、source pitch 与逐 adjacency 的 direct local advance |
 | `photo_geometry/template_direct_role_authority.py` | 已选直接 START/END 的 native coordinate 权限证明 |
 | `photo_geometry/template_lattice_authority.py` | `(phase, W, pitch)` 直接约束矩阵与独立闭合证明 |
 | `photo_geometry/template_adjacency_coverage.py` | selected adjacency 合法走廊到既有 query/trace/coordinate 的覆盖证明 |
 | `photo_geometry/template_outer_frame_authority.py` | 带 Grid 推断时首尾输出 Frame 的直接长轴角色证明 |
 | `photo_geometry/template_alignment_diagnostic.py` | theoretical-vs-observed residual 的只读诊断 |
-| `photo_geometry/interval_math.py`、`template_cross*.py`、`template_cross_support.py` | 共享 interval 运算、fixed-H aperture、局部 top/bottom 方向闭合与 enclosing support |
+| `photo_geometry/interval_math.py`、`template_cross*.py`、`template_cross_support.py` | 共享 interval 运算、source H 校准、局部 top/bottom 方向闭合与 enclosing support |
 | `photo_geometry/template_placement.py`、`template_selection.py` | source-axis frame 的一次 compose 与离散 winner/runner |
 | `photo_geometry/template_holder_fill.py` | selected PhotoGroupOuter 与 W-only fill assessment |
 | `photo_geometry/content_*.py` | 最终 post-bleed polygon 上的二维 negative veto |
@@ -782,8 +828,9 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
 ## 14. 验证边界
 
 - `x5crop_directional_minimum_acceptable_crop_v1` 是全部当前与以后用户确认黄金共用的
-  accuracy 合同。用户确认 polygon 表示最内侧可接受的无 bleed 裁切，不表示真实内容边界的 100%
-  测量，也不限定 detector 只能产生一个逐像素相同的答案。
+  accuracy 合同。用户确认 polygon 是尽量贴近该 source 真实有效成像边界的最内侧可接受无 bleed
+  基准，基本可视为该 source 的 aperture 尺寸；它仍不是实验室级绝对测量，也不限定 detector 只能产生
+  一个逐像素相同的答案。
 - 黄金比较是方向性的：`approved_auto` 的正式 post-bleed `required_source_footprint` 必须完整包含确认
   polygon，边、角点或亚像素位置不得向其内侧越界；任一违例都是危险自动批准并硬阻断。Development
   contract 还用同一规则检查 selected candidate，以定位 detector 机制；Review candidate 的偏差不产生
@@ -867,9 +914,12 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   写回人工基线。分析结果绑定 HEAD、detector source manifest、comparator source manifest 与 development
   gold SHA，并分别记录两组路径是否与 HEAD 一致。`--gate zero-unsafe-auto` 只在完整 development gold 上
   阻断危险自动批准；完整 development contract 仍独立检查 candidate conformance 与 nominal 目标。
-- 同一分析按 source SHA 去重验证 runtime 物理先验：scan-canvas/profile 匹配、直接可见 Frame 比例、
-  separator gap、相邻 pitch 和编译后的 top/bottom corridor。黄金线是最内侧可接受基准，不是物理片门
-  真值；因此这些统计只用于发现方向性偏差和缺失能力，不能自动校准 runtime 常量或晋升黄金。
+- 同一分析按 source SHA 去重验证 runtime 物理先验，并分别统计同源与跨 source 的 W/H、separator gap、
+  pitch，以及 scan-canvas/profile 和 top/bottom corridor。黄金红线是人工确认、尽量贴近该 source 真实
+  有效成像边界的最内侧可接受基准，基本可作为 source aperture 的真实尺寸观测；因此它可以校准物理
+  分布、format prior 和 source-level extent owner。它仍不是跨相机绝对固定常量：holder-normalized mm
+  只是在名义片夹尺度上的估计，明显偏离 catalog 时必须先检查真实相机个体差异、扫描比例和 measurement
+  uncertainty，不能自动判为标注错误，也不能由开发集直接晋升黄金或绕过 sealed acceptance。
 - 24-source performance 只证明其绑定 commit、依赖和机器上的完整路径时间与资源；5 秒均值是
   blocking Gate，3 秒均值只是 non-blocking challenge。
 - Platform 聚合必须同时收到同一 commit 的 Apple Silicon macOS、Intel macOS 与 Windows x64

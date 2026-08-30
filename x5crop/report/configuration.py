@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 from ..configuration.model import DetectionConfiguration
-from ..formats import FRAME_DIMENSION_TOLERANCE_SPEC
 from ..detection.evidence.content_occupancy_model import (
     CONTENT_OCCUPANCY_MEASUREMENT_SPEC,
 )
@@ -23,10 +22,7 @@ def detection_configuration_read_model(
         "slot_count_request": typed_read_model(
             configuration.count_request
         ),
-        "frame_physical_spec_mm": typed_read_model(spec.frame),
-        "frame_dimension_tolerance": typed_read_model(
-            FRAME_DIMENSION_TOLERANCE_SPEC
-        ),
+        "frame_physical_spec": typed_read_model(spec.frame),
         "scan_layout": typed_read_model(spec.layout),
         "measurement": {
             "base_gray": typed_read_model(configuration.base_gray),

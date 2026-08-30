@@ -28,9 +28,6 @@ from x5crop.detection.photo_geometry.template_model import (
     PhaseLatticeAuthority,
     TemplateSpec,
 )
-from x5crop.detection.photo_geometry.template_phase_candidates import (
-    _with_common_frame_width,
-)
 from x5crop.detection.photo_geometry.template_placement import (
     compose_format_placement,
     resolved_sequence_support_domains_px,
@@ -177,28 +174,6 @@ class TemplatePlacementContractTest(unittest.TestCase):
         self.assertAlmostEqual(
             placement.frames[0].end.canonical_position_px,
             200.5,
-        )
-
-    def test_common_width_closes_exactly_one_unobserved_role(self) -> None:
-        template = replace(
-            _template(3),
-            frame_width_px=FiniteInterval(96.0, 104.0),
-        )
-
-        one_missing = _with_common_frame_width(
-            _sequence(template, missing=(3,))
-        )
-        two_missing = _with_common_frame_width(
-            _sequence(template, missing=(1, 3))
-        )
-
-        self.assertEqual(
-            one_missing.pitch_fit.frame_width_px,
-            PositiveInterval(100.0, 100.0),
-        )
-        self.assertEqual(
-            two_missing.pitch_fit.frame_width_px,
-            template.frame_width_px,
         )
 
     def test_cross_single_side_uses_fixed_height_inference(self) -> None:

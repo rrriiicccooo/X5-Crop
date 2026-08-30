@@ -45,7 +45,7 @@ from x5crop.domain import (
     FiniteInterval,
     PositiveInterval,
 )
-from x5crop.formats import FORMAT_CHOICES, FRAME_DIMENSION_TOLERANCE_SPEC, format_spec
+from x5crop.formats import FORMAT_CHOICES, format_spec
 from x5crop.formats.scan_canvas import (
     SCAN_CANVAS_PHYSICAL_SPECS,
     ScanCanvasPhysicalSpec,
@@ -130,14 +130,17 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
             )
             self.assertEqual(spec.maximum_full_count, values[-1])
             self.assertFalse(hasattr(spec, "partial_mode_supported"))
-            self.assertFalse(hasattr(spec, "aperture_tolerance"))
+            self.assertLessEqual(spec.frame.frame_width_factor_minimum, 1.0)
+            self.assertGreaterEqual(spec.frame.frame_width_factor_maximum, 1.0)
+            self.assertLessEqual(spec.frame.frame_height_factor_minimum, 1.0)
+            self.assertGreaterEqual(spec.frame.frame_height_factor_maximum, 1.0)
         self.assertEqual(
-            FRAME_DIMENSION_TOLERANCE_SPEC.frame_width_tolerance_ratio,
-            0.0125,
+            format_spec("half").frame.frame_width_factor_minimum,
+            0.965,
         )
         self.assertEqual(
-            FRAME_DIMENSION_TOLERANCE_SPEC.frame_height_tolerance_ratio,
-            0.0040,
+            format_spec("135").frame.frame_width_factor_minimum,
+            0.9875,
         )
 
     def test_source_geometry_propagates_shared_scale_and_tolerance(

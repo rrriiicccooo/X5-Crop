@@ -9,7 +9,11 @@ from ...domain import FiniteInterval, ObservationId
 from .model import BoundaryRole, SPATIAL_SUPPORT_REGION_COUNT
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_evidence import separator_support_authority
-from .template_model import LocalAdvanceRelation, SequenceFit
+from .template_model import (
+    FrameWidthInferenceAssessment,
+    LocalAdvanceRelation,
+    SequenceFit,
+)
 from .template_adjacency_coverage import AdjacencyObservationCoverage
 from .template_direct_role_authority import DirectRoleBindingAuthority
 from .template_outer_frame_authority import OuterFrameObservationAuthority
@@ -75,6 +79,7 @@ class TemplateAlignmentDiagnostic:
     ]
     direct_role_binding_authority: DirectRoleBindingAuthority | None
     outer_frame_observation_authority: OuterFrameObservationAuthority | None
+    frame_width_inference: FrameWidthInferenceAssessment | None
     unbound_direct_observation_ids: tuple[ObservationId, ...]
     incompatible_separator_support_ids: tuple[ObservationId, ...]
     maximum_absolute_role_residual_px: float | None
@@ -113,6 +118,11 @@ class TemplateAlignmentDiagnostic:
             and not isinstance(
                 self.outer_frame_observation_authority,
                 OuterFrameObservationAuthority,
+            )
+            or self.frame_width_inference is not None
+            and not isinstance(
+                self.frame_width_inference,
+                FrameWidthInferenceAssessment,
             )
             or (self.pattern == ResidualPattern.NORMAL and self.local_advance_relations)
             or (
@@ -314,6 +324,9 @@ def template_alignment_diagnostic(
         ),
         outer_frame_observation_authority=(
             phase.outer_frame_observation_authority
+        ),
+        frame_width_inference=(
+            None if fit is None else fit.frame_width_inference
         ),
         unbound_direct_observation_ids=unbound,
         incompatible_separator_support_ids=incompatible,

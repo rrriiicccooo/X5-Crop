@@ -12,6 +12,7 @@ from tools.regression.accuracy import DEVELOPMENT_GOLD_COHORT_PATH
 from tools.regression.gold_analysis import (
     ANALYSIS_RECORD_SCHEMA,
     _analysis_identity,
+    _source_variation_summary,
     _summary,
     line_axis_position,
     main as gold_analysis_main,
@@ -207,11 +208,20 @@ class GoldAnalysisContractTest(unittest.TestCase):
                 "nearest_scan_canvas_profile_id": "135_standard",
                 "scan_canvas_aspect_error_ratio": 0.0,
                 "scan_canvas_scale_authority_supported": True,
+                "dimension_estimate_basis": (
+                    "gold_native_geometry_divided_by_selected_nominal_holder_axis_scale"
+                ),
+                "sequence_scale_px_per_nominal_mm": 100.0,
+                "cross_scale_px_per_nominal_mm": 100.0,
                 "frame_ratio_measurements": [1.5],
+                "holder_normalized_frame_width_estimates_mm": [36.0],
+                "holder_normalized_frame_height_estimates_mm": [24.0],
+                "frame_width_prior_containment": [True],
+                "frame_height_prior_containment": [True],
                 "excluded_frame_count": 0,
-                "separator_gap_measurements_mm": [2.0],
+                "holder_normalized_separator_gap_estimates_mm": [2.0],
                 "separator_gap_prior_containment": [True],
-                "pitch_measurements_mm": [38.0],
+                "holder_normalized_pitch_estimates_mm": [38.0],
                 "pitch_prior_containment": [True],
                 "excluded_separator_count": 0,
                 "cross_corridor": {
@@ -266,6 +276,32 @@ class GoldAnalysisContractTest(unittest.TestCase):
             ],
             1,
         )
+        self.assertEqual(
+            summary["physical_prior_validation"]["formats"]["135"][
+                "holder_normalized_frame_width_mm"
+            ]["measurement_count"],
+            1,
+        )
+
+    def test_physical_summary_separates_within_and_between_source_variation(
+        self,
+    ) -> None:
+        summary = _source_variation_summary(
+            (
+                {"values": [35.9, 36.0, 36.1]},
+                {"values": [36.8, 36.9, 37.0]},
+            ),
+            "values",
+        )
+
+        self.assertEqual(summary["measurement_count"], 6)
+        self.assertEqual(summary["source_count"], 2)
+        self.assertEqual(summary["multi_measurement_source_count"], 2)
+        self.assertGreater(
+            summary["between_source_relative_std"],
+            summary["pooled_within_source_relative_rms"],
+        )
+        self.assertGreater(summary["between_to_within_ratio"], 1.0)
 
     def test_analysis_artifact_binds_comparator_and_reaggregates(self) -> None:
         identity = _analysis_identity()

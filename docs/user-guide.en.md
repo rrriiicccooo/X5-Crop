@@ -6,7 +6,8 @@
 
 ## Product Behavior
 
-X5 Crop aligns a fixed physical template for a known format; it is not a general-purpose photo-boundary recognizer.
+X5 Crop uses a known format's design-size prior to establish a bounded physical template for each source; it is not a
+general-purpose photo-boundary recognizer.
 Official TIFFs are written only when every slot in the source has one unique, safe, directly usable crop. Otherwise the
 entire source becomes `needs_review`; individual slots are never salvaged.
 
@@ -28,8 +29,16 @@ It does not remove, merge, or reorder blank slots. V5 has no full/partial mode.
 ### Automatic Approval And Review
 
 V5 first establishes coarse support and a common direction from the whole strip. It then compiles format/count into a
-fixed W/H template and makes bounded local measurements only near theoretical outer, separator, and top/bottom
-positions. Pixel evidence aligns or rejects the template; it cannot invent format, count, or placement authority.
+bounded W/H template and makes bounded local measurements only near theoretical outer, separator, and top/bottom
+positions. Format dimensions are cross-camera priors, not an identical gate size imposed on every camera. Direct edges
+in the unique placement may independently close that source's common W and H while retaining their native positions.
+Pixel evidence aligns or rejects the template; it cannot invent format, count, or placement authority.
+
+A missing single start/end side may be inferred only after at least two complete direct Frames close source W and that
+Frame still has its opposite direct side. Grid cannot create a Frame whose two sides are both unseen. Direct W and H
+retain separate evidence. A gold-calibrated format aspect-ratio interval may eventually let W constrain H with full
+uncertainty, but that authority is not enabled in the current build; it cannot impersonate direct top/bottom or apply
+the nominal ratio as an exact conversion.
 
 Within one registered window, weak gradient, tone, and texture signals are also checked jointly across height. They may
 own a crop coordinate only when three independent height regions agree and uniquely reinforce the same direct edge.
