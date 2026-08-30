@@ -474,6 +474,7 @@ def prepare_template_lane(
         top_cross_bindings=(),
         bottom_cross_bindings=(),
         raw_cross_observations=(),
+        cross_boundary_family_resolutions=(),
         measurement_work=work,
         measurement_plan=measurement_plan,
     )
@@ -774,6 +775,9 @@ def prepare_template_lane(
     registered_values["top_cross_bindings"] = top_bindings
     registered_values["bottom_cross_bindings"] = bottom_bindings
     registered_values["raw_cross_observations"] = cross.observations
+    registered_values["cross_boundary_family_resolutions"] = (
+        cross.family_resolutions
+    )
     return PreparedTemplateLane(
         **registered_values,
         template_spec=template,

@@ -123,6 +123,9 @@ def development_report_facts(
                     "raw_top_bottom_lines": typed_read_model(
                         lane.prepared.raw_cross_observations
                     ),
+                    "cross_boundary_family_resolutions": typed_read_model(
+                        lane.prepared.cross_boundary_family_resolutions
+                    ),
                     "registered_top_bottom_bindings": typed_read_model(
                         (
                             *lane.prepared.top_cross_bindings,

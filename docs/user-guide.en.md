@@ -47,6 +47,13 @@ Within one registered window, weak gradient, tone, and texture signals are also 
 own a crop coordinate only when three independent height regions agree and uniquely reinforce the same direct edge.
 Unbound or multiply explained joint lines remain Debug evidence and cannot create another placement.
 
+Direct top and bottom evidence need not occur on the same sampling trace. They may close one complementary direct pair
+when each side has at least two independent support regions, their union covers the longitudinal domain of every output
+Frame, and direction and fixed H agree. Shared support is still reported as zero. Incomplete coverage, a template-inferred
+side, or multiple equally legal pairs keeps the entire source in `needs_review`. A complete pair also cannot win when the
+same opposite closes against a strictly farther-out local direct edge. Likewise, one source-spanning edge cannot project
+an opposite edge that is visible only locally across the whole strip.
+
 Normal strips use one shared pitch. Every directly proven, ordinal-unique separator may constrain its own wide or narrow
 gap; later Frames apply that measured delta once. Multiple proven gap changes still use one bounded pass. An ambiguous
 gap, missing authority, multiple equally legal answers, or an unknown required Frame remains `needs_review`. Contact and

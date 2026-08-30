@@ -198,6 +198,7 @@ def prepared_template_lane() -> PreparedTemplateLane:
         top_cross_bindings=(),
         bottom_cross_bindings=(),
         raw_cross_observations=(),
+        cross_boundary_family_resolutions=(),
         measurement_work=TemplateMeasurementWorkReceipt(
             2,
             2,

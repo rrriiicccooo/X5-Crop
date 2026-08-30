@@ -483,10 +483,41 @@ Photo aperture 的候选必须有正确 top/bottom 角色、外侧背景、有�
   two-region edge 的要求；
 - 同侧多个相距较远且物理相连的 fragments。
 
-直接 top/bottom pair 只有在共享 direct trace 覆盖至少 3 个 selected frame domain，或其中一侧覆盖
-全部 selected domain 且共享 trace 仍覆盖至少 2 个 domain 时，才拥有整条 template 的 pair authority。
-一侧 template-wide、另一侧仅一个局部 domain 的组合只能保留前者的单侧 authority，不能把局部 opposite
-外推为全局闭环。
+Cross registration 是同角色边界 family identity 的唯一 owner。Transition tracking 可以先产生多个局部
+fragment；registration 先把投影坐标与完整方向区间相容的同角色 observation 组成有界 component，再对
+该 component 的完整 transition 并集只重拟合一次：
+
+| registration 事实 | 结果 |
+|---|---|
+| 一次 robust refit 精确保留完整 transition union | 合并为一个 canonical observation，`state=supported` |
+| refit 丢弃任一 transition 或无法成线 | 全部原 observation 原样保留，`complete_transition_union_refit_rejected` |
+| 只有一个 observation | 不建立多余 family record |
+
+Raster trace 不连续不等于物理边界不同；完整并集重拟合能够成立时，跨 domain fragment 仍可属于同一条线。
+反过来，坐标邻近、方向相似、support 更多或 residual 更小都不能选择性合并其中一部分。Selection 不再
+拥有 broader/local containment 或 dominance 逻辑，只消费 registration 的 canonical identity。每个最多
+256 个 registered run 的集合只做有界 compatibility 与每个多成员 component 一次重拟合，不新增 TIFF
+读取或 selected-placement query。Family state、成员/transition/final identity 与 typed failure 写入
+development report 和 Debug。
+
+直接 top/bottom pair 有两种互斥的 typed support mode：
+
+| 直接观察 | `pair_support_mode` | pair authority |
+|---|---|---|
+| 两侧共享足够的 direct trace | `shared_traces` | 按共享 trace 的独立区域与 selected-domain 合同判断 |
+| 共享 trace 不足，但两侧都为 role-authorized `direct`、各有至少 2 个独立区域、两侧 trace 并集覆盖每个 selected domain，并且 fixed H 与方向相容 | `complementary_domains` | 并集拥有 template-wide pair support；共享 trace 仍如实记录为 0 |
+| domain 并集不完整、任一侧只是 template-local/inferred、支持不足或方向冲突 | 无 | typed failure，保持 review |
+| 存在多个非等价完整 pair | 各自保留 | `non_equivalent_fits`，保持 winner/runner 与 review |
+| 一个完整 pair 的某侧，与同一个 opposite 还能形成严格更外侧、但未取得全局 pair authority 的直接局部闭环 | 不授予该完整 pair 最终权限 | `outward_role_counterevidence`，保持 review |
+
+`shared_traces` 仍须共享 direct trace 覆盖至少 3 个 selected frame domain，或其中一侧覆盖全部 selected
+domain 且共享 trace 仍覆盖至少 2 个 domain。`complementary_domains` 不能借一条 template-wide side 把只在
+一个局部 domain 出现的 opposite 外推成全局闭环；每侧的独立区域和完整 union 都必须由已登记 direct
+trace 证明。若更外侧 pair 也拥有完整全局 authority，则两者都是离散 placement，继续以
+`non_equivalent_fits` review；不能借“更外侧更安全”消除合法 runner。严格外侧反证只比较不相交的 full
+interval，并按共享 opposite identity 建立，不使用距离、support 或 residual score。两种 mode 使用同一
+fixed-H placement、相同 4096 pair 上界和同一 Gate，不建立第二套 detector；反证索引只作 O(pair count)
+的有界归约。
 
 一条短局部线不能外推整条片带。两个不同合法 side tracks 是两个 placements；不按梯度、support
 数量或 residual 的未经校准标量硬选。已有 direct top+bottom 闭环时，不再执行“缺失 opposite”的局部精修；
@@ -497,24 +528,17 @@ departure；它不会产生 placement angle。任何 binding 的短轴 offset �
 直接 trace span 内，未覆盖的 frame 不沿 fit direction 外推。`ENCLOSING_SUPPORT_PAIR` 可以保留
 自己直接观测的 same-state slope，但这仍不是 placement 或 deskew authority。
 
-Broader same-role track 只有与 local competitor 共享同一个 opposite binding、双方 role-authorized，
-且全部 supporting traces 都属于显式 registered trace lattice 时，才可能产生集合支配。存在两种
-直接物理证明：若 local 的 registered trace set 是 broader 的严格真子集，且 broader 直接覆盖严格
-更多 registered frame domains，则 exact registered-sample containment 已经成立；这条证明不再要求
-方向区间相交、allowed-gap 连通或额外的三区域支持。若采样 staggered、local 含有 broader 未命中的
-registered trace，则双方必须各自在同一 lattice 上形成单一 connected allowed-gap run，observed/full
-direction intervals 直接相交，broader 以至少 3 个独立区域覆盖至少 3 个且严格更多 registered frame
-domains，并在长轴上严格包含 local；local 仍须有至少 2 个独立支持区域。Lattice 缺失、trace 未注册、
-domain 相等、opposite 不同，或 staggered proof 的 extent 相等/分离、方向不交、任一侧不连通或支持
-不足时，runner 必须保留。这不是 fragment 合并、坐标邻近、support/residual 打分或 holder center
-选位。
-
-上述 domain-complete anchor 仍必须有完整方向、明确 role authority，并由同一个 direct binding
+Domain-complete 单侧 anchor 仍必须有完整方向、明确 role authority，并由同一个 direct binding
 在每个 selected frame domain 中分别命中 direct trace；selected domain 少于 3 个、缺少一个
 domain、把两个不连通 fragments 合计覆盖、role 未授权或方向不完整时，不能拼接或推导 placement，
 继续 review。Holder short-axis center 只在 measurement compiler 中生成有界 corridor；观察登记完成后，
 它不再是 compatibility、selection 或边界 authority。Opposite 只由 fixed H 推导，局部 departure 继续
 进入 selected placement 的 output budget。
+
+Source-spanning 单侧 direct anchor 与局部 opposite 即使偶然 fixed-H 相容，也不能把局部坐标或方向外推到
+整条 template。只有 opposite 自己覆盖全部 selected domain 时才保留两侧 native height；否则由该
+source-spanning side 与有界 H 推导 opposite。多个局部 closure 不能替代这条权限，也不能扩大整条片带的
+共同方向。
 
 ### 8.2 `ENCLOSING_SUPPORT_PAIR`
 

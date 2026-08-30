@@ -31,6 +31,7 @@ from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossEvidence,
     CrossFit,
+    CrossPairSupportMode,
     CrossRoleBinding,
 )
 from x5crop.detection.photo_geometry.template_model import (
@@ -459,6 +460,9 @@ def placement_cross(
         continuous_support_fraction=1.0,
         residual_sum_px=0.0,
         boundary_use=OutputBoundaryUse.APERTURE_PAIR,
+        pair_support_mode=(
+            None if one_sided else CrossPairSupportMode.SHARED_TRACES
+        ),
     )
 
 

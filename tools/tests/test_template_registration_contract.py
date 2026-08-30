@@ -4,17 +4,28 @@ from dataclasses import replace
 import unittest
 
 from tools.tests.photo_geometry_support import make_side_measurement_set
-from x5crop.domain import FiniteInterval, ObservationId, PositiveInterval
+from x5crop.domain import (
+    EvidenceState,
+    FiniteInterval,
+    ObservationId,
+    PositiveInterval,
+)
 from x5crop.formats import FramePhysicalSpec
 from x5crop.detection.photo_geometry.model import BoundaryAxis, BoundaryRole
+from x5crop.detection.photo_geometry.observation_types import (
+    BasicAxisProfile,
+    ProfileRun,
+)
 from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
 from x5crop.detection.photo_geometry.template_cross_model import (
+    CrossBoundaryFamilyFailureKind,
     CrossEvidence,
     CrossRoleBinding,
 )
 from x5crop.detection.photo_geometry.template_model import PhaseLatticeAuthority
 from x5crop.detection.photo_geometry.template_registration import (
     RegisteredCrossEvidence,
+    register_cross_evidence,
     register_template_local_cross_refinements,
     template_spec_from_physical_authority,
 )
@@ -38,6 +49,96 @@ def _lattice() -> PhaseLatticeAuthority:
 
 
 class TemplateRegistrationContractTest(unittest.TestCase):
+    @staticmethod
+    def _registered_top_families(
+        coordinates_px: tuple[float, ...],
+        groups: tuple[tuple[int, ...], ...],
+    ) -> RegisteredCrossEvidence:
+        measurement = make_side_measurement_set(
+            tuple((coordinate,) for coordinate in coordinates_px)
+        )
+        transitions_by_ordinal = {
+            item.trace_ordinal: item for item in measurement.transitions
+        }
+        runs = tuple(
+            ProfileRun(
+                run_id=f"top-family:{group_ordinal}",
+                coordinate_interval_px=FiniteInterval(
+                    min(coordinates_px[index] for index in group) - 0.25,
+                    max(coordinates_px[index] for index in group) + 0.25,
+                ),
+                transition_ids=tuple(
+                    transitions_by_ordinal[index].transition_id
+                    for index in group
+                ),
+                trace_coordinates_px=tuple(
+                    transitions_by_ordinal[index].trace_coordinate_px
+                    for index in group
+                ),
+                role_hint=BoundaryRole.TOP,
+                qualified_anchor_roles=(BoundaryRole.TOP,),
+                support_fraction=len(group) / len(coordinates_px),
+                continuous_support_fraction=0.5,
+                fit_residual_px=0.0,
+                evidence_strength=10.0,
+                pair_qualified=True,
+            )
+            for group_ordinal, group in enumerate(groups)
+        )
+        profile = BasicAxisProfile(
+            "cross",
+            200,
+            measurement.query.trace_positions_px,
+            runs,
+        )
+        return register_cross_evidence(
+            profile=profile,
+            top_measurement=measurement,
+            bottom_measurement=measurement,
+            width_axis=BoundaryAxis.Y,
+            height_axis=BoundaryAxis.X,
+            height_scale_px_per_mm=PositiveInterval.exact(10.0),
+            lane_reference_trace_px=55.0,
+        )
+
+    def test_cross_family_merges_disconnected_complete_union(self) -> None:
+        registered = self._registered_top_families(
+            (100.0,) * 12,
+            ((0, 2, 4), (7, 9, 11)),
+        )
+
+        self.assertEqual(len(registered.top_bindings), 1)
+        self.assertEqual(len(registered.observations), 1)
+        self.assertEqual(len(registered.observations[0].transition_ids), 6)
+        self.assertEqual(len(registered.family_resolutions), 1)
+        self.assertEqual(
+            registered.family_resolutions[0].state,
+            EvidenceState.SUPPORTED,
+        )
+        self.assertIsNone(registered.family_resolutions[0].failure_kind)
+
+    def test_cross_family_rejects_partial_union_refit(self) -> None:
+        registered = self._registered_top_families(
+            tuple(100.0 if index % 2 == 0 else 102.0 for index in range(12)),
+            (
+                (0, 2, 4, 6, 8, 10),
+                (1, 3, 5, 7, 9, 11),
+            ),
+        )
+
+        self.assertEqual(len(registered.top_bindings), 2)
+        self.assertEqual(len(registered.observations), 2)
+        self.assertEqual(len(registered.family_resolutions), 1)
+        self.assertEqual(
+            registered.family_resolutions[0].state,
+            EvidenceState.UNAVAILABLE,
+        )
+        self.assertEqual(
+            registered.family_resolutions[0].failure_kind,
+            CrossBoundaryFamilyFailureKind
+            .COMPLETE_TRANSITION_UNION_REFIT_REJECTED,
+        )
+
     @staticmethod
     def _top_anchor() -> CrossRoleBinding:
         return CrossRoleBinding(

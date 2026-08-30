@@ -49,14 +49,24 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   extent 保留独立的外部 ±3.5% 设计先验。二者都没有为了复用 aperture guard 而改变物理含义。
 - Cross 注册超过编译上界时不再抛出 runtime error；完整实际计数进入 typed `producer_bound_exceeded`
   receipt，并由 Gate 安全 review，不截断观察或提高魔法上限。
+- Cross registration 现在是同角色边界 family identity 的唯一 owner。只有一次 robust refit 精确保留完整
+  transition union 时，多个局部 fragment 才合并为一个 canonical observation；refit 丢失任一 transition
+  时全部成员原样保留，并报告 typed `complete_transition_union_refit_rejected`。Selection 中旧的
+  broader/local dominance 已删除；不再按 trace containment、邻近、support 或 residual 消除 runner。
 - 当前选择仍只使用 typed hard facts；没有启用 score。架构允许未来在硬合法候选之间加入经独立数据
   校准、带高阈值与 abstention 的概率选择，但未经校准的 score 不得拥有最终决定权，runner
   必须继续报告。
-- Cross 不再用片夹短轴中心选择最终边界；它只帮助编译有界测量 corridor。直接 pair 必须共享足够的
-  selected-frame domain support，不能把一条局部 opposite 借另一条 template-wide side 外推成全局闭环。
-  Cross winner basis、source 长轴投影与 enclosing-support 的逐侧/联合 padding 预算均进入 typed report
-  与外部校验。已经由 fixed H 与 `1.1H` 合同预闭合的唯一 enclosing-support pair 直接拥有两侧输出权限，
-  不再错误依赖或消费只用于缺失 aperture side 的 W/H 比例推导。
+- Cross 不再用片夹短轴中心选择最终边界；它只帮助编译有界测量 corridor。直接 top/bottom pair 现在显式
+  区分 `shared_traces` 与 `complementary_domains`：后者只在两侧都是 role-authorized direct evidence、
+  各自有至少两个独立区域、两侧 trace 并集完整覆盖全部 selected Frame domain，且 fixed H 与方向相容时
+  成立；共享 trace 数仍如实为 0。缺 domain、template-local/inferred opposite、方向冲突或多个完整 pair
+  均保留 typed failure 与 review。若完整 pair 的同一 opposite 还能与严格更外侧的直接局部 role 闭合，
+  内侧 pair 产生 typed `outward_role_counterevidence`；更外侧 pair 若也拥有完整 authority，则两者继续作为
+  非等价 placement review。Source-spanning 单侧也不再把未覆盖全部 selected domain 的局部 opposite 外推
+  为整条片带边界。Cross winner basis、pair support mode、family resolution、source 长轴投影
+  与 enclosing-support 的逐侧/联合 padding 预算进入 typed report 和 Debug。已经由 fixed H 与 `1.1H`
+  合同预闭合的唯一 enclosing-support pair 直接拥有两侧输出权限，不再错误依赖或消费只用于缺失
+  aperture side 的 W/H 比例推导。
 - 任一 slot 不安全时整张 source `needs_review`，不做 slot salvage。Contact 与 overlap 始终属于
   challenge，但 challenge 不预设终态：标准 detector/Gate 可产生安全自动批准，证据不足时安全 review
   同样合格。当前尚未启用异常 topology；后续只允许在同一 adjacency/placement 中加入显式关系，并让
@@ -76,8 +86,9 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   阻断原因；报告同时保存全局未知量 constraint rank、逐 adjacency query/trace/coordinate coverage 与
   直接角色/外侧 Frame observation authority，以及 dark/light material、逐区域状态和冲突。Debug 不重新
   求解，也不把 review candidate 伪装为正式输出。当前 report revision 为
-  `x5crop_v5_template_report_19`，并显式报告 source W/H、相关 Frame-width inference、aspect calibration、
-  raw/guarded ratio、两轴 guard、推导 H、预算与 typed failure；不保留旧 schema 兼容路径。
+  `x5crop_v5_template_report_20`，并显式报告 source W/H、相关 Frame-width inference、aspect calibration、
+  raw/guarded ratio、两轴 guard、推导 H、Cross typed root failure、pair support mode、family resolution 与
+  预算；不保留旧 schema 兼容路径。
 - 正式 TIFF 保真 16-bit RGB、ICC、resolution、支持的 metadata 与无损压缩，并写
   `Orientation=1`。完整 source 先写 staging，再原子发布到尚不存在的目录。
 - Report、Gate 与 final geometry 各有唯一 owner；`CandidateGate` 只记录事实，`DecisionGate` 创建终态。

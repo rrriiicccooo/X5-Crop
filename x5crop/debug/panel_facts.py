@@ -390,6 +390,33 @@ def axis_authority_summaries(
             }
         )
     )
+    cross_failures = "/".join(
+        sorted(
+            {
+                lane.prepared.cross_competition.failure_kind.value.upper()
+                for lane in lanes
+                if lane.prepared.cross_competition.failure_kind is not None
+            }
+        )
+    )
+    cross_pair_modes = "/".join(
+        sorted(
+            {
+                lane.prepared.cross_competition.best.pair_support_mode.value
+                .upper()
+                for lane in lanes
+                if lane.prepared.cross_competition.best is not None
+                and lane.prepared.cross_competition.best.pair_support_mode
+                is not None
+            }
+        )
+    )
+    cross_failure_suffix = (
+        "" if not cross_failures else f" · FAILURE {cross_failures}"
+    )
+    cross_pair_mode_suffix = (
+        "" if not cross_pair_modes else f" · PAIR {cross_pair_modes}"
+    )
     phase_runners = sum(
         lane.prepared.phase_competition.runner_up is not None
         for lane in lanes
@@ -471,7 +498,7 @@ def axis_authority_summaries(
         return (
             f"CROSS FIT · {cross_status} · COARSE {coarse_short} · "
             f"COARSE ORIENTATION {direction} · ENCLOSING {enclosing} · "
-            f"RUNNER {cross_runners}",
+            f"RUNNER {cross_runners}{cross_failure_suffix}",
             f"SEQUENCE FIT · {phase_status} · COARSE {coarse_long} · "
             f"RUNNER {phase_runners}",
             f"SOURCE FIT · {competitors} PLACEMENTS · APERTURE "
@@ -517,7 +544,8 @@ def axis_authority_summaries(
                 }
             )
         )
-        + f" · DIRECT {direct_cross} · INFERRED {inferred_cross}",
+        + f" · DIRECT {direct_cross} · INFERRED {inferred_cross}"
+        + cross_pair_mode_suffix,
         f"SEQUENCE FIT · {phase_status} · COARSE {coarse_long} → "
         f"DIRECT {direct_sequence} · INFERRED {inferred_sequence}",
         f"SOURCE FIT · LANES {len(lanes)} · APERTURE W "

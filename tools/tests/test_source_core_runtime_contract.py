@@ -109,6 +109,16 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             len(record["photo_geometry"]["slot_identities"]),
             3,
         )
+        lane = record["photo_geometry"]["lanes"][0]
+        self.assertEqual(lane["cross_status"], "unresolved")
+        self.assertEqual(
+            lane["cross_failure_kind"],
+            "direct_evidence_unavailable",
+        )
+        self.assertEqual(
+            lane["cross_failure_reason"],
+            "cross fit requires top or bottom direct evidence",
+        )
         self.assertEqual(outcome.artifacts.frame_outputs, ())
         self.assertEqual(
             tuple(

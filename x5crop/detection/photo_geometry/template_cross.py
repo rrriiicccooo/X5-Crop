@@ -5,7 +5,7 @@ from __future__ import annotations
 from bisect import bisect_left
 from dataclasses import replace
 import math
-from ...domain import EvidenceState, FiniteInterval
+from ...domain import EvidenceState, FiniteInterval, ObservationId
 from .interval_math import (
     add as _add,
     intersect as _intersect,
@@ -28,6 +28,7 @@ from .template_cross_candidates import (
     _single_candidate,
 )
 from .template_cross_model import (
+    CrossFailureKind,
     CrossFit,
     CrossFitCompetition,
     CrossFitStatus,
@@ -45,7 +46,6 @@ from .template_aspect_ratio import (
     require_aperture_aspect_ratio_for_cross,
 )
 from .template_aspect_ratio_model import ApertureAspectRatioFailureKind
-from .trace_support import trace_support_is_one_connected_run
 
 
 def calibrate_source_frame_height(
@@ -98,124 +98,6 @@ def _receipt(
     )
 
 
-def _remove_contained_local_side_tracks(
-    candidates,
-    registered_traces: tuple[int, ...],
-    longitudinal_domains: tuple[FiniteInterval, ...],
-):
-    """Remove a local side fragment contained by a broader direct track.
-
-    This is set dominance, not a score: the two candidates must share the
-    opposite direct boundary and all supporting traces must belong to the
-    explicit registered lattice. Exact registered-sample strict containment
-    proves dominance directly when the broader side covers strictly more frame
-    domains. Staggered samples instead require connected allowed-gap runs,
-    compatible measured directions, three-region/three-domain broader support,
-    two-region local support, and strict longitudinal extent containment.
-    Disjoint tracks, equal-domain alternatives, and under-supported staggered
-    evidence remain competing placements.
-    """
-
-    if not registered_traces or not longitudinal_domains:
-        return list(candidates)
-    registered_ordinal = {
-        trace: ordinal for ordinal, trace in enumerate(registered_traces)
-    }
-
-    def registered_trace_set(binding):
-        traces = frozenset(binding.trace_coordinates_px)
-        if not traces or any(trace not in registered_ordinal for trace in traces):
-            return None
-        return traces
-
-    def connected_extent(binding, traces):
-        if not trace_support_is_one_connected_run(
-            registered_traces,
-            binding.trace_coordinates_px,
-            spec=PHOTO_BOUNDARY_MEASUREMENT_SPEC,
-        ):
-            return None
-        ordinals = tuple(registered_ordinal[trace] for trace in traces)
-        return min(ordinals), max(ordinals)
-
-    def directions_overlap(broader, fragment) -> bool:
-        for attribute in (
-            "observed_direction_interval_degrees",
-            "full_direction_interval_degrees",
-        ):
-            broad_interval = getattr(broader, attribute)
-            local_interval = getattr(fragment, attribute)
-            if (
-                broad_interval is None
-                or local_interval is None
-                or _intersect(broad_interval, local_interval) is None
-            ):
-                return False
-        return True
-
-    def dominates(broader, fragment) -> bool:
-        if not broader.direct_pair or not fragment.direct_pair:
-            return False
-        if broader.top.observation_id == fragment.top.observation_id:
-            broad_side, local_side = broader.bottom, fragment.bottom
-        elif broader.bottom.observation_id == fragment.bottom.observation_id:
-            broad_side, local_side = broader.top, fragment.top
-        else:
-            return False
-        if (
-            broad_side.observation_id == local_side.observation_id
-            or broad_side.role != local_side.role
-            or not broad_side.role_authorized
-            or not local_side.role_authorized
-        ):
-            return False
-        broad_traces = registered_trace_set(broad_side)
-        local_traces = registered_trace_set(local_side)
-        if broad_traces is None or local_traces is None:
-            return False
-        broad_domain_count = _longitudinal_domain_count(
-            broad_side.trace_coordinates_px,
-            longitudinal_domains,
-        )
-        local_domain_count = _longitudinal_domain_count(
-            local_side.trace_coordinates_px,
-            longitudinal_domains,
-        )
-        if (
-            local_traces < broad_traces
-            and broad_domain_count > local_domain_count
-        ):
-            return True
-        broad_extent = connected_extent(broad_side, broad_traces)
-        local_extent = connected_extent(local_side, local_traces)
-        if (
-            broad_extent is None
-            or local_extent is None
-            or broad_extent[0] > local_extent[0]
-            or broad_extent[1] < local_extent[1]
-            or broad_extent == local_extent
-            or not directions_overlap(broad_side, local_side)
-        ):
-            return False
-        return (
-            broad_side.independent_support_region_count
-            >= SPATIAL_SUPPORT_REGION_COUNT
-            and broad_domain_count >= SPATIAL_SUPPORT_REGION_COUNT
-            and local_side.independent_support_region_count
-            >= MINIMUM_INDEPENDENT_SUPPORT_REGIONS
-            and broad_domain_count > local_domain_count
-        )
-
-    return [
-        candidate
-        for candidate in candidates
-        if not any(
-            other is not candidate and dominates(other, candidate)
-            for other in candidates
-        )
-    ]
-
-
 def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     """Fit one fixed-H short-axis template with bounded interval search."""
 
@@ -255,6 +137,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             status=CrossFitStatus.BOUND_EXCEEDED,
             winner_basis=None,
             reason="cross registration bound exceeded",
+            failure_kind=CrossFailureKind.REGISTRATION_BOUND_EXCEEDED,
             receipt=empty_receipt(),
             aperture_aspect_ratio_authority=aspect_ratio_authority,
         )
@@ -266,6 +149,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             status=CrossFitStatus.UNRESOLVED,
             winner_basis=None,
             reason="cross fit requires top or bottom direct evidence",
+            failure_kind=CrossFailureKind.DIRECT_EVIDENCE_UNAVAILABLE,
             receipt=empty_receipt(),
             aperture_aspect_ratio_authority=aspect_ratio_authority,
         )
@@ -396,6 +280,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                 + candidate.bottom_binding.fit_residual_px
             ),
             boundary_use=OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR,
+            pair_support_mode=None,
             enclosing_support_pair=candidate.pair,
             height_compatibility_px=fixed_height,
             shift_interval_px=top_full,
@@ -443,6 +328,9 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                     status=CrossFitStatus.BOUND_EXCEEDED,
                     winner_basis=None,
                     reason="cross evaluated-fit bound exceeded",
+                    failure_kind=(
+                        CrossFailureKind.EVALUATED_FIT_BOUND_EXCEEDED
+                    ),
                     receipt=receipt,
                     aperture_aspect_ratio_authority=aspect_ratio_authority,
                 ),
@@ -459,6 +347,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                 status=CrossFitStatus.RESOLVED,
                 winner_basis=CrossWinnerBasis.UNIQUE_ENCLOSING_SUPPORT,
                 reason=None,
+                failure_kind=None,
                 receipt=receipt,
                 aperture_aspect_ratio_authority=(
                     inputs.aperture_aspect_ratio_authority
@@ -470,6 +359,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     def unresolved(
         receipt: CrossSearchReceipt,
         reason: str,
+        failure_kind: CrossFailureKind,
         *,
         best: CrossFit | None = None,
         runner_up: CrossFit | None = None,
@@ -484,6 +374,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             status=CrossFitStatus.UNRESOLVED,
             winner_basis=None,
             reason=reason,
+            failure_kind=failure_kind,
             receipt=receipt,
             aperture_aspect_ratio_authority=aspect_ratio_authority,
         )
@@ -492,6 +383,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     direct_candidates: list[_Candidate] = []
     candidates: list[_Candidate] = []
     compatible_pairs = 0
+    pair_failure_kinds: set[CrossFailureKind] = set()
     # Sorted starts plus prefix maxima enumerate every interval overlap.  No
     # nearest-neighbour or used-bottom shortcut may discard a valid answer.
     if top and bottom:
@@ -509,14 +401,19 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             index = start_index
             while index < len(ordered_bottom) and starts[index] <= expected.maximum:
                 bottom_item = ordered_bottom[index]
-                candidate = _direct_candidate(
+                candidate, pair_failure_kind = _direct_candidate(
                     top_item,
                     bottom_item,
                     fixed_height=fixed_height,
                     canonical_height_px=float(inputs.canonical_fixed_height_px),
                     minimum_shared_trace_support=inputs.minimum_shared_trace_support,
+                    longitudinal_support_domains_px=(
+                        inputs.longitudinal_support_domains_px
+                    ),
                     source_direction=inputs.source_direction,
                 )
+                if pair_failure_kind is not None:
+                    pair_failure_kinds.add(pair_failure_kind)
                 if candidate is not None:
                     compatible_pairs += 1
                     direct_candidates.append(candidate)
@@ -536,12 +433,86 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                             status=CrossFitStatus.BOUND_EXCEEDED,
                             winner_basis=None,
                             reason="cross compatible-pair bound exceeded",
+                            failure_kind=(
+                                CrossFailureKind
+                                .COMPATIBLE_PAIR_BOUND_EXCEEDED
+                            ),
                             receipt=receipt,
                             aperture_aspect_ratio_authority=(
                                 aspect_ratio_authority
                             ),
                         )
                 index += 1
+    def has_template_pair_authority(candidate: _Candidate) -> bool:
+        if not candidate.top.role_authorized or not candidate.bottom.role_authorized:
+            return False
+        domain_count = _longitudinal_domain_count(
+            candidate.authority_trace_coordinates_px,
+            inputs.longitudinal_support_domains_px,
+        )
+        return domain_count >= min(
+            SPATIAL_SUPPORT_REGION_COUNT,
+            inputs.template.count,
+        ) or (
+            domain_count
+            >= min(MINIMUM_INDEPENDENT_SUPPORT_REGIONS, inputs.template.count)
+            and (
+                _covers_template_domains(
+                    candidate.top,
+                    inputs.longitudinal_support_domains_px,
+                )
+                or _covers_template_domains(
+                    candidate.bottom,
+                    inputs.longitudinal_support_domains_px,
+                )
+            )
+        )
+
+    # A template-wide pair cannot obtain authority by ignoring a strictly
+    # farther-out direct role that closes against the same opposite boundary.
+    # The farther-out observation remains a negative veto when it lacks global
+    # pair authority; when both pairs are globally complete, both remain legal
+    # placements and ordinary competition keeps them unresolved.
+    outward_contested_pair_ids: set[
+        tuple[ObservationId, ObservationId]
+    ] = set()
+    minimum_local_top_maximum_by_bottom: dict[ObservationId, float] = {}
+    maximum_local_bottom_minimum_by_top: dict[ObservationId, float] = {}
+    for candidate in direct_candidates:
+        if has_template_pair_authority(candidate):
+            continue
+        bottom_id = candidate.bottom.observation_id
+        top_id = candidate.top.observation_id
+        minimum_local_top_maximum_by_bottom[bottom_id] = min(
+            minimum_local_top_maximum_by_bottom.get(bottom_id, math.inf),
+            candidate.top.full_interval_px.maximum,
+        )
+        maximum_local_bottom_minimum_by_top[top_id] = max(
+            maximum_local_bottom_minimum_by_top.get(top_id, -math.inf),
+            candidate.bottom.full_interval_px.minimum,
+        )
+    for candidate in direct_candidates:
+        if not has_template_pair_authority(candidate):
+            continue
+        top_counter = minimum_local_top_maximum_by_bottom.get(
+            candidate.bottom.observation_id,
+            math.inf,
+        )
+        bottom_counter = maximum_local_bottom_minimum_by_top.get(
+            candidate.top.observation_id,
+            -math.inf,
+        )
+        if (
+            top_counter < candidate.top.full_interval_px.minimum - 1.0e-9
+            or bottom_counter
+            > candidate.bottom.full_interval_px.maximum + 1.0e-9
+        ):
+            outward_contested_pair_ids.add(
+                (
+                    candidate.top.observation_id,
+                    candidate.bottom.observation_id,
+                )
+            )
     spanning_top = tuple(
         item
         for item in top
@@ -573,32 +544,12 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     role_authorized_direct_pairs = tuple(
         candidate
         for candidate in direct_candidates
-        if candidate.top.role_authorized
-        and candidate.bottom.role_authorized
+        if has_template_pair_authority(candidate)
         and (
-            _longitudinal_domain_count(
-                candidate.support_trace_coordinates_px,
-                inputs.longitudinal_support_domains_px,
-            )
-            >= min(SPATIAL_SUPPORT_REGION_COUNT, inputs.template.count)
-            or (
-                _longitudinal_domain_count(
-                    candidate.support_trace_coordinates_px,
-                    inputs.longitudinal_support_domains_px,
-                )
-                >= min(MINIMUM_INDEPENDENT_SUPPORT_REGIONS, inputs.template.count)
-                and (
-                    _covers_template_domains(
-                        candidate.top,
-                        inputs.longitudinal_support_domains_px,
-                    )
-                    or _covers_template_domains(
-                        candidate.bottom,
-                        inputs.longitudinal_support_domains_px,
-                    )
-                )
-            )
+            candidate.top.observation_id,
+            candidate.bottom.observation_id,
         )
+        not in outward_contested_pair_ids
     )
     if spanning_top and spanning_bottom:
         # When both physical roles have source-spanning evidence, fragments do
@@ -618,15 +569,33 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         # fragments cannot move geometry fixed by whole-strip evidence.
         spanning = spanning_top or spanning_bottom
         spanning_ids = {item.observation_id for item in spanning}
-        spanning_pairs = [
+        all_spanning_pairs = [
             candidate
             for candidate in direct_candidates
             if candidate.top.observation_id in spanning_ids
             or candidate.bottom.observation_id in spanning_ids
         ]
+        complete_spanning_pairs = [
+            candidate
+            for candidate in all_spanning_pairs
+            if (
+                candidate.top.observation_id in spanning_ids
+                and _covers_template_domains(
+                    candidate.bottom,
+                    inputs.longitudinal_support_domains_px,
+                )
+            )
+            or (
+                candidate.bottom.observation_id in spanning_ids
+                and _covers_template_domains(
+                    candidate.top,
+                    inputs.longitudinal_support_domains_px,
+                )
+            )
+        ]
         candidates = (
-            spanning_pairs
-            if len(spanning_pairs) == 1
+            complete_spanning_pairs
+            if complete_spanning_pairs
             else [
                 candidate
                 for item in spanning
@@ -686,16 +655,6 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             if (candidate := inferred_candidate(item))
             is not None
         ]
-    candidate_count_before_track_dominance = len(candidates)
-    candidates = _remove_contained_local_side_tracks(
-        candidates,
-        inputs.registered_trace_coordinates_px,
-        inputs.longitudinal_support_domains_px,
-    )
-    contained_side_track_basis = (
-        len(candidates) == 1
-        and candidate_count_before_track_dominance > len(candidates)
-    )
     single_count = sum(not item.direct_pair for item in candidates)
     receipt = _receipt(
         inputs=inputs,
@@ -713,6 +672,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             status=CrossFitStatus.BOUND_EXCEEDED,
             winner_basis=None,
             reason="cross evaluated-fit bound exceeded",
+            failure_kind=CrossFailureKind.EVALUATED_FIT_BOUND_EXCEEDED,
             receipt=receipt,
             aperture_aspect_ratio_authority=aspect_ratio_authority,
         )
@@ -722,12 +682,44 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             aspect_ratio_authority = require_aperture_aspect_ratio_for_cross(
                 aspect_ratio_authority
             )
-        reason = (
-            "direct top/bottom evidence contradicts fixed height"
-            if top and bottom
-            else "single-side evidence lacks independent support or direction"
-        )
-        return unresolved(receipt, reason)
+        if outward_contested_pair_ids:
+            failure_kind = CrossFailureKind.OUTWARD_ROLE_COUNTEREVIDENCE
+            reason = "direct cross role has strictly outward counterevidence"
+        elif direct_candidates:
+            failure_kind = CrossFailureKind.PHYSICAL_GROUP_UNAVAILABLE
+            reason = "direct cross evidence lacks one admissible physical group"
+        elif top and bottom:
+            failure_kind = next(
+                (
+                    kind
+                    for kind in (
+                        CrossFailureKind.PAIR_SUPPORT_UNAVAILABLE,
+                        CrossFailureKind.DIRECTION_INCOMPATIBLE,
+                        CrossFailureKind.DIRECT_ROLE_AUTHORITY_UNAVAILABLE,
+                        CrossFailureKind.FIXED_HEIGHT_INCOMPATIBLE,
+                    )
+                    if kind in pair_failure_kinds
+                ),
+                CrossFailureKind.FIXED_HEIGHT_INCOMPATIBLE,
+            )
+            reason = {
+                CrossFailureKind.PAIR_SUPPORT_UNAVAILABLE: (
+                    "direct top/bottom pair lacks shared or complete-domain support"
+                ),
+                CrossFailureKind.DIRECTION_INCOMPATIBLE: (
+                    "direct top/bottom directions are incompatible"
+                ),
+                CrossFailureKind.DIRECT_ROLE_AUTHORITY_UNAVAILABLE: (
+                    "direct top/bottom pair lacks role authority"
+                ),
+                CrossFailureKind.FIXED_HEIGHT_INCOMPATIBLE: (
+                    "direct top/bottom evidence contradicts fixed height"
+                ),
+            }[failure_kind]
+        else:
+            failure_kind = CrossFailureKind.INDEPENDENT_SUPPORT_UNAVAILABLE
+            reason = "single-side evidence lacks independent support or direction"
+        return unresolved(receipt, reason, failure_kind)
 
     # A unique two-sided enclosing support is stronger output authority than
     # a one-sided aperture whose opposite edge is only format-inferred. The
@@ -760,9 +752,31 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         )
         for group in groups
     )
+
+    def direct_pair_id(
+        item: CrossFit,
+    ) -> tuple[ObservationId, ObservationId] | None:
+        if not item.direct_pair or len(item.direct_bindings) != 2:
+            return None
+        top_binding = next(
+            binding
+            for binding in item.direct_bindings
+            if binding.role == BoundaryRole.TOP
+        )
+        bottom_binding = next(
+            binding
+            for binding in item.direct_bindings
+            if binding.role == BoundaryRole.BOTTOM
+        )
+        return (
+            top_binding.observation_id,
+            bottom_binding.observation_id,
+        )
+
     def has_role_authorized_pair(item: CrossFit) -> bool:
         return (
             item.direct_pair
+            and direct_pair_id(item) not in outward_contested_pair_ids
             and (
                 item.role_authorized_pair_support_domain_count
                 >= min(SPATIAL_SUPPORT_REGION_COUNT, inputs.template.count)
@@ -777,21 +791,36 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         )
 
     def has_source_spanning_direct_side(item: CrossFit) -> bool:
-        return item.direct_pair and any(
-            binding.source_spanning_continuous
+        if (
+            not item.direct_pair
+            or direct_pair_id(item) in outward_contested_pair_ids
+        ):
+            return False
+        top_binding = next(
+            binding
             for binding in item.direct_bindings
+            if binding.role == BoundaryRole.TOP
         )
-
-    def has_three_region_direct_side(item: CrossFit) -> bool:
-        required = min(SPATIAL_SUPPORT_REGION_COUNT, inputs.template.count)
-        return item.direct_pair and any(
-            binding.independent_support_region_count >= required
-            and _longitudinal_domain_count(
-                binding.trace_coordinates_px,
+        bottom_binding = next(
+            binding
+            for binding in item.direct_bindings
+            if binding.role == BoundaryRole.BOTTOM
+        )
+        return (
+            top_binding.source_spanning_continuous
+            and bottom_binding.source_spanning_continuous
+        ) or (
+            top_binding.source_spanning_continuous
+            and _covers_template_domains(
+                bottom_binding,
                 inputs.longitudinal_support_domains_px,
             )
-            >= required
-            for binding in item.direct_bindings
+        ) or (
+            bottom_binding.source_spanning_continuous
+            and _covers_template_domains(
+                top_binding,
+                inputs.longitudinal_support_domains_px,
+            )
         )
 
     authoritative = tuple(
@@ -800,10 +829,6 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         if (
             has_role_authorized_pair(item)
             or has_source_spanning_direct_side(item)
-            or (
-                contained_side_track_basis
-                and has_three_region_direct_side(item)
-            )
             or (
                 not item.direct_pair
                 and item.independent_support_region_count
@@ -815,11 +840,24 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     best = ordered_fits[0] if ordered_fits else None
     runner = ordered_fits[1] if len(ordered_fits) > 1 else None
     if best is None:
-        return unresolved(receipt, "cross fit has no physical group")
+        return unresolved(
+            receipt,
+            "cross fit has no physical group",
+            CrossFailureKind.PHYSICAL_GROUP_UNAVAILABLE,
+        )
+    if outward_contested_pair_ids and not authoritative:
+        return unresolved(
+            receipt,
+            "direct cross role has strictly outward counterevidence",
+            CrossFailureKind.OUTWARD_ROLE_COUNTEREVIDENCE,
+            best=best,
+            runner_up=runner,
+        )
     if len(authoritative) > 1 or (not authoritative and len(groups) > 1):
         return unresolved(
             receipt,
             "non-equivalent cross fits remain",
+            CrossFailureKind.NON_EQUIVALENT_FITS,
             best=best,
             runner_up=runner,
         )
@@ -827,6 +865,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         return unresolved(
             receipt,
             "cross fit lacks independent spatial support",
+            CrossFailureKind.INDEPENDENT_SUPPORT_UNAVAILABLE,
             best=best,
             runner_up=runner,
         )
@@ -834,6 +873,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         return unresolved(
             receipt,
             "cross direction unavailable",
+            CrossFailureKind.DIRECTION_UNAVAILABLE,
             best=best,
             runner_up=runner,
         )
@@ -858,6 +898,9 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                     status=CrossFitStatus.UNRESOLVED,
                     winner_basis=None,
                     reason=resolved_aspect_ratio_authority.failure_detail,
+                    failure_kind=(
+                        CrossFailureKind.APERTURE_ASPECT_RATIO_CONFLICT
+                    ),
                     receipt=receipt,
                     aperture_aspect_ratio_authority=(
                         resolved_aspect_ratio_authority
@@ -876,6 +919,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         status=CrossFitStatus.RESOLVED,
         winner_basis=CrossWinnerBasis.ONLY_AUTHORITATIVE_FIT,
         reason=None,
+        failure_kind=None,
         receipt=receipt,
         aperture_aspect_ratio_authority=(
             resolved_aspect_ratio_authority

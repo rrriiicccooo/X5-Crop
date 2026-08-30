@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 import math
 
-from ...domain import FiniteInterval, ObservationId, PositiveInterval
+from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
 from ...formats import OUTPUT_PROTECTION_SPEC
 from .line_observations import PhotoBoundaryObservation
 from .interval_math import intersect, subtract
@@ -88,6 +88,77 @@ class CrossEvidence(str, Enum):
     DIRECT = "direct"
     TEMPLATE_LOCAL_REFINEMENT = "template_local_refinement"
     ASPECT_RATIO_HEIGHT_INFERRED = "aspect_ratio_height_inferred"
+
+
+class CrossPairSupportMode(str, Enum):
+    """Independent support contract that closes one direct aperture pair."""
+
+    SHARED_TRACES = "shared_traces"
+    COMPLEMENTARY_DOMAINS = "complementary_domains"
+
+
+class CrossBoundaryFamilyFailureKind(str, Enum):
+    """Why locally compatible same-role lines retained distinct identity."""
+
+    COMPLETE_TRANSITION_UNION_REFIT_REJECTED = (
+        "complete_transition_union_refit_rejected"
+    )
+
+
+@dataclass(frozen=True)
+class CrossBoundaryFamilyResolution:
+    """Canonical registration result for one same-role line component.
+
+    A supported family owns exactly one refitted observation containing the
+    complete transition union.  An unavailable family retains every member as
+    a distinct alternative; it never selects a convenient subset.
+    """
+
+    family_id: str
+    role: BoundaryRole
+    state: EvidenceState
+    member_observation_ids: tuple[ObservationId, ...]
+    member_transition_ids: tuple[ObservationId, ...]
+    final_observation_ids: tuple[ObservationId, ...]
+    failure_kind: CrossBoundaryFamilyFailureKind | None
+
+    def __post_init__(self) -> None:
+        supported = self.state == EvidenceState.SUPPORTED
+        unavailable = self.state == EvidenceState.UNAVAILABLE
+        if (
+            not self.family_id
+            or self.role not in {BoundaryRole.TOP, BoundaryRole.BOTTOM}
+            or not (supported or unavailable)
+            or len(self.member_observation_ids) < 2
+            or tuple(sorted(set(self.member_observation_ids), key=str))
+            != self.member_observation_ids
+            or not self.member_transition_ids
+            or tuple(sorted(set(self.member_transition_ids), key=str))
+            != self.member_transition_ids
+            or not self.final_observation_ids
+            or tuple(sorted(set(self.final_observation_ids), key=str))
+            != self.final_observation_ids
+            or any(
+                not isinstance(identity, ObservationId)
+                for identity in (
+                    *self.member_observation_ids,
+                    *self.member_transition_ids,
+                    *self.final_observation_ids,
+                )
+            )
+        ):
+            raise ValueError("cross boundary family resolution is invalid")
+        if supported:
+            if len(self.final_observation_ids) != 1 or self.failure_kind is not None:
+                raise ValueError("supported cross family must resolve to one line")
+        elif (
+            self.final_observation_ids != self.member_observation_ids
+            or not isinstance(
+                self.failure_kind,
+                CrossBoundaryFamilyFailureKind,
+            )
+        ):
+            raise ValueError("unavailable cross family must retain every member")
 
 
 @dataclass(frozen=True)
@@ -624,6 +695,23 @@ class CrossFitStatus(str, Enum):
     BOUND_EXCEEDED = "bound_exceeded"
 
 
+class CrossFailureKind(str, Enum):
+    REGISTRATION_BOUND_EXCEEDED = "registration_bound_exceeded"
+    DIRECT_EVIDENCE_UNAVAILABLE = "direct_evidence_unavailable"
+    FIXED_HEIGHT_INCOMPATIBLE = "fixed_height_incompatible"
+    DIRECT_ROLE_AUTHORITY_UNAVAILABLE = "direct_role_authority_unavailable"
+    PAIR_SUPPORT_UNAVAILABLE = "pair_support_unavailable"
+    OUTWARD_ROLE_COUNTEREVIDENCE = "outward_role_counterevidence"
+    DIRECTION_INCOMPATIBLE = "direction_incompatible"
+    COMPATIBLE_PAIR_BOUND_EXCEEDED = "compatible_pair_bound_exceeded"
+    EVALUATED_FIT_BOUND_EXCEEDED = "evaluated_fit_bound_exceeded"
+    PHYSICAL_GROUP_UNAVAILABLE = "physical_group_unavailable"
+    NON_EQUIVALENT_FITS = "non_equivalent_fits"
+    INDEPENDENT_SUPPORT_UNAVAILABLE = "independent_support_unavailable"
+    DIRECTION_UNAVAILABLE = "direction_unavailable"
+    APERTURE_ASPECT_RATIO_CONFLICT = "aperture_aspect_ratio_conflict"
+
+
 class CrossWinnerBasis(str, Enum):
     """Exclusive physical proof that selected one short-axis fit."""
 
@@ -652,6 +740,7 @@ class CrossFit:
     continuous_support_fraction: float
     residual_sum_px: float
     boundary_use: OutputBoundaryUse
+    pair_support_mode: CrossPairSupportMode | None
     enclosing_support_pair: EnclosingSupportPair | None = None
     height_compatibility_px: FiniteInterval | None = None
     shift_interval_px: FiniteInterval | None = None
@@ -703,8 +792,18 @@ class CrossFit:
         if self.boundary_use == OutputBoundaryUse.APERTURE_PAIR:
             if self.enclosing_support_pair is not None:
                 raise ValueError("aperture fit cannot carry support output")
+            if self.direct_pair:
+                if not isinstance(
+                    self.pair_support_mode,
+                    CrossPairSupportMode,
+                ):
+                    raise TypeError("direct aperture pair needs typed support mode")
+            elif self.pair_support_mode is not None:
+                raise ValueError("single-side aperture cannot carry pair support")
         elif self.boundary_use == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR:
             support = self.enclosing_support_pair
+            if self.pair_support_mode is not None:
+                raise ValueError("enclosing support is not an aperture pair mode")
             if not self.direct_pair or len(self.direct_bindings) != 2 or self.inferred_bindings:
                 raise ValueError("enclosing support requires two-sided direct bindings")
             if not isinstance(support, EnclosingSupportPair):
@@ -798,6 +897,7 @@ class CrossFitCompetition:
     status: CrossFitStatus
     winner_basis: CrossWinnerBasis | None
     reason: str | None
+    failure_kind: CrossFailureKind | None
     receipt: CrossSearchReceipt
     aperture_aspect_ratio_authority: ApertureAspectRatioAuthority = field(
         default_factory=unavailable_aperture_aspect_ratio_authority
@@ -818,6 +918,15 @@ class CrossFitCompetition:
             )
         if self.status != CrossFitStatus.RESOLVED and self.winner_basis is not None:
             raise ValueError("unresolved cross competition cannot have a winner basis")
+        if (self.status == CrossFitStatus.RESOLVED) != (
+            self.failure_kind is None
+        ):
+            raise ValueError("cross competition failure kind disagrees with status")
+        if self.failure_kind is not None and not isinstance(
+            self.failure_kind,
+            CrossFailureKind,
+        ):
+            raise TypeError("cross competition failure kind must be typed")
         if self.status == CrossFitStatus.BOUND_EXCEEDED and self.best is not None:
             raise ValueError("bound-exceeded cross competition cannot select a fit")
         if self.reason is not None and not self.reason:

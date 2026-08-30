@@ -26,6 +26,7 @@ from x5crop.detection.photo_geometry.content_veto_model import (
 )
 from x5crop.detection.photo_geometry.template_cross import fit_template_cross
 from x5crop.detection.photo_geometry.template_cross_model import (
+    CrossFailureKind,
     CrossFitStatus,
     TemplateCrossInput,
 )
@@ -248,6 +249,7 @@ class TemplateSelectionContractTest(unittest.TestCase):
             status=CrossFitStatus.UNRESOLVED,
             winner_basis=None,
             reason="non-equivalent cross fits remain",
+            failure_kind=CrossFailureKind.NON_EQUIVALENT_FITS,
         )
         assessment = ContentVetoAssessment(
             assessment_id="content:unresolved",

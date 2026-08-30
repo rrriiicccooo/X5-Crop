@@ -186,6 +186,7 @@ class GoldAnalysisContractTest(unittest.TestCase):
             "phase_status": "resolved",
             "phase_failure_kind": None,
             "cross_status": "resolved",
+            "cross_failure_kind": None,
             "cross_failure_reason": None,
             "placement_failure_gap": None,
             "selected_cross_boundary_use": "aperture_pair",

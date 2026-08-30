@@ -31,6 +31,7 @@ from x5crop.detection.photo_geometry.model import (
 from x5crop.detection.photo_geometry.output_model import OutputBoundaryUse
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossFit,
+    CrossPairSupportMode,
     EnclosingSupportPair,
 )
 from x5crop.detection.photo_geometry.template_output import (
@@ -177,6 +178,7 @@ def _enclosing_support_placement(
         continuous_support_fraction=1.0,
         residual_sum_px=0.0,
         boundary_use=OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR,
+        pair_support_mode=None,
         enclosing_support_pair=support,
     )
     return _compose(template, _sequence(template), cross)

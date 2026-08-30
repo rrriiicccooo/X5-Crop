@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from itertools import combinations
 import math
 
-from ...domain import FiniteInterval, PositiveInterval
+from ...domain import EvidenceState, FiniteInterval, PositiveInterval
 from ...formats import FramePhysicalSpec
 from .boundary_fitting import fit_format_bound_boundary_observation
 from .measurement_model import PhotoBoundaryMeasurementSet
@@ -20,13 +19,17 @@ from .observation_types import BasicAxisProfile, ProfileRun
 from .line_observations import PhotoBoundaryObservation
 from .physical_identity import physical_fact_id
 from .source_geometry import SourceScanGeometry
-from .template_cross_model import CrossEvidence, CrossRoleBinding
+from .template_cross_model import (
+    CrossBoundaryFamilyFailureKind,
+    CrossBoundaryFamilyResolution,
+    CrossEvidence,
+    CrossRoleBinding,
+)
 from .template_model import (
     PhaseLatticeAuthority,
     TemplateSpec,
     generic_separator_gap_interval_px,
 )
-from .trace_support import trace_support_is_one_connected_run
 
 
 def _add(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval:
@@ -80,11 +83,15 @@ class RegisteredCrossEvidence:
     fit_attempt_count: int
     registered_run_count: int | None = None
     fitted_observation_count: int | None = None
+    family_resolutions: tuple[CrossBoundaryFamilyResolution, ...] = ()
 
     def __post_init__(self) -> None:
         identities = tuple(item.observation_id for item in self.observations)
         if len(set(identities)) != len(identities):
             raise ValueError("cross observations must be registered once")
+        family_ids = tuple(item.family_id for item in self.family_resolutions)
+        if len(set(family_ids)) != len(family_ids):
+            raise ValueError("cross boundary families must be registered once")
         if self.fit_attempt_count < len(self.observations):
             raise ValueError("cross fit-attempt receipt is incomplete")
         binding_run_count = len(
@@ -218,6 +225,124 @@ def _canonical_cross_run(
     )
 
 
+def _cross_family_projection_interval(
+    observation: PhotoBoundaryObservation,
+    *,
+    reference_trace_px: float,
+    boundary_axis: BoundaryAxis,
+    connection_allowance_px: float,
+) -> FiniteInterval:
+    """Project one local line's full measured direction at one shared trace."""
+
+    line = observation.line
+    anchor_trace_px = line.support_projection_px.center
+    if boundary_axis == BoundaryAxis.Y:
+        normal = line.normal_y
+        other = line.normal_x
+    else:
+        normal = line.normal_x
+        other = line.normal_y
+    if abs(normal) <= 1.0e-12:
+        raise ValueError("cross family line cannot project at shared trace")
+    anchor_coordinates = tuple(
+        (offset - other * anchor_trace_px) / normal
+        for offset in (
+            observation.offset_interval_px.minimum,
+            observation.offset_interval_px.maximum,
+        )
+    )
+    delta_trace_px = reference_trace_px - anchor_trace_px
+    slopes = tuple(
+        math.tan(math.radians(angle))
+        for angle in (
+            observation.angle_interval_degrees.minimum,
+            observation.angle_interval_degrees.maximum,
+        )
+    )
+    projected = tuple(
+        coordinate + slope * delta_trace_px
+        for coordinate in anchor_coordinates
+        for slope in slopes
+    )
+    return FiniteInterval(
+        min(projected) - connection_allowance_px,
+        max(projected) + connection_allowance_px,
+    )
+
+
+def _cross_family_components(
+    values: tuple[PhotoBoundaryObservation, ...],
+    *,
+    measurement: PhotoBoundaryMeasurementSet,
+    height_scale_px_per_mm: PositiveInterval,
+) -> tuple[tuple[int, ...], ...]:
+    """Group only position- and direction-compatible local line fragments."""
+
+    if not values:
+        return ()
+    reference_trace_px = (
+        measurement.query.trace_positions_px[0]
+        + measurement.query.trace_positions_px[-1]
+    ) / 2.0
+    allowance_px = PHOTO_BOUNDARY_MEASUREMENT_SPEC.line_connection_allowance_px(
+        height_scale_px_per_mm.maximum
+    )
+    projections = tuple(
+        _cross_family_projection_interval(
+            observation,
+            reference_trace_px=reference_trace_px,
+            boundary_axis=measurement.query.boundary_axis,
+            connection_allowance_px=allowance_px,
+        )
+        for observation in values
+    )
+    ordered = tuple(
+        sorted(
+            range(len(values)),
+            key=lambda index: (
+                projections[index].minimum,
+                projections[index].maximum,
+                str(values[index].observation_id),
+            ),
+        )
+    )
+    links: dict[int, set[int]] = {index: set() for index in ordered}
+    active: list[int] = []
+    for index in ordered:
+        interval = projections[index]
+        active = [
+            candidate
+            for candidate in active
+            if projections[candidate].maximum >= interval.minimum
+        ]
+        for candidate in active:
+            other_direction = values[candidate].angle_interval_degrees
+            direction = values[index].angle_interval_degrees
+            if (
+                other_direction.maximum < direction.minimum
+                or direction.maximum < other_direction.minimum
+            ):
+                continue
+            links[index].add(candidate)
+            links[candidate].add(index)
+        active.append(index)
+
+    components: list[tuple[int, ...]] = []
+    remaining = set(ordered)
+    while remaining:
+        frontier = [min(remaining)]
+        component: set[int] = set()
+        while frontier:
+            member = frontier.pop()
+            if member in component:
+                continue
+            component.add(member)
+            frontier.extend(links[member].intersection(remaining))
+        remaining.difference_update(component)
+        components.append(tuple(sorted(component)))
+    return tuple(components)
+
+
 def _merge_registered_cross_families(
     values: tuple[PhotoBoundaryObservation, ...],
     *,
@@ -225,11 +350,21 @@ def _merge_registered_cross_families(
     role: BoundaryRole,
     width_axis: BoundaryAxis,
     height_scale_px_per_mm: PositiveInterval,
-) -> tuple[tuple[PhotoBoundaryObservation, ...], int]:
-    """Merge only a complete connected union that refits as one line."""
+) -> tuple[
+    tuple[PhotoBoundaryObservation, ...],
+    int,
+    tuple[CrossBoundaryFamilyResolution, ...],
+]:
+    """Merge only a complete transition union that refits as one line.
+
+    Transition tracking deliberately emits local segments.  Their raster
+    support need not be connected: the family owner proves physical identity
+    by requiring one robust refit to retain the exact transition union.  A
+    refit that discards even one member transition is not identity evidence.
+    """
 
     if len(values) < 2:
-        return values, 0
+        return values, 0, ()
     fit_cache: dict[tuple[str, ...], PhotoBoundaryObservation | None] = {}
     attempts = 0
 
@@ -258,81 +393,75 @@ def _merge_registered_cross_families(
         candidate = fit_cache[key]
         if candidate is None:
             return None
-        selected = set(candidate.transition_ids)
-        if not all(
-            len(selected.intersection(values[index].transition_ids)) >= 2
-            for index in indices
-        ):
-            return None
-        traces = tuple(
-            sorted(
-                transition.trace_coordinate_px
-                for transition in measurement.transitions
-                if transition.transition_id in selected
-            )
-        )
-        if not trace_support_is_one_connected_run(
-            measurement.query.trace_positions_px,
-            traces,
-            spec=PHOTO_BOUNDARY_MEASUREMENT_SPEC,
-        ):
+        if set(candidate.transition_ids) != set(identities):
             return None
         return candidate
 
-    mergeable: set[tuple[int, int]] = set()
-    queried = measurement.query.trace_positions_px
-    for left, right in combinations(range(len(values)), 2):
-        traces = tuple(
-            sorted(
-                {
-                    transition.trace_coordinate_px
-                    for transition in measurement.transitions
-                    if transition.transition_id
-                    in {
-                        *values[left].transition_ids,
-                        *values[right].transition_ids,
-                    }
-                }
-            )
-        )
-        if not trace_support_is_one_connected_run(
-            queried,
-            traces,
-            spec=PHOTO_BOUNDARY_MEASUREMENT_SPEC,
-        ):
-            continue
-        if fit((left, right)) is not None:
-            mergeable.add((left, right))
-
-    components: list[tuple[int, ...]] = []
-    remaining = set(range(len(values)))
-    while remaining:
-        frontier = [min(remaining)]
-        component: set[int] = set()
-        while frontier:
-            member = frontier.pop()
-            if member in component:
-                continue
-            component.add(member)
-            frontier.extend(
-                candidate
-                for candidate in remaining
-                if (min(member, candidate), max(member, candidate)) in mergeable
-            )
-        remaining.difference_update(component)
-        components.append(tuple(sorted(component)))
+    components = _cross_family_components(
+        values,
+        measurement=measurement,
+        height_scale_px_per_mm=height_scale_px_per_mm,
+    )
 
     merged: list[PhotoBoundaryObservation] = []
+    resolutions: list[CrossBoundaryFamilyResolution] = []
     for component in components:
         if len(component) == 1:
             merged.append(values[component[0]])
             continue
+        members = tuple(values[index] for index in component)
+        member_observation_ids = tuple(
+            sorted(
+                (item.observation_id for item in members),
+                key=str,
+            )
+        )
+        member_transition_ids = tuple(
+            sorted(
+                {
+                    identity
+                    for item in members
+                    for identity in item.transition_ids
+                },
+                key=str,
+            )
+        )
+        family_id = physical_fact_id(
+            "cross-boundary-family",
+            role.value,
+            *(str(identity) for identity in member_observation_ids),
+        )
         observation = fit(component)
         if observation is None:
-            merged.extend(values[index] for index in component)
+            merged.extend(members)
+            resolutions.append(
+                CrossBoundaryFamilyResolution(
+                    family_id=family_id,
+                    role=role,
+                    state=EvidenceState.UNAVAILABLE,
+                    member_observation_ids=member_observation_ids,
+                    member_transition_ids=member_transition_ids,
+                    final_observation_ids=member_observation_ids,
+                    failure_kind=(
+                        CrossBoundaryFamilyFailureKind
+                        .COMPLETE_TRANSITION_UNION_REFIT_REJECTED
+                    ),
+                )
+            )
         else:
             merged.append(observation)
-    return tuple(merged), attempts
+            resolutions.append(
+                CrossBoundaryFamilyResolution(
+                    family_id=family_id,
+                    role=role,
+                    state=EvidenceState.SUPPORTED,
+                    member_observation_ids=member_observation_ids,
+                    member_transition_ids=member_transition_ids,
+                    final_observation_ids=(observation.observation_id,),
+                    failure_kind=None,
+                )
+            )
+    return tuple(merged), attempts, tuple(resolutions)
 
 
 def register_cross_evidence(
@@ -392,11 +521,12 @@ def register_cross_evidence(
         key = str(observation.observation_id)
         observations_by_role[run.role_hint].setdefault(key, observation)
     merged_observations: list[PhotoBoundaryObservation] = []
+    family_resolutions: list[CrossBoundaryFamilyResolution] = []
     for role, measurement in (
         (BoundaryRole.TOP, top_measurement),
         (BoundaryRole.BOTTOM, bottom_measurement),
     ):
-        values, attempts = _merge_registered_cross_families(
+        values, attempts, resolutions = _merge_registered_cross_families(
             tuple(observations_by_role[role].values()),
             measurement=measurement,
             role=role,
@@ -405,6 +535,7 @@ def register_cross_evidence(
         )
         fit_attempt_count += attempts
         merged_observations.extend(values)
+        family_resolutions.extend(resolutions)
     registered = {
         str(observation.observation_id): (
             CrossRoleBinding.from_measurement(
@@ -447,6 +578,9 @@ def register_cross_evidence(
         fit_attempt_count=fit_attempt_count,
         registered_run_count=len(qualified),
         fitted_observation_count=len(ordered),
+        family_resolutions=tuple(
+            sorted(family_resolutions, key=lambda item: item.family_id)
+        ),
     )
 
 
@@ -672,6 +806,7 @@ def register_template_local_cross_refinements(
                 len(bindings),
             ),
             fitted_observation_count=len(bindings),
+            family_resolutions=registered.family_resolutions,
         )
     ordered = tuple(
         bindings[key]
@@ -700,4 +835,5 @@ def register_template_local_cross_refinements(
             len({item.run_id for item in ordered}),
         ),
         fitted_observation_count=len(ordered_observations),
+        family_resolutions=registered.family_resolutions,
     )

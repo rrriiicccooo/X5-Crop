@@ -75,6 +75,12 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                 },
                 "phase_status": lane.prepared.phase_competition.status.value,
                 "cross_status": lane.prepared.cross_competition.status.value,
+                "cross_failure_kind": (
+                    None
+                    if lane.prepared.cross_competition.failure_kind is None
+                    else lane.prepared.cross_competition.failure_kind.value
+                ),
+                "cross_failure_reason": lane.prepared.cross_competition.reason,
                 "placement_state": lane.placement_competition.state.value,
                 "placement_failure": typed_read_model(
                     lane.placement_competition.failure

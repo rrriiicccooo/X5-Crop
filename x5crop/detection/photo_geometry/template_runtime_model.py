@@ -40,6 +40,7 @@ from .output_model import (
 from .search_model import SequenceAnchorDiscoveryDomain
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import (
+    CrossBoundaryFamilyResolution,
     CrossFitCompetition,
     CrossRoleBinding,
     TemplateCrossInput,
@@ -121,6 +122,10 @@ class RegisteredTemplateLane:
     top_cross_bindings: tuple[CrossRoleBinding, ...]
     bottom_cross_bindings: tuple[CrossRoleBinding, ...]
     raw_cross_observations: tuple[PhotoBoundaryObservation, ...]
+    cross_boundary_family_resolutions: tuple[
+        CrossBoundaryFamilyResolution,
+        ...,
+    ]
     measurement_work: TemplateMeasurementWorkReceipt
     measurement_plan: TemplateMeasurementPlan
 
@@ -308,6 +313,11 @@ class RegisteredTemplateLane:
             self.raw_cross_observations
         ):
             raise ValueError("cross observations must be registered once")
+        family_ids = tuple(
+            item.family_id for item in self.cross_boundary_family_resolutions
+        )
+        if len(set(family_ids)) != len(family_ids):
+            raise ValueError("cross boundary families must be registered once")
         enclosing = self.coarse_support.enclosing_support
         coarse_ids = (
             set()
@@ -325,6 +335,14 @@ class RegisteredTemplateLane:
             item.observation_id for item in self.raw_cross_observations
         }.union(coarse_ids if uses_enclosing else set()):
             raise ValueError("cross bindings and observations must share identity")
+        observation_ids = {
+            item.observation_id for item in self.raw_cross_observations
+        }
+        if any(
+            not set(item.final_observation_ids).issubset(observation_ids)
+            for item in self.cross_boundary_family_resolutions
+        ):
+            raise ValueError("cross family result leaves registered observations")
         object.__setattr__(self, "transition_by_id", MappingProxyType(dict(self.transition_by_id)))
 
 

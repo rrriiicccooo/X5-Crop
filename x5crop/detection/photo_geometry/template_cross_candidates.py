@@ -26,7 +26,9 @@ from .template_cross_geometry import (
 )
 from .template_cross_model import (
     CrossEvidence,
+    CrossFailureKind,
     CrossFit,
+    CrossPairSupportMode,
     CrossRoleBinding,
 )
 from .template_model import TemplateSpec
@@ -46,6 +48,8 @@ class _Candidate:
     direction_interval: FiniteInterval | None
     direction_ready: bool
     support_trace_coordinates_px: tuple[int, ...]
+    authority_trace_coordinates_px: tuple[int, ...]
+    pair_support_mode: CrossPairSupportMode | None
     top_full_override: FiniteInterval | None = None
     bottom_full_override: FiniteInterval | None = None
     source_direction: SharedStripDirection | None = None
@@ -74,56 +78,93 @@ def _direct_candidate(
     fixed_height: FiniteInterval,
     canonical_height_px: float,
     minimum_shared_trace_support: int,
+    longitudinal_support_domains_px: tuple[FiniteInterval, ...] = (),
     source_direction: SharedStripDirection | None = None,
-) -> _Candidate | None:
+) -> tuple[_Candidate | None, CrossFailureKind | None]:
     # Aperture coordinates require photo-boundary role authority on both
     # sides. Role-unknown material/holder lines belong to the separate
     # enclosing-support owner even when their span happens to match H.
     if not top.role_authorized or not bottom.role_authorized:
-        return None
+        return None, CrossFailureKind.DIRECT_ROLE_AUTHORITY_UNAVAILABLE
     expected_bottom = _add(top.full_interval_px, fixed_height)
     if _intersect(bottom.full_interval_px, expected_bottom) is None:
-        return None
+        return None, CrossFailureKind.FIXED_HEIGHT_INCOMPATIBLE
     height = _intersect(fixed_height, _subtract(bottom.full_interval_px, top.full_interval_px))
     shift = _intersect(top.full_interval_px, _subtract(bottom.full_interval_px, fixed_height))
     if height is None or shift is None:
-        return None
+        return None, CrossFailureKind.FIXED_HEIGHT_INCOMPATIBLE
     support_traces = _shared_trace_coordinates(top, bottom)
-    if len(support_traces) < minimum_shared_trace_support:
-        return None
+    if len(support_traces) >= minimum_shared_trace_support:
+        pair_support_mode = CrossPairSupportMode.SHARED_TRACES
+        authority_traces = support_traces
+    else:
+        authority_traces = tuple(
+            sorted(
+                set(top.trace_coordinates_px).union(
+                    bottom.trace_coordinates_px
+                )
+            )
+        )
+        if (
+            top.evidence != CrossEvidence.DIRECT
+            or bottom.evidence != CrossEvidence.DIRECT
+            or top.independent_support_region_count
+            < MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+            or bottom.independent_support_region_count
+            < MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+            or not longitudinal_support_domains_px
+            or not all(
+                any(
+                    domain.contains(float(trace), epsilon=0.5)
+                    for trace in authority_traces
+                )
+                for domain in longitudinal_support_domains_px
+            )
+        ):
+            return None, CrossFailureKind.PAIR_SUPPORT_UNAVAILABLE
+        pair_support_mode = CrossPairSupportMode.COMPLEMENTARY_DOMAINS
+        support_traces = ()
     if source_direction is None:
         direction, direction_ready, contradiction = _direction_closure(
             top,
             bottom,
         )
         if contradiction:
-            return None
+            return None, CrossFailureKind.DIRECTION_INCOMPATIBLE
     else:
         if any(
             not _fits_source_direction(item, source_direction)
             for item in (top, bottom)
         ):
-            return None
+            return None, CrossFailureKind.DIRECTION_INCOMPATIBLE
         # The whole-strip observation validates that both local fragments
         # belong to the same strip and bounds their local cross relation.
         # It never owns cosmetic output deskew; small local departures remain
         # a straight-model residual instead of entering the coarse fit.
         direction = source_direction.observed_angle_interval_degrees
         direction_ready = True
-    return _Candidate(
-        top=top,
-        bottom=bottom,
-        direct_pair=True,
-        shared_support=0,
-        continuous_support=min(top.continuous_support_fraction, bottom.continuous_support_fraction),
-        residual=top.fit_residual_px + bottom.fit_residual_px,
-        height_compatibility=height,
-        canonical_height_px=canonical_height_px,
-        shift_interval=shift,
-        direction_interval=direction,
-        direction_ready=direction_ready,
-        support_trace_coordinates_px=support_traces,
-        source_direction=None,
+    return (
+        _Candidate(
+            top=top,
+            bottom=bottom,
+            direct_pair=True,
+            shared_support=0,
+            continuous_support=min(
+                top.continuous_support_fraction,
+                bottom.continuous_support_fraction,
+            ),
+            residual=top.fit_residual_px + bottom.fit_residual_px,
+            height_compatibility=height,
+            canonical_height_px=canonical_height_px,
+            shift_interval=shift,
+            direction_interval=direction,
+            direction_ready=direction_ready,
+            support_trace_coordinates_px=support_traces,
+            authority_trace_coordinates_px=authority_traces,
+            pair_support_mode=pair_support_mode,
+            source_direction=None,
+        ),
+        None,
     )
 
 
@@ -199,6 +240,8 @@ def _single_candidate(
         ),
         direction_ready=True,
         support_trace_coordinates_px=binding.trace_coordinates_px,
+        authority_trace_coordinates_px=binding.trace_coordinates_px,
+        pair_support_mode=None,
         top_full_override=top_full,
         bottom_full_override=bottom_full,
         source_direction=source_direction,
@@ -370,6 +413,7 @@ def _fit_from_candidate(
         continuous_support_fraction=candidate.continuous_support,
         residual_sum_px=candidate.residual,
         boundary_use=OutputBoundaryUse.APERTURE_PAIR,
+        pair_support_mode=candidate.pair_support_mode,
         height_compatibility_px=candidate.height_compatibility,
         shift_interval_px=candidate.shift_interval,
         parallel_direction_interval_degrees=candidate.direction_interval,
@@ -428,7 +472,7 @@ def _fit_from_group(
     ) -> int:
         return max(
             (
-                support_domain_count(candidate.support_trace_coordinates_px)
+                support_domain_count(candidate.authority_trace_coordinates_px)
                 for candidate in candidates
                 if candidate.direct_pair
                 and candidate.top.role_authorized
@@ -443,7 +487,7 @@ def _fit_from_group(
         if candidate.direct_pair
         and candidate.top.role_authorized
         and candidate.bottom.role_authorized
-        and support_domain_count(candidate.support_trace_coordinates_px)
+        and support_domain_count(candidate.authority_trace_coordinates_px)
         >= min(MINIMUM_INDEPENDENT_SUPPORT_REGIONS, template.count)
     )
     if role_authorized_group:
@@ -477,14 +521,23 @@ def _fit_from_group(
             }
         )
     )
+    authority_traces = tuple(
+        sorted(
+            {
+                trace
+                for item in group
+                for trace in item.authority_trace_coordinates_px
+            }
+        )
+    )
     return replace(
         representative,
         shared_trace_support_count=len(support_traces),
         continuous_support_fraction=min(item.continuous_support for item in group),
         residual_sum_px=max(item.residual for item in group),
         direct_provenance_ids=tuple(item.observation_id for item in direct),
-        independent_support_region_count=support_region_count(support_traces),
-        longitudinal_support_domain_count=support_domain_count(support_traces),
+        independent_support_region_count=support_region_count(authority_traces),
+        longitudinal_support_domain_count=support_domain_count(authority_traces),
         role_authorized_pair_support_domain_count=(
             role_authorized_pair_domain_count(group)
         ),

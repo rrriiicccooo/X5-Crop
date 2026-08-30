@@ -23,7 +23,9 @@ from x5crop.detection.photo_geometry.template_cross import (
 )
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossEvidence,
+    CrossFailureKind,
     CrossFitStatus,
+    CrossPairSupportMode,
     CrossWinnerBasis,
     CrossRoleBinding,
     TemplateCrossInput as _TemplateCrossInput,
@@ -217,6 +219,353 @@ class TemplateCrossContractTest(unittest.TestCase):
             ObservationId("observation:bottom"),
         ))
         self.assertEqual(result.receipt.compatible_pair_count, 1)
+
+    def test_complementary_domains_close_unique_direct_pair(self) -> None:
+        domains = (
+            FiniteInterval(0.0, 20.0),
+            FiniteInterval(40.0, 60.0),
+            FiniteInterval(80.0, 100.0),
+        )
+        result = fit_template_cross(
+            aspect_input(
+                template=template(count=3),
+                fixed_height_px=240.0,
+                registered_trace_coordinates_px=(10, 50, 55, 90),
+                longitudinal_support_domains_px=domains,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "complementary-top",
+                        100.0,
+                        traces=(10, 50),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "complementary-bottom",
+                        340.0,
+                        traces=(55, 90),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertEqual(
+            result.best.pair_support_mode,
+            CrossPairSupportMode.COMPLEMENTARY_DOMAINS,
+        )
+        self.assertEqual(result.best.shared_trace_support_count, 0)
+        self.assertEqual(result.best.longitudinal_support_domain_count, 3)
+        self.assertEqual(
+            result.best.role_authorized_pair_support_domain_count,
+            3,
+        )
+
+    def test_inward_local_alternative_does_not_block_outer_complementary_pair(
+        self,
+    ) -> None:
+        domains = (
+            FiniteInterval(0.0, 20.0),
+            FiniteInterval(40.0, 60.0),
+            FiniteInterval(80.0, 100.0),
+        )
+        result = fit_template_cross(
+            aspect_input(
+                template=template(count=3),
+                fixed_height_px=FiniteInterval(230.0, 250.0),
+                registered_trace_coordinates_px=(10, 15, 50, 55, 90),
+                longitudinal_support_domains_px=domains,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "outer-complementary-top",
+                        100.0,
+                        traces=(10, 50),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "outer-complementary-bottom",
+                        340.0,
+                        traces=(55, 90),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "inward-local-bottom",
+                        335.0,
+                        traces=(10, 50),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertEqual(
+            result.best.bound_observation_ids,
+            (
+                ObservationId("observation:outer-complementary-top"),
+                ObservationId("observation:outer-complementary-bottom"),
+            ),
+        )
+
+    def test_outward_local_alternative_blocks_complementary_pair(self) -> None:
+        domains = (
+            FiniteInterval(0.0, 20.0),
+            FiniteInterval(40.0, 60.0),
+            FiniteInterval(80.0, 100.0),
+        )
+        result = fit_template_cross(
+            aspect_input(
+                template=template(count=3),
+                fixed_height_px=FiniteInterval(230.0, 250.0),
+                registered_trace_coordinates_px=(10, 15, 50, 90),
+                longitudinal_support_domains_px=domains,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "inward-complementary-top",
+                        100.0,
+                        traces=(50, 90),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                    binding(
+                        BoundaryRole.TOP,
+                        "outward-local-top",
+                        95.0,
+                        traces=(10, 15),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "shared-bottom",
+                        340.0,
+                        traces=(10, 15),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            CrossFailureKind.OUTWARD_ROLE_COUNTEREVIDENCE,
+        )
+
+    def test_source_spanning_side_does_not_export_local_opposite(self) -> None:
+        domains = (
+            FiniteInterval(0.0, 20.0),
+            FiniteInterval(40.0, 60.0),
+            FiniteInterval(80.0, 100.0),
+        )
+        result = fit_template_cross(
+            aspect_input(
+                template=template(count=3),
+                fixed_height_px=FiniteInterval(230.0, 250.0),
+                canonical_fixed_height_px=245.0,
+                registered_trace_coordinates_px=(10, 15, 50, 90),
+                longitudinal_support_domains_px=domains,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "source-spanning-top",
+                        100.0,
+                        traces=(10, 50, 90),
+                        independent_regions=3,
+                        source_spanning=True,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "local-opposite-bottom",
+                        338.0,
+                        traces=(10, 15),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertFalse(result.best.direct_pair)
+        self.assertEqual(
+            result.best.bound_observation_ids,
+            (ObservationId("observation:source-spanning-top"),),
+        )
+        self.assertAlmostEqual(
+            result.best.bottom_canonical_px - result.best.top_canonical_px,
+            240.0,
+        )
+
+    def test_complementary_domains_require_complete_union(self) -> None:
+        result = fit_template_cross(
+            aspect_input(
+                template=template(count=3),
+                fixed_height_px=240.0,
+                registered_trace_coordinates_px=(10, 50, 55, 60),
+                longitudinal_support_domains_px=(
+                    FiniteInterval(0.0, 20.0),
+                    FiniteInterval(40.0, 60.0),
+                    FiniteInterval(80.0, 100.0),
+                ),
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "incomplete-complementary-top",
+                        100.0,
+                        traces=(10, 50),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "incomplete-complementary-bottom",
+                        340.0,
+                        traces=(55, 60),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertIsNone(result.best)
+        self.assertEqual(
+            result.failure_kind,
+            CrossFailureKind.PAIR_SUPPORT_UNAVAILABLE,
+        )
+
+    def test_multiple_complementary_domain_pairs_remain_unresolved(self) -> None:
+        domains = (
+            FiniteInterval(0.0, 20.0),
+            FiniteInterval(40.0, 60.0),
+            FiniteInterval(80.0, 100.0),
+        )
+        result = fit_template_cross(
+            aspect_input(
+                template=template(count=3),
+                fixed_height_px=FiniteInterval(239.0, 241.0),
+                registered_trace_coordinates_px=(10, 50, 55, 90),
+                longitudinal_support_domains_px=domains,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "ambiguous-complementary-top",
+                        100.0,
+                        traces=(10, 50),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "ambiguous-complementary-bottom-a",
+                        339.0,
+                        traces=(55, 90),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "ambiguous-complementary-bottom-b",
+                        341.0,
+                        traces=(55, 90),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            CrossFailureKind.NON_EQUIVALENT_FITS,
+        )
+        self.assertIsNotNone(result.best)
+        self.assertIsNotNone(result.runner_up)
+        assert result.best is not None
+        assert result.runner_up is not None
+        self.assertEqual(
+            result.best.pair_support_mode,
+            CrossPairSupportMode.COMPLEMENTARY_DOMAINS,
+        )
+        self.assertEqual(
+            result.runner_up.pair_support_mode,
+            CrossPairSupportMode.COMPLEMENTARY_DOMAINS,
+        )
+
+    def test_template_local_refinement_cannot_close_complementary_domains(
+        self,
+    ) -> None:
+        bottom = replace(
+            binding(
+                BoundaryRole.BOTTOM,
+                "refined-complementary-bottom",
+                340.0,
+                traces=(55, 90),
+                independent_regions=2,
+                source_spanning=False,
+            ),
+            evidence=CrossEvidence.TEMPLATE_LOCAL_REFINEMENT,
+        )
+        result = fit_template_cross(
+            aspect_input(
+                template=template(count=3),
+                fixed_height_px=240.0,
+                registered_trace_coordinates_px=(10, 50, 55, 90),
+                longitudinal_support_domains_px=(
+                    FiniteInterval(0.0, 20.0),
+                    FiniteInterval(40.0, 60.0),
+                    FiniteInterval(80.0, 100.0),
+                ),
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "refined-complementary-top",
+                        100.0,
+                        traces=(10, 50),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+                bottom_bindings=(bottom,),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertIsNone(result.best)
+        self.assertEqual(
+            result.failure_kind,
+            CrossFailureKind.PAIR_SUPPORT_UNAVAILABLE,
+        )
 
     def test_physical_direction_intervals_close_disjoint_local_fits(self) -> None:
         top = binding(
@@ -630,7 +979,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertTrue(result.best.direct_pair)
         self.assertIn("non-equivalent", result.reason or "")
 
-    def test_exact_registered_trace_subset_dominates_despite_disjoint_direction(self) -> None:
+    def test_selection_does_not_own_exact_subset_family_identity(self) -> None:
         registered = tuple(range(0, 101, 10))
         result = fit_template_cross(
             aspect_input(
@@ -679,18 +1028,11 @@ class TemplateCrossContractTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
-        assert result.best is not None
-        self.assertIsNone(result.runner_up)
-        self.assertEqual(
-            result.best.bound_observation_ids,
-            (
-                ObservationId("observation:exact-broader-top"),
-                ObservationId("observation:exact-shared-bottom"),
-            ),
-        )
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertIsNotNone(result.best)
+        self.assertIsNotNone(result.runner_up)
 
-    def test_connected_broader_side_dominates_staggered_local_fragment(self) -> None:
+    def test_selection_does_not_own_staggered_family_identity(self) -> None:
         domains = (
             FiniteInterval(-1.0, 21.0),
             FiniteInterval(39.0, 61.0),
@@ -734,18 +1076,11 @@ class TemplateCrossContractTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
-        assert result.best is not None
-        self.assertIsNone(result.runner_up)
-        self.assertEqual(
-            result.best.bound_observation_ids,
-            (
-                ObservationId("observation:broader-top"),
-                ObservationId("observation:shared-bottom"),
-            ),
-        )
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertIsNotNone(result.best)
+        self.assertIsNotNone(result.runner_up)
         self.assertEqual(result.receipt.compatible_pair_count, 2)
-        self.assertEqual(result.receipt.evaluated_fit_count, 1)
+        self.assertEqual(result.receipt.evaluated_fit_count, 2)
 
     def test_equal_domain_side_tracks_remain_discrete(self) -> None:
         registered = tuple(range(0, 101, 10))
@@ -1142,7 +1477,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                 self.assertIsNotNone(result.best)
                 self.assertIsNotNone(result.runner_up)
 
-    def test_broader_side_dominates_one_domain_supported_fragment(self) -> None:
+    def test_selection_does_not_own_one_domain_family_identity(self) -> None:
         result = fit_template_cross(
             aspect_input(
                 template=template(count=4),
@@ -1185,16 +1520,9 @@ class TemplateCrossContractTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
-        assert result.best is not None
-        self.assertIsNone(result.runner_up)
-        self.assertEqual(
-            result.best.bound_observation_ids,
-            (
-                ObservationId("observation:one-domain-broader-top"),
-                ObservationId("observation:one-domain-shared-bottom"),
-            ),
-        )
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertIsNotNone(result.best)
+        self.assertIsNotNone(result.runner_up)
 
     def test_missing_or_unregistered_lattice_cannot_authorize_dominance(self) -> None:
         domains = (
@@ -1373,7 +1701,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertAlmostEqual(result.best.top_canonical_px, 100.0)
         self.assertAlmostEqual(result.best.bottom_canonical_px, 340.0)
 
-    def test_spanning_side_rejects_wrong_role_local_closure(self) -> None:
+    def test_spanning_side_does_not_export_local_role_closure(self) -> None:
         result = fit_template_cross(
             aspect_input(
                 template=template(),
@@ -1401,12 +1729,10 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertEqual(result.status, CrossFitStatus.RESOLVED)
         self.assertIsNone(result.runner_up)
         assert result.best is not None
+        self.assertFalse(result.best.direct_pair)
         self.assertEqual(
             result.best.direct_provenance_ids,
-            (
-                ObservationId("observation:spanning-top"),
-                ObservationId("observation:authorized-bottom"),
-            ),
+            (ObservationId("observation:spanning-top"),),
         )
 
     def test_template_wide_side_infers_opposite_without_local_fragment_authority(self) -> None:
@@ -2517,7 +2843,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertEqual(result.status, CrossFitStatus.RESOLVED)
         assert result.best is not None
         assert result.best.selected_direction is not None
-        self.assertTrue(result.best.direct_pair)
+        self.assertFalse(result.best.direct_pair)
         self.assertEqual(
             result.best.selected_direction.full_angle_interval_degrees,
             FiniteInterval(-0.2, -0.1),
