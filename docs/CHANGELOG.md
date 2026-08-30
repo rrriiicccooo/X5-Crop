@@ -125,12 +125,13 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
 - `tools/verify` 是 Hook、CI 与本地验证的唯一入口。Diagnostic 只证明工程合同；gold accuracy、性能与
   platform receipt 分层记录，不互相冒充。
 - 正式性能 Gate 为 24-source 完整用户路径 mean 不超过 5 秒；3 秒只是不阻断的 challenge。
-- 当前 source-level aperture checkpoint 的 development gold 为 110/110 完成、分析错误 0、危险自动
-  批准 0；安全 auto 为基础 nominal 10/66、较难 nominal 0/30、challenge 0/14。S003 因安全的相关 W
-  推断新增通过；S087 因移除无依据的精确 W→H 换算而由 content veto 安全回到 review，它是下一阶段
-  有界比例 authority 的真实正例，不证明两轴不存在物理相关性。全部 candidate 为 86 个不可用、18 个
-  安全、6 个不安全，其中不安全 candidate 均保持 review。检查点 `f8760091` 的 pre-push Hook 为 549 项
-  通过、2 项按设计跳过；24-source 正式 mean 为 3.437 秒，5 秒 Gate 通过，3 秒不阻断目标未达到。
+- Mixed aperture compatibility 检查点 `2d9fbf9c` 的完整 development gold 为 110/110 完成、分析错误 0、
+  `unsafe_approved_auto = 0`；安全 auto 为基础 nominal 4/66、较难 nominal 0/30、challenge 0/14。全部
+  candidate 为 96 个不可用、9 个安全、5 个不安全，所有不安全 candidate 均保持 review。黄金重算确认
+  105-source/494-Frame W/H calibration 的运行时公式、计数与 source-level q95 完全一致。
+- 同 commit 的 pre-push Hook 为 564 项通过、2 项按设计跳过；24-source 正式 mean 为 2.966 秒，5 秒
+  Gate 通过，3 秒 non-blocking 目标也已达到。当前覆盖降低表达更宽真实先验揭示的 phase/cross 证明缺口，
+  不以调窄 guard、恢复精确 W→H 或改变样片角色掩盖。
 - Apple Silicon macOS、Intel macOS 与 Windows x64 必须在同一最终 commit 取得实机 receipt。Accuracy、
   性能与平台证据未全部绑定该 commit 前，不创建 RC、tag、Release 或公开 ZIP。
 - 发布包由唯一 manifest 构建，不包含 modular source、tests、tools、内部文档或开发输出。
