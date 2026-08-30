@@ -15,26 +15,26 @@ mean `<= 5s` 来提高覆盖；3 秒 mean 是持续优化目标。
 Debug、正反例、少量真实样片、完整黄金验收和性能。已闭合全局 lattice authority、逐 adjacency
 coverage、候选无关查询走廊、polarity-complete separator、跨高度弱边缘、source-level W/H direct
 aperture、有界的 W/H compatibility 与 aspect-ratio authority，以及不依赖比例推导的 fixed-H enclosing
-support。Contact/overlap 以后仍只扩展同一 adjacency/placement 模型。
+support、直接坐标权限和真实 TIFF 外缘的显式 source saturation。Contact/overlap 以后仍只扩展同一
+adjacency/placement 模型。
 
 ## 当前检查点
 
-- 检测检查点 `d062703b` 让 registration 成为 same-role Cross family identity 的唯一 owner：只有一次
-  refit 精确保留完整 transition union 才合并 fragment，旧 selection-time containment/dominance 权限已经
-  删除。Direct top/bottom 还可在两侧各自拥有独立区域、domain union 覆盖全部 selected Frame、方向与
-  fixed H 相容时，以 `complementary_domains` 形成闭环；它不伪造 shared trace。
-- 同一检查点加入通用外侧反证：若某个完整 pair 的同一 opposite 还能与严格更外侧的直接局部 role
-  闭合，内侧 pair 产生 `outward_role_counterevidence`；若外侧 pair 也完整，则保留两者竞争。Source-wide
-  单侧不得把没有覆盖全部 selected domain 的局部 opposite 外推。S018、S062 因此安全 review，S064
-  取得安全 auto；没有样片特例或 score。
+- `6a121ab1` 删除两条局部 start/end 仅凭彼此间距与 W prior 互相授予 native coordinate 权限的循环。
+  已观察坐标只接受 source-wide edge、跨高度联合或同一 separator pair；独立闭合 W 只推导真正缺失的
+  opposite。S088 因弱局部线失去自授权而在 placement 前安全 review。
+- `b54ac17f` 把输出保护拆为 mandatory、完整 requested 与实际 required 三层 polygon。真实 TIFF 外缘
+  显式限定不存在的源像素，并区分 optional bleed 与 joint protection saturation；内部 dual-lane 边界
+  两种情况都继续阻断。5% 预算使用未限定 requested 层，Debug 与 report 保留完整请求、kind 和越界距离。
+  S083、S084、S085、S092 因此安全 auto；S094 仍由独立预算阻断，S088 仍无 placement。
 - 完整 development gold 为 110/110 完成、分析错误 0、`unsafe_approved_auto = 0`。安全 auto 为基础
-  nominal 8/66、较难 nominal 1/30、challenge 0/14；基础 nominal candidate 为 47 个不可用、15 个安全、
-  4 个不安全，较难 nominal 为 26 个不可用、3 个安全、1 个不安全，所有不安全 candidate 均保持 review。
-  安全 auto 为 S022、S025、S063、S064、S067、S081、S087、S095、S103；全部 challenge 均安全 review。
-- 黄金 receipt 的 detector、comparator 与 cohort 均精确匹配 `d062703b`；detector manifest 为
-  `81a6c33c07fdad76b1d3e34fac76ab27f5dbe712a1f41942b4d940bed503d848`。24-source 正式性能 mean 为
-  2.711 秒，最慢 S109 为 4.740 秒，5 秒 Gate 通过且 3 秒 non-blocking 目标达到；receipt 位于
-  `build/v5-performance/performance_receipt.json`，只证明该 commit、依赖和 M2 Max 主机。
+  nominal 10/66、较难 nominal 1/30、challenge 0/14；基础 nominal candidate 为 54 个不可用、11 个安全、
+  1 个不安全，较难 nominal 为 29 个不可用、1 个安全。安全 auto 为 S022、S025、S063、S064、S067、
+  S083、S084、S085、S087、S092、S095；全部 challenge 均安全 review。
+- 黄金 receipt 的 detector、comparator 与 cohort 均精确匹配 `b54ac17f`；detector manifest 为
+  `e20f6ac108a410eea3cf172045ada1545baf34c9678f8e3da93255bc111ffc8d`。24-source 正式性能 mean 为
+  2.756 秒，p95 为 4.544 秒，最慢 S109 为 4.781 秒；5 秒 Gate 通过且 3 秒 non-blocking 目标达到。
+  Receipt 只证明该 commit、记录的依赖和 M2 Max 主机。
 
 ## 当前物理证据
 
@@ -52,14 +52,14 @@ support。Contact/overlap 以后仍只扩展同一 adjacency/placement 模型。
 
 ## 开放风险
 
-- 基础 nominal 仍有 58/66 review，较难 nominal 有 29/30 review。当前完整集有 29 个
-  `discrete_phase_ambiguous`、17 个 `non_equivalent_fits`、11 个
-  `direct_role_binding_authority_unavailable` 和 7 个 `aperture_aspect_ratio_budget_exhausted`。较宽真实先验
-  暴露的竞争必须由观察 identity、权限或安全预算闭合；不得靠缩窄 guard、恢复精确 W→H 或改 challenge
-  分类取回数字。
-- 仍有 9 个几何安全但最终 review 的 candidate：S015、S083、S084、S085、S091、S092、S093、S094、
-  S099；另有 S012、S013、S017、S088、S098 五个不安全 candidate 被正确阻断。前者是后续权限机制的
-  正例，后者必须作为同机制的安全反例，不能把 candidate 安全混同于可自动批准。
+- 基础 nominal 仍有 56/66 review，较难 nominal 有 29/30 review。当前完整集有 34 个
+  `direct_role_binding_authority_unavailable`、29 个 `discrete_phase_ambiguous`、18 个
+  `non_equivalent_fits`、9 个 `fixed_template_mismatch`、6 个 `global_lattice_authority_unavailable` 与 6 个
+  `aperture_aspect_ratio_budget_exhausted`。竞争必须由新的直接观察 identity、权限或相关安全状态闭合；
+  不得恢复 W 自授权、缩窄 guard、精确 W→H 或改 challenge 分类。
+- 当前唯一几何安全但最终 review 的 candidate 是 S094（`direct_use_budget_exceeded`）；唯一不安全
+  candidate 是同样被预算阻断的 S017。它们构成下一机制的正反例。其余 97 个 task 没有 selected
+  candidate，不能把“没有输出”误当成精度问题。
 - 当前黄金同时参与 development calibration 与 development 验收，只能证明该集合上的安全与可复算性；
   尚无 sealed acceptance，也没有 `xpan`、`120-645`、`135-dual` 的独立黄金覆盖。
 - 当前开发集不能事后兼任概率 calibration。未来 scorer 仍需预先冻结的新数据、OOD、abstention 和独立
@@ -67,12 +67,10 @@ support。Contact/overlap 以后仍只扩展同一 adjacency/placement 模型。
 
 ## 精确下一步
 
-1. 先闭合 source-lane/output-footprint 权限：以 S083、S084、S085、S092、S094 等安全 candidate 为正例，
-   以 S088 的危险 candidate 及真实 source truncation 为反例，区分输入确实不足、已有 enclosing authority
-   未传播和 bleed 无法容纳；source containment 保持硬合同，不能静默裁小。
-2. 再审计 `direct_use_budget_exceeded`：S015、S091、S099 是安全正例，S012、S013、S017、S098 是安全
-   反例。只允许修正同一 placement 的相关 uncertainty、residual 与逐侧预算 owner，不扩大 5% 产品上限，
-   也不把不能同时发生的误差分别相加。
-3. 随后按独立未知量而非样片数量拆解 `discrete_phase_ambiguous` 与 `non_equivalent_fits`，依次完善
-   candidate-independent separator coverage、局部片距和弱边缘权限；contact/overlap 仍在 nominal 机制
-   稳定后作为同一 adjacency 模型的 challenge 扩展。
+1. 先用 S094（安全）与 S017（不安全）闭合 `direct_use_budget_exceeded`：审计同一 placement 的相关
+   measurement state、line residual 与逐侧 expansion，消除互斥极值的重复计算；不得扩大 5% 上限、缩窄
+   原始 uncertainty 或为 S094 建例外。
+2. 再拆解 34 个 `direct_role_binding_authority_unavailable`。新增能力必须来自同一 registered 像素的通用
+   source-wide、跨高度或 separator physical identity，不能让两个弱局部边界重新凭 W 互相授权。
+3. 随后按独立未知量拆解 `discrete_phase_ambiguous` 与 `non_equivalent_fits`，完善候选无关 separator
+   coverage、局部片距和弱边缘权限；contact/overlap 仍在 nominal 机制稳定后作为同一 adjacency 模型扩展。

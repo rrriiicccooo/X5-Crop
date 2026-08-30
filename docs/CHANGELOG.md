@@ -147,15 +147,15 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
 - `tools/verify` 是 Hook、CI 与本地验证的唯一入口。Diagnostic 只证明工程合同；gold accuracy、性能与
   platform receipt 分层记录，不互相冒充。
 - 正式性能 Gate 为 24-source 完整用户路径 mean 不超过 5 秒；3 秒只是不阻断的 challenge。
-- Cross family/complementary-domain 检查点 `d062703b` 的完整 development gold 为 110/110 完成、分析
-  错误 0、`unsafe_approved_auto = 0`；安全 auto 为基础 nominal 8/66、较难 nominal 1/30、challenge 0/14。
-  基础 nominal candidate 为 47 个不可用、15 个安全、4 个不安全，较难 nominal 为 26 个不可用、3 个
-  安全、1 个不安全；所有不安全 candidate 均保持 review。安全 auto 为 S022、S025、S063、S064、S067、
-  S081、S087、S095、S103。黄金重算继续确认 105-source/494-Frame W/H calibration 的运行时公式、计数与
-  source-level q95 一致。
-- 同 commit 的 24-source 正式 mean 为 2.711 秒，最慢 S109 为 4.740 秒；5 秒 Gate 通过，3 秒
-  non-blocking 目标达到。当前其余 review 表达真实的 phase/cross、source-footprint 与预算证明缺口，不以
-  调窄 guard、静默裁小 footprint、恢复精确 W→H 或改变样片角色掩盖。
+- Source-boundary 检查点 `b54ac17f` 的完整 development gold 为 110/110 完成、分析错误 0、
+  `unsafe_approved_auto = 0`；安全 auto 为基础 nominal 10/66、较难 nominal 1/30、challenge 0/14。
+  基础 nominal candidate 为 54 个不可用、11 个安全、1 个不安全，较难 nominal 为 29 个不可用、1 个
+  安全；唯一不安全 candidate S017 保持 review。安全 auto 为 S022、S025、S063、S064、S067、S083、
+  S084、S085、S087、S092、S095。黄金重算继续确认 105-source/494-Frame W/H calibration 的运行时公式、
+  计数与 source-level q95 一致。
+- 同 commit 的 24-source 正式 mean 为 2.756 秒、p95 为 4.544 秒，最慢 S109 为 4.781 秒；5 秒 Gate
+  通过，3 秒 non-blocking 目标达到。当前其余 review 表达真实的 phase/cross 与预算证明缺口，不以调窄
+  guard、静默隐藏 saturation、恢复精确 W→H 或改变样片角色掩盖。
 - Apple Silicon macOS、Intel macOS 与 Windows x64 必须在同一最终 commit 取得实机 receipt。Accuracy、
   性能与平台证据未全部绑定该 commit 前，不创建 RC、tag、Release 或公开 ZIP。
 - 发布包由唯一 manifest 构建，不包含 modular source、tests、tools、内部文档或开发输出。
