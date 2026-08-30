@@ -31,6 +31,9 @@ from x5crop.detection.photo_geometry.registered_measurement import (
 from x5crop.detection.photo_geometry.template_measurement_plan import (
     compile_template_measurement_plan,
 )
+from x5crop.detection.photo_geometry.template_model import (
+    template_role_refinement_radius_px,
+)
 from x5crop.detection.source_core import (
     SourceLaneEvidence,
     SourceStripValidationDomain,
@@ -185,6 +188,80 @@ class CoarseStripSupportContractTest(unittest.TestCase):
             all(100.0 <= trace <= 2200.0 for trace in top.trace_positions_px)
         )
         self.assertEqual(top.trace_positions_px, bottom.trace_positions_px)
+
+    def test_anchor_windows_cover_the_complete_compiled_role_envelope(self) -> None:
+        lane, plan = _lane()
+        template = plan.template_spec
+        holder_span = FiniteInterval(
+            template.frame_width_px.minimum
+            + (plan.full_count - 1) * template.pitch_px.minimum,
+            template.frame_width_px.maximum
+            + (plan.full_count - 1) * template.pitch_px.maximum,
+        )
+        direct = FiniteInterval(
+            100.0,
+            min(2219.0, 100.0 + holder_span.center),
+        )
+        support = CoarseStripSupport(
+            "lane:0",
+            CoarseAxisSupport(
+                FiniteInterval(0.0, 2319.0),
+                direct,
+                CoarseSupportAuthority.PIXEL_OBSERVED,
+                (ObservationId("coarse:long"),),
+            ),
+            CoarseAxisSupport(
+                FiniteInterval(0.0, 321.0),
+                None,
+                CoarseSupportAuthority.HOLDER_CONSERVATIVE,
+                (),
+            ),
+            None,
+            None,
+            CoarseStripSupportReceipt(2, 2, 2, 2, 1, 2, 2),
+        )
+
+        domain = build_sequence_anchor_discovery_domain(
+            lane,
+            layout="horizontal",
+            measurement_plan=plan,
+            coarse_support=support,
+        )
+
+        def covered(value: float) -> bool:
+            return any(
+                window.core_px.minimum <= value
+                <= window.core_px.maximum - 1.0
+                for window in domain.windows
+            )
+
+        radius = template_role_refinement_radius_px(template.pitch_px.maximum)
+        for slot_index in range(plan.full_count):
+            left_start = FiniteInterval(
+                direct.minimum + slot_index * template.pitch_px.minimum,
+                direct.minimum + slot_index * template.pitch_px.maximum,
+            )
+            left_end = FiniteInterval(
+                left_start.minimum + template.frame_width_px.minimum,
+                left_start.maximum + template.frame_width_px.maximum,
+            )
+            remaining = plan.full_count - 1 - slot_index
+            right_end = FiniteInterval(
+                direct.maximum - remaining * template.pitch_px.maximum,
+                direct.maximum - remaining * template.pitch_px.minimum,
+            )
+            right_start = FiniteInterval(
+                right_end.minimum - template.frame_width_px.maximum,
+                right_end.maximum - template.frame_width_px.minimum,
+            )
+            for role in (left_start, left_end, right_start, right_end):
+                for extreme in (
+                    max(domain.support_interval_px.minimum, role.minimum - radius),
+                    min(domain.support_interval_px.maximum, role.maximum + radius),
+                ):
+                    self.assertTrue(covered(extreme))
+
+        self.assertLessEqual(len(domain.windows), 2 * plan.full_count)
 
     def test_role_free_material_region_localizes_the_whole_strip(self) -> None:
         lane, plan = _lane()

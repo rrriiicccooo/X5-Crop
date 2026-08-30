@@ -28,6 +28,12 @@ class GateGap(str, Enum):
     ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE = (
         "adjacency_observation_coverage_incomplete"
     )
+    DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE = (
+        "direct_role_binding_authority_unavailable"
+    )
+    OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE = (
+        "outer_frame_observation_authority_unavailable"
+    )
     PHASE_TEMPLATE_MISMATCH = "phase_template_mismatch"
     PHASE_PLACEMENT_AMBIGUOUS = "phase_placement_ambiguous"
     CROSS_AUTHORITY_UNAVAILABLE = "cross_authority_unavailable"
@@ -55,6 +61,8 @@ class MinimumMissingFact(str, Enum):
     ABSOLUTE_PHASE_ANCHOR = "absolute_phase_anchor"
     GLOBAL_LATTICE_AUTHORITY = "global_lattice_authority"
     ADJACENCY_OBSERVATION_COVERAGE = "adjacency_observation_coverage"
+    DIRECT_ROLE_BINDING_AUTHORITY = "direct_role_binding_authority"
+    OUTER_FRAME_OBSERVATION_AUTHORITY = "outer_frame_observation_authority"
     PITCH_CLOSURE = "pitch_closure"
     CROSS_POSITION = "cross_position"
     REGISTERED_QUERY_COVERAGE = "registered_query_coverage"
@@ -157,6 +165,16 @@ def failure_fact(
             FailureRecovery.REMEASURE,
             MinimumMissingFact.ADJACENCY_OBSERVATION_COVERAGE,
             RecoveryAction.OPEN_DEBUG_ANALYSIS,
+        ),
+        GateGap.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.DIRECT_ROLE_BINDING_AUTHORITY,
+            RecoveryAction.REVIEW_PLACEMENT,
+        ),
+        GateGap.OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.OUTER_FRAME_OBSERVATION_AUTHORITY,
+            RecoveryAction.REVIEW_PLACEMENT,
         ),
         GateGap.PHASE_TEMPLATE_MISMATCH: (
             FailureRecovery.REMEASURE,

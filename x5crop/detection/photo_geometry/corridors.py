@@ -163,6 +163,60 @@ def _merged_anchor_cores(
     return tuple(merged)
 
 
+def _compiled_role_search_cores(
+    support_interval_px: FiniteInterval,
+    direct_interval_px: FiniteInterval,
+    measurement_plan: TemplateMeasurementPlan,
+) -> tuple[FiniteInterval, ...]:
+    """Cover every role location allowed by the compiled physical template.
+
+    Coarse support may localize the search, but it is not phase authority.  The
+    query domain must therefore retain the complete W/pitch interval for both
+    holder-end alignments before pixels are interpreted.  Later placement can
+    only consume observations from these candidate-independent cores.
+    """
+
+    template = measurement_plan.template_spec
+    width = template.frame_width_px
+    pitch = template.pitch_px
+    radius_px = template_role_refinement_radius_px(pitch.maximum)
+    cores: list[FiniteInterval] = []
+    for slot_index in range(measurement_plan.full_count):
+        left_start = FiniteInterval(
+            direct_interval_px.minimum + slot_index * pitch.minimum,
+            direct_interval_px.minimum + slot_index * pitch.maximum,
+        )
+        left_end = FiniteInterval(
+            left_start.minimum + width.minimum,
+            left_start.maximum + width.maximum,
+        )
+        remaining = measurement_plan.full_count - 1 - slot_index
+        right_end = FiniteInterval(
+            direct_interval_px.maximum - remaining * pitch.maximum,
+            direct_interval_px.maximum - remaining * pitch.minimum,
+        )
+        right_start = FiniteInterval(
+            right_end.minimum - width.maximum,
+            right_end.maximum - width.minimum,
+        )
+        # Left- and right-anchored formulas retain the shared W/pitch state;
+        # constructing an origin interval and adding pitch again would combine
+        # mutually exclusive extrema and inflate later windows toward full-axis
+        # work.
+        for role in (left_start, left_end, right_start, right_end):
+            minimum = max(
+                support_interval_px.minimum,
+                role.minimum - radius_px,
+            )
+            maximum = min(
+                support_interval_px.maximum,
+                role.maximum + radius_px,
+            )
+            if maximum > minimum:
+                cores.append(FiniteInterval(minimum, maximum))
+    return _merged_anchor_cores(tuple(cores))
+
+
 def _anchor_windows(
     lane_id: str,
     support_interval_px: FiniteInterval,
@@ -187,30 +241,11 @@ def _anchor_windows(
     if direct_interval_px is None:
         return conservative_window()
 
-    template = measurement_plan.template_spec
-    width_px = (
-        template.frame_width_px.minimum + template.frame_width_px.maximum
-    ) / 2.0
-    pitch_px = (template.pitch_px.minimum + template.pitch_px.maximum) / 2.0
-    holder_span_px = width_px + (measurement_plan.full_count - 1) * pitch_px
-    origins = tuple(
-        sorted(
-            {
-                direct_interval_px.minimum,
-                direct_interval_px.maximum - holder_span_px,
-            }
-        )
+    cores = _compiled_role_search_cores(
+        support_interval_px,
+        direct_interval_px,
+        measurement_plan,
     )
-    radius_px = template_role_refinement_radius_px(template.pitch_px.maximum)
-    cores: list[FiniteInterval] = []
-    for origin_px in origins:
-        for slot_index in range(measurement_plan.full_count):
-            frame_start_px = origin_px + slot_index * pitch_px
-            for role_px in (frame_start_px, frame_start_px + width_px):
-                minimum = max(support_interval_px.minimum, role_px - radius_px)
-                maximum = min(support_interval_px.maximum, role_px + radius_px)
-                if maximum > minimum:
-                    cores.append(FiniteInterval(minimum, maximum))
     if not cores:
         return conservative_window()
 
@@ -227,7 +262,7 @@ def _anchor_windows(
                 min(support_interval_px.maximum, core.maximum + halo_px),
             ),
         )
-        for index, core in enumerate(_merged_anchor_cores(tuple(cores)))
+        for index, core in enumerate(cores)
     )
 
 

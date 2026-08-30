@@ -173,9 +173,25 @@ def alignment_summary(detection: FinalDetection) -> str:
         complete_coverage = sum(
             item.state.value == "complete" for item in inferred_coverage
         )
+        direct = diagnostic.direct_role_binding_authority
+        direct_supported = (
+            0
+            if direct is None
+            else len(direct.facts) - len(direct.unsupported_role_indices)
+        )
+        direct_total = 0 if direct is None else len(direct.facts)
+        outer = diagnostic.outer_frame_observation_authority
+        outer_count = (
+            0
+            if outer is None
+            else int(bool(outer.first_frame_observation_ids))
+            + int(bool(outer.last_frame_observation_ids))
+        )
         proof = (
             f"GLOBAL {rank}/3 · ADJ "
-            f"{complete_coverage}/{len(inferred_coverage)}"
+            f"{complete_coverage}/{len(inferred_coverage)} · DIRECT "
+            f"{direct_supported}/{direct_total} · OUTER "
+            f"{outer_count}/2"
         )
         if diagnostic.pattern.value == "unresolved":
             values.append(f"{lane.lane_id} {label} · {proof}")

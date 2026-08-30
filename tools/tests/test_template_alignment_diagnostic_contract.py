@@ -114,6 +114,16 @@ class TemplateAlignmentDiagnosticContractTest(unittest.TestCase):
                 for item in diagnostic.adjacency_observation_coverage
             )
         )
+        assert diagnostic.direct_role_binding_authority is not None
+        self.assertEqual(
+            diagnostic.direct_role_binding_authority.state.value,
+            "supported",
+        )
+        assert diagnostic.outer_frame_observation_authority is not None
+        self.assertEqual(
+            diagnostic.outer_frame_observation_authority.state.value,
+            "supported",
+        )
 
     def test_one_direct_suffix_shift_is_named_without_new_search(self) -> None:
         observations = tuple(

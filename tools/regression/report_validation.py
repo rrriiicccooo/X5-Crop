@@ -63,6 +63,8 @@ _TEMPLATE_ALIGNMENT_FIELDS = {
     "local_advance_relations",
     "global_lattice_authority",
     "adjacency_observation_coverage",
+    "direct_role_binding_authority",
+    "outer_frame_observation_authority",
     "unbound_direct_observation_count",
     "unresolved_reason",
 }
@@ -326,6 +328,102 @@ def _validate_adjacency_coverage(value: object) -> None:
             raise ValueError("adjacency aggregate coverage is invalid")
     if ordinals != list(range(1, len(ordinals) + 1)):
         raise ValueError("adjacency coverage ordinals are invalid")
+
+
+def _validate_outer_frame_observation_authority(value: object) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict) or set(value) != {
+        "state",
+        "first_frame_ordinal",
+        "last_frame_ordinal",
+        "first_frame_observation_ids",
+        "last_frame_observation_ids",
+        "reason",
+    }:
+        raise ValueError("outer-frame observation authority summary is invalid")
+    first = value["first_frame_observation_ids"]
+    last = value["last_frame_observation_ids"]
+    supported = value["state"] == "supported"
+    if (
+        value["state"] not in {"supported", "unavailable"}
+        or value["first_frame_ordinal"] != 1
+        or not isinstance(value["last_frame_ordinal"], int)
+        or value["last_frame_ordinal"] < 1
+        or not _valid_ids(first)
+        or not _valid_ids(last)
+        or supported != bool(first and last)
+        or supported != (value["reason"] is None)
+        or value["reason"] is not None
+        and (not isinstance(value["reason"], str) or not value["reason"])
+    ):
+        raise ValueError("outer-frame observation authority summary is invalid")
+
+
+def _validate_direct_role_binding_authority(value: object) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict) or set(value) != {
+        "state",
+        "facts",
+        "unsupported_role_indices",
+        "reason",
+    }:
+        raise ValueError("direct-role binding authority summary is invalid")
+    facts = value["facts"]
+    unsupported = value["unsupported_role_indices"]
+    if not isinstance(facts, list) or not isinstance(unsupported, list):
+        raise ValueError("direct-role binding authority ledger is invalid")
+    indices: list[int] = []
+    unavailable: list[int] = []
+    allowed_bases = {
+        "source_wide_edge",
+        "separator_pair",
+        "frame_width_pair",
+    }
+    for fact in facts:
+        if not isinstance(fact, dict) or set(fact) != {
+            "role_index",
+            "lane_ordinal",
+            "role",
+            "observation_id",
+            "independent_support_region_count",
+            "bases",
+            "state",
+        }:
+            raise ValueError("direct-role authority fact is invalid")
+        index = fact["role_index"]
+        bases = fact["bases"]
+        supported = fact["state"] == "supported"
+        if (
+            not isinstance(index, int)
+            or index < 0
+            or fact["lane_ordinal"] != index // 2 + 1
+            or fact["role"] != ("start" if index % 2 == 0 else "end")
+            or not isinstance(fact["observation_id"], str)
+            or not fact["observation_id"]
+            or fact["independent_support_region_count"] not in {1, 2, 3}
+            or not isinstance(bases, list)
+            or bases != list(dict.fromkeys(bases))
+            or any(item not in allowed_bases for item in bases)
+            or fact["state"] not in {"supported", "unavailable"}
+            or supported != bool(bases)
+        ):
+            raise ValueError("direct-role authority fact is invalid")
+        indices.append(index)
+        if not supported:
+            unavailable.append(index)
+    supported = value["state"] == "supported"
+    if (
+        indices != sorted(set(indices))
+        or unsupported != unavailable
+        or value["state"] not in {"supported", "unavailable"}
+        or supported != (not unavailable)
+        or supported != (value["reason"] is None)
+        or value["reason"] is not None
+        and (not isinstance(value["reason"], str) or not value["reason"])
+    ):
+        raise ValueError("direct-role binding authority summary is invalid")
 
 
 def _validate_polygon(value: object, label: str) -> list[list[float]]:
@@ -696,6 +794,12 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         )
         _validate_adjacency_coverage(
             alignment["adjacency_observation_coverage"]
+        )
+        _validate_direct_role_binding_authority(
+            alignment["direct_role_binding_authority"]
+        )
+        _validate_outer_frame_observation_authority(
+            alignment["outer_frame_observation_authority"]
         )
         if {item["geometry_id"] for item in outputs} != {
             item["geometry_id"] for item in budgets

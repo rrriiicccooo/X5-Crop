@@ -10,6 +10,8 @@ from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInte
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .measurement_model import PhotoBoundaryMeasurementSet
 from .template_adjacency_coverage import AdjacencyObservationCoverage
+from .template_direct_role_authority import DirectRoleBindingAuthority
+from .template_outer_frame_authority import OuterFrameObservationAuthority
 from .template_model import (
     SequenceFit,
     TemplateSearchReceipt,
@@ -238,6 +240,12 @@ class PhaseFailureKind(str, Enum):
     ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE = (
         "adjacency_observation_coverage_incomplete"
     )
+    DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE = (
+        "direct_role_binding_authority_unavailable"
+    )
+    OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE = (
+        "outer_frame_observation_authority_unavailable"
+    )
     FIXED_TEMPLATE_MISMATCH = "fixed_template_mismatch"
     DISCRETE_PHASE_AMBIGUOUS = "discrete_phase_ambiguous"
     LOCAL_ADVANCE_AMBIGUOUS = "local_advance_ambiguous"
@@ -265,6 +273,10 @@ class PhaseFitResult:
     winner_basis: PhaseWinnerBasis | None = None
     global_lattice_authority: GlobalLatticeAuthority | None = None
     adjacency_observation_coverage: tuple[AdjacencyObservationCoverage, ...] = ()
+    direct_role_binding_authority: DirectRoleBindingAuthority | None = None
+    outer_frame_observation_authority: (
+        OuterFrameObservationAuthority | None
+    ) = None
 
     def __post_init__(self) -> None:
         if (
@@ -298,6 +310,22 @@ class PhaseFitResult:
             for item in self.adjacency_observation_coverage
         ):
             raise TypeError("phase adjacency observation coverage is invalid")
+        if (
+            self.direct_role_binding_authority is not None
+            and not isinstance(
+                self.direct_role_binding_authority,
+                DirectRoleBindingAuthority,
+            )
+        ):
+            raise TypeError("phase direct-role binding authority is invalid")
+        if (
+            self.outer_frame_observation_authority is not None
+            and not isinstance(
+                self.outer_frame_observation_authority,
+                OuterFrameObservationAuthority,
+            )
+        ):
+            raise TypeError("phase outer-frame observation authority is invalid")
         if self.adjacency_observation_coverage and tuple(
             item.relation_ordinal
             for item in self.adjacency_observation_coverage
@@ -345,4 +373,8 @@ class PhaseFitResult:
             winner_basis=winner_basis,
             global_lattice_authority=self.global_lattice_authority,
             adjacency_observation_coverage=self.adjacency_observation_coverage,
+            direct_role_binding_authority=self.direct_role_binding_authority,
+            outer_frame_observation_authority=(
+                self.outer_frame_observation_authority
+            ),
         )

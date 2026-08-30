@@ -7,6 +7,7 @@ from typing import Sequence
 from ...domain import EvidenceState, ObservationId
 from .model import BoundaryRole
 from .template_model import SequenceBindingUse, SequenceFit
+from .template_direct_role_authority import DirectRoleBindingAuthority
 from .template_phase_model import (
     GlobalLatticeAuthority,
     GlobalLatticeAuthorityBasis,
@@ -56,6 +57,8 @@ def _constraint_rank(rows: Sequence[tuple[float, float, float]]) -> int:
 def assess_global_lattice_authority(
     fit: SequenceFit,
     phase_input: TemplatePhaseInput,
+    *,
+    direct_role_authority: DirectRoleBindingAuthority | None = None,
 ) -> GlobalLatticeAuthority:
     """Close ``phase``, ``W``, and ``pitch`` only from direct constraints."""
 
@@ -63,6 +66,16 @@ def assess_global_lattice_authority(
         raise TypeError("global lattice authority requires a sequence fit")
     if not isinstance(phase_input, TemplatePhaseInput):
         raise TypeError("global lattice authority requires the exact phase input")
+    if direct_role_authority is not None and not isinstance(
+        direct_role_authority,
+        DirectRoleBindingAuthority,
+    ):
+        raise TypeError("global lattice authority requires typed direct-role authority")
+    authorized_role_indices = (
+        None
+        if direct_role_authority is None
+        else set(direct_role_authority.supported_role_indices)
+    )
     constraints: list[GlobalLatticeConstraint] = []
     role_rows: list[tuple[float, float, float]] = []
     role_ids: list[ObservationId] = []
@@ -71,7 +84,12 @@ def assess_global_lattice_authority(
         fit.role_bindings,
         strict=True,
     ):
-        if binding is None or binding.use != SequenceBindingUse.PHASE_ANCHOR:
+        if (
+            binding is None
+            or binding.use != SequenceBindingUse.PHASE_ANCHOR
+            or authorized_role_indices is not None
+            and role.role_index not in authorized_role_indices
+        ):
             continue
         coefficients = (
             1.0,

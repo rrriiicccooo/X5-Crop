@@ -587,7 +587,10 @@ class DebugAnalysisContractTest(unittest.TestCase):
             _configuration, _profile, _workspace, detection = _fixture(
                 Path(temporary)
             )
-        self.assertTrue(alignment_summary(detection).startswith("ALIGNMENT · "))
+        summary = alignment_summary(detection)
+        self.assertTrue(summary.startswith("ALIGNMENT · "))
+        self.assertIn(" · DIRECT ", summary)
+        self.assertIn(" · OUTER ", summary)
         self.assertTrue(
             selected_output_safety_summary(detection).startswith(
                 "SELECTED OUTPUT SAFETY · "

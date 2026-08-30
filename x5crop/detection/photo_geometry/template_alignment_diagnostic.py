@@ -11,6 +11,8 @@ from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_evidence import separator_support_authority
 from .template_model import LocalAdvanceRelation, SequenceFit
 from .template_adjacency_coverage import AdjacencyObservationCoverage
+from .template_direct_role_authority import DirectRoleBindingAuthority
+from .template_outer_frame_authority import OuterFrameObservationAuthority
 from .template_phase_model import (
     GlobalLatticeAuthority,
     PhaseFitResult,
@@ -71,6 +73,8 @@ class TemplateAlignmentDiagnostic:
     adjacency_observation_coverage: tuple[
         AdjacencyObservationCoverage, ...
     ]
+    direct_role_binding_authority: DirectRoleBindingAuthority | None
+    outer_frame_observation_authority: OuterFrameObservationAuthority | None
     unbound_direct_observation_ids: tuple[ObservationId, ...]
     incompatible_separator_support_ids: tuple[ObservationId, ...]
     maximum_absolute_role_residual_px: float | None
@@ -99,6 +103,16 @@ class TemplateAlignmentDiagnostic:
             or any(
                 not isinstance(item, AdjacencyObservationCoverage)
                 for item in self.adjacency_observation_coverage
+            )
+            or self.direct_role_binding_authority is not None
+            and not isinstance(
+                self.direct_role_binding_authority,
+                DirectRoleBindingAuthority,
+            )
+            or self.outer_frame_observation_authority is not None
+            and not isinstance(
+                self.outer_frame_observation_authority,
+                OuterFrameObservationAuthority,
             )
             or (self.pattern == ResidualPattern.NORMAL and self.local_advance_relations)
             or (
@@ -294,6 +308,12 @@ def template_alignment_diagnostic(
         global_lattice_authority=phase.global_lattice_authority,
         adjacency_observation_coverage=(
             phase.adjacency_observation_coverage
+        ),
+        direct_role_binding_authority=(
+            phase.direct_role_binding_authority
+        ),
+        outer_frame_observation_authority=(
+            phase.outer_frame_observation_authority
         ),
         unbound_direct_observation_ids=unbound,
         incompatible_separator_support_ids=incompatible,

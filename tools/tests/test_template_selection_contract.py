@@ -173,6 +173,16 @@ class TemplateSelectionContractTest(unittest.TestCase):
                 GateGap.ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE,
                 MinimumMissingFact.ADJACENCY_OBSERVATION_COVERAGE,
             ),
+            (
+                PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE,
+                GateGap.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE,
+                MinimumMissingFact.DIRECT_ROLE_BINDING_AUTHORITY,
+            ),
+            (
+                PhaseFailureKind.OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE,
+                GateGap.OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE,
+                MinimumMissingFact.OUTER_FRAME_OBSERVATION_AUTHORITY,
+            ),
         )
         for failure_kind, expected_gap, expected_fact in cases:
             with self.subTest(failure_kind=failure_kind.value):

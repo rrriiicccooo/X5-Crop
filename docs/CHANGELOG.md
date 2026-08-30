@@ -21,7 +21,11 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   一个角色、且至少两张完整直接 Frame 唯一证明共同 W 时，才用该 W 补这一条边。缺失 separator 只有在
   直接约束矩阵独立闭合 `phase/W/pitch`、对应 adjacency 的完整不确定性走廊被已执行窗口逐 trace 覆盖、
   且没有局部反证时才按 `local_delta = 0` 补齐；不再用 edge 数、连续缺失数或全局 query-complete
-  布尔值代替证明。
+  布尔值代替证明。候选无关 sequence 窗口按左右 holder 端分别投影完整且相关的 `W/pitch` 状态，覆盖
+  传播走廊但不重复相加互斥极值；扩大 ownership 不增加 TIFF 读取。带 Grid 推断的 placement 还要求
+  首尾输出 Frame 各至少绑定一条直接长轴角色，不能由片夹位置凭空创造整张外侧 Frame。任一已选直接
+  START/END 只有获得 source-wide edge、同一 separator pair 或独立 fixed-W Frame pair 的坐标权限后，
+  才能进入最终 placement；局部孤立 edge 保留为观察并产生 typed review，不能反向参与 lattice 自证。
 - 当前选择仍只使用 typed hard facts；没有启用 score。架构允许未来在硬合法候选之间加入经独立数据
   校准、带高阈值与 abstention 的概率选择，但未经校准的 score 不得拥有最终决定权，runner
   必须继续报告。
@@ -44,8 +48,9 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
 - Finalization 对 source 与安全 polygon 使用同一 affine transform，再取精确半开 AABB；不在旋转后继续
   裁固定 W×H。AABB 的 no-data 角落不是检测失败。
 - Debug Analysis 只可视化同次检测事实：理论模板、观察、winner/runner、最终 footprint、预算和首个
-  阻断原因；报告同时保存全局未知量 constraint rank 与逐 adjacency query/trace/coordinate coverage。
-  Debug 不重新求解，也不把 review candidate 伪装为正式输出。
+  阻断原因；报告同时保存全局未知量 constraint rank、逐 adjacency query/trace/coordinate coverage 与
+  直接角色/外侧 Frame observation authority。Debug 不重新求解，也不把 review candidate 伪装为正式
+  输出。
 - 正式 TIFF 保真 16-bit RGB、ICC、resolution、支持的 metadata 与无损压缩，并写
   `Orientation=1`。完整 source 先写 staging，再原子发布到尚不存在的目录。
 - Report、Gate 与 final geometry 各有唯一 owner；`CandidateGate` 只记录事实，`DecisionGate` 创建终态。
@@ -90,10 +95,10 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
 - `tools/verify` 是 Hook、CI 与本地验证的唯一入口。Diagnostic 只证明工程合同；gold accuracy、性能与
   platform receipt 分层记录，不互相冒充。
 - 正式性能 Gate 为 24-source 完整用户路径 mean 不超过 5 秒；3 秒只是不阻断的 challenge。
-- 当前 lattice/coverage 阶段的 development gold 为 110/110 完成、分析错误 0、危险自动批准 0；安全
-  auto 为基础 nominal 10/66、较难 nominal 1/30，challenge 0/14。23 个 adjacency coverage 与 9 个
-  global lattice authority 缺口被明确命名；S004、S081 因旧证明不足安全转入 review。Clean-commit
-  24-source 性能继续通过 5 秒 Gate，并达到 3 秒 challenge。
+- 当前查询走廊阶段的 development gold 为 110/110 完成、分析错误 0、危险自动批准 0；安全 auto 为
+  基础 nominal 11/66、较难 nominal 1/30，challenge 0/14。原 23 个 adjacency coverage failure 已归零，
+  S004 在完整走廊下恢复为安全 auto；扩大观察同时暴露 22 个直接角色坐标权限缺口，S034 的局部孤立
+  edge 不再造成危险自动批准。Clean-commit 24-source 性能继续以 5 秒 mean 为 Gate、3 秒为不阻断目标。
 - Apple Silicon macOS、Intel macOS 与 Windows x64 必须在同一最终 commit 取得实机 receipt。Accuracy、
   性能与平台证据未全部绑定该 commit 前，不创建 RC、tag、Release 或公开 ZIP。
 - 发布包由唯一 manifest 构建，不包含 modular source、tests、tools、内部文档或开发输出。

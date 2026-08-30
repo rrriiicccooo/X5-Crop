@@ -39,6 +39,12 @@ from .template_adjacency_coverage import (
     assess_adjacency_observation_coverage,
 )
 from .template_lattice_authority import assess_global_lattice_authority
+from .template_direct_role_authority import (
+    assess_direct_role_binding_authority,
+)
+from .template_outer_frame_authority import (
+    assess_outer_frame_observation_authority,
+)
 from .template_phase_model import (
     PhaseFailureKind,
     PhaseFitResult,
@@ -769,12 +775,27 @@ def _apply_final_lattice_contract(
     *,
     directly_observed_ordinals: tuple[int, ...],
 ) -> PhaseFitResult:
-    """Require both global closure and local coverage for inferred adjacency."""
+    """Require direct-role, global, and local authority for one placement."""
+
+    direct_role_authority = (
+        None
+        if result.best is None or not phase_input.sequence_measurement_sets
+        else assess_direct_role_binding_authority(
+            result.best,
+            phase_input.observations,
+            phase_input.separator_bands,
+            phase_input.sequence_measurement_sets,
+        )
+    )
 
     authority = (
         None
         if result.best is None
-        else assess_global_lattice_authority(result.best, phase_input)
+        else assess_global_lattice_authority(
+            result.best,
+            phase_input,
+            direct_role_authority=direct_role_authority,
+        )
     )
     coverage = (
         ()
@@ -785,12 +806,33 @@ def _apply_final_lattice_contract(
             directly_observed_ordinals=directly_observed_ordinals,
         )
     )
+    outer_authority = (
+        None
+        if result.best is None
+        else assess_outer_frame_observation_authority(result.best)
+    )
     result = replace(
         result,
         global_lattice_authority=authority,
         adjacency_observation_coverage=coverage,
+        direct_role_binding_authority=direct_role_authority,
+        outer_frame_observation_authority=outer_authority,
     )
     inferred = tuple(item for item in coverage if item.normal_inference_required)
+    if (
+        result.status == PhaseFitStatus.RESOLVED
+        and direct_role_authority is not None
+        and direct_role_authority.state != EvidenceState.SUPPORTED
+    ):
+        return replace(
+            result,
+            status=PhaseFitStatus.UNRESOLVED,
+            ambiguity_reason=direct_role_authority.reason,
+            failure_kind=(
+                PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE
+            ),
+            winner_basis=None,
+        )
     if (
         result.status == PhaseFitStatus.RESOLVED
         and inferred
@@ -832,6 +874,26 @@ def _apply_final_lattice_contract(
             ),
             failure_kind=(
                 PhaseFailureKind.ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE
+            ),
+            winner_basis=None,
+        )
+    if (
+        result.status == PhaseFitStatus.RESOLVED
+        and inferred
+        and (
+            outer_authority is None
+            or outer_authority.state != EvidenceState.SUPPORTED
+        )
+    ):
+        return replace(
+            result,
+            status=PhaseFitStatus.UNRESOLVED,
+            ambiguity_reason=(
+                "normal Grid inference requires one directly bound long-axis "
+                "role on each outer output frame"
+            ),
+            failure_kind=(
+                PhaseFailureKind.OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE
             ),
             winner_basis=None,
         )

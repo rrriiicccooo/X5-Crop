@@ -143,11 +143,11 @@ format/count/holder 编译固定模板、coarse intents 与工作上界
 Coarse pass 对每个 lane 只执行一个长轴和一个短轴 aggregate query，输出保守 interval 和 receipt；
 aggregate interval 本身没有角色、ordinal、placement 或输出 deskew authority。短轴 query 的各条
 已注册 trace 若能直接闭合为双侧 track，可以在满足第 8.2 节全部条件时建立 enclosing support；
-这份 authority 来自逐 trace 直接观察，不来自 aggregate interval。Long-axis precision 使用固定 lattice 在两个有限 origin
-上生成互不重叠的理论窗口；没有 direct coarse observation 时才退回一个保守全长窗口。所有计划内的
-精测窗口随后一次登记、一次读取；某个 selected placement 是否真正被覆盖，必须在测量后按第 7 节逐
-adjacency 证明，不能从“查询已全部执行”反推。不能为某个 candidate 重读 TIFF、扩张全图搜索或
-winner-specific requery。
+这份 authority 来自逐 trace 直接观察，不来自 aggregate interval。Long-axis precision 从左右 holder 端
+分别投影 format/count 编译的完整且相关的 `W/pitch` 状态，合并为候选无关 role search core；没有
+direct coarse observation 时才使用一个保守全长窗口。所有计划内的精测窗口随后一次登记、一次读取；
+某个 selected placement 是否真正被覆盖，必须在测量后按第 7 节逐 adjacency 证明，不能从“查询已全部
+执行”反推。不能为某个 candidate 重读 TIFF、扩张全图搜索或 winner-specific requery。
 
 同一 trace lattice 只建立一次全局 normalization baseline，再由理论窗口切出局部测量。Baseline
 不产生 transition 或 placement evidence；其像素和临时内存仍完整计入 receipt，不能伪装成免费工作。
@@ -176,9 +176,12 @@ measurement。它们共同描述同一个 observation，可以互相加强、否
 和两侧 edge identity。一个 separator 的两条边、band、多条 trace 和全部梯度像素是一份物理证据，
 不能变成多票。
 
-`+ / -` 亮峰仍保留为两条 edge observation，但不能仅凭“长距离亮带”自动成为 separator：照片内部
-也能形成相同极性和空间支持，且宽度可以接近一个 Frame。未来若要授予亮 material 权限，必须先增加
-能够普遍区分 separator 与照片内容的独立物理事实，并重新通过 development 与 sealed 安全验证。
+`+ / -` 亮峰仍保留为两条 edge observation，但当前不能仅凭“长距离亮带”自动成为 separator：照片
+内部也能形成相同极性和空间支持，且宽度可以接近一个 Frame。下一项观察机制可以把 material polarity
+显式扩展为 `dark | light`，但必须仍由同一个 registered measurement owner 产生，并同时证明两侧直接
+edge、至少三个独立高度区域、band 内部 material 一致性和同一 polarity；区域冲突保持 unresolved。
+它必须先通过 development 安全反例和未来 sealed 验证，不能形成第二 detector 或按 profile 分数选择
+geometry。
 
 同一物理 material support 中，只有 source-wide band 可以自行授予 END→START 角色。局部 band 只能
 连接两条已经由各自像素观察取得相容角色的 edge，不能覆盖或创造角色；存在多个局部解释时不按强度或
@@ -235,31 +238,60 @@ role = phase
   内形成唯一相交宽度组，且没有复用同一 observation 时，该共同 W 只可推导这一个 opposite。
   已观察边继续保留 native coordinate；缺两条及以上、宽度分组并列/分离或接触共线时不启用该约束。
 
+被模板选中的 edge 仍须取得 `DirectRoleBindingAuthority`，才能让自己的 native coordinate 进入最终
+placement；“观察到了”本身不等于“有权决定裁切”。权限只来自以下三种独立物理闭环：
+
+| edge 空间支持与关系 | 角色坐标权限 |
+|---|---|
+| 同一 edge 直接覆盖三个独立高度区域 | `source_wide_edge`，允许 |
+| 同一 source-wide separator 的两侧 edge 原子绑定到一个 adjacency | `separator_pair`，两侧均允许 |
+| 同一 Frame 的两条不同物理 edge，其直接宽度区间与固定 W 相交 | `frame_width_pair`，两侧均允许 |
+| 只覆盖局部高度，且没有上述任一闭环 | `direct_role_binding_authority_unavailable` |
+
+短 edge 仍保留为 observation；失败只撤销它的坐标决定权，不删除像素事实。全局 rank 计算必须排除无权
+角色，不能先让短线闭合 lattice，再由该 lattice 反向证明短线。该证明由
+`template_direct_role_authority.py` 唯一拥有，不读取新像素，也不按强度选择 winner。
+
 未观察 separator 的正常 adjacency 不是 detector miss 的默认值。它只有同时满足以下条件时，才可使用
 `local_delta = 0` 并由已确定 Grid 补齐 START/END：
 
-1. `GlobalLatticeAuthority` 已用独立直接证据达到 rank 3；Grid 没有参与创造 phase 或 ordinal mapping；
-2. 该 adjacency 的 END/START 完整传播区间形成 `required_interval`，每条预登记 sequence trace 上都由
+1. 全部已选直接角色的 `DirectRoleBindingAuthority` 为 `supported`；
+2. `GlobalLatticeAuthority` 已用独立直接证据达到 rank 3；Grid 没有参与创造 phase 或 ordinal mapping；
+3. 该 adjacency 的 END/START 完整传播区间形成 `required_interval`，每条预登记 sequence trace 上都由
    已完整执行的 `SEQUENCE_ANCHOR_WINDOW` ownership interval 连续覆盖；
-3. 同一 adjacency 没有直接 wide/narrow gap、contact、overlap、角色冲突或其它 typed 反证。
+4. 同一 adjacency 没有直接 wide/narrow gap、contact、overlap、角色冲突或其它 typed 反证；
+5. 一旦使用正常 Grid 推断，首张与末张输出 Frame 各至少有一条直接绑定的长轴角色。内部 adjacency
+   coverage 不能证明 source 外侧的一整张 Frame 存在，Grid 不得从片夹或 holder fill 凭空创造它。
 
-| 全局 constraint rank | adjacency coverage | 直接局部反证 | 结果 |
-|---:|---|---|---|
-| 3 | complete | 无 | 允许既定 Grid 使用 `local_delta = 0` |
-| 0–2 | complete | 无 | `global_lattice_authority_unavailable` |
-| 3 | incomplete | 无 | `adjacency_observation_coverage_incomplete` |
-| 3 | complete | 有 | 直接 wide/narrow advance 优先；contact/overlap/conflict 保持 unresolved |
+| 直接角色权限 | 全局 rank | adjacency coverage | 外侧 Frame 直接角色 | 直接局部反证 | 结果 |
+|---|---:|---|---|---|---|
+| supported | 3 | complete | 首尾各至少一条 | 无 | 允许既定 Grid 使用 `local_delta = 0` |
+| unavailable | 任意 | 任意 | 任意 | 任意 | `direct_role_binding_authority_unavailable` |
+| supported | 0–2 | complete | 任意 | 无 | `global_lattice_authority_unavailable` |
+| supported | 3 | incomplete | 任意 | 无 | `adjacency_observation_coverage_incomplete` |
+| supported | 3 | complete | 首或尾整张无绑定 | 无 | `outer_frame_observation_authority_unavailable` |
+| supported | 3 | complete | 任意 | 有 | 直接 wide/narrow advance 优先；contact/overlap/conflict 保持 unresolved |
 
 `AdjacencyObservationCoverage` 逐关系保存 `relation_ordinal`、`required_interval`、参与覆盖的 query ID、
 逐 trace 的已覆盖区间与 coordinate count，以及 `complete | incomplete`。全长 normalization baseline
 不产生 transition，因此不能充当 separator coverage。覆盖只映射既有 candidate-independent 查询，不增加
 TIFF 读取；测量全局完成但某个合法走廊未覆盖时产生
 `adjacency_observation_coverage_incomplete`，全局矩阵不足时产生
-`global_lattice_authority_unavailable`。两者都保留完整传播不确定性，并先于输出预算进入 review。
+`global_lattice_authority_unavailable`。`OuterFrameObservationAuthority` 分别保存首尾 Frame 已绑定的直接
+observation；只有两侧都非空才支持带推断的正常 Grid，否则产生
+`outer_frame_observation_authority_unavailable`。这些证明都保留完整传播不确定性，并先于输出预算进入
+review。
+
+`SequenceAnchorDiscoveryDomain` 是候选无关查询走廊的唯一 owner。存在 coarse direct long support 时，
+它从 format/count 编译的完整 `W/pitch` 区间分别按左端锚定向右、右端锚定向左投影每个 START/END，
+再加唯一的 role refinement radius、裁到 coarse support 并合并重叠 core。右端公式直接保留同一
+`W/pitch` 状态的相关性，不能先制造 origin 区间再重复叠加 pitch 极值。没有 direct long support 时才
+使用一个保守全 support 窗口。所有窗口在 placement 前登记，并从同一条全长 baseline trace 切片；扩大
+ownership 不增加 TIFF 读取，不读取 winner，也不授予 phase、ordinal 或 placement 权限。
 
 模板放置后，`template_alignment_diagnostic` 只读比较 theoretical role 与 bound observation，并报告
-全局 constraint rank、逐 adjacency coverage、`normal`、`measured_advances` 或 `unresolved`；它不搜索、
-不选择、不改变 placement。
+直接角色权限、全局 constraint rank、逐 adjacency coverage、外侧 Frame observation authority、
+`normal`、`measured_advances` 或 `unresolved`；它不搜索、不选择、不改变 placement。
 
 每个 adjacency 只有一个 `LocalAdvanceRelation`：
 
@@ -603,11 +635,14 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `x5crop/detection/source_core.py`、`evidence/scan_canvas.py` | source/lane 与 matched-holder authority |
 | `photo_geometry/coarse_strip_support.py`、`coarse_enclosing_model.py`、`coarse_enclosing_support.py` | 两个 role-free aggregate query、粗片带 interval、source-wide 双侧 track 与 receipt |
 | `photo_geometry/template_measurement_plan*.py` | pixel-free 模板、有限 query intents、停止与工作上界 |
+| `photo_geometry/corridors.py` | 候选无关 top/bottom 与完整 `W/pitch` sequence 查询走廊 |
 | `photo_geometry/registered_*.py`、`observations.py`、`separator_*.py` | 一次性 measurement、role-free edge 与 material band |
 | `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source 共享 W/H/scale authority |
 | `photo_geometry/template_phase*.py`、`template_pitch.py`、`template_residual.py` | phase/ordinal 求解、source pitch 与逐 adjacency 的 direct local advance |
+| `photo_geometry/template_direct_role_authority.py` | 已选直接 START/END 的 native coordinate 权限证明 |
 | `photo_geometry/template_lattice_authority.py` | `(phase, W, pitch)` 直接约束矩阵与独立闭合证明 |
 | `photo_geometry/template_adjacency_coverage.py` | selected adjacency 合法走廊到既有 query/trace/coordinate 的覆盖证明 |
+| `photo_geometry/template_outer_frame_authority.py` | 带 Grid 推断时首尾输出 Frame 的直接长轴角色证明 |
 | `photo_geometry/template_alignment_diagnostic.py` | theoretical-vs-observed residual 的只读诊断 |
 | `photo_geometry/interval_math.py`、`template_cross*.py`、`template_cross_support.py` | 共享 interval 运算、fixed-H aperture、局部 top/bottom 方向闭合与 enclosing support |
 | `photo_geometry/template_placement.py`、`template_selection.py` | source-axis frame 的一次 compose 与离散 winner/runner |

@@ -112,6 +112,14 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                         alignments[lane.lane_id]
                         .adjacency_observation_coverage
                     ),
+                    "direct_role_binding_authority": typed_read_model(
+                        alignments[lane.lane_id]
+                        .direct_role_binding_authority
+                    ),
+                    "outer_frame_observation_authority": typed_read_model(
+                        alignments[lane.lane_id]
+                        .outer_frame_observation_authority
+                    ),
                     "unbound_direct_observation_count": len(
                         alignments[lane.lane_id]
                         .unbound_direct_observation_ids

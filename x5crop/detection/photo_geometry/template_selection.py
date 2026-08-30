@@ -75,6 +75,12 @@ def select_lane_template_placement(
             PhaseFailureKind.ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE: (
                 GateGap.ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE
             ),
+            PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE: (
+                GateGap.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE
+            ),
+            PhaseFailureKind.OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE: (
+                GateGap.OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE
+            ),
             PhaseFailureKind.FIXED_TEMPLATE_MISMATCH: (
                 GateGap.PHASE_TEMPLATE_MISMATCH
             ),

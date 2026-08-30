@@ -420,6 +420,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self,
     ) -> None:
         specs = (
+            ("gap:start:1", 40.0, BoundaryRole.START),
             ("gap:start:2", 160.0, BoundaryRole.START),
             ("gap:end:2", 260.0, BoundaryRole.END),
             ("gap:start:3", 280.0, BoundaryRole.START),
@@ -455,7 +456,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
 
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
         assert result.best is not None
-        self.assertEqual(result.best.phase_support_locations, (1, 2, 3, 6))
+        self.assertEqual(result.best.phase_support_locations, (0, 1, 2, 3, 6))
         assert result.global_lattice_authority is not None
         self.assertEqual(result.global_lattice_authority.joint_constraint_rank, 3)
         self.assertEqual(
@@ -467,6 +468,183 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 item.state.value == "complete"
                 for item in result.adjacency_observation_coverage
                 if item.normal_inference_required
+            )
+        )
+        assert result.outer_frame_observation_authority is not None
+        self.assertEqual(
+            result.outer_frame_observation_authority.state.value,
+            "supported",
+        )
+
+    def test_grid_cannot_invent_an_entire_unanchored_outer_frame(self) -> None:
+        observations = tuple(
+            replace(
+                edge(identity, coordinate),
+                qualified_anchor_roles=(role,),
+                polarity=1 if role == BoundaryRole.START else -1,
+            )
+            for identity, coordinate, role in (
+                ("start:2", 160.0, BoundaryRole.START),
+                ("end:2", 260.0, BoundaryRole.END),
+                ("start:3", 280.0, BoundaryRole.START),
+                ("end:3", 380.0, BoundaryRole.END),
+                ("start:4", 400.0, BoundaryRole.START),
+                ("end:6", 740.0, BoundaryRole.END),
+            )
+        )
+
+        result = fit_template_phase_with_local_advance(
+            TemplatePhaseInput(
+                observations=observations,
+                separator_bands=(),
+                template=template(6),
+                scale_px_per_mm=None,
+                holder_span_px=FiniteInterval(0.0, 800.0),
+                phase_authority_px=None,
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "complete-unanchored-outer-frame",
+                        FiniteInterval(0.0, 800.0),
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            PhaseFailureKind.OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE,
+        )
+        assert result.global_lattice_authority is not None
+        self.assertEqual(result.global_lattice_authority.joint_constraint_rank, 3)
+        self.assertTrue(
+            all(
+                item.state.value == "complete"
+                for item in result.adjacency_observation_coverage
+            )
+        )
+        assert result.outer_frame_observation_authority is not None
+        self.assertEqual(
+            result.outer_frame_observation_authority.state.value,
+            "unavailable",
+        )
+        self.assertFalse(
+            result.outer_frame_observation_authority.first_frame_observation_ids
+        )
+        self.assertTrue(
+            result.outer_frame_observation_authority.last_frame_observation_ids
+        )
+
+    def test_short_unpaired_edge_cannot_own_a_direct_role_coordinate(self) -> None:
+        observations = tuple(
+            replace(
+                edge(identity, coordinate),
+                qualified_anchor_roles=(role,),
+                polarity=1 if role == BoundaryRole.START else -1,
+                trace_coordinates_px=(
+                    (10, 20) if identity.startswith("short:") else (0, 10, 20)
+                ),
+                support_fraction=(
+                    2.0 / 3.0 if identity.startswith("short:") else 1.0
+                ),
+                continuous_support_fraction=(
+                    2.0 / 3.0 if identity.startswith("short:") else 1.0
+                ),
+            )
+            for identity, coordinate, role in (
+                ("start:1", 40.0, BoundaryRole.START),
+                ("end:1", 140.0, BoundaryRole.END),
+                ("start:2", 160.0, BoundaryRole.START),
+                ("end:2", 260.0, BoundaryRole.END),
+                ("short:start:3", 280.0, BoundaryRole.START),
+                ("start:4", 400.0, BoundaryRole.START),
+                ("end:4", 500.0, BoundaryRole.END),
+            )
+        )
+        result = fit_template_phase_with_local_advance(
+            TemplatePhaseInput(
+                observations=observations,
+                separator_bands=(),
+                template=template(4),
+                scale_px_per_mm=None,
+                holder_span_px=FiniteInterval(0.0, 540.0),
+                phase_authority_px=None,
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "short-unpaired-direct-role",
+                        FiniteInterval(0.0, 540.0),
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE,
+        )
+        assert result.direct_role_binding_authority is not None
+        self.assertEqual(
+            result.direct_role_binding_authority.unsupported_role_indices,
+            (4,),
+        )
+
+    def test_fixed_width_pair_authorizes_two_independent_short_edges(self) -> None:
+        observations = tuple(
+            replace(
+                edge(identity, coordinate),
+                qualified_anchor_roles=(role,),
+                polarity=1 if role == BoundaryRole.START else -1,
+                trace_coordinates_px=(10, 20) if identity == "short:start:3" else (0, 10, 20),
+                support_fraction=2.0 / 3.0 if identity == "short:start:3" else 1.0,
+                continuous_support_fraction=(
+                    2.0 / 3.0 if identity == "short:start:3" else 1.0
+                ),
+            )
+            for identity, coordinate, role in (
+                ("start:1", 40.0, BoundaryRole.START),
+                ("end:1", 140.0, BoundaryRole.END),
+                ("start:2", 160.0, BoundaryRole.START),
+                ("end:2", 260.0, BoundaryRole.END),
+                ("short:start:3", 280.0, BoundaryRole.START),
+                ("short:end:3", 380.0, BoundaryRole.END),
+                ("start:4", 400.0, BoundaryRole.START),
+                ("end:4", 500.0, BoundaryRole.END),
+            )
+        )
+        result = fit_template_phase_with_local_advance(
+            TemplatePhaseInput(
+                observations=observations,
+                separator_bands=(),
+                template=template(4),
+                scale_px_per_mm=None,
+                holder_span_px=FiniteInterval(0.0, 540.0),
+                phase_authority_px=None,
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "short-fixed-width-direct-role",
+                        FiniteInterval(0.0, 540.0),
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        assert result.direct_role_binding_authority is not None
+        self.assertEqual(
+            result.direct_role_binding_authority.unsupported_role_indices,
+            (),
+        )
+        short_pair = tuple(
+            item
+            for item in result.direct_role_binding_authority.facts
+            if item.role_index in {4, 5}
+        )
+        self.assertEqual(len(short_pair), 2)
+        self.assertTrue(
+            all(
+                "frame_width_pair" in tuple(basis.value for basis in item.bases)
+                for item in short_pair
             )
         )
 
