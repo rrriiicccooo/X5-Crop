@@ -9,12 +9,10 @@ from tools.tests.template_runtime_test_support import (
 )
 from x5crop.detection.gate_checks import GateGap, TypedAssessment, failure_fact
 from x5crop.detection.photo_geometry.model import (
-    AuthoritySide,
     BoundaryRole,
 )
 from x5crop.detection.photo_geometry.output_model import (
     BoundaryProtectionFact,
-    FootprintSaturationFact,
     JointPlacementEnvelope,
     OutputBoundaryUse,
     OutputFootprint,
@@ -185,10 +183,7 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
         self.assertEqual(selection.lane_ids, ())
 
 def _output_footprint():
-    polygon = ((0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0))
-    saturation = FootprintSaturationFact(
-        authority_side=AuthoritySide.LEFT,
-    )
+    polygon = ((0.0, 0.0), (9.0, 0.0), (9.0, 9.0), (0.0, 9.0))
     envelope = JointPlacementEnvelope(
         placement_id="placement:0",
         projection_id="projection:0",
@@ -202,6 +197,8 @@ def _output_footprint():
     return OutputFootprint(
         geometry_id="geometry:0",
         envelope=envelope,
+        mandatory_source_footprint=polygon,
+        requested_source_footprint=polygon,
         required_source_footprint=polygon,
         boundary_protections=tuple(
             BoundaryProtectionFact(role, 0.0, 0.0, 0.0, 0.0)
@@ -212,7 +209,7 @@ def _output_footprint():
                 BoundaryRole.BOTTOM,
             )
         ),
-        saturation_facts=(saturation,),
+        saturation_facts=(),
         sampling_authority_box=Box(0, 0, 10, 10),
         authority_profile_id="135_standard",
     )

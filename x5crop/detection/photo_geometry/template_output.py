@@ -6,7 +6,11 @@ import math
 
 from ...domain import Box, EvidenceState
 from ...formats import OUTPUT_PROTECTION_SPEC
-from ...geometry.convex import ConvexPolygon, convex_hull
+from ...geometry.convex import (
+    ConvexPolygon,
+    clip_convex_polygon_to_box,
+    convex_hull,
+)
 from ...run_local_identity import run_local_id
 from ..source_core import SourceLaneEvidence
 from .boundary_geometry import boundary_line_at_state
@@ -23,10 +27,13 @@ from .output_model import (
     DirectUseBudgetAssessment,
     DirectUseBudgetEdgeAssessment,
     FootprintSaturationFact,
+    FootprintSaturationKind,
     FrameBoundaryGeometry,
     JointPlacementEnvelope,
     OutputBoundaryUse,
     OutputFootprint,
+    footprint_outside_authority_sides,
+    footprint_overflow_px,
 )
 from .template_placement import FormatPlacement, TemplateFrame
 from .template_cross_model import CrossRoleBinding
@@ -57,26 +64,33 @@ def _footprint(
     frame: TemplateFrame,
     projection: FeasiblePlacementProjection,
     *,
-    apply_bleed_and_residual: bool = False,
+    apply_residual: bool = False,
+    apply_bleed: bool = False,
 ) -> ConvexPolygon:
     """Materialize only same-state boundary intersections."""
 
     if projection.placement_id != placement.placement_id:
         raise ValueError("joint projection belongs to another placement")
+    if apply_bleed and not apply_residual:
+        raise ValueError("product bleed cannot omit mandatory residual protection")
     states = projection.frame_states[frame.lane_ordinal - 1]
     boundaries = _canonical_boundaries(frame)
     points: list[tuple[float, float]] = []
     for state in states:
-        if apply_bleed_and_residual:
+        if apply_residual:
             residuals = _state_boundary_residuals(
                 placement,
                 frame,
                 state,
             )
-            bleeds = _state_bleed_px(
-                placement,
-                state,
-                placement.cross_fit.boundary_use,
+            bleeds = (
+                _state_bleed_px(
+                    placement,
+                    state,
+                    placement.cross_fit.boundary_use,
+                )
+                if apply_bleed
+                else {role: 0.0 for role in _ROLES}
             )
             expansions = {
                 role: residuals[role] + bleeds[role]
@@ -433,33 +447,50 @@ def joint_placement_envelope(
     )
 
 
-def _outside_authority_sides(
-    polygon: ConvexPolygon,
+def _authority_side_is_source_boundary(
+    side: AuthoritySide,
     authority: Box,
-) -> tuple[AuthoritySide, ...]:
-    sides: list[AuthoritySide] = []
-    if min(point[0] for point in polygon) < authority.left:
-        sides.append(AuthoritySide.LEFT)
-    if min(point[1] for point in polygon) < authority.top:
-        sides.append(AuthoritySide.TOP)
-    if max(point[0] for point in polygon) > authority.right - 1:
-        sides.append(AuthoritySide.RIGHT)
-    if max(point[1] for point in polygon) > authority.bottom - 1:
-        sides.append(AuthoritySide.BOTTOM)
-    return tuple(sides)
+    source: Box,
+) -> bool:
+    return {
+        AuthoritySide.LEFT: authority.left == source.left,
+        AuthoritySide.TOP: authority.top == source.top,
+        AuthoritySide.RIGHT: authority.right == source.right,
+        AuthoritySide.BOTTOM: authority.bottom == source.bottom,
+    }[side]
 
 
 def _saturation_facts(
-    required: ConvexPolygon,
+    requested: ConvexPolygon,
+    mandatory: ConvexPolygon,
     authority: Box,
+    source: Box,
 ) -> tuple[FootprintSaturationFact, ...]:
-    outside = set(_outside_authority_sides(required, authority))
     return tuple(
         FootprintSaturationFact(
             authority_side=side,
+            kind=(
+                FootprintSaturationKind.SOURCE_BOUNDARY_JOINT_PROTECTION
+                if _authority_side_is_source_boundary(side, authority, source)
+                and footprint_overflow_px(mandatory, authority, side) > 0.0
+                else FootprintSaturationKind.SOURCE_BOUNDARY_OPTIONAL_BLEED
+                if _authority_side_is_source_boundary(side, authority, source)
+                else FootprintSaturationKind.LANE_BOUNDARY_JOINT_PROTECTION
+                if footprint_overflow_px(mandatory, authority, side) > 0.0
+                else FootprintSaturationKind.LANE_BOUNDARY_OPTIONAL_BLEED
+            ),
+            requested_overflow_px=footprint_overflow_px(
+                requested,
+                authority,
+                side,
+            ),
+            mandatory_overflow_px=footprint_overflow_px(
+                mandatory,
+                authority,
+                side,
+            ),
         )
-        for side in AuthoritySide
-        if side in outside
+        for side in footprint_outside_authority_sides(requested, authority)
     )
 
 
@@ -472,6 +503,19 @@ def _source_lane_authority(
         return work
     if layout == "vertical":
         return Box(work.top, work.left, work.bottom, work.right)
+    raise ValueError(f"unsupported source layout: {layout}")
+
+
+def _source_canvas_authority(
+    lane: SourceLaneEvidence,
+    layout: str,
+) -> Box:
+    long_axis = lane.scan_canvas.observed_long_axis_px
+    short_axis = lane.scan_canvas.observed_short_axis_px
+    if layout == "horizontal":
+        return Box(0, 0, long_axis, short_axis)
+    if layout == "vertical":
+        return Box(0, 0, short_axis, long_axis)
     raise ValueError(f"unsupported source layout: {layout}")
 
 
@@ -510,14 +554,40 @@ def output_footprint_from_template_placement(
         frame,
         projection,
     )
-    required = _footprint(
+    mandatory = _footprint(
         placement,
         frame,
         projection,
-        apply_bleed_and_residual=True,
+        apply_residual=True,
+    )
+    requested = _footprint(
+        placement,
+        frame,
+        projection,
+        apply_residual=True,
+        apply_bleed=True,
     )
     authority = _source_lane_authority(lane, layout)
-    saturation = _saturation_facts(required, authority)
+    source_authority = _source_canvas_authority(lane, layout)
+    if (
+        authority.left < source_authority.left
+        or authority.top < source_authority.top
+        or authority.right > source_authority.right
+        or authority.bottom > source_authority.bottom
+    ):
+        raise ValueError("source-lane authority exceeds the TIFF source extent")
+    saturation = _saturation_facts(
+        requested,
+        mandatory,
+        authority,
+        source_authority,
+    )
+    source_boundary_only = all(fact.source_boundary for fact in saturation)
+    required = (
+        clip_convex_polygon_to_box(requested, authority)
+        if saturation and source_boundary_only
+        else requested
+    )
     boundaries = _canonical_boundaries(frame)
     protections = tuple(
         BoundaryProtectionFact(
@@ -528,7 +598,7 @@ def output_footprint_from_template_placement(
             ),
             bleed_px=bleed_by_role[role],
             local_boundary_residual_px=local_residuals[role],
-            joint_expansion_px=_expansion_px(boundaries[role], required),
+            joint_expansion_px=_expansion_px(boundaries[role], requested),
         )
         for role in _ROLES
     )
@@ -539,6 +609,8 @@ def output_footprint_from_template_placement(
             lane_ordinal,
         ),
         envelope=envelope,
+        mandatory_source_footprint=mandatory,
+        requested_source_footprint=requested,
         required_source_footprint=required,
         boundary_protections=protections,
         saturation_facts=saturation,

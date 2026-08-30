@@ -21,11 +21,23 @@ class CurrentRuntimeContractTest(unittest.TestCase):
 
     def test_diagnostic_validates_current_output_footprint_overflow_facts(self) -> None:
         output = {
-            "required_source_footprint": [
+            "mandatory_source_footprint": [
+                [0.0, 10.0],
+                [80.0, 10.0],
+                [80.0, 90.0],
+                [0.0, 90.0],
+            ],
+            "requested_source_footprint": [
                 [-2.0, 10.0],
                 [80.0, 10.0],
                 [80.0, 90.0],
                 [-2.0, 90.0],
+            ],
+            "required_source_footprint": [
+                [0.0, 10.0],
+                [80.0, 10.0],
+                [80.0, 90.0],
+                [0.0, 90.0],
             ],
             "sampling_authority_box": {
                 "left": 0,
@@ -36,6 +48,9 @@ class CurrentRuntimeContractTest(unittest.TestCase):
             "saturation_facts": [
                 {
                     "authority_side": "left",
+                    "kind": "source_boundary_optional_bleed",
+                    "requested_overflow_px": 2.0,
+                    "mandatory_overflow_px": 0.0,
                 }
             ],
         }
@@ -46,6 +61,18 @@ class CurrentRuntimeContractTest(unittest.TestCase):
 
     def test_current_report_rejects_duplicate_footprint_authority_sides(self) -> None:
         output = {
+            "mandatory_source_footprint": [
+                [-2.0, 10.0],
+                [80.0, 10.0],
+                [80.0, 90.0],
+                [-2.0, 90.0],
+            ],
+            "requested_source_footprint": [
+                [-2.0, 10.0],
+                [80.0, 10.0],
+                [80.0, 90.0],
+                [-2.0, 90.0],
+            ],
             "required_source_footprint": [
                 [-2.0, 10.0],
                 [80.0, 10.0],
@@ -61,9 +88,15 @@ class CurrentRuntimeContractTest(unittest.TestCase):
             "saturation_facts": [
                 {
                     "authority_side": "left",
+                    "kind": "lane_boundary_joint_protection",
+                    "requested_overflow_px": 2.0,
+                    "mandatory_overflow_px": 2.0,
                 },
                 {
                     "authority_side": "left",
+                    "kind": "lane_boundary_joint_protection",
+                    "requested_overflow_px": 2.0,
+                    "mandatory_overflow_px": 2.0,
                 },
             ],
         }
@@ -73,6 +106,18 @@ class CurrentRuntimeContractTest(unittest.TestCase):
 
     def test_current_report_needs_only_the_safe_source_footprint(self) -> None:
         output = {
+            "mandatory_source_footprint": [
+                [10.0, 10.0],
+                [80.0, 10.0],
+                [80.0, 90.0],
+                [10.0, 90.0],
+            ],
+            "requested_source_footprint": [
+                [10.0, 10.0],
+                [80.0, 10.0],
+                [80.0, 90.0],
+                [10.0, 90.0],
+            ],
             "required_source_footprint": [
                 [10.0, 10.0],
                 [80.0, 10.0],
@@ -153,7 +198,7 @@ class CurrentRuntimeContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_ID, "x5crop_detection_report_v5")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "x5crop_v5_template_report_21",
+            "x5crop_v5_template_report_22",
         )
         candidate = candidate_gate_assessment(
             {

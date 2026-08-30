@@ -21,6 +21,7 @@ from .panel_facts import (
 )
 from .panel_layout import (
     PresentationGrid,
+    draw_dashed_polyline,
     draw_label_chip,
     fill_polygon,
     font,
@@ -137,6 +138,19 @@ def protected_output_panel(
         envelope = output.envelope
         identity = identities[(envelope.lane_id, envelope.lane_ordinal)]
         color = frame_color(identity.global_output_ordinal)
+        if output.saturation_facts:
+            requested_output = selected_viewport.polygon(
+                output.requested_source_footprint
+            )
+            draw_dashed_polyline(
+                draw,
+                requested_output,
+                style.selected_boundary_color,
+                style.frame_line_width,
+                style.line_dash_length,
+                style.line_dash_gap,
+                closed=True,
+            )
         final_output = selected_viewport.polygon(
             output.required_source_footprint
         )

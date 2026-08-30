@@ -5,6 +5,7 @@ from dataclasses import replace
 import inspect
 import math
 from pathlib import Path
+from types import SimpleNamespace
 import unittest
 
 from x5crop.domain import (
@@ -28,12 +29,19 @@ from x5crop.detection.photo_geometry.model import (
     AuthoritySide,
     BoundaryRole,
 )
-from x5crop.detection.photo_geometry.output_model import OutputBoundaryUse
+from x5crop.detection.photo_geometry.output_model import (
+    FootprintSaturationKind,
+    OutputBoundaryUse,
+)
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossFit,
+    CrossFitStatus,
     CrossPairSupportMode,
     EnclosingSupportPair,
 )
+from x5crop.detection.photo_geometry.template_gate import build_template_gate
+from x5crop.detection.photo_geometry.template_holder_fill import HolderFillState
+from x5crop.detection.photo_geometry.template_phase_model import PhaseFitStatus
 from x5crop.detection.photo_geometry.template_output import (
     output_footprint_from_template_placement,
     template_direct_use_budget_assessment,
@@ -229,6 +237,37 @@ def _lane(lane_id: str = "lane:test") -> SourceLaneEvidence:
     )
 
 
+def _selected_output_gate_fact(output, assessment):
+    reconstruction = SimpleNamespace(
+        prepared=SimpleNamespace(
+            measurement_work=SimpleNamespace(
+                completed_query_count=1,
+                measurement_query_count=1,
+            ),
+            phase_competition=SimpleNamespace(
+                status=PhaseFitStatus.RESOLVED,
+                failure_kind=None,
+            ),
+            cross_competition=SimpleNamespace(status=CrossFitStatus.RESOLVED),
+        ),
+        work=SimpleNamespace(bound_exceeded=False),
+        placement_competition=SimpleNamespace(placements=(object(),)),
+        selected_placement=object(),
+        output_footprints=(output,),
+        direct_use_budget_assessments=(assessment,),
+        holder_fill_assessment=SimpleNamespace(state=HolderFillState.FILLED),
+        content_veto_facts=(),
+    )
+    return build_template_gate(
+        SimpleNamespace(output_slot_count=1),
+        (reconstruction,),
+        SimpleNamespace(
+            state=EvidenceState.SUPPORTED,
+            failure=None,
+        ),
+    )["selected_output_footprint"]
+
+
 class TemplateOutputContractTest(unittest.TestCase):
     def test_enclosing_support_keeps_its_same_state_target_projection(self) -> None:
         placement = _enclosing_support_placement(
@@ -384,7 +423,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         self.assertEqual(assessment.geometry_id, output.geometry_id)
 
-    def test_lane_overflow_is_explicit_and_never_clipped(self) -> None:
+    def test_mandatory_lane_overflow_is_explicit_and_never_clipped(self) -> None:
         placement = _placement()
         lane = _lane()
         lane = replace(
@@ -402,6 +441,21 @@ class TemplateOutputContractTest(unittest.TestCase):
             AuthoritySide.TOP,
             tuple(item.authority_side for item in output.saturation_facts),
         )
+        top = next(
+            item
+            for item in output.saturation_facts
+            if item.authority_side == AuthoritySide.TOP
+        )
+        self.assertEqual(
+            top.kind,
+            FootprintSaturationKind.LANE_BOUNDARY_JOINT_PROTECTION,
+        )
+        self.assertGreater(top.mandatory_overflow_px, 0.0)
+        self.assertFalse(output.source_authority_supported)
+        self.assertEqual(
+            output.required_source_footprint,
+            output.requested_source_footprint,
+        )
         self.assertLess(
             min(point[1] for point in output.required_source_footprint),
             float(lane.domain.work_box.top),
@@ -413,6 +467,133 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         self.assertEqual(assessment.state, EvidenceState.SUPPORTED)
         self.assertTrue(all(item.within_limit for item in assessment.edge_assessments))
+        gate_fact = _selected_output_gate_fact(output, assessment)
+        self.assertEqual(gate_fact.state, EvidenceState.CONTRADICTED)
+        self.assertEqual(
+            gate_fact.failure.detail,
+            "top:lane_boundary_joint_protection",
+        )
+
+    def test_true_source_edge_reduces_only_unavailable_optional_bleed(self) -> None:
+        placement = _placement()
+        lane = _lane()
+        lane = replace(
+            lane,
+            domain=replace(lane.domain, work_box=Box(0, 0, 500, 253)),
+            scan_canvas=replace(lane.scan_canvas, observed_short_axis_px=253),
+        )
+
+        output = output_footprint_from_template_placement(
+            placement,
+            project_selected_placement(placement),
+            lane=lane,
+            lane_ordinal=1,
+            layout="horizontal",
+        )
+
+        self.assertEqual(len(output.saturation_facts), 1)
+        saturation = output.saturation_facts[0]
+        self.assertEqual(saturation.authority_side, AuthoritySide.BOTTOM)
+        self.assertEqual(
+            saturation.kind,
+            FootprintSaturationKind.SOURCE_BOUNDARY_OPTIONAL_BLEED,
+        )
+        self.assertEqual(saturation.mandatory_overflow_px, 0.0)
+        self.assertGreater(saturation.requested_overflow_px, 0.0)
+        self.assertTrue(output.source_authority_supported)
+        self.assertLessEqual(
+            max(point[1] for point in output.mandatory_source_footprint),
+            252.0,
+        )
+        self.assertGreater(
+            max(point[1] for point in output.requested_source_footprint),
+            252.0,
+        )
+        self.assertEqual(
+            max(point[1] for point in output.required_source_footprint),
+            252.0,
+        )
+        gate_fact = _selected_output_gate_fact(
+            output,
+            template_direct_use_budget_assessment(placement, output),
+        )
+        self.assertEqual(gate_fact.state, EvidenceState.SUPPORTED)
+
+    def test_true_source_edge_bounds_joint_protection_without_hiding_it(self) -> None:
+        placement = _placement()
+        lane = _lane()
+        lane = replace(
+            lane,
+            domain=replace(lane.domain, work_box=Box(0, 0, 500, 251)),
+            scan_canvas=replace(lane.scan_canvas, observed_short_axis_px=251),
+        )
+
+        output = output_footprint_from_template_placement(
+            placement,
+            project_selected_placement(placement),
+            lane=lane,
+            lane_ordinal=1,
+            layout="horizontal",
+        )
+
+        self.assertEqual(len(output.saturation_facts), 1)
+        saturation = output.saturation_facts[0]
+        self.assertEqual(saturation.authority_side, AuthoritySide.BOTTOM)
+        self.assertEqual(
+            saturation.kind,
+            FootprintSaturationKind.SOURCE_BOUNDARY_JOINT_PROTECTION,
+        )
+        self.assertGreater(saturation.mandatory_overflow_px, 0.0)
+        self.assertTrue(output.source_authority_supported)
+        self.assertGreater(
+            max(point[1] for point in output.requested_source_footprint),
+            250.0,
+        )
+        self.assertEqual(
+            max(point[1] for point in output.required_source_footprint),
+            250.0,
+        )
+        gate_fact = _selected_output_gate_fact(
+            output,
+            template_direct_use_budget_assessment(placement, output),
+        )
+        self.assertEqual(gate_fact.state, EvidenceState.SUPPORTED)
+
+    def test_internal_lane_edge_cannot_reduce_optional_bleed(self) -> None:
+        placement = _placement()
+        lane = _lane()
+        lane = replace(
+            lane,
+            domain=replace(lane.domain, work_box=Box(0, 0, 500, 253)),
+        )
+
+        output = output_footprint_from_template_placement(
+            placement,
+            project_selected_placement(placement),
+            lane=lane,
+            lane_ordinal=1,
+            layout="horizontal",
+        )
+
+        self.assertEqual(len(output.saturation_facts), 1)
+        self.assertEqual(
+            output.saturation_facts[0].kind,
+            FootprintSaturationKind.LANE_BOUNDARY_OPTIONAL_BLEED,
+        )
+        self.assertFalse(output.source_authority_supported)
+        self.assertEqual(
+            output.required_source_footprint,
+            output.requested_source_footprint,
+        )
+        gate_fact = _selected_output_gate_fact(
+            output,
+            template_direct_use_budget_assessment(placement, output),
+        )
+        self.assertEqual(gate_fact.state, EvidenceState.CONTRADICTED)
+        self.assertEqual(
+            gate_fact.failure.detail,
+            "bottom:lane_boundary_optional_bleed",
+        )
 
     def test_source_footprint_is_safe_without_output_transform(self) -> None:
         placement = _placement()

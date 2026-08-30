@@ -95,10 +95,28 @@ def build_template_gate(
     )
     output_count = sum(len(lane.output_footprints) for lane in reconstructions)
     output_complete = selected and output_count == resolved.output_slot_count
-    output_safe = output_complete and all(
-        not output.saturation_facts
+    unsafe_saturations = tuple(
+        fact
         for lane in reconstructions
         for output in lane.output_footprints
+        for fact in output.saturation_facts
+        if not fact.source_boundary
+    )
+    output_safe = output_complete and all(
+        output.source_authority_supported
+        for lane in reconstructions
+        for output in lane.output_footprints
+    )
+    output_failure = (
+        None
+        if not unsafe_saturations
+        else failure_fact(
+            GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE,
+            detail=";".join(
+                f"{fact.authority_side.value}:{fact.kind.value}"
+                for fact in unsafe_saturations
+            ),
+        )
     )
     budgets = tuple(
         item
@@ -167,7 +185,10 @@ def build_template_gate(
         "selected_output_footprint": (
             supported()
             if output_safe
-            else contradicted(GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE)
+            else contradicted(
+                GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE,
+                output_failure,
+            )
             if output_complete
             else unavailable(GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE)
         ),

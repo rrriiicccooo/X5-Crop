@@ -8,7 +8,10 @@ from typing import Any
 from x5crop.detection.candidate.assessment.model import CANDIDATE_GATE_CHECK_CODES
 from x5crop.detection.decision.vocabulary import FINAL_REVIEW_REASONS
 from x5crop.detection.output_deskew import DeskewSkipReason
+from x5crop.detection.photo_geometry.output_model import FootprintSaturationKind
+from x5crop.domain import Box
 from x5crop.formats import OUTPUT_PROTECTION_SPEC
+from x5crop.geometry.convex import clip_convex_polygon_to_box
 from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 
 
@@ -702,11 +705,50 @@ def _outside_authority_sides(
     return tuple(result)
 
 
+def _authority_overflow_px(
+    footprint: list[list[float]],
+    authority: dict[str, float],
+    side: str,
+) -> float:
+    if side == "left":
+        return max(0.0, authority["left"] - min(point[0] for point in footprint))
+    if side == "top":
+        return max(0.0, authority["top"] - min(point[1] for point in footprint))
+    if side == "right":
+        return max(
+            0.0,
+            max(point[0] for point in footprint) - (authority["right"] - 1),
+        )
+    return max(
+        0.0,
+        max(point[1] for point in footprint) - (authority["bottom"] - 1),
+    )
+
+
+def _same_polygon(
+    left: list[list[float]],
+    right: tuple[tuple[float, float], ...],
+) -> bool:
+    return len(left) == len(right) and all(
+        abs(float(a[0]) - b[0]) <= 1.0e-8
+        and abs(float(a[1]) - b[1]) <= 1.0e-8
+        for a, b in zip(left, right, strict=True)
+    )
+
+
 def validate_output_footprint_authority(output: dict[str, Any]) -> None:
-    """Validate one serialized output footprint without silent clipping."""
+    """Validate one serialized output footprint and explicit edge saturation."""
 
     if not isinstance(output, dict):
         raise ValueError("output footprint is invalid")
+    mandatory = _validate_polygon(
+        output.get("mandatory_source_footprint"),
+        "mandatory source footprint",
+    )
+    requested = _validate_polygon(
+        output.get("requested_source_footprint"),
+        "requested source footprint",
+    )
     required = _validate_polygon(
         output.get("required_source_footprint"),
         "required source footprint",
@@ -715,7 +757,7 @@ def validate_output_footprint_authority(output: dict[str, Any]) -> None:
         output.get("sampling_authority_box"),
         "sampling authority box",
     )
-    expected = set(_outside_authority_sides(required, authority))
+    expected = set(_outside_authority_sides(requested, authority))
     facts = output.get("saturation_facts")
     if not isinstance(facts, list):
         raise ValueError("footprint saturation facts are invalid")
@@ -723,18 +765,71 @@ def validate_output_footprint_authority(output: dict[str, Any]) -> None:
     for fact in facts:
         if (
             not isinstance(fact, dict)
-            or set(fact) != {"authority_side"}
+            or set(fact)
+            != {
+                "authority_side",
+                "kind",
+                "requested_overflow_px",
+                "mandatory_overflow_px",
+            }
         ):
             raise ValueError("footprint saturation fact is invalid")
         side = fact["authority_side"]
+        kind = fact["kind"]
+        requested_overflow = fact["requested_overflow_px"]
+        mandatory_overflow = fact["mandatory_overflow_px"]
         if (
             side not in _AUTHORITY_SIDES
             or side in recorded
+            or kind not in {item.value for item in FootprintSaturationKind}
+            or not _finite_number(requested_overflow)
+            or float(requested_overflow) <= 0.0
+            or not _finite_number(mandatory_overflow)
+            or float(mandatory_overflow) < 0.0
+            or abs(
+                float(requested_overflow)
+                - _authority_overflow_px(requested, authority, side)
+            )
+            > 1.0e-8
+            or abs(
+                float(mandatory_overflow)
+                - _authority_overflow_px(mandatory, authority, side)
+            )
+            > 1.0e-8
+            or (
+                kind
+                in {
+                    FootprintSaturationKind.SOURCE_BOUNDARY_JOINT_PROTECTION.value,
+                    FootprintSaturationKind.LANE_BOUNDARY_JOINT_PROTECTION.value,
+                }
+            )
+            != (float(mandatory_overflow) > 0.0)
         ):
             raise ValueError("footprint authority side is invalid")
         recorded.add(side)
     if recorded != expected:
         raise ValueError("footprint saturation facts disagree with authority")
+    safely_source_bounded = all(
+        fact["kind"]
+        in {
+            FootprintSaturationKind.SOURCE_BOUNDARY_OPTIONAL_BLEED.value,
+            FootprintSaturationKind.SOURCE_BOUNDARY_JOINT_PROTECTION.value,
+        }
+        for fact in facts
+    )
+    source_box_values = tuple(authority[side] for side in _AUTHORITY_SIDES)
+    if any(float(value) != int(value) for value in source_box_values):
+        raise ValueError("sampling authority box must use integer pixel bounds")
+    expected_required = (
+        clip_convex_polygon_to_box(
+            tuple((float(point[0]), float(point[1])) for point in requested),
+            Box(*(int(value) for value in source_box_values)),
+        )
+        if facts and safely_source_bounded
+        else tuple((float(point[0]), float(point[1])) for point in requested)
+    )
+    if not _same_polygon(required, expected_required):
+        raise ValueError("required source footprint violates saturation contract")
 
 
 def _validate_transform(value: object) -> bool:

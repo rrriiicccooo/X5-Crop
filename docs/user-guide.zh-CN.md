@@ -71,8 +71,9 @@ top/bottom = 0.25 mm
 测量不确定性、局部 residual 与 bleed 共同消耗每侧最多 5% W/H 的安全外扩预算，边与边之间不能借用。
 若直接观察到一对连续 outer support 完整包住固定 H，且总高度不超过 `1.1H`，它可以替代不可用的
 aperture top/bottom；这对直接支撑不依赖 W/H 比例推导。此时不再添加 0.25 mm cross bleed，但逐侧与
-联合对齐 padding 仍受 5% 预算保护。
-任何真正需要的 source-space footprint 越界都进入 review，不会静默裁小。
+联合对齐 padding 仍受 5% 预算保护。真实 TIFF 外缘会显式限定到实际存在的源像素，并在报告中区分是
+bleed 还是联合保护触及边界；完整未限定 footprint 仍负责 5% 预算。双 lane 内部边界或其它 authority
+越界继续进入 review，任何限定都不会静默发生。
 
 二维内容只在最终 post-bleed polygon 上作保守否决：bleed 内的画面可以保留；可靠内容越过最终裁切边
 会阻止自动输出。尘点、别名和极小角点接触不会单独移动边界或选择另一个 placement。

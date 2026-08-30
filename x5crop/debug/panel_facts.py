@@ -6,7 +6,10 @@ from PIL import Image
 
 from ..detection.final.model import FinalDetection
 from ..detection.photo_geometry.model import SPATIAL_SUPPORT_REGION_COUNT
-from ..detection.photo_geometry.output_model import OutputFootprint
+from ..detection.photo_geometry.output_model import (
+    FootprintSaturationKind,
+    OutputFootprint,
+)
 from ..detection.photo_geometry.template_alignment_diagnostic import (
     template_alignment_diagnostic,
 )
@@ -306,10 +309,33 @@ def selected_output_safety_summary(detection: FinalDetection) -> str:
         default=0.0,
     )
     maximum = "N/A" if not ratios else f"{100.0 * max(ratios):.1f}%"
+    source_saturations = tuple(
+        fact
+        for output in outputs
+        for fact in output.saturation_facts
+        if fact.source_boundary
+    )
+    optional_count = sum(
+        fact.kind == FootprintSaturationKind.SOURCE_BOUNDARY_OPTIONAL_BLEED
+        for fact in source_saturations
+    )
+    joint_count = len(source_saturations) - optional_count
+    maximum_overflow = max(
+        (fact.requested_overflow_px for fact in source_saturations),
+        default=0.0,
+    )
+    saturation = (
+        ""
+        if not source_saturations
+        else (
+            f" · SOURCE EDGE B{optional_count}/J{joint_count} · "
+            f"MAX {maximum_overflow:.1f}px"
+        )
+    )
     return (
         f"SELECTED OUTPUT SAFETY · {uses} · JOINT {measurement:.1f}px · "
         f"RESIDUAL {residual:.1f}px · BLEED S{sequence_bleed:.1f}/"
-        f"C{cross_bleed:.1f}px · MAX 5% BUDGET USE {maximum}"
+        f"C{cross_bleed:.1f}px · MAX 5% BUDGET USE {maximum}{saturation}"
     )
 
 

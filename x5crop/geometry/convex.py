@@ -53,6 +53,64 @@ def convex_hull(points: tuple[Point, ...]) -> ConvexPolygon:
     return hull
 
 
+def clip_convex_polygon_to_box(
+    polygon: ConvexPolygon,
+    box: Box,
+) -> ConvexPolygon:
+    """Clip one convex polygon to the source pixel-center extent of ``box``."""
+
+    if not box.valid():
+        raise ValueError("polygon clipping requires a valid box")
+    if len(polygon) < 3 or signed_area(polygon) <= 0.0:
+        raise ValueError("polygon clipping requires a non-degenerate CCW polygon")
+
+    boundaries = (
+        (0, float(box.left), True),
+        (0, float(box.right - 1), False),
+        (1, float(box.top), True),
+        (1, float(box.bottom - 1), False),
+    )
+    points = list(polygon)
+    for axis, limit, keep_greater in boundaries:
+        if not points:
+            break
+        clipped: list[Point] = []
+        previous = points[-1]
+        previous_inside = (
+            previous[axis] >= limit
+            if keep_greater
+            else previous[axis] <= limit
+        )
+        for current in points:
+            current_inside = (
+                current[axis] >= limit
+                if keep_greater
+                else current[axis] <= limit
+            )
+            if current_inside != previous_inside:
+                delta = current[axis] - previous[axis]
+                if delta == 0.0:
+                    raise ValueError("polygon clipping intersection is undefined")
+                fraction = (limit - previous[axis]) / delta
+                other_axis = 1 - axis
+                other = (
+                    previous[other_axis]
+                    + fraction * (current[other_axis] - previous[other_axis])
+                )
+                intersection = (
+                    (limit, other) if axis == 0 else (other, limit)
+                )
+                clipped.append(intersection)
+            if current_inside:
+                clipped.append(current)
+            previous = current
+            previous_inside = current_inside
+        points = clipped
+    if len(points) < 3:
+        raise ValueError("polygon clipping removed the complete footprint")
+    return convex_hull(tuple(points))
+
+
 def mapped_half_open_box(
     polygon: ConvexPolygon,
     map_point,

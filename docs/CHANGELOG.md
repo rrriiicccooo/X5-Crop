@@ -51,6 +51,10 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   extent 保留独立的外部 ±3.5% 设计先验。二者都没有为了复用 aperture guard 而改变物理含义。
 - Cross 注册超过编译上界时不再抛出 runtime error；完整实际计数进入 typed `producer_bound_exceeded`
   receipt，并由 Gate 安全 review，不截断观察或提高魔法上限。
+- Output protection 现在分别保存 mandatory、完整 requested 与实际 required source footprint。真实 TIFF
+  外缘只限定不存在的源像素，并按 `source_boundary_optional_bleed | source_boundary_joint_protection`
+  显式记录；内部 dual-lane 边界仍按 `lane_boundary_*` 阻断，不能借裁小获得批准。5% 预算继续使用未裁小
+  requested footprint，Debug 以虚线保留完整请求，不静默丢失保护事实。
 - Cross registration 现在是同角色边界 family identity 的唯一 owner。只有一次 robust refit 精确保留完整
   transition union 时，多个局部 fragment 才合并为一个 canonical observation；refit 丢失任一 transition
   时全部成员原样保留，并报告 typed `complete_transition_union_refit_rejected`。Selection 中旧的
@@ -76,7 +80,8 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
 - Placement 保持 source-axis；局部直线 slope 只扩大安全包络。Deskew 是批准后的可选整理，不参与
   placement、Gate 或黄金准确性；证据不足或超限时保持原始倾斜。
 - 安全层只处理唯一 selected placement 的联合可行状态。Aperture 每侧共用 5% 外扩预算；直接 enclosing
-  support 使用总高度不超过 `1.1H` 的独立合同。所需 footprint 越出 authority 时 review，不静默裁小。
+  support 使用总高度不超过 `1.1H` 的独立合同。真实 TIFF 外缘按显式 saturation 限定实际可用像素；
+  内部 lane authority 越界仍 review，不静默裁小。
 - 二维 content 只对最终 post-residual、post-bleed polygon 作 negative veto；它不能移动边界、选择
   runner 或创造 phase。
 
@@ -88,9 +93,9 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   阻断原因；报告同时保存全局未知量 constraint rank、逐 adjacency query/trace/coordinate coverage 与
   直接角色/外侧 Frame observation authority，以及 dark/light material、逐区域状态和冲突。Debug 不重新
   求解，也不把 review candidate 伪装为正式输出。当前 report revision 为
-  `x5crop_v5_template_report_21`，并显式报告 source W/H、相关 Frame-width inference、aspect calibration、
-  raw/guarded ratio、两轴 guard、推导 H、Cross typed root failure、pair support mode、family resolution 与
-  预算；不保留旧 schema 兼容路径。
+  `x5crop_v5_template_report_22`，并显式报告三层 source footprint、typed saturation、source W/H、相关
+  Frame-width inference、aspect calibration、raw/guarded ratio、两轴 guard、推导 H、Cross typed root
+  failure、pair support mode、family resolution 与预算；不保留旧 schema 兼容路径。
 - 正式 TIFF 保真 16-bit RGB、ICC、resolution、支持的 metadata 与无损压缩，并写
   `Orientation=1`。完整 source 先写 staging，再原子发布到尚不存在的目录。
 - Report、Gate 与 final geometry 各有唯一 owner；`CandidateGate` 只记录事实，`DecisionGate` 创建终态。

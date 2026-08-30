@@ -158,14 +158,15 @@ class DebugAnalysisContractTest(unittest.TestCase):
             (grid.canvas_height, style.canvas_width, 3),
         )
 
-    def test_output_panel_fills_only_final_required_footprints(
+    def test_output_panel_fills_required_and_outlines_source_limited_request(
         self,
     ) -> None:
         source = inspect.getsource(protected_output_panel)
         self.assertIn("output.required_source_footprint", source)
+        self.assertIn("output.requested_source_footprint", source)
         self.assertNotIn("envelope.canonical_source_footprint", source)
         self.assertNotIn("envelope.feasible_source_footprint", source)
-        self.assertNotIn("draw_dashed_polyline", source)
+        self.assertIn("draw_dashed_polyline", source)
 
     def test_output_panel_facts_are_decision_gated(self) -> None:
         final_outputs = (object(), object())

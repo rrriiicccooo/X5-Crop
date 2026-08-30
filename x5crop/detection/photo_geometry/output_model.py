@@ -7,7 +7,12 @@ from enum import Enum
 import math
 
 from ...domain import Box, EvidenceState, FiniteInterval, ObservationId
-from ...geometry.convex import ConvexPolygon, convex_hull, signed_area
+from ...geometry.convex import (
+    ConvexPolygon,
+    clip_convex_polygon_to_box,
+    convex_hull,
+    signed_area,
+)
 from .line_observations import SourceCoordinateLine
 from .model import (
     AuthoritySide,
@@ -95,13 +100,52 @@ class FrameBoundaryGeometry:
             raise ValueError("inferred boundary requires named observed inputs")
 
 
+class FootprintSaturationKind(str, Enum):
+    """Why one requested output side exceeds its lane authority."""
+
+    SOURCE_BOUNDARY_OPTIONAL_BLEED = "source_boundary_optional_bleed"
+    SOURCE_BOUNDARY_JOINT_PROTECTION = (
+        "source_boundary_joint_protection"
+    )
+    LANE_BOUNDARY_OPTIONAL_BLEED = "lane_boundary_optional_bleed"
+    LANE_BOUNDARY_JOINT_PROTECTION = "lane_boundary_joint_protection"
+
+
 @dataclass(frozen=True)
 class FootprintSaturationFact:
     authority_side: AuthoritySide
+    kind: FootprintSaturationKind
+    requested_overflow_px: float
+    mandatory_overflow_px: float
 
     def __post_init__(self) -> None:
-        if not isinstance(self.authority_side, AuthoritySide):
-            raise TypeError("saturation fact requires a typed authority side")
+        if (
+            not isinstance(self.authority_side, AuthoritySide)
+            or not isinstance(self.kind, FootprintSaturationKind)
+        ):
+            raise TypeError("saturation fact requires typed authority facts")
+        if (
+            not math.isfinite(self.requested_overflow_px)
+            or self.requested_overflow_px <= 0.0
+            or not math.isfinite(self.mandatory_overflow_px)
+            or self.mandatory_overflow_px < 0.0
+            or (
+                self.kind
+                in {
+                    FootprintSaturationKind.SOURCE_BOUNDARY_JOINT_PROTECTION,
+                    FootprintSaturationKind.LANE_BOUNDARY_JOINT_PROTECTION,
+                }
+            )
+            != (self.mandatory_overflow_px > 0.0)
+        ):
+            raise ValueError("saturation distances disagree with their kind")
+
+    @property
+    def source_boundary(self) -> bool:
+        return self.kind in {
+            FootprintSaturationKind.SOURCE_BOUNDARY_OPTIONAL_BLEED,
+            FootprintSaturationKind.SOURCE_BOUNDARY_JOINT_PROTECTION,
+        }
 
 
 def _validate_continuous_footprint(
@@ -120,6 +164,35 @@ def _validate_continuous_footprint(
         raise ValueError(f"{name} must be a finite non-degenerate CCW polygon")
     if convex_hull(footprint) != footprint:
         raise ValueError(f"{name} must be an ordered convex hull")
+
+
+def footprint_overflow_px(
+    footprint: ConvexPolygon,
+    authority: Box,
+    side: AuthoritySide,
+) -> float:
+    """Return one polygon's maximum pixel-center overflow on one side."""
+
+    if not authority.valid() or not isinstance(side, AuthoritySide):
+        raise ValueError("footprint overflow requires typed source authority")
+    if side == AuthoritySide.LEFT:
+        return max(0.0, authority.left - min(x for x, _y in footprint))
+    if side == AuthoritySide.TOP:
+        return max(0.0, authority.top - min(y for _x, y in footprint))
+    if side == AuthoritySide.RIGHT:
+        return max(0.0, max(x for x, _y in footprint) - (authority.right - 1))
+    return max(0.0, max(y for _x, y in footprint) - (authority.bottom - 1))
+
+
+def footprint_outside_authority_sides(
+    footprint: ConvexPolygon,
+    authority: Box,
+) -> tuple[AuthoritySide, ...]:
+    return tuple(
+        side
+        for side in AuthoritySide
+        if footprint_overflow_px(footprint, authority, side) > 0.0
+    )
 
 
 class OutputBoundaryUse(str, Enum):
@@ -197,16 +270,21 @@ class BoundaryProtectionFact:
 
 @dataclass(frozen=True)
 class OutputFootprint:
-    """Final selected-frame source requirement, including product bleed.
+    """Final selected-frame source requirement and its source-edge contract.
 
-    The required polygon is never clipped to source authority.  When it lies
-    outside the lane, ``saturation_facts`` records the contradiction so the
-    Gate must request review.  Cosmetic deskew and its output-raster envelope
-    are deliberately absent: finalization owns them only after DecisionGate.
+    ``mandatory_source_footprint`` retains joint measurement uncertainty,
+    line residual and complete pixel-center support.  ``requested`` also adds
+    product bleed.  ``required`` equals that request except where it reaches a
+    true TIFF boundary, which is the absolute limit of available source
+    pixels.  The typed saturation fact preserves whether this bounded optional
+    bleed or joint protection.  Internal lane boundaries are never clipped
+    into approval.
     """
 
     geometry_id: str
     envelope: JointPlacementEnvelope
+    mandatory_source_footprint: ConvexPolygon
+    requested_source_footprint: ConvexPolygon
     required_source_footprint: ConvexPolygon
     boundary_protections: tuple[BoundaryProtectionFact, ...]
     saturation_facts: tuple[FootprintSaturationFact, ...]
@@ -222,6 +300,14 @@ class OutputFootprint:
         ):
             raise ValueError("output footprint is invalid")
         _validate_continuous_footprint(
+            self.mandatory_source_footprint,
+            "mandatory source footprint",
+        )
+        _validate_continuous_footprint(
+            self.requested_source_footprint,
+            "requested source footprint",
+        )
+        _validate_continuous_footprint(
             self.required_source_footprint,
             "required source footprint",
         )
@@ -236,6 +322,42 @@ class OutputFootprint:
             self.saturation_facts
         ):
             raise ValueError("saturation facts require one fact per authority side")
+        expected_sides = footprint_outside_authority_sides(
+            self.requested_source_footprint,
+            self.sampling_authority_box,
+        )
+        if tuple(fact.authority_side for fact in self.saturation_facts) != expected_sides:
+            raise ValueError("saturation facts disagree with requested footprint")
+        for fact in self.saturation_facts:
+            requested_overflow = footprint_overflow_px(
+                self.requested_source_footprint,
+                self.sampling_authority_box,
+                fact.authority_side,
+            )
+            mandatory_overflow = footprint_overflow_px(
+                self.mandatory_source_footprint,
+                self.sampling_authority_box,
+                fact.authority_side,
+            )
+            if (
+                abs(fact.requested_overflow_px - requested_overflow) > 1.0e-8
+                or abs(fact.mandatory_overflow_px - mandatory_overflow) > 1.0e-8
+            ):
+                raise ValueError("saturation fact distances are not reproducible")
+        expected_required = (
+            clip_convex_polygon_to_box(
+                self.requested_source_footprint,
+                self.sampling_authority_box,
+            )
+            if self.saturation_facts and self.source_authority_supported
+            else self.requested_source_footprint
+        )
+        if self.required_source_footprint != expected_required:
+            raise ValueError("required footprint disagrees with saturation contract")
+
+    @property
+    def source_authority_supported(self) -> bool:
+        return all(fact.source_boundary for fact in self.saturation_facts)
 
 
 @dataclass(frozen=True)

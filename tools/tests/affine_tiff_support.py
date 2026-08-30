@@ -80,6 +80,8 @@ def sampling_footprint(authority: Box) -> OutputFootprint:
             feasible_source_footprint=polygon,
             extreme_evaluation_count=1,
         ),
+        mandatory_source_footprint=polygon,
+        requested_source_footprint=polygon,
         required_source_footprint=polygon,
         boundary_protections=tuple(
             BoundaryProtectionFact(role, 0.0, 0.0, 0.0, 0.0)

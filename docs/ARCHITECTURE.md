@@ -668,7 +668,8 @@ placement 能进入下列完整联合几何与输出流：
 selected placement
 → PlacementFeasibleSet
 → JointPlacementEnvelope
-→ deterministic bleed
+→ mandatory / requested source footprints
+→ explicit source-boundary saturation
 → OutputFootprint
 → authority + direct-use assessment
 ```
@@ -706,9 +707,18 @@ max(0, 5% W - joint uncertainty - line residual - base sequence bleed)
 `<= 1.1H` 外，每侧自身 expansion 仍不得超过 5%，两侧为对齐同一直接支撑状态而增加的 cross padding
 之和也不得超过一个 5% 短轴预算。Start/end 使用正常 sequence bleed 和各自 5% 预算。
 
-`OutputFootprint` 不得与 source/lane authority 相交后静默缩小。Decision 前只验证联合 source-space
-polygon 完整位于 lane authority；任一真正所需区域越界都按 authority side 保存一个 saturation fact
-并进入 review。
+`OutputFootprint` 同时保存三层 source-space polygon：`mandatory_source_footprint` 含联合测量不确定性、
+直线 residual 与完整 pixel-center span；`requested_source_footprint` 再加入完整产品 bleed；
+`required_source_footprint` 是最终实际采样范围。完整 5% 预算始终按 requested 层评估，不能因源边界而
+收窄或掩盖超预算。
+
+真实 TIFF 外缘是可用源像素的绝对极限。Requested 越过该外缘时，required 明确等于其与 TIFF
+pixel-center extent 的交集；typed saturation fact 区分只触及 optional bleed 的
+`source_boundary_optional_bleed` 与联合保护也触及边界的 `source_boundary_joint_protection`。两者都保留
+完整 requested/mandatory polygon、越界距离和 Debug 虚线，不伪造 TIFF 外内容，也不因不存在的源像素
+要求 review。双 lane 的内部边界不是 source boundary：`lane_boundary_optional_bleed` 与
+`lane_boundary_joint_protection` 都不得裁小后批准，继续由 Gate 阻断。交集退化、其它 authority 冲突或
+预算失败仍进入 review；任何 saturation 都不得静默发生。
 
 Content protection 查询的也是同一个最终 `OutputFootprint`，即联合不确定性、局部 residual、完整
 pixel-center span 和 bleed 全部加入后的精确 convex polygon。真实画面位于 nominal frame 之外、但仍
