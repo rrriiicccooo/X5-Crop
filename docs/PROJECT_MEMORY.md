@@ -14,23 +14,22 @@ mean `<= 5s` 来提高覆盖；3 秒 mean 是持续优化目标。
 每次只闭合一个通用物理机制，并同时交付合同与真值表、canonical owner、typed evidence/failure、
 Debug、正反例、少量真实样片、完整黄金验收和性能。已闭合全局 lattice authority、逐 adjacency
 coverage、候选无关查询走廊、polarity-complete separator、跨高度弱边缘、source-level W/H direct
-aperture，以及有界的 W/H compatibility 与 aspect-ratio authority。Contact/overlap 以后仍只扩展同一
-adjacency/placement 模型。
+aperture、有界的 W/H compatibility 与 aspect-ratio authority，以及不依赖比例推导的 fixed-H enclosing
+support。Contact/overlap 以后仍只扩展同一 adjacency/placement 模型。
 
 ## 当前检查点
 
-- `2d9fbf9c` 已推送：全部 format 通过同一个 mixed guard 计算 W/H compatibility；
-  `guard_W=max(0.95 mm, 2.4%W)`，`guard_H=max(0.70 mm, 1.8%H)`，没有 `half` 或样片例外。
-  `ApertureAspectRatioAuthority` 用分格式 raw W/H 包络与两轴 guard 推导 rank 0 相关 H；direct H 优先，
-  authority 不足、physical-prior/direct conflict 和 5% 预算耗尽均为 typed review。Report revision 为
-  `x5crop_v5_template_report_19`。Cross 注册超界也改为 `producer_bound_exceeded`，不再崩溃或截断。
-- 同 commit 的 pre-push Hook 为 564 项通过、2 项按设计跳过。完整 development gold 为 110/110
-  完成、分析错误 0、`unsafe_approved_auto = 0`；安全 auto 为基础 nominal 4/66、较难 nominal 0/30、
-  challenge 0/14。九个 candidate 安全、五个不安全、96 个不可用；五个不安全 candidate 全部保持
-  review。安全 auto 为 S022、S025、S063、S081；全部 challenge 均安全 review。
-- 黄金 receipt 的 detector、comparator 与 cohort 均精确匹配该 commit；detector manifest 为
-  `58bd8e25c53fa4cd3072ed3bad6850afe345d0823df75ce6281e34c672979298`。24-source 正式性能 mean 为
-  2.966 秒，5 秒 Gate 通过，3 秒 non-blocking 目标已达到；receipt 位于
+- 检测检查点 `728450da` 修正唯一 `ENCLOSING_SUPPORT_PAIR` 的权限：它只由 source fixed H、canonical H、
+  两条直接支撑和 `1.1H` 上限闭合，不再错误依赖或消费只服务缺失 aperture side 的比例推导。
+  S083、S092 因此取得安全 enclosing candidate，但仍由真实的 source-footprint 越界阻断；S001、S024、
+  S002 与 S012 等反例继续 review。
+- 同 commit 的完整 development gold 为 110/110 完成、分析错误 0、`unsafe_approved_auto = 0`。安全 auto
+  为基础 nominal 6/66、较难 nominal 0/30、challenge 0/14；基础 nominal candidate 为 47 个不可用、
+  13 个安全、6 个不安全，所有不安全 candidate 均保持 review。安全 auto 为 S022、S025、S063、S081、
+  S095、S103；全部 challenge 均安全 review。
+- 黄金 receipt 的 detector、comparator 与 cohort 均精确匹配 `728450da`；detector manifest 为
+  `9b0d6a6dba78286219ade8c718b79993f5838bf84a193e15788e632ddff5d5da`。24-source 正式性能 mean 为
+  2.944 秒，5 秒 Gate 通过，3 秒 non-blocking 目标达到；receipt 位于
   `build/v5-performance/performance_receipt.json`，只证明该 commit、依赖和 M2 Max 主机。
 
 ## 当前物理证据
@@ -49,10 +48,10 @@ adjacency/placement 模型。
 
 ## 开放风险
 
-- 基础 nominal 仍有 62/66 review。较宽且真实的 W/H guard 揭示了旧窄 prior 曾排除的竞争解释：完整集
-  当前有 29 个 `discrete_phase_ambiguous`、42 个 non-equivalent cross fit、34 个 direct H mismatch，
-  另有 10 个 aspect-ratio budget exhaustion。旧检查点的 10 个基础安全 auto 变为当前 4 个，不是危险
-  放行回归；不得靠缩窄 guard、恢复精确 W→H 或改 challenge 分类取回数字。
+- 基础 nominal 仍有 60/66 review。当前完整集有 29 个 `discrete_phase_ambiguous`、16 个
+  `non-equivalent cross fits remain`、15 个 direct fixed-H mismatch 与 4 个 aspect-ratio budget
+  exhaustion。较宽真实先验暴露的竞争必须由观察 identity、权限或安全预算闭合；不得靠缩窄 guard、
+  恢复精确 W→H 或改 challenge 分类取回数字。
 - 当前黄金同时参与 development calibration 与 development 验收，只能证明该集合上的安全与可复算性；
   尚无 sealed acceptance，也没有 `xpan`、`120-645`、`135-dual` 的独立黄金覆盖。
 - 当前开发集不能事后兼任概率 calibration。未来 scorer 仍需预先冻结的新数据、OOD、abstention 和独立
@@ -60,9 +59,12 @@ adjacency/placement 模型。
 
 ## 精确下一步
 
-1. 对旧 10 个与当前 4 个安全 auto 做机制迁移，先闭合由真实 W/H 范围暴露的离散 phase 与 cross
-   竞争。优先让已有直接 START/END、separator pair 与 source-wide top/bottom 获得正确权限，不调窄
-   compatibility，也不引入 score。
-2. 单独建立 separator 的非对称、候选无关搜索 coverage 合同；它只提高正确位置的观察覆盖，不改变
-   direct local gap，不与 aperture 或 holder tolerance 合并。
-3. 基础 nominal 稳定后再处理弱边缘与局部片距变化，最后按既定顺序闭合 contact/overlap challenge。
+1. 先让 registration 成为 same-role cross family identity 的唯一 owner：只有一次重拟合精确保留完整
+   transition union 时才形成 canonical track，并删除 selection 后的平行 broader/local 权限；不能按邻近、
+   residual、方向相似或 score 合并。S013 的两个完整离散 bottom 闭环是必须保留的反例。
+2. 再闭合 complementary-domain direct pair：top/bottom 各自直接、方向与 fixed H 相容、各有独立区域，
+   且两侧 domain union 完整覆盖 template 时可以形成唯一闭环；共享 trace 仍记为 0。S064 是当前正例，
+   缺 domain、支持不足或存在多个完整闭环时继续 review。
+3. 独立审计 S083、S092、S091 等安全 candidate 的 source-footprint 越界；source containment 仍是硬合同，
+   先区分真实输入不足、基础 bleed 不可满足与 authority 过窄，不能以静默裁小换取 auto。之后再处理离散
+   phase、候选无关 separator coverage、局部片距与 contact/overlap challenge。
