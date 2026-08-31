@@ -454,7 +454,7 @@ candidate 与最终 selected fit 的直接坐标权限都由 `template_direct_ro
 1. 全部已选直接角色的 `DirectRoleBindingAuthority` 为 `supported`；
 2. `GlobalLatticeAuthority` 已用独立直接证据达到 rank 3；Grid 没有参与创造 phase 或 ordinal mapping；
 3. 该 adjacency 的 END/START 完整传播区间形成 `required_interval`，每条预登记 sequence trace 上都由
-   已完整执行的 `SEQUENCE_ANCHOR_WINDOW` ownership interval 连续覆盖；
+   已完整执行的 `SEQUENCE_ANCHOR_WINDOW` ownership interval 覆盖全部整数像素中心；
 4. 同一 adjacency 没有直接 wide/narrow gap、contact、overlap、角色冲突或其它 typed 反证；
 5. 一旦使用正常 Grid 推断，首张与末张输出 Frame 各至少有一条直接绑定的长轴角色。内部 adjacency
    coverage 不能证明 source 外侧的一整张 Frame 存在，Grid 不得从片夹或 holder fill 凭空创造它。
@@ -469,9 +469,10 @@ candidate 与最终 selected fit 的直接坐标权限都由 `template_direct_ro
 | supported | 3 | complete | 任意 | 有 | 直接 wide/narrow advance 优先；contact/overlap/conflict 保持 unresolved |
 
 `AdjacencyObservationCoverage` 逐关系保存 `relation_ordinal`、`required_interval`、参与覆盖的 query ID、
-逐 trace 的已覆盖区间与 coordinate count，以及 `complete | incomplete`。全长 normalization baseline
-不产生 transition，因此不能充当 separator coverage。覆盖只映射既有 candidate-independent 查询，不增加
-TIFF 读取；测量全局完成但某个合法走廊未覆盖时产生
+逐 trace 的离散 ownership 并集与 coordinate count，以及 `complete | incomplete`。相邻 interval 只要
+覆盖相邻整数像素中心即为无缺口；任何一个可测像素中心无人拥有仍为 incomplete。全长 normalization
+baseline 不产生 transition，因此不能单独充当 separator coverage；它只让全部预登记窗口复用同一批像素。
+覆盖只映射既有 candidate-independent 查询，不增加 TIFF 读取；测量全局完成但某个合法走廊未覆盖时产生
 `adjacency_observation_coverage_incomplete`，全局矩阵不足时产生
 `global_lattice_authority_unavailable`。`OuterFrameObservationAuthority` 分别保存首尾 Frame 已绑定的直接
 observation；只有两侧都非空才支持带推断的正常 Grid，否则产生
@@ -480,10 +481,12 @@ review。
 
 `SequenceAnchorDiscoveryDomain` 是候选无关查询走廊的唯一 owner。存在 coarse direct long support 时，
 它从 format/count 编译的完整 `W/pitch` 区间分别按左端锚定向右、右端锚定向左投影每个 START/END，
-再加唯一的 role refinement radius、裁到 coarse support 并合并重叠 core。右端公式直接保留同一
-`W/pitch` 状态的相关性，不能先制造 origin 区间再重复叠加 pitch 极值。没有 direct long support 时才
-使用一个保守全 support 窗口。所有窗口在 placement 前登记，并从同一条全长 baseline trace 切片；扩大
-ownership 不增加 TIFF 读取，不读取 winner，也不授予 phase、ordinal 或 placement 权限。
+再加唯一的 role refinement radius、裁到 coarse support 并合并重叠 core。合并后的理论 core 是窗口种子；
+相邻种子之间在中点分界，把 coarse support 内每个可测整数像素中心恰好分配给一个窗口。Measurement halo
+可以重叠，transition ownership 不得重叠或留洞。右端公式直接保留同一 `W/pitch` 状态的相关性，不能先
+制造 origin 区间再重复叠加 pitch 极值。没有 direct long support 时使用一个保守全 support 窗口。全部
+窗口在 placement 前登记，并从同一条全长 baseline trace 切片；该分区不新增 TIFF 读取或 query，不读取
+winner，也不授予 phase、ordinal 或 placement 权限。
 
 模板放置后，`template_alignment_diagnostic` 只读比较 theoretical role 与 bound observation，并报告
 直接角色权限、全局 constraint rank、逐 adjacency coverage、外侧 Frame observation authority、

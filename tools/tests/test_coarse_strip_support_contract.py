@@ -263,6 +263,57 @@ class CoarseStripSupportContractTest(unittest.TestCase):
 
         self.assertLessEqual(len(domain.windows), 2 * plan.full_count)
 
+    def test_anchor_windows_partition_every_registered_sequence_pixel_once(
+        self,
+    ) -> None:
+        lane, plan = _lane()
+        support = CoarseStripSupport(
+            "lane:0",
+            CoarseAxisSupport(
+                FiniteInterval(0.0, 2319.0),
+                FiniteInterval(100.0, 2219.0),
+                CoarseSupportAuthority.PIXEL_OBSERVED,
+                (ObservationId("coarse:long"),),
+            ),
+            CoarseAxisSupport(
+                FiniteInterval(0.0, 321.0),
+                None,
+                CoarseSupportAuthority.HOLDER_CONSERVATIVE,
+                (),
+            ),
+            None,
+            None,
+            CoarseStripSupportReceipt(2, 2, 2, 2, 1, 2, 2),
+        )
+
+        domain = build_sequence_anchor_discovery_domain(
+            lane,
+            layout="horizontal",
+            measurement_plan=plan,
+            coarse_support=support,
+        )
+        ownership = tuple(
+            (
+                int(window.core_px.minimum),
+                int(window.core_px.maximum - 1.0),
+            )
+            for window in domain.windows
+        )
+
+        self.assertEqual(ownership[0][0], 0)
+        self.assertEqual(ownership[-1][1], 2319)
+        self.assertTrue(
+            all(
+                left_end + 1 == right_start
+                for (_left_start, left_end), (right_start, _right_end) in zip(
+                    ownership,
+                    ownership[1:],
+                    strict=False,
+                )
+            )
+        )
+        self.assertLessEqual(len(domain.windows), 2 * plan.full_count)
+
     def test_role_free_material_region_localizes_the_whole_strip(self) -> None:
         lane, plan = _lane()
         pixels = np.full((322, 2320), 255, dtype=np.uint8)

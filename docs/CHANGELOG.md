@@ -32,7 +32,10 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   直接约束矩阵独立闭合 `phase/W/pitch`、对应 adjacency 的完整不确定性走廊被已执行窗口逐 trace 覆盖、
   且没有局部反证时才按 `local_delta = 0` 补齐；不再用 edge 数、连续缺失数或全局 query-complete
   布尔值代替证明。候选无关 sequence 窗口按左右 holder 端分别投影完整且相关的 `W/pitch` 状态，覆盖
-  传播走廊但不重复相加互斥极值；扩大 ownership 不增加 TIFF 读取。带 Grid 推断的 placement 还要求
+  传播走廊但不重复相加互斥极值；理论 core 合并后按中点把 coarse support 的每个整数像素中心恰好分给
+  一个窗口，measurement halo 可重叠而 transition ownership 无重叠、无缺口。覆盖以真实可测的离散坐标
+  判断，不再把相邻像素中心之间的亚像素距离误报为缺口；扩大 ownership 不增加 TIFF 读取或 query。
+  带 Grid 推断的 placement 还要求
   首尾输出 Frame 各至少绑定一条直接长轴角色，不能由片夹位置凭空创造整张外侧 Frame。任一已选直接
   START/END 只有获得 source-wide edge、跨高度联合或同一 separator pair 的直接坐标权限后，才能进入
   最终 placement；两条局部 edge 不能仅因间距与 catalog/source W 相容就互相授权。独立 source W 只推导
@@ -193,12 +196,13 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
 - `tools/verify` 是 Hook、CI 与本地验证的唯一入口。Diagnostic 只证明工程合同；gold accuracy、性能与
   platform receipt 分层记录，不互相冒充。
 - 正式性能 Gate 为 24-source 完整用户路径 mean 不超过 5 秒；3 秒只是不阻断的 challenge。
-- Calibrated nominal Grid 检查点的完整 development gold 为 110/110 完成、分析错误 0、
+- Sequence ownership 检查点的完整 development gold 为 110/110 完成、分析错误 0、
   `unsafe_approved_auto = 0`；安全 auto 为基础 nominal 14/66、较难 nominal 2/30、challenge 0/14。
-  Candidate 为 88 个不可用、17 个安全、5 个不安全；全部不安全 candidate 均保持 review。相对上一
-  检查点，S023 安全进入 auto；S070 因 source W 冲突、S088 因两个 direct placement 竞争回到 review。
-  S040、S056 暴露“整张 Frame 双侧都由 Grid 生成”不足以单独批准，现以同一个 typed 机制安全 review。
-  该阶段主要完善安全证明，不用放宽 Gate 换取覆盖。
+  Candidate 为 88 个不可用、17 个安全、5 个不安全；全部不安全 candidate 均保持 review。原有 4 个
+  phase-level `adjacency_observation_coverage_incomplete` 已迁移到完整 Frame、共同 W 或真实 placement
+  冲突，只剩 1 个非最终候选的 coverage failure；自动批准数量不变。该阶段修复的是查询所有权与安全
+  证明，不用放宽 Gate 换取覆盖。绑定最终干净 commit 的 24-source 正式性能仍通过 5 秒 mean Gate，
+  3 秒 non-blocking 目标尚未达到。
 - 24-source 正式性能只由绑定最终干净 commit 的 receipt 判定；5 秒 mean 仍是 blocking Gate，3 秒仍是
   non-blocking 目标。当前 review 表达真实的 phase/cross、Grid/W 与预算证明缺口，不以调窄 guard、静默
   隐藏 saturation、恢复精确 W→H 或改变样片角色掩盖。

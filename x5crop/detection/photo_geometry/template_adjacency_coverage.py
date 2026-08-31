@@ -126,13 +126,17 @@ class AdjacencyObservationCoverage:
             raise ValueError("adjacency aggregate coverage disagrees with traces")
 
 
+def _integer_coordinate_bounds(
+    interval: FiniteInterval,
+) -> tuple[int, int] | None:
+    minimum = int(math.ceil(interval.minimum))
+    maximum = int(math.floor(interval.maximum))
+    return None if maximum < minimum else (minimum, maximum)
+
+
 def _integer_coordinate_count(interval: FiniteInterval) -> int:
-    return max(
-        0,
-        int(math.floor(interval.maximum))
-        - int(math.ceil(interval.minimum))
-        + 1,
-    )
+    bounds = _integer_coordinate_bounds(interval)
+    return 0 if bounds is None else bounds[1] - bounds[0] + 1
 
 
 def _trace_coverage(
@@ -140,40 +144,37 @@ def _trace_coverage(
     required: FiniteInterval,
     intervals: tuple[tuple[FiniteInterval, str], ...],
 ) -> AdjacencyTraceCoverage:
-    query_ids = tuple(
-        sorted(
-            {
-                query_id
-                for interval, query_id in intervals
-                if interval.maximum >= required.minimum
-                and interval.minimum <= required.maximum
-            }
-        )
-    )
-    clipped = sorted(
-        (
-            FiniteInterval(
-                max(required.minimum, interval.minimum),
-                min(required.maximum, interval.maximum),
-            )
-            for interval, _query_id in intervals
-            if interval.maximum >= required.minimum
-            and interval.minimum <= required.maximum
-        ),
-        key=lambda item: (item.minimum, item.maximum),
+    required_bounds = _integer_coordinate_bounds(required)
+    required_count = _integer_coordinate_count(required)
+    clipped_with_ids: list[tuple[int, int, str]] = []
+    if required_bounds is not None:
+        required_start, required_end = required_bounds
+        for interval, query_id in intervals:
+            bounds = _integer_coordinate_bounds(interval)
+            if bounds is None:
+                continue
+            start = max(required_start, bounds[0])
+            end = min(required_end, bounds[1])
+            if start <= end:
+                clipped_with_ids.append((start, end, query_id))
+    clipped_with_ids.sort(key=lambda item: (item[0], item[1], item[2]))
+    query_ids = tuple(sorted({item[2] for item in clipped_with_ids}))
+    clipped = tuple(
+        FiniteInterval(float(start), float(end))
+        for start, end, _query_id in clipped_with_ids
     )
     if not clipped:
         return AdjacencyTraceCoverage(
             trace_position_px=trace_position_px,
             covering_query_ids=(),
             covered_intervals_px=(),
-            required_coordinate_count=_integer_coordinate_count(required),
+            required_coordinate_count=required_count,
             covered_coordinate_count=0,
             complete=False,
         )
     merged: list[FiniteInterval] = []
     for interval in clipped:
-        if not merged or interval.minimum > merged[-1].maximum + 1.0e-9:
+        if not merged or interval.minimum > merged[-1].maximum + 1.0:
             merged.append(interval)
         else:
             merged[-1] = FiniteInterval(
@@ -181,18 +182,10 @@ def _trace_coverage(
                 max(merged[-1].maximum, interval.maximum),
             )
     count = min(
-        _integer_coordinate_count(required),
+        required_count,
         sum(_integer_coordinate_count(interval) for interval in merged),
     )
-    complete = (
-        merged[0].minimum <= required.minimum + 1.0e-9
-        and merged[-1].maximum >= required.maximum - 1.0e-9
-        and all(
-            left.maximum >= right.minimum - 1.0e-9
-            for left, right in zip(merged, merged[1:])
-        )
-    )
-    required_count = _integer_coordinate_count(required)
+    complete = required_count > 0 and count == required_count
     return AdjacencyTraceCoverage(
         trace_position_px=trace_position_px,
         covering_query_ids=query_ids,

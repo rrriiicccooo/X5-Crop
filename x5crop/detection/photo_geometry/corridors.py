@@ -217,6 +217,61 @@ def _compiled_role_search_cores(
     return _merged_anchor_cores(tuple(cores))
 
 
+def _partition_sequence_pixel_ownership(
+    support_interval_px: FiniteInterval,
+    role_cores: tuple[FiniteInterval, ...],
+) -> tuple[FiniteInterval, ...]:
+    """Assign every measurable support coordinate to one theory-local core.
+
+    The registered baseline already measures every integer pixel center in the
+    coarse support.  Role cores seed bounded transition interpretation; the
+    gaps between them are divided at their midpoint so a later correlated
+    Grid corridor cannot leave already measured coordinates without an owner.
+    """
+
+    support_start = int(math.ceil(support_interval_px.minimum))
+    support_end = int(math.floor(support_interval_px.maximum))
+    if support_end < support_start:
+        return ()
+
+    discrete: list[tuple[int, int]] = []
+    for core in role_cores:
+        start = max(support_start, int(math.ceil(core.minimum)))
+        end = min(support_end, int(math.floor(core.maximum)))
+        if end < start:
+            center = min(
+                support_end,
+                max(
+                    support_start,
+                    int(math.floor(core.center + 0.5)),
+                ),
+            )
+            start = center
+            end = center
+        if not discrete or start > discrete[-1][1] + 1:
+            discrete.append((start, end))
+            continue
+        discrete[-1] = (discrete[-1][0], max(discrete[-1][1], end))
+
+    if not discrete:
+        return ()
+
+    partitioned = [list(item) for item in discrete]
+    partitioned[0][0] = support_start
+    partitioned[-1][1] = support_end
+    for index in range(len(partitioned) - 1):
+        left = partitioned[index]
+        right = partitioned[index + 1]
+        split = (left[1] + right[0]) // 2
+        left[1] = split
+        right[0] = split + 1
+
+    return tuple(
+        FiniteInterval(float(start), float(end))
+        for start, end in partitioned
+    )
+
+
 def _anchor_windows(
     lane_id: str,
     support_interval_px: FiniteInterval,
@@ -248,6 +303,12 @@ def _anchor_windows(
     )
     if not cores:
         return conservative_window()
+    ownership_cores = _partition_sequence_pixel_ownership(
+        support_interval_px,
+        cores,
+    )
+    if not ownership_cores:
+        return conservative_window()
 
     halo_px = float(measurement_plan.projected_queries.measurement_halo_px)
     return tuple(
@@ -262,7 +323,7 @@ def _anchor_windows(
                 min(support_interval_px.maximum, core.maximum + halo_px),
             ),
         )
-        for index, core in enumerate(cores)
+        for index, core in enumerate(ownership_cores)
     )
 
 

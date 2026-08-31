@@ -34,12 +34,17 @@ OOD 共同支持“风险低到可直接使用”，不是 runtime 已知黄金�
 - Grid 可以生成完整 diagnostic candidate，但当前 hard-fact 自动批准要求每张 Frame 至少有一侧直接角色。
   双侧都未绑定时，evidence 保存 Frame ordinal，并以 `nominal_grid_complete_frame_unobserved` review；S040、
   S056 是该合同的真实安全反例。Report revision 为 `x5crop_v5_template_report_31`。
+- `SequenceAnchorDiscoveryDomain` 现在以左右锚定的完整 W/pitch role core 为种子，把 coarse support 内每个
+  可测整数像素中心恰好分给一个预登记窗口。相邻窗口的 measurement halo 可以重叠，transition ownership
+  无重叠、无缺口；逐 adjacency coverage 按离散坐标计数。它复用同一全长 baseline，不新增 TIFF 读取、
+  query、winner-specific requery 或第二 detector。
 - 完整 development gold 为 110/110、分析错误 0、`unsafe_approved_auto = 0`。安全 auto 为基础 nominal
   14/66、较难 nominal 2/30、challenge 0/14；candidate 为 88 个不可用、17 个安全、5 个不安全，全部不安全
-  candidate 均保持 review。相对上一检查点，S023 安全进入 auto；S070 因 source W 冲突、S088 因两个合法
-  direct placement 竞争回到 review。该阶段净少 1 个 auto，但关闭了两项危险自动批准，不以覆盖换安全。
-- 24-source 性能只接受绑定最终干净 commit 的 receipt；5 秒 mean 是 blocking Gate，3 秒是 non-blocking
-  目标。精确时间、RSS、依赖与机器身份不在本文件复制。
+  candidate 均保持 review。phase root 中原有 4 个 `adjacency_observation_coverage_incomplete` 已消失并迁移
+  到完整 Frame、共同 W 或真实 placement 冲突；仍有 1 个非最终候选的 coverage failure。该机制没有伪造
+  新批准，也没有改变当前安全 auto 总数。
+- 本检查点的 24-source 正式 receipt 绑定最终干净 commit，并通过 5 秒 mean Gate；3 秒 non-blocking
+  目标尚未达到。精确时间、RSS、依赖与机器身份不在本文件复制。
 
 ## 证据与数据边界
 
@@ -58,10 +63,10 @@ OOD 共同支持“风险低到可直接使用”，不是 runtime 已知黄金�
 ## 开放风险
 
 - 基础 nominal 仍有 52/66 review，较难 nominal 有 28/30 review。主要 Gate 根因是 26 个
-  `nominal_grid_complete_frame_unobserved`、12 个 `phase_placement_ambiguous`、9 个
+  `nominal_grid_complete_frame_unobserved`、12 个 `phase_placement_ambiguous`、12 个
   `phase_template_mismatch`、8 个 `aperture_aspect_ratio_budget_exhausted`、7 个
-  `direct_role_binding_authority_unavailable`、5 个 `direct_role_aperture_domain_unavailable`，另有 4 个
-  `adjacency_observation_coverage_incomplete` 与 4 个 `nominal_grid_phase_anchor_unavailable`。
+  `direct_role_binding_authority_unavailable`、5 个 `direct_role_aperture_domain_unavailable` 与 4 个
+  `nominal_grid_phase_anchor_unavailable`。
 - S040/S056 证明完整 query receipt 与 calibrated Grid 仍不足以硬授权整张未观察 Frame；这不是 Grid 的
   永久物理上限。未来只有更强的直接/continuity/topology evidence，或独立校准且可拒绝的概率层，才能
   改变该权限，不能简单删除 failure。
@@ -71,10 +76,9 @@ OOD 共同支持“风险低到可直接使用”，不是 runtime 已知黄金�
 
 ## 精确下一步
 
-1. 以一个小机制闭环完善 candidate-independent sequence 查询走廊，先消除真实的
-   `adjacency_observation_coverage_incomplete`，并提高每张 Frame 至少一侧直接角色的观察覆盖；不得放宽
-   `nominal_grid_complete_frame_unobserved` 或新增 winner-specific query。
-2. 随后处理 nominal 的跨高度弱边缘、极低显著边缘与真实片距变化，让同一 registered measurement owner
+1. 处理 nominal 的跨高度弱边缘、极低显著边缘与真实片距变化，让同一 registered measurement owner
    提供更多 typed observation，不建立 enhanced detector 或样片规则。
+2. 对 26 个 `nominal_grid_complete_frame_unobserved` 区分“像素已有弱证据”和“整张确实无直接角色”，先
+   提高真实 direct role coverage；不得删除完整 Frame 安全反例或用 Grid 自证存在性。
 3. 再依次闭合 adjacency continuity、contact、overlap。概率选择层只设计 feature/calibration/OOD/
    abstention schema，等独立 calibration 与 sealed 数据具备后再进入 runtime。
