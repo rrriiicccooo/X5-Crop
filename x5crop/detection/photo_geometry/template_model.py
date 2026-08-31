@@ -598,7 +598,7 @@ class SequenceRoleBinding:
 
     use: SequenceBindingUse
     observation_id: ObservationId
-    independent_support_id: ObservationId
+    evidence_group_id: ObservationId
     canonical_position_px: float
     fit_position_interval_px: FiniteInterval
     full_position_interval_px: FiniteInterval
@@ -608,7 +608,7 @@ class SequenceRoleBinding:
         if (
             not isinstance(self.use, SequenceBindingUse)
             or not isinstance(self.observation_id, ObservationId)
-            or not isinstance(self.independent_support_id, ObservationId)
+            or not isinstance(self.evidence_group_id, ObservationId)
             or not math.isfinite(self.canonical_position_px)
             or not isinstance(self.fit_position_interval_px, FiniteInterval)
             or not isinstance(self.full_position_interval_px, FiniteInterval)
@@ -671,11 +671,11 @@ class SequenceFit:
         )
 
     @property
-    def independent_support_ids(self) -> tuple[ObservationId, ...]:
+    def evidence_group_ids(self) -> tuple[ObservationId, ...]:
         return tuple(
             sorted(
                 {
-                    binding.independent_support_id
+                    binding.evidence_group_id
                     for binding in self.role_bindings
                     if binding is not None
                 }
@@ -829,7 +829,7 @@ class SequenceFit:
             for binding in self.role_bindings
         )
         if (
-            not self.independent_support_ids
+            not self.evidence_group_ids
             or not self.phase_support_locations
             or self.phase_support_count > phase_authority_role_count
         ):

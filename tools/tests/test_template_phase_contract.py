@@ -2017,7 +2017,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(len(result.best.bound_observation_ids), 2)
         self.assertEqual(result.best.phase_support_count, 1)
         self.assertEqual(
-            result.best.independent_support_ids,
+            result.best.evidence_group_ids,
             (band.observation_id,),
         )
         self.assertAlmostEqual(result.best.phase_support_coverage, 0.2)
@@ -2544,7 +2544,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             0.51,
         )
 
-    def test_one_connected_separator_keeps_role_alternatives_continuous(self) -> None:
+    def test_one_evidence_group_does_not_merge_distinct_coordinates(self) -> None:
         observations = tuple(
             edge(f"connected:{index}", coordinate)
             for index, coordinate in enumerate((10.0, 110.0, 130.0, 230.0))
@@ -2582,20 +2582,20 @@ class TemplatePhaseContractTest(unittest.TestCase):
             model_full_role_intervals_px=tuple(full_intervals),
             role_bindings=tuple(bindings),
         )
-        self.assertTrue(_same_continuous_placement(fit, alternative))
-        disconnected_bindings = list(alternative.role_bindings)
-        for index, identity in zip((2, 3), alternative_ids, strict=True):
-            binding = disconnected_bindings[index]
-            assert binding is not None
-            disconnected_bindings[index] = replace(
-                binding,
-                independent_support_id=identity,
+        self.assertTrue(
+            all(
+                left is not None
+                and right is not None
+                and left.observation_id != right.observation_id
+                and left.evidence_group_id == right.evidence_group_id
+                for left, right in zip(
+                    fit.role_bindings[2:4],
+                    alternative.role_bindings[2:4],
+                    strict=True,
+                )
             )
-        disconnected = replace(
-            alternative,
-            role_bindings=tuple(disconnected_bindings),
         )
-        self.assertFalse(_same_continuous_placement(fit, disconnected))
+        self.assertFalse(_same_continuous_placement(fit, alternative))
 
     def test_complementary_endpoint_facts_merge_into_one_continuous_fit(
         self,
@@ -2651,8 +2651,8 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
 
         self.assertNotEqual(
-            left.independent_support_ids,
-            right.independent_support_ids,
+            left.evidence_group_ids,
+            right.evidence_group_ids,
         )
         self.assertTrue(_same_continuous_placement(left, right))
         merged = _merge_continuous_placement(

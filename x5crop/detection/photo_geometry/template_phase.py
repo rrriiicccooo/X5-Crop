@@ -150,11 +150,7 @@ def _continuous_role_bindings(
             merged.append(right_binding)
         elif right_binding is None:
             merged.append(left_binding)
-        elif (
-            left_binding.observation_id == right_binding.observation_id
-            or left_binding.independent_support_id
-            == right_binding.independent_support_id
-        ):
+        elif left_binding.observation_id == right_binding.observation_id:
             merged.append(left_binding)
         else:
             return None
@@ -182,16 +178,11 @@ def _same_continuous_placement(
     ) -> bool:
         if left_binding is None or right_binding is None:
             return _intervals_overlap(left_interval, right_interval)
-        # Several measured edges can describe the two sides or texture inside
-        # one directly observed separator.  Once the ordinal lattice is the
-        # same, those alternatives are uncertainty about one role position,
-        # not two photo placements.  The connected material identity is the
-        # authority for that statement; proximity or edge strength is not.
-        return (
-            left_binding.observation_id == right_binding.observation_id
-            or left_binding.independent_support_id
-            == right_binding.independent_support_id
-        )
+        # A material component can correlate several measured edges without
+        # making them the same physical coordinate.  Edge-family registration
+        # has already merged fragments that truly own one coordinate, so only
+        # the canonical observation identity may collapse two role bindings.
+        return left_binding.observation_id == right_binding.observation_id
 
     merged_bindings = _continuous_role_bindings(left, right)
     return (

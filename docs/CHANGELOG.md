@@ -112,7 +112,8 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   阻断原因；报告同时保存全局未知量 constraint rank、逐 adjacency query/trace/coordinate coverage 与
   直接角色/外侧 Frame observation authority，以及 dark/light material、逐区域状态和冲突。Debug 不重新
   求解，也不把 review candidate 伪装为正式输出。当前 report revision 为
-  `x5crop_v5_template_report_27`，并显式报告 phase candidate 的直接角色权限、评估/拒绝/role-check
+  `x5crop_v5_template_report_28`，并显式区分直接角色的 coordinate `observation_id` 与相关
+  `evidence_group_id`，同时报告 phase candidate 的直接角色权限、评估/拒绝/role-check
   工作量、连续 lattice 参数依据、三层 source footprint、typed
   saturation、同一状态 cross
   alignment padding、source W/H、相关
@@ -167,6 +168,9 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   验证执行。
 - Full/pre-push 在工程测试前先以只读方式核对当前 Python 环境与 CI 共用的依赖合同；
   版本或模块能力漂移必须在推送前失败，不得留到 GitHub 矩阵暴露。
+- Sequence coordinate identity 由 `observation_id` 唯一拥有；`evidence_group_id` 只负责相关证据去重。
+  Separator 左右侧即使共享 material group 也不得被合并成同一坐标或用于隐藏离散 runner；旧的
+  `independent_support_id` 字段已删除，不保留兼容别名。
 - Registered gray、affine crop buffer 与 source-local cache 按阶段释放；这些优化不得改变 observation、
   placement、Gate、footprint 或输出像素。
 - `tools/verify` 是 Hook、CI 与本地验证的唯一入口。Diagnostic 只证明工程合同；gold accuracy、性能与

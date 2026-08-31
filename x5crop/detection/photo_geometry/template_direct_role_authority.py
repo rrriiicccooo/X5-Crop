@@ -48,6 +48,7 @@ class DirectRoleAuthorityFact:
     lane_ordinal: int
     role: BoundaryRole
     observation_id: ObservationId
+    evidence_group_id: ObservationId
     independent_support_region_count: int
     bases: tuple[DirectRoleAuthorityBasis, ...]
     blocking_material_conflict_ids: tuple[ObservationId, ...]
@@ -64,6 +65,7 @@ class DirectRoleAuthorityFact:
                 else BoundaryRole.END
             )
             or not isinstance(self.observation_id, ObservationId)
+            or not isinstance(self.evidence_group_id, ObservationId)
             or not 1
             <= self.independent_support_region_count
             <= SPATIAL_SUPPORT_REGION_COUNT
@@ -276,6 +278,7 @@ def _assess_direct_role_binding_authority(
     ledger: _DirectRoleAuthorityLedger,
 ) -> DirectRoleBindingAuthority:
     selected: dict[int, BoundaryEdgeObservation] = {}
+    selected_evidence_groups: dict[int, ObservationId] = {}
     for role, binding in zip(fit.template.roles, fit.role_bindings, strict=True):
         if binding is None:
             continue
@@ -283,6 +286,7 @@ def _assess_direct_role_binding_authority(
         if observation is None:
             raise ValueError("selected direct role is absent from the observation ledger")
         selected[role.role_index] = observation
+        selected_evidence_groups[role.role_index] = binding.evidence_group_id
 
     bases: dict[int, set[DirectRoleAuthorityBasis]] = {
         role_index: set() for role_index in selected
@@ -370,6 +374,7 @@ def _assess_direct_role_binding_authority(
             lane_ordinal=role_index // 2 + 1,
             role=(BoundaryRole.START if role_index % 2 == 0 else BoundaryRole.END),
             observation_id=selected[role_index].observation_id,
+            evidence_group_id=selected_evidence_groups[role_index],
             independent_support_region_count=region_counts[role_index],
             bases=tuple(
                 item

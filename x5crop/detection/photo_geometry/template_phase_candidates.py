@@ -43,7 +43,7 @@ _LINEAR_CONSTRAINT_EPSILON_PX = 1.0e-7
 @dataclass(frozen=True)
 class _AnchorFact:
     observation_id: ObservationId
-    independent_support_id: ObservationId
+    evidence_group_id: ObservationId
     interval_px: FiniteInterval
     full_interval_px: FiniteInterval
     role_index: int | None
@@ -124,7 +124,7 @@ def _facts(
         result.append(
             _AnchorFact(
                 observation_id=observation.observation_id,
-                independent_support_id=separator_support_ids.get(
+                evidence_group_id=separator_support_ids.get(
                     observation.observation_id,
                     observation.observation_id,
                 ),
@@ -591,7 +591,7 @@ def _refine_local_role_bindings(
         return SequenceRoleBinding(
             use=SequenceBindingUse.LOCAL_REFINEMENT,
             observation_id=fact.observation_id,
-            independent_support_id=fact.independent_support_id,
+            evidence_group_id=fact.evidence_group_id,
             canonical_position_px=fact.coordinate_px,
             fit_position_interval_px=fact.interval_px,
             full_position_interval_px=fact.full_interval_px,
@@ -611,7 +611,7 @@ def _refine_local_role_bindings(
         other = bindings[other_index]
         if other is None:
             return True
-        if other.independent_support_id == fact.independent_support_id:
+        if other.evidence_group_id == fact.evidence_group_id:
             return False
         if role_index % 2 == 0:
             return width_compatible(
@@ -658,7 +658,7 @@ def _refine_local_role_bindings(
             or right is None
             or left.line_evidence is None
             or right.line_evidence is None
-            or left.independent_support_id != right.independent_support_id
+            or left.evidence_group_id != right.evidence_group_id
         ):
             continue
         left_roles = (
@@ -726,7 +726,7 @@ def _refine_local_role_bindings(
         if end - begin != 1:
             return None
         selected = candidates[begin]
-        if selected.independent_support_id == other.independent_support_id:
+        if selected.evidence_group_id == other.evidence_group_id:
             return None
         return selected
 
@@ -751,7 +751,7 @@ def _refine_local_role_bindings(
             if end == begin:
                 continue
             candidate = ends[begin]
-            if candidate.independent_support_id == start.independent_support_id:
+            if candidate.evidence_group_id == start.evidence_group_id:
                 continue
             if selected is not None:
                 return None
@@ -883,7 +883,7 @@ def _match_roles(
             item
             for item in direct[begin:end]
             if item.observation_id not in used
-            and item.independent_support_id not in used_supports
+            and item.evidence_group_id not in used_supports
             and (
                 fit_residual_limit_px is None
                 or item.fit_residual_px <= fit_residual_limit_px
@@ -980,7 +980,7 @@ def _match_roles(
         list[tuple[TemplateRole, _AnchorFact]],
     ] = {}
     for item in required:
-        required_by_support.setdefault(item[1].independent_support_id, []).append(
+        required_by_support.setdefault(item[1].evidence_group_id, []).append(
             item
         )
     separator_pair_ids = {
@@ -1047,7 +1047,7 @@ def _match_roles(
             for left, right in separator_pairs
             if left.observation_id in end_candidates
             and right.observation_id in start_candidates
-            and left.independent_support_id not in used_supports
+            and left.evidence_group_id not in used_supports
         )
         selected_pair = unique_dominant(
             compatible_pairs,
@@ -1060,7 +1060,7 @@ def _match_roles(
             continue
         left, right = selected_pair
         used.update((left.observation_id, right.observation_id))
-        used_supports.add(left.independent_support_id)
+        used_supports.add(left.evidence_group_id)
         used_roles.update((end_role.role_index, start_role.role_index))
         selected.extend(((end_role, left), (start_role, right)))
 
@@ -1134,7 +1134,7 @@ def _match_roles(
             start, end = selected_pair
             used.update((start.observation_id, end.observation_id))
             used_supports.update(
-                (start.independent_support_id, end.independent_support_id)
+                (start.evidence_group_id, end.evidence_group_id)
             )
             used_roles.update((start_role.role_index, end_role.role_index))
             selected.extend(((start_role, start), (end_role, end)))
@@ -1163,7 +1163,7 @@ def _match_roles(
             ):
                 continue
             used.add(chosen.observation_id)
-            used_supports.add(chosen.independent_support_id)
+            used_supports.add(chosen.evidence_group_id)
             used_roles.add(role.role_index)
             selected.append((role, chosen))
     return tuple(sorted(selected, key=lambda item: item[0].role_index))
@@ -1651,7 +1651,7 @@ def _fit_seed(
                 SequenceRoleBinding(
                     use=SequenceBindingUse.PHASE_ANCHOR,
                     observation_id=observed.observation_id,
-                    independent_support_id=observed.independent_support_id,
+                    evidence_group_id=observed.evidence_group_id,
                     canonical_position_px=observed.coordinate_px,
                     fit_position_interval_px=observed.interval_px,
                     full_position_interval_px=observed.full_interval_px,

@@ -84,6 +84,7 @@ def _with_partial_height_role_authority(phase):
                 lane_ordinal=1,
                 role=BoundaryRole.START,
                 observation_id=ObservationId("edge:start"),
+                evidence_group_id=ObservationId("evidence-group:start"),
                 independent_support_region_count=2,
                 bases=(
                     DirectRoleAuthorityBasis.PARTIAL_HEIGHT_SEPARATOR_PAIR,

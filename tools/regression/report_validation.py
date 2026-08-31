@@ -627,6 +627,7 @@ def _validate_direct_role_binding_authority(value: object) -> None:
             "lane_ordinal",
             "role",
             "observation_id",
+            "evidence_group_id",
             "independent_support_region_count",
             "bases",
             "blocking_material_conflict_ids",
@@ -645,6 +646,8 @@ def _validate_direct_role_binding_authority(value: object) -> None:
             or fact["role"] != ("start" if index % 2 == 0 else "end")
             or not isinstance(fact["observation_id"], str)
             or not fact["observation_id"]
+            or not isinstance(fact["evidence_group_id"], str)
+            or not fact["evidence_group_id"]
             or fact["independent_support_region_count"] not in {1, 2, 3}
             or not isinstance(bases, list)
             or bases != list(dict.fromkeys(bases))

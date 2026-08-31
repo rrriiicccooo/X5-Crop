@@ -78,6 +78,7 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
                     else BoundaryRole.END
                 ),
                 observation_id=ObservationId(f"sequence:{index}"),
+                evidence_group_id=ObservationId(f"sequence:{index}"),
                 independent_support_region_count=(2 if index == 4 else 3),
                 bases=(
                     ()

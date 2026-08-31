@@ -341,7 +341,7 @@ def placement_sequence(
         else SequenceRoleBinding(
             use=SequenceBindingUse.PHASE_ANCHOR,
             observation_id=identity,
-            independent_support_id=identity,
+            evidence_group_id=identity,
             canonical_position_px=positions[index],
             fit_position_interval_px=FiniteInterval.exact(positions[index]),
             full_position_interval_px=FiniteInterval.exact(positions[index]),

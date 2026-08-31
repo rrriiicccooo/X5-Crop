@@ -148,6 +148,25 @@ sequence/cross provenance，`CanonicalPlacement` 使用 `FormatPlacement`。不�
 或在满足完整 enclosing 合同时成为输出边界。同一 raw observation 可以承担多个职责，但 identity
 只有一个，不能重复计为独立证据。
 
+Sequence 的坐标身份与证据相关性是两种不同事实。`observation_id` 是 edge-family registration 后唯一
+能够表示同一物理坐标的 identity；`evidence_group_id` 只表示多条 edge 共享同一 material/transition
+证据，需要在 phase、pitch、W 与 constraint rank 中去重。一个 separator 的左右两侧拥有不同
+`observation_id`，但可以共享同一 `evidence_group_id`。相关组不能把两个坐标合并成连续 placement、
+生成中间位置或隐藏 runner；缺少相同 `observation_id` 时必须保持离散竞争。Production 不保留旧的
+`independent_support_id` 同义字段。
+
+| 两个 role binding | 坐标关系 | 证据关系 | placement 行为 |
+|---|---|---|---|
+| 相同 `observation_id` | 同一 canonical coordinate | 必然相关 | 可以合并同一连续 placement |
+| 不同 `observation_id`、相同 `evidence_group_id` | 两个物理坐标 | 相关，只计一组独立 evidence | 保留离散竞争，不得合并 |
+| 不同 `observation_id`、不同 `evidence_group_id` | 两个物理坐标 | 独立 | 保留离散竞争并分别计证据 |
+
+Edge-family registration 是 `observation_id` 的 owner；`template_phase_candidates.py` 只把已登记的
+separator material/component 映射成 `evidence_group_id`，并由 `SequenceRoleBinding` 同时保存两种身份。
+`template_phase.py` 只读取 coordinate identity 判断连续 placement；phase、pitch、W 与 lattice rank
+只读取 evidence group 去重。无法满足第一行时，Gate 通过现有 `discrete_phase_ambiguous` 保持 review，
+不增加 proximity、residual 或 score 旁路。
+
 ## 4. Source-axis placement 与可选 deskew
 
 检测中的 placement 没有角度自由度。每个 lane 独立拥有 phase、pitch、cross offset 和有界 local
@@ -834,6 +853,7 @@ Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决
 
 - theoretical template、role-free observations 与跨高度联合观察的 typed resolution；
 - dark/light separator material、逐区域状态、直接角色权限与 material conflict；
+- 每个直接角色的 coordinate `observation_id`、`evidence_group_id` 与 separator side provenance；
 - `partial_height_separator_pair` 角色数、direct aperture domain 条件与对应 typed Gate；
 - source W proof 的支持 Frame、相关推导角色、validation-only 局部角色及其 observation provenance；
 - 每个 bound role 的 residual 和 normal/measured-advances/unresolved pattern；
@@ -917,7 +937,8 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source W/H extent、scan-scale authority 与不增加 direct provenance 的相关 interval 收紧 |
 | `photo_geometry/template_frame_width.py` | selected placement 后的 source W 校准、无权局部 refinement 让位与相关单侧角色推断 |
 | `photo_geometry/template_aspect_ratio_model.py`、`template_aspect_ratio.py` | 校准 W/H 比例的 typed authority、相关 H 推断、direct H 对账与预算失败 |
-| `photo_geometry/template_phase*.py`、`template_pitch.py`、`template_residual.py` | phase/ordinal 求解、source pitch 与逐 adjacency 的 direct local advance |
+| `photo_geometry/template_phase_candidates.py`、`template_model.py` | Sequence coordinate `observation_id`、相关 `evidence_group_id` 与 role binding 的唯一映射和类型 owner |
+| `photo_geometry/template_phase.py`、`template_pitch.py`、`template_residual.py` | phase/ordinal 求解、连续 placement identity、source pitch 与逐 adjacency 的 direct local advance |
 | `photo_geometry/template_direct_role_authority.py` | 每个 bounded phase candidate 与最终已选 START/END 的 native-coordinate 权限证明及共享 evidence ledger |
 | `photo_geometry/template_lattice_authority.py` | `(phase, W, pitch)` 直接约束矩阵与独立闭合证明 |
 | `photo_geometry/template_adjacency_coverage.py` | selected adjacency 合法走廊到既有 query/trace/coordinate 的覆盖证明 |

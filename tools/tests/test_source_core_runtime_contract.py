@@ -20,7 +20,10 @@ from x5crop.detection.decision.vocabulary import (
     FINAL_REASON_NO_LEGAL_PLACEMENT,
 )
 from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
-from tools.regression.report_validation import validate_current_report_record
+from tools.regression.report_validation import (
+    _validate_direct_role_binding_authority,
+    validate_current_report_record,
+)
 from x5crop.run_config import RunConfig
 from x5crop.runtime.invocation import PlannedSource
 from x5crop.runtime.bootstrap import run_options
@@ -189,6 +192,34 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         record["output"]["tiff_fidelity"]["validation"] = "pixel_validated"
         with self.assertRaises(ValueError):
             validate_current_report_record(record)
+
+    def test_direct_role_report_separates_coordinate_and_evidence_group(self) -> None:
+        authority = {
+            "state": "supported",
+            "facts": [
+                {
+                    "role_index": 0,
+                    "lane_ordinal": 1,
+                    "role": "start",
+                    "observation_id": "boundary-edge:1",
+                    "evidence_group_id": "separator-component:1",
+                    "independent_support_region_count": 3,
+                    "bases": ["source_wide_edge"],
+                    "blocking_material_conflict_ids": [],
+                    "state": "supported",
+                }
+            ],
+            "unsupported_role_indices": [],
+            "reason": None,
+        }
+        _validate_direct_role_binding_authority(authority)
+
+        del authority["facts"][0]["evidence_group_id"]
+        with self.assertRaisesRegex(
+            ValueError,
+            "direct-role authority fact is invalid",
+        ):
+            _validate_direct_role_binding_authority(authority)
 
     def test_scan_canvas_contradiction_is_review_not_runtime_error(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

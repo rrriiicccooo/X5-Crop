@@ -599,6 +599,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
         summary = alignment_summary(detection)
         self.assertTrue(summary.startswith("ALIGNMENT · "))
         self.assertIn(" · DIRECT ", summary)
+        self.assertRegex(summary, r" · DIRECT \d+/\d+ G\d+ · ")
         self.assertIn(" · OUTER ", summary)
         self.assertIn(" · SEP D ", summary)
         self.assertIn(" · JOINT ", summary)

@@ -116,7 +116,7 @@ def close_separator_phase_hypothesis(
             fit.phase_lattice_fit.absolute_phase_interval_px,
         )
         is None
-        or not set(fit.independent_support_ids).difference(
+        or not set(fit.evidence_group_ids).difference(
             calibration.direct_separator_ids
         )
     ):

@@ -52,7 +52,7 @@ def calibrate_source_frame_width(
         if (
             start is None
             or end is None
-            or start.independent_support_id == end.independent_support_id
+            or start.evidence_group_id == end.evidence_group_id
         ):
             continue
         start_edge = by_id[start.observation_id]
@@ -126,7 +126,7 @@ def _supporting_frame_ordinals(
         if (
             start is None
             or end is None
-            or start.independent_support_id == end.independent_support_id
+            or start.evidence_group_id == end.evidence_group_id
             or start.observation_id not in registered
             or end.observation_id not in registered
         ):
@@ -225,7 +225,7 @@ def _yield_local_roles_to_correlated_width(
             or not set(end_fact.bases) & _INDEPENDENT_WIDTH_ROLE_BASES
             or start.observation_id not in width_ids
             or end.observation_id not in width_ids
-            or start.independent_support_id == end.independent_support_id
+            or start.evidence_group_id == end.evidence_group_id
         ):
             continue
         strong_frames.append(slot_index + 1)

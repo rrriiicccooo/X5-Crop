@@ -600,7 +600,7 @@ def prepare_template_lane(
                     *(
                         ()
                         if base_phase.best is None
-                        else base_phase.best.independent_support_ids
+                        else base_phase.best.evidence_group_ids
                     ),
                 )
             )

@@ -222,6 +222,11 @@ def alignment_summary(detection: FinalDetection) -> str:
             else len(direct.facts) - len(direct.unsupported_role_indices)
         )
         direct_total = 0 if direct is None else len(direct.facts)
+        direct_evidence_group_count = (
+            0
+            if direct is None
+            else len({item.evidence_group_id for item in direct.facts})
+        )
         direct_aperture_required = (
             0
             if direct is None
@@ -278,7 +283,8 @@ def alignment_summary(detection: FinalDetection) -> str:
         proof = (
             f"GLOBAL {rank}/3 · ADJ "
             f"{complete_coverage}/{len(inferred_coverage)} · DIRECT "
-            f"{direct_supported}/{direct_total} · APERTURE DOMAIN "
+            f"{direct_supported}/{direct_total} G{direct_evidence_group_count} · "
+            f"APERTURE DOMAIN "
             f"{direct_aperture_required} · OUTER "
             f"{outer_count}/2 · W {width_proof} · SEP "
             f"D {separator_counts['dark'][0]}/{separator_counts['dark'][1]}"
