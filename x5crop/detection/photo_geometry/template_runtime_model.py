@@ -46,6 +46,7 @@ from .template_cross_model import (
     TemplateCrossInput,
 )
 from .template_evidence import EvidenceUseFact
+from .template_frame_width import SourceFrameWidthAuthority
 from .template_holder_fill import HolderFillAssessment
 from .template_model import TemplateSpec
 from .template_measurement_plan_model import TemplateMeasurementPlan
@@ -352,6 +353,7 @@ class PreparedTemplateLane(RegisteredTemplateLane):
 
     template_spec: TemplateSpec
     source_scan_geometry: SourceScanGeometry
+    source_frame_width_authority: SourceFrameWidthAuthority
     phase_input: TemplatePhaseInput
     cross_input: TemplateCrossInput
     phase_competition: PhaseFitResult
@@ -368,6 +370,19 @@ class PreparedTemplateLane(RegisteredTemplateLane):
             raise ValueError("prepared template must retain compiled identity")
         if not isinstance(self.source_scan_geometry, SourceScanGeometry):
             raise TypeError("prepared template lane requires source geometry")
+        if not isinstance(
+            self.source_frame_width_authority,
+            SourceFrameWidthAuthority,
+        ):
+            raise TypeError("prepared template lane requires source W authority")
+        width_ids = self.source_scan_geometry.width_state.observation_ids
+        if (
+            self.source_frame_width_authority.state == EvidenceState.SUPPORTED
+        ) != bool(width_ids) or (
+            self.source_frame_width_authority.state == EvidenceState.SUPPORTED
+            and self.source_frame_width_authority.observation_ids != width_ids
+        ):
+            raise ValueError("source geometry and source W authority disagree")
         if not isinstance(self.phase_input, TemplatePhaseInput):
             raise TypeError("prepared template lane requires its exact phase input")
         if not isinstance(self.cross_input, TemplateCrossInput):

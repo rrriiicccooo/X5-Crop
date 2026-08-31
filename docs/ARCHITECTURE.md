@@ -333,10 +333,11 @@ role = phase
   `(phase, W, source_pitch)`。无约束最小二乘若落在已编译的 phase、W、pitch 与
   `pitch-W` 全部区间内，记录 `direct_least_squares`；若只越过这些硬区间，求解器在同一可行集合内取得
   最近的 `bounded_direct_least_squares`，不能把 W/pitch 整体退回 catalog 中心后继续沿用不相容的
-  phase。同一离散 placement 经 source pitch、source W 或 local advance 重拟合时，报告保留该连续
+  phase。同一离散 placement 经候选无关 source pitch 或 local advance 重拟合时，报告保留该连续
   lineage 中约束最强的一次参数依据；只有 template 身份、ordinal offset、phase 区间及共享
   observation-role 映射一致才允许继承，runner 之间不能串用。区间不会扩张，直接 role 的 native
-  coordinate 也不会被拟合值覆盖。受约束后仍存在另一离散
+  coordinate 也不会被拟合值覆盖。Source W 只能在离散与 local competition 已唯一结束后收紧 selected
+  fit 的连续 W，不属于候选重拟合，不能改变 lineage、ordinal、winner 或 runner。受约束后仍存在另一离散
   ordinal/edge 解释时保留 runner 并产生 `discrete_phase_ambiguous`；连续最小二乘不能充当 best-score。
 
 Production phase competition 在离散比较前，对每个去重后的 bounded candidate 对称执行
@@ -373,8 +374,12 @@ Production phase competition 在离散比较前，对每个去重后的 bounded 
   observation，所有 phase、pitch 与 role interval 都相交，且同一 role 没有绑定不同物理 support，
   它们是一个连续 placement 的联合证据，不是 runner。合并只取联合可行区间与 observation 并集；
   ordinal、support identity 或 local relation 不同仍是离散竞争。
-- Placement、local topology、全局 lattice、逐 adjacency coverage 和两端 Frame authority 全部闭合后，
-  至少两张具有独立直接双边的完整 Frame 可以收紧该 source 的共同 W。所有物理相容的完整 Frame 都以
+- 离散 placement 与 local topology 必须先在没有 source W evidence 的候选空间中唯一闭合。随后对 selected
+  candidate 评估直接角色权限、pre-W lattice rank、逐 adjacency coverage 和两端 Frame authority；pre-W
+  joint rank 至少为 2、所有必要 coverage 完整且没有直接反证时，至少两张具有独立直接双边的完整 Frame
+  才可建立一份 `SourceFrameWidthAuthority`，收紧 selected fit 的连续 W，并在最终阶段重新评估 rank 3、
+  opposite inference 与 Gate。W 不得重编译 template、重新搜索 phase、删除 runner、改变 ordinal 或把
+  自己写回候选选择证据。所有物理相容的完整 Frame 都以
   完整 uncertainty 进入一个保守 hull；非相邻 Frame 同样有效，不挑 dominant subset、不取中位 winner，
   也不覆盖任何已经取得坐标权限的直接边界。若每个仍缺角色的 Frame 都至少有一侧直接边缘，同一份相关
   W 可以推导多条 opposite；这些推导不是多份独立证据。一个仅由两高度局部 support 形成、没有直接坐标
@@ -384,6 +389,9 @@ Production phase competition 在离散比较前，对每个去重后的 bounded 
 
 | source W 与缺失角色状态 | 结果 |
 |---|---|
+| 离散 placement 仍有 runner、pre-W rank < 2、必要 adjacency coverage 不完整、外侧 Frame authority 不足或存在直接反证 | `SourceFrameWidthAuthority` 保存对应 typed failure；source geometry 与候选均不改变 |
+| 唯一 placement、pre-W rank = 2、必要 coverage/outer 完整、无反证，且至少两张独立完整 Frame | 建立 selected-only source W；它可以补最后一个 rank，但不能参与先前的候选选择 |
+| pre-W rank = 3 且其它条件完整 | source W 只收紧 selected continuous W 并提供相关推断，不增加新的离散选择权限 |
 | 没有缺失角色 | 不需要 W 推断，全部直接 native coordinate 保持不变 |
 | 至少两张完整直接 Frame 闭合共同 W，且每个缺失 Frame 仍有一侧直接边缘 | `supported`；同一相关 W 补齐全部 opposite |
 | 无权 `LOCAL_REFINEMENT`，opposite 已授权，W 来自至少两张其它双边授权 Frame，且 W 走廊中只有该线相容 | 该角色成为 `validation_only`；完整相关 W 推导坐标，记录 role index 与 validation observation ID |
@@ -855,7 +863,8 @@ Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决
 - dark/light separator material、逐区域状态、直接角色权限与 material conflict；
 - 每个直接角色的 coordinate `observation_id`、`evidence_group_id` 与 separator side provenance；
 - `partial_height_separator_pair` 角色数、direct aperture domain 条件与对应 typed Gate；
-- source W proof 的支持 Frame、相关推导角色、validation-only 局部角色及其 observation provenance；
+- selected-only source W authority 的 selected signature、支持 Frame、W interval、typed failure，及相关
+  推导角色、validation-only 局部角色与 observation provenance；
 - 每个 bound role 的 residual 和 normal/measured-advances/unresolved pattern；
 - direct 与 inferred 边界；
 - best、runner 及真正不同之处；
@@ -935,7 +944,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/registered_*.py`、`observations.py`、`separator_*.py` | 一次性 measurement、role-free edge 与 material band |
 | `photo_geometry/cross_height_transition_measurement.py`、`cross_height_edge_support.py` | 三区域弱信号联合测量及其与唯一 direct edge 的单次绑定权限 |
 | `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source W/H extent、scan-scale authority 与不增加 direct provenance 的相关 interval 收紧 |
-| `photo_geometry/template_frame_width.py` | selected placement 后的 source W 校准、无权局部 refinement 让位与相关单侧角色推断 |
+| `photo_geometry/template_frame_width.py` | selected-only `SourceFrameWidthAuthority`、source W 校准、无权局部 refinement 让位与相关单侧角色推断；不得参与候选选择或重编译 template |
 | `photo_geometry/template_aspect_ratio_model.py`、`template_aspect_ratio.py` | 校准 W/H 比例的 typed authority、相关 H 推断、direct H 对账与预算失败 |
 | `photo_geometry/template_phase_candidates.py`、`template_model.py` | Sequence coordinate `observation_id`、相关 `evidence_group_id` 与 role binding 的唯一映射和类型 owner |
 | `photo_geometry/template_phase.py`、`template_pitch.py`、`template_residual.py` | phase/ordinal 求解、连续 placement identity、source pitch 与逐 adjacency 的 direct local advance |

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from enum import Enum
 
 from ...domain import EvidenceState, FiniteInterval, ObservationId
 from .observation_types import BoundaryEdgeObservation
+from .physical_identity import physical_fact_id
 from .source_geometry import SourceScanGeometry
+from .template_adjacency_coverage import AdjacencyCoverageState
 from .template_direct_role_authority import (
     DirectRoleAuthorityBasis,
     DirectRoleBindingAuthority,
@@ -20,41 +23,227 @@ from .template_model import (
 from .template_phase_model import PhaseFitResult, PhaseFitStatus
 
 
+_INDEPENDENT_WIDTH_ROLE_BASES = frozenset(
+    {
+        DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE,
+        DirectRoleAuthorityBasis.CROSS_HEIGHT_UNION,
+        DirectRoleAuthorityBasis.SEPARATOR_PAIR,
+    }
+)
+
+
+class SourceFrameWidthAuthorityFailureKind(str, Enum):
+    """Why selected-only source W cannot be established."""
+
+    UNIQUE_PLACEMENT_UNAVAILABLE = "unique_placement_unavailable"
+    DIRECT_ROLE_AUTHORITY_UNAVAILABLE = "direct_role_authority_unavailable"
+    DIRECT_ROLE_AUTHORITY_CONTRADICTED = "direct_role_authority_contradicted"
+    GLOBAL_LATTICE_RANK_INSUFFICIENT = "global_lattice_rank_insufficient"
+    ADJACENCY_COVERAGE_INCOMPLETE = "adjacency_coverage_incomplete"
+    OUTER_FRAME_AUTHORITY_UNAVAILABLE = "outer_frame_authority_unavailable"
+    INDEPENDENT_COMPLETE_FRAMES_UNAVAILABLE = (
+        "independent_complete_frames_unavailable"
+    )
+    PHYSICAL_WIDTH_CONFLICT = "physical_width_conflict"
+
+
+@dataclass(frozen=True)
+class SourceFrameWidthAuthority:
+    """One source W derived only after discrete placement is fixed."""
+
+    authority_id: str
+    state: EvidenceState
+    selected_integer_slot_offset: int | None
+    selected_role_observation_ids: tuple[ObservationId | None, ...]
+    supporting_frame_ordinals: tuple[int, ...]
+    width_px: FiniteInterval | None
+    canonical_width_px: float | None
+    observation_ids: tuple[ObservationId, ...]
+    failure_kind: SourceFrameWidthAuthorityFailureKind | None
+    reason: str | None
+
+    def __post_init__(self) -> None:
+        supported = self.state == EvidenceState.SUPPORTED
+        failed = self.state in {
+            EvidenceState.UNAVAILABLE,
+            EvidenceState.CONTRADICTED,
+        }
+        if (
+            not self.authority_id
+            or not (supported or failed)
+            or tuple(sorted(set(self.supporting_frame_ordinals)))
+            != self.supporting_frame_ordinals
+            or any(ordinal <= 0 for ordinal in self.supporting_frame_ordinals)
+            or len(set(self.observation_ids)) != len(self.observation_ids)
+            or tuple(sorted(self.observation_ids, key=str))
+            != self.observation_ids
+            or any(
+                identity is not None and not isinstance(identity, ObservationId)
+                for identity in self.selected_role_observation_ids
+            )
+            or any(
+                not isinstance(identity, ObservationId)
+                for identity in self.observation_ids
+            )
+            or supported
+            != (
+                self.selected_integer_slot_offset is not None
+                and bool(self.selected_role_observation_ids)
+                and len(self.supporting_frame_ordinals) >= 2
+                and isinstance(self.width_px, FiniteInterval)
+                and self.canonical_width_px is not None
+                and self.width_px.contains(
+                    float(self.canonical_width_px), epsilon=1.0e-9
+                )
+                and len(self.observation_ids) >= 4
+                and self.failure_kind is None
+                and self.reason is None
+            )
+            or failed
+            != (
+                self.width_px is None
+                and self.canonical_width_px is None
+                and not self.observation_ids
+                and isinstance(
+                    self.failure_kind,
+                    SourceFrameWidthAuthorityFailureKind,
+                )
+                and bool(self.reason)
+            )
+        ):
+            raise ValueError("source Frame-width authority is invalid")
+
+
+def _failed_source_width_authority(
+    phase: PhaseFitResult,
+    state: EvidenceState,
+    failure_kind: SourceFrameWidthAuthorityFailureKind,
+    reason: str,
+) -> SourceFrameWidthAuthority:
+    fit = phase.best
+    return SourceFrameWidthAuthority(
+        authority_id=physical_fact_id(
+            "source-frame-width-authority",
+            phase.template.template_id,
+            phase.status.value,
+            failure_kind.value,
+            () if fit is None else fit.binding_observation_ids,
+        ),
+        state=state,
+        selected_integer_slot_offset=None,
+        selected_role_observation_ids=(),
+        supporting_frame_ordinals=(),
+        width_px=None,
+        canonical_width_px=None,
+        observation_ids=(),
+        failure_kind=failure_kind,
+        reason=reason,
+    )
+
+
 def calibrate_source_frame_width(
     source_geometry: SourceScanGeometry,
     phase: PhaseFitResult,
     sequence_edges: tuple[BoundaryEdgeObservation, ...],
-    *,
-    holder_span_px: FiniteInterval,
-) -> SourceScanGeometry:
-    """Narrow source W from every compatible complete direct Frame.
+) -> tuple[SourceScanGeometry, SourceFrameWidthAuthority]:
+    """Narrow source W from authorized Frames after candidate selection.
 
-    A uniquely resolved placement establishes ordinal ownership before this
-    operation runs.  All complete direct Frames then contribute one retained
-    hull, including non-adjacent Frames and their full measurement
-    uncertainty.  No dominant subset, median, or catalogue projection may
-    overwrite a native direct boundary.
+    The candidate has already fixed ordinal ownership and exposed direct-role,
+    coverage, outer and pre-W lattice assessments.  Source W may add one
+    correlated constraint afterwards; it never recompiles the template,
+    deletes a runner or changes the selected ordinal mapping.
     """
 
     fit = phase.best
     if phase.status != PhaseFitStatus.RESOLVED or fit is None:
-        return source_geometry
+        return source_geometry, _failed_source_width_authority(
+            phase,
+            EvidenceState.UNAVAILABLE,
+            SourceFrameWidthAuthorityFailureKind.UNIQUE_PLACEMENT_UNAVAILABLE,
+            "source W requires one uniquely resolved discrete placement",
+        )
+    direct = phase.direct_role_binding_authority
+    if direct is None:
+        return source_geometry, _failed_source_width_authority(
+            phase,
+            EvidenceState.UNAVAILABLE,
+            SourceFrameWidthAuthorityFailureKind.DIRECT_ROLE_AUTHORITY_UNAVAILABLE,
+            "source W requires typed direct-role authority facts",
+        )
+    if direct.state == EvidenceState.CONTRADICTED:
+        return source_geometry, _failed_source_width_authority(
+            phase,
+            EvidenceState.CONTRADICTED,
+            SourceFrameWidthAuthorityFailureKind.DIRECT_ROLE_AUTHORITY_CONTRADICTED,
+            "source W cannot consume a material-contradicted role binding",
+        )
+    lattice = phase.global_lattice_authority
+    if lattice is None or lattice.joint_constraint_rank < 2:
+        return source_geometry, _failed_source_width_authority(
+            phase,
+            EvidenceState.UNAVAILABLE,
+            SourceFrameWidthAuthorityFailureKind.GLOBAL_LATTICE_RANK_INSUFFICIENT,
+            "source W may close only the final unknown of an already rank-2 lattice",
+        )
+    inferred_coverage = tuple(
+        item
+        for item in phase.adjacency_observation_coverage
+        if item.normal_inference_required
+    )
+    if any(
+        item.state != AdjacencyCoverageState.COMPLETE
+        for item in inferred_coverage
+    ):
+        return source_geometry, _failed_source_width_authority(
+            phase,
+            EvidenceState.UNAVAILABLE,
+            SourceFrameWidthAuthorityFailureKind.ADJACENCY_COVERAGE_INCOMPLETE,
+            "source W requires complete coverage for every inferred adjacency",
+        )
+    outer = phase.outer_frame_observation_authority
+    if inferred_coverage and (
+        outer is None or outer.state != EvidenceState.SUPPORTED
+    ):
+        return source_geometry, _failed_source_width_authority(
+            phase,
+            EvidenceState.UNAVAILABLE,
+            SourceFrameWidthAuthorityFailureKind.OUTER_FRAME_AUTHORITY_UNAVAILABLE,
+            "source W cannot create an unobserved outer Frame",
+        )
     by_id = {item.observation_id: item for item in sequence_edges}
+    facts = {item.role_index: item for item in direct.facts}
     physical = source_geometry.width_state.extent_projection_px()
     spans: list[
-        tuple[FiniteInterval, tuple[ObservationId, ObservationId]]
+        tuple[int, FiniteInterval, tuple[ObservationId, ObservationId]]
     ] = []
-    for start, end in zip(
-        fit.role_bindings[0::2],
-        fit.role_bindings[1::2],
-        strict=True,
+    for frame_index, (start, end) in enumerate(
+        zip(
+            fit.role_bindings[0::2],
+            fit.role_bindings[1::2],
+            strict=True,
+        )
     ):
+        start_index = 2 * frame_index
+        end_index = start_index + 1
+        start_fact = facts.get(start_index)
+        end_fact = facts.get(end_index)
         if (
             start is None
             or end is None
+            or start_fact is None
+            or end_fact is None
+            or start_fact.state != EvidenceState.SUPPORTED
+            or end_fact.state != EvidenceState.SUPPORTED
+            or not set(start_fact.bases) & _INDEPENDENT_WIDTH_ROLE_BASES
+            or not set(end_fact.bases) & _INDEPENDENT_WIDTH_ROLE_BASES
             or start.evidence_group_id == end.evidence_group_id
         ):
             continue
+        if (
+            start.observation_id not in by_id
+            or end.observation_id not in by_id
+        ):
+            raise ValueError("source W binding leaves the observation ledger")
         start_edge = by_id[start.observation_id]
         end_edge = by_id[end.observation_id]
         if fit.template.direction > 0:
@@ -73,42 +262,124 @@ def calibrate_source_frame_width(
             )
         minimum = max(measured.minimum, physical.minimum)
         maximum = min(measured.maximum, physical.maximum)
-        if maximum >= minimum:
-            spans.append(
-                (
-                    FiniteInterval(minimum, maximum),
-                    (start.observation_id, end.observation_id),
-                )
+        if maximum < minimum:
+            return source_geometry, _failed_source_width_authority(
+                phase,
+                EvidenceState.CONTRADICTED,
+                SourceFrameWidthAuthorityFailureKind.PHYSICAL_WIDTH_CONFLICT,
+                "an authorized complete Frame contradicts the physical W interval",
             )
+        spans.append(
+            (
+                frame_index + 1,
+                FiniteInterval(minimum, maximum),
+                (start.observation_id, end.observation_id),
+            )
+        )
     if len(spans) < 2:
-        return source_geometry
+        return source_geometry, _failed_source_width_authority(
+            phase,
+            EvidenceState.UNAVAILABLE,
+            SourceFrameWidthAuthorityFailureKind.INDEPENDENT_COMPLETE_FRAMES_UNAVAILABLE,
+            "source W requires at least two independently authorized complete Frames",
+        )
     observed = FiniteInterval(
-        min(item[0].minimum for item in spans),
-        max(item[0].maximum for item in spans),
+        min(item[1].minimum for item in spans),
+        max(item[1].maximum for item in spans),
     )
-    full_span_minimum = (
-        observed.minimum
-        + fit.pitch_fit.pitch_interval_px.minimum
-        * max(0, fit.template.count - 1)
-    )
-    if full_span_minimum > holder_span_px.width * 1.04:
-        return source_geometry
     identities = tuple(
-        dict.fromkeys(
-            identity
-            for _interval, pair in spans
-            for identity in pair
+        sorted(
+            {
+                identity
+                for _ordinal, _interval, pair in spans
+                for identity in pair
+            },
+            key=str,
         )
     )
-    width_state = source_geometry.width_state.intersect_observed_extent(
-        observed,
-        observation_ids=identities,
-    )
-    return SourceScanGeometry.from_axis_states(
+    try:
+        width_state = source_geometry.width_state.intersect_observed_extent(
+            observed,
+            observation_ids=identities,
+        )
+    except ValueError:
+        return source_geometry, _failed_source_width_authority(
+            phase,
+            EvidenceState.CONTRADICTED,
+            SourceFrameWidthAuthorityFailureKind.PHYSICAL_WIDTH_CONFLICT,
+            "authorized Frame widths have no common physical source state",
+        )
+    calibrated = SourceScanGeometry.from_axis_states(
         source_geometry.frame_spec,
         width_state,
         source_geometry.height_state,
     )
+    width_px = width_state.extent_projection_px()
+    _scale, normalized, _factor = width_state.canonical_state()
+    canonical_width_px = width_state.design_extent_mm * normalized
+    authority = SourceFrameWidthAuthority(
+        authority_id=physical_fact_id(
+            "source-frame-width-authority",
+            phase.template.template_id,
+            fit.phase_lattice_fit.integer_slot_offset,
+            fit.binding_observation_ids,
+            tuple(item[0] for item in spans),
+            width_px,
+            identities,
+        ),
+        state=EvidenceState.SUPPORTED,
+        selected_integer_slot_offset=(
+            fit.phase_lattice_fit.integer_slot_offset
+        ),
+        selected_role_observation_ids=fit.binding_observation_ids,
+        supporting_frame_ordinals=tuple(item[0] for item in spans),
+        width_px=width_px,
+        canonical_width_px=canonical_width_px,
+        observation_ids=identities,
+        failure_kind=None,
+        reason=None,
+    )
+    return calibrated, authority
+
+
+def apply_selected_source_frame_width(
+    phase: PhaseFitResult,
+    authority: SourceFrameWidthAuthority,
+) -> PhaseFitResult:
+    """Narrow only the selected fit's continuous W; preserve every runner."""
+
+    if authority.state != EvidenceState.SUPPORTED:
+        return phase
+    fit = phase.best
+    if phase.status != PhaseFitStatus.RESOLVED or fit is None:
+        raise ValueError("supported source W requires its selected placement")
+    if (
+        authority.selected_integer_slot_offset
+        != fit.phase_lattice_fit.integer_slot_offset
+        or authority.selected_role_observation_ids
+        != fit.binding_observation_ids
+    ):
+        raise ValueError("source W authority belongs to a different placement")
+    assert authority.width_px is not None
+    assert authority.canonical_width_px is not None
+    old_width = fit.pitch_fit.frame_width_px
+    minimum = max(old_width.minimum, authority.width_px.minimum)
+    maximum = min(old_width.maximum, authority.width_px.maximum)
+    if maximum < minimum:
+        raise ValueError("selected source W contradicts the fitted width interval")
+    selected_width = FiniteInterval(minimum, maximum)
+    canonical = authority.canonical_width_px
+    if not selected_width.contains(canonical, epsilon=1.0e-9):
+        raise ValueError("selected source W canonical state leaves the fit interval")
+    selected = replace(
+        fit,
+        pitch_fit=replace(
+            fit.pitch_fit,
+            frame_width_px=selected_width,
+            canonical_frame_width_px=canonical,
+        ),
+    )
+    return replace(phase, best=selected)
 
 
 def _supporting_frame_ordinals(
@@ -133,15 +404,6 @@ def _supporting_frame_ordinals(
             continue
         ordinals.append(frame_ordinal)
     return tuple(ordinals)
-
-
-_INDEPENDENT_WIDTH_ROLE_BASES = frozenset(
-    {
-        DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE,
-        DirectRoleAuthorityBasis.CROSS_HEIGHT_UNION,
-        DirectRoleAuthorityBasis.SEPARATOR_PAIR,
-    }
-)
 
 
 def _predicted_role_interval_from_opposite(
@@ -398,5 +660,8 @@ def apply_correlated_frame_width_inference(
 
 __all__ = [
     "apply_correlated_frame_width_inference",
+    "apply_selected_source_frame_width",
     "calibrate_source_frame_width",
+    "SourceFrameWidthAuthority",
+    "SourceFrameWidthAuthorityFailureKind",
 ]

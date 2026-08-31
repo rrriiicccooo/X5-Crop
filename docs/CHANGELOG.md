@@ -43,6 +43,12 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   同一 adjacency 的另一侧传递一次 `partial_height_separator_pair` 权限；传递不能级联，且最终必须使用
   两侧直接的 `aperture_pair` 短轴域。Enclosing support 或单侧推断 aperture 产生 typed
   `direct_role_aperture_domain_unavailable`，不能把两个不完整机制叠加成批准。
+- Source W 不再由 provisional/base phase 预先校准后重编译 template，也不再形成第二次 pitch/phase 搜索。
+  离散与 local competition 先在没有 source W evidence 的同一候选空间中结束；只有唯一 selected candidate、
+  pre-W joint rank 至少为 2、必要 adjacency coverage/outer authority 完整且没有直接反证时，至少两张独立
+  完整 Frame 才建立 typed `SourceFrameWidthAuthority`。它只收紧 selected fit 的连续 W，并在最终阶段
+  重新评估 rank 与相关 opposite inference；不能删除 runner、改变 ordinal/winner、重编译 template 或
+  回写候选选择。未支持与矛盾状态均进入 report/Debug，不建立旧 API、fallback 或并行 runtime。
 - Rank 3 直接坐标现在在 phase、W、pitch 与 `pitch-W` 的联合硬区间内执行有界最小二乘。无约束解轻微
   越界时不再把 W/pitch 整体退回 catalog 中心却保留原 phase；报告以
   `direct_least_squares | bounded_direct_least_squares | template_interval_center` 记录连续参数依据。
@@ -112,11 +118,11 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   阻断原因；报告同时保存全局未知量 constraint rank、逐 adjacency query/trace/coordinate coverage 与
   直接角色/外侧 Frame observation authority，以及 dark/light material、逐区域状态和冲突。Debug 不重新
   求解，也不把 review candidate 伪装为正式输出。当前 report revision 为
-  `x5crop_v5_template_report_28`，并显式区分直接角色的 coordinate `observation_id` 与相关
+  `x5crop_v5_template_report_29`，并显式区分直接角色的 coordinate `observation_id` 与相关
   `evidence_group_id`，同时报告 phase candidate 的直接角色权限、评估/拒绝/role-check
   工作量、连续 lattice 参数依据、三层 source footprint、typed
   saturation、同一状态 cross
-  alignment padding、source W/H、相关
+  alignment padding、selected-only source W authority、source W/H、相关
   Frame-width inference 及 validation-only role/observation provenance、aspect calibration、raw/guarded
   ratio、两轴 guard、推导 H、Cross typed root
   failure、pair support mode、family resolution 与预算；不保留旧 schema 兼容路径。

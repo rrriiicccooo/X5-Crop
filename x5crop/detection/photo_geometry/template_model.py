@@ -387,31 +387,6 @@ class PitchFit:
         if any(not isinstance(item, ObservationId) for item in self.observation_ids):
             raise TypeError("pitch observations must be typed identities")
 
-    def with_calibrated_template(self, template: TemplateSpec) -> "PitchFit":
-        """Retain pitch identity while calibrating physical W and gap."""
-
-        if not (
-            template.pitch_px.minimum - 1.0e-9
-            <= self.canonical_pitch_px
-            <= template.pitch_px.maximum + 1.0e-9
-        ):
-            raise ValueError(
-                "calibrated template excludes the selected pitch: "
-                f"{self.canonical_pitch_px} not in "
-                f"[{template.pitch_px.minimum}, {template.pitch_px.maximum}]"
-            )
-        width = (template.frame_width_px.minimum + template.frame_width_px.maximum) / 2.0
-        return PitchFit(
-            frame_width_px=template.frame_width_px,
-            gap_interval_px=template.gap_prior_px,
-            pitch_interval_px=template.pitch_px,
-            canonical_frame_width_px=width,
-            canonical_pitch_px=self.canonical_pitch_px,
-            scale_px_per_mm=self.scale_px_per_mm,
-            observation_ids=self.observation_ids,
-        )
-
-
 class LatticeParameterFitBasis(str, Enum):
     """Most constrained solve used by one continuous placement lineage."""
 
@@ -881,94 +856,6 @@ class SequenceFit:
             for end, next_start in zip(ends, starts[1:])
         ):
             raise ValueError("sequence local overlap exceeds one frame width")
-
-    def with_calibrated_template(self, template: TemplateSpec) -> "SequenceFit":
-        """Preserve the discrete role binding while narrowing physical state."""
-
-        if (
-            template.template_id != self.template.template_id
-            or template.count != self.template.count
-            or template.direction != self.template.direction
-        ):
-            raise ValueError("calibrated template changes sequence identity")
-        width = (
-            template.frame_width_px.minimum + template.frame_width_px.maximum
-        ) / 2.0
-        period = self.pitch_fit.canonical_pitch_px
-        if not (
-            template.phase_lattice_authority.period_px.minimum - 1.0e-9
-            <= period
-            <= template.phase_lattice_authority.period_px.maximum + 1.0e-9
-        ):
-            period = template.phase_lattice_authority.period_px.center
-        lattice = self.phase_lattice_fit
-        normalized = template.direction * (
-            lattice.canonical_absolute_phase_px
-            - template.phase_lattice_authority.cycle_origin_px
-        )
-        cycle = normalized - lattice.integer_slot_offset * period
-        if not 0.0 <= cycle < period:
-            raise ValueError("calibrated period changes the discrete phase offset")
-        cycle_radius = min(
-            cycle,
-            period - cycle,
-            lattice.absolute_phase_interval_px.width / 2.0,
-        )
-        canonical_positions: list[float] = []
-        role_intervals: list[FiniteInterval] = []
-        role_full_intervals: list[FiniteInterval] = []
-        for role, old_canonical, old_interval, old_full_interval, binding in zip(
-            template.roles,
-            self.model_role_positions_px,
-            self.model_role_intervals_px,
-            self.model_full_role_intervals_px,
-            self.role_bindings,
-            strict=True,
-        ):
-            canonical = (
-                old_canonical
-                if role.role == BoundaryRole.START or binding is not None
-                else canonical_positions[-1] + template.direction * width
-            )
-            canonical_positions.append(canonical)
-            role_intervals.append(
-                FiniteInterval(
-                    min(old_interval.minimum, canonical),
-                    max(old_interval.maximum, canonical),
-                )
-            )
-            role_full_intervals.append(
-                FiniteInterval(
-                    min(old_full_interval.minimum, canonical),
-                    max(old_full_interval.maximum, canonical),
-                )
-            )
-        return SequenceFit(
-            template=template,
-            phase_lattice_fit=PhaseLatticeFit(
-                authority=template.phase_lattice_authority,
-                cycle_phase_interval_px=FiniteInterval(
-                    cycle - cycle_radius,
-                    cycle + cycle_radius,
-                ),
-                canonical_cycle_phase_px=cycle,
-                integer_slot_offset=lattice.integer_slot_offset,
-                canonical_period_px=period,
-                absolute_phase_interval_px=lattice.absolute_phase_interval_px,
-                canonical_absolute_phase_px=lattice.canonical_absolute_phase_px,
-                direction=template.direction,
-            ),
-            pitch_fit=self.pitch_fit.with_calibrated_template(template),
-            lattice_parameter_fit_basis=self.lattice_parameter_fit_basis,
-            model_role_positions_px=tuple(canonical_positions),
-            model_role_intervals_px=tuple(role_intervals),
-            model_full_role_intervals_px=tuple(role_full_intervals),
-            role_bindings=self.role_bindings,
-            local_advance_relations=self.local_advance_relations,
-            contradicted_observation_count=self.contradicted_observation_count,
-            residual_sum_px=self.residual_sum_px,
-            phase_support_coverage=self.phase_support_coverage,
-        )
 
 @dataclass(frozen=True)
 class TemplateSearchReceipt:

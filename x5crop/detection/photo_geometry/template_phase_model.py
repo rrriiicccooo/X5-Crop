@@ -262,7 +262,6 @@ class PhaseWinnerBasis(str, Enum):
     INDEPENDENT_SUPPORT = "independent_support"
     INDEPENDENT_COVERAGE = "independent_coverage"
     RESIDUAL_SEPARATION = "residual_separation"
-    CALIBRATED_RUNNER_REJECTED = "calibrated_runner_rejected"
 
 
 @dataclass(frozen=True)
@@ -366,57 +365,24 @@ class PhaseFitResult:
         ) != tuple(range(1, self.template.count)):
             raise ValueError("phase adjacency coverage must follow template order")
 
-    def with_calibrated_template(self, template: TemplateSpec) -> "PhaseFitResult":
-        """Narrow the continuous template without rerunning role selection."""
 
-        if template.template_id != self.template.template_id:
-            raise ValueError("calibrated template changes phase identity")
-        best = (
-            None
-            if self.best is None
-            else self.best.with_calibrated_template(template)
-        )
-        try:
-            runner = (
-                None
-                if self.runner_up is None
-                else self.runner_up.with_calibrated_template(template)
+
+@dataclass(frozen=True)
+class TemplatePhaseCandidateCompetition:
+    """One discrete/local competition before selected-only W is consumed."""
+
+    result: PhaseFitResult
+    directly_observed_adjacency_ordinals: tuple[int, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.result, PhaseFitResult):
+            raise TypeError("phase candidate competition requires a phase result")
+        ordinals = self.directly_observed_adjacency_ordinals
+        if (
+            tuple(sorted(set(ordinals))) != ordinals
+            or any(
+                ordinal <= 0 or ordinal >= self.result.template.count
+                for ordinal in ordinals
             )
-        except ValueError:
-            # A discrete runner that fails the calibrated W+gap closure is
-            # physically illegal; this is a hard filter, not score pruning.
-            runner = None
-        status = self.status
-        reason = self.ambiguity_reason
-        winner_basis = self.winner_basis
-        if best is not None and runner is None and status == PhaseFitStatus.AMBIGUOUS:
-            status = PhaseFitStatus.RESOLVED
-            reason = None
-            winner_basis = PhaseWinnerBasis.CALIBRATED_RUNNER_REJECTED
-        return PhaseFitResult(
-            template=template,
-            best=best,
-            runner_up=runner,
-            status=status,
-            ambiguity_reason=reason,
-            receipt=self.receipt,
-            registered_direct_observation_ids=(
-                self.registered_direct_observation_ids
-            ),
-            failure_kind=(None if status == PhaseFitStatus.RESOLVED else self.failure_kind),
-            winner_basis=winner_basis,
-            best_phase_candidate_direct_role_authority=(
-                self.best_phase_candidate_direct_role_authority
-            ),
-            runner_phase_candidate_direct_role_authority=(
-                None
-                if runner is None
-                else self.runner_phase_candidate_direct_role_authority
-            ),
-            global_lattice_authority=self.global_lattice_authority,
-            adjacency_observation_coverage=self.adjacency_observation_coverage,
-            direct_role_binding_authority=self.direct_role_binding_authority,
-            outer_frame_observation_authority=(
-                self.outer_frame_observation_authority
-            ),
-        )
+        ):
+            raise ValueError("directly observed adjacency ordinals are invalid")

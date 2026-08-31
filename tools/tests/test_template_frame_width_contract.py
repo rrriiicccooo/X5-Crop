@@ -11,7 +11,9 @@ from tools.tests.template_test_support import (
 )
 from x5crop.detection.photo_geometry.template_frame_width import (
     apply_correlated_frame_width_inference,
+    apply_selected_source_frame_width,
     calibrate_source_frame_width,
+    SourceFrameWidthAuthorityFailureKind,
 )
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.template_direct_role_authority import (
@@ -19,9 +21,20 @@ from x5crop.detection.photo_geometry.template_direct_role_authority import (
     DirectRoleAuthorityFact,
     DirectRoleBindingAuthority,
 )
+from x5crop.detection.photo_geometry.template_adjacency_coverage import (
+    AdjacencyCoverageState,
+    AdjacencyObservationCoverage,
+    AdjacencyTraceCoverage,
+)
 from x5crop.detection.photo_geometry.template_model import (
     FrameWidthInferenceFailureKind,
     SequenceBindingUse,
+)
+from x5crop.detection.photo_geometry.template_lattice_authority import (
+    assess_global_lattice_authority,
+)
+from x5crop.detection.photo_geometry.template_outer_frame_authority import (
+    assess_outer_frame_observation_authority,
 )
 from x5crop.domain import (
     EvidenceState,
@@ -31,11 +44,123 @@ from x5crop.domain import (
 )
 from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
 from x5crop.detection.photo_geometry.template_phase import fit_template_phase
-from x5crop.detection.photo_geometry.template_phase_model import PhaseFitStatus
+from x5crop.detection.photo_geometry.template_phase_model import (
+    GlobalLatticeAuthorityEvidence,
+    PhaseFailureKind,
+    PhaseFitStatus,
+    TemplatePhaseInput,
+)
 from x5crop.formats import FramePhysicalSpec
 
 
 class TemplateFrameWidthContractTest(unittest.TestCase):
+    @staticmethod
+    def _with_selected_width_prerequisites(phase, observations):
+        assert phase.best is not None
+        facts = tuple(
+            DirectRoleAuthorityFact(
+                role_index=role_index,
+                lane_ordinal=role_index // 2 + 1,
+                role=(
+                    BoundaryRole.START
+                    if role_index % 2 == 0
+                    else BoundaryRole.END
+                ),
+                observation_id=binding.observation_id,
+                evidence_group_id=binding.evidence_group_id,
+                independent_support_region_count=3,
+                bases=(DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE,),
+                blocking_material_conflict_ids=(),
+                state=EvidenceState.SUPPORTED,
+            )
+            for role_index, binding in enumerate(phase.best.role_bindings)
+            if binding is not None
+        )
+        direct = DirectRoleBindingAuthority(
+            state=EvidenceState.SUPPORTED,
+            facts=facts,
+            unsupported_role_indices=(),
+            reason=None,
+        )
+        phase_input = TemplatePhaseInput(
+            observations=observations,
+            separator_bands=(),
+            template=phase.template,
+            scale_px_per_mm=None,
+            holder_span_px=None,
+            phase_authority_px=None,
+        )
+        lattice = assess_global_lattice_authority(
+            phase.best,
+            phase_input,
+            direct_role_authority=direct,
+        )
+        return replace(
+            phase,
+            direct_role_binding_authority=direct,
+            global_lattice_authority=lattice,
+        )
+
+    @classmethod
+    def _with_rank_two_selected_width_prerequisites(
+        cls,
+        phase,
+        observations,
+    ):
+        assert phase.best is not None
+        retained_phase_anchor = False
+        bindings = []
+        for binding in phase.best.role_bindings:
+            if binding is None:
+                bindings.append(None)
+            elif not retained_phase_anchor:
+                retained_phase_anchor = True
+                bindings.append(binding)
+            else:
+                bindings.append(
+                    replace(binding, use=SequenceBindingUse.LOCAL_REFINEMENT)
+                )
+        selected = replace(
+            phase,
+            best=replace(
+                phase.best,
+                role_bindings=tuple(bindings),
+                phase_support_coverage=1.0,
+            ),
+        )
+        selected = cls._with_selected_width_prerequisites(
+            selected,
+            observations,
+        )
+        assert selected.best is not None
+        direct = selected.direct_role_binding_authority
+        assert direct is not None
+        phase_input = TemplatePhaseInput(
+            observations=observations,
+            separator_bands=(),
+            template=selected.template,
+            scale_px_per_mm=None,
+            holder_span_px=None,
+            phase_authority_px=None,
+            global_lattice_evidence=GlobalLatticeAuthorityEvidence(
+                pitch_observation_ids=(observations[-1].observation_id,),
+            ),
+        )
+        lattice = assess_global_lattice_authority(
+            selected.best,
+            phase_input,
+            direct_role_authority=direct,
+        )
+        if lattice.joint_constraint_rank != 2:
+            raise AssertionError("rank-two source-W test fixture is invalid")
+        return replace(
+            selected,
+            global_lattice_authority=lattice,
+            outer_frame_observation_authority=(
+                assess_outer_frame_observation_authority(selected.best)
+            ),
+        )
+
     @staticmethod
     def _local_role_fixture(*, local: bool = True):
         template = placement_template(4)
@@ -117,17 +242,310 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             height_scale_px_per_mm=PositiveInterval.exact(10.0),
         )
 
-        calibrated = calibrate_source_frame_width(
+        phase = self._with_selected_width_prerequisites(phase, observations)
+        calibrated, authority = calibrate_source_frame_width(
             source,
             phase,
             observations,
-            holder_span_px=FiniteInterval(0.0, 400.0),
         )
 
         width = calibrated.width_state.extent_projection_px()
         self.assertLessEqual(width.minimum, 99.0)
         self.assertGreaterEqual(width.maximum, 101.0)
         self.assertEqual(len(calibrated.width_state.observation_ids), 4)
+        self.assertEqual(authority.state, EvidenceState.SUPPORTED)
+        self.assertEqual(authority.supporting_frame_ordinals, (1, 3))
+        self.assertEqual(
+            authority.observation_ids,
+            calibrated.width_state.observation_ids,
+        )
+        self.assertEqual(
+            authority.observation_ids,
+            tuple(sorted(authority.observation_ids, key=str)),
+        )
+        selected = apply_selected_source_frame_width(phase, authority)
+        assert selected.best is not None and phase.best is not None
+        self.assertEqual(selected.runner_up, phase.runner_up)
+        self.assertEqual(
+            selected.best.binding_observation_ids,
+            phase.best.binding_observation_ids,
+        )
+        self.assertEqual(
+            selected.best.model_role_positions_px,
+            phase.best.model_role_positions_px,
+        )
+        self.assertGreaterEqual(
+            selected.best.pitch_fit.frame_width_px.minimum,
+            width.minimum,
+        )
+        self.assertLessEqual(
+            selected.best.pitch_fit.frame_width_px.maximum,
+            width.maximum,
+        )
+        self.assertLessEqual(
+            selected.best.pitch_fit.frame_width_px.minimum,
+            selected.best.pitch_fit.canonical_frame_width_px,
+        )
+        self.assertGreaterEqual(
+            selected.best.pitch_fit.frame_width_px.maximum,
+            selected.best.pitch_fit.canonical_frame_width_px,
+        )
+
+    def test_source_width_never_resolves_an_ambiguous_placement(self) -> None:
+        observations = (
+            phase_edge("frame-1-start", 40.0),
+            phase_edge("frame-1-end", 139.0),
+            phase_edge("frame-3-start", 280.0),
+            phase_edge("frame-3-end", 381.0),
+        )
+        phase = fit_template_phase(observations, phase_template(3))
+        phase = self._with_selected_width_prerequisites(phase, observations)
+        ambiguous = replace(
+            phase,
+            status=PhaseFitStatus.AMBIGUOUS,
+            ambiguity_reason="test discrete runner remains",
+            failure_kind=PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS,
+            winner_basis=None,
+        )
+        source = SourceScanGeometry.create(
+            FramePhysicalSpec(10.0, 24.0, None),
+            width_scale_px_per_mm=PositiveInterval.exact(10.0),
+            height_scale_px_per_mm=PositiveInterval.exact(10.0),
+        )
+
+        retained, authority = calibrate_source_frame_width(
+            source,
+            ambiguous,
+            observations,
+        )
+
+        self.assertEqual(retained, source)
+        self.assertEqual(authority.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(
+            authority.failure_kind,
+            SourceFrameWidthAuthorityFailureKind.UNIQUE_PLACEMENT_UNAVAILABLE,
+        )
+
+    def test_rank_two_selected_lattice_can_close_source_width(self) -> None:
+        observations = (
+            phase_edge("rank-two-frame-1-start", 40.0),
+            phase_edge("rank-two-frame-1-end", 139.0),
+            phase_edge("rank-two-frame-3-start", 280.0),
+            phase_edge("rank-two-frame-3-end", 381.0),
+        )
+        phase = self._with_rank_two_selected_width_prerequisites(
+            fit_template_phase(observations, phase_template(3)),
+            observations,
+        )
+        source = SourceScanGeometry.create(
+            FramePhysicalSpec(10.0, 24.0, None),
+            width_scale_px_per_mm=PositiveInterval.exact(10.0),
+            height_scale_px_per_mm=PositiveInterval.exact(10.0),
+        )
+
+        calibrated, authority = calibrate_source_frame_width(
+            source,
+            phase,
+            observations,
+        )
+
+        self.assertEqual(authority.state, EvidenceState.SUPPORTED)
+        self.assertEqual(authority.supporting_frame_ordinals, (1, 3))
+        self.assertEqual(
+            calibrated.width_state.observation_ids,
+            authority.observation_ids,
+        )
+        selected = apply_selected_source_frame_width(phase, authority)
+        assert selected.best is not None
+        closed_input = TemplatePhaseInput(
+            observations=observations,
+            separator_bands=(),
+            template=phase.template,
+            scale_px_per_mm=None,
+            holder_span_px=None,
+            phase_authority_px=None,
+            global_lattice_evidence=GlobalLatticeAuthorityEvidence(
+                frame_width_observation_ids=authority.observation_ids,
+                pitch_observation_ids=(observations[-1].observation_id,),
+            ),
+        )
+        closed = assess_global_lattice_authority(
+            selected.best,
+            closed_input,
+            direct_role_authority=phase.direct_role_binding_authority,
+        )
+        self.assertEqual(closed.state, EvidenceState.SUPPORTED)
+        self.assertEqual(closed.joint_constraint_rank, 3)
+
+    def test_rank_one_lattice_cannot_claim_source_width(self) -> None:
+        observations = (
+            phase_edge("rank-one-frame-1-start", 40.0),
+            phase_edge("rank-one-frame-1-end", 139.0),
+            phase_edge("rank-one-frame-3-start", 280.0),
+            phase_edge("rank-one-frame-3-end", 381.0),
+        )
+        phase = self._with_rank_two_selected_width_prerequisites(
+            fit_template_phase(observations, phase_template(3)),
+            observations,
+        )
+        assert phase.best is not None
+        rank_one_input = TemplatePhaseInput(
+            observations=observations,
+            separator_bands=(),
+            template=phase.template,
+            scale_px_per_mm=None,
+            holder_span_px=None,
+            phase_authority_px=None,
+        )
+        phase = replace(
+            phase,
+            global_lattice_authority=assess_global_lattice_authority(
+                phase.best,
+                rank_one_input,
+                direct_role_authority=phase.direct_role_binding_authority,
+            ),
+        )
+        source = SourceScanGeometry.create(
+            FramePhysicalSpec(10.0, 24.0, None),
+            width_scale_px_per_mm=PositiveInterval.exact(10.0),
+            height_scale_px_per_mm=PositiveInterval.exact(10.0),
+        )
+
+        retained, authority = calibrate_source_frame_width(
+            source,
+            phase,
+            observations,
+        )
+
+        self.assertEqual(retained, source)
+        self.assertEqual(authority.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(
+            authority.failure_kind,
+            SourceFrameWidthAuthorityFailureKind.GLOBAL_LATTICE_RANK_INSUFFICIENT,
+        )
+
+    def test_incomplete_inferred_adjacency_blocks_source_width(self) -> None:
+        observations = (
+            phase_edge("coverage-frame-1-start", 40.0),
+            phase_edge("coverage-frame-1-end", 139.0),
+            phase_edge("coverage-frame-3-start", 280.0),
+            phase_edge("coverage-frame-3-end", 381.0),
+        )
+        phase = self._with_rank_two_selected_width_prerequisites(
+            fit_template_phase(observations, phase_template(3)),
+            observations,
+        )
+        incomplete_trace = AdjacencyTraceCoverage(
+            trace_position_px=10,
+            covering_query_ids=(),
+            covered_intervals_px=(),
+            required_coordinate_count=11,
+            covered_coordinate_count=0,
+            complete=False,
+        )
+        complete_trace = AdjacencyTraceCoverage(
+            trace_position_px=10,
+            covering_query_ids=("complete-query",),
+            covered_intervals_px=(FiniteInterval(0.0, 10.0),),
+            required_coordinate_count=11,
+            covered_coordinate_count=11,
+            complete=True,
+        )
+        phase = replace(
+            phase,
+            adjacency_observation_coverage=(
+                AdjacencyObservationCoverage(
+                    relation_ordinal=1,
+                    required_interval_px=FiniteInterval(140.0, 160.0),
+                    covering_query_ids=(),
+                    trace_coverage=(incomplete_trace,),
+                    required_trace_count=1,
+                    covered_trace_count=0,
+                    required_coordinate_count=11,
+                    covered_coordinate_count=0,
+                    normal_inference_required=True,
+                    state=AdjacencyCoverageState.INCOMPLETE,
+                ),
+                AdjacencyObservationCoverage(
+                    relation_ordinal=2,
+                    required_interval_px=FiniteInterval(260.0, 280.0),
+                    covering_query_ids=("complete-query",),
+                    trace_coverage=(complete_trace,),
+                    required_trace_count=1,
+                    covered_trace_count=1,
+                    required_coordinate_count=11,
+                    covered_coordinate_count=11,
+                    normal_inference_required=False,
+                    state=AdjacencyCoverageState.COMPLETE,
+                ),
+            ),
+        )
+        source = SourceScanGeometry.create(
+            FramePhysicalSpec(10.0, 24.0, None),
+            width_scale_px_per_mm=PositiveInterval.exact(10.0),
+            height_scale_px_per_mm=PositiveInterval.exact(10.0),
+        )
+
+        retained, authority = calibrate_source_frame_width(
+            source,
+            phase,
+            observations,
+        )
+
+        self.assertEqual(retained, source)
+        self.assertEqual(authority.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(
+            authority.failure_kind,
+            SourceFrameWidthAuthorityFailureKind.ADJACENCY_COVERAGE_INCOMPLETE,
+        )
+
+    def test_direct_role_contradiction_precedes_source_width(self) -> None:
+        observations = (
+            phase_edge("conflict-frame-1-start", 40.0),
+            phase_edge("conflict-frame-1-end", 139.0),
+            phase_edge("conflict-frame-3-start", 280.0),
+            phase_edge("conflict-frame-3-end", 381.0),
+        )
+        phase = self._with_rank_two_selected_width_prerequisites(
+            fit_template_phase(observations, phase_template(3)),
+            observations,
+        )
+        direct = phase.direct_role_binding_authority
+        assert direct is not None
+        conflict = replace(
+            direct.facts[0],
+            bases=(),
+            blocking_material_conflict_ids=(ObservationId("material-conflict"),),
+            state=EvidenceState.CONTRADICTED,
+        )
+        contradicted = DirectRoleBindingAuthority(
+            state=EvidenceState.CONTRADICTED,
+            facts=(conflict, *direct.facts[1:]),
+            unsupported_role_indices=(conflict.role_index,),
+            reason="direct role has material conflict",
+        )
+        phase = replace(
+            phase,
+            direct_role_binding_authority=contradicted,
+        )
+        source = SourceScanGeometry.create(
+            FramePhysicalSpec(10.0, 24.0, None),
+            width_scale_px_per_mm=PositiveInterval.exact(10.0),
+            height_scale_px_per_mm=PositiveInterval.exact(10.0),
+        )
+
+        retained, authority = calibrate_source_frame_width(
+            source,
+            phase,
+            observations,
+        )
+
+        self.assertEqual(retained, source)
+        self.assertEqual(authority.state, EvidenceState.CONTRADICTED)
+        self.assertEqual(
+            authority.failure_kind,
+            SourceFrameWidthAuthorityFailureKind.DIRECT_ROLE_AUTHORITY_CONTRADICTED,
+        )
 
     def test_one_source_width_authority_infers_multiple_opposite_roles(self) -> None:
         template = placement_template(4)

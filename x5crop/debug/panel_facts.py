@@ -251,6 +251,12 @@ def alignment_summary(detection: FinalDetection) -> str:
                 else width_inference.failure_kind.value.upper()
             )
         )
+        source_width = lane.prepared.source_frame_width_authority
+        source_width_proof = (
+            f"{len(source_width.supporting_frame_ordinals)}F"
+            if source_width.state.value == "supported"
+            else source_width.failure_kind.value.upper()
+        )
         separator_counts = {
             polarity: (
                 sum(
@@ -286,7 +292,8 @@ def alignment_summary(detection: FinalDetection) -> str:
             f"{direct_supported}/{direct_total} G{direct_evidence_group_count} · "
             f"APERTURE DOMAIN "
             f"{direct_aperture_required} · OUTER "
-            f"{outer_count}/2 · W {width_proof} · SEP "
+            f"{outer_count}/2 · SOURCE W {source_width_proof} · "
+            f"W INFER {width_proof} · SEP "
             f"D {separator_counts['dark'][0]}/{separator_counts['dark'][1]}"
             f" C{separator_counts['dark'][2]} "
             f"L {separator_counts['light'][0]}/{separator_counts['light'][1]}"

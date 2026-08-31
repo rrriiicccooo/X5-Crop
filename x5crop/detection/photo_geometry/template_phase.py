@@ -56,6 +56,7 @@ from .template_phase_model import (
     PhaseFitResult,
     PhaseFitStatus,
     PhaseWinnerBasis,
+    TemplatePhaseCandidateCompetition,
     TemplatePhaseInput,
 )
 
@@ -986,44 +987,14 @@ def _with_local_role_refinement(
     return replace(result, best=refinement.fit, receipt=receipt)
 
 
-def _apply_final_lattice_contract(
+def _attach_selected_candidate_authorities(
     result: PhaseFitResult,
     phase_input: TemplatePhaseInput,
     *,
     directly_observed_ordinals: tuple[int, ...],
 ) -> PhaseFitResult:
-    """Require direct-role, global, and local authority for one placement."""
+    """Measure selected-candidate authorities without changing its status."""
 
-    preliminary_direct_role_authority = (
-        None
-        if result.best is None or not phase_input.sequence_measurement_sets
-        else assess_direct_role_binding_authority(
-            result.best,
-            phase_input.observations,
-            phase_input.separator_bands,
-            phase_input.sequence_measurement_sets,
-        )
-    )
-    if result.best is not None:
-        assessed_best = apply_correlated_frame_width_inference(
-            result.best,
-            frame_width_observation_ids=(
-                phase_input.global_lattice_evidence
-                .frame_width_observation_ids
-            ),
-            direct_role_authority=preliminary_direct_role_authority,
-            sequence_edges=phase_input.observations,
-        )
-        receipt = replace(
-            result.receipt,
-            inferred_role_count=len(assessed_best.unbound_role_indices),
-        )
-        receipt.validate_bounds()
-        result = replace(
-            result,
-            best=assessed_best,
-            receipt=receipt,
-        )
     direct_role_authority = (
         None
         if result.best is None or not phase_input.sequence_measurement_sets
@@ -1034,7 +1005,6 @@ def _apply_final_lattice_contract(
             phase_input.sequence_measurement_sets,
         )
     )
-
     authority = (
         None
         if result.best is None
@@ -1065,6 +1035,51 @@ def _apply_final_lattice_contract(
         direct_role_binding_authority=direct_role_authority,
         outer_frame_observation_authority=outer_authority,
     )
+    return result
+
+
+def _apply_final_lattice_contract(
+    result: PhaseFitResult,
+    phase_input: TemplatePhaseInput,
+    *,
+    directly_observed_ordinals: tuple[int, ...],
+) -> PhaseFitResult:
+    """Require direct-role, global, and local authority for one placement."""
+
+    result = _attach_selected_candidate_authorities(
+        result,
+        phase_input,
+        directly_observed_ordinals=directly_observed_ordinals,
+    )
+    if result.best is not None:
+        assessed_best = apply_correlated_frame_width_inference(
+            result.best,
+            frame_width_observation_ids=(
+                phase_input.global_lattice_evidence
+                .frame_width_observation_ids
+            ),
+            direct_role_authority=result.direct_role_binding_authority,
+            sequence_edges=phase_input.observations,
+        )
+        receipt = replace(
+            result.receipt,
+            inferred_role_count=len(assessed_best.unbound_role_indices),
+        )
+        receipt.validate_bounds()
+        result = replace(
+            result,
+            best=assessed_best,
+            receipt=receipt,
+        )
+    result = _attach_selected_candidate_authorities(
+        result,
+        phase_input,
+        directly_observed_ordinals=directly_observed_ordinals,
+    )
+    direct_role_authority = result.direct_role_binding_authority
+    authority = result.global_lattice_authority
+    coverage = result.adjacency_observation_coverage
+    outer_authority = result.outer_frame_observation_authority
     inferred = tuple(item for item in coverage if item.normal_inference_required)
     if (
         result.status == PhaseFitStatus.RESOLVED
@@ -1171,10 +1186,10 @@ def _apply_final_lattice_contract(
     return result
 
 
-def fit_template_phase_with_local_advance(
+def fit_template_phase_candidate_with_local_advance(
     phase_input: TemplatePhaseInput,
-) -> PhaseFitResult:
-    """Fit the normal template, then apply directly measured adjacency advances."""
+) -> TemplatePhaseCandidateCompetition:
+    """Resolve discrete/local competition before selected-only source W."""
 
     if not isinstance(phase_input, TemplatePhaseInput):
         raise TypeError("local-advance phase fit requires TemplatePhaseInput")
@@ -1197,11 +1212,12 @@ def fit_template_phase_with_local_advance(
         max_observations=max_observations,
     )
     if normal.status != PhaseFitStatus.RESOLVED or normal.best is None:
-        return _apply_final_lattice_contract(
+        assessed = _attach_selected_candidate_authorities(
             normal,
             phase_input,
             directly_observed_ordinals=(),
         )
+        return TemplatePhaseCandidateCompetition(assessed, ())
     normal = _with_local_role_refinement(
         normal,
         observations,
@@ -1236,10 +1252,14 @@ def fit_template_phase_with_local_advance(
                 ),
             ),
         )
-        return _apply_final_lattice_contract(
+        assessed = _attach_selected_candidate_authorities(
             unresolved,
             phase_input,
             directly_observed_ordinals=directly_observed_ordinals,
+        )
+        return TemplatePhaseCandidateCompetition(
+            assessed,
+            directly_observed_ordinals,
         )
     if not analysis.relations:
         measured = replace(
@@ -1251,10 +1271,14 @@ def fit_template_phase_with_local_advance(
                 ),
             ),
         )
-        return _apply_final_lattice_contract(
+        assessed = _attach_selected_candidate_authorities(
             measured,
             phase_input,
             directly_observed_ordinals=directly_observed_ordinals,
+        )
+        return TemplatePhaseCandidateCompetition(
+            assessed,
+            directly_observed_ordinals,
         )
     adjusted = fit_template_phase(
         observations,
@@ -1278,11 +1302,43 @@ def fit_template_phase_with_local_advance(
         normal.receipt,
         local_relation_evaluation_count=analysis.evaluated_adjacency_count,
     )
-    return _apply_final_lattice_contract(
+    assessed = _attach_selected_candidate_authorities(
         adjusted,
         phase_input,
         directly_observed_ordinals=directly_observed_ordinals,
     )
+    return TemplatePhaseCandidateCompetition(
+        assessed,
+        directly_observed_ordinals,
+    )
+
+
+def finalize_template_phase_candidate(
+    candidate: TemplatePhaseCandidateCompetition,
+    phase_input: TemplatePhaseInput,
+) -> PhaseFitResult:
+    """Apply selected-only lattice and inference contracts to one competition."""
+
+    if not isinstance(candidate, TemplatePhaseCandidateCompetition):
+        raise TypeError("phase finalization requires a candidate competition")
+    if candidate.result.template != phase_input.template:
+        raise ValueError("phase candidate and final input use different templates")
+    return _apply_final_lattice_contract(
+        candidate.result,
+        phase_input,
+        directly_observed_ordinals=(
+            candidate.directly_observed_adjacency_ordinals
+        ),
+    )
+
+
+def fit_template_phase_with_local_advance(
+    phase_input: TemplatePhaseInput,
+) -> PhaseFitResult:
+    """Run canonical candidate competition and final lattice assessment."""
+
+    candidate = fit_template_phase_candidate_with_local_advance(phase_input)
+    return finalize_template_phase_candidate(candidate, phase_input)
 
 
 def account_prior_phase_fit(

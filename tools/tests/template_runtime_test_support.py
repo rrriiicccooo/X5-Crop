@@ -26,6 +26,10 @@ from x5crop.detection.photo_geometry.template_cross import fit_template_cross
 from x5crop.detection.photo_geometry.template_cross_model import (
     TemplateCrossInput,
 )
+from x5crop.detection.photo_geometry.template_frame_width import (
+    SourceFrameWidthAuthority,
+    SourceFrameWidthAuthorityFailureKind,
+)
 from x5crop.detection.photo_geometry.template_measurement_plan import (
     compile_template_measurement_plan,
 )
@@ -229,6 +233,20 @@ def prepared_template_lane() -> PreparedTemplateLane:
         **registered.__dict__,
         template_spec=template,
         source_scan_geometry=source,
+        source_frame_width_authority=SourceFrameWidthAuthority(
+            authority_id="source-width:test:unavailable",
+            state=EvidenceState.UNAVAILABLE,
+            selected_integer_slot_offset=None,
+            selected_role_observation_ids=(),
+            supporting_frame_ordinals=(),
+            width_px=None,
+            canonical_width_px=None,
+            observation_ids=(),
+            failure_kind=(
+                SourceFrameWidthAuthorityFailureKind.UNIQUE_PLACEMENT_UNAVAILABLE
+            ),
+            reason="test fixture has no selected placement",
+        ),
         phase_input=phase_input,
         cross_input=cross_input,
         phase_competition=fit_template_phase((), template),

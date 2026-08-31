@@ -55,6 +55,9 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                 "source_scan_geometry": typed_read_model(
                     lane.prepared.source_scan_geometry
                 ),
+                "source_frame_width_authority": typed_read_model(
+                    lane.prepared.source_frame_width_authority
+                ),
                 "aperture_aspect_ratio_authority": typed_read_model(
                     lane.prepared.cross_competition
                     .aperture_aspect_ratio_authority

@@ -99,6 +99,28 @@ _APERTURE_ASPECT_RATIO_FIELDS = {
     "correlated_inference",
     "independent_constraint_rank",
 }
+_SOURCE_FRAME_WIDTH_AUTHORITY_FIELDS = {
+    "authority_id",
+    "state",
+    "selected_integer_slot_offset",
+    "selected_role_observation_ids",
+    "supporting_frame_ordinals",
+    "width_px",
+    "canonical_width_px",
+    "observation_ids",
+    "failure_kind",
+    "reason",
+}
+_SOURCE_FRAME_WIDTH_FAILURE_KINDS = {
+    "unique_placement_unavailable",
+    "direct_role_authority_unavailable",
+    "direct_role_authority_contradicted",
+    "global_lattice_rank_insufficient",
+    "adjacency_coverage_incomplete",
+    "outer_frame_authority_unavailable",
+    "independent_complete_frames_unavailable",
+    "physical_width_conflict",
+}
 
 
 def _finite_number(value: object) -> bool:
@@ -596,6 +618,70 @@ def _validate_frame_width_inference(value: object) -> None:
         }
     ):
         raise ValueError("unavailable Frame width inference is invalid")
+
+
+def _validate_source_frame_width_authority(value: object) -> None:
+    if (
+        not isinstance(value, dict)
+        or set(value) != _SOURCE_FRAME_WIDTH_AUTHORITY_FIELDS
+        or not isinstance(value["authority_id"], str)
+        or not value["authority_id"]
+    ):
+        raise ValueError("source Frame-width authority summary is invalid")
+    state = value["state"]
+    role_ids = value["selected_role_observation_ids"]
+    supporting = value["supporting_frame_ordinals"]
+    observation_ids = value["observation_ids"]
+    if (
+        state not in {"supported", "unavailable", "contradicted"}
+        or not isinstance(role_ids, list)
+        or any(
+            identity is not None
+            and (not isinstance(identity, str) or not identity)
+            for identity in role_ids
+        )
+        or not isinstance(supporting, list)
+        or supporting != sorted(set(supporting))
+        or any(
+            not isinstance(ordinal, int) or ordinal <= 0
+            for ordinal in supporting
+        )
+        or not _valid_ids(observation_ids)
+        or observation_ids != sorted(observation_ids)
+    ):
+        raise ValueError("source Frame-width authority ledger is invalid")
+    supported = state == "supported"
+    width = value["width_px"]
+    canonical = value["canonical_width_px"]
+    if supported:
+        if (
+            not isinstance(value["selected_integer_slot_offset"], int)
+            or not role_ids
+            or len(supporting) < 2
+            or not _valid_interval(width)
+            or float(width["minimum"]) <= 0.0
+            or not _finite_number(canonical)
+            or not float(width["minimum"])
+            <= float(canonical)
+            <= float(width["maximum"])
+            or len(observation_ids) < 4
+            or value["failure_kind"] is not None
+            or value["reason"] is not None
+        ):
+            raise ValueError("supported source Frame-width authority is invalid")
+        return
+    if (
+        value["selected_integer_slot_offset"] is not None
+        or role_ids
+        or supporting
+        or width is not None
+        or canonical is not None
+        or observation_ids
+        or value["failure_kind"] not in _SOURCE_FRAME_WIDTH_FAILURE_KINDS
+        or not isinstance(value["reason"], str)
+        or not value["reason"]
+    ):
+        raise ValueError("failed source Frame-width authority is invalid")
 
 
 def _validate_direct_role_binding_authority(value: object) -> None:
@@ -1130,6 +1216,26 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         _validate_aperture_aspect_ratio_authority(
             lane.get("aperture_aspect_ratio_authority")
         )
+        source_width = lane.get("source_frame_width_authority")
+        _validate_source_frame_width_authority(source_width)
+        source_geometry = lane.get("source_scan_geometry")
+        width_state = (
+            None
+            if not isinstance(source_geometry, dict)
+            else source_geometry.get("width_state")
+        )
+        width_ids = (
+            None
+            if not isinstance(width_state, dict)
+            else width_state.get("observation_ids")
+        )
+        if (
+            not isinstance(width_ids, list)
+            or (source_width["state"] == "supported") != bool(width_ids)
+            or source_width["state"] == "supported"
+            and source_width["observation_ids"] != width_ids
+        ):
+            raise ValueError("source geometry and source W authority disagree")
         if (
             not isinstance(coarse, dict)
             or set(coarse)
@@ -1355,6 +1461,7 @@ def _validate_development(record: dict[str, Any]) -> None:
             or work.get("placement_evaluation_count")
             != len(placement.get("placements", ()))
             or not isinstance(lane.get("phase_competition"), dict)
+            or not isinstance(lane.get("source_frame_width_authority"), dict)
             or not isinstance(lane.get("cross_competition"), dict)
             or lane.get("aperture_aspect_ratio_authority")
             != lane.get("cross_competition", {}).get(

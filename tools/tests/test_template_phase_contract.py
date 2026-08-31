@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 import math
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
@@ -1703,69 +1704,6 @@ class TemplatePhaseContractTest(unittest.TestCase):
             40.0,
         )
 
-    def test_calibration_narrows_continuous_size_without_rebinding_roles(self) -> None:
-        result = fit_template_phase(
-            tuple(
-                edge(f"edge:{index}", coordinate)
-                for index, coordinate in enumerate((40.0, 140.0, 160.0, 260.0))
-            ),
-            template(2),
-        )
-        calibrated = TemplateSpec(
-            template_id="test-template",
-            frame_width_px=FiniteInterval(98.0, 102.0),
-            pitch_px=FiniteInterval(118.0, 122.0),
-            count=2,
-            phase_lattice_authority=PhaseLatticeAuthority(
-                period_px=FiniteInterval(118.0, 122.0),
-                cycle_origin_px=0.0,
-                minimum_slot_offset=-1,
-                maximum_slot_offset=20,
-            ),
-            nominal_gap_px=FiniteInterval(18.0, 22.0),
-        )
-        narrowed = result.with_calibrated_template(calibrated)
-        self.assertEqual(
-            narrowed.best.binding_observation_ids,
-            result.best.binding_observation_ids,
-        )
-        self.assertAlmostEqual(
-            narrowed.best.pitch_fit.canonical_frame_width_px,
-            100.0,
-        )
-
-    def test_calibration_never_rewrites_a_direct_end_position(self) -> None:
-        broad = TemplateSpec(
-            template_id="direct-end-preservation",
-            frame_width_px=FiniteInterval(98.0, 102.0),
-            pitch_px=FiniteInterval(118.0, 122.0),
-            count=2,
-            phase_lattice_authority=PhaseLatticeAuthority(
-                period_px=FiniteInterval(118.0, 122.0),
-                cycle_origin_px=0.0,
-                minimum_slot_offset=-1,
-                maximum_slot_offset=20,
-            ),
-            nominal_gap_px=FiniteInterval(18.0, 22.0),
-        )
-        result = fit_template_phase(
-            tuple(
-                edge(f"direct:{index}", coordinate)
-                for index, coordinate in enumerate((40.0, 141.0, 160.0, 261.0))
-            ),
-            broad,
-        )
-        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
-        assert result.best is not None
-        narrowed = result.with_calibrated_template(
-            replace(broad, frame_width_px=FiniteInterval(99.0, 101.0))
-        )
-        assert narrowed.best is not None
-        self.assertEqual(
-            narrowed.best.model_role_positions_px,
-            result.best.model_role_positions_px,
-        )
-
     def test_clutter_does_not_move_global_fit(self) -> None:
         true_edges = (40.0, 140.0, 160.0, 260.0, 280.0, 380.0)
         observations = tuple(
@@ -2419,6 +2357,55 @@ class TemplatePhaseContractTest(unittest.TestCase):
             all(
                 item.effect in tuple(AnchorDependencyEffect)
                 for item in analysis.dependencies
+            )
+        )
+
+    def test_stability_never_reuses_selected_source_width(self) -> None:
+        observations = tuple(
+            edge(f"selected-width:{index}", coordinate)
+            for index, coordinate in enumerate((40.0, 140.0, 160.0, 260.0))
+        )
+        compiled = template(2)
+        result = fit_template_phase(observations, compiled)
+        phase_input = TemplatePhaseInput(
+            observations=observations,
+            separator_bands=(),
+            template=compiled,
+            scale_px_per_mm=None,
+            holder_span_px=None,
+            phase_authority_px=None,
+            global_lattice_evidence=GlobalLatticeAuthorityEvidence(
+                frame_width_observation_ids=tuple(
+                    item.observation_id for item in observations
+                ),
+            ),
+        )
+        refit_inputs = []
+
+        def capture_refit(candidate_input):
+            refit_inputs.append(candidate_input)
+            return replace(
+                result,
+                best=None,
+                runner_up=None,
+                status=PhaseFitStatus.UNRESOLVED,
+                ambiguity_reason="test refit remains unresolved",
+                failure_kind=PhaseFailureKind.GLOBAL_LATTICE_AUTHORITY_UNAVAILABLE,
+                winner_basis=None,
+            )
+
+        with patch(
+            "x5crop.detection.photo_geometry.template_stability."
+            "fit_template_phase_with_local_advance",
+            side_effect=capture_refit,
+        ):
+            leave_one_anchor_out_phase_stability(result, phase_input)
+
+        self.assertTrue(refit_inputs)
+        self.assertTrue(
+            all(
+                not item.global_lattice_evidence.frame_width_observation_ids
+                for item in refit_inputs
             )
         )
 

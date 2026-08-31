@@ -36,7 +36,10 @@ from .sequence_edge_families import merge_sequence_edge_families
 from .separator_observations import build_format_separator_bands
 from .observation_types import BoundaryEdgeMeasurementBasis
 from .template_evidence import template_evidence_use_ledger
-from .template_frame_width import calibrate_source_frame_width
+from .template_frame_width import (
+    apply_selected_source_frame_width,
+    calibrate_source_frame_width,
+)
 from .template_aspect_ratio import (
     apply_inferred_aperture_height,
     derive_aperture_aspect_ratio_authority,
@@ -50,7 +53,6 @@ from .template_measurement_plan import compile_template_measurement_plan
 from .template_registration import (
     register_cross_evidence,
     register_template_local_cross_refinements,
-    template_spec_from_physical_authority,
 )
 from .template_cross import (
     calibrate_source_frame_height,
@@ -59,8 +61,9 @@ from .template_cross import (
 from .template_cross_model import CrossRoleBinding, TemplateCrossInput
 from .template_phase import (
     account_prior_phase_fit,
+    finalize_template_phase_candidate,
     fit_template_phase,
-    fit_template_phase_with_local_advance,
+    fit_template_phase_candidate_with_local_advance,
 )
 from .template_phase_model import (
     GlobalLatticeAuthorityEvidence,
@@ -541,51 +544,11 @@ def prepare_template_lane(
                 base_phase,
                 proposed_base_phase,
             )
-    source_geometry = calibrate_source_frame_width(
-        source_geometry,
-        base_phase,
-        sequence_edges,
-        holder_span_px=width_authority,
-    )
-    template = template_spec_from_physical_authority(
-        frame_spec=configuration.physical_spec.frame,
-        source_geometry=source_geometry,
-        width_scale_px_per_mm=scales.width_axis_px_per_mm,
-        count=output_slot_count,
-        phase_lattice_authority=template.phase_lattice_authority,
-        template_id=measurement_plan.template_spec.template_id,
-    )
-    pitch_calibration = calibrate_template_source_pitch(
-        template,
-        base_phase,
-        sequence_edges,
-        separator_bands,
-        holder_span_px=width_authority,
-        refine_from_bound_roles=True,
-        max_lattice_hypotheses=measurement_plan.phase_bounds.max_hypotheses,
-    )
-    registered_pitch_authority_ids = tuple(
-        dict.fromkeys(
-            (
-                *registered_pitch_authority_ids,
-                *pitch_calibration.pitch_observation_ids,
-            )
-        )
-    )
-    pitch_lattice_hypothesis_count += (
-        pitch_calibration.lattice_hypothesis_count
-    )
-    pitch_lattice_bound_exceeded = (
-        pitch_lattice_bound_exceeded or pitch_calibration.bound_exceeded
-    )
-    template = pitch_calibration.template
-    # Rebind the already-registered observations once, then interpret local
-    # residuals. No selected-placement query or new pixel read is introduced.
-    # A provisional role binding may calibrate continuous W/pitch, but it
-    # cannot authorize its own ordinal mapping.  A two-band separator phase
-    # hypothesis becomes authority only after a complete legal fit binds
-    # another independent direct support; otherwise all bounded role-compatible
-    # mappings remain in competition.
+    # Source pitch comes only from candidate-independent separator positions.
+    # Source W is deliberately absent here: a provisional role mapping cannot
+    # recompile the template and then use that narrowed template to delete its
+    # own runner.  Selected-only W is consumed below after discrete/local
+    # competition has already resolved.
     phase_search_authority = close_separator_phase_hypothesis(
         pitch_calibration,
         base_phase,
@@ -620,13 +583,62 @@ def prepare_template_lane(
         ),
         global_lattice_evidence=GlobalLatticeAuthorityEvidence(
             phase_observation_ids=phase_authority_observation_ids,
-            frame_width_observation_ids=(
-                source_geometry.width_state.observation_ids
-            ),
+            frame_width_observation_ids=(),
             pitch_observation_ids=registered_pitch_authority_ids,
         ),
     )
-    phase = fit_template_phase_with_local_advance(phase_input)
+    phase_candidate = fit_template_phase_candidate_with_local_advance(
+        phase_input
+    )
+    if pitch_lattice_bound_exceeded:
+        phase_candidate = replace(
+            phase_candidate,
+            result=replace(
+                phase_candidate.result,
+                best=None,
+                runner_up=None,
+                status=PhaseFitStatus.BOUND_EXCEEDED,
+                ambiguity_reason=(
+                    "separator lattice hypothesis bound exceeded"
+                ),
+                failure_kind=PhaseFailureKind.HYPOTHESIS_BOUND_EXCEEDED,
+                winner_basis=None,
+                best_phase_candidate_direct_role_authority=None,
+                runner_phase_candidate_direct_role_authority=None,
+                global_lattice_authority=None,
+                adjacency_observation_coverage=(),
+                direct_role_binding_authority=None,
+                outer_frame_observation_authority=None,
+            ),
+        )
+    source_geometry, source_frame_width_authority = (
+        calibrate_source_frame_width(
+            source_geometry,
+            phase_candidate.result,
+            sequence_edges,
+        )
+    )
+    selected_width_phase = apply_selected_source_frame_width(
+        phase_candidate.result,
+        source_frame_width_authority,
+    )
+    phase_candidate = replace(
+        phase_candidate,
+        result=selected_width_phase,
+    )
+    phase_input = replace(
+        phase_input,
+        global_lattice_evidence=replace(
+            phase_input.global_lattice_evidence,
+            frame_width_observation_ids=(
+                source_frame_width_authority.observation_ids
+            ),
+        ),
+    )
+    phase = finalize_template_phase_candidate(
+        phase_candidate,
+        phase_input,
+    )
     phase = account_prior_phase_fit(phase, base_phase)
     phase = account_prior_phase_fit(phase, provisional_phase)
     phase = replace(
@@ -638,16 +650,6 @@ def prepare_template_lane(
             ),
         ),
     )
-    if pitch_lattice_bound_exceeded:
-        phase = replace(
-            phase,
-            best=None,
-            runner_up=None,
-            status=PhaseFitStatus.BOUND_EXCEEDED,
-            ambiguity_reason="separator lattice hypothesis bound exceeded",
-            failure_kind=PhaseFailureKind.HYPOTHESIS_BOUND_EXCEEDED,
-            winner_basis=None,
-        )
     longitudinal_support_domains_px = ()
     if phase.status == PhaseFitStatus.RESOLVED and phase.best is not None:
         domains = tuple(
@@ -782,6 +784,7 @@ def prepare_template_lane(
         **registered_values,
         template_spec=template,
         source_scan_geometry=source_geometry,
+        source_frame_width_authority=source_frame_width_authority,
         phase_input=phase_input,
         cross_input=cross_input,
         phase_competition=phase,
