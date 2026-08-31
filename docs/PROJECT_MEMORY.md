@@ -33,18 +33,21 @@ OOD 共同支持“风险低到可直接使用”，不是 runtime 已知黄金�
   format 保持 unavailable。
 - Grid 可以生成完整 diagnostic candidate，但当前 hard-fact 自动批准要求每张 Frame 至少有一侧直接角色。
   双侧都未绑定时，evidence 保存 Frame ordinal，并以 `nominal_grid_complete_frame_unobserved` review；S040、
-  S056 是该合同的真实安全反例。Report revision 为 `x5crop_v5_template_report_31`。
+  S056 是该合同的真实安全反例。Report revision 为 `x5crop_v5_template_report_32`。
 - `SequenceAnchorDiscoveryDomain` 现在以左右锚定的完整 W/pitch role core 为种子，把 coarse support 内每个
   可测整数像素中心恰好分给一个预登记窗口。相邻窗口的 measurement halo 可以重叠，transition ownership
   无重叠、无缺口；逐 adjacency coverage 按离散坐标计数。它复用同一全长 baseline，不新增 TIFF 读取、
   query、winner-specific requery 或第二 detector。
+- 三个固定高度区域的弱 signal 可以在同一 registered measurement owner 内形成 aggregate edge。单条
+  aggregate edge 默认只作诊断；只有左右 edge 分别具备 END/START 角色，且 separator material 也由三个
+  独立区域共同支持时，才作为一个 `cross_height_aggregate` separator pair 进入 placement。Direct 同物理
+  pair 保持 canonical；两区域 material、孤立 edge、角色冲突与多解都不取得坐标权限。
 - 完整 development gold 为 110/110、分析错误 0、`unsafe_approved_auto = 0`。安全 auto 为基础 nominal
-  14/66、较难 nominal 2/30、challenge 0/14；candidate 为 88 个不可用、17 个安全、5 个不安全，全部不安全
-  candidate 均保持 review。phase root 中原有 4 个 `adjacency_observation_coverage_incomplete` 已消失并迁移
-  到完整 Frame、共同 W 或真实 placement 冲突；仍有 1 个非最终候选的 coverage failure。该机制没有伪造
-  新批准，也没有改变当前安全 auto 总数。
-- 本检查点的 24-source 正式 receipt 绑定最终干净 commit，并通过 5 秒 mean Gate；3 秒 non-blocking
-  目标尚未达到。精确时间、RSS、依赖与机器身份不在本文件复制。
+  15/66、较难 nominal 2/30、challenge 0/14；candidate 为 89 个不可用、18 个安全、3 个不安全，全部不安全
+  candidate 均保持 review。S088 的完整三区域联合 separator pair 新增 1 个安全自动批准；S007、S086、
+  S108 证明两区域 material 不能冒充完整 pair，并保持 typed review。
+- 正式性能只由绑定最终干净 commit 的 24-source receipt 判断；5 秒 mean 是阻断 Gate，3 秒 mean 是持续
+  优化目标。精确时间、RSS、依赖与机器身份不在本文件复制。
 
 ## 证据与数据边界
 
@@ -62,23 +65,24 @@ OOD 共同支持“风险低到可直接使用”，不是 runtime 已知黄金�
 
 ## 开放风险
 
-- 基础 nominal 仍有 52/66 review，较难 nominal 有 28/30 review。主要 Gate 根因是 26 个
-  `nominal_grid_complete_frame_unobserved`、12 个 `phase_placement_ambiguous`、12 个
-  `phase_template_mismatch`、8 个 `aperture_aspect_ratio_budget_exhausted`、7 个
-  `direct_role_binding_authority_unavailable`、5 个 `direct_role_aperture_domain_unavailable` 与 4 个
-  `nominal_grid_phase_anchor_unavailable`。
+- 基础 nominal 仍有 51/66 review，较难 nominal 有 28/30 review。主要 Gate 根因是 26 个
+  `nominal_grid_complete_frame_unobserved`、13 个 `phase_template_mismatch`、10 个
+  `phase_placement_ambiguous`、10 个 `aperture_aspect_ratio_budget_exhausted`、7 个
+  `direct_role_binding_authority_unavailable`、6 个 `placement_unresolved`、5 个
+  `direct_role_aperture_domain_unavailable` 与 4 个 `nominal_grid_phase_anchor_unavailable`。
 - S040/S056 证明完整 query receipt 与 calibrated Grid 仍不足以硬授权整张未观察 Frame；这不是 Grid 的
   永久物理上限。未来只有更强的直接/continuity/topology evidence，或独立校准且可拒绝的概率层，才能
   改变该权限，不能简单删除 failure。
-- S088 证明多个 direct placement 可以都满足硬物理合同。后续不能用 residual、support 或未校准 score
-  强选；它适合作为未来概率选择层的机制样片。
+- S088 证明完整三区域联合 separator pair 可以补足 direct-role authority 并安全消除原有离散歧义；这不
+  授权孤立弱线或两区域 material。其它仍存在多个硬合法 placement 的 source 继续保留 runner，不能用
+  residual、support 或未校准 score 强选。
 - 现有黄金没有 `xpan`、`120-645`、`135-dual` 的合格覆盖；`120-67` 只有 3 个 source。
 
 ## 精确下一步
 
-1. 处理 nominal 的跨高度弱边缘、极低显著边缘与真实片距变化，让同一 registered measurement owner
-   提供更多 typed observation，不建立 enhanced detector 或样片规则。
-2. 对 26 个 `nominal_grid_complete_frame_unobserved` 区分“像素已有弱证据”和“整张确实无直接角色”，先
-   提高真实 direct role coverage；不得删除完整 Frame 安全反例或用 Grid 自证存在性。
+1. 对 26 个 `nominal_grid_complete_frame_unobserved` 区分“像素已有弱证据”和“整张确实无直接角色”，
+   先提高真实 direct role coverage；不得删除完整 Frame 安全反例或用 Grid 自证存在性。
+2. 继续处理极低显著边缘与真实片距变化，让同一 registered measurement owner 提供更多 typed
+   observation，不建立 enhanced detector、样片规则或未经校准的 score。
 3. 再依次闭合 adjacency continuity、contact、overlap。概率选择层只设计 feature/calibration/OOD/
    abstention schema，等独立 calibration 与 sealed 数据具备后再进入 runtime。

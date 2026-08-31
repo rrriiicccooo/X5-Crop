@@ -528,6 +528,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
             PhotoBoundaryMeasurementField(pixels, "horizontal"),
             BoundaryAxis.X,
             PositiveInterval(90.0, 110.0),
+            measurement_basis=SeparatorBandMeasurementBasis.DIRECT_TRACE,
         )
         return bands
 
@@ -656,6 +657,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
                 mock.Mock(),
                 BoundaryAxis.X,
                 PositiveInterval(900.0, 920.0),
+                measurement_basis=SeparatorBandMeasurementBasis.DIRECT_TRACE,
             )
 
         self.assertEqual(result, (marker,))
@@ -725,6 +727,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
                 mock.Mock(),
                 BoundaryAxis.X,
                 PositiveInterval(700.0, 720.0),
+                measurement_basis=SeparatorBandMeasurementBasis.DIRECT_TRACE,
             )
 
         self.assertEqual(result, ())
@@ -897,6 +900,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
                 mock.Mock(),
                 BoundaryAxis.X,
                 PositiveInterval(250.0, 260.0),
+                measurement_basis=SeparatorBandMeasurementBasis.DIRECT_TRACE,
             )
 
         self.assertNotIn(("outer-left", "outer-right"), markers)

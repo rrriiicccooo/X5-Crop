@@ -286,15 +286,18 @@ polarity 合同；不降低单 trace 阈值、不读取新像素，也不建立 
 | 联合观察与直接 edge 的关系 | typed resolution | 权限 |
 |---|---|---|
 | 唯一匹配一条局部 direct edge | `bound_direct_edge` | 保留 direct native coordinate，以 `cross_height_union` 补足空间支持，只计一份证据 |
-| 没有匹配 direct edge | `standalone_candidate` | 只进入 evidence、report 与 Debug，不进入 phase、separator、outer 或 placement |
+| 没有匹配 direct edge | `standalone_edge` | 默认只进入 evidence、report 与 Debug，不单独进入 phase、outer 或 placement |
+| 两条已唯一解析的三区域联合 edge 依次具备 END/START 角色，且它们之间的 separator material 也由三个独立高度区域共同支持 | `standalone_edge + cross_height_aggregate separator band` | 将这一对 edge 作为同一 `separator_pair` 投影到 placement；band 只计一份相关证据 |
 | 匹配的 direct edge 已覆盖三个独立区域 | `redundant_direct_edge` | 保留原 direct edge，不重复计票 |
 | 同一联合 edge 匹配多条 direct edge | `multiple_compatible_direct_edges` | typed contradiction，不授予联合权限 |
 | 多条联合 edge 竞争同一局部 direct edge | `multiple_supports_for_one_direct_edge` | typed contradiction，不授予联合权限 |
-| 少于三个区域、区域 polarity 冲突或 query coverage 不完整 | 无合格联合 edge | `unavailable`，保持原 direct evidence |
+| edge 或 material 少于三个支持区域、区域 polarity 冲突、角色不相容或 query coverage 不完整 | 无合格联合 pair | `unavailable`，保持原 direct evidence；原始联合观察只作诊断 |
 
-联合观察只能加强已经存在且唯一的直接物理边缘，不能凭自身创造相位候选。其完整原始 transition、edge、
+单条联合 edge 不能凭自身创造相位候选。只有上述完整 separator pair 才能共同进入已有唯一 placement
+模型；同一物理 pair 已有 direct band 时 direct 事实保持 canonical，联合 band 不再投票。缺失 direction
+不是反证，但两份明确且不相交的 direction interval 必须保持不同物理解释。完整原始 transition、edge、
 resolution 与工作量只保存在 development report；Debug 用独立颜色显示原始联合线，并明确区分已绑定、
-冗余、standalone 与 ambiguous 状态。
+standalone、冗余、ambiguous 与获得 pair 权限的状态。
 
 ### 6.4 Cross observation
 
@@ -429,6 +432,7 @@ placement；“观察到了”本身不等于“有权决定裁切”。权限�
 |---|---|
 | 同一 edge 直接覆盖三个独立高度区域 | `source_wide_edge`，允许 |
 | 一条局部 direct edge 唯一绑定三区域联合观察 | `cross_height_union`，允许；两者仍是一份相关证据 |
+| 同一三区域联合 separator 的 material 与两侧 END/START edge 都覆盖三个独立高度区域 | `separator_pair`，两侧均允许；缺一项则只保留诊断事实 |
 | 同一 source-wide separator 的两侧 edge 原子绑定到一个 adjacency | `separator_pair`，两侧均允许 |
 | normal separator 在两个独立高度区域成立，且两侧原子绑定到同一 adjacency，其中一侧已由上述任一完整闭环授权 | 只向另一侧传递一次 `partial_height_separator_pair`；该 placement 还必须具有唯一、两侧直接的 `aperture_pair` 短轴域 |
 | 两高度 separator 的两侧都只有局部 edge | 不能互相授权；`direct_role_binding_authority_unavailable` |
@@ -1023,7 +1027,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/template_measurement_plan*.py` | pixel-free 模板、有限 query intents、停止与工作上界 |
 | `photo_geometry/corridors.py` | 候选无关 top/bottom 与完整 `W/pitch` sequence 查询走廊 |
 | `photo_geometry/registered_*.py`、`observations.py`、`separator_*.py` | 一次性 measurement、role-free edge 与 material band |
-| `photo_geometry/cross_height_transition_measurement.py`、`cross_height_edge_support.py` | 三区域弱信号联合测量及其与唯一 direct edge 的单次绑定权限 |
+| `photo_geometry/cross_height_transition_measurement.py`、`cross_height_edge_support.py` | 三区域弱信号联合测量、与唯一 direct edge 的单次绑定，以及完整三区域 separator pair 向 placement 的唯一投影权限 |
 | `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source W/H extent、scan-scale authority 与不增加 direct provenance 的相关 interval 收紧 |
 | `photo_geometry/template_frame_width.py` | selected-only `SourceFrameWidthAuthority`、source W 校准、无权局部 refinement 让位与相关单侧角色推断；不得参与候选选择或重编译 template |
 | `photo_geometry/template_aspect_ratio_model.py`、`template_aspect_ratio.py` | 校准 W/H 比例的 typed authority、相关 H 推断、direct H 对账与预算失败 |

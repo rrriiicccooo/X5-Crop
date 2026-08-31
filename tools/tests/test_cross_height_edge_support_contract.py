@@ -4,19 +4,23 @@ from dataclasses import replace
 import unittest
 
 from x5crop.detection.photo_geometry.cross_height_edge_support import (
+    placement_sequence_edges_with_cross_height_support,
     resolve_cross_height_edge_support,
+    resolve_cross_height_separator_support,
 )
 from x5crop.detection.photo_geometry.observation_types import (
     BoundaryEdgeMeasurementBasis,
     BoundaryEdgeObservation,
     CrossHeightEdgeResolutionFailureKind,
     CrossHeightEdgeResolutionKind,
+    SeparatorBandMeasurementBasis,
 )
 from x5crop.detection.photo_geometry.measurement_model import (
     PhotoBoundaryTransition,
 )
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.domain import FiniteInterval, ObservationId
+from tools.tests.template_test_support import phase_separator
 
 
 def _edge(
@@ -150,7 +154,7 @@ class CrossHeightEdgeSupportContractTest(unittest.TestCase):
             CrossHeightEdgeResolutionKind.BOUND_DIRECT_EDGE,
         )
 
-    def test_standalone_aggregate_remains_a_non_placement_candidate(self) -> None:
+    def test_standalone_three_region_aggregate_enters_once(self) -> None:
         direct = _edge(
             "direct",
             100.0,
@@ -169,12 +173,197 @@ class CrossHeightEdgeSupportContractTest(unittest.TestCase):
             (aggregate,),
         )
 
-        self.assertEqual(edges, (direct[0],))
+        self.assertEqual(len(edges), 2)
+        self.assertIn(aggregate[0], edges)
         self.assertEqual(
             resolutions[0].kind,
-            CrossHeightEdgeResolutionKind.STANDALONE_CANDIDATE,
+            CrossHeightEdgeResolutionKind.STANDALONE_EDGE,
         )
-        self.assertIsNone(resolutions[0].final_edge_observation_id)
+        self.assertEqual(
+            resolutions[0].final_edge_observation_id,
+            aggregate[0].observation_id,
+        )
+
+    def test_two_region_aggregate_is_typed_unavailable(self) -> None:
+        aggregate = _edge(
+            "aggregate-two-regions",
+            150.0,
+            (10, 40),
+            BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE,
+        )
+
+        edges, resolutions = self._resolve((), (aggregate,))
+
+        self.assertEqual(edges, ())
+        self.assertEqual(
+            resolutions[0].state.value,
+            "unavailable",
+        )
+        self.assertEqual(
+            resolutions[0].kind,
+            CrossHeightEdgeResolutionKind.INSUFFICIENT_SPATIAL_SUPPORT,
+        )
+        self.assertEqual(
+            resolutions[0].failure_kind,
+            CrossHeightEdgeResolutionFailureKind
+            .INSUFFICIENT_INDEPENDENT_SPATIAL_SUPPORT,
+        )
+
+    def test_standalone_edges_enter_placement_only_as_verified_pair(
+        self,
+    ) -> None:
+        left_value = _edge(
+            "aggregate-left",
+            100.0,
+            (10, 40, 70),
+            BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE,
+        )
+        right_value = _edge(
+            "aggregate-right",
+            120.0,
+            (10, 40, 70),
+            BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE,
+        )
+        left = (
+            replace(
+                left_value[0],
+                polarity=-1,
+                qualified_anchor_roles=(BoundaryRole.END,),
+            ),
+            left_value[1],
+        )
+        right = right_value
+
+        edges, resolutions = self._resolve((), (left, right))
+        self.assertEqual(
+            placement_sequence_edges_with_cross_height_support(edges, ()),
+            (),
+        )
+        aggregate_band = replace(
+            phase_separator(
+                "aggregate-band",
+                left[0],
+                right[0],
+                FiniteInterval(19.0, 21.0),
+            ),
+            measurement_basis=(
+                SeparatorBandMeasurementBasis.CROSS_HEIGHT_AGGREGATE
+            ),
+        )
+        projected = resolve_cross_height_separator_support(
+            (aggregate_band,),
+            resolutions,
+            edges,
+            (),
+        )
+
+        self.assertEqual(len(projected), 1)
+        self.assertEqual(
+            placement_sequence_edges_with_cross_height_support(
+                edges,
+                projected,
+            ),
+            edges,
+        )
+
+    def test_two_region_material_does_not_admit_standalone_edges(self) -> None:
+        left_value = _edge(
+            "aggregate-left-partial-material",
+            100.0,
+            (10, 40, 70),
+            BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE,
+        )
+        right = _edge(
+            "aggregate-right-partial-material",
+            120.0,
+            (10, 40, 70),
+            BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE,
+        )
+        left = (
+            replace(
+                left_value[0],
+                polarity=-1,
+                qualified_anchor_roles=(BoundaryRole.END,),
+            ),
+            left_value[1],
+        )
+        edges, resolutions = self._resolve((), (left, right))
+        partial_band = replace(
+            phase_separator(
+                "aggregate-partial-material-band",
+                left[0],
+                right[0],
+                FiniteInterval(19.0, 21.0),
+                region_count=2,
+            ),
+            measurement_basis=(
+                SeparatorBandMeasurementBasis.CROSS_HEIGHT_AGGREGATE
+            ),
+        )
+
+        projected = resolve_cross_height_separator_support(
+            (partial_band,),
+            resolutions,
+            edges,
+            (),
+        )
+
+        self.assertEqual(projected, ())
+        self.assertEqual(
+            placement_sequence_edges_with_cross_height_support(
+                edges,
+                projected,
+            ),
+            (),
+        )
+
+    def test_role_incompatible_pair_does_not_admit_standalone_edges(
+        self,
+    ) -> None:
+        left_value = _edge(
+            "aggregate-left-wrong-role",
+            100.0,
+            (10, 40, 70),
+            BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE,
+        )
+        right = _edge(
+            "aggregate-right-role-compatible",
+            120.0,
+            (10, 40, 70),
+            BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE,
+        )
+        left = (
+            replace(left_value[0], polarity=-1),
+            left_value[1],
+        )
+        edges, resolutions = self._resolve((), (left, right))
+        aggregate_band = replace(
+            phase_separator(
+                "aggregate-role-incompatible-band",
+                left[0],
+                right[0],
+                FiniteInterval(19.0, 21.0),
+            ),
+            measurement_basis=(
+                SeparatorBandMeasurementBasis.CROSS_HEIGHT_AGGREGATE
+            ),
+        )
+
+        projected = resolve_cross_height_separator_support(
+            (aggregate_band,),
+            resolutions,
+            edges,
+            (),
+        )
+
+        self.assertEqual(projected, ())
+        self.assertEqual(
+            placement_sequence_edges_with_cross_height_support(
+                edges,
+                projected,
+            ),
+            (),
+        )
 
     def test_multiple_direct_matches_remain_typed_ambiguous(self) -> None:
         direct_left = _edge(
@@ -237,6 +426,39 @@ class CrossHeightEdgeSupportContractTest(unittest.TestCase):
             (direct,),
             (aggregate,),
         )
+
+        self.assertEqual(edges, (direct[0],))
+        self.assertEqual(
+            resolutions[0].kind,
+            CrossHeightEdgeResolutionKind.REDUNDANT_DIRECT_EDGE,
+        )
+
+    def test_missing_direct_direction_does_not_duplicate_same_edge(
+        self,
+    ) -> None:
+        direct_value = _edge(
+            "direct-wide-no-direction",
+            100.0,
+            (0, 40, 80),
+            BoundaryEdgeMeasurementBasis.DIRECT_TRACE,
+        )
+        direct = (
+            replace(
+                direct_value[0],
+                canonical_direction_degrees=None,
+                fit_direction_interval_degrees=None,
+                full_direction_interval_degrees=None,
+            ),
+            direct_value[1],
+        )
+        aggregate = _edge(
+            "aggregate-same-edge",
+            100.0,
+            (10, 40, 70),
+            BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE,
+        )
+
+        edges, resolutions = self._resolve((direct,), (aggregate,))
 
         self.assertEqual(edges, (direct[0],))
         self.assertEqual(

@@ -780,6 +780,80 @@ class TemplatePhaseContractTest(unittest.TestCase):
             (0,),
         )
 
+    def test_cross_height_separator_pair_authorizes_both_roles_once(
+        self,
+    ) -> None:
+        start1 = replace(
+            edge("start:1", 40.0),
+            qualified_anchor_roles=(BoundaryRole.START,),
+            polarity=1,
+        )
+        end1 = replace(
+            edge("aggregate:end:1", 140.0),
+            qualified_anchor_roles=(BoundaryRole.END,),
+            polarity=-1,
+            measurement_basis=(
+                BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE
+            ),
+        )
+        start2 = replace(
+            edge("aggregate:start:2", 160.0),
+            qualified_anchor_roles=(BoundaryRole.START,),
+            polarity=1,
+            measurement_basis=(
+                BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE
+            ),
+        )
+        end2 = replace(
+            edge("end:2", 260.0),
+            qualified_anchor_roles=(BoundaryRole.END,),
+            polarity=-1,
+        )
+        spec = template(2)
+
+        result = fit_template_phase_with_local_advance(
+            TemplatePhaseInput(
+                observations=(start1, end1, start2, end2),
+                separator_bands=(
+                    separator(
+                        "separator:aggregate-pair",
+                        end1,
+                        start2,
+                        FiniteInterval(19.0, 21.0),
+                    ),
+                ),
+                template=spec,
+                calibrated_nominal_grid_prior=(
+                    unavailable_nominal_grid_prior(spec)
+                ),
+                scale_px_per_mm=PositiveInterval.exact(10.0),
+                holder_span_px=FiniteInterval(0.0, 300.0),
+                phase_authority_px=None,
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "cross-height-separator-pair",
+                        FiniteInterval(0.0, 300.0),
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        assert result.direct_role_binding_authority is not None
+        aggregate_facts = tuple(
+            item
+            for item in result.direct_role_binding_authority.facts
+            if item.role_index in {1, 2}
+        )
+        self.assertEqual(len(aggregate_facts), 2)
+        self.assertEqual(
+            tuple(
+                tuple(basis.value for basis in item.bases)
+                for item in aggregate_facts
+            ),
+            (("separator_pair",), ("separator_pair",)),
+        )
+
     def test_short_unpaired_edge_cannot_own_a_direct_role_coordinate(self) -> None:
         observations = tuple(
             replace(

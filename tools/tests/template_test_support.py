@@ -19,6 +19,7 @@ from x5crop.detection.photo_geometry.observation_types import (
     BoundaryEdgeMeasurementBasis,
     BoundaryEdgeObservation,
     SeparatorBandObservation,
+    SeparatorBandMeasurementBasis,
     SeparatorMaterialPolarity,
     SeparatorMaterialRegionObservation,
     SeparatorMaterialRegionState,
@@ -237,6 +238,7 @@ def phase_separator(
         right_edge_observation_id=right.observation_id,
         left_run_id=left.run_id,
         right_run_id=right.run_id,
+        measurement_basis=SeparatorBandMeasurementBasis.DIRECT_TRACE,
         material_polarity=material_polarity,
         gap_interval_px=gap,
         transition_ids=(

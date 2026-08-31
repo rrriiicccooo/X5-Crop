@@ -22,8 +22,11 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   gap 上界的 material 仍保留为事实，但不能创造 phase、ordinal 或直接角色权限。
 - 已登记 sequence trace 的弱 gradient、tone 与 texture 可在三个固定高度区域内联合成一份 typed
   observation。只有位置、方向、polarity 与角色相容的三区域结果唯一绑定同一条局部 direct edge 时，
-  才以 `cross_height_union` 加强该 edge；standalone、重复或多解联合线只进入 development report 与
-  Debug，不进入 phase、separator、outer 或 placement，也不重复计票或增加 TIFF 读取。
+  才以 `cross_height_union` 加强该 edge。Standalone 联合 edge 默认只进入 development report 与 Debug；
+  只有两侧 edge 分别具备 END/START 角色，且它们之间的 separator material 也由三个独立高度区域共同
+  支持时，才作为一个 `cross_height_aggregate` separator pair 进入 placement。两区域 material、角色
+  不相容、重复或多解联合事实不取得坐标权限；同一 pair 已有 direct band 时不重复计票。该能力不增加
+  TIFF 读取、query、第二 detector 或 score。
 - 直接观察到的 start/end 在最终 placement 中保留 native coordinate 与完整 interval；Grid 只补齐缺失
   角色。同一连续 placement 的互补 endpoint evidence 合并为联合可行状态，不伪造 runner。唯一 placement
   中至少两张完整直接 Frame 可闭合 source W；当每个缺失 Frame 仍有一侧直接边缘时，同一份相关 W 可补
@@ -131,7 +134,7 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   阻断原因；报告同时保存全局未知量 constraint rank、逐 adjacency query/trace/coordinate coverage 与
   直接角色/外侧 Frame observation authority，以及 dark/light material、逐区域状态和冲突。Debug 不重新
   求解，也不把 review candidate 伪装为正式输出。当前 report revision 为
-  `x5crop_v5_template_report_31`，并显式区分直接角色的 coordinate `observation_id` 与相关
+  `x5crop_v5_template_report_32`，并显式区分直接角色的 coordinate `observation_id` 与相关
   `evidence_group_id`，同时报告 phase candidate 的输入权限、projection outcome、保留 rank、投影 binding、
   calibrated nominal prior/evidence/selected authority、phase anchor、推断 adjacency、未观察 Frame、
   nominal solve/local-prefix 工作量、连续 lattice 参数依据、三层 source footprint、typed
@@ -196,13 +199,11 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
 - `tools/verify` 是 Hook、CI 与本地验证的唯一入口。Diagnostic 只证明工程合同；gold accuracy、性能与
   platform receipt 分层记录，不互相冒充。
 - 正式性能 Gate 为 24-source 完整用户路径 mean 不超过 5 秒；3 秒只是不阻断的 challenge。
-- Sequence ownership 检查点的完整 development gold 为 110/110 完成、分析错误 0、
-  `unsafe_approved_auto = 0`；安全 auto 为基础 nominal 14/66、较难 nominal 2/30、challenge 0/14。
-  Candidate 为 88 个不可用、17 个安全、5 个不安全；全部不安全 candidate 均保持 review。原有 4 个
-  phase-level `adjacency_observation_coverage_incomplete` 已迁移到完整 Frame、共同 W 或真实 placement
-  冲突，只剩 1 个非最终候选的 coverage failure；自动批准数量不变。该阶段修复的是查询所有权与安全
-  证明，不用放宽 Gate 换取覆盖。绑定最终干净 commit 的 24-source 正式性能仍通过 5 秒 mean Gate，
-  3 秒 non-blocking 目标尚未达到。
+- 跨高度 separator-pair 检查点的完整 development gold 为 110/110 完成、分析错误 0、
+  `unsafe_approved_auto = 0`；安全 auto 为基础 nominal 15/66、较难 nominal 2/30、challenge 0/14。
+  Candidate 为 89 个不可用、18 个安全、3 个不安全；全部不安全 candidate 均保持 review。S088 由完整
+  三区域联合 separator pair 从 `discrete_phase_ambiguous` 变为安全自动批准；两区域 material、孤立联合
+  edge 与角色不相容 pair 均保持诊断或 review。该阶段没有放宽 Grid、Gate、5% 预算或黄金合同。
 - 24-source 正式性能只由绑定最终干净 commit 的 receipt 判定；5 秒 mean 仍是 blocking Gate，3 秒仍是
   non-blocking 目标。当前 review 表达真实的 phase/cross、Grid/W 与预算证明缺口，不以调窄 guard、静默
   隐藏 saturation、恢复精确 W→H 或改变样片角色掩盖。

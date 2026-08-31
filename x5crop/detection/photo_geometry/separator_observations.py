@@ -25,6 +25,7 @@ from .observation_types import (
     BoundaryEdgeObservation,
     ProfileRun,
     SeparatorBandObservation,
+    SeparatorBandMeasurementBasis,
     SeparatorMaterialPolarity,
     SeparatorMaterialRegionObservation,
     SeparatorMaterialRegionState,
@@ -91,6 +92,7 @@ def _separator_band_from_edges(
     field: PhotoBoundaryMeasurementField,
     boundary_axis: BoundaryAxis,
     frame_width_px: PositiveInterval,
+    measurement_basis: SeparatorBandMeasurementBasis,
 ) -> SeparatorBandObservation | None:
     """Build one directly observed band from two physical edge families."""
 
@@ -259,6 +261,7 @@ def _separator_band_from_edges(
         right_edge_observation_id=right.observation_id,
         left_run_id=left.run_id,
         right_run_id=right.run_id,
+        measurement_basis=measurement_basis,
         material_polarity=polarity,
         gap_interval_px=gap,
         transition_ids=transition_ids,
@@ -293,6 +296,8 @@ def build_format_separator_bands(
     field: PhotoBoundaryMeasurementField,
     boundary_axis: BoundaryAxis,
     frame_width_px: PositiveInterval,
+    *,
+    measurement_basis: SeparatorBandMeasurementBasis,
 ) -> tuple[SeparatorBandObservation, ...]:
     """Verify adjacent dark-valley or light-peak edges as material.
 
@@ -354,6 +359,7 @@ def build_format_separator_bands(
             field=field,
             boundary_axis=boundary_axis,
             frame_width_px=frame_width_px,
+            measurement_basis=measurement_basis,
         )
         if candidate is not None:
             values[str(candidate.observation_id)] = candidate

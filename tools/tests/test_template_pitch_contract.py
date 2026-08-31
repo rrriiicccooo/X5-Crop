@@ -7,6 +7,7 @@ from x5crop.detection.photo_geometry.observation_types import (
     BoundaryEdgeMeasurementBasis,
     BoundaryEdgeObservation,
     SeparatorBandObservation,
+    SeparatorBandMeasurementBasis,
     SeparatorMaterialPolarity,
     SeparatorMaterialRegionObservation,
     SeparatorMaterialRegionState,
@@ -85,6 +86,7 @@ def separator(
         right_edge_observation_id=right.observation_id,
         left_run_id=left.run_id,
         right_run_id=right.run_id,
+        measurement_basis=SeparatorBandMeasurementBasis.DIRECT_TRACE,
         material_polarity=SeparatorMaterialPolarity.DARK,
         gap_interval_px=FiniteInterval(
             right.fit_position_interval_px.minimum

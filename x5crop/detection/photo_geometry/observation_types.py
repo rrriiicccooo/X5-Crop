@@ -175,12 +175,16 @@ class BoundaryEdgeObservation:
 
 class CrossHeightEdgeResolutionKind(str, Enum):
     BOUND_DIRECT_EDGE = "bound_direct_edge"
-    STANDALONE_CANDIDATE = "standalone_candidate"
+    STANDALONE_EDGE = "standalone_edge"
     REDUNDANT_DIRECT_EDGE = "redundant_direct_edge"
     AMBIGUOUS_DIRECT_MATCH = "ambiguous_direct_match"
+    INSUFFICIENT_SPATIAL_SUPPORT = "insufficient_spatial_support"
 
 
 class CrossHeightEdgeResolutionFailureKind(str, Enum):
+    INSUFFICIENT_INDEPENDENT_SPATIAL_SUPPORT = (
+        "insufficient_independent_spatial_support"
+    )
     MULTIPLE_COMPATIBLE_DIRECT_EDGES = (
         "multiple_compatible_direct_edges"
     )
@@ -204,8 +208,16 @@ class CrossHeightEdgeResolution:
         ambiguous = self.kind == (
             CrossHeightEdgeResolutionKind.AMBIGUOUS_DIRECT_MATCH
         )
-        standalone = self.kind == (
-            CrossHeightEdgeResolutionKind.STANDALONE_CANDIDATE
+        insufficient = self.kind == (
+            CrossHeightEdgeResolutionKind.INSUFFICIENT_SPATIAL_SUPPORT
+        )
+        failed = ambiguous or insufficient
+        expected_state = (
+            EvidenceState.CONTRADICTED
+            if ambiguous
+            else EvidenceState.UNAVAILABLE
+            if insufficient
+            else EvidenceState.SUPPORTED
         )
         if (
             not isinstance(self.support_observation_id, ObservationId)
@@ -217,18 +229,20 @@ class CrossHeightEdgeResolution:
                 not isinstance(item, ObservationId)
                 for item in self.compatible_direct_edge_ids
             )
-            or ambiguous != (self.state == EvidenceState.CONTRADICTED)
-            or (not ambiguous) != (self.state == EvidenceState.SUPPORTED)
-            or ambiguous != (self.failure_kind is not None)
-            or (ambiguous or standalone) != (
-                self.final_edge_observation_id is None
-            )
+            or self.state != expected_state
+            or failed != (self.failure_kind is not None)
             or (
                 self.failure_kind is not None
                 and not isinstance(
                     self.failure_kind,
                     CrossHeightEdgeResolutionFailureKind,
                 )
+            )
+            or (
+                self.failure_kind
+                == CrossHeightEdgeResolutionFailureKind
+                .INSUFFICIENT_INDEPENDENT_SPATIAL_SUPPORT
+                and not insufficient
             )
             or (
                 self.failure_kind
@@ -252,21 +266,31 @@ class CrossHeightEdgeResolution:
             )
             or (
                 self.kind
-                == CrossHeightEdgeResolutionKind.STANDALONE_CANDIDATE
+                == CrossHeightEdgeResolutionKind.STANDALONE_EDGE
                 and (
                     self.compatible_direct_edge_ids
-                    or self.final_edge_observation_id is not None
+                    or self.final_edge_observation_id
+                    != self.support_observation_id
                 )
             )
             or (
                 self.kind
-                not in {
-                    CrossHeightEdgeResolutionKind.STANDALONE_CANDIDATE,
-                    CrossHeightEdgeResolutionKind.AMBIGUOUS_DIRECT_MATCH,
+                in {
+                    CrossHeightEdgeResolutionKind.BOUND_DIRECT_EDGE,
+                    CrossHeightEdgeResolutionKind.REDUNDANT_DIRECT_EDGE,
                 }
-                and self.final_edge_observation_id is not None
                 and self.final_edge_observation_id
                 not in self.compatible_direct_edge_ids
+            )
+            or (
+                failed
+                and (
+                    self.final_edge_observation_id is not None
+                    or (
+                        insufficient
+                        and self.compatible_direct_edge_ids
+                    )
+                )
             )
         ):
             raise ValueError("cross-height edge resolution is invalid")
@@ -275,6 +299,11 @@ class CrossHeightEdgeResolution:
 class SeparatorMaterialPolarity(str, Enum):
     DARK = "dark"
     LIGHT = "light"
+
+
+class SeparatorBandMeasurementBasis(str, Enum):
+    DIRECT_TRACE = "direct_trace"
+    CROSS_HEIGHT_AGGREGATE = "cross_height_aggregate"
 
 
 class SeparatorMaterialRegionState(str, Enum):
@@ -315,6 +344,7 @@ class SeparatorBandObservation:
     right_edge_observation_id: ObservationId
     left_run_id: str
     right_run_id: str
+    measurement_basis: SeparatorBandMeasurementBasis
     material_polarity: SeparatorMaterialPolarity
     gap_interval_px: FiniteInterval
     transition_ids: tuple[ObservationId, ...]
@@ -331,6 +361,10 @@ class SeparatorBandObservation:
         if (
             not self.left_run_id
             or not self.right_run_id
+            or not isinstance(
+                self.measurement_basis,
+                SeparatorBandMeasurementBasis,
+            )
             or not isinstance(
                 self.material_polarity,
                 SeparatorMaterialPolarity,

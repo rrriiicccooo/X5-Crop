@@ -28,13 +28,20 @@ from .measurement_model import (
 )
 from .model import BoundaryRole, QueryPurpose
 from .observations import build_sequence_edge_observations
-from .cross_height_edge_support import resolve_cross_height_edge_support
+from .cross_height_edge_support import (
+    placement_sequence_edges_with_cross_height_support,
+    resolve_cross_height_edge_support,
+    resolve_cross_height_separator_support,
+)
 from .output_model import ResolvedOutputSlots, SharedStripDirection
 from .profile_adapters import cross_profile_from_regions, sequence_profile_from_regions
 from .registered_measurement import measure_registered_queries
 from .sequence_edge_families import merge_sequence_edge_families
 from .separator_observations import build_format_separator_bands
-from .observation_types import BoundaryEdgeMeasurementBasis
+from .observation_types import (
+    BoundaryEdgeMeasurementBasis,
+    SeparatorBandMeasurementBasis,
+)
 from .template_evidence import template_evidence_use_ledger
 from .template_frame_width import (
     apply_selected_source_frame_width,
@@ -415,8 +422,28 @@ def prepare_template_lane(
             BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE
         ),
     )
+    direct_separator_bands = build_format_separator_bands(
+        direct_sequence_profile,
+        direct_sequence_edges,
+        transition_by_id,
+        field,
+        width_axis,
+        measurement_plan.template_spec.frame_width_px,
+        measurement_basis=SeparatorBandMeasurementBasis.DIRECT_TRACE,
+    )
+    cross_height_separator_bands = build_format_separator_bands(
+        cross_height_profile,
+        cross_height_edges,
+        transition_by_id,
+        field,
+        width_axis,
+        measurement_plan.template_spec.frame_width_px,
+        measurement_basis=(
+            SeparatorBandMeasurementBasis.CROSS_HEIGHT_AGGREGATE
+        ),
+    )
     (
-        sequence_edges,
+        resolved_sequence_edges,
         cross_height_edge_resolutions,
     ) = resolve_cross_height_edge_support(
         direct_sequence_edges,
@@ -427,13 +454,28 @@ def prepare_template_lane(
         ),
     )
     sequence_profile = direct_sequence_profile
-    separator_bands = build_format_separator_bands(
-        sequence_profile,
-        sequence_edges,
-        transition_by_id,
-        field,
-        width_axis,
-        measurement_plan.template_spec.frame_width_px,
+    projected_cross_height_separator_bands = (
+        resolve_cross_height_separator_support(
+            cross_height_separator_bands,
+            cross_height_edge_resolutions,
+            resolved_sequence_edges,
+            direct_separator_bands,
+        )
+    )
+    separator_bands = tuple(
+        sorted(
+            (
+                *direct_separator_bands,
+                *projected_cross_height_separator_bands,
+            ),
+            key=lambda item: str(item.observation_id),
+        )
+    )
+    placement_sequence_edges = (
+        placement_sequence_edges_with_cross_height_support(
+            resolved_sequence_edges,
+            projected_cross_height_separator_bands,
+        )
     )
     coverage = tuple(item.coverage for item in measurement_sets)
     work = TemplateMeasurementWorkReceipt(
@@ -472,7 +514,7 @@ def prepare_template_lane(
         transition_by_id=transition_by_id,
         sequence_profile=sequence_profile,
         cross_profile=cross_profile,
-        sequence_edges=sequence_edges,
+        sequence_edges=placement_sequence_edges,
         separator_bands=separator_bands,
         top_cross_bindings=(),
         bottom_cross_bindings=(),
@@ -483,7 +525,7 @@ def prepare_template_lane(
     )
     template = measurement_plan.template_spec
     provisional_phase = fit_template_phase(
-        sequence_edges,
+        placement_sequence_edges,
         template,
         separator_bands=separator_bands,
         scale_px_per_mm=scales.width_axis_px_per_mm,
@@ -498,7 +540,7 @@ def prepare_template_lane(
     pitch_calibration = calibrate_template_source_pitch(
         template,
         provisional_phase,
-        sequence_edges,
+        placement_sequence_edges,
         separator_bands,
         holder_span_px=width_authority,
         max_lattice_hypotheses=measurement_plan.phase_bounds.max_hypotheses,
@@ -514,7 +556,7 @@ def prepare_template_lane(
         None
         if base_phase_hypothesis is None
         else fit_template_phase(
-            sequence_edges,
+            placement_sequence_edges,
             template,
             separator_bands=separator_bands,
             scale_px_per_mm=scales.width_axis_px_per_mm,
@@ -532,7 +574,7 @@ def prepare_template_lane(
         base_phase = proposed_base_phase
     else:
         base_phase = fit_template_phase(
-            sequence_edges,
+            placement_sequence_edges,
             template,
             separator_bands=separator_bands,
             scale_px_per_mm=scales.width_axis_px_per_mm,
@@ -570,7 +612,7 @@ def prepare_template_lane(
         )
     )
     phase_input = TemplatePhaseInput(
-        observations=sequence_edges,
+        observations=placement_sequence_edges,
         separator_bands=separator_bands,
         template=template,
         scale_px_per_mm=scales.width_axis_px_per_mm,
@@ -619,7 +661,7 @@ def prepare_template_lane(
         calibrate_source_frame_width(
             source_geometry,
             phase_candidate.result,
-            sequence_edges,
+            placement_sequence_edges,
         )
     )
     selected_width_phase = apply_selected_source_frame_width(
@@ -794,7 +836,7 @@ def prepare_template_lane(
         phase_competition=phase,
         cross_competition=cross_competition,
         evidence_use_ledger=template_evidence_use_ledger(
-            sequence_edges,
+            placement_sequence_edges,
             separator_bands,
             cross.observations,
             phase,

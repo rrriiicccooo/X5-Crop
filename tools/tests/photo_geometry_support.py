@@ -40,6 +40,7 @@ from x5crop.detection.photo_geometry.observation_types import (
     BoundaryEdgeMeasurementBasis,
     BoundaryEdgeObservation,
     ProfileRun,
+    SeparatorBandMeasurementBasis,
     SeparatorMaterialPolarity,
     SeparatorMaterialRegionObservation,
     SeparatorMaterialRegionState,

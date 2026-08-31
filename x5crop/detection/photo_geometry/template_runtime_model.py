@@ -22,13 +22,14 @@ from .measurement_model import (
     PhotoBoundaryMeasurementSet,
     SequenceTransitionObservation,
 )
-from .model import BoundaryAxis, QueryPurpose
+from .model import BoundaryAxis, BoundaryEvidenceState, QueryPurpose
 from .observation_types import (
     BasicAxisProfile,
     BoundaryEdgeMeasurementBasis,
     BoundaryEdgeObservation,
     CrossHeightEdgeResolution,
     CrossHeightEdgeResolutionKind,
+    SeparatorBandMeasurementBasis,
     SeparatorBandObservation,
 )
 from .output_model import (
@@ -259,22 +260,56 @@ class RegisteredTemplateLane:
             for item in self.cross_height_edge_resolutions
         }
         edge_ids = {item.observation_id for item in self.sequence_edges}
-        if any(
-            item.final_edge_observation_id is not None
-            and item.final_edge_observation_id not in edge_ids
-            for item in self.cross_height_edge_resolutions
-        ):
-            raise ValueError(
-                "cross-height resolution leaves the final edge ledger"
+        raw_cross_ids = {
+            item.observation_id for item in self.cross_height_edges
+        }
+        for resolution in self.cross_height_edge_resolutions:
+            final_id = resolution.final_edge_observation_id
+            if final_id is None:
+                continue
+            if resolution.kind == CrossHeightEdgeResolutionKind.STANDALONE_EDGE:
+                if (
+                    final_id != resolution.support_observation_id
+                    or final_id not in raw_cross_ids
+                ):
+                    raise ValueError(
+                        "standalone cross-height resolution changed identity"
+                    )
+            elif final_id not in edge_ids:
+                raise ValueError(
+                    "bound cross-height resolution leaves the edge ledger"
+                )
+        aggregate_separator_edge_ids = {
+            identity
+            for band in self.separator_bands
+            if (
+                band.measurement_basis
+                == SeparatorBandMeasurementBasis.CROSS_HEIGHT_AGGREGATE
+                and band.evidence_state == BoundaryEvidenceState.SUPPORT
             )
+            for identity in (
+                band.left_edge_observation_id,
+                band.right_edge_observation_id,
+            )
+        }
         for edge in self.sequence_edges:
             if (
                 edge.measurement_basis
                 == BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE
             ):
-                raise ValueError(
-                    "standalone cross-height candidate entered placement"
-                )
+                resolution = resolution_by_id.get(edge.observation_id)
+                if (
+                    resolution is None
+                    or resolution.kind
+                    != CrossHeightEdgeResolutionKind.STANDALONE_EDGE
+                    or resolution.final_edge_observation_id
+                    != edge.observation_id
+                    or edge.observation_id
+                    not in aggregate_separator_edge_ids
+                ):
+                    raise ValueError(
+                        "standalone cross-height edge lacks separator authority"
+                    )
             elif (
                 edge.measurement_basis
                 == BoundaryEdgeMeasurementBasis.DIRECT_WITH_CROSS_HEIGHT
@@ -296,6 +331,12 @@ class RegisteredTemplateLane:
             raise ValueError("sequence edges must be registered once")
         if len({item.observation_id for item in self.separator_bands}) != len(self.separator_bands):
             raise ValueError("separator bands must be registered once")
+        if any(
+            band.left_edge_observation_id not in edge_ids
+            or band.right_edge_observation_id not in edge_ids
+            for band in self.separator_bands
+        ):
+            raise ValueError("separator bands must stay inside the placement edge ledger")
         if any(
             binding.role.value != expected
             for bindings, expected in (

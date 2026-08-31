@@ -331,9 +331,21 @@ def alignment_summary(detection: FinalDetection) -> str:
             item.kind.value == "bound_direct_edge"
             for item in lane.prepared.cross_height_edge_resolutions
         )
+        joint_standalone = sum(
+            item.kind.value == "standalone_edge"
+            for item in lane.prepared.cross_height_edge_resolutions
+        )
         joint_ambiguous = sum(
             item.state.value == "contradicted"
             for item in lane.prepared.cross_height_edge_resolutions
+        )
+        joint_unavailable = sum(
+            item.state.value == "unavailable"
+            for item in lane.prepared.cross_height_edge_resolutions
+        )
+        joint_separator = sum(
+            item.measurement_basis.value == "cross_height_aggregate"
+            for item in lane.prepared.separator_bands
         )
         proof = (
             f"GLOBAL {rank}/3 · NOMINAL {nominal_proof} · ADJ "
@@ -347,7 +359,9 @@ def alignment_summary(detection: FinalDetection) -> str:
             f" C{separator_counts['dark'][2]} "
             f"L {separator_counts['light'][0]}/{separator_counts['light'][1]}"
             f" C{separator_counts['light'][2]} · JOINT "
-            f"{joint_authority}/{joint_total} A{joint_ambiguous}"
+            f"B{joint_authority} S{joint_standalone}/{joint_total} "
+            f"A{joint_ambiguous} "
+            f"U{joint_unavailable} P{joint_separator}"
         )
         if diagnostic.pattern.value == "unresolved":
             values.append(f"{lane.lane_id} {label} · {proof}")
