@@ -38,16 +38,22 @@ adjacency/placement 模型。
 - `d18c74e7` 允许无权 `LOCAL_REFINEMENT` 在严格闭环下成为 validation-only：同 Frame opposite 已独立
   授权，source W 完全来自至少两张其它双边授权 Frame，且完整 W 走廊中只有该局部 observation 相容。
   坐标由 `opposite + correlated W` 推导，弱线不收窄 W、不增加 rank，也不改变 phase；phase anchor、
-  循环 W 与多条相容局部线仍保持 typed review。S088 因此安全 auto。
+  循环 W 与多条相容局部线仍保持 typed review。
+- `3c759e99` 把 rank 3 直接坐标的 `(phase, W, pitch)` 改为在 phase、W、pitch 与 `pitch-W` 全部硬区间
+  内联合最小二乘。无约束解越界时不再把 W/pitch 退回 catalog 中心却保留不相容 phase；有界解不扩张
+  authority、不覆盖 native coordinate，也不选择离散 runner。报告与 Debug 保存连续 lineage 中约束最强
+  的 `template_interval_center | direct_least_squares | bounded_direct_least_squares`，不同 runner 不能串用。
 - 完整 development gold 为 110/110 完成、分析错误 0、`unsafe_approved_auto = 0`。安全 auto 为基础
-  nominal 14/66、较难 nominal 1/30、challenge 0/14；基础 nominal candidate 为 51 个不可用、14 个安全、
-  1 个不安全，较难 nominal 为 29 个不可用、1 个安全。安全 auto 为 S022、S025、S029、S063、S064、
-  S067、S081、S083、S084、S085、S087、S088、S092、S094、S095；全部 challenge 均安全 review。
-- 黄金 receipt 的 detector、comparator 与 cohort 均精确匹配 `d18c74e7`；detector manifest 为
-  `672c9a3f3c244d538f21f43befe72c2b06e53b3d42b4a794c8ae217c9a5604a7`，comparator manifest 为
+  nominal 15/66、较难 nominal 1/30、challenge 0/14；基础 nominal candidate 为 50 个不可用、15 个安全、
+  1 个不安全，较难 nominal 为 29 个不可用、1 个安全。安全 auto 为 S003、S022、S025、S029、S063、
+  S064、S067、S081、S083、S084、S085、S087、S089、S092、S094、S095；全部 challenge 均安全 review。
+  S003、S089 新增安全 auto；S088 暴露两条仍合法且证据接近的离散 placement，保守回到 review。
+- 黄金 receipt 的 detector、comparator 与 cohort 均精确匹配 `3c759e99`；detector manifest 为
+  `8f3b293730e9b3efac89085639abb17254bfa7166c5a194b2a1581c53a410098`，comparator manifest 为
   `ad5e68cb34b121b29a53b5fc5485a9d32cb11a7ae2c14d27c921c8d1ff59ced4`。24-source 正式性能 mean 为
-  2.874 秒，p95 为 4.698 秒，最慢 S109 为 4.878 秒；5 秒 Gate 通过且 3 秒 non-blocking 目标达到。
-  性能 receipt SHA-256 为 `8ee4887622ebd255c04f8d160986a7c94a5e09975c3b757300674167ee7a4859`；
+  3.010 秒，p95 为 5.176 秒，最慢 S109 为 5.214 秒；5 秒 mean Gate 通过，3 秒 non-blocking 目标未达到。
+  黄金 summary SHA-256 为 `cf6b7e385254f92f5098004cf0dcd794a9e136721d396e5f329d755dd33e32c8`，性能 receipt
+  SHA-256 为 `b9a664fe8273374caada46eaab324944b043360e681788e214430844060826dc`；
   receipt 只证明该 commit、记录的依赖和 M2 Max 主机。
 
 ## 当前物理证据
@@ -66,13 +72,13 @@ adjacency/placement 模型。
 
 ## 开放风险
 
-- 基础 nominal 仍有 52/66 review，较难 nominal 有 29/30 review。当前完整集有 22 个
-  `direct_role_binding_authority_unavailable`、5 个 `direct_role_aperture_domain_unavailable`、29 个
-  `discrete_phase_ambiguous`、17 个 `non_equivalent_fits`、14 个 placement-level
-  `phase_template_mismatch`、6 个 `global_lattice_authority_unavailable` 与 6 个
+- 基础 nominal 仍有 51/66 review，较难 nominal 有 29/30 review。当前完整集有 19 个
+  `direct_role_binding_authority_unavailable`、6 个 `direct_role_aperture_domain_unavailable`、33 个
+  `discrete_phase_ambiguous`、16 个 `non_equivalent_fits`、12 个 placement-level
+  `phase_template_mismatch`、2 个 `global_lattice_authority_unavailable` 与 6 个
   `aperture_aspect_ratio_budget_exhausted`。竞争必须由新的直接观察 identity、权限或相关安全状态闭合；
   不得恢复 W 自授权、缩窄 guard、精确 W→H 或改 challenge 分类。
-- 当前唯一不安全 candidate 是 S017，并继续由 `direct_use_budget_exceeded` 阻断；其余 94 个 review task 没有
+- 当前唯一不安全 candidate 是 S017，并继续由 `direct_use_budget_exceeded` 阻断；其余 93 个 review task 没有
   selected candidate，不能把“没有输出”误当成精度问题。
 - 当前黄金同时参与 development calibration 与 development 验收，只能证明该集合上的安全与可复算性；
   尚无 sealed acceptance，也没有 `xpan`、`120-645`、`135-dual` 的独立黄金覆盖。
@@ -81,10 +87,10 @@ adjacency/placement 模型。
 
 ## 精确下一步
 
-1. 拆解剩余 22 个 `direct_role_binding_authority_unavailable`，区分承担 phase anchor 的短 edge、outer role
-   与真正的 observation 缺失。下一机制不能复用本阶段的 validation-only 让位，因为 phase anchor 一旦移除
-   就必须由其它独立 direct evidence 重新闭合 phase/pitch。新增能力必须来自同一 registered 像素的通用
-   source-wide、跨高度或 separator
-   physical identity，不能让两个弱局部边界重新凭 W 互相授权。
-2. 随后按独立未知量拆解 `discrete_phase_ambiguous` 与 `non_equivalent_fits`，完善候选无关 separator
-   coverage、局部片距和弱边缘权限；contact/overlap 仍在 nominal 机制稳定后作为同一 adjacency 模型扩展。
+1. 先对基础 nominal 的 18 个 `discrete_phase_ambiguous` 做只读机制分解：逐一比较 winner/runner 的
+   ordinal mapping、独立 support location、separator physical identity、局部 gap 与黄金安全性，区分真实
+   双解和缺少哪一类候选无关 observation。不得用 residual 或未经校准 score 强选。
+2. 选择该分解中覆盖面最大的一个通用物理缺口完成下一轮小机制闭环；随后再处理基础 nominal 的 12 个
+   `direct_role_binding_authority_unavailable`。新增权限必须来自同一 registered 像素的 source-wide、跨高度
+   或 separator physical identity，不能让两个弱局部边界重新凭 W 互相授权。Contact/overlap 仍在 nominal
+   机制稳定后作为同一 adjacency 模型扩展。
