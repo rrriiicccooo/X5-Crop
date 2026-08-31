@@ -1,9 +1,9 @@
 """Classify bounded residual topology after one normal template fit.
 
 The normal fit is the default answer. This module never searches pixels,
-ordinals, or placements. It walks the already-bound roles once and asks one
-physical question: does a directly observed END -> material band -> START
-adjacency depart from the format gap authority?  Only that exact material
+ordinals, placements, or material. It consumes the canonical adjacency
+continuity ledger once and asks whether a directly observed positive
+separator departs from the format gap authority. Only that exact material
 relation can authorize its own measured suffix advance.
 """
 
@@ -13,16 +13,15 @@ from dataclasses import dataclass
 from enum import Enum
 
 from ...domain import FiniteInterval, ObservationId
-from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
-from .model import BoundaryEvidenceState
+from .template_adjacency_topology import (
+    AdjacencyContinuityKind,
+    AdjacencyContinuityObservation,
+)
 from .template_model import (
     LocalAdvanceKind,
     LocalAdvanceRelation,
     SequenceFit,
 )
-
-
-_NUMERIC_EPSILON_PX = 1.0e-7
 
 
 class ResidualPattern(str, Enum):
@@ -36,8 +35,10 @@ class ResidualPattern(str, Enum):
 class LocalAdvanceFailureKind(str, Enum):
     """Typed reason why no bounded local relation can be authorized."""
 
-    MULTIPLE_BANDS = "multiple_bands"
-    TOPOLOGY_CONTRADICTION = "topology_contradiction"
+    ADJACENCY_CONTINUITY_UNRESOLVED = (
+        "adjacency_continuity_unresolved"
+    )
+    ADJACENCY_TOPOLOGY_UNRESOLVED = "adjacency_topology_unresolved"
 
 
 @dataclass(frozen=True)
@@ -120,112 +121,72 @@ def _nominal_relation(ordinal: int) -> LocalAdvanceRelation:
     )
 
 
-def _bands_by_bound_pair(
-    bands: tuple[SeparatorBandObservation, ...],
-    edge_ids: set[ObservationId],
-) -> dict[frozenset[ObservationId], tuple[SeparatorBandObservation, ...]]:
-    values: dict[frozenset[ObservationId], list[SeparatorBandObservation]] = {}
-    for band in bands:
-        if band.evidence_state != BoundaryEvidenceState.SUPPORT:
-            continue
-        pair = frozenset(
-            (band.left_edge_observation_id, band.right_edge_observation_id)
-        )
-        if len(pair) != 2:
-            raise ValueError("separator band must bind two distinct edges")
-        if not pair.issubset(edge_ids):
-            raise ValueError("separator band references an unknown edge")
-        values.setdefault(pair, []).append(band)
-    return {key: tuple(items) for key, items in values.items()}
-
-
 def derive_bounded_local_advances(
     fit: SequenceFit,
-    sequence_edges: tuple[BoundaryEdgeObservation, ...],
-    separator_bands: tuple[SeparatorBandObservation, ...],
+    continuity_observations: tuple[AdjacencyContinuityObservation, ...],
 ) -> LocalAdvanceAnalysis:
     """Classify normal versus directly measured adjacency advances in O(count)."""
 
     evaluated = max(0, fit.template.count - 1)
     if evaluated == 0:
         return LocalAdvanceAnalysis(ResidualPattern.NORMAL, (), (), 0)
-    by_id = {item.observation_id: item for item in sequence_edges}
-    if len(by_id) != len(sequence_edges):
-        raise ValueError("sequence edge identities must be unique")
-    bands_by_pair = _bands_by_bound_pair(separator_bands, set(by_id))
+    if tuple(item.relation_ordinal for item in continuity_observations) != tuple(
+        range(1, fit.template.count)
+    ):
+        raise ValueError("adjacency continuity ledger is incomplete")
     facts: list[AdjacencyGapFact] = []
-    for adjacency_index in range(evaluated):
-        end_id = fit.binding_observation_ids[2 * adjacency_index + 1]
-        next_start_id = fit.binding_observation_ids[2 * adjacency_index + 2]
-        if end_id is None or next_start_id is None:
-            continue
-        end = by_id.get(end_id)
-        next_start = by_id.get(next_start_id)
-        if end is None or next_start is None:
-            raise ValueError("bound adjacency observation is not registered")
-        exact_bands = bands_by_pair.get(
-            frozenset((end_id, next_start_id)),
-            (),
-        )
-        if len(exact_bands) > 1:
+    for observation in continuity_observations:
+        if observation.kind == AdjacencyContinuityKind.UNRESOLVED:
             return LocalAdvanceAnalysis(
                 ResidualPattern.UNRESOLVED,
                 (),
                 tuple(facts),
                 evaluated,
-                failure_kind=LocalAdvanceFailureKind.MULTIPLE_BANDS,
+                failure_kind=(
+                    LocalAdvanceFailureKind.ADJACENCY_CONTINUITY_UNRESOLVED
+                ),
                 unresolved_reason=(
-                    "multiple separator observations bind one adjacency"
+                    observation.reason
+                    or "adjacency continuity is unresolved"
                 ),
             )
-        if not exact_bands:
-            canonical_gap = fit.template.direction * (
-                next_start.canonical_position_px - end.canonical_position_px
-            )
-            if canonical_gap <= _NUMERIC_EPSILON_PX:
-                # End-before-next-start is the normal physical topology.  A
-                # directly reversed/equal pair without separator material is
-                # contact or overlap evidence, but the current product has no
-                # user-confirmed overlap golden authority.  Preserve the
-                # observation and stop at review; never hide it inside a
-                # generic negative local advance.
-                return LocalAdvanceAnalysis(
-                    ResidualPattern.UNRESOLVED,
-                    (),
-                    tuple(facts),
-                    evaluated,
-                    failure_kind=LocalAdvanceFailureKind.TOPOLOGY_CONTRADICTION,
-                    unresolved_reason=(
-                        "direct adjacency does not preserve end-then-start "
-                        "order and has no separator material"
-                    ),
-                )
-            # A missing band cannot authorize an exceptional gap.  The normal
-            # template may still infer this adjacency from other direct phase
-            # evidence, but no local degree of freedom is opened here.
-            continue
-        band = exact_bands[0]
-        if (
-            band.left_edge_observation_id != end_id
-            or band.right_edge_observation_id != next_start_id
+        if observation.kind == (
+            AdjacencyContinuityKind.NORMAL_SEPARATOR_COUNTEREVIDENCE
         ):
             return LocalAdvanceAnalysis(
                 ResidualPattern.UNRESOLVED,
                 (),
                 tuple(facts),
                 evaluated,
-                failure_kind=LocalAdvanceFailureKind.TOPOLOGY_CONTRADICTION,
+                failure_kind=(
+                    LocalAdvanceFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED
+                ),
                 unresolved_reason=(
-                    "separator material contradicts bound END-then-START roles"
+                    "direct adjacency contradicts an ordinary positive "
+                    "separator; contact or overlap is not yet authorized"
                 ),
             )
+        if observation.kind != AdjacencyContinuityKind.SEPARATOR_MATERIAL:
+            continue
+        gap = observation.signed_gap_interval_px
+        end_id = observation.end_observation_id
+        next_start_id = observation.next_start_observation_id
+        band_ids = observation.separator_band_observation_ids
+        if (
+            gap is None
+            or end_id is None
+            or next_start_id is None
+            or len(band_ids) != 1
+        ):
+            raise ValueError("separator continuity fact is incomplete")
+        band_id = band_ids[0]
         facts.append(
             AdjacencyGapFact(
-                relation_ordinal=adjacency_index + 1,
-                gap_interval_px=band.gap_interval_px,
-                canonical_gap_px=band.gap_interval_px.center,
+                relation_ordinal=observation.relation_ordinal,
+                gap_interval_px=gap,
+                canonical_gap_px=gap.center,
                 observation_ids=(end_id, next_start_id),
-                separator_band_id=band.observation_id,
+                separator_band_id=band_id,
             )
         )
 

@@ -27,6 +27,12 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   支持时，才作为一个 `cross_height_aggregate` separator pair 进入 placement。两区域 material、角色
   不相容、重复或多解联合事实不取得坐标权限；同一 pair 已有 direct band 时不重复计票。该能力不增加
   TIFF 读取、query、第二 detector 或 score。
+- Selected placement 现在由 `AdjacencyContinuityObservation` 为每个 adjacency 建立唯一 typed ledger。
+  唯一正序 separator band 可以授权实测 local advance；完整 corridor 但无反证只保留正常 Grid，不能
+  冒充直接 separator；material unavailable、band/角色冲突、跨零 gap 与非正 gap 分别保留独立状态。
+  普通 adjacency 的歧义和拓扑反证通过专用 Gate reason 安全 review，report revision 更新为
+  `x5crop_v5_template_report_33`。该映射只复用已登记事实，不新增 TIFF 读取、低梯度 detector 或
+  contact/overlap 选择。
 - 直接观察到的 start/end 在最终 placement 中保留 native coordinate 与完整 interval；Grid 只补齐缺失
   角色。同一连续 placement 的互补 endpoint evidence 合并为联合可行状态，不伪造 runner。唯一 placement
   中至少两张完整直接 Frame 可闭合 source W；当每个缺失 Frame 仍有一侧直接边缘时，同一份相关 W 可补
@@ -140,14 +146,14 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   阻断原因；报告同时保存全局未知量 constraint rank、逐 adjacency query/trace/coordinate coverage 与
   直接角色/外侧 Frame observation authority，以及 dark/light material、逐区域状态和冲突。Debug 不重新
   求解，也不把 review candidate 伪装为正式输出。当前 report revision 为
-  `x5crop_v5_template_report_32`，并显式区分直接角色的 coordinate `observation_id` 与相关
+  `x5crop_v5_template_report_33`，并显式区分直接角色的 coordinate `observation_id` 与相关
   `evidence_group_id`，同时报告 phase candidate 的输入权限、projection outcome、保留 rank、投影 binding、
   calibrated nominal prior/evidence/selected authority、phase anchor、推断 adjacency、未观察 Frame、
   nominal solve/local-prefix 工作量、连续 lattice 参数依据、三层 source footprint、typed
   saturation、同一状态 cross
   alignment padding、selected-only source W authority、source W/H、相关
   Frame-width inference 及 validation-only role/observation provenance、aspect calibration、raw/guarded
-  ratio、两轴 guard、推导 H、Cross typed root
+  ratio、两轴 guard、推导 H、逐 adjacency continuity ledger、Cross typed root
   failure、pair support mode、family resolution 与预算；不保留旧 schema 兼容路径。
 - 正式 TIFF 保真 16-bit RGB、ICC、resolution、支持的 metadata 与无损压缩，并写
   `Orientation=1`。完整 source 先写 staging，再原子发布到尚不存在的目录。

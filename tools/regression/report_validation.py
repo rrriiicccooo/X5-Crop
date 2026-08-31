@@ -67,6 +67,7 @@ _TEMPLATE_ALIGNMENT_FIELDS = {
     "global_lattice_authority",
     "calibrated_nominal_grid_evidence",
     "adjacency_observation_coverage",
+    "adjacency_continuity_observations",
     "direct_role_binding_authority",
     "outer_frame_observation_authority",
     "frame_width_inference",
@@ -654,6 +655,177 @@ def _validate_adjacency_coverage(value: object) -> None:
             raise ValueError("adjacency aggregate coverage is invalid")
     if ordinals != list(range(1, len(ordinals) + 1)):
         raise ValueError("adjacency coverage ordinals are invalid")
+
+
+def _validate_adjacency_continuity(value: object) -> None:
+    if not isinstance(value, list):
+        raise ValueError("adjacency continuity summary is invalid")
+    ordinals: list[int] = []
+    for observation in value:
+        if not isinstance(observation, dict) or set(observation) != {
+            "observation_id",
+            "relation_ordinal",
+            "state",
+            "kind",
+            "basis",
+            "required_interval_px",
+            "covering_query_ids",
+            "end_observation_id",
+            "next_start_observation_id",
+            "separator_band_observation_ids",
+            "signed_gap_interval_px",
+            "failure_kind",
+            "reason",
+        }:
+            raise ValueError("adjacency continuity item is invalid")
+        ordinal = observation["relation_ordinal"]
+        state = observation["state"]
+        kind = observation["kind"]
+        basis = observation["basis"]
+        end_id = observation["end_observation_id"]
+        start_id = observation["next_start_observation_id"]
+        separator_band_ids = observation["separator_band_observation_ids"]
+        signed_gap = observation["signed_gap_interval_px"]
+        failure_kind = observation["failure_kind"]
+        reason = observation["reason"]
+        if (
+            not isinstance(observation["observation_id"], str)
+            or not observation["observation_id"]
+            or not isinstance(ordinal, int)
+            or ordinal <= 0
+            or state not in {"supported", "contradicted", "unavailable"}
+            or kind
+            not in {
+                "separator_material",
+                "no_counterevidence_observed",
+                "normal_separator_counterevidence",
+                "separator_material_unresolved",
+                "unresolved",
+                "coverage_incomplete",
+            }
+            or basis
+            not in {
+                None,
+                "positive_separator_band",
+                "complete_registered_corridor",
+                "reversed_direct_edges",
+            }
+            or not _valid_interval(observation["required_interval_px"])
+            or not _valid_ids(observation["covering_query_ids"])
+            or observation["covering_query_ids"]
+            != sorted(observation["covering_query_ids"])
+            or any(
+                item is not None
+                and (not isinstance(item, str) or not item)
+                for item in (end_id, start_id)
+            )
+            or not _valid_ids(separator_band_ids)
+            or separator_band_ids != sorted(separator_band_ids)
+            or signed_gap is not None
+            and not _valid_interval(signed_gap)
+            or failure_kind
+            not in {
+                None,
+                "multiple_separator_bands",
+                "separator_material_unresolved",
+                "separator_role_conflict",
+                "signed_gap_crosses_zero",
+                "registered_coverage_incomplete",
+            }
+            or reason is not None
+            and (not isinstance(reason, str) or not reason)
+        ):
+            raise ValueError("adjacency continuity item is invalid")
+        ordinals.append(ordinal)
+        failed = kind in {
+            "separator_material_unresolved",
+            "unresolved",
+            "coverage_incomplete",
+        }
+        if (
+            (kind in {"separator_material", "no_counterevidence_observed"})
+            != (state == "supported")
+            or (kind == "normal_separator_counterevidence")
+            != (state == "contradicted")
+            or failed != (state == "unavailable")
+            or failed != (failure_kind is not None and reason is not None)
+            or (not failed) != (failure_kind is None and reason is None)
+        ):
+            raise ValueError("adjacency continuity state is inconsistent")
+        allowed_failures = {
+            "separator_material_unresolved": {
+                "separator_material_unresolved",
+            },
+            "unresolved": {
+                "multiple_separator_bands",
+                "separator_role_conflict",
+                "signed_gap_crosses_zero",
+            },
+            "coverage_incomplete": {
+                "registered_coverage_incomplete",
+            },
+        }
+        if failed and failure_kind not in allowed_failures[kind]:
+            raise ValueError("adjacency continuity failure kind is invalid")
+        direct_pair = end_id is not None and start_id is not None
+        if kind == "separator_material":
+            if (
+                basis != "positive_separator_band"
+                or not direct_pair
+                or len(separator_band_ids) != 1
+                or signed_gap is None
+                or float(signed_gap["minimum"]) <= 1.0e-7
+            ):
+                raise ValueError("separator continuity fact is incomplete")
+        elif kind == "no_counterevidence_observed":
+            if (
+                basis != "complete_registered_corridor"
+                or separator_band_ids
+            ):
+                raise ValueError("neutral continuity fact is invalid")
+        elif kind == "normal_separator_counterevidence":
+            if (
+                basis != "reversed_direct_edges"
+                or not direct_pair
+                or separator_band_ids
+                or signed_gap is None
+                or float(signed_gap["maximum"]) > 1.0e-7
+            ):
+                raise ValueError("normal-separator counterevidence is invalid")
+        elif basis is not None:
+            raise ValueError("unresolved continuity cannot claim a basis")
+        if kind == "separator_material_unresolved" and (
+            not direct_pair
+            or not separator_band_ids
+            or signed_gap is None
+            or float(signed_gap["minimum"]) <= 1.0e-7
+        ):
+            raise ValueError("unresolved material provenance is invalid")
+        if failure_kind == "multiple_separator_bands" and (
+            not direct_pair or len(separator_band_ids) < 2
+        ):
+            raise ValueError("multiple separator provenance is invalid")
+        if failure_kind == "separator_role_conflict" and (
+            not direct_pair
+            or len(separator_band_ids) != 1
+            or signed_gap is None
+        ):
+            raise ValueError("separator role-conflict provenance is invalid")
+        if failure_kind == "signed_gap_crosses_zero" and (
+            not direct_pair
+            or separator_band_ids
+            or signed_gap is None
+            or float(signed_gap["minimum"]) > 1.0e-7
+            or float(signed_gap["maximum"]) <= 1.0e-7
+        ):
+            raise ValueError("cross-zero gap provenance is invalid")
+        if (
+            failure_kind == "registered_coverage_incomplete"
+            and separator_band_ids
+        ):
+            raise ValueError("incomplete coverage retained a material band")
+    if ordinals != list(range(1, len(ordinals) + 1)):
+        raise ValueError("adjacency continuity ordinals are invalid")
 
 
 def _validate_outer_frame_observation_authority(value: object) -> None:
@@ -1416,6 +1588,17 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         _validate_adjacency_coverage(
             alignment["adjacency_observation_coverage"]
         )
+        _validate_adjacency_continuity(
+            alignment["adjacency_continuity_observations"]
+        )
+        if [
+            item["relation_ordinal"]
+            for item in alignment["adjacency_observation_coverage"]
+        ] != [
+            item["relation_ordinal"]
+            for item in alignment["adjacency_continuity_observations"]
+        ]:
+            raise ValueError("adjacency coverage and continuity disagree")
         _validate_direct_role_binding_authority(
             alignment["direct_role_binding_authority"]
         )
@@ -1729,6 +1912,7 @@ def _validate_phase_competition(value: object) -> None:
         "global_lattice_authority",
         "calibrated_nominal_grid_evidence",
         "adjacency_observation_coverage",
+        "adjacency_continuity_observations",
         "direct_role_binding_authority",
         "outer_frame_observation_authority",
     }:
@@ -1749,6 +1933,18 @@ def _validate_phase_competition(value: object) -> None:
     _validate_nominal_grid_evidence(
         value["calibrated_nominal_grid_evidence"]
     )
+    _validate_adjacency_coverage(value["adjacency_observation_coverage"])
+    _validate_adjacency_continuity(
+        value["adjacency_continuity_observations"]
+    )
+    if [
+        item["relation_ordinal"]
+        for item in value["adjacency_observation_coverage"]
+    ] != [
+        item["relation_ordinal"]
+        for item in value["adjacency_continuity_observations"]
+    ]:
+        raise ValueError("adjacency coverage and continuity disagree")
     receipt = value["receipt"]
     receipt_fields = {
         "observation_count",

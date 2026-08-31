@@ -27,6 +27,9 @@ from x5crop.detection.photo_geometry.template_adjacency_coverage import (
     AdjacencyObservationCoverage,
     AdjacencyTraceCoverage,
 )
+from x5crop.detection.photo_geometry.template_adjacency_topology import (
+    observe_adjacency_continuity,
+)
 from x5crop.detection.photo_geometry.template_model import (
     FrameWidthInferenceFailureKind,
     SequenceBindingUse,
@@ -571,33 +574,41 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             covered_coordinate_count=11,
             complete=True,
         )
+        coverage = (
+            AdjacencyObservationCoverage(
+                relation_ordinal=1,
+                required_interval_px=FiniteInterval(140.0, 160.0),
+                covering_query_ids=(),
+                trace_coverage=(incomplete_trace,),
+                required_trace_count=1,
+                covered_trace_count=0,
+                required_coordinate_count=11,
+                covered_coordinate_count=0,
+                normal_inference_required=True,
+                state=AdjacencyCoverageState.INCOMPLETE,
+            ),
+            AdjacencyObservationCoverage(
+                relation_ordinal=2,
+                required_interval_px=FiniteInterval(260.0, 280.0),
+                covering_query_ids=("complete-query",),
+                trace_coverage=(complete_trace,),
+                required_trace_count=1,
+                covered_trace_count=1,
+                required_coordinate_count=11,
+                covered_coordinate_count=11,
+                normal_inference_required=False,
+                state=AdjacencyCoverageState.COMPLETE,
+            ),
+        )
+        assert phase.best is not None
         phase = replace(
             phase,
-            adjacency_observation_coverage=(
-                AdjacencyObservationCoverage(
-                    relation_ordinal=1,
-                    required_interval_px=FiniteInterval(140.0, 160.0),
-                    covering_query_ids=(),
-                    trace_coverage=(incomplete_trace,),
-                    required_trace_count=1,
-                    covered_trace_count=0,
-                    required_coordinate_count=11,
-                    covered_coordinate_count=0,
-                    normal_inference_required=True,
-                    state=AdjacencyCoverageState.INCOMPLETE,
-                ),
-                AdjacencyObservationCoverage(
-                    relation_ordinal=2,
-                    required_interval_px=FiniteInterval(260.0, 280.0),
-                    covering_query_ids=("complete-query",),
-                    trace_coverage=(complete_trace,),
-                    required_trace_count=1,
-                    covered_trace_count=1,
-                    required_coordinate_count=11,
-                    covered_coordinate_count=11,
-                    normal_inference_required=False,
-                    state=AdjacencyCoverageState.COMPLETE,
-                ),
+            adjacency_observation_coverage=coverage,
+            adjacency_continuity_observations=observe_adjacency_continuity(
+                phase.best,
+                observations,
+                (),
+                coverage,
             ),
         )
         source = SourceScanGeometry.create(

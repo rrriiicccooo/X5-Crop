@@ -48,6 +48,10 @@ from .template_adjacency_coverage import (
     AdjacencyCoverageState,
     assess_adjacency_observation_coverage,
 )
+from .template_adjacency_topology import (
+    AdjacencyContinuityKind,
+    observe_adjacency_continuity,
+)
 from .template_lattice_authority import assess_global_lattice_authority
 from .template_direct_role_authority import (
     assess_direct_role_binding_authorities,
@@ -1257,6 +1261,16 @@ def _attach_selected_candidate_authorities(
             directly_observed_ordinals=directly_observed_ordinals,
         )
     )
+    continuity = (
+        ()
+        if result.best is None
+        else observe_adjacency_continuity(
+            result.best,
+            phase_input.observations,
+            phase_input.separator_bands,
+            coverage,
+        )
+    )
     outer_authority = (
         None
         if result.best is None
@@ -1356,6 +1370,7 @@ def _attach_selected_candidate_authorities(
         global_lattice_authority=authority,
         calibrated_nominal_grid_evidence=nominal_evidence,
         adjacency_observation_coverage=coverage,
+        adjacency_continuity_observations=continuity,
         direct_role_binding_authority=direct_role_authority,
         outer_frame_observation_authority=outer_authority,
     )
@@ -1417,8 +1432,50 @@ def _apply_final_lattice_contract(
     authority = result.global_lattice_authority
     nominal_evidence = result.calibrated_nominal_grid_evidence
     coverage = result.adjacency_observation_coverage
+    continuity = result.adjacency_continuity_observations
     outer_authority = result.outer_frame_observation_authority
     inferred = tuple(item for item in coverage if item.normal_inference_required)
+    topology_counterevidence = next(
+        (
+            item
+            for item in continuity
+            if item.kind
+            == AdjacencyContinuityKind.NORMAL_SEPARATOR_COUNTEREVIDENCE
+        ),
+        None,
+    )
+    continuity_unresolved = next(
+        (
+            item
+            for item in continuity
+            if item.kind == AdjacencyContinuityKind.UNRESOLVED
+        ),
+        None,
+    )
+    if result.status == PhaseFitStatus.RESOLVED and (
+        topology_counterevidence is not None
+        or continuity_unresolved is not None
+    ):
+        blocker = (
+            topology_counterevidence
+            if topology_counterevidence is not None
+            else continuity_unresolved
+        )
+        assert blocker is not None
+        return replace(
+            result,
+            status=PhaseFitStatus.UNRESOLVED,
+            ambiguity_reason=(
+                blocker.reason
+                or "an adjacency contradicts an ordinary separator"
+            ),
+            failure_kind=(
+                PhaseFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED
+                if topology_counterevidence is not None
+                else PhaseFailureKind.ADJACENCY_CONTINUITY_UNRESOLVED
+            ),
+            winner_basis=None,
+        )
     if (
         result.status == PhaseFitStatus.RESOLVED
         and nominal_evidence is not None
@@ -1587,14 +1644,30 @@ def fit_template_phase_candidate_with_local_advance(
     assert normal.best is not None
     # Import here keeps the residual owner dependent on the canonical phase
     # types without creating a module import cycle.
-    from .template_residual import derive_bounded_local_advances
+    from .template_residual import (
+        LocalAdvanceFailureKind,
+        derive_bounded_local_advances,
+    )
+
+    initial_coverage = assess_adjacency_observation_coverage(
+        normal.best,
+        phase_input.sequence_measurement_sets,
+        directly_observed_ordinals=(),
+    )
+    continuity = observe_adjacency_continuity(
+        normal.best,
+        tuple(
+            item
+            for item in observations
+            if isinstance(item, BoundaryEdgeObservation)
+        ),
+        separator_bands,
+        initial_coverage,
+    )
 
     analysis = derive_bounded_local_advances(
         normal.best,
-        tuple(
-            item for item in observations if isinstance(item, BoundaryEdgeObservation)
-        ),
-        separator_bands,
+        continuity,
     )
     directly_observed_ordinals = tuple(
         item.relation_ordinal for item in analysis.adjacency_facts
@@ -1604,7 +1677,15 @@ def fit_template_phase_candidate_with_local_advance(
             normal,
             status=PhaseFitStatus.UNRESOLVED,
             ambiguity_reason=analysis.unresolved_reason,
-            failure_kind=PhaseFailureKind.LOCAL_ADVANCE_AMBIGUOUS,
+            failure_kind=(
+                PhaseFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED
+                if analysis.failure_kind
+                == LocalAdvanceFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED
+                else PhaseFailureKind.ADJACENCY_CONTINUITY_UNRESOLVED
+                if analysis.failure_kind
+                == LocalAdvanceFailureKind.ADJACENCY_CONTINUITY_UNRESOLVED
+                else PhaseFailureKind.LOCAL_ADVANCE_AMBIGUOUS
+            ),
             winner_basis=None,
             receipt=replace(
                 normal.receipt,

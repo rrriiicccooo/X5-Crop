@@ -15,6 +15,7 @@ from .template_model import (
     SequenceFit,
 )
 from .template_adjacency_coverage import AdjacencyObservationCoverage
+from .template_adjacency_topology import AdjacencyContinuityObservation
 from .template_direct_role_authority import DirectRoleBindingAuthority
 from .template_outer_frame_authority import OuterFrameObservationAuthority
 from .template_nominal_grid_model import CalibratedNominalGridEvidence
@@ -79,6 +80,9 @@ class TemplateAlignmentDiagnostic:
     adjacency_observation_coverage: tuple[
         AdjacencyObservationCoverage, ...
     ]
+    adjacency_continuity_observations: tuple[
+        AdjacencyContinuityObservation, ...
+    ]
     direct_role_binding_authority: DirectRoleBindingAuthority | None
     outer_frame_observation_authority: OuterFrameObservationAuthority | None
     frame_width_inference: FrameWidthInferenceAssessment | None
@@ -115,6 +119,10 @@ class TemplateAlignmentDiagnostic:
             or any(
                 not isinstance(item, AdjacencyObservationCoverage)
                 for item in self.adjacency_observation_coverage
+            )
+            or any(
+                not isinstance(item, AdjacencyContinuityObservation)
+                for item in self.adjacency_continuity_observations
             )
             or self.direct_role_binding_authority is not None
             and not isinstance(
@@ -328,6 +336,9 @@ def template_alignment_diagnostic(
         ),
         adjacency_observation_coverage=(
             phase.adjacency_observation_coverage
+        ),
+        adjacency_continuity_observations=(
+            phase.adjacency_continuity_observations
         ),
         direct_role_binding_authority=(
             phase.direct_role_binding_authority

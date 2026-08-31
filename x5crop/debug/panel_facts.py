@@ -264,6 +264,20 @@ def alignment_summary(detection: FinalDetection) -> str:
         complete_coverage = sum(
             item.state.value == "complete" for item in inferred_coverage
         )
+        continuity_counts = {
+            kind: sum(
+                item.kind.value == kind
+                for item in diagnostic.adjacency_continuity_observations
+            )
+            for kind in (
+                "separator_material",
+                "no_counterevidence_observed",
+                "normal_separator_counterevidence",
+                "separator_material_unresolved",
+                "unresolved",
+                "coverage_incomplete",
+            )
+        }
         direct = diagnostic.direct_role_binding_authority
         direct_supported = (
             0
@@ -349,7 +363,13 @@ def alignment_summary(detection: FinalDetection) -> str:
         )
         proof = (
             f"GLOBAL {rank}/3 · NOMINAL {nominal_proof} · ADJ "
-            f"{complete_coverage}/{len(inferred_coverage)} · DIRECT "
+            f"{complete_coverage}/{len(inferred_coverage)} · CONT "
+            f"S{continuity_counts['separator_material']} "
+            f"N{continuity_counts['no_counterevidence_observed']} "
+            f"X{continuity_counts['normal_separator_counterevidence']} "
+            f"M{continuity_counts['separator_material_unresolved']} "
+            f"U{continuity_counts['unresolved']} "
+            f"I{continuity_counts['coverage_incomplete']} · DIRECT "
             f"{direct_supported}/{direct_total} G{direct_evidence_group_count} · "
             f"APERTURE DOMAIN "
             f"{direct_aperture_required} · OUTER "

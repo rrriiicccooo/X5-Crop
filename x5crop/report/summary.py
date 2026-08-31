@@ -132,6 +132,10 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                         alignments[lane.lane_id]
                         .adjacency_observation_coverage
                     ),
+                    "adjacency_continuity_observations": typed_read_model(
+                        alignments[lane.lane_id]
+                        .adjacency_continuity_observations
+                    ),
                     "direct_role_binding_authority": typed_read_model(
                         alignments[lane.lane_id]
                         .direct_role_binding_authority

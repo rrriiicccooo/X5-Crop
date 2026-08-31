@@ -152,6 +152,92 @@ class TemplateSelectionContractTest(unittest.TestCase):
         self.assertEqual(competition.selected_placement_id, placement.placement_id)
         self.assertIsNone(competition.failure)
 
+    def test_adjacency_topology_counterevidence_has_one_typed_gate_reason(
+        self,
+    ) -> None:
+        phase, cross, placement = _resolved()
+        phase = replace(
+            phase,
+            status=PhaseFitStatus.UNRESOLVED,
+            ambiguity_reason=(
+                "ordinary positive separator is contradicted"
+            ),
+            failure_kind=PhaseFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED,
+            winner_basis=None,
+        )
+
+        competition = select_lane_template_placement(
+            lane_id="lane:0",
+            best=placement,
+            runner_up=None,
+            phase=phase,
+            cross=cross,
+            content_assessment=None,
+        )
+
+        assert competition.failure is not None
+        self.assertEqual(
+            competition.failure.gap,
+            GateGap.ADJACENCY_TOPOLOGY_UNRESOLVED,
+        )
+        facts = {
+            code: TypedAssessment(EvidenceState.SUPPORTED, None)
+            for code in CANDIDATE_GATE_CHECK_CODES
+        }
+        facts["local_advance_authority"] = TypedAssessment(
+            EvidenceState.UNAVAILABLE,
+            GateGap.ADJACENCY_TOPOLOGY_UNRESOLVED,
+            competition.failure,
+        )
+        decision = apply_decision_gate(candidate_gate_assessment(facts))
+        self.assertEqual(
+            decision.final_review_reasons,
+            ("adjacency_topology_unresolved",),
+        )
+
+    def test_adjacency_continuity_failure_has_one_typed_gate_reason(
+        self,
+    ) -> None:
+        phase, cross, placement = _resolved()
+        phase = replace(
+            phase,
+            status=PhaseFitStatus.UNRESOLVED,
+            ambiguity_reason="separator material is unresolved",
+            failure_kind=(
+                PhaseFailureKind.ADJACENCY_CONTINUITY_UNRESOLVED
+            ),
+            winner_basis=None,
+        )
+
+        competition = select_lane_template_placement(
+            lane_id="lane:0",
+            best=placement,
+            runner_up=None,
+            phase=phase,
+            cross=cross,
+            content_assessment=None,
+        )
+
+        assert competition.failure is not None
+        self.assertEqual(
+            competition.failure.gap,
+            GateGap.ADJACENCY_CONTINUITY_UNRESOLVED,
+        )
+        facts = {
+            code: TypedAssessment(EvidenceState.SUPPORTED, None)
+            for code in CANDIDATE_GATE_CHECK_CODES
+        }
+        facts["local_advance_authority"] = TypedAssessment(
+            EvidenceState.UNAVAILABLE,
+            GateGap.ADJACENCY_CONTINUITY_UNRESOLVED,
+            competition.failure,
+        )
+        decision = apply_decision_gate(candidate_gate_assessment(facts))
+        self.assertEqual(
+            decision.final_review_reasons,
+            ("adjacency_continuity_unresolved",),
+        )
+
     def test_partial_height_role_accepts_a_direct_aperture_pair(self) -> None:
         phase, cross, placement = _resolved()
         phase = _with_partial_height_role_authority(phase)

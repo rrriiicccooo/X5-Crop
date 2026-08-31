@@ -10,6 +10,7 @@ from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInte
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .measurement_model import PhotoBoundaryMeasurementSet
 from .template_adjacency_coverage import AdjacencyObservationCoverage
+from .template_adjacency_topology import AdjacencyContinuityObservation
 from .template_direct_role_authority import DirectRoleBindingAuthority
 from .template_outer_frame_authority import OuterFrameObservationAuthority
 from .template_model import (
@@ -277,6 +278,10 @@ class PhaseFailureKind(str, Enum):
     FIXED_TEMPLATE_MISMATCH = "fixed_template_mismatch"
     DISCRETE_PHASE_AMBIGUOUS = "discrete_phase_ambiguous"
     LOCAL_ADVANCE_AMBIGUOUS = "local_advance_ambiguous"
+    ADJACENCY_CONTINUITY_UNRESOLVED = (
+        "adjacency_continuity_unresolved"
+    )
+    ADJACENCY_TOPOLOGY_UNRESOLVED = "adjacency_topology_unresolved"
 
 
 class PhaseWinnerBasis(str, Enum):
@@ -462,6 +467,9 @@ class PhaseFitResult:
         CalibratedNominalGridEvidence | None
     ) = None
     adjacency_observation_coverage: tuple[AdjacencyObservationCoverage, ...] = ()
+    adjacency_continuity_observations: tuple[
+        AdjacencyContinuityObservation, ...
+    ] = ()
     direct_role_binding_authority: DirectRoleBindingAuthority | None = None
     outer_frame_observation_authority: (
         OuterFrameObservationAuthority | None
@@ -537,6 +545,11 @@ class PhaseFitResult:
             for item in self.adjacency_observation_coverage
         ):
             raise TypeError("phase adjacency observation coverage is invalid")
+        if any(
+            not isinstance(item, AdjacencyContinuityObservation)
+            for item in self.adjacency_continuity_observations
+        ):
+            raise TypeError("phase adjacency continuity ledger is invalid")
         if (
             self.direct_role_binding_authority is not None
             and not isinstance(
@@ -558,6 +571,19 @@ class PhaseFitResult:
             for item in self.adjacency_observation_coverage
         ) != tuple(range(1, self.template.count)):
             raise ValueError("phase adjacency coverage must follow template order")
+        if self.adjacency_continuity_observations and tuple(
+            item.relation_ordinal
+            for item in self.adjacency_continuity_observations
+        ) != tuple(range(1, self.template.count)):
+            raise ValueError(
+                "phase adjacency continuity must follow template order"
+            )
+        if bool(self.adjacency_continuity_observations) != bool(
+            self.adjacency_observation_coverage
+        ):
+            raise ValueError(
+                "phase adjacency continuity requires the coverage ledger"
+            )
 
 
 @dataclass(frozen=True)

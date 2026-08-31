@@ -77,7 +77,11 @@ def build_template_gate(
             lane.prepared.phase_competition
             for lane in reconstructions
             if lane.prepared.phase_competition.failure_kind
-            == PhaseFailureKind.LOCAL_ADVANCE_AMBIGUOUS
+            in {
+                PhaseFailureKind.LOCAL_ADVANCE_AMBIGUOUS,
+                PhaseFailureKind.ADJACENCY_CONTINUITY_UNRESOLVED,
+                PhaseFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED,
+            }
         ),
         None,
     )
@@ -86,10 +90,18 @@ def build_template_gate(
         None
         if local_phase_failure is None
         else failure_fact(
-            GateGap.LOCAL_ADVANCE_UNRESOLVED,
+            (
+                GateGap.ADJACENCY_TOPOLOGY_UNRESOLVED
+                if local_phase_failure.failure_kind
+                == PhaseFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED
+                else GateGap.ADJACENCY_CONTINUITY_UNRESOLVED
+                if local_phase_failure.failure_kind
+                == PhaseFailureKind.ADJACENCY_CONTINUITY_UNRESOLVED
+                else GateGap.LOCAL_ADVANCE_UNRESOLVED
+            ),
             detail=(
                 local_phase_failure.ambiguity_reason
-                or GateGap.LOCAL_ADVANCE_UNRESOLVED.value
+                or local_phase_failure.failure_kind.value
             ),
         )
     )
@@ -180,7 +192,7 @@ def build_template_gate(
         ),
         "local_advance_authority": (
             unavailable(
-                GateGap.LOCAL_ADVANCE_UNRESOLVED,
+                local_advance_failure.gap,
                 local_advance_failure,
             )
             if local_advance_unresolved

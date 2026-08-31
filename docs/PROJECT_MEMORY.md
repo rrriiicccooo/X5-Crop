@@ -33,7 +33,7 @@ OOD 共同支持“风险低到可直接使用”，不是 runtime 已知黄金�
   format 保持 unavailable。
 - Grid 可以生成完整 diagnostic candidate，但当前 hard-fact 自动批准要求每张 Frame 至少有一侧直接角色。
   双侧都未绑定时，evidence 保存 Frame ordinal，并以 `nominal_grid_complete_frame_unobserved` review；S040、
-  S056 是该合同的真实安全反例。Report revision 为 `x5crop_v5_template_report_32`。
+  S056 是该合同的真实安全反例。Report revision 为 `x5crop_v5_template_report_33`。
 - 普通 local refinement 使用完整 format W，不能让正在受检验的 fitted Grid W 过滤自己的反证。唯一
   placement 中至少两张其它完整直接 Frame 闭合的 `SourceFrameWidthAuthority` 可以追加一次有界 lookup，
   在某个双侧未绑定 Frame 中唯一选择已经注册且各自有坐标权限的 native edge pair；没有合格解释或多解
@@ -45,6 +45,11 @@ OOD 共同支持“风险低到可直接使用”，不是 runtime 已知黄金�
   可测整数像素中心恰好分给一个预登记窗口。相邻窗口的 measurement halo 可以重叠，transition ownership
   无重叠、无缺口；逐 adjacency coverage 按离散坐标计数。它复用同一全长 baseline，不新增 TIFF 读取、
   query、winner-specific requery 或第二 detector。
+- `AdjacencyContinuityObservation` 现在把 selected placement 的既有 registered facts 按 ordinal 映射为
+  `separator_material | no_counterevidence_observed | separator_material_unresolved |
+  normal_separator_counterevidence | unresolved | coverage_incomplete`。只有正序 material band 能产生
+  local advance；完整走廊无反证只维持正常 Grid。Continuity 与 topology 分别使用 typed Gate failure，
+  report/Debug 保存完整 ledger。该机制没有新增像素读取，也尚未选择 contact/overlap。
 - 三个固定高度区域的弱 signal 可以在同一 registered measurement owner 内形成 aggregate edge。单条
   aggregate edge 默认只作诊断；只有左右 edge 分别具备 END/START 角色，且 separator material 也由三个
   独立区域共同支持时，才作为一个 `cross_height_aggregate` separator pair 进入 placement。Direct 同物理
@@ -54,6 +59,8 @@ OOD 共同支持“风险低到可直接使用”，不是 runtime 已知黄金�
   candidate 均保持 review。S079、S090 通过 source-W native-pair rebind 新增安全自动批准，既有安全 auto
   无回退；S070 继续以 `source_frame_width_conflict` 阻断 Grid 自证错误边缘。单侧 source-W closure 没有
   放宽终态：S110 从完整 Frame 无观察迁移为直接角色权限缺口，S011 在弱线让位后继续由独立比例预算阻断。
+  Continuity ledger 将 S026、S061、S099 的普通 adjacency 歧义统一迁移为
+  `adjacency_continuity_unresolved`，没有增加危险自动批准。
 - 正式性能只由绑定最终干净 commit 的 24-source receipt 判断；5 秒 mean 是阻断 Gate，3 秒 mean 是持续
   优化目标。精确时间、RSS、依赖与机器身份不在本文件复制。
 
@@ -73,11 +80,12 @@ OOD 共同支持“风险低到可直接使用”，不是 runtime 已知黄金�
 
 ## 开放风险
 
-- 基础 nominal 仍有 49/66 review，较难 nominal 有 28/30 review。主要 Gate 根因是 23 个
+- 基础 nominal 仍有 49/66 review，较难 nominal 有 28/30 review。主要 Gate 根因是 22 个
   `nominal_grid_complete_frame_unobserved`、12 个 `phase_template_mismatch`、10 个
   `phase_placement_ambiguous`、9 个 `direct_role_binding_authority_unavailable`、9 个
   `aperture_aspect_ratio_budget_exhausted`、6 个 `placement_unresolved`、5 个
-  `direct_role_aperture_domain_unavailable` 与 4 个 `nominal_grid_phase_anchor_unavailable`。
+  `direct_role_aperture_domain_unavailable`、4 个 `nominal_grid_phase_anchor_unavailable` 与 3 个
+  `adjacency_continuity_unresolved`。
 - S040/S056 证明完整 query receipt 与 calibrated Grid 仍不足以硬授权整张未观察 Frame；这不是 Grid 的
   永久物理上限。未来只有更强的直接/continuity/topology evidence，或独立校准且可拒绝的概率层，才能
   改变该权限，不能简单删除 failure。
@@ -88,10 +96,10 @@ OOD 共同支持“风险低到可直接使用”，不是 runtime 已知黄金�
 
 ## 精确下一步
 
-1. 剩余 23 个 `nominal_grid_complete_frame_unobserved` 已没有可由现有 source W 唯一闭合的 intrinsic
+1. 剩余 22 个 `nominal_grid_complete_frame_unobserved` 已没有可由现有 source W 唯一闭合的 intrinsic
    pair 或单侧 edge；下一步提高候选无关 observation/coordinate authority，不能删除完整 Frame 安全反例
    或让 Grid/source W 创造像素事实。
-2. 继续处理极低显著边缘与真实片距变化，让同一 registered measurement owner 提供更多 typed
-   observation，不建立 enhanced detector、样片规则或未经校准的 score。
-3. 再依次闭合 adjacency continuity、contact、overlap。概率选择层只设计 feature/calibration/OOD/
-   abstention schema，等独立 calibration 与 sealed 数据具备后再进入 runtime。
+2. 下一个小机制是宽缓、低梯度 material boundary：只在同一 registered measurement owner 中增加
+   多尺度 tone、uniformity、texture 与跨高度一致性，不能形成 enhanced detector 或第二套 geometry。
+3. 再分别闭合 contact 与 overlap。完全未观察 Frame 的 Grid 风险权限和概率选择只先设计
+   feature/calibration/OOD/abstention schema，等独立 calibration 与 sealed 数据具备后再进入 runtime。

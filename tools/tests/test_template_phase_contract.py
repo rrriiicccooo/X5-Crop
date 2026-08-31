@@ -43,6 +43,12 @@ from x5crop.detection.photo_geometry.template_direct_role_authority import (
     assess_direct_role_binding_authority,
     intrinsic_direct_role_authority_bases,
 )
+from x5crop.detection.photo_geometry.template_adjacency_coverage import (
+    assess_adjacency_observation_coverage,
+)
+from x5crop.detection.photo_geometry.template_adjacency_topology import (
+    observe_adjacency_continuity,
+)
 from x5crop.detection.photo_geometry.template_nominal_grid_model import (
     NominalGridFailureKind,
 )
@@ -86,6 +92,25 @@ from x5crop.domain import (
     ObservationId,
     PositiveInterval,
 )
+
+
+def _continuity_for_residual(fit, observations, bands):
+    coverage = assess_adjacency_observation_coverage(
+        fit,
+        (
+            phase_sequence_measurement(
+                "residual",
+                FiniteInterval(0.0, 1000.0),
+            ),
+        ),
+        directly_observed_ordinals=(),
+    )
+    return observe_adjacency_continuity(
+        fit,
+        tuple(observations),
+        tuple(bands),
+        coverage,
+    )
 
 
 class TemplatePhaseContractTest(unittest.TestCase):
@@ -3789,8 +3814,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         analysis = derive_bounded_local_advances(
             fit,
-            nominal_edges,
-            bands,
+            _continuity_for_residual(fit, nominal_edges, bands),
         )
         self.assertEqual(
             analysis.pattern,
@@ -3818,13 +3842,12 @@ class TemplatePhaseContractTest(unittest.TestCase):
 
         analysis = derive_bounded_local_advances(
             fit,
-            tuple(overlap),
-            (),
+            _continuity_for_residual(fit, tuple(overlap), ()),
         )
 
         self.assertEqual(analysis.pattern, ResidualPattern.UNRESOLVED)
         self.assertEqual(analysis.relations, ())
-        self.assertIn("end-then-start", analysis.unresolved_reason or "")
+        self.assertIn("ordinary positive separator", analysis.unresolved_reason or "")
 
     def test_repeated_direct_gap_facts_are_all_applied_before_output_bleed(self) -> None:
         regular = tuple(
@@ -3844,7 +3867,10 @@ class TemplatePhaseContractTest(unittest.TestCase):
             )
             for index in range(3)
         )
-        analysis = derive_bounded_local_advances(fit, regular, bands)
+        analysis = derive_bounded_local_advances(
+            fit,
+            _continuity_for_residual(fit, regular, bands),
+        )
         self.assertEqual(
             analysis.pattern,
             ResidualPattern.MEASURED_ADVANCES,

@@ -66,6 +66,10 @@ class GateGap(str, Enum):
     SHARED_AUTHORITY_UNAVAILABLE = "shared_authority_unavailable"
     CONTENT_VETO_REJECTED = "content_veto_rejected"
     LOCAL_ADVANCE_UNRESOLVED = "local_advance_unresolved"
+    ADJACENCY_CONTINUITY_UNRESOLVED = (
+        "adjacency_continuity_unresolved"
+    )
+    ADJACENCY_TOPOLOGY_UNRESOLVED = "adjacency_topology_unresolved"
     DUAL_LANE_NOT_FILLED = "dual_lane_not_filled"
     DUAL_LANE_FILL_UNRESOLVED = "dual_lane_fill_unresolved"
     SOURCE_LANE_AUTHORITY_INVALID = "source_lane_authority_invalid"
@@ -99,6 +103,8 @@ class MinimumMissingFact(str, Enum):
     APERTURE_ASPECT_RATIO_AUTHORITY = "aperture_aspect_ratio_authority"
     REGISTERED_QUERY_COVERAGE = "registered_query_coverage"
     LOCAL_GAP_ORDINAL = "local_gap_ordinal"
+    ADJACENCY_CONTINUITY = "adjacency_continuity"
+    ADJACENCY_TOPOLOGY = "adjacency_topology"
     UNIQUE_PLACEMENT = "unique_placement"
     CONTENT_SAFE_PLACEMENT = "content_safe_placement"
     DIRECT_USE_PRECISION = "direct_use_precision"
@@ -281,6 +287,16 @@ def failure_fact(
         GateGap.LOCAL_ADVANCE_UNRESOLVED: (
             FailureRecovery.UNRECOVERABLE,
             MinimumMissingFact.LOCAL_GAP_ORDINAL,
+            RecoveryAction.REVIEW_PLACEMENT,
+        ),
+        GateGap.ADJACENCY_CONTINUITY_UNRESOLVED: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.ADJACENCY_CONTINUITY,
+            RecoveryAction.REVIEW_PLACEMENT,
+        ),
+        GateGap.ADJACENCY_TOPOLOGY_UNRESOLVED: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.ADJACENCY_TOPOLOGY,
             RecoveryAction.REVIEW_PLACEMENT,
         ),
         GateGap.DUAL_LANE_NOT_FILLED: (

@@ -531,10 +531,33 @@ Contact 与 overlap 始终属于 challenge。Challenge 是运行前的评测角�
 Gate 能唯一证明安全时可以 `approved_auto`，证据不足时 `needs_review` 同样合格；当前尚未闭合异常
 topology，因而保持 unresolved，不以普通 Grid、基础 bleed 或强制批准替代证明。
 
-### 7.1 已确认、尚未启用的 adjacency topology 合同
+### 7.1 已启用的 adjacency continuity 与尚未启用的 topology
+
+`photo_geometry/template_adjacency_topology.py` 是逐 adjacency material fact 的唯一 owner。像素 query、
+trace 与 coordinate coverage 在 placement 前候选无关地登记和执行；`AdjacencyContinuityObservation`
+只在 selected candidate 上把这些既有事实按 ordinal 映射一次，因此它是 candidate-bound ledger，而不是
+新的 detector、winner-specific requery 或第二次 TIFF 读取。每个 adjacency 恰有一个 observation：
+
+| 已登记事实 | Continuity 结果与权限 |
+|---|---|
+| 唯一 END → separator material → START，方向正确且正 gap | `separator_material`；可以授权一份实测 local advance |
+| 合法走廊完整覆盖，且没有直接反证 | `no_counterevidence_observed`；允许既有 Grid 保持 `local_delta=0`，但不冒充直接 separator |
+| 已登记 material 在不同高度区域不能一致闭合 | `separator_material_unresolved`；本 owner 不否定已经有权限的有序直接边，但不能授予 material/local-advance 权限 |
+| 多个或互相冲突的 band、band 角色冲突，或 signed-gap interval 跨过 0 | `adjacency_continuity_unresolved`；Gate 阻断普通 adjacency |
+| 两条直接角色的 signed gap 整体不大于 0 | `normal_separator_counterevidence`；以 `adjacency_topology_unresolved` 阻断普通 separator |
+| 合法走廊未被完整登记和执行 | `coverage_incomplete`；继续由逐 adjacency coverage 合同阻断推断 |
+
+材料不可用与材料反证不可混淆：前者只表示这份 material observation 没有 authority；后者表示当前普通
+separator 解释与直接坐标冲突。`template_residual.py` 只接受 `separator_material` 产生 local advance；
+`no_counterevidence_observed` 只维持正常 Grid，不能调整 native boundary。Ledger、依据、覆盖 query、直接
+角色、signed-gap interval 与 typed failure 全部进入 report/Debug；当前 report 不保留旧 schema 兼容路径。
+
+本阶段没有新增宽缓/低梯度 material 测量，也没有用 tone、texture 或 content continuity 证明共享边或叠片。
+后续可以在同一 registered measurement owner 内补充多尺度 material observation，再映射进同一 ledger；
+不能建立 enhanced-image 平行 detector。
 
 异常 topology 进入 production 时仍使用第 7 节唯一 placement 模型，不建立“发布版式 detector”或第二套
-Grid。`LocalAdvanceRelation` 将 current-only 升级为一个 `AdjacencyRelation` sum type：
+Grid。届时 `LocalAdvanceRelation` current-only 升级为一个 `AdjacencyRelation` sum type：
 
 ```text
 AdjacencyRelation
@@ -555,34 +578,20 @@ material identity；`ContactRelation` 必须保存 END/START 共用的唯一 phy
 `OverlapRelation` 必须保存两条独立、角色相反且顺序反转的 edge 与 overlap interval。同一 contact 共用线
 只能计作一份 rank support。
 
-`AdjacencyContinuityObservation` 是进入 topology 前的唯一候选无关观察。它只读取已经预登记并执行的同一
-窗口，记录 separator material、跨理论间隔的 tone/texture/content continuity、共享 edge 或两条反序 edge；
-不新增 TIFF query，不成为第二条 content detector：
+Contact 必须由同一 physical edge 唯一绑定 END 与下一张 START；overlap 必须由两条独立角色 edge 及
+`START(next) < END(current)` 的有界 interval 证明。内容连续只能否定普通 separator，不能单独证明
+contact 或 overlap；存在多组合法解释时保持 `adjacency_topology_ambiguous`。没有 topology relation 却
+发生 Frame domain overlap 时继续产生 `fixed_template_mismatch`；只有唯一 `OverlapRelation` 与 realized
+overlap interval 相容时该处重叠才合法，任何其它 adjacency 的意外重叠仍是 topology contradiction。
 
-| 直接观察 | 关系结果 |
-|---|---|
-| END、separator material、START 正序且唯一 | `SeparatorRelation` |
-| 同一 physical edge 唯一绑定 END 与下一张 START | `ContactRelation` |
-| 两条独立角色 edge，且 `START(next) < END(current)` | `OverlapRelation` |
-| 没有直接 edge、coverage 完整、全局 lattice 已闭合且无反证 | inferred normal Grid |
-| 内容连续但 edge 不能唯一绑定 | `adjacency_topology_unresolved` |
-| 存在多组同样合法的 contact/overlap 解释 | `adjacency_topology_ambiguous` |
+现有 source W authority 已允许每个至少拥有一条直接 START/END 的 Frame 用同一相关 W 推导另一侧；
+多张 Frame 的推导共享一份相关状态，不能当成多条独立证据。未来 topology 必须继续遵守：W 不得凭空
+生成两侧都未观察到的 Frame、决定 contact/overlap、覆盖直接 native coordinate，或把 contact 共用线
+重复计票。无权 `LOCAL_REFINEMENT` 仍按第 6 节的 validation-only 合同让位。
 
-内容连续只能否定普通 separator，不能单独证明 contact 或 overlap。没有 topology relation 却发生 Frame
-domain overlap 时继续产生 `fixed_template_mismatch`；只有唯一 `OverlapRelation` 与 realized overlap
-interval 相容时该处重叠才合法，任何其它 adjacency 的意外重叠仍是 topology contradiction。
-
-共同 Frame width 的权限也只在 topology 唯一闭合后扩展：若同一份独立证据已经闭合 W，每个至少拥有
-一条直接 START/END 的 Frame 可以用同一相关 W 推导另一侧；多张 Frame 的推导共享一份相关状态，不能
-当成多条独立证据。W 不得凭空生成两侧都未观察到的 Frame、决定 contact/overlap、覆盖直接 native
-coordinate，或把 contact 共用线重复计票。这里的 direct native coordinate 只指已经取得坐标权限的边；
-无权 `LOCAL_REFINEMENT` 仍按第 6 节的 validation-only 合同让位。
-
-该合同按四个独立小机制实现并各自形成检查点：先让 `AdjacencyContinuityObservation` 只提供普通
-separator 的 typed 反证，再分别闭合 contact、overlap，最后运行完整黄金集并单独报告安全 challenge
-能力。以上合同在对应 type、owner、Gate、Debug、正反例、真实样片、性能和黄金安全验收闭合前，不授予
-runtime 自动批准权限。开始实现时由单一 `photo_geometry/template_adjacency_topology.py` 拥有 observation
-到 relation 的闭合；当前不为尚未启用的能力建立占位模块。
+剩余能力继续按独立小机制形成检查点：先补宽缓/低梯度 material observation，再分别闭合 contact 与
+overlap。每项都必须完整交付 type、owner、Gate、Debug、正反例、真实样片、性能和黄金安全验收；尚未
+闭合的 relation 不授予 runtime 自动批准权限，也不建立占位 runtime。
 
 ### 7.2 Calibrated nominal Grid authority
 
