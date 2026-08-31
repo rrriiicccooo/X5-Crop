@@ -20,41 +20,24 @@ adjacency/placement 模型。
 
 ## 当前检查点
 
-- `6a121ab1` 删除两条局部 start/end 仅凭彼此间距与 W prior 互相授予 native coordinate 权限的循环。
-  已观察坐标只接受 source-wide edge、跨高度联合或同一 separator pair；独立闭合 W 只推导真正缺失的
-  opposite。S088 因弱局部线失去自授权而在 placement 前安全 review。
-- `b54ac17f` 把输出保护拆为 mandatory、完整 requested 与实际 required 三层 polygon。真实 TIFF 外缘
-  显式限定不存在的源像素，并区分 optional bleed 与 joint protection saturation；内部 dual-lane 边界
-  两种情况都继续阻断。5% 预算使用未限定 requested 层，Debug 与 report 保留完整请求、kind 和越界距离。
-  S083、S084、S085、S092 因此安全 auto；S088 仍无 placement。
-- `b7ab6d40` 修正 enclosing support 的 direct-use 预算：top/bottom 各自完整 expansion 继续受逐侧
-  5% 限制，support span 继续受 `1.1H` 限制；联合项只计算同一可行状态中额外的直线 alignment
-  padding，不再重复收费 support 位置 uncertainty 或相加互斥极值。S094 因此安全 auto；S017 的真实
-  超预算候选仍被 Gate 阻断。
-- `ca6d2d23` 增加一次性 `partial_height_separator_pair` 权限：两个高度区域的 normal separator 只有在
-  一侧已具完整直接权限时，才向同一 adjacency 的另一侧传递 native coordinate；传递不能级联，最终还
-  必须由两侧直接 `aperture_pair` 闭合短轴。S029、S081 因此安全 auto；S012、S015、S091、S098、S099
-  保守停在 typed `direct_role_aperture_domain_unavailable`。
-- `d18c74e7` 允许无权 `LOCAL_REFINEMENT` 在严格闭环下成为 validation-only：同 Frame opposite 已独立
-  授权，source W 完全来自至少两张其它双边授权 Frame，且完整 W 走廊中只有该局部 observation 相容。
-  坐标由 `opposite + correlated W` 推导，弱线不收窄 W、不增加 rank，也不改变 phase；phase anchor、
-  循环 W 与多条相容局部线仍保持 typed review。
-- `3c759e99` 把 rank 3 直接坐标的 `(phase, W, pitch)` 改为在 phase、W、pitch 与 `pitch-W` 全部硬区间
-  内联合最小二乘。无约束解越界时不再把 W/pitch 退回 catalog 中心却保留不相容 phase；有界解不扩张
-  authority、不覆盖 native coordinate，也不选择离散 runner。报告与 Debug 保存连续 lineage 中约束最强
-  的 `template_interval_center | direct_least_squares | bounded_direct_least_squares`，不同 runner 不能串用。
+- `0075cc75` 把 `DirectRoleBindingAuthority` 前移到 bounded phase candidate 的离散竞争之前。全部
+  candidate 对称使用同一预索引 evidence ledger；无权或 material-contradicted runner 保留在 report 与
+  Debug，但不能阻断有权 candidate。若没有有权 candidate，返回 best 自身的 typed failure；两个均有权
+  的真实竞争继续 `discrete_phase_ambiguous`。S059 因此安全 auto，S027、S075、S088 仍保守 review。
 - 完整 development gold 为 110/110 完成、分析错误 0、`unsafe_approved_auto = 0`。安全 auto 为基础
-  nominal 15/66、较难 nominal 1/30、challenge 0/14；基础 nominal candidate 为 50 个不可用、15 个安全、
-  1 个不安全，较难 nominal 为 29 个不可用、1 个安全。安全 auto 为 S003、S022、S025、S029、S063、
-  S064、S067、S081、S083、S084、S085、S087、S089、S092、S094、S095；全部 challenge 均安全 review。
-  S003、S089 新增安全 auto；S088 暴露两条仍合法且证据接近的离散 placement，保守回到 review。
-- 黄金 receipt 的 detector、comparator 与 cohort 均精确匹配 `3c759e99`；detector manifest 为
-  `8f3b293730e9b3efac89085639abb17254bfa7166c5a194b2a1581c53a410098`，comparator manifest 为
-  `ad5e68cb34b121b29a53b5fc5485a9d32cb11a7ae2c14d27c921c8d1ff59ced4`。24-source 正式性能 mean 为
-  3.010 秒，p95 为 5.176 秒，最慢 S109 为 5.214 秒；5 秒 mean Gate 通过，3 秒 non-blocking 目标未达到。
-  黄金 summary SHA-256 为 `cf6b7e385254f92f5098004cf0dcd794a9e136721d396e5f329d755dd33e32c8`，性能 receipt
-  SHA-256 为 `b9a664fe8273374caada46eaab324944b043360e681788e214430844060826dc`；
-  receipt 只证明该 commit、记录的依赖和 M2 Max 主机。
+  nominal 15/66、较难 nominal 2/30、challenge 0/14；基础 nominal candidate 为 49 个不可用、15 个安全、
+  2 个不安全。S017、S051 的不安全 candidate 均被 direct-use budget 阻断；全部 challenge 安全 review。
+  安全 auto 共 17 个：S003、S022、S025、S029、S059、S063、S064、S067、S081、S083、S084、S085、
+  S087、S089、S092、S094、S095。
+- 黄金 receipt 精确匹配 `0075cc75`；detector manifest 为
+  `9dca9de929648b177d1a236f86353fd7e22be0479be1a1ca39d6e0d3b62610c4`，comparator manifest 为
+  `ad5e68cb34b121b29a53b5fc5485a9d32cb11a7ae2c14d27c921c8d1ff59ced4`，cohort SHA-256 为
+  `c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`。黄金 summary SHA-256 为
+  `6b57552b598b276f45b02f70ee4f68349f3d0bba1fa793b1c8ff999ed8127b69`。
+- 同 commit 的 24-source 正式性能 mean 为 3.384 秒，p95 为 5.716 秒，最慢 S109 为 6.124 秒；5 秒
+  mean Gate 通过，3 秒 non-blocking 目标未达到。性能 receipt SHA-256 为
+  `370dfa0960999e0553e586e55e3f82a00141ebe3bf39e368cc59dae37243bc7e`；receipt 只证明记录的依赖与
+  M2 Max 主机。
 
 ## 当前物理证据
 
@@ -72,14 +55,13 @@ adjacency/placement 模型。
 
 ## 开放风险
 
-- 基础 nominal 仍有 51/66 review，较难 nominal 有 29/30 review。当前完整集有 19 个
-  `direct_role_binding_authority_unavailable`、6 个 `direct_role_aperture_domain_unavailable`、33 个
-  `discrete_phase_ambiguous`、16 个 `non_equivalent_fits`、12 个 placement-level
-  `phase_template_mismatch`、2 个 `global_lattice_authority_unavailable` 与 6 个
-  `aperture_aspect_ratio_budget_exhausted`。竞争必须由新的直接观察 identity、权限或相关安全状态闭合；
-  不得恢复 W 自授权、缩窄 guard、精确 W→H 或改 challenge 分类。
-- 当前唯一不安全 candidate 是 S017，并继续由 `direct_use_budget_exceeded` 阻断；其余 93 个 review task 没有
-  selected candidate，不能把“没有输出”误当成精度问题。
+- 基础 nominal 仍有 51/66 review，较难 nominal 有 28/30 review。当前完整集的 phase 根因包括 28 个
+  `direct_role_binding_authority_unavailable`、12 个 `frame_width_inference_unavailable`、8 个
+  `global_lattice_authority_unavailable`、7 个 `discrete_phase_ambiguous`、5 个
+  `separator_material_conflict` 与 5 个 `fixed_template_mismatch`。竞争必须由新的直接 observation identity、
+  权限或相关安全状态闭合；不得恢复 W 自授权、缩窄 guard、精确 W→H 或改 challenge 分类。
+- S017、S051 是仅有的两个不安全 candidate，并继续由 `direct_use_budget_exceeded` 阻断；其余 91 个
+  review task 没有 selected candidate，不能把“没有输出”误当成精度问题。
 - 当前黄金同时参与 development calibration 与 development 验收，只能证明该集合上的安全与可复算性；
   尚无 sealed acceptance，也没有 `xpan`、`120-645`、`135-dual` 的独立黄金覆盖。
 - 当前开发集不能事后兼任概率 calibration。未来 scorer 仍需预先冻结的新数据、OOD、abstention 和独立
@@ -87,10 +69,9 @@ adjacency/placement 模型。
 
 ## 精确下一步
 
-1. 先对基础 nominal 的 18 个 `discrete_phase_ambiguous` 做只读机制分解：逐一比较 winner/runner 的
-   ordinal mapping、独立 support location、separator physical identity、局部 gap 与黄金安全性，区分真实
-   双解和缺少哪一类候选无关 observation。不得用 residual 或未经校准 score 强选。
-2. 选择该分解中覆盖面最大的一个通用物理缺口完成下一轮小机制闭环；随后再处理基础 nominal 的 12 个
-   `direct_role_binding_authority_unavailable`。新增权限必须来自同一 registered 像素的 source-wide、跨高度
-   或 separator physical identity，不能让两个弱局部边界重新凭 W 互相授权。Contact/overlap 仍在 nominal
-   机制稳定后作为同一 adjacency 模型扩展。
+1. 只读拆分剩余 7 个 `discrete_phase_ambiguous`：S027、S034、S050、S052、S061、S075、S088。S027、
+   S075、S088 已知两侧 candidate 均有权限；不得用 residual 或未经校准 score 强选。重点确认 S034/S052
+   是否来自 separator 两侧的 physical identity 未闭合，challenge S050/S061 只作能力观察。
+2. 对基础 nominal 的 16 个 `direct_role_binding_authority_unavailable` 按缺失 basis 分组，选择覆盖最大的
+   一个候选无关 observation identity 小机制。新增权限只能来自同一 registered 像素的 source-wide、跨高度
+   或 separator physical identity，不能让两个弱局部边界重新凭 W 互相授权。

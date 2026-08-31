@@ -320,6 +320,21 @@ role = phase
   coordinate 也不会被拟合值覆盖。受约束后仍存在另一离散
   ordinal/edge 解释时保留 runner 并产生 `discrete_phase_ambiguous`；连续最小二乘不能充当 best-score。
 
+Production phase competition 在离散比较前，对每个去重后的 bounded candidate 对称执行
+`DirectRoleBindingAuthority`。只有全部已绑定直接角色都具 native-coordinate 权限的 candidate，才可进入
+`_clear_winner_basis`；没有权限或存在 separator-material 反证的 candidate 仍保留为 report/Debug runner，
+但不能阻断有权限 candidate。该过滤不新增像素查询、不改变 residual、不读取黄金，也不隐藏 runner。
+若没有 residual-compatible 且有权限的 candidate，保留最佳诊断 candidate，并产生它自身的 typed
+`direct_role_binding_authority_unavailable | separator_material_conflict`，不得退回 residual、support
+或 Grid 强选。
+
+| bounded candidate 权限状态 | 离散竞争结果 |
+|---|---|
+| 唯一 residual-compatible candidate 为 `supported`，其它为 `unavailable | contradicted` | `unique_direct_role_authority`；无权 runner 保留，继续接受后续 W/cross/Gate |
+| 两个非等价 residual-compatible candidate 均为 `supported` | 继续既有硬物理比较；不能明确分离时 `discrete_phase_ambiguous` |
+| 没有 residual-compatible `supported` candidate | 保留诊断 best/runner；按 best 的权限状态产生 typed failure |
+| `supported` 的 residual-incompatible candidate 具有更高独立支持并与 best 的 phase/pitch 分离 | 仍是直接反证并阻断；不能被权限过滤隐藏 |
+
 | 直接约束状态 | 连续参数结果 | 离散选择结果 |
 |---|---|---|
 | rank < 3 | `template_interval_center` 只维持候选搜索；不能建立全局 authority | 后续由 `global_lattice_authority_unavailable` 阻断缺失角色推断 |
@@ -382,8 +397,9 @@ placement；“观察到了”本身不等于“有权决定裁切”。权限�
 `enclosing_support_pair` 或由单侧推断的 aperture，则产生
 `direct_role_aperture_domain_unavailable`。这样不能把不完整的长轴空间支持与近似短轴支撑叠加成自动批准。
 独立闭合的 source W 只覆盖真正有权限的 native coordinate；上表的 validation-only 局部线不是 competing
-placement，也不能反向收窄 W。其它局部观察与相关 W 不唯一相容时保持 unresolved。直接坐标权限由
-`template_direct_role_authority.py` 唯一拥有，让位与相关 W 推断由 `template_frame_width.py` 唯一拥有，
+placement，也不能反向收窄 W。其它局部观察与相关 W 不唯一相容时保持 unresolved。每个 bounded phase
+candidate 与最终 selected fit 的直接坐标权限都由 `template_direct_role_authority.py` 唯一拥有；让位与
+相关 W 推断由 `template_frame_width.py` 唯一拥有，
 短轴联合条件由 `template_selection.py` 检查；三者都不读取新像素，也不按强度选择 winner。
 
 未观察 separator 的正常 adjacency 不是 detector miss 的默认值。它只有同时满足以下条件时，才可使用
@@ -839,6 +855,7 @@ Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决
 registered queries / pixels
 separator lattice hypotheses
 phase hypotheses / lookups / bindings / fit passes
+phase candidate direct-role authority evaluations / rejections / role checks
 local adjacency evaluations
 cross runs / fits
 placement / boundary / content evaluations
@@ -901,7 +918,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/template_frame_width.py` | selected placement 后的 source W 校准、无权局部 refinement 让位与相关单侧角色推断 |
 | `photo_geometry/template_aspect_ratio_model.py`、`template_aspect_ratio.py` | 校准 W/H 比例的 typed authority、相关 H 推断、direct H 对账与预算失败 |
 | `photo_geometry/template_phase*.py`、`template_pitch.py`、`template_residual.py` | phase/ordinal 求解、source pitch 与逐 adjacency 的 direct local advance |
-| `photo_geometry/template_direct_role_authority.py` | 已选直接 START/END 的 native coordinate 权限证明 |
+| `photo_geometry/template_direct_role_authority.py` | 每个 bounded phase candidate 与最终已选 START/END 的 native-coordinate 权限证明及共享 evidence ledger |
 | `photo_geometry/template_lattice_authority.py` | `(phase, W, pitch)` 直接约束矩阵与独立闭合证明 |
 | `photo_geometry/template_adjacency_coverage.py` | selected adjacency 合法走廊到既有 query/trace/coordinate 的覆盖证明 |
 | `photo_geometry/template_outer_frame_authority.py` | 带 Grid 推断时首尾输出 Frame 的直接长轴角色证明 |
