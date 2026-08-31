@@ -40,7 +40,10 @@ from .template_phase_candidates import (
 )
 from .separator_material import normal_separator_material_bands
 from .template_evidence import separator_support_authority
-from .template_frame_width import apply_correlated_frame_width_inference
+from .template_frame_width import (
+    SourceFrameWidthAuthority,
+    apply_correlated_frame_width_inference,
+)
 from .template_adjacency_coverage import (
     AdjacencyCoverageState,
     assess_adjacency_observation_coverage,
@@ -49,6 +52,7 @@ from .template_lattice_authority import assess_global_lattice_authority
 from .template_direct_role_authority import (
     assess_direct_role_binding_authorities,
     assess_direct_role_binding_authority,
+    intrinsic_direct_role_authority_bases,
 )
 from .template_outer_frame_authority import (
     assess_outer_frame_observation_authority,
@@ -1126,16 +1130,35 @@ def _with_local_role_refinement(
     result: PhaseFitResult,
     observations: Sequence[BoundaryEdgeObservation],
     separator_bands: Sequence[SeparatorBandObservation],
+    sequence_measurement_sets: Sequence[PhotoBoundaryMeasurementSet] = (),
+    *,
+    frame_width_authority_px: FiniteInterval | None = None,
+    additional_fit_pass: bool = False,
 ) -> PhaseFitResult:
     if result.status != PhaseFitStatus.RESOLVED or result.best is None:
         return result
+    authority_ids = (
+        frozenset(
+            intrinsic_direct_role_authority_bases(
+                tuple(observations),
+                tuple(sequence_measurement_sets),
+            )
+        )
+        if sequence_measurement_sets
+        else frozenset()
+    )
     refinement = _refine_local_role_bindings(
         result.best,
         observations,
         separator_bands,
+        intrinsic_coordinate_authority_ids=authority_ids,
+        frame_width_authority_px=frame_width_authority_px,
     )
     receipt = replace(
         result.receipt,
+        fit_pass_count=(
+            result.receipt.fit_pass_count + int(additional_fit_pass)
+        ),
         local_refinement_lookup_count=(
             result.receipt.local_refinement_lookup_count
             + refinement.role_lookup_count
@@ -1150,11 +1173,52 @@ def _with_local_role_refinement(
     return replace(result, best=refinement.fit, receipt=receipt)
 
 
+def refine_template_phase_with_source_frame_width(
+    result: PhaseFitResult,
+    authority: SourceFrameWidthAuthority,
+    observations: Sequence[BoundaryEdgeObservation],
+    separator_bands: Sequence[SeparatorBandObservation],
+    sequence_measurement_sets: Sequence[PhotoBoundaryMeasurementSet],
+) -> PhaseFitResult:
+    """Bind only roles uniquely selected by an independent source-level W.
+
+    The discrete placement is already fixed and source W is derived from at
+    least two other directly observed complete Frames.  This pass may bind a
+    registered native edge pair that the broader format interval could not
+    distinguish.  It never creates a coordinate or changes phase, pitch, or
+    ordinal mapping.
+    """
+
+    if authority.state != EvidenceState.SUPPORTED:
+        return result
+    if result.status != PhaseFitStatus.RESOLVED or result.best is None:
+        raise ValueError("supported source W requires one resolved placement")
+    if not result.best.unbound_role_indices:
+        return result
+    if (
+        authority.selected_integer_slot_offset
+        != result.best.phase_lattice_fit.integer_slot_offset
+        or authority.selected_role_observation_ids
+        != result.best.binding_observation_ids
+        or authority.width_px is None
+    ):
+        raise ValueError("source W authority belongs to a different placement")
+    return _with_local_role_refinement(
+        result,
+        observations,
+        separator_bands,
+        sequence_measurement_sets,
+        frame_width_authority_px=authority.width_px,
+        additional_fit_pass=True,
+    )
+
+
 def _attach_selected_candidate_authorities(
     result: PhaseFitResult,
     phase_input: TemplatePhaseInput,
     *,
     directly_observed_ordinals: tuple[int, ...],
+    source_frame_width_authority: SourceFrameWidthAuthority | None = None,
 ) -> PhaseFitResult:
     """Measure selected-candidate authorities without changing its status."""
 
@@ -1166,6 +1230,13 @@ def _attach_selected_candidate_authorities(
             phase_input.observations,
             phase_input.separator_bands,
             phase_input.sequence_measurement_sets,
+            independent_frame_width_px=(
+                None
+                if source_frame_width_authority is None
+                or source_frame_width_authority.state
+                != EvidenceState.SUPPORTED
+                else source_frame_width_authority.width_px
+            ),
         )
     )
     authority = (
@@ -1296,6 +1367,7 @@ def _apply_final_lattice_contract(
     phase_input: TemplatePhaseInput,
     *,
     directly_observed_ordinals: tuple[int, ...],
+    source_frame_width_authority: SourceFrameWidthAuthority | None,
 ) -> PhaseFitResult:
     """Require direct-role, global, and local authority for one placement."""
 
@@ -1303,6 +1375,7 @@ def _apply_final_lattice_contract(
         result,
         phase_input,
         directly_observed_ordinals=directly_observed_ordinals,
+        source_frame_width_authority=source_frame_width_authority,
     )
     if (
         result.best is not None
@@ -1331,6 +1404,7 @@ def _apply_final_lattice_contract(
         result,
         phase_input,
         directly_observed_ordinals=directly_observed_ordinals,
+        source_frame_width_authority=source_frame_width_authority,
     )
     direct_role_authority = result.direct_role_binding_authority
     authority = result.global_lattice_authority
@@ -1501,6 +1575,7 @@ def fit_template_phase_candidate_with_local_advance(
         normal,
         observations,
         separator_bands,
+        phase_input.sequence_measurement_sets,
     )
     assert normal.best is not None
     # Import here keeps the residual owner dependent on the canonical phase
@@ -1577,6 +1652,7 @@ def fit_template_phase_candidate_with_local_advance(
         adjusted,
         observations,
         separator_bands,
+        phase_input.sequence_measurement_sets,
     )
     adjusted = _inherit_prior_lattice_fit_basis(adjusted, normal)
     adjusted = _aggregate_phase_work(
@@ -1598,6 +1674,8 @@ def fit_template_phase_candidate_with_local_advance(
 def finalize_template_phase_candidate(
     candidate: TemplatePhaseCandidateCompetition,
     phase_input: TemplatePhaseInput,
+    *,
+    source_frame_width_authority: SourceFrameWidthAuthority | None,
 ) -> PhaseFitResult:
     """Apply selected-only lattice and inference contracts to one competition."""
 
@@ -1611,6 +1689,7 @@ def finalize_template_phase_candidate(
         directly_observed_ordinals=(
             candidate.directly_observed_adjacency_ordinals
         ),
+        source_frame_width_authority=source_frame_width_authority,
     )
 
 
@@ -1620,7 +1699,11 @@ def fit_template_phase_with_local_advance(
     """Run canonical candidate competition and final lattice assessment."""
 
     candidate = fit_template_phase_candidate_with_local_advance(phase_input)
-    return finalize_template_phase_candidate(candidate, phase_input)
+    return finalize_template_phase_candidate(
+        candidate,
+        phase_input,
+        source_frame_width_authority=None,
+    )
 
 
 def account_prior_phase_fit(

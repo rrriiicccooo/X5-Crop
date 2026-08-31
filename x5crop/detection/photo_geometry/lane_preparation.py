@@ -71,6 +71,7 @@ from .template_phase import (
     finalize_template_phase_candidate,
     fit_template_phase,
     fit_template_phase_candidate_with_local_advance,
+    refine_template_phase_with_source_frame_width,
 )
 from .template_phase_model import (
     GlobalLatticeAuthorityEvidence,
@@ -668,6 +669,13 @@ def prepare_template_lane(
         phase_candidate.result,
         source_frame_width_authority,
     )
+    selected_width_phase = refine_template_phase_with_source_frame_width(
+        selected_width_phase,
+        source_frame_width_authority,
+        placement_sequence_edges,
+        separator_bands,
+        phase_input.sequence_measurement_sets,
+    )
     phase_candidate = replace(
         phase_candidate,
         result=selected_width_phase,
@@ -684,6 +692,7 @@ def prepare_template_lane(
     phase = finalize_template_phase_candidate(
         phase_candidate,
         phase_input,
+        source_frame_width_authority=source_frame_width_authority,
     )
     phase = account_prior_phase_fit(phase, base_phase)
     phase = account_prior_phase_fit(phase, provisional_phase)

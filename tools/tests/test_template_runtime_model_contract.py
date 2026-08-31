@@ -24,6 +24,10 @@ from x5crop.detection.photo_geometry.template_model import (
 from x5crop.detection.photo_geometry.template_nominal_grid_authority import (
     assess_calibrated_nominal_grid_authority,
 )
+from x5crop.detection.photo_geometry.template_nominal_grid_model import (
+    CalibratedNominalGridAuthority,
+    NominalGridFailureKind,
+)
 from x5crop.detection.photo_geometry.template_runtime_model import (
     PhotoGeometryDetectionResult,
     PreparedTemplateLane,
@@ -148,6 +152,44 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
         self.assertEqual(result.direct_use_budget_assessments, ())
         with self.assertRaises(TypeError):
             result.assessment_facts["new"] = object()  # type: ignore[index]
+
+    def test_unresolved_lane_retains_nominal_grid_counterevidence(self) -> None:
+        prepared = _prepared()
+        competition = TemplatePlacementCompetition(
+            placements=(),
+            selected_placement_id=None,
+            runner_up_placement_id=None,
+            state=EvidenceState.UNAVAILABLE,
+            failure=failure_fact(GateGap.PLACEMENT_UNRESOLVED),
+        )
+
+        reconstruction = TemplateLaneReconstruction(
+            lane_id="lane:0",
+            prepared=prepared,
+            placement_competition=competition,
+            selected_placement=None,
+            output_footprints=(),
+            calibrated_nominal_grid_authority=(
+                CalibratedNominalGridAuthority(
+                    authority_id="nominal-grid-authority:contradicted",
+                    state=EvidenceState.CONTRADICTED,
+                    evidence_id="nominal-grid-evidence:contradicted",
+                    placement_id=None,
+                    output_geometry_ids=(),
+                    failure_kind=NominalGridFailureKind.COUNTEREVIDENCE,
+                    reason="direct counterevidence rejects the nominal Grid",
+                )
+            ),
+            direct_use_budget_assessments=(),
+            holder_fill_assessment=None,
+            content_veto_facts=(),
+            work=TemplatePlacementWorkReceipt(0, 0, 0, 0),
+        )
+
+        self.assertEqual(
+            reconstruction.calibrated_nominal_grid_authority.state,
+            EvidenceState.CONTRADICTED,
+        )
 
     def test_output_footprints_are_selected_only(self) -> None:
         prepared = _prepared()

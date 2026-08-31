@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from ...domain import EvidenceState, ObservationId
+from ...domain import EvidenceState, FiniteInterval, ObservationId
 from .measurement_model import PhotoBoundaryMeasurementSet
 from .model import (
     BoundaryRole,
@@ -173,16 +173,16 @@ class _DirectRoleAuthorityLedger:
     supported_material_roles: frozenset[tuple[ObservationId, BoundaryRole]]
     conflicts_by_edge_role: dict[
         tuple[ObservationId, BoundaryRole],
-        tuple[ObservationId, ...],
+        tuple[tuple[ObservationId, ObservationId], ...],
     ]
 
 
-def _direct_role_authority_ledger(
-    fit: SequenceFit,
+def _trace_lattice_and_support_region_counts(
     observations: tuple[BoundaryEdgeObservation, ...],
-    separator_bands: tuple[SeparatorBandObservation, ...],
     measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
-) -> _DirectRoleAuthorityLedger:
+) -> tuple[tuple[float, ...], dict[ObservationId, int]]:
+    """Return the one registered trace lattice and its per-edge coverage."""
+
     if not measurement_sets:
         raise ValueError("direct-role authority requires registered sequence queries")
     trace_lattice = measurement_sets[0].query.trace_positions_px
@@ -194,13 +194,68 @@ def _direct_role_authority_ledger(
     by_id = {item.observation_id: item for item in observations}
     if len(by_id) != len(observations):
         raise ValueError("direct-role observations must be unique")
-    region_counts = {
+    return trace_lattice, {
         observation.observation_id: independent_spatial_support_count(
             trace_lattice,
             observation.trace_coordinates_px,
         )
         for observation in observations
     }
+
+
+def intrinsic_direct_role_authority_bases(
+    observations: tuple[BoundaryEdgeObservation, ...],
+    measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
+) -> dict[ObservationId, tuple[DirectRoleAuthorityBasis, ...]]:
+    """Identify edges that own coordinates without another selected edge.
+
+    Separator-pair and partial-height transfer authority remain relational and
+    are assessed only after a fixed role mapping exists.  This index contains
+    the two observation-intrinsic bases so local refinement can ignore weak
+    validation-only alternatives when an independently authoritative edge is
+    already present in the same fixed role corridor.
+    """
+
+    _trace_lattice, region_counts = _trace_lattice_and_support_region_counts(
+        observations,
+        measurement_sets,
+    )
+    result: dict[ObservationId, tuple[DirectRoleAuthorityBasis, ...]] = {}
+    for observation in observations:
+        bases = tuple(
+            basis
+            for basis, eligible in (
+                (
+                    DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE,
+                    region_counts[observation.observation_id]
+                    == SPATIAL_SUPPORT_REGION_COUNT
+                    and observation.measurement_basis
+                    == BoundaryEdgeMeasurementBasis.DIRECT_TRACE,
+                ),
+                (
+                    DirectRoleAuthorityBasis.CROSS_HEIGHT_UNION,
+                    observation.measurement_basis
+                    == BoundaryEdgeMeasurementBasis.DIRECT_WITH_CROSS_HEIGHT,
+                ),
+            )
+            if eligible
+        )
+        if bases:
+            result[observation.observation_id] = bases
+    return result
+
+
+def _direct_role_authority_ledger(
+    fit: SequenceFit,
+    observations: tuple[BoundaryEdgeObservation, ...],
+    separator_bands: tuple[SeparatorBandObservation, ...],
+    measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
+) -> _DirectRoleAuthorityLedger:
+    trace_lattice, region_counts = _trace_lattice_and_support_region_counts(
+        observations,
+        measurement_sets,
+    )
+    by_id = {item.observation_id: item for item in observations}
     role_authority_bands = normal_separator_material_bands(
         separator_bands,
         maximum_material_gap_px=fit.template.gap_prior_px.maximum,
@@ -233,9 +288,33 @@ def _direct_role_authority_ledger(
         }
     )
 
+    intrinsic_bases = intrinsic_direct_role_authority_bases(
+        observations,
+        measurement_sets,
+    )
+    potential_authority_roles = set(supported_material_roles)
+    potential_authority_roles.update(
+        (observation_id, role)
+        for observation_id in intrinsic_bases
+        for role in by_id[observation_id].qualified_anchor_roles
+    )
+    # A two-region band can transfer coordinate authority once, but only from
+    # an intrinsically authoritative opposite edge.  Include that exact
+    # potential role when deciding whether a material conflict is a legal
+    # counter-explanation.
+    for band in role_authority_bands:
+        if band.material_support_region_count != SPATIAL_SUPPORT_REGION_COUNT - 1:
+            continue
+        left_id = band.left_edge_observation_id
+        right_id = band.right_edge_observation_id
+        if left_id in intrinsic_bases:
+            potential_authority_roles.add((right_id, BoundaryRole.START))
+        if right_id in intrinsic_bases:
+            potential_authority_roles.add((left_id, BoundaryRole.END))
+
     conflict_sets: dict[
         tuple[ObservationId, BoundaryRole],
-        set[ObservationId],
+        set[tuple[ObservationId, ObservationId]],
     ] = {}
     for conflict in normal_separator_material_conflicts(
         separator_bands,
@@ -257,9 +336,10 @@ def _direct_role_authority_ledger(
                     "separator material conflict references an unregistered edge"
                 )
             for role in alternative.qualified_anchor_roles:
-                conflict_sets.setdefault((edge_id, role), set()).add(
-                    conflict.observation_id
-                )
+                if (alternative_id, role) in potential_authority_roles:
+                    conflict_sets.setdefault((edge_id, role), set()).add(
+                        (conflict.observation_id, alternative_id)
+                    )
     return _DirectRoleAuthorityLedger(
         trace_lattice=trace_lattice,
         observations_by_id=by_id,
@@ -268,7 +348,10 @@ def _direct_role_authority_ledger(
         partial_height_pairs=partial_height_pairs,
         supported_material_roles=supported_material_roles,
         conflicts_by_edge_role={
-            key: tuple(sorted(values)) for key, values in conflict_sets.items()
+            key: tuple(
+                sorted(values, key=lambda item: tuple(map(str, item)))
+            )
+            for key, values in conflict_sets.items()
         },
     )
 
@@ -276,6 +359,8 @@ def _direct_role_authority_ledger(
 def _assess_direct_role_binding_authority(
     fit: SequenceFit,
     ledger: _DirectRoleAuthorityLedger,
+    *,
+    independent_frame_width_px: FiniteInterval | None = None,
 ) -> DirectRoleBindingAuthority:
     selected: dict[int, BoundaryEdgeObservation] = {}
     selected_evidence_groups: dict[int, ObservationId] = {}
@@ -287,6 +372,40 @@ def _assess_direct_role_binding_authority(
             raise ValueError("selected direct role is absent from the observation ledger")
         selected[role.role_index] = observation
         selected_evidence_groups[role.role_index] = binding.evidence_group_id
+
+    def alternative_preserves_independent_width(
+        role_index: int,
+        alternative_id: ObservationId,
+    ) -> bool:
+        if independent_frame_width_px is None:
+            return True
+        opposite_index = (
+            role_index + 1 if role_index % 2 == 0 else role_index - 1
+        )
+        opposite = selected.get(opposite_index)
+        if opposite is None:
+            return True
+        alternative = ledger.observations_by_id[alternative_id]
+        if role_index % 2 == 0:
+            start_interval = alternative.full_position_interval_px
+            end_interval = opposite.full_position_interval_px
+        else:
+            start_interval = opposite.full_position_interval_px
+            end_interval = alternative.full_position_interval_px
+        if fit.template.direction > 0:
+            possible_width = FiniteInterval(
+                end_interval.minimum - start_interval.maximum,
+                end_interval.maximum - start_interval.minimum,
+            )
+        else:
+            possible_width = FiniteInterval(
+                start_interval.minimum - end_interval.maximum,
+                start_interval.maximum - end_interval.minimum,
+            )
+        return not (
+            possible_width.maximum < independent_frame_width_px.minimum
+            or independent_frame_width_px.maximum < possible_width.minimum
+        )
 
     bases: dict[int, set[DirectRoleAuthorityBasis]] = {
         role_index: set() for role_index in selected
@@ -355,12 +474,19 @@ def _assess_direct_role_binding_authority(
             )
 
     blocking_conflicts = {
-        role_index: ledger.conflicts_by_edge_role.get(
-            (
-                observation.observation_id,
-                fit.template.roles[role_index].role,
-            ),
-            (),
+        role_index: tuple(
+            conflict_id
+            for conflict_id, alternative_id in ledger.conflicts_by_edge_role.get(
+                (
+                    observation.observation_id,
+                    fit.template.roles[role_index].role,
+                ),
+                (),
+            )
+            if alternative_preserves_independent_width(
+                role_index,
+                alternative_id,
+            )
         )
         if (observation.observation_id, fit.template.roles[role_index].role)
         not in ledger.supported_material_roles
@@ -437,6 +563,8 @@ def assess_direct_role_binding_authorities(
     observations: tuple[BoundaryEdgeObservation, ...],
     separator_bands: tuple[SeparatorBandObservation, ...],
     measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
+    *,
+    independent_frame_width_px: FiniteInterval | None = None,
 ) -> tuple[DirectRoleBindingAuthority, ...]:
     """Assess bounded phase candidates against one pre-indexed evidence ledger."""
 
@@ -451,7 +579,12 @@ def assess_direct_role_binding_authorities(
         fits[0], observations, separator_bands, measurement_sets
     )
     return tuple(
-        _assess_direct_role_binding_authority(fit, ledger) for fit in fits
+        _assess_direct_role_binding_authority(
+            fit,
+            ledger,
+            independent_frame_width_px=independent_frame_width_px,
+        )
+        for fit in fits
     )
 
 
@@ -460,13 +593,19 @@ def assess_direct_role_binding_authority(
     observations: tuple[BoundaryEdgeObservation, ...],
     separator_bands: tuple[SeparatorBandObservation, ...],
     measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
+    *,
+    independent_frame_width_px: FiniteInterval | None = None,
 ) -> DirectRoleBindingAuthority:
     """Authorize a short line only through another independent physical fact."""
 
     if not isinstance(fit, SequenceFit):
         raise TypeError("direct-role authority requires a sequence fit")
     return assess_direct_role_binding_authorities(
-        (fit,), observations, separator_bands, measurement_sets
+        (fit,),
+        observations,
+        separator_bands,
+        measurement_sets,
+        independent_frame_width_px=independent_frame_width_px,
     )[0]
 
 
@@ -476,4 +615,5 @@ __all__ = [
     "DirectRoleBindingAuthority",
     "assess_direct_role_binding_authorities",
     "assess_direct_role_binding_authority",
+    "intrinsic_direct_role_authority_bases",
 ]

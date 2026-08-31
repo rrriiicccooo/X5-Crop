@@ -322,6 +322,47 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             selected.best.pitch_fit.canonical_frame_width_px,
         )
 
+    def test_observed_inner_frames_close_source_width_before_outer_refinement(
+        self,
+    ) -> None:
+        observations = tuple(
+            phase_edge(f"outer-missing:{index}", coordinate)
+            for index, coordinate in enumerate(
+                (40.0, 140.0, 160.0, 260.0, 280.0, 380.0)
+            )
+        )
+        phase = fit_template_phase(observations, phase_template(3))
+        assert phase.best is not None
+        bindings = list(phase.best.role_bindings)
+        bindings[0] = None
+        bindings[1] = None
+        phase = replace(
+            phase,
+            best=replace(
+                phase.best,
+                role_bindings=tuple(bindings),
+                phase_support_coverage=3.0,
+            ),
+        )
+        phase = self._with_selected_width_prerequisites(
+            phase,
+            observations,
+        )
+        source = SourceScanGeometry.create(
+            FramePhysicalSpec(10.0, 24.0, None),
+            width_scale_px_per_mm=PositiveInterval.exact(10.0),
+            height_scale_px_per_mm=PositiveInterval.exact(10.0),
+        )
+
+        _calibrated, authority = calibrate_source_frame_width(
+            source,
+            phase,
+            observations,
+        )
+
+        self.assertEqual(authority.state, EvidenceState.SUPPORTED)
+        self.assertEqual(authority.supporting_frame_ordinals, (2, 3))
+
     def test_selected_width_conflict_is_typed_counterevidence(self) -> None:
         observations = (
             phase_edge("conflicting-frame-1-start", 40.0),

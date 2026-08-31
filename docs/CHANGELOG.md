@@ -30,8 +30,9 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
 - 直接观察到的 start/end 在最终 placement 中保留 native coordinate 与完整 interval；Grid 只补齐缺失
   角色。同一连续 placement 的互补 endpoint evidence 合并为联合可行状态，不伪造 runner。唯一 placement
   中至少两张完整直接 Frame 可闭合 source W；当每个缺失 Frame 仍有一侧直接边缘时，同一份相关 W 可补
-  多条 opposite。任一 Frame 双侧都未观察，或共同 W authority 不足时，产生 typed
-  `frame_width_inference_unavailable`。缺失 separator 只有在
+  多条 opposite。若某个双侧未绑定 Frame 的完整物理 W 走廊内已经存在多组 registered native edge，
+  独立 source W 还可在固定 placement 上追加一次有界 lookup；只有它唯一留下一个各自具有直接坐标权限的
+  pair 时才绑定，零组或多组继续 typed review。缺失 separator 只有在
   直接约束矩阵独立闭合 `phase/W/pitch`、对应 adjacency 的完整不确定性走廊被已执行窗口逐 trace 覆盖、
   且没有局部反证时才按 `local_delta = 0` 补齐；不再用 edge 数、连续缺失数或全局 query-complete
   布尔值代替证明。候选无关 sequence 窗口按左右 holder 端分别投影完整且相关的 `W/pitch` 状态，覆盖
@@ -51,10 +52,12 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   `direct_role_aperture_domain_unavailable`，不能把两个不完整机制叠加成批准。
 - Source W 不再由 provisional/base phase 预先校准后重编译 template，也不再形成第二次 pitch/phase 搜索。
   离散与 local competition 先在没有 source W evidence 的同一候选空间中结束；只有唯一 selected candidate、
-  pre-W joint rank 至少为 2、必要 adjacency coverage/outer authority 完整且没有直接反证时，至少两张独立
+  pre-W joint rank 至少为 2、必要 adjacency coverage 完整且没有直接反证时，至少两张独立
   完整 Frame 才建立 typed `SourceFrameWidthAuthority`。它只收紧 selected fit 的连续 W，并在最终阶段
-  重新评估 rank 与相关 opposite inference；不能删除 runner、改变 ordinal/winner、重编译 template 或
-  回写候选选择。未支持与矛盾状态均进入 report/Debug，不建立旧 API、fallback 或并行 runtime。
+  重新评估 rank、direct-role/outer authority 与相关 opposite inference；不能删除离散 runner、改变
+  ordinal/winner、重编译 template 或回写先前候选选择。普通 local refinement 使用完整 format W，不能让
+  fitted Grid W 过滤自己的反证；只有 typed independent source W 能排除与同 Frame opposite role 物理不相容
+  的 material alternative。未支持与矛盾状态均进入 report/Debug，不建立旧 API、fallback 或并行 runtime。
 - Rank 3 直接坐标现在在 phase、W、pitch 与 `pitch-W` 的联合硬区间内执行有界最小二乘。无约束解轻微
   越界时不再把 W/pitch 整体退回 catalog 中心却保留原 phase；报告以
   `direct_least_squares | bounded_direct_least_squares | template_interval_center` 记录连续参数依据。
@@ -199,11 +202,11 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
 - `tools/verify` 是 Hook、CI 与本地验证的唯一入口。Diagnostic 只证明工程合同；gold accuracy、性能与
   platform receipt 分层记录，不互相冒充。
 - 正式性能 Gate 为 24-source 完整用户路径 mean 不超过 5 秒；3 秒只是不阻断的 challenge。
-- 跨高度 separator-pair 检查点的完整 development gold 为 110/110 完成、分析错误 0、
-  `unsafe_approved_auto = 0`；安全 auto 为基础 nominal 15/66、较难 nominal 2/30、challenge 0/14。
-  Candidate 为 89 个不可用、18 个安全、3 个不安全；全部不安全 candidate 均保持 review。S088 由完整
-  三区域联合 separator pair 从 `discrete_phase_ambiguous` 变为安全自动批准；两区域 material、孤立联合
-  edge 与角色不相容 pair 均保持诊断或 review。该阶段没有放宽 Grid、Gate、5% 预算或黄金合同。
+- Source-W native-pair rebind 检查点的完整 development gold 为 110/110 完成、分析错误 0、
+  `unsafe_approved_auto = 0`；安全 auto 为基础 nominal 17/66、较难 nominal 2/30、challenge 0/14。
+  Candidate 为 87 个不可用、20 个安全、3 个不安全；全部不安全 candidate 均保持 review。S079、S090
+  新增安全自动批准，既有安全 auto 无回退；S070 保持 typed `source_frame_width_conflict` review，证明 fitted
+  Grid W 不能过滤自己的直接反证。该阶段没有放宽 Grid、Gate、5% 预算或黄金合同。
 - 24-source 正式性能只由绑定最终干净 commit 的 receipt 判定；5 秒 mean 仍是 blocking Gate，3 秒仍是
   non-blocking 目标。当前 review 表达真实的 phase/cross、Grid/W 与预算证明缺口，不以调窄 guard、静默
   隐藏 saturation、恢复精确 W→H 或改变样片角色掩盖。

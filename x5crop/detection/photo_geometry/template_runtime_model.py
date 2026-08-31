@@ -603,10 +603,13 @@ class TemplateLaneReconstruction:
         )
         nominal_authority = self.calibrated_nominal_grid_authority
         if nominal_fit is None:
-            if nominal_authority.state not in {
+            permitted = {
                 EvidenceState.NOT_APPLICABLE,
                 EvidenceState.UNAVAILABLE,
-            }:
+            }
+            if self.selected_placement is None:
+                permitted.add(EvidenceState.CONTRADICTED)
+            if nominal_authority.state not in permitted:
                 raise ValueError("direct placement cannot consume nominal Grid authority")
         elif (
             nominal_authority.state != EvidenceState.SUPPORTED

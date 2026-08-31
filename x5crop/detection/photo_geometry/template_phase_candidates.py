@@ -535,6 +535,9 @@ def _refine_local_role_bindings(
     fit: SequenceFit,
     observations: Sequence[BoundaryEdgeObservation],
     separator_bands: Sequence[SeparatorBandObservation],
+    *,
+    intrinsic_coordinate_authority_ids: frozenset[ObservationId] = frozenset(),
+    frame_width_authority_px: FiniteInterval | None = None,
 ) -> _LocalRoleRefinement:
     """Bind uniquely closed local edges after global phase is immutable.
 
@@ -561,6 +564,16 @@ def _refine_local_role_bindings(
     )
     by_id = {item.observation_id: item for item in facts}
     roles = fit.template.roles
+    # Local observations must be allowed to contradict the current Grid fit.
+    # The calibrated physical template bounds legal Frame widths unless an
+    # independently observed source-level W has already been established.
+    # The current fitted W is the answer being checked and therefore cannot
+    # filter its own counterevidence.
+    frame_width = (
+        fit.template.frame_width_px
+        if frame_width_authority_px is None
+        else frame_width_authority_px
+    )
     corridor = template_role_refinement_radius_px(
         fit.pitch_fit.canonical_pitch_px
     )
@@ -596,8 +609,10 @@ def _refine_local_role_bindings(
     for identity, role_indices in candidate_roles.items():
         if len(role_indices) == 1:
             candidate_lists[role_indices[0]].append(by_id[identity])
-    candidates_by_role = {
-        role_index: tuple(
+    candidates_by_role = {}
+    intrinsic_candidates_by_role = {}
+    for role_index, values in candidate_lists.items():
+        candidates_by_role[role_index] = tuple(
             sorted(
                 values,
                 key=lambda item: (
@@ -606,8 +621,11 @@ def _refine_local_role_bindings(
                 ),
             )
         )
-        for role_index, values in candidate_lists.items()
-    }
+        intrinsic_candidates_by_role[role_index] = tuple(
+            item
+            for item in candidates_by_role[role_index]
+            if item.observation_id in intrinsic_coordinate_authority_ids
+        )
 
     def binding_for(fact: _AnchorFact) -> SequenceRoleBinding:
         return SequenceRoleBinding(
@@ -623,9 +641,9 @@ def _refine_local_role_bindings(
     def width_compatible(start_px: float, end_px: float) -> bool:
         width = fit.template.direction * (end_px - start_px)
         return (
-            fit.template.frame_width_px.minimum - 1.0e-9
+            frame_width.minimum - 1.0e-9
             <= width
-            <= fit.template.frame_width_px.maximum + 1.0e-9
+            <= frame_width.maximum + 1.0e-9
         )
 
     def fact_fits_bound_frame(role_index: int, fact: _AnchorFact) -> bool:
@@ -719,10 +737,18 @@ def _refine_local_role_bindings(
         if bindings[right_role] is None:
             bind(right_role, by_id[right_id])
 
-    def remaining(role_index: int) -> tuple[_AnchorFact, ...]:
+    def remaining(
+        role_index: int,
+        *,
+        intrinsic: bool = False,
+    ) -> tuple[_AnchorFact, ...]:
         return tuple(
             item
-            for item in candidates_by_role[role_index]
+            for item in (
+                intrinsic_candidates_by_role[role_index]
+                if intrinsic
+                else candidates_by_role[role_index]
+            )
             if item.observation_id not in bound_ids
         )
 
@@ -738,11 +764,11 @@ def _refine_local_role_bindings(
         values = tuple(normalized(item.coordinate_px) for item in candidates)
         other_px = normalized(other.canonical_position_px)
         if missing_start:
-            minimum = other_px - fit.template.frame_width_px.maximum
-            maximum = other_px - fit.template.frame_width_px.minimum
+            minimum = other_px - frame_width.maximum
+            maximum = other_px - frame_width.minimum
         else:
-            minimum = other_px + fit.template.frame_width_px.minimum
-            maximum = other_px + fit.template.frame_width_px.maximum
+            minimum = other_px + frame_width.minimum
+            maximum = other_px + frame_width.maximum
         begin = bisect_left(values, minimum - 1.0e-9)
         end = bisect_right(values, maximum + 1.0e-9)
         if end - begin != 1:
@@ -762,11 +788,11 @@ def _refine_local_role_bindings(
             start_px = normalized(start.coordinate_px)
             begin = bisect_left(
                 end_values,
-                start_px + fit.template.frame_width_px.minimum - 1.0e-9,
+                start_px + frame_width.minimum - 1.0e-9,
             )
             end = bisect_right(
                 end_values,
-                start_px + fit.template.frame_width_px.maximum + 1.0e-9,
+                start_px + frame_width.maximum + 1.0e-9,
             )
             if end - begin > 1:
                 return None
@@ -787,26 +813,43 @@ def _refine_local_role_bindings(
         end = bindings[end_index]
         if start is None and end is None:
             pair = unique_pair(
-                remaining(start_index),
-                remaining(end_index),
+                remaining(start_index, intrinsic=True),
+                remaining(end_index, intrinsic=True),
             )
+            if pair is None:
+                pair = unique_pair(
+                    remaining(start_index),
+                    remaining(end_index),
+                )
             if pair is not None:
                 bind(start_index, pair[0])
                 bind(end_index, pair[1])
         elif start is None:
             candidate = unique_missing(
-                remaining(start_index),
+                remaining(start_index, intrinsic=True),
                 other=end,
                 missing_start=True,
             )
+            if candidate is None:
+                candidate = unique_missing(
+                    remaining(start_index),
+                    other=end,
+                    missing_start=True,
+                )
             if candidate is not None:
                 bind(start_index, candidate)
         elif end is None:
             candidate = unique_missing(
-                remaining(end_index),
+                remaining(end_index, intrinsic=True),
                 other=start,
                 missing_start=False,
             )
+            if candidate is None:
+                candidate = unique_missing(
+                    remaining(end_index),
+                    other=start,
+                    missing_start=False,
+                )
             if candidate is not None:
                 bind(end_index, candidate)
 

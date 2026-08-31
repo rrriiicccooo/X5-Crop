@@ -10,6 +10,7 @@ import numpy as np
 from tools.tests.template_test_support import (
     calibrated_nominal_grid_prior,
     phase_edge as edge,
+    placement_sequence,
     phase_sequence_measurement,
     phase_separator as separator,
     phase_template as template,
@@ -37,6 +38,11 @@ from x5crop.detection.photo_geometry.template_model import (
     TemplateSearchReceipt,
     TemplateSpec,
 )
+from x5crop.detection.photo_geometry.template_direct_role_authority import (
+    DirectRoleAuthorityBasis,
+    assess_direct_role_binding_authority,
+    intrinsic_direct_role_authority_bases,
+)
 from x5crop.detection.photo_geometry.template_nominal_grid_model import (
     NominalGridFailureKind,
 )
@@ -52,6 +58,7 @@ from x5crop.detection.photo_geometry.template_phase_candidates import (
     _bounded_lattice_least_squares,
     _facts,
     _match_roles,
+    _refine_local_role_bindings,
 )
 from x5crop.detection.photo_geometry.template_phase_candidates import (
     _separator_role_authority,
@@ -229,6 +236,188 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         self.assertEqual(result.receipt.local_refinement_lookup_count, 20)
         self.assertEqual(result.receipt.local_refinement_binding_count, 0)
+
+    def test_post_grid_local_pair_can_contradict_the_current_fit_width(
+        self,
+    ) -> None:
+        spec = replace(
+            template(2),
+            frame_width_px=PositiveInterval(90.0, 110.0),
+        )
+        fit = placement_sequence(spec, missing=(0, 1))
+        fit = replace(
+            fit,
+            pitch_fit=replace(
+                fit.pitch_fit,
+                frame_width_px=PositiveInterval(99.5, 100.5),
+            ),
+        )
+        true_start = self._local_line(
+            "local:true:start:1",
+            90.0,
+            BoundaryRole.START,
+        )
+        weak_start = self._local_line(
+            "local:weak:start:1",
+            90.25,
+            BoundaryRole.START,
+        )
+        true_end = self._local_line(
+            "local:true:end:1",
+            200.0,
+            BoundaryRole.END,
+        )
+        observations = (
+            true_start,
+            weak_start,
+            true_end,
+        )
+        refined = _refine_local_role_bindings(
+            fit,
+            observations,
+            (),
+            intrinsic_coordinate_authority_ids=frozenset(
+                {
+                    true_start.observation_id,
+                    true_end.observation_id,
+                }
+            ),
+        )
+
+        self.assertEqual(
+            refined.fit.binding_observation_ids[:2],
+            (
+                ObservationId("local:true:start:1"),
+                ObservationId("local:true:end:1"),
+            ),
+        )
+
+    def test_intrinsic_coordinate_authority_excludes_a_short_edge(self) -> None:
+        source_wide = edge("source-wide", 100.0)
+        short = replace(
+            edge("short", 101.0),
+            trace_coordinates_px=(0, 10),
+            support_fraction=2.0 / 3.0,
+            continuous_support_fraction=2.0 / 3.0,
+        )
+
+        bases = intrinsic_direct_role_authority_bases(
+            (source_wide, short),
+            (
+                phase_sequence_measurement(
+                    "intrinsic-coordinate-authority",
+                    FiniteInterval(0.0, 300.0),
+                ),
+            ),
+        )
+
+        self.assertEqual(
+            bases,
+            {
+                source_wide.observation_id: (
+                    DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE,
+                )
+            },
+        )
+
+    def test_post_grid_local_pair_stays_unbound_when_fit_width_is_ambiguous(
+        self,
+    ) -> None:
+        spec = replace(
+            template(2),
+            frame_width_px=PositiveInterval(90.0, 110.0),
+        )
+        fit = placement_sequence(spec, missing=(0, 1))
+        fit = replace(
+            fit,
+            pitch_fit=replace(
+                fit.pitch_fit,
+                frame_width_px=PositiveInterval(99.5, 100.5),
+            ),
+        )
+        first_start = self._local_line(
+            "local:first:start:1",
+            100.0,
+            BoundaryRole.START,
+        )
+        second_start = self._local_line(
+            "local:second:start:1",
+            100.25,
+            BoundaryRole.START,
+        )
+        true_end = self._local_line(
+            "local:end:1",
+            200.0,
+            BoundaryRole.END,
+        )
+        observations = (
+            first_start,
+            second_start,
+            true_end,
+        )
+        refined = _refine_local_role_bindings(
+            fit,
+            observations,
+            (),
+            intrinsic_coordinate_authority_ids=frozenset(
+                {
+                    first_start.observation_id,
+                    second_start.observation_id,
+                    true_end.observation_id,
+                }
+            ),
+        )
+
+        self.assertEqual(refined.fit.binding_observation_ids[:2], (None, None))
+
+    def test_independent_source_width_closes_one_intrinsic_pair(self) -> None:
+        spec = replace(
+            template(2),
+            frame_width_px=PositiveInterval(90.0, 110.0),
+        )
+        fit = placement_sequence(spec, missing=(0, 1))
+        first_start = self._local_line(
+            "source-width:first:start:1",
+            90.0,
+            BoundaryRole.START,
+        )
+        true_start = self._local_line(
+            "source-width:true:start:1",
+            100.0,
+            BoundaryRole.START,
+        )
+        end = self._local_line(
+            "source-width:end:1",
+            200.0,
+            BoundaryRole.END,
+        )
+        observations = (first_start, true_start, end)
+        intrinsic_ids = frozenset(
+            item.observation_id for item in observations
+        )
+
+        physical_only = _refine_local_role_bindings(
+            fit,
+            observations,
+            (),
+            intrinsic_coordinate_authority_ids=intrinsic_ids,
+        )
+        source_closed = _refine_local_role_bindings(
+            fit,
+            observations,
+            (),
+            intrinsic_coordinate_authority_ids=intrinsic_ids,
+            frame_width_authority_px=FiniteInterval(99.5, 100.5),
+        )
+
+        self.assertEqual(
+            physical_only.fit.binding_observation_ids[:2],
+            (None, None),
+        )
+        self.assertEqual(
+            source_closed.fit.binding_observation_ids[:2],
+            (true_start.observation_id, end.observation_id),
+        )
 
     def test_locally_bound_separator_drives_one_wide_advance(self) -> None:
         anchor = replace(
@@ -1238,6 +1427,129 @@ class TemplatePhaseContractTest(unittest.TestCase):
             result.runner_phase_candidate_authority_projection
             .projected_out_bindings
         )
+
+    def test_short_material_alternative_does_not_contradict_source_wide_role(
+        self,
+    ) -> None:
+        supported = self._phase_candidate_group("supported", 0.0)
+        alternative_group = self._phase_candidate_group("alternative", 5.0)
+        impossible_alternative = replace(
+            edge("alternative:impossible-end", 155.0),
+            qualified_anchor_roles=(BoundaryRole.END,),
+            polarity=-1,
+            trace_coordinates_px=(10, 20),
+            support_fraction=2.0 / 3.0,
+            continuous_support_fraction=2.0 / 3.0,
+        )
+        conflict = separator(
+            "material-outside-fitted-width",
+            alternative_group[1],
+            impossible_alternative,
+            FiniteInterval(9.0, 11.0),
+        )
+        conflict = replace(
+            conflict,
+            material_support_region_count=1,
+            material_regions=tuple(
+                region
+                if region.region_index == 0
+                else replace(
+                    region,
+                    state=SeparatorMaterialRegionState.TONE_UNRESOLVED,
+                )
+                for region in conflict.material_regions
+            ),
+            evidence_state=BoundaryEvidenceState.CONTRADICTION,
+        )
+
+        result = fit_template_phase(
+            (*supported, *alternative_group, impossible_alternative),
+            template(2),
+            separator_bands=(conflict,),
+            holder_span_px=FiniteInterval(0.0, 320.0),
+            sequence_measurement_sets=(
+                phase_sequence_measurement(
+                    "material-outside-fitted-width",
+                    FiniteInterval(0.0, 320.0),
+                ),
+            ),
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.AMBIGUOUS)
+        assert result.runner_phase_candidate_authority_projection is not None
+        self.assertEqual(
+            result.runner_phase_candidate_authority_projection
+            .input_direct_role_authority.state,
+            EvidenceState.SUPPORTED,
+        )
+
+    def test_independent_source_width_rejects_impossible_material_alternative(
+        self,
+    ) -> None:
+        observations = self._phase_candidate_group("source-width", 0.0)
+        result = fit_template_phase(observations, template(2))
+        assert result.best is not None
+        alternative = replace(
+            edge("source-width:alternate-start", 50.0),
+            qualified_anchor_roles=(BoundaryRole.START,),
+            polarity=1,
+        )
+        supported = SeparatorMaterialRegionObservation(
+            region_index=0,
+            sample_count=1,
+            material_contrast_interval=FiniteInterval(3.0, 4.0),
+            core_texture_interval=FiniteInterval(0.0, 1.0),
+            state=SeparatorMaterialRegionState.SUPPORTED,
+        )
+        conflict = replace(
+            separator(
+                "source-width:material-conflict",
+                observations[0],
+                alternative,
+                FiniteInterval(9.0, 11.0),
+            ),
+            material_support_region_count=1,
+            material_regions=(
+                supported,
+                replace(
+                    supported,
+                    region_index=1,
+                    state=SeparatorMaterialRegionState.TONE_UNRESOLVED,
+                ),
+                replace(
+                    supported,
+                    region_index=2,
+                    state=SeparatorMaterialRegionState.TONE_UNRESOLVED,
+                ),
+            ),
+            evidence_state=BoundaryEvidenceState.CONTRADICTION,
+        )
+        measurement_sets = (
+            phase_sequence_measurement(
+                "source-width-material-conflict",
+                FiniteInterval(0.0, 300.0),
+            ),
+        )
+
+        before_source_width = assess_direct_role_binding_authority(
+            result.best,
+            (*observations, alternative),
+            (conflict,),
+            measurement_sets,
+        )
+        after_source_width = assess_direct_role_binding_authority(
+            result.best,
+            (*observations, alternative),
+            (conflict,),
+            measurement_sets,
+            independent_frame_width_px=FiniteInterval(99.0, 101.0),
+        )
+
+        self.assertEqual(
+            before_source_width.state,
+            EvidenceState.CONTRADICTED,
+        )
+        self.assertEqual(after_source_width.state, EvidenceState.SUPPORTED)
 
     def test_two_authorized_discrete_candidates_remain_ambiguous(self) -> None:
         result = fit_template_phase(

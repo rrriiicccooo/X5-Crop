@@ -44,7 +44,6 @@ class SourceFrameWidthAuthorityFailureKind(str, Enum):
     DIRECT_ROLE_AUTHORITY_CONTRADICTED = "direct_role_authority_contradicted"
     GLOBAL_LATTICE_RANK_INSUFFICIENT = "global_lattice_rank_insufficient"
     ADJACENCY_COVERAGE_INCOMPLETE = "adjacency_coverage_incomplete"
-    OUTER_FRAME_AUTHORITY_UNAVAILABLE = "outer_frame_authority_unavailable"
     INDEPENDENT_COMPLETE_FRAMES_UNAVAILABLE = (
         "independent_complete_frames_unavailable"
     )
@@ -153,9 +152,11 @@ def calibrate_source_frame_width(
     """Narrow source W from authorized Frames after candidate selection.
 
     The candidate has already fixed ordinal ownership and exposed direct-role,
-    coverage, outer and pre-W lattice assessments.  Source W may add one
-    correlated constraint afterwards; it never recompiles the template,
-    deletes a runner or changes the selected ordinal mapping.
+    coverage and pre-W lattice assessments.  Source W may add one correlated
+    constraint afterwards; it never recompiles the template, deletes a runner
+    or changes the selected ordinal mapping.  Outer-Frame authority remains a
+    final Grid-inference Gate and is not a prerequisite for measuring W from
+    other directly observed complete Frames.
     """
 
     fit = phase.best
@@ -219,16 +220,6 @@ def calibrate_source_frame_width(
             EvidenceState.UNAVAILABLE,
             SourceFrameWidthAuthorityFailureKind.ADJACENCY_COVERAGE_INCOMPLETE,
             "source W requires complete coverage for every inferred adjacency",
-        )
-    outer = phase.outer_frame_observation_authority
-    if inferred_coverage and (
-        outer is None or outer.state != EvidenceState.SUPPORTED
-    ):
-        return source_geometry, _failed_source_width_authority(
-            phase,
-            EvidenceState.UNAVAILABLE,
-            SourceFrameWidthAuthorityFailureKind.OUTER_FRAME_AUTHORITY_UNAVAILABLE,
-            "source W cannot create an unobserved outer Frame",
         )
     by_id = {item.observation_id: item for item in sequence_edges}
     facts = {item.role_index: item for item in direct.facts}
