@@ -20,26 +20,26 @@ Contact/overlap 以后仍只扩展同一 adjacency/placement 模型。
 
 ## 当前检查点
 
-- `11e0e7a6` 将 sequence coordinate `observation_id` 与相关 `evidence_group_id` 分离。只有相同
-  coordinate identity 可以合并连续 placement；共享 material group 只用于证据去重，不能隐藏不同坐标
-  runner。旧字段已删除，report revision 为 `x5crop_v5_template_report_28`；类型、owner、Debug、外部
-  report validator 与正反例使用同一 current-only schema。
+- `ded3b715` 删除 pre-selection source-W calibration、template recompile 与第二次 phase/pitch 搜索。
+  离散竞争先在没有 source W evidence 的候选空间中结束；唯一 selected placement 只有满足 pre-W rank、
+  adjacency coverage、outer authority、direct-role authority 且至少两张完整 Frame 独立闭合时，才取得 typed
+  `SourceFrameWidthAuthority`。W 只收紧 selected fit 与相关 opposite inference，不能删除 runner、改变
+  ordinal/winner 或回写选择证据。旧入口已删除，report revision 为 `x5crop_v5_template_report_29`。
 - 完整 development gold 为 110/110 完成、分析错误 0、`unsafe_approved_auto = 0`。安全 auto 为基础
-  nominal 14/66、较难 nominal 2/30、challenge 0/14；基础 nominal candidate 为 50 个不可用、14 个安全、
-  2 个不安全。S017、S051 的不安全 candidate 均被 direct-use budget 阻断；全部 challenge 安全 review。
-  安全 auto 共 16 个：S003、S022、S025、S059、S063、S064、S067、S081、S083、S084、S085、
-  S087、S089、S092、S094、S095。
-- S029 的旧批准依赖把同一 material group 中 14325.97px 与 14386.36px 两个 START 当成同一坐标；后者
-  相对黄金基线会向内裁切约 63.5px。当前明确保留 runner 并返回 `discrete_phase_ambiguous`。S002、S015、
-  S024、S030、S047 终态仍为 review，只把 root failure 前移到同一真实 phase 歧义。
-- 黄金 receipt 精确匹配 `11e0e7a6`；detector manifest 为
-  `8b7d361953ba7792612dfad29a35c5f167f4b689e684ecab7f0f4dc40836b05e`，comparator manifest 为
-  `3bd4218ed1b752ac5b47b9c7ea124d2d795095e8f5938590e69fef464995e969`，cohort SHA-256 为
+  nominal 14/66、较难 nominal 3/30、challenge 0/14；基础 nominal candidate 为 49 个不可用、14 个安全、
+  3 个不安全。S013、S017、S051 的不安全 candidate 均被 direct-use budget 阻断；全部 challenge 安全
+  review。安全 auto 共 17 个：S003、S021、S022、S025、S059、S063、S064、S067、S070、S081、
+  S083、S085、S087、S088、S089、S094、S095。
+- 相对上一检查点，S021、S070、S088 安全进入 auto，S084、S092 保守回到 review；这证明旧 source W
+  确实能够改变离散选择，selected-only 权限修正不是单纯重排代码。所有变化均保持危险自动批准为 0。
+- 黄金 receipt 精确匹配 `ded3b715`；detector manifest 为
+  `4b736e577cd9dba18bc1757ab4a6f0cfa4534d8ff9d4c836e7034b7e7789bfad`，comparator manifest 为
+  `af39310d3b30e3047c3a22babf8fc989fd2b2457dbb737ea660b246f4f4e53a6`，cohort SHA-256 为
   `c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`。黄金 summary SHA-256 为
-  `35d463e89cbbb0c0712ef623de5315b2028fa66ef730960ddeb79aba3e41bb1b`。
-- 同 commit 的 24-source 正式性能 mean 为 2.947 秒，p95 为 5.064 秒，最慢 S109 为 5.476 秒；5 秒
-  mean Gate 通过，3 秒 non-blocking 目标达到。性能 receipt SHA-256 为
-  `f90d6a103990eae5c7d0760c7dca1a3b0df8fb690a009c5c7585df1f4f722546`；receipt 只证明记录的依赖与
+  `1e2b42e37418ccffe997f3e625ab0335fe238c73bdf798223fbdbe419a3cdad9`。
+- 同 commit 的 24-source 正式性能 mean 为 3.204 秒，p95 为 5.231 秒，最慢 S109 为 5.521 秒；5 秒
+  mean Gate 通过，3 秒 non-blocking 目标未达到。性能 receipt SHA-256 为
+  `46429c4ad8cd85e497cc98ac362c232b2c8111d8c4ef6279d86eaf62df5958d2`；receipt 只证明记录的依赖与
   M2 Max 主机。
 
 ## 当前物理证据
@@ -58,16 +58,16 @@ Contact/overlap 以后仍只扩展同一 adjacency/placement 模型。
 
 ## 开放风险
 
-- 基础 nominal 仍有 52/66 review，较难 nominal 有 28/30 review。当前完整集的 phase 根因包括 28 个
-  `direct_role_binding_authority_unavailable`、13 个 `discrete_phase_ambiguous`、11 个
-  `frame_width_inference_unavailable`、8 个 `global_lattice_authority_unavailable`、5 个
-  `separator_material_conflict` 与 5 个 `fixed_template_mismatch`。竞争必须由新的直接 observation identity、
+- 基础 nominal 仍有 52/66 review，较难 nominal 有 27/30 review。当前完整集的 phase 根因包括 31 个
+  `direct_role_binding_authority_unavailable`、11 个 `discrete_phase_ambiguous`、10 个
+  `frame_width_inference_unavailable`、8 个 `global_lattice_authority_unavailable`、4 个
+  `separator_material_conflict` 与 4 个 `fixed_template_mismatch`。竞争必须由新的直接 observation identity、
   权限或相关安全状态闭合；不得恢复 W 自授权、缩窄 guard、精确 W→H 或改 challenge 分类。
-- S017、S051 是仅有的两个不安全 candidate，并继续由 `direct_use_budget_exceeded` 阻断；其余 92 个
+- S013、S017、S051 是仅有的三个不安全 candidate，并继续由 `direct_use_budget_exceeded` 阻断；其余 90 个
   review task 没有 selected candidate，不能把“没有输出”误当成精度问题。
-- `lane_preparation.py` 仍在最终直接角色权限和离散竞争闭合前校准 source W、重编译模板，再把该 W 作为
-  global lattice evidence。黄金结果当前安全，但这个顺序让相关 W 可能参与选择自己的 source placement，
-  是下一项必须消除的循环权限，而不是通过率工具。
+- 当前 direct-role candidate 权限仍按整组 binding 判定。下一机制必须验证：删除无权限 binding 后，保留
+  的直接角色是否仍能独立闭合 rank 3；不能把 `contradicted` 当成可删噪声，也不能让 projection 生成新
+  Frame、隐藏 runner 或使 validation-only 弱线获得权限。
 - 当前黄金同时参与 development calibration 与 development 验收，只能证明该集合上的安全与可复算性；
   尚无 sealed acceptance，也没有 `xpan`、`120-645`、`135-dual` 的独立黄金覆盖。
 - 当前开发集不能事后兼任概率 calibration。未来 scorer 仍需预先冻结的新数据、OOD、abstention 和独立
@@ -75,11 +75,7 @@ Contact/overlap 以后仍只扩展同一 adjacency/placement 模型。
 
 ## 精确下一步
 
-1. 删除 pre-selection source-W calibration/recompile 路径。Bounded candidate 必须先只凭直接角色权限和
-   独立 lattice facts 完成离散竞争；唯一 placement、全局 rank、adjacency coverage、outer authority 与
-   topology 闭合后，才允许 selected-only source W 校准和相关 opposite 推断。W 不得删除 runner、改变
-   ordinal 或把自己写回选择证据。
-2. 上述安全顺序稳定后，再为每个 bounded candidate 增加对称的 authority projection：只删除
+1. 为每个 bounded candidate 增加对称的 authority projection：只删除
    `unavailable` binding、绝不删除 `contradicted`，保留的直接角色必须重新独立闭合 rank 3；随后全部投影
    candidate 重新 canonicalize 并竞争。它不能生成双侧都未观察的 Frame，也不能让 validation-only 弱线
    增加 rank、收窄 W 或决定 winner。
