@@ -28,10 +28,10 @@ from .measurement_model import (
 )
 from .model import BoundaryRole, QueryPurpose
 from .observations import build_sequence_edge_observations
-from .cross_height_edge_support import (
-    placement_sequence_edges_with_cross_height_support,
-    resolve_cross_height_edge_support,
-    resolve_cross_height_separator_support,
+from .aggregate_edge_support import (
+    placement_sequence_edges_with_aggregate_support,
+    resolve_aggregate_edge_support,
+    resolve_aggregate_separator_support,
 )
 from .output_model import ResolvedOutputSlots, SharedStripDirection
 from .profile_adapters import cross_profile_from_regions, sequence_profile_from_regions
@@ -87,6 +87,7 @@ from .template_pitch import (
 from .template_placement import resolved_sequence_support_domains_px
 from .source_geometry import SourceScanGeometry
 from .transition_tracking import (
+    track_broad_material_transition_regions,
     track_cross_height_transition_regions,
     track_side_transition_regions,
 )
@@ -268,6 +269,31 @@ def _physical_cross_height_regions(
     )
 
 
+def _physical_broad_material_regions(
+    measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
+    *,
+    reference_trace_px: float,
+    boundary_axis_scale_px_per_mm,
+):
+    retained = {}
+    for measurement_set in measurement_sets:
+        values = track_broad_material_transition_regions(
+            (measurement_set,),
+            reference_trace_px=reference_trace_px,
+            boundary_axis_scale_px_per_mm=boundary_axis_scale_px_per_mm,
+        )
+        retained.update({item.region_id: item for item in values})
+    return tuple(
+        sorted(
+            retained.values(),
+            key=lambda item: (
+                item.position_interval_px.center,
+                item.region_id,
+            ),
+        )
+    )
+
+
 def prepare_template_lane(
     field: PhotoBoundaryMeasurementField,
     lane: SourceLaneEvidence,
@@ -355,6 +381,7 @@ def prepare_template_lane(
         for item in (
             *measurement_set.transitions,
             *measurement_set.cross_height_transitions,
+            *measurement_set.broad_material_transitions,
         )
     }
     side_regions = _physical_transition_regions(
@@ -363,6 +390,11 @@ def prepare_template_lane(
         boundary_axis_scale_px_per_mm=scales.width_axis_px_per_mm,
     )
     cross_height_regions = _physical_cross_height_regions(
+        precision_measurement_sets[2:],
+        reference_trace_px=height_authority.center,
+        boundary_axis_scale_px_per_mm=scales.width_axis_px_per_mm,
+    )
+    broad_material_regions = _physical_broad_material_regions(
         precision_measurement_sets[2:],
         reference_trace_px=height_authority.center,
         boundary_axis_scale_px_per_mm=scales.width_axis_px_per_mm,
@@ -401,6 +433,17 @@ def prepare_template_lane(
         reference_trace_px=height_authority.center,
         boundary_axis_scale_px_per_mm=scales.width_axis_px_per_mm,
     )
+    broad_material_profile = sequence_profile_from_regions(
+        broad_material_regions,
+        coordinate_count=coordinate_count(width_authority),
+        transition_by_id=transition_by_id,
+    )
+    broad_material_profile = merge_sequence_edge_families(
+        broad_material_profile,
+        transition_by_id,
+        reference_trace_px=height_authority.center,
+        boundary_axis_scale_px_per_mm=scales.width_axis_px_per_mm,
+    )
     cross_profile = cross_profile_from_regions(
         top_regions,
         bottom_regions,
@@ -423,6 +466,15 @@ def prepare_template_lane(
             BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE
         ),
     )
+    broad_material_edges = build_sequence_edge_observations(
+        broad_material_profile,
+        transition_by_id,
+        reference_trace_px=height_authority.center,
+        boundary_axis_scale_px_per_mm=scales.width_axis_px_per_mm,
+        measurement_basis=(
+            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+        ),
+    )
     direct_separator_bands = build_format_separator_bands(
         direct_sequence_profile,
         direct_sequence_edges,
@@ -443,24 +495,71 @@ def prepare_template_lane(
             SeparatorBandMeasurementBasis.CROSS_HEIGHT_AGGREGATE
         ),
     )
+    broad_material_separator_bands = build_format_separator_bands(
+        broad_material_profile,
+        broad_material_edges,
+        transition_by_id,
+        field,
+        width_axis,
+        measurement_plan.template_spec.frame_width_px,
+        measurement_basis=(
+            SeparatorBandMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+        ),
+    )
     (
         resolved_sequence_edges,
         cross_height_edge_resolutions,
-    ) = resolve_cross_height_edge_support(
+    ) = resolve_aggregate_edge_support(
         direct_sequence_edges,
         cross_height_edges,
         transition_by_id,
         registered_trace_lattice=(
             precision_measurement_sets[2].query.trace_positions_px
         ),
+        aggregate_basis=(
+            BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE
+        ),
+        bind_direct_edge=True,
+    )
+    (
+        resolved_sequence_edges,
+        broad_material_edge_resolutions,
+    ) = resolve_aggregate_edge_support(
+        resolved_sequence_edges,
+        broad_material_edges,
+        transition_by_id,
+        registered_trace_lattice=(
+            precision_measurement_sets[2].query.trace_positions_px
+        ),
+        aggregate_basis=(
+            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+        ),
+        bind_direct_edge=False,
     )
     sequence_profile = direct_sequence_profile
     projected_cross_height_separator_bands = (
-        resolve_cross_height_separator_support(
+        resolve_aggregate_separator_support(
             cross_height_separator_bands,
             cross_height_edge_resolutions,
             resolved_sequence_edges,
             direct_separator_bands,
+            aggregate_basis=(
+                SeparatorBandMeasurementBasis.CROSS_HEIGHT_AGGREGATE
+            ),
+        )
+    )
+    projected_broad_material_separator_bands = (
+        resolve_aggregate_separator_support(
+            broad_material_separator_bands,
+            broad_material_edge_resolutions,
+            resolved_sequence_edges,
+            (
+                *direct_separator_bands,
+                *projected_cross_height_separator_bands,
+            ),
+            aggregate_basis=(
+                SeparatorBandMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+            ),
         )
     )
     separator_bands = tuple(
@@ -468,14 +567,18 @@ def prepare_template_lane(
             (
                 *direct_separator_bands,
                 *projected_cross_height_separator_bands,
+                *projected_broad_material_separator_bands,
             ),
             key=lambda item: str(item.observation_id),
         )
     )
     placement_sequence_edges = (
-        placement_sequence_edges_with_cross_height_support(
+        placement_sequence_edges_with_aggregate_support(
             resolved_sequence_edges,
-            projected_cross_height_separator_bands,
+            (
+                *projected_cross_height_separator_bands,
+                *projected_broad_material_separator_bands,
+            ),
         )
     )
     coverage = tuple(item.coverage for item in measurement_sets)
@@ -509,6 +612,11 @@ def prepare_template_lane(
         cross_height_edges=cross_height_edges,
         cross_height_edge_resolutions=(
             cross_height_edge_resolutions
+        ),
+        broad_material_regions=broad_material_regions,
+        broad_material_edges=broad_material_edges,
+        broad_material_edge_resolutions=(
+            broad_material_edge_resolutions
         ),
         top_regions=top_regions,
         bottom_regions=bottom_regions,
@@ -850,6 +958,9 @@ def prepare_template_lane(
             cross.observations,
             phase,
             cross_competition,
-            cross_height_edge_resolutions,
+            (
+                *cross_height_edge_resolutions,
+                *broad_material_edge_resolutions,
+            ),
         ),
     )

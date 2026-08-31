@@ -6,9 +6,13 @@ from .model import (
     BoundaryRole,
     MINIMUM_INDEPENDENT_SUPPORT_REGIONS,
     PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+    SPATIAL_SUPPORT_REGION_COUNT,
 )
 from .measurement_model import SequenceTransitionObservation
-from .line_observations import SideTransitionRegion
+from .line_observations import (
+    SideTransitionRegion,
+    TransitionRegionMeasurementBasis,
+)
 from .observation_types import BasicAxisProfile, ProfileRun
 
 
@@ -28,12 +32,26 @@ def _region_anchor_qualified(
         if role == BoundaryRole.START
         else region.right_background_preference_fraction
     )
+    signal_qualified = (
+        region.mean_tone_or_texture_z
+        >= spec.tone_or_texture_z_minimum
+        and (
+            region.measurement_basis
+            == TransitionRegionMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+            or region.mean_gradient_z >= spec.gradient_z_minimum
+        )
+    )
     return (
         not region.ambiguous
         and region.independent_support_region_count
         >= MINIMUM_INDEPENDENT_SUPPORT_REGIONS
-        and region.mean_gradient_z >= spec.gradient_z_minimum
-        and region.mean_tone_or_texture_z >= spec.tone_or_texture_z_minimum
+        and (
+            region.measurement_basis
+            != TransitionRegionMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+            or region.independent_support_region_count
+            == SPATIAL_SUPPORT_REGION_COUNT
+        )
+        and signal_qualified
         and _is_strict_majority(role_preference)
     )
 
@@ -80,9 +98,22 @@ def sequence_profile_from_regions(
                         not region.ambiguous
                         and region.independent_support_region_count
                         >= MINIMUM_INDEPENDENT_SUPPORT_REGIONS
-                        and region.mean_gradient_z >= spec.gradient_z_minimum
                         and region.mean_tone_or_texture_z
                         >= spec.tone_or_texture_z_minimum
+                        and (
+                            region.measurement_basis
+                            == TransitionRegionMeasurementBasis
+                            .BROAD_MATERIAL_AGGREGATE
+                            or region.mean_gradient_z
+                            >= spec.gradient_z_minimum
+                        )
+                        and (
+                            region.measurement_basis
+                            != TransitionRegionMeasurementBasis
+                            .BROAD_MATERIAL_AGGREGATE
+                            or region.independent_support_region_count
+                            == SPATIAL_SUPPORT_REGION_COUNT
+                        )
                     ),
                 )
                 for region in regions

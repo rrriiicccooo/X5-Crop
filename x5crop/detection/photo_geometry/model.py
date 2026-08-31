@@ -7,7 +7,7 @@ from enum import Enum
 import math
 
 
-PHOTO_BOUNDARY_MEASUREMENT_REVISION = "x5crop_photo_boundary_measurement_v1"
+PHOTO_BOUNDARY_MEASUREMENT_REVISION = "x5crop_photo_boundary_measurement_v2"
 
 
 class BoundaryAxis(str, Enum):
@@ -59,6 +59,7 @@ class PhotoBoundaryMeasurementSpec:
     lattice_minimum_mm: float = 2.0
     lattice_maximum_mm: float = 4.0
     local_window_mm: float = 0.25
+    broad_material_window_mm: float = 0.50
     transition_gap_mm: float = 0.05
     gradient_z_minimum: float = 3.0
     tone_or_texture_z_minimum: float = 3.0
@@ -80,6 +81,7 @@ class PhotoBoundaryMeasurementSpec:
             self.lattice_minimum_mm,
             self.lattice_maximum_mm,
             self.local_window_mm,
+            self.broad_material_window_mm,
             self.transition_gap_mm,
             self.gradient_z_minimum,
             self.tone_or_texture_z_minimum,
@@ -96,6 +98,10 @@ class PhotoBoundaryMeasurementSpec:
             raise ValueError("photo-boundary measurement spec must be positive")
         if self.lattice_minimum_mm > self.lattice_maximum_mm:
             raise ValueError("measurement lattice bounds are reversed")
+        if self.broad_material_window_mm <= self.local_window_mm:
+            raise ValueError(
+                "broad material window must exceed the local edge window"
+            )
         if (
             self.maximum_missing_lattice_steps < 0
             or self.robust_fit_maximum_evaluations <= 0
@@ -124,8 +130,39 @@ class PhotoBoundaryMeasurementSpec:
             raise ValueError("window scale must be finite and positive")
         return max(1, int(math.ceil(self.local_window_mm * scale_px_per_mm)))
 
+    def broad_material_window_px(self, scale_px_per_mm: float) -> int:
+        if not math.isfinite(scale_px_per_mm) or scale_px_per_mm <= 0.0:
+            raise ValueError("material window scale must be finite and positive")
+        return max(
+            1,
+            int(math.ceil(self.broad_material_window_mm * scale_px_per_mm)),
+        )
+
+    def local_measurement_work_radius_px(
+        self,
+        scale_px_per_mm: float,
+    ) -> int:
+        """Logical local sample radius used by the work receipt."""
+
+        if not math.isfinite(scale_px_per_mm) or scale_px_per_mm <= 0.0:
+            raise ValueError("measurement work scale must be positive")
+        return max(
+            1,
+            int(
+                math.ceil(
+                    (self.local_window_mm + self.transition_gap_mm)
+                    * scale_px_per_mm
+                )
+            ),
+        )
+
     def measurement_halo_px(self, scale_px_per_mm: float) -> int:
-        """Exact raster footprint required on each side of a transition."""
+        """Registered-query halo for the canonical local transition owner.
+
+        Broad material measurements reuse the already complete sequence
+        baseline.  They must not enlarge candidate-independent query
+        corridors or alter existing local/cross-height observations.
+        """
 
         return self.local_window_px(scale_px_per_mm) + self.transition_gap_px(
             scale_px_per_mm

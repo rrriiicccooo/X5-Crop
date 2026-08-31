@@ -65,6 +65,7 @@ class DebugStyleParameters:
     selected_edge_color: tuple[int, int, int] = (255, 78, 66)
     detected_transition_color: tuple[int, int, int] = (205, 211, 216)
     joint_transition_color: tuple[int, int, int] = (133, 231, 106)
+    broad_material_transition_color: tuple[int, int, int] = (255, 203, 78)
     selected_boundary_color: tuple[int, int, int] = (255, 171, 37)
     competitor_color: tuple[int, int, int] = (197, 111, 255)
     safe_output_color: tuple[int, int, int] = (30, 144, 255)
@@ -124,6 +125,7 @@ class DebugStyleParameters:
             self.selected_edge_color,
             self.detected_transition_color,
             self.joint_transition_color,
+            self.broad_material_transition_color,
             self.selected_boundary_color,
             self.competitor_color,
             self.safe_output_color,
@@ -150,6 +152,11 @@ class DiagnosticsConfiguration:
             DebugLegendEntry("SELECTED TOP/BOTTOM", style.selected_edge_color, "solid"),
             DebugLegendEntry("DETECTED START/END", style.detected_transition_color, "dashed"),
             DebugLegendEntry("JOINT START/END", style.joint_transition_color, "dashed"),
+            DebugLegendEntry(
+                "BROAD MATERIAL START/END",
+                style.broad_material_transition_color,
+                "dashed",
+            ),
             DebugLegendEntry("SELECTED START/END", style.selected_boundary_color, "solid"),
             DebugLegendEntry("RUNNER / COMPETITOR", style.competitor_color, "dashed"),
             DebugLegendEntry("FINAL OUTPUT", style.safe_output_color, "box"),

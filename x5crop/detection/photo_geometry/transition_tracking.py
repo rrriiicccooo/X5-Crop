@@ -25,7 +25,10 @@ from .measurement_model import PhotoBoundaryMeasurementSet
 from .cross_height_transition_measurement import (
     cross_height_region_trace_ordinals,
 )
-from .line_observations import SideTransitionRegion
+from .line_observations import (
+    SideTransitionRegion,
+    TransitionRegionMeasurementBasis,
+)
 from .physical_identity import physical_observation_id
 
 
@@ -140,7 +143,7 @@ def _track_transition_regions(
         MINIMUM_INDEPENDENT_SUPPORT_REGIONS
     ),
     spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
-    use_cross_height_transitions: bool,
+    measurement_basis: TransitionRegionMeasurementBasis,
 ) -> tuple[SideTransitionRegion, ...]:
     """Track one typed transition source without assigning boundary roles.
 
@@ -164,9 +167,13 @@ def _track_transition_regions(
         str(transition.transition_id): transition
         for item in measurement_sets
         for transition in (
-            item.cross_height_transitions
-            if use_cross_height_transitions
-            else item.transitions
+            item.transitions
+            if measurement_basis
+            == TransitionRegionMeasurementBasis.DIRECT_TRACE
+            else item.cross_height_transitions
+            if measurement_basis
+            == TransitionRegionMeasurementBasis.CROSS_HEIGHT_AGGREGATE
+            else item.broad_material_transitions
         )
     }
     transitions = tuple(
@@ -175,7 +182,8 @@ def _track_transition_regions(
                 transition
                 for transition in transition_by_id.values()
                 if (
-                    not use_cross_height_transitions
+                    measurement_basis
+                    != TransitionRegionMeasurementBasis.CROSS_HEIGHT_AGGREGATE
                     or transition.polarity != 0
                 )
                 if support_interval_px is None
@@ -191,7 +199,7 @@ def _track_transition_regions(
             ),
         )
     )
-    if use_cross_height_transitions:
+    if measurement_basis != TransitionRegionMeasurementBasis.DIRECT_TRACE:
         trace_lattices = {
             item.query.trace_positions_px for item in measurement_sets
         }
@@ -243,6 +251,25 @@ def _track_transition_regions(
     maximum_slope = math.tan(
         math.radians(spec.maximum_measurable_line_angle_degrees)
     )
+
+    def same_aggregate_material_state(
+        point: TransitionPoint,
+        last: TransitionPoint,
+    ) -> bool:
+        if measurement_basis == TransitionRegionMeasurementBasis.DIRECT_TRACE:
+            return True
+        if point.transition.polarity != last.transition.polarity:
+            return False
+        if (
+            measurement_basis
+            == TransitionRegionMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+        ):
+            return (
+                point.transition.background_side
+                == last.transition.background_side
+            )
+        return True
+
     active: list[_SideTrack] = []
     completed: list[_SideTrack] = []
     for trace in queried_traces:
@@ -299,11 +326,7 @@ def _track_transition_regions(
                     (abs(point.coordinate - last.coordinate), point_index)
                     for point_index, point in enumerate(current)
                     if point_index not in connected_points
-                    and (
-                        not use_cross_height_transitions
-                        or point.transition.polarity
-                        == last.transition.polarity
-                    )
+                    and same_aggregate_material_state(point, last)
                     and abs(point.coordinate - last.coordinate)
                     <= allowance + 1.0e-12
                 ]
@@ -371,17 +394,32 @@ def _track_transition_regions(
             or independent_regions < minimum_independent_support_regions
         ):
             continue
-        if (
+        mean_gradient_z = (
             sum(point.transition.gradient_z for point in points)
             / len(points)
-            < spec.gradient_z_minimum
-            or sum(
+        )
+        mean_tone_or_texture_z = (
+            sum(
                 max(point.transition.tone_z, point.transition.texture_z)
                 for point in points
             )
             / len(points)
-            < spec.tone_or_texture_z_minimum
+        )
+        if measurement_basis == (
+            TransitionRegionMeasurementBasis.BROAD_MATERIAL_AGGREGATE
         ):
+            qualified_strength = (
+                independent_regions == SPATIAL_SUPPORT_REGION_COUNT
+                and mean_tone_or_texture_z
+                >= spec.tone_or_texture_z_minimum
+            )
+        else:
+            qualified_strength = (
+                mean_gradient_z >= spec.gradient_z_minimum
+                and mean_tone_or_texture_z
+                >= spec.tone_or_texture_z_minimum
+            )
+        if not qualified_strength:
             continue
         projected = tuple(
             provisional_cross_projection_interval(
@@ -465,6 +503,7 @@ def _track_transition_regions(
                     / len(selected)
                 ),
                 ambiguous=False,
+                measurement_basis=measurement_basis,
             )
     return tuple(
         sorted(
@@ -499,7 +538,7 @@ def track_side_transition_regions(
             minimum_independent_support_regions
         ),
         spec=spec,
-        use_cross_height_transitions=False,
+        measurement_basis=TransitionRegionMeasurementBasis.DIRECT_TRACE,
     )
 
 
@@ -519,5 +558,29 @@ def track_cross_height_transition_regions(
         support_interval_px=None,
         minimum_independent_support_regions=SPATIAL_SUPPORT_REGION_COUNT,
         spec=spec,
-        use_cross_height_transitions=True,
+        measurement_basis=(
+            TransitionRegionMeasurementBasis.CROSS_HEIGHT_AGGREGATE
+        ),
+    )
+
+
+def track_broad_material_transition_regions(
+    measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
+    *,
+    reference_trace_px: float,
+    boundary_axis_scale_px_per_mm: PositiveInterval,
+    spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+) -> tuple[SideTransitionRegion, ...]:
+    """Track only three-region, two-scale material observations."""
+
+    return _track_transition_regions(
+        measurement_sets,
+        reference_trace_px=reference_trace_px,
+        boundary_axis_scale_px_per_mm=boundary_axis_scale_px_per_mm,
+        support_interval_px=None,
+        minimum_independent_support_regions=SPATIAL_SUPPORT_REGION_COUNT,
+        spec=spec,
+        measurement_basis=(
+            TransitionRegionMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+        ),
     )

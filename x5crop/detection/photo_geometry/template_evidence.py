@@ -15,7 +15,7 @@ from .line_observations import PhotoBoundaryObservation
 from .model import BoundaryEvidenceState
 from .observation_types import (
     BoundaryEdgeObservation,
-    CrossHeightEdgeResolution,
+    AggregateEdgeResolution,
     SeparatorBandObservation,
 )
 from .template_cross_model import CrossFitCompetition
@@ -94,8 +94,8 @@ def template_evidence_use_ledger(
     cross_observations: tuple[PhotoBoundaryObservation, ...],
     phase: PhaseFitResult,
     cross: CrossFitCompetition,
-    cross_height_edge_resolutions: tuple[
-        CrossHeightEdgeResolution,
+    aggregate_edge_resolutions: tuple[
+        AggregateEdgeResolution,
         ...,
     ],
 ) -> tuple[EvidenceUseFact, ...]:
@@ -182,7 +182,7 @@ def template_evidence_use_ledger(
             )
         )
     used_ids = {item.observation_id for item in values}
-    for resolution in cross_height_edge_resolutions:
+    for resolution in aggregate_edge_resolutions:
         identity = resolution.support_observation_id
         if identity in used_ids:
             continue

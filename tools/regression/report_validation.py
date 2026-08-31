@@ -1017,7 +1017,7 @@ def _validate_direct_role_binding_authority(value: object) -> None:
     contradicted = False
     allowed_bases = {
         "source_wide_edge",
-        "cross_height_union",
+        "aggregate_union",
         "separator_pair",
         "partial_height_separator_pair",
     }

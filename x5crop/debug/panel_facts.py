@@ -361,6 +361,27 @@ def alignment_summary(detection: FinalDetection) -> str:
             item.measurement_basis.value == "cross_height_aggregate"
             for item in lane.prepared.separator_bands
         )
+        broad_total = len(lane.prepared.broad_material_edge_resolutions)
+        broad_matched = sum(
+            item.kind.value == "matched_existing_edge"
+            for item in lane.prepared.broad_material_edge_resolutions
+        )
+        broad_standalone = sum(
+            item.kind.value == "standalone_edge"
+            for item in lane.prepared.broad_material_edge_resolutions
+        )
+        broad_ambiguous = sum(
+            item.state.value == "contradicted"
+            for item in lane.prepared.broad_material_edge_resolutions
+        )
+        broad_unavailable = sum(
+            item.state.value == "unavailable"
+            for item in lane.prepared.broad_material_edge_resolutions
+        )
+        broad_separator = sum(
+            item.measurement_basis.value == "broad_material_aggregate"
+            for item in lane.prepared.separator_bands
+        )
         proof = (
             f"GLOBAL {rank}/3 · NOMINAL {nominal_proof} · ADJ "
             f"{complete_coverage}/{len(inferred_coverage)} · CONT "
@@ -381,7 +402,10 @@ def alignment_summary(detection: FinalDetection) -> str:
             f" C{separator_counts['light'][2]} · JOINT "
             f"B{joint_authority} S{joint_standalone}/{joint_total} "
             f"A{joint_ambiguous} "
-            f"U{joint_unavailable} P{joint_separator}"
+            f"U{joint_unavailable} P{joint_separator} · BROAD "
+            f"M{broad_matched} S{broad_standalone}/{broad_total} "
+            f"A{broad_ambiguous} "
+            f"U{broad_unavailable} P{broad_separator}"
         )
         if diagnostic.pattern.value == "unresolved":
             values.append(f"{lane.lane_id} {label} · {proof}")

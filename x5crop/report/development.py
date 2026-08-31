@@ -28,6 +28,12 @@ def _measurement_set_read_model(measurement_set: object) -> dict[str, object]:
         "cross_height_transitions": typed_read_model(
             measurement_set.cross_height_transitions
         ),
+        "broad_material_transition_count": len(
+            measurement_set.broad_material_transitions
+        ),
+        "broad_material_transitions": typed_read_model(
+            measurement_set.broad_material_transitions
+        ),
     }
 
 
@@ -119,6 +125,15 @@ def development_report_facts(
                     ),
                     "cross_height_edge_resolutions": typed_read_model(
                         lane.prepared.cross_height_edge_resolutions
+                    ),
+                    "broad_material_transition_regions": typed_read_model(
+                        lane.prepared.broad_material_regions
+                    ),
+                    "broad_material_edges": typed_read_model(
+                        lane.prepared.broad_material_edges
+                    ),
+                    "broad_material_edge_resolutions": typed_read_model(
+                        lane.prepared.broad_material_edge_resolutions
                     ),
                     "raw_top_bottom_lines": typed_read_model(
                         lane.prepared.raw_cross_observations
@@ -222,9 +237,20 @@ def development_report_facts(
                     "registered_cross_height_edge_count": len(
                         lane.prepared.cross_height_edges
                     ),
+                    "registered_broad_material_transition_count": sum(
+                        len(item.broad_material_transitions)
+                        for item in lane.prepared.measurement_sets
+                    ),
+                    "registered_broad_material_edge_count": len(
+                        lane.prepared.broad_material_edges
+                    ),
                     "cross_height_resolution_failure_count": sum(
                         item.state.value == "contradicted"
                         for item in lane.prepared.cross_height_edge_resolutions
+                    ),
+                    "broad_material_resolution_failure_count": sum(
+                        item.state.value == "contradicted"
+                        for item in lane.prepared.broad_material_edge_resolutions
                     ),
                     "phase_hypothesis_count": (
                         lane.prepared.phase_competition.receipt

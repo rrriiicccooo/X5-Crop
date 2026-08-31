@@ -34,6 +34,84 @@ class TraceMeasurement:
     left_texture: np.ndarray
     right_texture: np.ndarray
     temporary_bytes: int
+    broad_material: "BroadMaterialTraceMeasurement | None" = None
+
+
+@dataclass(frozen=True)
+class BroadMaterialTraceMeasurement:
+    """Two-scale material state on one already registered trace."""
+
+    window_scales_mm: tuple[float, ...]
+    signed_tone_by_scale: tuple[np.ndarray, ...]
+    left_tone_by_scale: tuple[np.ndarray, ...]
+    right_tone_by_scale: tuple[np.ndarray, ...]
+    left_texture_by_scale: tuple[np.ndarray, ...]
+    right_texture_by_scale: tuple[np.ndarray, ...]
+    observable: np.ndarray
+    supported: np.ndarray
+    polarity: np.ndarray
+    background_side: np.ndarray
+    contrast_lower_bound: np.ndarray
+    contrast_z: np.ndarray
+    background_uniformity_upper_bound: np.ndarray
+    left_tone: np.ndarray
+    right_tone: np.ndarray
+    left_texture: np.ndarray
+    right_texture: np.ndarray
+    temporary_bytes: int
+
+    def __post_init__(self) -> None:
+        arrays = (
+            *self.signed_tone_by_scale,
+            *self.left_tone_by_scale,
+            *self.right_tone_by_scale,
+            *self.left_texture_by_scale,
+            *self.right_texture_by_scale,
+            self.observable,
+            self.supported,
+            self.polarity,
+            self.background_side,
+            self.contrast_lower_bound,
+            self.contrast_z,
+            self.background_uniformity_upper_bound,
+            self.left_tone,
+            self.right_tone,
+            self.left_texture,
+            self.right_texture,
+        )
+        if (
+            len(self.window_scales_mm) < 2
+            or tuple(sorted(set(self.window_scales_mm)))
+            != self.window_scales_mm
+            or any(
+                not math.isfinite(value) or value <= 0.0
+                for value in self.window_scales_mm
+            )
+            or any(
+                len(values) != len(self.window_scales_mm)
+                for values in (
+                    self.signed_tone_by_scale,
+                    self.left_tone_by_scale,
+                    self.right_tone_by_scale,
+                    self.left_texture_by_scale,
+                    self.right_texture_by_scale,
+                )
+            )
+            or not arrays
+            or len({item.shape for item in arrays}) != 1
+            or any(item.ndim != 1 for item in arrays)
+            or self.observable.dtype != np.bool_
+            or self.supported.dtype != np.bool_
+            or self.polarity.dtype != np.int8
+            or self.background_side.dtype != np.int8
+            or np.any(~np.isin(self.polarity, (-1, 0, 1)))
+            or np.any(~np.isin(self.background_side, (-1, 0, 1)))
+            or np.any(self.contrast_lower_bound < 0.0)
+            or np.any(self.contrast_z < 0.0)
+            or np.any(self.background_uniformity_upper_bound < 0.0)
+            or self.temporary_bytes < 0
+        ):
+            raise ValueError("broad material trace measurement is invalid")
 
 
 @dataclass(frozen=True)
@@ -55,6 +133,28 @@ class MeasuredTransitionPeak:
     coordinate_index: int
 
 
+@dataclass(frozen=True)
+class MeasuredBroadMaterialPeak:
+    localization_interval: FiniteInterval
+    physical_position_interval: FiniteInterval
+    canonical_coordinate: float
+    window_scales_mm: tuple[float, ...]
+    scale_tone_contrasts: tuple[float, ...]
+    material_contrast_z: float
+    material_contrast_lower_bound: float
+    background_uniformity_upper_bound: float
+    left_tone: float
+    right_tone: float
+    left_texture: float
+    right_texture: float
+    polarity: int
+    background_side: int
+    peak_width_px: float
+    prominence: float
+    local_noise: float
+    coordinate_index: int
+
+
 def _window_means(
     values: np.ndarray,
     coordinates: np.ndarray,
@@ -73,11 +173,231 @@ def _window_means(
     return left, right
 
 
+def _material_scale_measurement(
+    values: np.ndarray,
+    differences: np.ndarray,
+    coordinates: np.ndarray,
+    *,
+    window: int,
+    gap: int,
+) -> tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+]:
+    observable = (
+        (coordinates - gap - window >= 0)
+        & (coordinates + gap + window <= values.size)
+    )
+    signed_tone = np.zeros(coordinates.size, dtype=np.float64)
+    left_tone = np.zeros_like(signed_tone)
+    right_tone = np.zeros_like(signed_tone)
+    left_texture = np.zeros_like(signed_tone)
+    right_texture = np.zeros_like(signed_tone)
+    if not np.any(observable):
+        return (
+            signed_tone,
+            left_tone,
+            right_tone,
+            left_texture,
+            right_texture,
+            observable,
+        )
+    retained = coordinates[observable]
+    measured_left, measured_right = _window_means(
+        values,
+        retained,
+        window,
+        gap,
+    )
+    texture_coordinates = np.clip(
+        retained,
+        window + gap,
+        differences.size - window - gap,
+    )
+    measured_left_texture, measured_right_texture = _window_means(
+        differences,
+        texture_coordinates,
+        window,
+        gap,
+    )
+    left_tone[observable] = measured_left
+    right_tone[observable] = measured_right
+    signed_tone[observable] = measured_right - measured_left
+    left_texture[observable] = measured_left_texture
+    right_texture[observable] = measured_right_texture
+    return (
+        signed_tone,
+        left_tone,
+        right_tone,
+        left_texture,
+        right_texture,
+        observable,
+    )
+
+
+def broad_material_from_scale_measurements(
+    window_scales_mm: tuple[float, ...],
+    signed_tone_by_scale: tuple[np.ndarray, ...],
+    left_tone_by_scale: tuple[np.ndarray, ...],
+    right_tone_by_scale: tuple[np.ndarray, ...],
+    left_texture_by_scale: tuple[np.ndarray, ...],
+    right_texture_by_scale: tuple[np.ndarray, ...],
+    observable_by_scale: tuple[np.ndarray, ...],
+) -> BroadMaterialTraceMeasurement:
+    if (
+        len(window_scales_mm) < 2
+        or any(
+            len(values) != len(window_scales_mm)
+            for values in (
+                signed_tone_by_scale,
+                left_tone_by_scale,
+                right_tone_by_scale,
+                left_texture_by_scale,
+                right_texture_by_scale,
+                observable_by_scale,
+            )
+        )
+    ):
+        raise ValueError("broad material scales are incomplete")
+    observable = np.logical_and.reduce(observable_by_scale)
+    positive = np.logical_and.reduce(
+        tuple(
+            item > REGISTERED_UINT8_QUANTIZATION_STEP
+            for item in signed_tone_by_scale
+        )
+    )
+    negative = np.logical_and.reduce(
+        tuple(
+            item < -REGISTERED_UINT8_QUANTIZATION_STEP
+            for item in signed_tone_by_scale
+        )
+    )
+    polarity = np.zeros_like(signed_tone_by_scale[0], dtype=np.int8)
+    polarity[positive] = 1
+    polarity[negative] = -1
+    left_background = np.logical_and.reduce(
+        tuple(
+            left + REGISTERED_UINT8_QUANTIZATION_STEP < right
+            for left, right in zip(
+                left_texture_by_scale,
+                right_texture_by_scale,
+                strict=True,
+            )
+        )
+    )
+    right_background = np.logical_and.reduce(
+        tuple(
+            right + REGISTERED_UINT8_QUANTIZATION_STEP < left
+            for left, right in zip(
+                left_texture_by_scale,
+                right_texture_by_scale,
+                strict=True,
+            )
+        )
+    )
+    background_side = np.zeros_like(signed_tone_by_scale[0], dtype=np.int8)
+    background_side[left_background] = -1
+    background_side[right_background] = 1
+    contrast_lower_bound = np.minimum.reduce(
+        tuple(np.abs(item) for item in signed_tone_by_scale)
+    )
+    left_uniformity = np.maximum.reduce(left_texture_by_scale)
+    right_uniformity = np.maximum.reduce(right_texture_by_scale)
+    background_uniformity = np.where(
+        background_side < 0,
+        left_uniformity,
+        np.where(background_side > 0, right_uniformity, 0.0),
+    )
+    supported = (
+        observable
+        & (polarity != 0)
+        & (background_side != 0)
+        & (
+            contrast_lower_bound
+            > background_uniformity + REGISTERED_UINT8_QUANTIZATION_STEP
+        )
+    )
+    contrast_z = positive_mad_z(
+        np.where(supported, contrast_lower_bound, 0.0),
+        minimum_scale=REGISTERED_UINT8_QUANTIZATION_STEP,
+    )
+    broad_index = len(window_scales_mm) - 1
+    arrays = (
+        *signed_tone_by_scale,
+        *left_tone_by_scale,
+        *right_tone_by_scale,
+        *left_texture_by_scale,
+        *right_texture_by_scale,
+        observable,
+        supported,
+        polarity,
+        background_side,
+        contrast_lower_bound,
+        contrast_z,
+        background_uniformity,
+    )
+    return BroadMaterialTraceMeasurement(
+        window_scales_mm=window_scales_mm,
+        signed_tone_by_scale=signed_tone_by_scale,
+        left_tone_by_scale=left_tone_by_scale,
+        right_tone_by_scale=right_tone_by_scale,
+        left_texture_by_scale=left_texture_by_scale,
+        right_texture_by_scale=right_texture_by_scale,
+        observable=observable,
+        supported=supported,
+        polarity=polarity,
+        background_side=background_side,
+        contrast_lower_bound=contrast_lower_bound,
+        contrast_z=contrast_z,
+        background_uniformity_upper_bound=background_uniformity,
+        left_tone=left_tone_by_scale[broad_index],
+        right_tone=right_tone_by_scale[broad_index],
+        left_texture=left_texture_by_scale[broad_index],
+        right_texture=right_texture_by_scale[broad_index],
+        temporary_bytes=sum(item.nbytes for item in arrays),
+    )
+
+
+def broad_material_trace_measurement(
+    values: np.ndarray,
+    differences: np.ndarray,
+    coordinates: np.ndarray,
+    scale_px_per_mm: float,
+    spec: PhotoBoundaryMeasurementSpec,
+) -> BroadMaterialTraceMeasurement:
+    scales = (spec.local_window_mm, spec.broad_material_window_mm)
+    measured = tuple(
+        _material_scale_measurement(
+            values,
+            differences,
+            coordinates,
+            window=max(1, int(math.ceil(window_mm * scale_px_per_mm))),
+            gap=spec.transition_gap_px(scale_px_per_mm),
+        )
+        for window_mm in scales
+    )
+    return broad_material_from_scale_measurements(
+        scales,
+        tuple(item[0] for item in measured),
+        tuple(item[1] for item in measured),
+        tuple(item[2] for item in measured),
+        tuple(item[3] for item in measured),
+        tuple(item[4] for item in measured),
+        tuple(item[5] for item in measured),
+    )
+
+
 def measure_trace(
     values_u8: np.ndarray,
     interval: FiniteInterval,
     scale_px_per_mm: float,
     spec: PhotoBoundaryMeasurementSpec,
+    *,
+    include_broad_material: bool = False,
 ) -> TraceMeasurement:
     window = spec.local_window_px(scale_px_per_mm)
     gap = spec.transition_gap_px(scale_px_per_mm)
@@ -122,6 +442,17 @@ def measure_trace(
         - values[coordinates - gap]
     )
     gradient = np.abs(signed_gradient)
+    broad_material = (
+        broad_material_trace_measurement(
+            values,
+            differences,
+            coordinates,
+            scale_px_per_mm,
+            spec,
+        )
+        if include_broad_material
+        else None
+    )
     return TraceMeasurement(
         coordinates=coordinates,
         gradient_z=positive_mad_z(
@@ -149,7 +480,9 @@ def measure_trace(
             + left_texture.nbytes
             + right_texture.nbytes
             + gradient.nbytes
+            + (0 if broad_material is None else broad_material.temporary_bytes)
         ),
+        broad_material=broad_material,
     )
 
 
@@ -318,4 +651,132 @@ def measured_transition_peaks(
                     coordinate_index=peak_index,
                 )
             )
+    return tuple(records)
+
+
+def measured_broad_material_peaks(
+    measurement: TraceMeasurement,
+    spec: PhotoBoundaryMeasurementSpec,
+) -> tuple[MeasuredBroadMaterialPeak, ...]:
+    """Localize broad material changes without pretending they are gradients."""
+
+    material = measurement.broad_material
+    if material is None or measurement.coordinates.size == 0:
+        return ()
+    credible = material.supported & (
+        material.contrast_z >= spec.tone_or_texture_z_minimum
+    )
+    indices = np.flatnonzero(credible)
+    if indices.size == 0:
+        return ()
+    split_at = np.flatnonzero(
+        (np.diff(indices) > 1)
+        | (
+            material.polarity[indices[1:]]
+            != material.polarity[indices[:-1]]
+        )
+        | (
+            material.background_side[indices[1:]]
+            != material.background_side[indices[:-1]]
+        )
+    ) + 1
+    groups = np.split(indices, split_at)
+    records: list[MeasuredBroadMaterialPeak] = []
+    for group in groups:
+        if group.size == 0:
+            continue
+        peak_index = int(
+            group[int(np.argmax(material.contrast_z[group]))]
+        )
+        outside = np.ones(material.contrast_z.size, dtype=bool)
+        outside[group] = False
+        local_noise = float(
+            np.median(material.contrast_z[outside])
+            if np.any(outside)
+            else np.min(material.contrast_z[group])
+        )
+        prominence = max(
+            0.0,
+            float(material.contrast_z[peak_index]) - local_noise,
+        )
+        half_height = (
+            local_noise
+            + PEAK_LOCALIZATION_PROMINENCE_FRACTION * prominence
+        )
+        peak_position = int(np.flatnonzero(group == peak_index)[0])
+        left_position = peak_position
+        right_position = peak_position
+        peak_polarity = int(material.polarity[peak_index])
+        peak_background = int(material.background_side[peak_index])
+
+        def same_peak(candidate: int) -> bool:
+            return (
+                material.contrast_z[candidate] >= half_height
+                and int(material.polarity[candidate]) == peak_polarity
+                and int(material.background_side[candidate])
+                == peak_background
+            )
+
+        while left_position > 0 and same_peak(
+            int(group[left_position - 1])
+        ):
+            left_position -= 1
+        while right_position + 1 < group.size and same_peak(
+            int(group[right_position + 1])
+        ):
+            right_position += 1
+        peak_members = group[left_position : right_position + 1]
+        peak_minimum = (
+            float(measurement.coordinates[int(peak_members[0])])
+            - PIXEL_CENTER_HALF_EXTENT_PX
+        )
+        peak_maximum = (
+            float(measurement.coordinates[int(peak_members[-1])])
+            + PIXEL_CENTER_HALF_EXTENT_PX
+        )
+        physical_minimum = (
+            float(measurement.coordinates[int(group[0])])
+            - PIXEL_CENTER_HALF_EXTENT_PX
+        )
+        physical_maximum = (
+            float(measurement.coordinates[int(group[-1])])
+            + PIXEL_CENTER_HALF_EXTENT_PX
+        )
+        records.append(
+            MeasuredBroadMaterialPeak(
+                localization_interval=FiniteInterval(
+                    peak_minimum,
+                    peak_maximum,
+                ),
+                physical_position_interval=FiniteInterval(
+                    physical_minimum,
+                    physical_maximum,
+                ),
+                canonical_coordinate=(peak_minimum + peak_maximum) / 2.0,
+                window_scales_mm=material.window_scales_mm,
+                scale_tone_contrasts=tuple(
+                    abs(float(values[peak_index]))
+                    for values in material.signed_tone_by_scale
+                ),
+                material_contrast_z=float(
+                    material.contrast_z[peak_index]
+                ),
+                material_contrast_lower_bound=float(
+                    material.contrast_lower_bound[peak_index]
+                ),
+                background_uniformity_upper_bound=float(
+                    material.background_uniformity_upper_bound[peak_index]
+                ),
+                left_tone=float(material.left_tone[peak_index]),
+                right_tone=float(material.right_tone[peak_index]),
+                left_texture=float(material.left_texture[peak_index]),
+                right_texture=float(material.right_texture[peak_index]),
+                polarity=peak_polarity,
+                background_side=peak_background,
+                peak_width_px=peak_maximum - peak_minimum,
+                prominence=prominence,
+                local_noise=local_noise,
+                coordinate_index=peak_index,
+            )
+        )
     return tuple(records)

@@ -72,7 +72,8 @@ class ProfileRun:
 class BoundaryEdgeMeasurementBasis(str, Enum):
     DIRECT_TRACE = "direct_trace"
     CROSS_HEIGHT_AGGREGATE = "cross_height_aggregate"
-    DIRECT_WITH_CROSS_HEIGHT = "direct_with_cross_height"
+    BROAD_MATERIAL_AGGREGATE = "broad_material_aggregate"
+    DIRECT_WITH_AGGREGATE = "direct_with_aggregate"
 
 
 @dataclass(frozen=True)
@@ -94,7 +95,7 @@ class BoundaryEdgeObservation:
     fit_direction_interval_degrees: FiniteInterval | None
     full_direction_interval_degrees: FiniteInterval | None
     measurement_basis: BoundaryEdgeMeasurementBasis
-    cross_height_support_id: ObservationId | None = None
+    aggregate_support_id: ObservationId | None = None
     qualified_anchor_roles: tuple[BoundaryRole, ...] = ()
     evidence_state: BoundaryEvidenceState = BoundaryEvidenceState.SUPPORT
 
@@ -129,12 +130,12 @@ class BoundaryEdgeObservation:
             )
             or (
                 self.measurement_basis
-                == BoundaryEdgeMeasurementBasis.DIRECT_WITH_CROSS_HEIGHT
+                == BoundaryEdgeMeasurementBasis.DIRECT_WITH_AGGREGATE
             )
-            != (self.cross_height_support_id is not None)
+            != (self.aggregate_support_id is not None)
             or (
-                self.cross_height_support_id is not None
-                and self.cross_height_support_id == self.observation_id
+                self.aggregate_support_id is not None
+                and self.aggregate_support_id == self.observation_id
             )
             or (
                 (self.canonical_direction_degrees is None)
@@ -173,43 +174,44 @@ class BoundaryEdgeObservation:
             raise ValueError("boundary edge observation is invalid")
 
 
-class CrossHeightEdgeResolutionKind(str, Enum):
+class AggregateEdgeResolutionKind(str, Enum):
     BOUND_DIRECT_EDGE = "bound_direct_edge"
+    MATCHED_EXISTING_EDGE = "matched_existing_edge"
     STANDALONE_EDGE = "standalone_edge"
-    REDUNDANT_DIRECT_EDGE = "redundant_direct_edge"
-    AMBIGUOUS_DIRECT_MATCH = "ambiguous_direct_match"
+    REDUNDANT_EXISTING_EDGE = "redundant_existing_edge"
+    AMBIGUOUS_EXISTING_MATCH = "ambiguous_existing_match"
     INSUFFICIENT_SPATIAL_SUPPORT = "insufficient_spatial_support"
 
 
-class CrossHeightEdgeResolutionFailureKind(str, Enum):
+class AggregateEdgeResolutionFailureKind(str, Enum):
     INSUFFICIENT_INDEPENDENT_SPATIAL_SUPPORT = (
         "insufficient_independent_spatial_support"
     )
-    MULTIPLE_COMPATIBLE_DIRECT_EDGES = (
-        "multiple_compatible_direct_edges"
+    MULTIPLE_COMPATIBLE_EXISTING_EDGES = (
+        "multiple_compatible_existing_edges"
     )
-    MULTIPLE_SUPPORTS_FOR_ONE_DIRECT_EDGE = (
-        "multiple_supports_for_one_direct_edge"
+    MULTIPLE_AGGREGATES_FOR_ONE_EXISTING_EDGE = (
+        "multiple_aggregates_for_one_existing_edge"
     )
 
 
 @dataclass(frozen=True)
-class CrossHeightEdgeResolution:
+class AggregateEdgeResolution:
     """How one three-region aggregate may enter the edge ledger."""
 
     support_observation_id: ObservationId
     state: EvidenceState
-    kind: CrossHeightEdgeResolutionKind
-    compatible_direct_edge_ids: tuple[ObservationId, ...]
+    kind: AggregateEdgeResolutionKind
+    compatible_existing_edge_ids: tuple[ObservationId, ...]
     final_edge_observation_id: ObservationId | None
-    failure_kind: CrossHeightEdgeResolutionFailureKind | None
+    failure_kind: AggregateEdgeResolutionFailureKind | None
 
     def __post_init__(self) -> None:
         ambiguous = self.kind == (
-            CrossHeightEdgeResolutionKind.AMBIGUOUS_DIRECT_MATCH
+            AggregateEdgeResolutionKind.AMBIGUOUS_EXISTING_MATCH
         )
         insufficient = self.kind == (
-            CrossHeightEdgeResolutionKind.INSUFFICIENT_SPATIAL_SUPPORT
+            AggregateEdgeResolutionKind.INSUFFICIENT_SPATIAL_SUPPORT
         )
         failed = ambiguous or insufficient
         expected_state = (
@@ -222,12 +224,12 @@ class CrossHeightEdgeResolution:
         if (
             not isinstance(self.support_observation_id, ObservationId)
             or not isinstance(self.state, EvidenceState)
-            or not isinstance(self.kind, CrossHeightEdgeResolutionKind)
-            or tuple(sorted(set(self.compatible_direct_edge_ids)))
-            != self.compatible_direct_edge_ids
+            or not isinstance(self.kind, AggregateEdgeResolutionKind)
+            or tuple(sorted(set(self.compatible_existing_edge_ids)))
+            != self.compatible_existing_edge_ids
             or any(
                 not isinstance(item, ObservationId)
-                for item in self.compatible_direct_edge_ids
+                for item in self.compatible_existing_edge_ids
             )
             or self.state != expected_state
             or failed != (self.failure_kind is not None)
@@ -235,40 +237,41 @@ class CrossHeightEdgeResolution:
                 self.failure_kind is not None
                 and not isinstance(
                     self.failure_kind,
-                    CrossHeightEdgeResolutionFailureKind,
+                    AggregateEdgeResolutionFailureKind,
                 )
             )
             or (
                 self.failure_kind
-                == CrossHeightEdgeResolutionFailureKind
+                == AggregateEdgeResolutionFailureKind
                 .INSUFFICIENT_INDEPENDENT_SPATIAL_SUPPORT
                 and not insufficient
             )
             or (
                 self.failure_kind
-                == CrossHeightEdgeResolutionFailureKind
-                .MULTIPLE_COMPATIBLE_DIRECT_EDGES
-                and len(self.compatible_direct_edge_ids) <= 1
+                == AggregateEdgeResolutionFailureKind
+                .MULTIPLE_COMPATIBLE_EXISTING_EDGES
+                and len(self.compatible_existing_edge_ids) <= 1
             )
             or (
                 self.failure_kind
-                == CrossHeightEdgeResolutionFailureKind
-                .MULTIPLE_SUPPORTS_FOR_ONE_DIRECT_EDGE
-                and len(self.compatible_direct_edge_ids) != 1
+                == AggregateEdgeResolutionFailureKind
+                .MULTIPLE_AGGREGATES_FOR_ONE_EXISTING_EDGE
+                and len(self.compatible_existing_edge_ids) != 1
             )
             or (
                 self.kind
                 in {
-                    CrossHeightEdgeResolutionKind.BOUND_DIRECT_EDGE,
-                    CrossHeightEdgeResolutionKind.REDUNDANT_DIRECT_EDGE,
+                    AggregateEdgeResolutionKind.BOUND_DIRECT_EDGE,
+                    AggregateEdgeResolutionKind.MATCHED_EXISTING_EDGE,
+                    AggregateEdgeResolutionKind.REDUNDANT_EXISTING_EDGE,
                 }
-                and len(self.compatible_direct_edge_ids) != 1
+                and len(self.compatible_existing_edge_ids) != 1
             )
             or (
                 self.kind
-                == CrossHeightEdgeResolutionKind.STANDALONE_EDGE
+                == AggregateEdgeResolutionKind.STANDALONE_EDGE
                 and (
-                    self.compatible_direct_edge_ids
+                    self.compatible_existing_edge_ids
                     or self.final_edge_observation_id
                     != self.support_observation_id
                 )
@@ -276,11 +279,12 @@ class CrossHeightEdgeResolution:
             or (
                 self.kind
                 in {
-                    CrossHeightEdgeResolutionKind.BOUND_DIRECT_EDGE,
-                    CrossHeightEdgeResolutionKind.REDUNDANT_DIRECT_EDGE,
+                    AggregateEdgeResolutionKind.BOUND_DIRECT_EDGE,
+                    AggregateEdgeResolutionKind.MATCHED_EXISTING_EDGE,
+                    AggregateEdgeResolutionKind.REDUNDANT_EXISTING_EDGE,
                 }
                 and self.final_edge_observation_id
-                not in self.compatible_direct_edge_ids
+                not in self.compatible_existing_edge_ids
             )
             or (
                 failed
@@ -288,12 +292,12 @@ class CrossHeightEdgeResolution:
                     self.final_edge_observation_id is not None
                     or (
                         insufficient
-                        and self.compatible_direct_edge_ids
+                        and self.compatible_existing_edge_ids
                     )
                 )
             )
         ):
-            raise ValueError("cross-height edge resolution is invalid")
+            raise ValueError("aggregate edge resolution is invalid")
 
 
 class SeparatorMaterialPolarity(str, Enum):
@@ -304,6 +308,7 @@ class SeparatorMaterialPolarity(str, Enum):
 class SeparatorBandMeasurementBasis(str, Enum):
     DIRECT_TRACE = "direct_trace"
     CROSS_HEIGHT_AGGREGATE = "cross_height_aggregate"
+    BROAD_MATERIAL_AGGREGATE = "broad_material_aggregate"
 
 
 class SeparatorMaterialRegionState(str, Enum):

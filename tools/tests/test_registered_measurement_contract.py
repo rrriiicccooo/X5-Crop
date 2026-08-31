@@ -4,11 +4,17 @@ from tools.tests.photo_geometry_support import *
 from x5crop.detection.photo_geometry.cross_height_transition_measurement import (
     measure_cross_height_transition_regions,
 )
+from x5crop.detection.photo_geometry.broad_material_transition_measurement import (
+    measure_broad_material_transition_regions,
+)
 from x5crop.detection.photo_geometry.registered_transition_measurement import (
     TraceMeasurement,
+    measure_trace,
+    measured_broad_material_peaks,
     measured_transition_peaks,
 )
 from x5crop.detection.photo_geometry.transition_tracking import (
+    track_broad_material_transition_regions,
     track_cross_height_transition_regions,
 )
 from x5crop.detection.robust_statistics import positive_mad_z
@@ -91,6 +97,90 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
             ),
         )
 
+    @staticmethod
+    def _broad_material_trace(
+        *,
+        reverse_background: bool = False,
+    ) -> TraceMeasurement:
+        coordinates = np.arange(151)
+        values = np.full(151, 100.0)
+        if not reverse_background:
+            values += np.where(coordinates % 2, 2.0, -2.0)
+        left_ramp = (coordinates >= 40) & (coordinates <= 60)
+        values[left_ramp] = (
+            100.0 - (coordinates[left_ramp] - 40) * 4.0
+        )
+        values[(coordinates > 60) & (coordinates < 90)] = 20.0
+        right_ramp = (coordinates >= 90) & (coordinates <= 110)
+        values[right_ramp] = (
+            20.0 + (coordinates[right_ramp] - 90) * 4.0
+        )
+        if reverse_background:
+            separator = (coordinates > 60) & (coordinates < 90)
+            values[separator] += np.where(
+                coordinates[separator] % 2,
+                2.0,
+                -2.0,
+            )
+        return measure_trace(
+            np.clip(np.rint(values), 0, 255).astype(np.uint8),
+            FiniteInterval(0.0, 150.0),
+            10.0,
+            PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+            include_broad_material=True,
+        )
+
+    @staticmethod
+    def _broad_material_query() -> PhotoBoundaryMeasurementQuery:
+        traces = tuple(range(0, 81, 10))
+        return PhotoBoundaryMeasurementQuery(
+            query_id="query:broad-material",
+            registration_index=0,
+            lane_id="lane:0",
+            purpose=QueryPurpose.SEQUENCE_ANCHOR_WINDOW,
+            boundary_axis=BoundaryAxis.X,
+            trace_positions_px=traces,
+            search_intervals_px=(FiniteInterval(0.0, 150.0),) * len(traces),
+            transition_ownership_intervals_px=(
+                FiniteInterval(0.0, 150.0),
+            )
+            * len(traces),
+            expected_support_px=150.0,
+            boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
+            trace_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
+            measurement_halo_px=(
+                PHOTO_BOUNDARY_MEASUREMENT_SPEC.measurement_halo_px(10.0)
+            ),
+            registration_provenance_ids=("anchor-domain:broad-material",),
+        )
+
+    @staticmethod
+    def _broad_material_measurement_set(
+        query: PhotoBoundaryMeasurementQuery,
+        traces: tuple[TraceMeasurement, ...],
+    ) -> PhotoBoundaryMeasurementSet:
+        transitions, peak_temporary = (
+            measure_broad_material_transition_regions(query, traces)
+        )
+        coordinate_count = 151 * len(traces)
+        return PhotoBoundaryMeasurementSet(
+            query=query,
+            state=EvidenceState.SUPPORTED,
+            transitions=(),
+            cross_height_transitions=(),
+            coverage=PhotoBoundaryCoverageReceipt(
+                query_id=query.query_id,
+                registered_trace_count=len(traces),
+                completed_trace_count=len(traces),
+                registered_coordinate_count=coordinate_count,
+                completed_coordinate_count=coordinate_count,
+                pixel_query_count=coordinate_count,
+                streaming_block_count=1,
+                peak_temporary_bytes=peak_temporary,
+                complete=True,
+            ),
+            broad_material_transitions=transitions,
+        )
     def test_cross_height_union_recovers_one_common_subthreshold_line(
         self,
     ) -> None:
@@ -194,13 +284,76 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
         )
 
         self.assertEqual(regions, ())
+
+    def test_broad_material_recovers_two_slow_separator_sides(self) -> None:
+        query = self._broad_material_query()
+        traces = tuple(
+            self._broad_material_trace()
+            for _trace in query.trace_positions_px
+        )
+        local = measured_transition_peaks(
+            traces[0],
+            PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+            split_gradient_reversals=False,
+        )
+        self.assertTrue(
+            all(
+                item.gradient_z
+                < PHOTO_BOUNDARY_MEASUREMENT_SPEC.gradient_z_minimum
+                for item in local
+                if 35.0 < item.canonical_coordinate < 115.0
+            )
+        )
+        self.assertEqual(
+            len(measured_broad_material_peaks(
+                traces[0], PHOTO_BOUNDARY_MEASUREMENT_SPEC
+            )),
+            2,
+        )
+
+        measurement_set = self._broad_material_measurement_set(query, traces)
+        regions = track_broad_material_transition_regions(
+            (measurement_set,),
+            reference_trace_px=40.0,
+            boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
+        )
+
+        self.assertEqual(len(measurement_set.broad_material_transitions), 6)
+        self.assertEqual(len(regions), 2)
+        self.assertTrue(
+            all(item.independent_support_region_count == 3 for item in regions)
+        )
+
+    def test_broad_material_rejects_background_side_conflict(self) -> None:
+        query = self._broad_material_query()
+        traces = tuple(
+            self._broad_material_trace(
+                reverse_background=3 <= index < 6,
+            )
+            for index, _trace in enumerate(query.trace_positions_px)
+        )
+        measurement_set = self._broad_material_measurement_set(query, traces)
+
+        regions = track_broad_material_transition_regions(
+            (measurement_set,),
+            reference_trace_px=40.0,
+            boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
+        )
+
+        self.assertEqual(regions, ())
+
     def test_measurement_spec_contains_only_production_values(self) -> None:
         spec = PHOTO_BOUNDARY_MEASUREMENT_SPEC
         self.assertEqual(spec.lattice_spacing_mm(12.0), 2.0)
         self.assertEqual(spec.lattice_spacing_mm(36.0), 3.0)
         self.assertEqual(spec.lattice_spacing_mm(120.0), 4.0)
         self.assertEqual(spec.local_window_mm, 0.25)
+        self.assertEqual(spec.broad_material_window_mm, 0.5)
         self.assertEqual(spec.transition_gap_mm, 0.05)
+        self.assertEqual(spec.measurement_halo_px(10.0), 4)
+        self.assertEqual(spec.broad_material_window_px(10.0), 5)
+        self.assertEqual(spec.local_measurement_work_radius_px(86.0), 26)
+        self.assertEqual(spec.measurement_halo_px(86.0), 27)
         self.assertEqual(spec.maximum_measurable_line_angle_degrees, 4.0)
         self.assertEqual(spec.robust_loss_minimum_scale_mm, 0.05)
         self.assertEqual(spec.robust_fit_maximum_evaluations, 128)

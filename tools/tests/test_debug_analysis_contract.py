@@ -507,6 +507,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
                 "SELECTED TOP/BOTTOM",
                 "DETECTED START/END",
                 "JOINT START/END",
+                "BROAD MATERIAL START/END",
                 "SELECTED START/END",
                 "RUNNER / COMPETITOR",
                 "FINAL OUTPUT",

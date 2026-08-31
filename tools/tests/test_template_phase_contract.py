@@ -2038,11 +2038,11 @@ class TemplatePhaseContractTest(unittest.TestCase):
                     2.0 / 3.0 if identity.startswith("joint:") else 1.0
                 ),
                 measurement_basis=(
-                    BoundaryEdgeMeasurementBasis.DIRECT_WITH_CROSS_HEIGHT
+                    BoundaryEdgeMeasurementBasis.DIRECT_WITH_AGGREGATE
                     if identity.startswith("joint:")
                     else BoundaryEdgeMeasurementBasis.DIRECT_TRACE
                 ),
-                cross_height_support_id=(
+                aggregate_support_id=(
                     ObservationId("cross-height:joint:start:3")
                     if identity.startswith("joint:")
                     else None
@@ -2095,7 +2095,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(len(joint), 1)
         self.assertEqual(
             tuple(item.value for item in joint[0].bases),
-            ("cross_height_union",),
+            ("aggregate_union",),
         )
 
     def test_inferred_normal_adjacency_requires_full_registered_corridor(

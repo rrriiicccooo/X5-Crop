@@ -18,6 +18,9 @@ from .measurement_model import (
 from .cross_height_transition_measurement import (
     measure_cross_height_transition_regions,
 )
+from .broad_material_transition_measurement import (
+    measure_broad_material_transition_regions,
+)
 from .model import (
     BoundaryAxis,
     PHOTO_BOUNDARY_MEASUREMENT_SPEC,
@@ -57,6 +60,7 @@ def _measure_query(
     )
     transitions: list[PhotoBoundaryTransition] = []
     cross_height_transitions = ()
+    broad_material_transitions = ()
     peak_temporary = 0
     pixel_query_count = 0
     completed_coordinates = 0
@@ -73,9 +77,7 @@ def _measure_query(
             else field.source_extent.width
         )
         scale = query.boundary_axis_scale_px_per_mm.maximum
-        local_radius = int(
-            math.ceil((spec.local_window_mm + spec.transition_gap_mm) * scale)
-        )
+        local_radius = spec.local_measurement_work_radius_px(scale)
         for trace_ordinal, (trace, interval, ownership) in enumerate(
             zip(
                 query.trace_positions_px,
@@ -183,6 +185,18 @@ def _measure_query(
                 peak_temporary,
                 cross_height_temporary,
             )
+            (
+                broad_material_transitions,
+                broad_material_temporary,
+            ) = measure_broad_material_transition_regions(
+                query,
+                premeasured,
+                spec,
+            )
+            peak_temporary = max(
+                peak_temporary,
+                broad_material_temporary,
+            )
     except Exception:
         receipt = _coverage_receipt(
             query,
@@ -200,6 +214,7 @@ def _measure_query(
             transitions=(),
             cross_height_transitions=(),
             coverage=receipt,
+            broad_material_transitions=(),
         )
     receipt = _coverage_receipt(
         query,
@@ -217,6 +232,7 @@ def _measure_query(
         transitions=tuple(transitions),
         cross_height_transitions=cross_height_transitions,
         coverage=receipt,
+        broad_material_transitions=broad_material_transitions,
     )
 
 
@@ -232,6 +248,42 @@ def _slice_trace_measurement(
             math.floor(interval.maximum), side="right"
         ),
     )
+    broad = measured.broad_material
+    sliced_broad = (
+        None
+        if broad is None
+        else replace(
+            broad,
+            signed_tone_by_scale=tuple(
+                item[retained] for item in broad.signed_tone_by_scale
+            ),
+            left_tone_by_scale=tuple(
+                item[retained] for item in broad.left_tone_by_scale
+            ),
+            right_tone_by_scale=tuple(
+                item[retained] for item in broad.right_tone_by_scale
+            ),
+            left_texture_by_scale=tuple(
+                item[retained] for item in broad.left_texture_by_scale
+            ),
+            right_texture_by_scale=tuple(
+                item[retained] for item in broad.right_texture_by_scale
+            ),
+            observable=broad.observable[retained],
+            supported=broad.supported[retained],
+            polarity=broad.polarity[retained],
+            background_side=broad.background_side[retained],
+            contrast_lower_bound=broad.contrast_lower_bound[retained],
+            contrast_z=broad.contrast_z[retained],
+            background_uniformity_upper_bound=(
+                broad.background_uniformity_upper_bound[retained]
+            ),
+            left_tone=broad.left_tone[retained],
+            right_tone=broad.right_tone[retained],
+            left_texture=broad.left_texture[retained],
+            right_texture=broad.right_texture[retained],
+        )
+    )
     return replace(
         measured,
         coordinates=measured.coordinates[retained],
@@ -243,6 +295,7 @@ def _slice_trace_measurement(
         right_tone=measured.right_tone[retained],
         left_texture=measured.left_texture[retained],
         right_texture=measured.right_texture[retained],
+        broad_material=sliced_broad,
     )
 
 
@@ -277,6 +330,7 @@ def _premeasure_sequence_windows(
             baseline.search_intervals_px[trace_ordinal],
             scale,
             spec,
+            include_broad_material=True,
         )
         values_by_query[baseline.query_id].append(measured)
         for query in windows:

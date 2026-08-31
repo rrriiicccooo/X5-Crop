@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 import math
 
 from ...domain import FiniteInterval, ObservationId
@@ -160,6 +161,12 @@ class PhotoBoundaryObservation:
         if len(set(self.transition_ids)) != len(self.transition_ids):
             raise ValueError("line transition identities must be unique")
 
+class TransitionRegionMeasurementBasis(str, Enum):
+    DIRECT_TRACE = "direct_trace"
+    CROSS_HEIGHT_AGGREGATE = "cross_height_aggregate"
+    BROAD_MATERIAL_AGGREGATE = "broad_material_aggregate"
+
+
 @dataclass(frozen=True)
 class SideTransitionRegion:
     """Direction-free physical region from tracked transitions."""
@@ -177,6 +184,9 @@ class SideTransitionRegion:
     left_background_preference_fraction: float
     right_background_preference_fraction: float
     ambiguous: bool = False
+    measurement_basis: TransitionRegionMeasurementBasis = (
+        TransitionRegionMeasurementBasis.DIRECT_TRACE
+    )
 
     def __post_init__(self) -> None:
         if (
@@ -202,5 +212,9 @@ class SideTransitionRegion:
             or not 0.0
             <= self.right_background_preference_fraction
             <= 1.0
+            or not isinstance(
+                self.measurement_basis,
+                TransitionRegionMeasurementBasis,
+            )
         ):
             raise ValueError("side transition region is invalid")

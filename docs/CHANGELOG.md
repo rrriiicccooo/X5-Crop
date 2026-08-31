@@ -20,18 +20,18 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   反向 edge 必须在同一高度区域同时满足 oriented tone contrast 与 core texture 合同；局部两区域 support
   不能冒充 source-wide role authority，完整三区域反证产生 typed `separator_material_conflict`。超出 normal
   gap 上界的 material 仍保留为事实，但不能创造 phase、ordinal 或直接角色权限。
-- 已登记 sequence trace 的弱 gradient、tone 与 texture 可在三个固定高度区域内联合成一份 typed
-  observation。只有位置、方向、polarity 与角色相容的三区域结果唯一绑定同一条局部 direct edge 时，
-  才以 `cross_height_union` 加强该 edge。Standalone 联合 edge 默认只进入 development report 与 Debug；
-  只有两侧 edge 分别具备 END/START 角色，且它们之间的 separator material 也由三个独立高度区域共同
-  支持时，才作为一个 `cross_height_aggregate` separator pair 进入 placement。两区域 material、角色
-  不相容、重复或多解联合事实不取得坐标权限；同一 pair 已有 direct band 时不重复计票。该能力不增加
-  TIFF 读取、query、第二 detector 或 score。
+- 已登记 sequence baseline 现在同时产生两类三区域 aggregate：局部 weak gradient/tone/texture 可以
+  `aggregate_union` 加强唯一 short direct edge；宽缓 material 使用 `0.25/0.50 mm` 双尺度 tone、texture、
+  uniformity、polarity 与 background-side 一致性。宽缓单边只能匹配或保留为 standalone，不增加
+  direct-role 权限；只有完整 END/material/START pair 才能进入 placement 并约束 local advance。
+  `aggregate_edge_support.py` 统一拥有解析、去重与 pair 投影；跨尺度、跨高度、角色或多解冲突保持 typed
+  unavailable/contradiction。同一物理 pair 已有 direct band 时不重复计票。该能力不扩大 query、halo、
+  TIFF 读取，不建立 enhanced detector、第二 geometry 或 score。
 - Selected placement 现在由 `AdjacencyContinuityObservation` 为每个 adjacency 建立唯一 typed ledger。
   唯一正序 separator band 可以授权实测 local advance；完整 corridor 但无反证只保留正常 Grid，不能
   冒充直接 separator；material unavailable、band/角色冲突、跨零 gap 与非正 gap 分别保留独立状态。
   普通 adjacency 的歧义和拓扑反证通过专用 Gate reason 安全 review，report revision 更新为
-  `x5crop_v5_template_report_33`。该映射只复用已登记事实，不新增 TIFF 读取、低梯度 detector 或
+  `x5crop_v5_template_report_34`。该映射只复用已登记事实，不新增 TIFF 读取、低梯度 detector 或
   contact/overlap 选择。
 - 直接观察到的 start/end 在最终 placement 中保留 native coordinate 与完整 interval；Grid 只补齐缺失
   角色。同一连续 placement 的互补 endpoint evidence 合并为联合可行状态，不伪造 runner。唯一 placement
@@ -146,7 +146,7 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   阻断原因；报告同时保存全局未知量 constraint rank、逐 adjacency query/trace/coordinate coverage 与
   直接角色/外侧 Frame observation authority，以及 dark/light material、逐区域状态和冲突。Debug 不重新
   求解，也不把 review candidate 伪装为正式输出。当前 report revision 为
-  `x5crop_v5_template_report_33`，并显式区分直接角色的 coordinate `observation_id` 与相关
+  `x5crop_v5_template_report_34`，并显式区分直接角色的 coordinate `observation_id` 与相关
   `evidence_group_id`，同时报告 phase candidate 的输入权限、projection outcome、保留 rank、投影 binding、
   calibrated nominal prior/evidence/selected authority、phase anchor、推断 adjacency、未观察 Frame、
   nominal solve/local-prefix 工作量、连续 lattice 参数依据、三层 source footprint、typed

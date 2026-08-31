@@ -273,31 +273,40 @@ texture 上界时才为 `supported`；否则明确为 `tone_unresolved` 或 `mat
 明确 adjacency 时，实测宽度才能约束该处 local advance。亮、暗两种 polarity 使用完全相同的权限和
 失败合同；极性本身不参与 winner 评分。
 
-### 6.3 跨高度弱边缘联合观察
+### 6.3 跨高度 aggregate 与宽缓 material boundary
 
-同一个已登记 `SEQUENCE_ANCHOR_WINDOW` 的 trace lattice 固定分成三个高度区域。每个区域只在原有
-signed gradient、tone 与 texture 坐标上求联合测量，并继续使用同一 robust-z、peak localization 和
-polarity 合同；不降低单 trace 阈值、不读取新像素，也不建立 enhanced image 或第二 detector。
+同一个已登记 `SEQUENCE_BASELINE` 只生成一次全长灰度测量，`SEQUENCE_ANCHOR_WINDOW` 只切出已经登记的
+坐标与 transition ownership。它固定分成三个高度区域，并产生两种互不冒充的 typed aggregate：
 
-三区域联合观察仍不知道 role、ordinal 或 placement。它只有在三个区域的位置区间、方向区间、polarity
-和可承担的 START/END 角色均相容时，才形成一个 `CROSS_HEIGHT_AGGREGATE` edge。其进入 placement 的
-权限由 `cross_height_edge_support.py` 唯一决定：
+- `CROSS_HEIGHT_AGGREGATE` 在原有局部 signed gradient、tone 与 texture 上联合弱信号；
+- `BROAD_MATERIAL_AGGREGATE` 同时使用 `0.25 mm` 与 `0.50 mm` 两个物理尺度的 signed tone、两侧
+  texture 与 material uniformity。两个尺度必须保持相同 polarity，同一侧必须在两个尺度上都是更均匀的
+  background，完整 tone contrast 下界还必须高于该侧 texture 上界与 uint8 量化步长。
 
-| 联合观察与直接 edge 的关系 | typed resolution | 权限 |
+每个 broad 高度区域内部要求多数 trace 支持同一 polarity 与 background side；三个高度区域还必须在
+位置区间、方向区间、polarity 和 background side 上一致。宽缓通道不伪造 gradient，不降低局部 edge
+阈值，也不扩大既有 query、transition ownership、local measurement halo 或 TIFF 读取。它只复用已经
+完整登记的全长 baseline；新增数组和计算完整进入 work/RSS receipt。
+
+两类 aggregate 都不知道 role、ordinal 或 placement。`aggregate_edge_support.py` 是 edge resolution 与
+separator pair 投影的唯一 owner：
+
+| aggregate 与既有 edge/material 的关系 | typed resolution | 权限 |
 |---|---|---|
-| 唯一匹配一条局部 direct edge | `bound_direct_edge` | 保留 direct native coordinate，以 `cross_height_union` 补足空间支持，只计一份证据 |
-| 没有匹配 direct edge | `standalone_edge` | 默认只进入 evidence、report 与 Debug，不单独进入 phase、outer 或 placement |
-| 两条已唯一解析的三区域联合 edge 依次具备 END/START 角色，且它们之间的 separator material 也由三个独立高度区域共同支持 | `standalone_edge + cross_height_aggregate separator band` | 将这一对 edge 作为同一 `separator_pair` 投影到 placement；band 只计一份相关证据 |
-| 匹配的 direct edge 已覆盖三个独立区域 | `redundant_direct_edge` | 保留原 direct edge，不重复计票 |
-| 同一联合 edge 匹配多条 direct edge | `multiple_compatible_direct_edges` | typed contradiction，不授予联合权限 |
-| 多条联合 edge 竞争同一局部 direct edge | `multiple_supports_for_one_direct_edge` | typed contradiction，不授予联合权限 |
-| edge 或 material 少于三个支持区域、区域 polarity 冲突、角色不相容或 query coverage 不完整 | 无合格联合 pair | `unavailable`，保持原 direct evidence；原始联合观察只作诊断 |
+| cross-height 唯一匹配一条空间支持不足的 direct edge | `bound_direct_edge` | 保留 direct native coordinate，以 `aggregate_union` 补足三区域支持，只计一份相关证据 |
+| broad 唯一匹配一条既有 edge | `matched_existing_edge` | 保留既有 edge 原 basis；单根宽缓边不增加坐标或 direct-role 权限 |
+| 没有匹配既有 edge | `standalone_edge` | 只进入 evidence、report 与 Debug；没有完整 pair 时不进入 phase、outer 或 placement |
+| 两条已解析 aggregate edge 依次具备 END/START 角色，且其间 material 由三个高度区域共同支持 | `standalone/matched edge + aggregate separator band` | 作为一份 `separator_pair` 投影到 placement；实测 gap 可以约束该 adjacency 的 local advance |
+| 匹配的既有 edge 已覆盖三个高度区域，或已由另一 aggregate 支持 | `redundant_existing_edge` | 保留既有 edge，不重复计票，也不能让未成 pair 的 aggregate edge 进入 placement |
+| 同一 aggregate 匹配多个既有 edge | `multiple_compatible_existing_edges` | typed contradiction，不授予 aggregate 权限 |
+| 多个可绑定 aggregate 竞争同一既有 edge | `multiple_aggregates_for_one_existing_edge` | typed contradiction，不授予 aggregate 权限 |
+| edge/material 少于三个支持区域、跨尺度或跨高度状态冲突、角色不相容、coverage 不完整 | 无合格 aggregate pair | `unavailable`，保持原 evidence 与安全终态 |
 
-单条联合 edge 不能凭自身创造相位候选。只有上述完整 separator pair 才能共同进入已有唯一 placement
-模型；同一物理 pair 已有 direct band 时 direct 事实保持 canonical，联合 band 不再投票。缺失 direction
-不是反证，但两份明确且不相交的 direction interval 必须保持不同物理解释。完整原始 transition、edge、
-resolution 与工作量只保存在 development report；Debug 用独立颜色显示原始联合线，并明确区分已绑定、
-standalone、冗余、ambiguous 与获得 pair 权限的状态。
+单条 aggregate edge 不能创造相位候选。只有完整 separator pair 才能把 standalone 坐标带入唯一 placement
+模型；同一物理 pair 已有 direct band 时 direct 事实保持 canonical，aggregate band 不再投票。缺失
+direction 不是反证，但两份明确且不相交的 direction interval 必须保留为不同解释。Development report 与
+Debug 分别显示 local aggregate、broad material、resolution、pair、typed failure 和工作量；Debug 不重新
+测量或求解。
 
 ### 6.4 Cross observation
 
@@ -445,13 +454,13 @@ placement；“观察到了”本身不等于“有权决定裁切”。权限�
 | edge 空间支持与关系 | 角色坐标权限 |
 |---|---|
 | 同一 edge 直接覆盖三个独立高度区域 | `source_wide_edge`，允许 |
-| 一条局部 direct edge 唯一绑定三区域联合观察 | `cross_height_union`，允许；两者仍是一份相关证据 |
+| 一条局部 direct edge 唯一绑定三区域局部弱信号 aggregate | `aggregate_union`，允许；两者仍是一份相关证据；宽缓 material aggregate 单边不取得该权限 |
 | 同一三区域联合 separator 的 material 与两侧 END/START edge 都覆盖三个独立高度区域 | `separator_pair`，两侧均允许；缺一项则只保留诊断事实 |
 | 同一 source-wide separator 的两侧 edge 原子绑定到一个 adjacency | `separator_pair`，两侧均允许 |
 | normal separator 在两个独立高度区域成立，且两侧原子绑定到同一 adjacency，其中一侧已由上述任一完整闭环授权 | 只向另一侧传递一次 `partial_height_separator_pair`；该 placement 还必须具有唯一、两侧直接的 `aperture_pair` 短轴域 |
 | 两高度 separator 的两侧都只有局部 edge | 不能互相授权；`direct_role_binding_authority_unavailable` |
 | 两条局部 edge 的间距只与 catalog 或 source W 相容 | 只能证明尺寸未冲突，不能让两条无 intrinsic/pair 权限的线互相授予 native coordinate |
-| source W 在固定 placement 中唯一选择一组各自具有 intrinsic 权限的 registered pair | source W 只消除本地多解；两条 native coordinate 的权限仍来自各自 source-wide/cross-height basis |
+| source W 在固定 placement 中唯一选择一组各自具有 intrinsic 权限的 registered pair | source W 只消除本地多解；两条 native coordinate 的权限仍来自各自 source-wide/aggregate basis |
 | 双侧未绑定 Frame 只有一侧唯一 intrinsic edge，另一侧完整 corridor 无候选，且 source W 已独立闭合 | 该 edge 保留自己的 native coordinate；opposite 只来自相关 W，不冒充 direct observation |
 | 无权局部 refinement 满足上方独立 W 让位合同 | 弱线不取得 native coordinate；由已授权 opposite 与完整相关 W 推导该角色 |
 | 只覆盖局部高度，且没有上述任一直接闭环 | `direct_role_binding_authority_unavailable` |
@@ -1055,7 +1064,8 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/template_measurement_plan*.py` | pixel-free 模板、有限 query intents、停止与工作上界 |
 | `photo_geometry/corridors.py` | 候选无关 top/bottom 与完整 `W/pitch` sequence 查询走廊 |
 | `photo_geometry/registered_*.py`、`observations.py`、`separator_*.py` | 一次性 measurement、role-free edge 与 material band |
-| `photo_geometry/cross_height_transition_measurement.py`、`cross_height_edge_support.py` | 三区域弱信号联合测量、与唯一 direct edge 的单次绑定，以及完整三区域 separator pair 向 placement 的唯一投影权限 |
+| `photo_geometry/cross_height_transition_measurement.py`、`broad_material_transition_measurement.py` | 同一 registered baseline 上的三区域局部弱信号与双尺度宽缓 material 测量 |
+| `photo_geometry/aggregate_edge_support.py` | aggregate edge 的唯一解析、相关证据去重，以及完整三区域 separator pair 向 placement 的唯一投影权限 |
 | `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source W/H extent、scan-scale authority 与不增加 direct provenance 的相关 interval 收紧 |
 | `photo_geometry/template_frame_width.py` | selected-only `SourceFrameWidthAuthority`、source W 校准、无权局部 refinement 让位与相关单侧角色推断；不得参与离散候选选择或重编译 template |
 | `photo_geometry/template_aspect_ratio_model.py`、`template_aspect_ratio.py` | 校准 W/H 比例的 typed authority、相关 H 推断、direct H 对账与预算失败 |

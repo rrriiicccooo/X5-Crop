@@ -26,7 +26,7 @@ from .template_model import SequenceFit
 
 class DirectRoleAuthorityBasis(str, Enum):
     SOURCE_WIDE_EDGE = "source_wide_edge"
-    CROSS_HEIGHT_UNION = "cross_height_union"
+    AGGREGATE_UNION = "aggregate_union"
     SEPARATOR_PAIR = "separator_pair"
     PARTIAL_HEIGHT_SEPARATOR_PAIR = "partial_height_separator_pair"
 
@@ -34,7 +34,7 @@ class DirectRoleAuthorityBasis(str, Enum):
 _UNCONDITIONAL_DIRECT_ROLE_BASES = frozenset(
     {
         DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE,
-        DirectRoleAuthorityBasis.CROSS_HEIGHT_UNION,
+        DirectRoleAuthorityBasis.AGGREGATE_UNION,
         DirectRoleAuthorityBasis.SEPARATOR_PAIR,
     }
 )
@@ -105,7 +105,13 @@ class DirectRoleAuthorityFact:
             or (self.state == EvidenceState.UNAVAILABLE)
             != (not self.bases and not self.blocking_material_conflict_ids)
         ):
-            raise ValueError("direct-role authority fact is invalid")
+            raise ValueError(
+                "direct-role authority fact is invalid: "
+                f"role={self.role_index}; "
+                f"regions={self.independent_support_region_count}; "
+                f"bases={tuple(item.value for item in self.bases)}; "
+                f"state={self.state.value}"
+            )
 
 
 @dataclass(frozen=True)
@@ -233,9 +239,9 @@ def intrinsic_direct_role_authority_bases(
                     == BoundaryEdgeMeasurementBasis.DIRECT_TRACE,
                 ),
                 (
-                    DirectRoleAuthorityBasis.CROSS_HEIGHT_UNION,
+                    DirectRoleAuthorityBasis.AGGREGATE_UNION,
                     observation.measurement_basis
-                    == BoundaryEdgeMeasurementBasis.DIRECT_WITH_CROSS_HEIGHT,
+                    == BoundaryEdgeMeasurementBasis.DIRECT_WITH_AGGREGATE,
                 ),
             )
             if eligible
@@ -424,9 +430,9 @@ def _assess_direct_role_binding_authority(
             bases[role_index].add(DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE)
         if (
             observation.measurement_basis
-            == BoundaryEdgeMeasurementBasis.DIRECT_WITH_CROSS_HEIGHT
+            == BoundaryEdgeMeasurementBasis.DIRECT_WITH_AGGREGATE
         ):
-            bases[role_index].add(DirectRoleAuthorityBasis.CROSS_HEIGHT_UNION)
+            bases[role_index].add(DirectRoleAuthorityBasis.AGGREGATE_UNION)
 
     for adjacency_index in range(max(0, fit.template.count - 1)):
         end_index = 2 * adjacency_index + 1

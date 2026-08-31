@@ -19,8 +19,8 @@ from x5crop.detection.photo_geometry.template_evidence import (
     template_evidence_use_ledger,
 )
 from x5crop.detection.photo_geometry.observation_types import (
-    CrossHeightEdgeResolution,
-    CrossHeightEdgeResolutionKind,
+    AggregateEdgeResolution,
+    AggregateEdgeResolutionKind,
 )
 from x5crop.detection.photo_geometry.template_phase import (
     fit_template_phase,
@@ -164,11 +164,11 @@ class TemplateEvidenceContractTest(unittest.TestCase):
             phase,
             cross,
             (
-                CrossHeightEdgeResolution(
+                AggregateEdgeResolution(
                     support_observation_id=support_id,
                     state=EvidenceState.SUPPORTED,
-                    kind=CrossHeightEdgeResolutionKind.BOUND_DIRECT_EDGE,
-                    compatible_direct_edge_ids=(observation.observation_id,),
+                    kind=AggregateEdgeResolutionKind.BOUND_DIRECT_EDGE,
+                    compatible_existing_edge_ids=(observation.observation_id,),
                     final_edge_observation_id=observation.observation_id,
                     failure_kind=None,
                 ),

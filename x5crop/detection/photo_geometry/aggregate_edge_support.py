@@ -1,4 +1,4 @@
-"""Resolve three-region aggregate edges against the direct edge ledger."""
+"""Resolve typed three-region aggregate edges into one edge ledger."""
 
 from __future__ import annotations
 
@@ -17,9 +17,9 @@ from .model import (
 from .observation_types import (
     BoundaryEdgeMeasurementBasis,
     BoundaryEdgeObservation,
-    CrossHeightEdgeResolution,
-    CrossHeightEdgeResolutionFailureKind,
-    CrossHeightEdgeResolutionKind,
+    AggregateEdgeResolution,
+    AggregateEdgeResolutionFailureKind,
+    AggregateEdgeResolutionKind,
     SeparatorBandMeasurementBasis,
     SeparatorBandObservation,
 )
@@ -36,64 +36,69 @@ def _query_ids(
 
 
 def _physically_compatible(
-    direct: BoundaryEdgeObservation,
+    existing: BoundaryEdgeObservation,
     aggregate: BoundaryEdgeObservation,
     transitions: dict[str, SequenceTransitionObservation],
 ) -> bool:
     if (
-        direct.measurement_basis
-        != BoundaryEdgeMeasurementBasis.DIRECT_TRACE
-        or aggregate.measurement_basis
-        != BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE
-        or direct.polarity != aggregate.polarity
-        or direct.polarity == 0
-        or not set(direct.qualified_anchor_roles).intersection(
+        existing.measurement_basis == aggregate.measurement_basis
+        or existing.polarity != aggregate.polarity
+        or existing.polarity == 0
+        or not set(existing.qualified_anchor_roles).intersection(
             aggregate.qualified_anchor_roles
         )
-        or not _query_ids(direct, transitions).intersection(
+        or not _query_ids(existing, transitions).intersection(
             _query_ids(aggregate, transitions)
         )
         or intersect(
-            direct.full_position_interval_px,
+            existing.full_position_interval_px,
             aggregate.full_position_interval_px,
         )
         is None
     ):
         return False
     if (
-        direct.full_direction_interval_degrees is None
+        existing.full_direction_interval_degrees is None
         or aggregate.full_direction_interval_degrees is None
     ):
         return True
     return (
         intersect(
-            direct.full_direction_interval_degrees,
+            existing.full_direction_interval_degrees,
             aggregate.full_direction_interval_degrees,
         )
         is not None
     )
 
 
-def resolve_cross_height_edge_support(
-    direct_edges: tuple[BoundaryEdgeObservation, ...],
+def resolve_aggregate_edge_support(
+    existing_edges: tuple[BoundaryEdgeObservation, ...],
     aggregate_edges: tuple[BoundaryEdgeObservation, ...],
     transitions: dict[str, SequenceTransitionObservation],
     *,
     registered_trace_lattice: tuple[int, ...],
+    aggregate_basis: BoundaryEdgeMeasurementBasis,
+    bind_direct_edge: bool,
 ) -> tuple[
     tuple[BoundaryEdgeObservation, ...],
-    tuple[CrossHeightEdgeResolution, ...],
+    tuple[AggregateEdgeResolution, ...],
 ]:
     """Resolve each aggregate once without giving correlated pixels two votes."""
 
     if not registered_trace_lattice:
-        raise ValueError("cross-height edge support requires one trace lattice")
+        raise ValueError("aggregate edge support requires one trace lattice")
+    if aggregate_basis not in {
+        BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE,
+        BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+    }:
+        raise ValueError("aggregate edge support basis is invalid")
+    if not isinstance(bind_direct_edge, bool):
+        raise TypeError("aggregate direct-edge binding policy must be boolean")
     if any(
-        edge.measurement_basis
-        != BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE
+        edge.measurement_basis != aggregate_basis
         for edge in aggregate_edges
     ):
-        raise ValueError("cross-height support requires aggregate observations")
+        raise ValueError("aggregate support changed measurement basis")
     aggregate_support_counts = {
         aggregate.observation_id: independent_spatial_support_count(
             registered_trace_lattice,
@@ -103,15 +108,18 @@ def resolve_cross_height_edge_support(
     }
     matches = {
         aggregate.observation_id: tuple(
-            direct
-            for direct in direct_edges
-            if _physically_compatible(direct, aggregate, transitions)
+            existing
+            for existing in existing_edges
+            if _physically_compatible(existing, aggregate, transitions)
         )
         for aggregate in aggregate_edges
         if aggregate_support_counts[aggregate.observation_id]
         == SPATIAL_SUPPORT_REGION_COUNT
     }
-    supports_by_direct: dict[ObservationId, list[BoundaryEdgeObservation]] = {}
+    supports_by_existing: dict[
+        ObservationId,
+        list[BoundaryEdgeObservation],
+    ] = {}
     for aggregate in aggregate_edges:
         if (
             aggregate_support_counts[aggregate.observation_id]
@@ -120,38 +128,38 @@ def resolve_cross_height_edge_support(
             continue
         compatible = matches[aggregate.observation_id]
         if len(compatible) == 1:
-            supports_by_direct.setdefault(
+            supports_by_existing.setdefault(
                 compatible[0].observation_id,
                 [],
             ).append(aggregate)
 
-    direct_by_id = {item.observation_id: item for item in direct_edges}
-    if len(direct_by_id) != len(direct_edges):
-        raise ValueError("direct sequence edges must be unique")
-    final_edges = dict(direct_by_id)
+    existing_by_id = {item.observation_id: item for item in existing_edges}
+    if len(existing_by_id) != len(existing_edges):
+        raise ValueError("existing sequence edges must be unique")
+    final_edges = dict(existing_by_id)
     if any(
         aggregate.observation_id in final_edges
         for aggregate in aggregate_edges
     ):
-        raise ValueError("cross-height and direct edges must have unique identities")
-    resolutions: list[CrossHeightEdgeResolution] = []
+        raise ValueError("aggregate and existing edges must have unique identities")
+    resolutions: list[AggregateEdgeResolution] = []
     for aggregate in aggregate_edges:
         if (
             aggregate_support_counts[aggregate.observation_id]
             != SPATIAL_SUPPORT_REGION_COUNT
         ):
             resolutions.append(
-                CrossHeightEdgeResolution(
+                AggregateEdgeResolution(
                     support_observation_id=aggregate.observation_id,
                     state=EvidenceState.UNAVAILABLE,
                     kind=(
-                        CrossHeightEdgeResolutionKind
+                        AggregateEdgeResolutionKind
                         .INSUFFICIENT_SPATIAL_SUPPORT
                     ),
-                    compatible_direct_edge_ids=(),
+                    compatible_existing_edge_ids=(),
                     final_edge_observation_id=None,
                     failure_kind=(
-                        CrossHeightEdgeResolutionFailureKind
+                        AggregateEdgeResolutionFailureKind
                         .INSUFFICIENT_INDEPENDENT_SPATIAL_SUPPORT
                     ),
                 )
@@ -164,11 +172,11 @@ def resolve_cross_height_edge_support(
         if not compatible:
             final_edges[aggregate.observation_id] = aggregate
             resolutions.append(
-                CrossHeightEdgeResolution(
+                AggregateEdgeResolution(
                     support_observation_id=aggregate.observation_id,
                     state=EvidenceState.SUPPORTED,
-                    kind=CrossHeightEdgeResolutionKind.STANDALONE_EDGE,
-                    compatible_direct_edge_ids=(),
+                    kind=AggregateEdgeResolutionKind.STANDALONE_EDGE,
+                    compatible_existing_edge_ids=(),
                     final_edge_observation_id=aggregate.observation_id,
                     failure_kind=None,
                 )
@@ -176,74 +184,92 @@ def resolve_cross_height_edge_support(
             continue
         if len(compatible) > 1:
             resolutions.append(
-                CrossHeightEdgeResolution(
+                AggregateEdgeResolution(
                     support_observation_id=aggregate.observation_id,
                     state=EvidenceState.CONTRADICTED,
                     kind=(
-                        CrossHeightEdgeResolutionKind.AMBIGUOUS_DIRECT_MATCH
+                        AggregateEdgeResolutionKind.AMBIGUOUS_EXISTING_MATCH
                     ),
-                    compatible_direct_edge_ids=compatible_ids,
+                    compatible_existing_edge_ids=compatible_ids,
                     final_edge_observation_id=None,
                     failure_kind=(
-                        CrossHeightEdgeResolutionFailureKind
-                        .MULTIPLE_COMPATIBLE_DIRECT_EDGES
+                        AggregateEdgeResolutionFailureKind
+                        .MULTIPLE_COMPATIBLE_EXISTING_EDGES
                     ),
                 )
             )
             continue
-        direct = compatible[0]
-        direct_source_wide = (
+        existing = compatible[0]
+        existing_source_wide = (
             independent_spatial_support_count(
                 registered_trace_lattice,
-                direct.trace_coordinates_px,
+                existing.trace_coordinates_px,
             )
             == SPATIAL_SUPPORT_REGION_COUNT
         )
-        if direct_source_wide:
+        if (
+            existing_source_wide
+            or existing.measurement_basis
+            != BoundaryEdgeMeasurementBasis.DIRECT_TRACE
+        ):
             resolutions.append(
-                CrossHeightEdgeResolution(
+                AggregateEdgeResolution(
                     support_observation_id=aggregate.observation_id,
                     state=EvidenceState.SUPPORTED,
                     kind=(
-                        CrossHeightEdgeResolutionKind.REDUNDANT_DIRECT_EDGE
+                        AggregateEdgeResolutionKind.REDUNDANT_EXISTING_EDGE
                     ),
-                    compatible_direct_edge_ids=compatible_ids,
-                    final_edge_observation_id=direct.observation_id,
+                    compatible_existing_edge_ids=compatible_ids,
+                    final_edge_observation_id=existing.observation_id,
                     failure_kind=None,
                 )
             )
             continue
-        if len(supports_by_direct[direct.observation_id]) > 1:
+        if not bind_direct_edge:
             resolutions.append(
-                CrossHeightEdgeResolution(
+                AggregateEdgeResolution(
+                    support_observation_id=aggregate.observation_id,
+                    state=EvidenceState.SUPPORTED,
+                    kind=(
+                        AggregateEdgeResolutionKind.MATCHED_EXISTING_EDGE
+                    ),
+                    compatible_existing_edge_ids=compatible_ids,
+                    final_edge_observation_id=existing.observation_id,
+                    failure_kind=None,
+                )
+            )
+            continue
+        if len(supports_by_existing[existing.observation_id]) > 1:
+            resolutions.append(
+                AggregateEdgeResolution(
                     support_observation_id=aggregate.observation_id,
                     state=EvidenceState.CONTRADICTED,
                     kind=(
-                        CrossHeightEdgeResolutionKind.AMBIGUOUS_DIRECT_MATCH
+                        AggregateEdgeResolutionKind.AMBIGUOUS_EXISTING_MATCH
                     ),
-                    compatible_direct_edge_ids=compatible_ids,
+                    compatible_existing_edge_ids=compatible_ids,
                     final_edge_observation_id=None,
                     failure_kind=(
-                        CrossHeightEdgeResolutionFailureKind
-                        .MULTIPLE_SUPPORTS_FOR_ONE_DIRECT_EDGE
+                        AggregateEdgeResolutionFailureKind
+                        .MULTIPLE_AGGREGATES_FOR_ONE_EXISTING_EDGE
                     ),
                 )
             )
             continue
-        final_edges[direct.observation_id] = replace(
-            direct,
+        final_edges[existing.observation_id] = replace(
+            existing,
             measurement_basis=(
-                BoundaryEdgeMeasurementBasis.DIRECT_WITH_CROSS_HEIGHT
+                BoundaryEdgeMeasurementBasis.DIRECT_WITH_AGGREGATE
             ),
-            cross_height_support_id=aggregate.observation_id,
+            aggregate_support_id=aggregate.observation_id,
         )
         resolutions.append(
-            CrossHeightEdgeResolution(
+            AggregateEdgeResolution(
                 support_observation_id=aggregate.observation_id,
                 state=EvidenceState.SUPPORTED,
-                kind=CrossHeightEdgeResolutionKind.BOUND_DIRECT_EDGE,
-                compatible_direct_edge_ids=compatible_ids,
-                final_edge_observation_id=direct.observation_id,
+                kind=AggregateEdgeResolutionKind.BOUND_DIRECT_EDGE,
+                compatible_existing_edge_ids=compatible_ids,
+                final_edge_observation_id=existing.observation_id,
                 failure_kind=None,
             )
         )
@@ -268,11 +294,13 @@ def resolve_cross_height_edge_support(
     )
 
 
-def resolve_cross_height_separator_support(
+def resolve_aggregate_separator_support(
     aggregate_bands: tuple[SeparatorBandObservation, ...],
-    edge_resolutions: tuple[CrossHeightEdgeResolution, ...],
+    edge_resolutions: tuple[AggregateEdgeResolution, ...],
     sequence_edges: tuple[BoundaryEdgeObservation, ...],
-    direct_bands: tuple[SeparatorBandObservation, ...],
+    canonical_bands: tuple[SeparatorBandObservation, ...],
+    *,
+    aggregate_basis: SeparatorBandMeasurementBasis,
 ) -> tuple[SeparatorBandObservation, ...]:
     """Project verified aggregate material onto one resolved edge identity.
 
@@ -282,34 +310,34 @@ def resolve_cross_height_separator_support(
     second vote.
     """
 
+    if aggregate_basis not in {
+        SeparatorBandMeasurementBasis.CROSS_HEIGHT_AGGREGATE,
+        SeparatorBandMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+    }:
+        raise ValueError("aggregate separator basis is invalid")
+    if any(band.measurement_basis != aggregate_basis for band in aggregate_bands):
+        raise ValueError("aggregate separator support changed measurement basis")
     if any(
-        band.measurement_basis
-        != SeparatorBandMeasurementBasis.CROSS_HEIGHT_AGGREGATE
-        for band in aggregate_bands
+        band.measurement_basis == aggregate_basis
+        for band in canonical_bands
     ):
-        raise ValueError("cross-height separator support requires aggregate bands")
-    if any(
-        band.measurement_basis
-        != SeparatorBandMeasurementBasis.DIRECT_TRACE
-        for band in direct_bands
-    ):
-        raise ValueError("direct separator bands must keep direct measurement basis")
+        raise ValueError("canonical separator ledger repeats aggregate basis")
     resolutions_by_id = {
         item.support_observation_id: item for item in edge_resolutions
     }
     if len(resolutions_by_id) != len(edge_resolutions):
-        raise ValueError("cross-height edge resolutions must be unique")
+        raise ValueError("aggregate edge resolutions must be unique")
     edges_by_id = {item.observation_id: item for item in sequence_edges}
     if len(edges_by_id) != len(sequence_edges):
         raise ValueError("resolved sequence edges must be unique")
-    direct_pairs = {
+    canonical_pairs = {
         frozenset(
             (
                 band.left_edge_observation_id,
                 band.right_edge_observation_id,
             )
         )
-        for band in direct_bands
+        for band in canonical_bands
     }
     values: list[SeparatorBandObservation] = []
     for band in aggregate_bands:
@@ -354,7 +382,7 @@ def resolve_cross_height_separator_support(
         pair = frozenset((left.observation_id, right.observation_id))
         if (
             len(pair) != 2
-            or pair in direct_pairs
+            or pair in canonical_pairs
             or left.fit_position_interval_px.center
             >= right.fit_position_interval_px.center
         ):
@@ -376,7 +404,8 @@ def resolve_cross_height_separator_support(
                 band,
                 observation_id=ObservationId(
                     run_local_id(
-                        "cross-height-separator-band",
+                        "aggregate-separator-band",
+                        aggregate_basis.value,
                         band.material_polarity.value,
                         left.observation_id,
                         right.observation_id,
@@ -396,18 +425,21 @@ def resolve_cross_height_separator_support(
     )
 
 
-def placement_sequence_edges_with_cross_height_support(
+def placement_sequence_edges_with_aggregate_support(
     sequence_edges: tuple[BoundaryEdgeObservation, ...],
     aggregate_bands: tuple[SeparatorBandObservation, ...],
 ) -> tuple[BoundaryEdgeObservation, ...]:
     """Admit aggregate coordinates only through verified separator material."""
 
+    aggregate_bases = {
+        SeparatorBandMeasurementBasis.CROSS_HEIGHT_AGGREGATE,
+        SeparatorBandMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+    }
     if any(
-        band.measurement_basis
-        != SeparatorBandMeasurementBasis.CROSS_HEIGHT_AGGREGATE
+        band.measurement_basis not in aggregate_bases
         for band in aggregate_bands
     ):
-        raise ValueError("placement cross-height support requires aggregate bands")
+        raise ValueError("placement aggregate support requires aggregate bands")
     supported_ids = {
         identity
         for band in aggregate_bands
@@ -422,7 +454,10 @@ def placement_sequence_edges_with_cross_height_support(
         for edge in sequence_edges
         if (
             edge.measurement_basis
-            != BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE
+            not in {
+                BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE,
+                BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+            }
             or edge.observation_id in supported_ids
         )
     )

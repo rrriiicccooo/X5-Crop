@@ -30,7 +30,7 @@ from .template_phase_model import (
 _INDEPENDENT_WIDTH_ROLE_BASES = frozenset(
     {
         DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE,
-        DirectRoleAuthorityBasis.CROSS_HEIGHT_UNION,
+        DirectRoleAuthorityBasis.AGGREGATE_UNION,
         DirectRoleAuthorityBasis.SEPARATOR_PAIR,
     }
 )

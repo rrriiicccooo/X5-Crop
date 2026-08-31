@@ -51,7 +51,7 @@ def cross_height_region_trace_ordinals(
     return values
 
 
-def _common_coordinates(
+def common_trace_coordinates(
     measurements: tuple[TraceMeasurement, ...],
 ) -> np.ndarray:
     if any(item.coordinates.size == 0 for item in measurements):
@@ -63,7 +63,7 @@ def _common_coordinates(
     return np.arange(lower, upper + 1, dtype=np.int32)
 
 
-def _aligned_slice(
+def aligned_trace_slice(
     measurement: TraceMeasurement,
     coordinates: np.ndarray,
 ) -> slice:
@@ -83,7 +83,7 @@ def _aligned_slice(
 def _aggregate_region(
     measurements: tuple[TraceMeasurement, ...],
 ) -> tuple[TraceMeasurement, tuple[np.ndarray, ...], int]:
-    coordinates = _common_coordinates(measurements)
+    coordinates = common_trace_coordinates(measurements)
     if coordinates.size == 0:
         empty = np.empty(0, dtype=np.float64)
         return (
@@ -102,7 +102,7 @@ def _aggregate_region(
             (),
             0,
         )
-    slices = tuple(_aligned_slice(item, coordinates) for item in measurements)
+    slices = tuple(aligned_trace_slice(item, coordinates) for item in measurements)
     signed_values = tuple(
         item.signed_gradient[retained]
         for item, retained in zip(measurements, slices, strict=True)

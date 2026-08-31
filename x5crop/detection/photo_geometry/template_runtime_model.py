@@ -27,8 +27,8 @@ from .observation_types import (
     BasicAxisProfile,
     BoundaryEdgeMeasurementBasis,
     BoundaryEdgeObservation,
-    CrossHeightEdgeResolution,
-    CrossHeightEdgeResolutionKind,
+    AggregateEdgeResolution,
+    AggregateEdgeResolutionKind,
     SeparatorBandMeasurementBasis,
     SeparatorBandObservation,
 )
@@ -112,7 +112,13 @@ class RegisteredTemplateLane:
     cross_height_regions: tuple[SideTransitionRegion, ...]
     cross_height_edges: tuple[BoundaryEdgeObservation, ...]
     cross_height_edge_resolutions: tuple[
-        CrossHeightEdgeResolution,
+        AggregateEdgeResolution,
+        ...,
+    ]
+    broad_material_regions: tuple[SideTransitionRegion, ...]
+    broad_material_edges: tuple[BoundaryEdgeObservation, ...]
+    broad_material_edge_resolutions: tuple[
+        AggregateEdgeResolution,
         ...,
     ]
     top_regions: tuple[SideTransitionRegion, ...]
@@ -203,6 +209,7 @@ class RegisteredTemplateLane:
             for transition in (
                 *measurement_set.transitions,
                 *measurement_set.cross_height_transitions,
+                *measurement_set.broad_material_transitions,
             )
         }
         if len(set(transition_ids)) != len(transition_ids) or any(
@@ -215,76 +222,110 @@ class RegisteredTemplateLane:
             for measurement_set in self.measurement_sets
             for item in measurement_set.transitions
         }
-        aggregate_transition_ids = {
+        cross_height_transition_ids = {
             item.transition_id
             for measurement_set in self.measurement_sets
             for item in measurement_set.cross_height_transitions
+        }
+        broad_material_transition_ids = {
+            item.transition_id
+            for measurement_set in self.measurement_sets
+            for item in measurement_set.broad_material_transitions
         }
         if any(
             not set(item.transition_ids).issubset(direct_transition_ids)
             for item in self.side_regions
         ) or any(
-            not set(item.transition_ids).issubset(aggregate_transition_ids)
+            not set(item.transition_ids).issubset(cross_height_transition_ids)
             for item in self.cross_height_regions
+        ) or any(
+            not set(item.transition_ids).issubset(
+                broad_material_transition_ids
+            )
+            for item in self.broad_material_regions
         ):
             raise ValueError("tracked transition regions cross evidence sources")
-        if len(
-            {
-                item.region_id
-                for item in self.cross_height_regions
-            }
-        ) != len(self.cross_height_regions):
-            raise ValueError("cross-height regions must be registered once")
-        resolution_ids = tuple(
-            item.support_observation_id
-            for item in self.cross_height_edge_resolutions
+        aggregate_regions = (
+            *self.cross_height_regions,
+            *self.broad_material_regions,
         )
-        if len(set(resolution_ids)) != len(resolution_ids):
-            raise ValueError(
-                "cross-height edge supports must be resolved once"
-            )
-        if set(resolution_ids) != {
-            item.observation_id for item in self.cross_height_edges
-        }:
-            raise ValueError(
-                "cross-height edges and resolutions must share identity"
-            )
-        if any(
-            item.measurement_basis
-            != BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE
-            for item in self.cross_height_edges
+        if len({item.region_id for item in aggregate_regions}) != len(
+            aggregate_regions
         ):
-            raise ValueError("cross-height edge ledger changed measurement basis")
-        resolution_by_id = {
-            item.support_observation_id: item
-            for item in self.cross_height_edge_resolutions
-        }
+            raise ValueError("aggregate regions must be registered once")
         edge_ids = {item.observation_id for item in self.sequence_edges}
-        raw_cross_ids = {
-            item.observation_id for item in self.cross_height_edges
+        aggregate_families = (
+            (
+                BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE,
+                SeparatorBandMeasurementBasis.CROSS_HEIGHT_AGGREGATE,
+                self.cross_height_edges,
+                self.cross_height_edge_resolutions,
+            ),
+            (
+                BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+                SeparatorBandMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+                self.broad_material_edges,
+                self.broad_material_edge_resolutions,
+            ),
+        )
+        all_resolutions = tuple(
+            resolution
+            for _edge_basis, _band_basis, _edges, resolutions
+            in aggregate_families
+            for resolution in resolutions
+        )
+        resolution_by_id = {
+            item.support_observation_id: item for item in all_resolutions
         }
-        for resolution in self.cross_height_edge_resolutions:
-            final_id = resolution.final_edge_observation_id
-            if final_id is None:
-                continue
-            if resolution.kind == CrossHeightEdgeResolutionKind.STANDALONE_EDGE:
+        if len(resolution_by_id) != len(all_resolutions):
+            raise ValueError("aggregate supports must be resolved once")
+        for edge_basis, _band_basis, raw_edges, resolutions in aggregate_families:
+            resolution_ids = {
+                item.support_observation_id for item in resolutions
+            }
+            raw_ids = {item.observation_id for item in raw_edges}
+            if resolution_ids != raw_ids:
+                raise ValueError(
+                    "aggregate edges and resolutions must share identity"
+                )
+            if any(item.measurement_basis != edge_basis for item in raw_edges):
+                raise ValueError(
+                    "aggregate edge ledger changed measurement basis"
+                )
+            for resolution in resolutions:
+                final_id = resolution.final_edge_observation_id
+                if final_id is None:
+                    continue
                 if (
-                    final_id != resolution.support_observation_id
-                    or final_id not in raw_cross_ids
+                    resolution.kind
+                    == AggregateEdgeResolutionKind.STANDALONE_EDGE
+                ):
+                    if (
+                        final_id != resolution.support_observation_id
+                        or final_id not in raw_ids
+                    ):
+                        raise ValueError(
+                            "standalone aggregate resolution changed identity"
+                        )
+                elif (
+                    resolution.kind
+                    == AggregateEdgeResolutionKind.BOUND_DIRECT_EDGE
+                    and final_id not in edge_ids
                 ):
                     raise ValueError(
-                        "standalone cross-height resolution changed identity"
+                        "bound aggregate resolution leaves the edge ledger: "
+                        f"support={resolution.support_observation_id}; "
+                        f"final={final_id}; basis={edge_basis.value}"
                     )
-            elif final_id not in edge_ids:
-                raise ValueError(
-                    "bound cross-height resolution leaves the edge ledger"
-                )
         aggregate_separator_edge_ids = {
             identity
             for band in self.separator_bands
             if (
                 band.measurement_basis
-                == SeparatorBandMeasurementBasis.CROSS_HEIGHT_AGGREGATE
+                in {
+                    SeparatorBandMeasurementBasis.CROSS_HEIGHT_AGGREGATE,
+                    SeparatorBandMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+                }
                 and band.evidence_state == BoundaryEvidenceState.SUPPORT
             )
             for identity in (
@@ -292,38 +333,38 @@ class RegisteredTemplateLane:
                 band.right_edge_observation_id,
             )
         }
-        for edge in self.sequence_edges:
-            if (
-                edge.measurement_basis
-                == BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE
-            ):
+        for edge_basis, _band_basis, _raw_edges, _resolutions in aggregate_families:
+            for edge in self.sequence_edges:
+                if edge.measurement_basis != edge_basis:
+                    continue
                 resolution = resolution_by_id.get(edge.observation_id)
                 if (
                     resolution is None
                     or resolution.kind
-                    != CrossHeightEdgeResolutionKind.STANDALONE_EDGE
+                    != AggregateEdgeResolutionKind.STANDALONE_EDGE
                     or resolution.final_edge_observation_id
                     != edge.observation_id
                     or edge.observation_id
                     not in aggregate_separator_edge_ids
                 ):
                     raise ValueError(
-                        "standalone cross-height edge lacks separator authority"
+                        "standalone aggregate edge lacks separator authority"
                     )
-            elif (
+        for edge in self.sequence_edges:
+            if (
                 edge.measurement_basis
-                == BoundaryEdgeMeasurementBasis.DIRECT_WITH_CROSS_HEIGHT
+                == BoundaryEdgeMeasurementBasis.DIRECT_WITH_AGGREGATE
             ):
-                resolution = resolution_by_id.get(edge.cross_height_support_id)
+                resolution = resolution_by_id.get(edge.aggregate_support_id)
                 if (
                     resolution is None
                     or resolution.kind
-                    != CrossHeightEdgeResolutionKind.BOUND_DIRECT_EDGE
+                    != AggregateEdgeResolutionKind.BOUND_DIRECT_EDGE
                     or resolution.final_edge_observation_id
                     != edge.observation_id
                 ):
                     raise ValueError(
-                        "bound cross-height support leaves its direct edge"
+                        "bound aggregate support leaves its direct edge"
                     )
         if self.sequence_profile.axis_name != "sequence" or self.cross_profile.axis_name != "cross":
             raise ValueError("template profiles must retain sequence and cross axes")

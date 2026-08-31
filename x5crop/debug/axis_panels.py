@@ -454,6 +454,10 @@ def _draw_detected_start_end(
         for regions, color in (
             (lane.prepared.side_regions, style.detected_transition_color),
             (lane.prepared.cross_height_regions, style.joint_transition_color),
+            (
+                lane.prepared.broad_material_regions,
+                style.broad_material_transition_color,
+            ),
         ):
             for region in regions:
                 coordinate = region.position_interval_px.center

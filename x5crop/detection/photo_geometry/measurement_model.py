@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 import math
 
 import numpy as np
@@ -182,6 +183,11 @@ class PhotoBoundaryTransition:
         return self.canonical_coordinate_px
 
 
+class MaterialBackgroundSide(str, Enum):
+    LEFT = "left"
+    RIGHT = "right"
+
+
 @dataclass(frozen=True)
 class CrossHeightTransitionRegionObservation:
     """One fixed height-region aggregate from a registered sequence query.
@@ -284,8 +290,136 @@ class CrossHeightTransitionRegionObservation:
         return self.canonical_coordinate_px
 
 
+@dataclass(frozen=True)
+class BroadMaterialTransitionRegionObservation:
+    """One source-height region supporting a broad material boundary.
+
+    The observation is produced from the same registered sequence traces as
+    local transitions.  Its polarity comes from a two-scale signed tone
+    change; its background side must also remain the lower-texture side at
+    both physical scales.  It is therefore not a zero-gradient alias for a
+    local edge.
+    """
+
+    transition_id: ObservationId
+    query_id: str
+    spatial_region_index: int
+    trace_ordinal: int
+    trace_coordinate_px: int
+    contributing_trace_ordinals: tuple[int, ...]
+    contributing_trace_coordinates_px: tuple[int, ...]
+    canonical_coordinate_px: float
+    localization_interval_px: FiniteInterval
+    physical_position_interval_px: FiniteInterval
+    window_scales_mm: tuple[float, ...]
+    scale_tone_contrasts: tuple[float, ...]
+    material_contrast_z: float
+    material_contrast_lower_bound: float
+    background_uniformity_upper_bound: float
+    left_tone_mean: float
+    right_tone_mean: float
+    left_texture_mean: float
+    right_texture_mean: float
+    polarity: int
+    polarity_support_count: int
+    background_side: MaterialBackgroundSide
+    background_side_support_count: int
+    peak_width_px: float
+    prominence: float
+    local_noise: float
+
+    def __post_init__(self) -> None:
+        numeric = (
+            self.material_contrast_z,
+            self.material_contrast_lower_bound,
+            self.background_uniformity_upper_bound,
+            self.left_tone_mean,
+            self.right_tone_mean,
+            self.left_texture_mean,
+            self.right_texture_mean,
+            self.peak_width_px,
+            self.prominence,
+            self.local_noise,
+        )
+        support_count = len(self.contributing_trace_ordinals)
+        if (
+            not self.query_id
+            or not 0
+            <= self.spatial_region_index
+            < SPATIAL_SUPPORT_REGION_COUNT
+            or self.trace_ordinal < 0
+            or self.polarity not in {-1, 1}
+            or support_count < 2
+            or tuple(sorted(set(self.contributing_trace_ordinals)))
+            != self.contributing_trace_ordinals
+            or support_count != len(self.contributing_trace_coordinates_px)
+            or tuple(sorted(set(self.contributing_trace_coordinates_px)))
+            != self.contributing_trace_coordinates_px
+            or self.trace_ordinal not in self.contributing_trace_ordinals
+            or self.trace_coordinate_px
+            not in self.contributing_trace_coordinates_px
+            or not support_count // 2
+            < self.polarity_support_count
+            <= support_count
+            or not support_count // 2
+            < self.background_side_support_count
+            <= support_count
+            or not isinstance(self.background_side, MaterialBackgroundSide)
+            or len(self.window_scales_mm) < 2
+            or tuple(sorted(set(self.window_scales_mm)))
+            != self.window_scales_mm
+            or len(self.window_scales_mm) != len(self.scale_tone_contrasts)
+            or any(
+                not math.isfinite(value) or value <= 0.0
+                for value in self.window_scales_mm
+            )
+            or any(
+                not math.isfinite(value) or value <= 0.0
+                for value in self.scale_tone_contrasts
+            )
+            or not math.isfinite(self.canonical_coordinate_px)
+            or not self.localization_interval_px.contains(
+                self.canonical_coordinate_px,
+                epsilon=1.0e-12,
+            )
+            or not self.physical_position_interval_px.contains(
+                self.localization_interval_px.minimum,
+                epsilon=1.0e-12,
+            )
+            or not self.physical_position_interval_px.contains(
+                self.localization_interval_px.maximum,
+                epsilon=1.0e-12,
+            )
+            or any(not math.isfinite(value) or value < 0.0 for value in numeric)
+            or self.material_contrast_lower_bound
+            > min(self.scale_tone_contrasts) + 1.0e-9
+            or self.peak_width_px <= 0.0
+        ):
+            raise ValueError(
+                "broad material transition-region observation is invalid"
+            )
+
+    @property
+    def coordinate_px(self) -> float:
+        return self.canonical_coordinate_px
+
+    @property
+    def gradient_z(self) -> float:
+        return 0.0
+
+    @property
+    def tone_z(self) -> float:
+        return self.material_contrast_z
+
+    @property
+    def texture_z(self) -> float:
+        return 0.0
+
+
 SequenceTransitionObservation = (
-    PhotoBoundaryTransition | CrossHeightTransitionRegionObservation
+    PhotoBoundaryTransition
+    | CrossHeightTransitionRegionObservation
+    | BroadMaterialTransitionRegionObservation
 )
 
 
@@ -334,6 +468,10 @@ class PhotoBoundaryMeasurementSet:
         ...,
     ]
     coverage: PhotoBoundaryCoverageReceipt
+    broad_material_transitions: tuple[
+        BroadMaterialTransitionRegionObservation,
+        ...,
+    ] = ()
 
     def __post_init__(self) -> None:
         if self.query.query_id != self.coverage.query_id:
@@ -343,20 +481,25 @@ class PhotoBoundaryMeasurementSet:
                 raise ValueError(
                     "supported measurement requires complete coverage"
                 )
-        elif self.transitions or self.cross_height_transitions:
+        elif (
+            self.transitions
+            or self.cross_height_transitions
+            or self.broad_material_transitions
+        ):
             raise ValueError("incomplete measurement cannot expose transitions")
         if (
-            self.cross_height_transitions
+            (self.cross_height_transitions or self.broad_material_transitions)
             and self.query.purpose != QueryPurpose.SEQUENCE_ANCHOR_WINDOW
         ):
             raise ValueError(
-                "cross-height transitions require a sequence window"
+                "aggregate transitions require a sequence window"
             )
         identities = tuple(
             item.transition_id
             for item in (
                 *self.transitions,
                 *self.cross_height_transitions,
+                *self.broad_material_transitions,
             )
         )
         if len(set(identities)) != len(identities):
@@ -366,10 +509,14 @@ class PhotoBoundaryMeasurementSet:
             for item in (
                 *self.transitions,
                 *self.cross_height_transitions,
+                *self.broad_material_transitions,
             )
         ):
             raise ValueError("measurement set contains a foreign transition")
-        for item in self.cross_height_transitions:
+        for item in (
+            *self.cross_height_transitions,
+            *self.broad_material_transitions,
+        ):
             expected_coordinates = tuple(
                 self.query.trace_positions_px[index]
                 for index in item.contributing_trace_ordinals
