@@ -15,28 +15,31 @@ mean `<= 5s` 来提高覆盖；3 秒 mean 是持续优化目标。
 Debug、正反例、少量真实样片、完整黄金验收和性能。已闭合全局 lattice authority、逐 adjacency
 coverage、候选无关查询走廊、polarity-complete separator、跨高度弱边缘、source-level W/H direct
 aperture、有界的 W/H compatibility 与 aspect-ratio authority，以及不依赖比例推导的 fixed-H enclosing
-support、直接坐标权限和真实 TIFF 外缘的显式 source saturation。Contact/overlap 以后仍只扩展同一
-adjacency/placement 模型。
+support、直接坐标权限、coordinate/evidence identity 分离和真实 TIFF 外缘的显式 source saturation。
+Contact/overlap 以后仍只扩展同一 adjacency/placement 模型。
 
 ## 当前检查点
 
-- `0075cc75` 把 `DirectRoleBindingAuthority` 前移到 bounded phase candidate 的离散竞争之前。全部
-  candidate 对称使用同一预索引 evidence ledger；无权或 material-contradicted runner 保留在 report 与
-  Debug，但不能阻断有权 candidate。若没有有权 candidate，返回 best 自身的 typed failure；两个均有权
-  的真实竞争继续 `discrete_phase_ambiguous`。S059 因此安全 auto，S027、S075、S088 仍保守 review。
+- `11e0e7a6` 将 sequence coordinate `observation_id` 与相关 `evidence_group_id` 分离。只有相同
+  coordinate identity 可以合并连续 placement；共享 material group 只用于证据去重，不能隐藏不同坐标
+  runner。旧字段已删除，report revision 为 `x5crop_v5_template_report_28`；类型、owner、Debug、外部
+  report validator 与正反例使用同一 current-only schema。
 - 完整 development gold 为 110/110 完成、分析错误 0、`unsafe_approved_auto = 0`。安全 auto 为基础
-  nominal 15/66、较难 nominal 2/30、challenge 0/14；基础 nominal candidate 为 49 个不可用、15 个安全、
+  nominal 14/66、较难 nominal 2/30、challenge 0/14；基础 nominal candidate 为 50 个不可用、14 个安全、
   2 个不安全。S017、S051 的不安全 candidate 均被 direct-use budget 阻断；全部 challenge 安全 review。
-  安全 auto 共 17 个：S003、S022、S025、S029、S059、S063、S064、S067、S081、S083、S084、S085、
+  安全 auto 共 16 个：S003、S022、S025、S059、S063、S064、S067、S081、S083、S084、S085、
   S087、S089、S092、S094、S095。
-- 黄金 receipt 精确匹配 `0075cc75`；detector manifest 为
-  `9dca9de929648b177d1a236f86353fd7e22be0479be1a1ca39d6e0d3b62610c4`，comparator manifest 为
-  `ad5e68cb34b121b29a53b5fc5485a9d32cb11a7ae2c14d27c921c8d1ff59ced4`，cohort SHA-256 为
+- S029 的旧批准依赖把同一 material group 中 14325.97px 与 14386.36px 两个 START 当成同一坐标；后者
+  相对黄金基线会向内裁切约 63.5px。当前明确保留 runner 并返回 `discrete_phase_ambiguous`。S002、S015、
+  S024、S030、S047 终态仍为 review，只把 root failure 前移到同一真实 phase 歧义。
+- 黄金 receipt 精确匹配 `11e0e7a6`；detector manifest 为
+  `8b7d361953ba7792612dfad29a35c5f167f4b689e684ecab7f0f4dc40836b05e`，comparator manifest 为
+  `3bd4218ed1b752ac5b47b9c7ea124d2d795095e8f5938590e69fef464995e969`，cohort SHA-256 为
   `c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`。黄金 summary SHA-256 为
-  `6b57552b598b276f45b02f70ee4f68349f3d0bba1fa793b1c8ff999ed8127b69`。
-- 同 commit 的 24-source 正式性能 mean 为 3.384 秒，p95 为 5.716 秒，最慢 S109 为 6.124 秒；5 秒
-  mean Gate 通过，3 秒 non-blocking 目标未达到。性能 receipt SHA-256 为
-  `370dfa0960999e0553e586e55e3f82a00141ebe3bf39e368cc59dae37243bc7e`；receipt 只证明记录的依赖与
+  `35d463e89cbbb0c0712ef623de5315b2028fa66ef730960ddeb79aba3e41bb1b`。
+- 同 commit 的 24-source 正式性能 mean 为 2.947 秒，p95 为 5.064 秒，最慢 S109 为 5.476 秒；5 秒
+  mean Gate 通过，3 秒 non-blocking 目标达到。性能 receipt SHA-256 为
+  `f90d6a103990eae5c7d0760c7dca1a3b0df8fb690a009c5c7585df1f4f722546`；receipt 只证明记录的依赖与
   M2 Max 主机。
 
 ## 当前物理证据
@@ -55,13 +58,16 @@ adjacency/placement 模型。
 
 ## 开放风险
 
-- 基础 nominal 仍有 51/66 review，较难 nominal 有 28/30 review。当前完整集的 phase 根因包括 28 个
-  `direct_role_binding_authority_unavailable`、12 个 `frame_width_inference_unavailable`、8 个
-  `global_lattice_authority_unavailable`、7 个 `discrete_phase_ambiguous`、5 个
+- 基础 nominal 仍有 52/66 review，较难 nominal 有 28/30 review。当前完整集的 phase 根因包括 28 个
+  `direct_role_binding_authority_unavailable`、13 个 `discrete_phase_ambiguous`、11 个
+  `frame_width_inference_unavailable`、8 个 `global_lattice_authority_unavailable`、5 个
   `separator_material_conflict` 与 5 个 `fixed_template_mismatch`。竞争必须由新的直接 observation identity、
   权限或相关安全状态闭合；不得恢复 W 自授权、缩窄 guard、精确 W→H 或改 challenge 分类。
-- S017、S051 是仅有的两个不安全 candidate，并继续由 `direct_use_budget_exceeded` 阻断；其余 91 个
+- S017、S051 是仅有的两个不安全 candidate，并继续由 `direct_use_budget_exceeded` 阻断；其余 92 个
   review task 没有 selected candidate，不能把“没有输出”误当成精度问题。
+- `lane_preparation.py` 仍在最终直接角色权限和离散竞争闭合前校准 source W、重编译模板，再把该 W 作为
+  global lattice evidence。黄金结果当前安全，但这个顺序让相关 W 可能参与选择自己的 source placement，
+  是下一项必须消除的循环权限，而不是通过率工具。
 - 当前黄金同时参与 development calibration 与 development 验收，只能证明该集合上的安全与可复算性；
   尚无 sealed acceptance，也没有 `xpan`、`120-645`、`135-dual` 的独立黄金覆盖。
 - 当前开发集不能事后兼任概率 calibration。未来 scorer 仍需预先冻结的新数据、OOD、abstention 和独立
@@ -69,9 +75,11 @@ adjacency/placement 模型。
 
 ## 精确下一步
 
-1. 只读拆分剩余 7 个 `discrete_phase_ambiguous`：S027、S034、S050、S052、S061、S075、S088。S027、
-   S075、S088 已知两侧 candidate 均有权限；不得用 residual 或未经校准 score 强选。重点确认 S034/S052
-   是否来自 separator 两侧的 physical identity 未闭合，challenge S050/S061 只作能力观察。
-2. 对基础 nominal 的 16 个 `direct_role_binding_authority_unavailable` 按缺失 basis 分组，选择覆盖最大的
-   一个候选无关 observation identity 小机制。新增权限只能来自同一 registered 像素的 source-wide、跨高度
-   或 separator physical identity，不能让两个弱局部边界重新凭 W 互相授权。
+1. 删除 pre-selection source-W calibration/recompile 路径。Bounded candidate 必须先只凭直接角色权限和
+   独立 lattice facts 完成离散竞争；唯一 placement、全局 rank、adjacency coverage、outer authority 与
+   topology 闭合后，才允许 selected-only source W 校准和相关 opposite 推断。W 不得删除 runner、改变
+   ordinal 或把自己写回选择证据。
+2. 上述安全顺序稳定后，再为每个 bounded candidate 增加对称的 authority projection：只删除
+   `unavailable` binding、绝不删除 `contradicted`，保留的直接角色必须重新独立闭合 rank 3；随后全部投影
+   candidate 重新 canonicalize 并竞争。它不能生成双侧都未观察的 Frame，也不能让 validation-only 弱线
+   增加 rank、收窄 W 或决定 winner。

@@ -176,14 +176,14 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
 - `tools/verify` 是 Hook、CI 与本地验证的唯一入口。Diagnostic 只证明工程合同；gold accuracy、性能与
   platform receipt 分层记录，不互相冒充。
 - 正式性能 Gate 为 24-source 完整用户路径 mean 不超过 5 秒；3 秒只是不阻断的 challenge。
-- Phase-candidate authority 检查点 `0075cc75` 的完整 development gold 为 110/110 完成、分析错误 0、
-  `unsafe_approved_auto = 0`；安全 auto 为基础 nominal 15/66、较难 nominal 2/30、challenge 0/14。
-  基础 nominal candidate 为 49 个不可用、15 个安全、2 个不安全；两个不安全 candidate S017、S051 均由
-  direct-use budget 阻断并保持 review。S059 从无权限 runner 造成的双解中安全自动通过；S027、S075、
-  S088 等两个 candidate 均有权限的真实竞争继续 review。黄金重算继续确认 105-source/494-Frame W/H
-  calibration 的运行时公式、计数与 source-level q95 一致。
-- 同 commit 的 24-source 正式 mean 为 3.384 秒、p95 为 5.716 秒，最慢 S109 为 6.124 秒；5 秒 mean Gate
-  通过，3 秒 non-blocking 目标未达到。当前其余 review 表达真实的 phase/cross、W 与预算证明缺口，不以
+- Coordinate/evidence identity 检查点 `11e0e7a6` 的完整 development gold 为 110/110 完成、分析错误 0、
+  `unsafe_approved_auto = 0`；安全 auto 为基础 nominal 14/66、较难 nominal 2/30、challenge 0/14。
+  基础 nominal candidate 为 50 个不可用、14 个安全、2 个不安全；S017、S051 继续由 direct-use budget
+  阻断。S029 的同一 material group 实际包含两个不同 START 坐标，其中 runner 会危险向内裁切，因此从
+  旧自动批准正确回到 `discrete_phase_ambiguous`，不能用 group identity、residual 或距离隐藏。黄金重算
+  继续确认 105-source/494-Frame W/H calibration 的运行时公式、计数与 source-level q95 一致。
+- 同 commit 的 24-source 正式 mean 为 2.947 秒、p95 为 5.064 秒，最慢 S109 为 5.476 秒；5 秒 mean Gate
+  通过，3 秒 non-blocking 目标也达到。当前其余 review 表达真实的 phase/cross、W 与预算证明缺口，不以
   调窄 guard、静默隐藏 saturation、恢复精确 W→H 或改变样片角色掩盖。
 - Apple Silicon macOS、Intel macOS 与 Windows x64 必须在同一最终 commit 取得实机 receipt。Accuracy、
   性能与平台证据未全部绑定该 commit 前，不创建 RC、tag、Release 或公开 ZIP。
