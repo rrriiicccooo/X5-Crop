@@ -25,7 +25,8 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   uniformity、polarity 与 background-side 一致性。宽缓单边只能匹配或保留为 standalone，不增加
   direct-role 权限；只有完整 END/material/START pair 才能进入 placement 并约束 local advance。
   `aggregate_edge_support.py` 统一拥有解析、去重与 pair 投影；跨尺度、跨高度、角色或多解冲突保持 typed
-  unavailable/contradiction。同一物理 pair 已有 direct band 时不重复计票。该能力不扩大 query、halo、
+  unavailable/contradiction。任一 edge 已属于 supported canonical separator 时，宽缓 pair 不能用另一侧
+  重新解释该 edge；同一物理 pair 也不重复计票。该能力不扩大 query、halo、
   TIFF 读取，不建立 enhanced detector、第二 geometry 或 score。
 - Selected placement 现在由 `AdjacencyContinuityObservation` 为每个 adjacency 建立唯一 typed ledger。
   唯一正序 separator band 可以授权实测 local advance；完整 corridor 但无反证只保留正常 Grid，不能

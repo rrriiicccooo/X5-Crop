@@ -330,14 +330,14 @@ def resolve_aggregate_separator_support(
     edges_by_id = {item.observation_id: item for item in sequence_edges}
     if len(edges_by_id) != len(sequence_edges):
         raise ValueError("resolved sequence edges must be unique")
-    canonical_pairs = {
-        frozenset(
-            (
-                band.left_edge_observation_id,
-                band.right_edge_observation_id,
-            )
-        )
+    canonical_separator_edge_ids = {
+        identity
         for band in canonical_bands
+        if band.evidence_state == BoundaryEvidenceState.SUPPORT
+        for identity in (
+            band.left_edge_observation_id,
+            band.right_edge_observation_id,
+        )
     }
     values: list[SeparatorBandObservation] = []
     for band in aggregate_bands:
@@ -382,7 +382,7 @@ def resolve_aggregate_separator_support(
         pair = frozenset((left.observation_id, right.observation_id))
         if (
             len(pair) != 2
-            or pair in canonical_pairs
+            or bool(pair.intersection(canonical_separator_edge_ids))
             or left.fit_position_interval_px.center
             >= right.fit_position_interval_px.center
         ):

@@ -508,6 +508,87 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
             edges,
         )
 
+    def test_broad_pair_cannot_reassign_one_canonical_separator_edge(
+        self,
+    ) -> None:
+        direct_left_value = _edge(
+            "canonical-left",
+            100.0,
+            (0, 40, 80),
+            BoundaryEdgeMeasurementBasis.DIRECT_TRACE,
+        )
+        direct_right = _edge(
+            "canonical-right",
+            120.0,
+            (0, 40, 80),
+            BoundaryEdgeMeasurementBasis.DIRECT_TRACE,
+        )
+        broad_left_value = _edge(
+            "broad-competing-left",
+            100.0,
+            (10, 40, 70),
+            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+        )
+        broad_right = _edge(
+            "broad-competing-right",
+            130.0,
+            (10, 40, 70),
+            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+        )
+        direct_left = (
+            replace(
+                direct_left_value[0],
+                polarity=-1,
+                qualified_anchor_roles=(BoundaryRole.END,),
+            ),
+            direct_left_value[1],
+        )
+        broad_left = (
+            replace(
+                broad_left_value[0],
+                polarity=-1,
+                qualified_anchor_roles=(BoundaryRole.END,),
+            ),
+            broad_left_value[1],
+        )
+        edges, resolutions = self._resolve(
+            (direct_left, direct_right),
+            (broad_left, broad_right),
+            aggregate_basis=(
+                BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+            ),
+            bind_direct_edge=False,
+        )
+        canonical = phase_separator(
+            "canonical-band",
+            direct_left[0],
+            direct_right[0],
+            FiniteInterval(19.0, 21.0),
+        )
+        competing = replace(
+            phase_separator(
+                "broad-competing-band",
+                broad_left[0],
+                broad_right[0],
+                FiniteInterval(29.0, 31.0),
+            ),
+            measurement_basis=(
+                SeparatorBandMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+            ),
+        )
+
+        projected = resolve_aggregate_separator_support(
+            (competing,),
+            resolutions,
+            edges,
+            (canonical,),
+            aggregate_basis=(
+                SeparatorBandMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+            ),
+        )
+
+        self.assertEqual(projected, ())
+
     def test_role_incompatible_pair_does_not_admit_standalone_edges(
         self,
     ) -> None:

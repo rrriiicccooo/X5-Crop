@@ -298,6 +298,7 @@ separator pair 投影的唯一 owner：
 | 没有匹配既有 edge | `standalone_edge` | 只进入 evidence、report 与 Debug；没有完整 pair 时不进入 phase、outer 或 placement |
 | 两条已解析 aggregate edge 依次具备 END/START 角色，且其间 material 由三个高度区域共同支持 | `standalone/matched edge + aggregate separator band` | 作为一份 `separator_pair` 投影到 placement；实测 gap 可以约束该 adjacency 的 local advance |
 | 匹配的既有 edge 已覆盖三个高度区域，或已由另一 aggregate 支持 | `redundant_existing_edge` | 保留既有 edge，不重复计票，也不能让未成 pair 的 aggregate edge 进入 placement |
+| aggregate pair 的任一 resolved edge 已属于一组 supported direct/较早 aggregate separator | 保留原 separator 为 canonical | 新 pair 只作诊断，不能用另一侧重新解释同一物理 edge 或改变既有 placement |
 | 同一 aggregate 匹配多个既有 edge | `multiple_compatible_existing_edges` | typed contradiction，不授予 aggregate 权限 |
 | 多个可绑定 aggregate 竞争同一既有 edge | `multiple_aggregates_for_one_existing_edge` | typed contradiction，不授予 aggregate 权限 |
 | edge/material 少于三个支持区域、跨尺度或跨高度状态冲突、角色不相容、coverage 不完整 | 无合格 aggregate pair | `unavailable`，保持原 evidence 与安全终态 |
