@@ -57,6 +57,8 @@ check_pushed_documentation() {
 }
 
 run_full() {
+    "$PYTHON" tools/install/dependency_manager.py check \
+        --contract tools/install/dependencies.toml
     "$PYTHON" -m unittest discover -s tools/tests
     "$PYTHON" -m compileall -q X5_Crop.py x5crop tools
     "$PYTHON" -m tools.regression.cohort_count

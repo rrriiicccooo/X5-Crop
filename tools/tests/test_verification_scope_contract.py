@@ -199,5 +199,21 @@ class VerificationScopeContractTest(unittest.TestCase):
         )
         self.assertNotIn("paths-ignore", workflow)
 
+    def test_full_verification_checks_the_ci_dependency_contract_first(
+        self,
+    ) -> None:
+        verifier = (ROOT / "tools/verify").read_text(encoding="utf-8")
+        run_full = verifier.split("run_full() {", 1)[1].split("\n}", 1)[0]
+
+        dependency_check = (
+            '"$PYTHON" tools/install/dependency_manager.py check'
+        )
+        self.assertEqual(run_full.count(dependency_check), 1)
+        self.assertIn("--contract tools/install/dependencies.toml", run_full)
+        self.assertLess(
+            run_full.index(dependency_check),
+            run_full.index('"$PYTHON" -m unittest discover -s tools/tests'),
+        )
+
 if __name__ == "__main__":
     unittest.main()
