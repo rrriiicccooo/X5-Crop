@@ -54,12 +54,13 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   `direct_least_squares | bounded_direct_least_squares | template_interval_center` 记录连续参数依据。
   该求解不扩张物理区间、不覆盖 direct native coordinate，也不选择离散 runner；受约束后暴露出的另一
   合法解释仍安全进入 review。
-- 每个 bounded phase candidate 现在会在离散竞争前对称接受直接角色坐标权限检查。只有全部已绑定
-  START/END 都由 source-wide edge、跨高度联合或 separator pair 授权的 candidate 才能参与 winner
-  比较；`unavailable | contradicted` runner 继续进入 report/Debug，但不再凭 residual 或 support 阻断
-  有权限 candidate。若所有 candidate 都无权，则直接产生对应 typed failure；两个都有权限的真实双解仍
-  保持 `discrete_phase_ambiguous`。该检查复用同一 registered evidence ledger，不增加 TIFF 读取或第二套
-  detector。
+- 每个 bounded phase candidate 现在会在离散竞争前对称执行 direct-role authority projection。
+  `contradicted` 直接终止；`unavailable` binding 只有在删除后每张 Frame 仍保留一侧直接坐标、相关
+  evidence-group 去重后的 `(phase,W,pitch)` rank 仍为 3、且同一 template/ordinal/local topology 可以
+  有界重拟合时才投影出去。全部 eligible candidate 重新 canonicalize 并竞争，真实双解仍保持
+  `discrete_phase_ambiguous`；弱线只保留为 provenance，不能拥有 phase、收窄 W 或隐藏 runner。
+  `complete_frame_unobserved`、`retained_rank_insufficient`、material contradiction 与 refit/identity failure
+  均为 typed terminal outcome。该机制复用 registered evidence，不增加 TIFF 读取或第二 detector。
 - Format W/H compatibility 由一个 current-only 混合物理合同统一计算：
   `guard_W=max(0.95 mm, 2.4%W)`、`guard_H=max(0.70 mm, 1.8%H)`。参数来自 105 个合格黄金 source、
   494 个完整且全部直接可见 Frame 的 source-level 中位尺寸、分轴长 q95 与向外量化；不再保存 `half`
@@ -118,9 +119,9 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   阻断原因；报告同时保存全局未知量 constraint rank、逐 adjacency query/trace/coordinate coverage 与
   直接角色/外侧 Frame observation authority，以及 dark/light material、逐区域状态和冲突。Debug 不重新
   求解，也不把 review candidate 伪装为正式输出。当前 report revision 为
-  `x5crop_v5_template_report_29`，并显式区分直接角色的 coordinate `observation_id` 与相关
-  `evidence_group_id`，同时报告 phase candidate 的直接角色权限、评估/拒绝/role-check
-  工作量、连续 lattice 参数依据、三层 source footprint、typed
+  `x5crop_v5_template_report_30`，并显式区分直接角色的 coordinate `observation_id` 与相关
+  `evidence_group_id`，同时报告 phase candidate 的输入权限、projection outcome、保留 rank、投影 binding、
+  terminal/成功/role-check 工作量、连续 lattice 参数依据、三层 source footprint、typed
   saturation、同一状态 cross
   alignment padding、selected-only source W authority、source W/H、相关
   Frame-width inference 及 validation-only role/observation provenance、aspect calibration、raw/guarded
@@ -182,15 +183,15 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
 - `tools/verify` 是 Hook、CI 与本地验证的唯一入口。Diagnostic 只证明工程合同；gold accuracy、性能与
   platform receipt 分层记录，不互相冒充。
 - 正式性能 Gate 为 24-source 完整用户路径 mean 不超过 5 秒；3 秒只是不阻断的 challenge。
-- Selected-only source-W 检查点 `ded3b715` 的完整 development gold 为 110/110 完成、分析错误 0、
+- Direct-role projection 检查点的完整 development gold 为 110/110 完成、分析错误 0、
   `unsafe_approved_auto = 0`；安全 auto 为基础 nominal 14/66、较难 nominal 3/30、challenge 0/14。
-  基础 nominal candidate 为 49 个不可用、14 个安全、3 个不安全；S013、S017、S051 继续由 direct-use
-  budget 阻断。相对上一检查点，S021、S070、S088 安全进入 auto，S084、S092 保守回到 review；source W
-  不再参与选择自己的 placement。黄金重算继续确认 105-source/494-Frame W/H calibration 的运行时公式、
-  计数与 source-level q95 一致。
-- 同 commit 的 24-source 正式 mean 为 3.204 秒、p95 为 5.231 秒，最慢 S109 为 5.521 秒；5 秒 mean Gate
-  通过，3 秒 non-blocking 目标未达到。当前其余 review 表达真实的 phase/cross、W 与预算证明缺口，不以
-  调窄 guard、静默隐藏 saturation、恢复精确 W→H 或改变样片角色掩盖。
+  Candidate 为 88 个不可用、18 个安全、4 个不安全；全部不安全 candidate 均保持 review。相对
+  selected-only source-W 检查点，S023 安全进入 auto；S088 因投影后暴露第二个 rank-3 直接解释而回到
+  review；S098 暴露不安全 review candidate，S109 暴露安全 review candidate。自动覆盖总数不变，真实
+  runner、弱线和反证没有被隐藏。
+- 24-source 正式性能仍须在干净提交上独立生成 receipt；本机制保持 5 秒 mean Gate 通过，3 秒
+  non-blocking 目标尚未达到。当前 review 表达真实的 phase/cross、Grid/W 与预算证明缺口，不以调窄
+  guard、静默隐藏 saturation、恢复精确 W→H 或改变样片角色掩盖。
 - Apple Silicon macOS、Intel macOS 与 Windows x64 必须在同一最终 commit 取得实机 receipt。Accuracy、
   性能与平台证据未全部绑定该 commit 前，不创建 RC、tag、Release 或公开 ZIP。
 - 发布包由唯一 manifest 构建，不包含 modular source、tests、tools、内部文档或开发输出。

@@ -199,8 +199,8 @@ column 支撑至少 1%，outer 长轴至少 100 px；沿长轴约每 350 px 取�
 
 ## 5. 从整体到局部的模板编译
 
-V5 吸收 v4.2.8 的有效行为，不复制其代码、未经校准且直接决定终态的任意加权分数、Grid fallback
-或 content equal-split：
+V5 吸收 v4.2.8 的有效行为，不复制其代码、未经校准且直接决定终态的任意加权分数、把未校准 Grid
+当作答案的 fallback，或 content equal-split：
 
 ```text
 format/count/holder 编译固定模板、coarse intents 与工作上界
@@ -319,10 +319,16 @@ role = phase
      + (W if END else 0)
 ```
 
+这条 Grid 是唯一 placement 的主生成模型，不是 detector 失败后的 fallback。零偏差状态由 format 的有界
+`W/H/pitch` 先验、`local_delta = 0` 和 normal adjacency 组成；像素观察随后收紧 source W/H、确定
+absolute phase、保留直接 START/END 的 native coordinate，或给某个 adjacency 增加一次 local advance。
+Grid 始终可以生成一个待检验的默认 placement，但它不能仅凭自己取得 `approved_auto` 权限。
+
 - 连续小误差保存在一个 placement 的区间中。
 - 不同 ordinal mapping 或相隔明显的 phase 是离散 placements，保留 winner/runner，绝不平均。
 - Holder 长轴中心不参与 phase。省略 count 也不提供居中权限。
-- 模板投影可以补齐缺失 first/last 或 separator，但 phase 必须来自其它独立 direct anchor。
+- Format/count 可以定义尺子的刻度和 ordinal，但不能知道尺子应放在 TIFF 的哪一个像素；absolute phase
+  必须来自直接 outer、START/END 或其它独立 anchor。
 - 已绑定的直接角色在最终 placement 中保留自己的 native canonical coordinate、完整 observation interval
   与 observation identity；固定 Grid 只组织 ordinal 并补齐未观察角色，不能覆盖直接位置。
 - 全局未知量固定为 `(phase, W, source_pitch)`。每条已绑定直接 START/END 形成一行带 observation
@@ -341,19 +347,32 @@ role = phase
   ordinal/edge 解释时保留 runner 并产生 `discrete_phase_ambiguous`；连续最小二乘不能充当 best-score。
 
 Production phase competition 在离散比较前，对每个去重后的 bounded candidate 对称执行
-`DirectRoleBindingAuthority`。只有全部已绑定直接角色都具 native-coordinate 权限的 candidate，才可进入
-`_clear_winner_basis`；没有权限或存在 separator-material 反证的 candidate 仍保留为 report/Debug runner，
-但不能阻断有权限 candidate。该过滤不新增像素查询、不改变 residual、不读取黄金，也不隐藏 runner。
-若没有 residual-compatible 且有权限的 candidate，保留最佳诊断 candidate，并产生它自身的 typed
-`direct_role_binding_authority_unavailable | separator_material_conflict`，不得退回 residual、support
-或 Grid 强选。
+`DirectRoleBindingAuthority` 和 `PhaseCandidateAuthorityProjection`。`contradicted` 表示直接物理反证，
+始终终止该解释；`unavailable` 只表示某个被绑定像素线没有 native-coordinate 权限，因此先把这些 binding
+投影出去，再判断剩余直接坐标能否独立承担同一个离散解释。投影只允许使用原 candidate 已经绑定且获得
+权限的坐标，按原 template、ordinal、local topology 和完整硬区间精确重拟合；不能新增 observation、
+改变离散 identity、生成新 Frame 或读取像素。
 
-| bounded candidate 权限状态 | 离散竞争结果 |
-|---|---|
-| 唯一 residual-compatible candidate 为 `supported`，其它为 `unavailable | contradicted` | `unique_direct_role_authority`；无权 runner 保留，继续接受后续 W/cross/Gate |
-| 两个非等价 residual-compatible candidate 均为 `supported` | 继续既有硬物理比较；不能明确分离时 `discrete_phase_ambiguous` |
-| 没有 residual-compatible `supported` candidate | 保留诊断 best/runner；按 best 的权限状态产生 typed failure |
-| `supported` 的 residual-incompatible candidate 具有更高独立支持并与 best 的 phase/pitch 分离 | 仍是直接反证并阻断；不能被权限过滤隐藏 |
+投影后的 candidate 重新按 coordinate identity canonicalize，再与全部其它 eligible candidate 对称竞争。
+同一连续 placement 的互补直接证据仍可合并，非等价 projected/unchanged placement 仍保留 runner。
+原弱线只保存在 projection provenance；它不能继续拥有 phase、收窄 W、提高 constraint rank 或消失于
+Debug。若所有解释都终止，最佳原 candidate 只作为诊断几何保留，并以 projection outcome 说明首个缺口，
+不得退回 residual、support 或 Grid 强选。
+
+| bounded candidate 事实 | projection outcome | 离散竞争结果 |
+|---|---|---|
+| 全部直接 binding 均获授权 | `unchanged` | 原 candidate 进入竞争 |
+| 仅有 `unavailable` binding；投影后每张 Frame 至少保留一侧直接坐标，且相关 evidence-group 去重后的 `(phase,W,pitch)` rank 为 3 | `projected` | 只以保留坐标重拟合同一离散 identity，再进入竞争 |
+| 投影会使某张 Frame 的 START/END 都没有直接坐标 | `complete_frame_unobserved` | 当前 direct-evidence 路径终止；不让该弱线创造整张 Frame |
+| 保留坐标 rank 为 0–2 | `retained_rank_insufficient` | 终止；不能让已删除的弱线或 Grid 反向补 rank |
+| 存在 separator material 或同角色直接反证 | `direct_role_contradiction` | 终止且反证保留；不得作为噪声删除 |
+| 有界重拟合不存在，或会改变 template/ordinal/local topology/role mapping | `refit_unavailable | discrete_identity_changed` | 终止并报告 typed failure |
+| 两个非等价 eligible candidate 均成立 | `unchanged | projected` 各自保留 | 继续硬物理比较；不能明确分离时 `discrete_phase_ambiguous` |
+
+Constraint rank 只由 `template_lattice_authority.py` 计算。相同 `evidence_group_id` 的多个坐标只贡献一行；
+若同组绑定多个 role，按最低 role index 选择该组的 canonical rank row，其余 native coordinates 仍完整保留，
+不能因 rank 去重而合并坐标或隐藏 runner。整个 projection 只消费已登记 evidence，候选数、角色数与重拟合
+次数均受原 template 上界约束，不增加 TIFF 读取或第二 detector。
 
 | 直接约束状态 | 连续参数结果 | 离散选择结果 |
 |---|---|---|
@@ -538,6 +557,40 @@ separator 的 typed 反证，再分别闭合 contact、overlap，最后运行完
 能力。以上合同在对应 type、owner、Gate、Debug、正反例、真实样片、性能和黄金安全验收闭合前，不授予
 runtime 自动批准权限。开始实现时由单一 `photo_geometry/template_adjacency_topology.py` 拥有 observation
 到 relation 的闭合；当前不为尚未启用的能力建立占位模块。
+
+### 7.2 已确认、尚未启用的 calibrated nominal Grid authority
+
+当前 direct-evidence 路径要求投影后 rank 3，并禁止它生成一张 START/END 都未观察的 Frame。这是当前
+runtime 的保守权限边界，不是 Grid 物理模型的最终上限。下一小机制建立
+`CalibratedNominalGridAuthority`，让经过独立校准的默认 Grid 成为另一条显式闭合路径，而不冒充 direct
+evidence：
+
+```text
+format-specific calibrated W/H/pitch intervals
++ 至少一个直接 absolute phase anchor
++ 每个使用 local_delta=0 的 adjacency 完整覆盖其合法不确定性走廊
++ 没有 wide/narrow/contact/overlap/conflict/content counterevidence
++ 全部相关 phase/W/H/pitch 状态的最坏 OutputFootprint 仍在 5% 预算内
+→ calibrated nominal placement 可进入后续选择与 Gate
+```
+
+Format/count 只提供有界尺子，不能提供 absolute phase。Pitch uncertainty 按离 anchor 的 slot 距离以同一
+相关状态传播，不能按每格独立取有利值，也不能为了批准而收窄。直接 START/END 一旦存在，始终保留 native
+coordinate 并收紧或修正默认模型；直接 separator 的实际宽度继续产生一次 local advance，不能被 nominal
+gap 拉回。逐 adjacency coverage 必须覆盖该 placement 的完整合法走廊；“query 全部执行”或“没有检测到
+edge”都不是 normal adjacency 的充分证明。
+
+这条 authority 成立后，可以在没有两侧直接边界的 blank/低显著 Frame 上生成默认角色，因为它不再是
+“凭空”生成：absolute anchor、校准 prior、逐关系完整观察、无反证和最坏安全包络共同拥有该推断。
+任一条件缺失仍 review。当前 `complete_frame_unobserved` 只描述 direct-role projection 路径；未来不能把它
+误用为 calibrated Grid 的永久禁令。
+
+该机制必须由一个 canonical type/owner 同时保存 calibration identity、W/H/pitch prior intervals、phase
+anchor、逐 slot 累积 envelope、direct/local corrections、counterevidence 和 typed result。至少表达
+`calibrated_nominal_grid_authority_unavailable`、`nominal_grid_phase_anchor_unavailable`、
+`adjacency_observation_coverage_incomplete` 与 `nominal_grid_uncertainty_budget_exhausted`；Debug 展示默认
+Grid、实际修正和最终可行包络。实现保持 `O(count)`，不增加 TIFF query、样片特例、format denylist、
+第二 placement 模型或未经校准的 score。
 
 ## 8. Cross、outer 与固定 H
 
@@ -846,6 +899,13 @@ complete/selected placement 后重复建立同义 Gate fact。它不读取 deske
 - `direct_use_budget_exceeded`
 - `source_lane_authority_unavailable`
 
+`approved_auto` 是产品风险决定，不是“运行时已经知道真实黄金边界”的数学证明。Runtime 只能根据校准
+先验、registered evidence、硬物理合同、剩余不确定性与 OOD 判断风险是否低到可直接使用；真实内容边界
+只在开发验收中可知。开发目标因此是 development 与独立 sealed 验证持续保持
+`unsafe_approved_auto = 0`，并在此前提下提高 nominal 自动覆盖，而不是用无限外扩换取一个不存在的
+绝对保证。未来出现一次真实危险自动裁切时，该 source 经人工 reference 确认后永久进入 development
+regression，并补充新的 sealed source；不能只修当前图片或把它改成 challenge。
+
 普通 report 只保存输入、holder/count authority、最终选择、OutputFootprint、预算、根因、输出文件
 和必要 TIFF 事实。Saturation 只记录越界 `authority_side`；每项预算只按 output `geometry_id` 关联，
 不保留不可达的多 placement 或 named-gap 容器。Report 只保存最终 `deskew_assessment`：是否应用、
@@ -862,6 +922,8 @@ Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决
 - theoretical template、role-free observations 与跨高度联合观察的 typed resolution；
 - dark/light separator material、逐区域状态、直接角色权限与 material conflict；
 - 每个直接角色的 coordinate `observation_id`、`evidence_group_id` 与 separator side provenance；
+- 每个 bounded phase candidate 的输入权限、projection outcome、保留 rank、退出几何的 binding、重拟合结果与
+  terminal failure；
 - `partial_height_separator_pair` 角色数、direct aperture domain 条件与对应 typed Gate；
 - selected-only source W authority 的 selected signature、支持 Frame、W interval、typed failure，及相关
   推导角色、validation-only 局部角色与 observation provenance；
@@ -884,7 +946,8 @@ Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决
 registered queries / pixels
 separator lattice hypotheses
 phase hypotheses / lookups / bindings / fit passes
-phase candidate direct-role authority evaluations / rejections / role checks
+phase candidate authority evaluations / terminal outcomes / role checks
+phase candidate projection evaluations / successes / dropped bindings
 local adjacency evaluations
 cross runs / fits
 placement / boundary / content evaluations
@@ -894,8 +957,8 @@ domain pixels / peak temporary bytes
 
 任何上界不足都显式产生 `producer_bound_exceeded`，不得 silent first-N。像素工作上限为
 `128 × source_pixels`，峰值临时内存上限为 `10 × source_pixels + 32 MiB`。不得恢复通用 DP、
-beam、Grid、phase vote、候选笛卡尔积、完整链 materialization/cache、逐帧尺寸、candidate-dependent
-query 或 content-driven placement；概率层也只能消费已经生成且硬合法的有界候选。
+beam、未校准的第二套 Grid/phase vote 搜索、候选笛卡尔积、完整链 materialization/cache、逐帧尺寸、
+candidate-dependent query 或 content-driven placement；概率层也只能消费已经生成且硬合法的有界候选。
 
 性能合同是 24-source 完整用户路径平均不超过 5 秒；同一均值不超过 3 秒是明确记录但不阻断
 提交、发布或平台 receipt 的 challenge。正式计时子进程同时由外部观察未插桩 peak RSS；该值与
@@ -946,7 +1009,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source W/H extent、scan-scale authority 与不增加 direct provenance 的相关 interval 收紧 |
 | `photo_geometry/template_frame_width.py` | selected-only `SourceFrameWidthAuthority`、source W 校准、无权局部 refinement 让位与相关单侧角色推断；不得参与候选选择或重编译 template |
 | `photo_geometry/template_aspect_ratio_model.py`、`template_aspect_ratio.py` | 校准 W/H 比例的 typed authority、相关 H 推断、direct H 对账与预算失败 |
-| `photo_geometry/template_phase_candidates.py`、`template_model.py` | Sequence coordinate `observation_id`、相关 `evidence_group_id` 与 role binding 的唯一映射和类型 owner |
+| `photo_geometry/template_phase_model.py`、`template_phase_candidates.py`、`template_model.py` | Sequence coordinate/evidence identity、role binding、projection outcome/type 与同一离散 identity 的有界投影重拟合 |
 | `photo_geometry/template_phase.py`、`template_pitch.py`、`template_residual.py` | phase/ordinal 求解、连续 placement identity、source pitch 与逐 adjacency 的 direct local advance |
 | `photo_geometry/template_direct_role_authority.py` | 每个 bounded phase candidate 与最终已选 START/END 的 native-coordinate 权限证明及共享 evidence ledger |
 | `photo_geometry/template_lattice_authority.py` | `(phase, W, pitch)` 直接约束矩阵与独立闭合证明 |
@@ -1066,6 +1129,10 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   aggregate receipt。显式打开 sealed source 调试后，该 source 永久转入 development，并补充新的 sealed
   source。分区共享同一 reference authority，不建立 v1/v2 或其它平行校准池。当前尚无 sealed cohort，
   因而不能作未见 X5 扫描的泛化或发布准确性声明。
+- 生产中发现的危险自动裁切不是新的 validation partition。该 source 完成人工 reference 后永久加入
+  `development_gold`，作为 incident regression 参与此后每次机制验证；同类修复必须是通用物理能力，
+  不能读取 incident identity 或建立 whitelist。为保持未见验收的代表性，每吸收一项 sealed/production
+  incident，都应补充新的预先冻结 sealed source。
 - 概率选择层还需要独立 calibration source，且必须在查看 scorer 输出前冻结；calibration 与 sealed
   不能互相替代。只有 feature/model/threshold、风险预算、OOD 合同和候选生成 commit 全部冻结后，才能
   运行 sealed aggregate acceptance。任何改动都使两类 receipt 同时失效；sealed 失败不得用于逐样片

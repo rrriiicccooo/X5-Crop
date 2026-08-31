@@ -542,10 +542,22 @@ class DebugAnalysisContractTest(unittest.TestCase):
                     placement_competition=competition,
                     prepared=SimpleNamespace(
                         phase_competition=SimpleNamespace(
+                            best=SimpleNamespace(
+                                phase_lattice_fit=SimpleNamespace(
+                                    integer_slot_offset=0
+                                )
+                            ),
                             runner_up="phase:runner",
                             winner_basis=SimpleNamespace(value="direct_support"),
-                            best_phase_candidate_direct_role_authority=None,
-                            runner_phase_candidate_direct_role_authority=None,
+                            best_phase_candidate_authority_projection=(
+                                SimpleNamespace(
+                                    outcome=SimpleNamespace(value="projected"),
+                                    retained_direct_constraint_rank=3,
+                                    projected_out_bindings=(object(),),
+                                    reason=None,
+                                )
+                            ),
+                            runner_phase_candidate_authority_projection=None,
                         ),
                         cross_competition=SimpleNamespace(
                             runner_up=None,
@@ -578,7 +590,10 @@ class DebugAnalysisContractTest(unittest.TestCase):
             competition_summary(detection),
         )
         self.assertIn("RUNNER DIFF PHASE", competition_summary(detection))
-        self.assertIn("PHASE AUTH UNAVAILABLE", competition_summary(detection))
+        self.assertIn(
+            "OFFSET 0 / PROJECTED / RANK 3 / DROP 1 / FAILURE NONE",
+            competition_summary(detection),
+        )
         self.assertFalse(hasattr(debug_panel_facts, "geometry_by_identity"))
 
     def test_debug_names_the_root_blocking_gate_and_recovery(self) -> None:

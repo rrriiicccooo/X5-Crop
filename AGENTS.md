@@ -123,6 +123,9 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
   有界固定模板，只在理论 outer、separator 和 top/bottom 附近精修。独立像素观察负责对准、约束每个
   已唯一绑定 adjacency 的直接 local advance，并否决非法 placement；不得用模板投影创造自己的 phase
   authority。全部 local advance 的数量始终不超过 `count - 1`，且只作一次 O(count) 传播。
+- 固定模板中的校准 Grid 是唯一 placement 主生成模型：format/count 定义带不确定性的理想尺子，直接
+  observation 确定 absolute phase、保留 native boundary 并加入局部修正，counterevidence 淘汰非法状态。
+  Grid 不是 detector 失败后的 fallback，但也不能仅凭自身取得 `approved_auto` 权限。
 - Format 画幅比例是强物理先验，但不能作为零不确定性的 W→H 等式。跨轴推断必须由黄金集校准的
   format-specific ratio interval、typed authority 和完整相关 uncertainty 单独拥有；它不冒充 direct H、
   不增加独立 constraint rank，并继续受 5% 预算、反证和 sealed acceptance 约束。
@@ -134,8 +137,8 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
 - 安全层只处理唯一胜出 placement 的联合可行状态，不合并落选位置、不分别相加不能同时发生的
   最大误差、不静默裁掉越界 footprint。具体 bleed 和预算只由 `docs/ARCHITECTURE.md` 定义。
 - Contact 与 overlap 始终属于 challenge。Challenge 是预检测评测角色，不预设 runtime 终态：标准
-  detector 与 Gate 能唯一证明安全时可以 `approved_auto`，证据不足时 `needs_review` 同样合格。不得为
-  提高通过率强推自动批准，也不建立第二套 detector 或独立特殊 bleed 预算；未来显式 topology
+  detector 与 Gate 能把风险判定为可直接使用时可以 `approved_auto`，证据不足时 `needs_review` 同样
+  合格。不得为提高通过率强推自动批准，也不建立第二套 detector 或独立特殊 bleed 预算；未来显式 topology
   protection 只能作用于已证明关系的边界，并消耗同一 5% 总预算。
 - `CandidateGate` 只记录 typed assessment；只有 `DecisionGate` 创建 final status 与 reasons。
 - 任一 slot 不安全时，整个 source `needs_review` 且不写正式照片；不做 slot salvage。
@@ -212,6 +215,8 @@ platform | platform-check | platform-package | pre-push
   detector 输出或 post-selection holder fill。
 - 当前 `development_gold.jsonl` 只包含已查看的开发黄金。未来新增 source 在查看任何 detector 结果前，
   必须按 source SHA 固定为 development 或 sealed acceptance；同 SHA 的全部 count task 必须同分区。
+  生产中发现的危险自动裁切经人工 reference 确认后永久加入 development gold 作为 incident regression，
+  同时补充新的 sealed source；不建立新的平行黄金池、样片特例或 whitelist。
   日常开发命令不得读取或输出 sealed 的逐样片结果。显式打开 sealed source 调试后，该 source 永久转为
   development，并补充新的 sealed source。两个分区共享同一人工 reference 权限，不建立平行校准池。
 - 同 SHA 的合法 count 变体按共享物理 `boundary_pair` 映射真实 Frame。不同 count 可以改变 ambiguity 和

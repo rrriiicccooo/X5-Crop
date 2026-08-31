@@ -10,7 +10,12 @@ from typing import Sequence
 import numpy as np
 from scipy.optimize import lsq_linear
 
-from ...domain import FiniteInterval, ObservationId, PositiveInterval
+from ...domain import (
+    EvidenceState,
+    FiniteInterval,
+    ObservationId,
+    PositiveInterval,
+)
 from .model import (
     BoundaryRole,
     SPATIAL_SUPPORT_REGION_COUNT,
@@ -31,9 +36,16 @@ from .template_model import (
     phase_lattice_fit_from_absolute,
     template_role_refinement_radius_px,
 )
-from .template_phase_model import PhaseWinnerBasis
 from .template_pitch import refine_placement_pitch_interval
 from .template_evidence import separator_support_authority
+from .template_direct_role_authority import DirectRoleBindingAuthority
+from .template_lattice_authority import direct_role_constraint_rank
+from .template_phase_model import (
+    PhaseCandidateAuthorityProjection,
+    PhaseCandidateProjectionOutcome,
+    PhaseCandidateProjectedBinding,
+    PhaseWinnerBasis,
+)
 
 
 _NUMERIC_RESIDUAL_EPSILON_PX = 1.0e-9
@@ -1703,6 +1715,172 @@ def _fit_seed(
         phase_support_coverage=phase_support_coverage,
     )
     return _BoundFit(fit, residual_compatible)
+
+
+def project_candidate_to_authorized_direct_roles(
+    candidate: _BoundFit,
+    authority: DirectRoleBindingAuthority,
+    direct: tuple[_AnchorFact, ...],
+    separator_pairs: tuple[tuple[_AnchorFact, _AnchorFact], ...],
+    roles: tuple[TemplateRole, ...],
+    template: TemplateSpec,
+    relations: tuple[LocalAdvanceRelation, ...],
+    pitch_authority: FiniteInterval,
+    phase_authority: FiniteInterval | None,
+    fit_residual_limit_px: float | None,
+) -> tuple[_BoundFit | None, PhaseCandidateAuthorityProjection]:
+    """Remove only unavailable coordinates, then refit one fixed mapping."""
+
+    if not isinstance(candidate, _BoundFit):
+        raise TypeError("direct-role projection requires one bounded candidate")
+    if not isinstance(authority, DirectRoleBindingAuthority):
+        raise TypeError("direct-role projection requires typed authority")
+    retained_indices = authority.supported_role_indices
+    retained_rank = direct_role_constraint_rank(candidate.fit, retained_indices)
+    if authority.state == EvidenceState.SUPPORTED:
+        return candidate, PhaseCandidateAuthorityProjection(
+            input_direct_role_authority=authority,
+            outcome=PhaseCandidateProjectionOutcome.UNCHANGED,
+            projected_out_bindings=(),
+            retained_direct_constraint_rank=retained_rank,
+            reason=None,
+        )
+    if authority.state == EvidenceState.CONTRADICTED:
+        return None, PhaseCandidateAuthorityProjection(
+            input_direct_role_authority=authority,
+            outcome=(
+                PhaseCandidateProjectionOutcome.DIRECT_ROLE_CONTRADICTION
+            ),
+            projected_out_bindings=(),
+            retained_direct_constraint_rank=retained_rank,
+            reason=authority.reason or "direct-role evidence is contradicted",
+        )
+
+    removed_facts = tuple(
+        item for item in authority.facts if item.state == EvidenceState.UNAVAILABLE
+    )
+    projected_out = tuple(
+        PhaseCandidateProjectedBinding(
+            role_index=item.role_index,
+            observation_id=item.observation_id,
+        )
+        for item in removed_facts
+    )
+    retained_role_indices = set(retained_indices)
+    if any(
+        2 * frame_index not in retained_role_indices
+        and 2 * frame_index + 1 not in retained_role_indices
+        for frame_index in range(template.count)
+    ):
+        return None, PhaseCandidateAuthorityProjection(
+            input_direct_role_authority=authority,
+            outcome=(
+                PhaseCandidateProjectionOutcome.COMPLETE_FRAME_UNOBSERVED
+            ),
+            projected_out_bindings=projected_out,
+            retained_direct_constraint_rank=retained_rank,
+            reason=(
+                "direct-role projection cannot create a Frame whose START "
+                "and END are both unobserved"
+            ),
+        )
+    if retained_rank < 3:
+        return None, PhaseCandidateAuthorityProjection(
+            input_direct_role_authority=authority,
+            outcome=(
+                PhaseCandidateProjectionOutcome.RETAINED_RANK_INSUFFICIENT
+            ),
+            projected_out_bindings=projected_out,
+            retained_direct_constraint_rank=retained_rank,
+            reason=(
+                "authorized direct coordinates do not independently close "
+                "phase, W, and pitch"
+            ),
+        )
+
+    retained_facts = tuple(
+        item for item in authority.facts if item.state == EvidenceState.SUPPORTED
+    )
+    required_bindings = tuple(
+        (item.role_index, item.observation_id) for item in retained_facts
+    )
+    retained_ids = {item.observation_id for item in retained_facts}
+    direct_by_id = {item.observation_id: item for item in direct}
+    if any(identity not in direct_by_id for identity in retained_ids):
+        raise ValueError("authorized projection references an unknown direct edge")
+    retained_direct = tuple(
+        item for item in direct if item.observation_id in retained_ids
+    )
+    retained_pairs = tuple(
+        pair
+        for pair in separator_pairs
+        if pair[0].observation_id in retained_ids
+        and pair[1].observation_id in retained_ids
+    )
+    projected = _fit_seed(
+        _PhaseSeed(
+            phase_px=(
+                candidate.fit.phase_lattice_fit.canonical_absolute_phase_px
+            ),
+            pitch_px=candidate.fit.pitch_fit.canonical_pitch_px,
+            required_bindings=required_bindings,
+        ),
+        retained_direct,
+        retained_pairs,
+        roles,
+        template,
+        relations,
+        pitch_authority,
+        phase_authority,
+        fit_residual_limit_px,
+    )
+    if projected is None:
+        return None, PhaseCandidateAuthorityProjection(
+            input_direct_role_authority=authority,
+            outcome=PhaseCandidateProjectionOutcome.REFIT_UNAVAILABLE,
+            projected_out_bindings=projected_out,
+            retained_direct_constraint_rank=retained_rank,
+            reason="authorized direct coordinates have no bounded lattice refit",
+        )
+    projected_bindings = {
+        index: binding.observation_id
+        for index, binding in enumerate(projected.fit.role_bindings)
+        if binding is not None
+    }
+    if (
+        projected.fit.phase_lattice_fit.integer_slot_offset
+        != candidate.fit.phase_lattice_fit.integer_slot_offset
+        or projected.fit.template != candidate.fit.template
+        or projected.fit.local_advance_relations
+        != candidate.fit.local_advance_relations
+        or projected_bindings != dict(required_bindings)
+    ):
+        return None, PhaseCandidateAuthorityProjection(
+            input_direct_role_authority=authority,
+            outcome=(
+                PhaseCandidateProjectionOutcome.DISCRETE_IDENTITY_CHANGED
+            ),
+            projected_out_bindings=projected_out,
+            retained_direct_constraint_rank=retained_rank,
+            reason="authorized refit changed the bounded discrete mapping",
+        )
+    projected = replace(
+        projected,
+        fit=replace(
+            projected.fit,
+            contradicted_observation_count=max(
+                0,
+                len(direct) - len(projected.fit.bound_observation_ids),
+            ),
+        ),
+    )
+    return projected, PhaseCandidateAuthorityProjection(
+        input_direct_role_authority=authority,
+        outcome=PhaseCandidateProjectionOutcome.PROJECTED,
+        projected_out_bindings=projected_out,
+        retained_direct_constraint_rank=retained_rank,
+        reason=None,
+    )
 
 
 def _rank(value: _BoundFit) -> tuple[object, ...]:

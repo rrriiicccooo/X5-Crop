@@ -54,6 +54,7 @@ from x5crop.detection.photo_geometry.template_phase_candidates import (
 from x5crop.detection.photo_geometry.template_phase_model import (
     GlobalLatticeAuthorityEvidence,
     GlobalLatticeAuthorityBasis,
+    PhaseCandidateProjectionOutcome,
     PhaseFailureKind,
     PhaseFitStatus,
     PhaseWinnerBasis,
@@ -805,14 +806,16 @@ class TemplatePhaseContractTest(unittest.TestCase):
             PhaseWinnerBasis.UNIQUE_DIRECT_ROLE_AUTHORITY,
         )
         self.assertIsNotNone(result.runner_up)
-        assert result.best_phase_candidate_direct_role_authority is not None
-        assert result.runner_phase_candidate_direct_role_authority is not None
+        assert result.best_phase_candidate_authority_projection is not None
+        assert result.runner_phase_candidate_authority_projection is not None
         self.assertEqual(
-            result.best_phase_candidate_direct_role_authority.state,
+            result.best_phase_candidate_authority_projection
+            .input_direct_role_authority.state,
             EvidenceState.SUPPORTED,
         )
         self.assertEqual(
-            result.runner_phase_candidate_direct_role_authority.state,
+            result.runner_phase_candidate_authority_projection
+            .input_direct_role_authority.state,
             EvidenceState.UNAVAILABLE,
         )
         self.assertEqual(
@@ -820,12 +823,155 @@ class TemplatePhaseContractTest(unittest.TestCase):
             2,
         )
         self.assertEqual(
-            result.receipt.candidate_direct_role_authority_rejection_count,
+            result.receipt.candidate_direct_role_authority_terminal_count,
             1,
         )
         self.assertEqual(
             result.receipt.candidate_direct_role_authority_role_check_count,
             8,
+        )
+
+    def test_candidate_projection_removes_only_one_unavailable_phase_anchor(
+        self,
+    ) -> None:
+        observations = tuple(
+            replace(
+                edge(identity, coordinate),
+                qualified_anchor_roles=(role,),
+                polarity=1 if role == BoundaryRole.START else -1,
+                trace_coordinates_px=((10, 20) if weak else (0, 10, 20)),
+                support_fraction=(2.0 / 3.0 if weak else 1.0),
+                continuous_support_fraction=(2.0 / 3.0 if weak else 1.0),
+            )
+            for identity, coordinate, role, weak in (
+                ("start:1", 40.0, BoundaryRole.START, False),
+                ("end:1", 140.0, BoundaryRole.END, False),
+                ("start:2", 160.0, BoundaryRole.START, False),
+                ("end:2", 260.0, BoundaryRole.END, False),
+                ("weak:start:3", 280.0, BoundaryRole.START, True),
+                ("end:3", 380.0, BoundaryRole.END, False),
+            )
+        )
+        result = fit_template_phase(
+            observations,
+            template(3),
+            holder_span_px=FiniteInterval(0.0, 420.0),
+            sequence_measurement_sets=(
+                phase_sequence_measurement(
+                    "candidate-projection-rank-three",
+                    FiniteInterval(0.0, 420.0),
+                ),
+            ),
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        projection = result.best_phase_candidate_authority_projection
+        assert projection is not None and result.best is not None
+        self.assertEqual(
+            projection.outcome,
+            PhaseCandidateProjectionOutcome.PROJECTED,
+        )
+        self.assertEqual(projection.retained_direct_constraint_rank, 3)
+        self.assertEqual(
+            tuple(item.role_index for item in projection.projected_out_bindings),
+            (4,),
+        )
+        self.assertIsNone(result.best.role_bindings[4])
+        self.assertEqual(
+            tuple(
+                binding.canonical_position_px
+                for index, binding in enumerate(result.best.role_bindings)
+                if index != 4 and binding is not None
+            ),
+            (40.0, 140.0, 160.0, 260.0, 380.0),
+        )
+        self.assertGreater(
+            result.receipt.candidate_direct_role_projection_success_count,
+            0,
+        )
+
+    def test_candidate_projection_requires_retained_rank_three(self) -> None:
+        observations = tuple(
+            replace(
+                edge(identity, coordinate),
+                qualified_anchor_roles=(role,),
+                polarity=1 if role == BoundaryRole.START else -1,
+                trace_coordinates_px=((10, 20) if weak else (0, 10, 20)),
+                support_fraction=(2.0 / 3.0 if weak else 1.0),
+                continuous_support_fraction=(2.0 / 3.0 if weak else 1.0),
+            )
+            for identity, coordinate, role, weak in (
+                ("start:1", 40.0, BoundaryRole.START, False),
+                ("weak:end:1", 140.0, BoundaryRole.END, True),
+                ("weak:start:2", 160.0, BoundaryRole.START, True),
+                ("end:2", 260.0, BoundaryRole.END, False),
+            )
+        )
+        result = fit_template_phase(
+            observations,
+            template(2),
+            holder_span_px=FiniteInterval(0.0, 300.0),
+            sequence_measurement_sets=(
+                phase_sequence_measurement(
+                    "candidate-projection-rank-two",
+                    FiniteInterval(0.0, 300.0),
+                ),
+            ),
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
+        projection = result.best_phase_candidate_authority_projection
+        assert projection is not None
+        self.assertEqual(
+            projection.outcome,
+            PhaseCandidateProjectionOutcome.RETAINED_RANK_INSUFFICIENT,
+        )
+        self.assertEqual(projection.retained_direct_constraint_rank, 2)
+
+    def test_candidate_projection_cannot_create_an_unobserved_frame(self) -> None:
+        observations = tuple(
+            replace(
+                edge(identity, coordinate),
+                qualified_anchor_roles=(role,),
+                polarity=1 if role == BoundaryRole.START else -1,
+                trace_coordinates_px=((10, 20) if weak else (0, 10, 20)),
+                support_fraction=(2.0 / 3.0 if weak else 1.0),
+                continuous_support_fraction=(2.0 / 3.0 if weak else 1.0),
+            )
+            for identity, coordinate, role, weak in (
+                ("start:1", 40.0, BoundaryRole.START, False),
+                ("end:1", 140.0, BoundaryRole.END, False),
+                ("start:2", 160.0, BoundaryRole.START, False),
+                ("end:2", 260.0, BoundaryRole.END, False),
+                ("weak:start:3", 280.0, BoundaryRole.START, True),
+                ("weak:end:3", 380.0, BoundaryRole.END, True),
+                ("start:4", 400.0, BoundaryRole.START, False),
+                ("end:4", 500.0, BoundaryRole.END, False),
+            )
+        )
+        result = fit_template_phase(
+            observations,
+            template(4),
+            holder_span_px=FiniteInterval(0.0, 540.0),
+            sequence_measurement_sets=(
+                phase_sequence_measurement(
+                    "candidate-projection-unobserved-frame",
+                    FiniteInterval(0.0, 540.0),
+                ),
+            ),
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
+        projection = result.best_phase_candidate_authority_projection
+        assert projection is not None
+        self.assertEqual(
+            projection.outcome,
+            PhaseCandidateProjectionOutcome.COMPLETE_FRAME_UNOBSERVED,
+        )
+        self.assertEqual(projection.retained_direct_constraint_rank, 3)
+        self.assertEqual(
+            tuple(item.role_index for item in projection.projected_out_bindings),
+            (4, 5),
         )
 
     def test_candidate_authority_rejects_a_material_contradiction(self) -> None:
@@ -877,15 +1023,25 @@ class TemplatePhaseContractTest(unittest.TestCase):
             result.winner_basis,
             PhaseWinnerBasis.UNIQUE_DIRECT_ROLE_AUTHORITY,
         )
-        assert result.runner_phase_candidate_direct_role_authority is not None
+        assert result.runner_phase_candidate_authority_projection is not None
         self.assertEqual(
-            result.runner_phase_candidate_direct_role_authority.state,
+            result.runner_phase_candidate_authority_projection
+            .input_direct_role_authority.state,
             EvidenceState.CONTRADICTED,
         )
         self.assertEqual(
-            result.runner_phase_candidate_direct_role_authority
+            result.runner_phase_candidate_authority_projection
+            .input_direct_role_authority
             .unsupported_role_indices,
             (1,),
+        )
+        self.assertEqual(
+            result.runner_phase_candidate_authority_projection.outcome,
+            PhaseCandidateProjectionOutcome.DIRECT_ROLE_CONTRADICTION,
+        )
+        self.assertFalse(
+            result.runner_phase_candidate_authority_projection
+            .projected_out_bindings
         )
 
     def test_two_authorized_discrete_candidates_remain_ambiguous(self) -> None:
@@ -909,14 +1065,16 @@ class TemplatePhaseContractTest(unittest.TestCase):
             result.failure_kind,
             PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS,
         )
-        assert result.best_phase_candidate_direct_role_authority is not None
-        assert result.runner_phase_candidate_direct_role_authority is not None
+        assert result.best_phase_candidate_authority_projection is not None
+        assert result.runner_phase_candidate_authority_projection is not None
         self.assertEqual(
-            result.best_phase_candidate_direct_role_authority.state,
+            result.best_phase_candidate_authority_projection
+            .input_direct_role_authority.state,
             EvidenceState.SUPPORTED,
         )
         self.assertEqual(
-            result.runner_phase_candidate_direct_role_authority.state,
+            result.runner_phase_candidate_authority_projection
+            .input_direct_role_authority.state,
             EvidenceState.SUPPORTED,
         )
 
@@ -943,9 +1101,10 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         self.assertIsNotNone(result.best)
         self.assertIsNotNone(result.runner_up)
-        assert result.best_phase_candidate_direct_role_authority is not None
+        assert result.best_phase_candidate_authority_projection is not None
         self.assertEqual(
-            result.best_phase_candidate_direct_role_authority.state,
+            result.best_phase_candidate_authority_projection
+            .input_direct_role_authority.state,
             EvidenceState.UNAVAILABLE,
         )
 
@@ -1214,11 +1373,21 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
         self.assertEqual(
             result.failure_kind,
-            PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE,
+            PhaseFailureKind.FRAME_WIDTH_INFERENCE_UNAVAILABLE,
+        )
+        projection = result.best_phase_candidate_authority_projection
+        assert projection is not None
+        self.assertEqual(
+            projection.outcome,
+            PhaseCandidateProjectionOutcome.PROJECTED,
+        )
+        self.assertEqual(
+            tuple(item.role_index for item in projection.projected_out_bindings),
+            (3, 4),
         )
         authority = result.direct_role_binding_authority
         assert authority is not None
-        self.assertEqual(authority.unsupported_role_indices, (3, 4))
+        self.assertEqual(authority.unsupported_role_indices, ())
         self.assertFalse(authority.direct_aperture_required_role_indices)
 
     def test_cross_height_union_authorizes_one_short_direct_edge(self) -> None:
@@ -3026,6 +3195,12 @@ class TemplatePhaseContractTest(unittest.TestCase):
             max_observations=1,
         )
         self.assertEqual(result.status, PhaseFitStatus.BOUND_EXCEEDED)
+        self.assertIsNone(result.best_phase_candidate_authority_projection)
+        self.assertIsNone(result.runner_phase_candidate_authority_projection)
+        self.assertEqual(
+            result.receipt.candidate_direct_role_projection_evaluation_count,
+            0,
+        )
         with self.assertRaises(ValueError):
             replace(result.receipt, phase_lookup_count=13).validate_bounds(
                 observation_count=2,

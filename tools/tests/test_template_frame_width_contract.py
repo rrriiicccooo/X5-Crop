@@ -32,6 +32,7 @@ from x5crop.detection.photo_geometry.template_model import (
 )
 from x5crop.detection.photo_geometry.template_lattice_authority import (
     assess_global_lattice_authority,
+    direct_role_constraint_rank,
 )
 from x5crop.detection.photo_geometry.template_outer_frame_authority import (
     assess_outer_frame_observation_authority,
@@ -226,6 +227,34 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             reason="role 4 has no coordinate authority",
         )
         return fit, observations, authority
+
+    def test_lattice_rank_counts_one_row_per_physical_evidence_group(
+        self,
+    ) -> None:
+        observations = (
+            phase_edge("rank-group:start:1", 40.0),
+            phase_edge("rank-group:end:1", 140.0),
+            phase_edge("rank-group:start:2", 160.0),
+            phase_edge("rank-group:end:2", 260.0),
+        )
+        phase = fit_template_phase(observations, phase_template(2))
+        assert phase.best is not None
+        bindings = list(phase.best.role_bindings)
+        assert all(binding is not None for binding in bindings)
+        shared_group = ObservationId("rank-group:shared-separator")
+        bindings[1] = replace(bindings[1], evidence_group_id=shared_group)
+        bindings[2] = replace(bindings[2], evidence_group_id=shared_group)
+        bindings[3] = None
+        correlated = replace(
+            phase.best,
+            role_bindings=tuple(bindings),
+            phase_support_coverage=2.0,
+        )
+
+        self.assertEqual(direct_role_constraint_rank(correlated), 2)
+        bindings[3] = phase.best.role_bindings[3]
+        independent = replace(correlated, role_bindings=tuple(bindings))
+        self.assertEqual(direct_role_constraint_rank(independent), 3)
 
     def test_non_adjacent_direct_frames_close_one_source_width_hull(self) -> None:
         observations = (

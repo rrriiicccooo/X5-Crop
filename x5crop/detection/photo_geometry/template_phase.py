@@ -29,6 +29,7 @@ from .template_phase_candidates import (
     _holder_limits,
     _positive,
     _prefixes,
+    project_candidate_to_authorized_direct_roles,
     _rank,
     _refine_local_role_bindings,
     _relations,
@@ -52,6 +53,8 @@ from .template_outer_frame_authority import (
     assess_outer_frame_observation_authority,
 )
 from .template_phase_model import (
+    PhaseCandidateAuthorityProjection,
+    PhaseCandidateProjectionOutcome,
     PhaseFailureKind,
     PhaseFitResult,
     PhaseFitStatus,
@@ -683,39 +686,109 @@ def fit_template_phase(
         if candidates and measurement_sets
         else ()
     )
-    assessed = tuple(
-        (candidate, candidate_authorities[index])
-        for index, candidate in enumerate(candidates)
-    ) if candidate_authorities else ()
-    authoritative_candidates = (
+    projection_records: tuple[
+        tuple[_BoundFit, _BoundFit | None, PhaseCandidateAuthorityProjection],
+        ...,
+    ] = (
         tuple(
-            candidate
-            for candidate, authority in assessed
-            if authority.state == EvidenceState.SUPPORTED
+            (
+                candidate,
+                *project_candidate_to_authorized_direct_roles(
+                    candidate,
+                    candidate_authorities[index],
+                    direct,
+                    separator_pairs,
+                    roles,
+                    template,
+                    relations,
+                    pitch_authority,
+                    phase_authority_px,
+                    fit_residual_limit_px,
+                ),
+            )
+            for index, candidate in enumerate(candidates)
+        )
+        if candidate_authorities
+        else ()
+    )
+    eligible_records: tuple[
+        tuple[_BoundFit, PhaseCandidateAuthorityProjection | None], ...
+    ] = (
+        tuple(
+            (projected, projection)
+            for _input, projected, projection in projection_records
+            if projected is not None
         )
         if measurement_sets
-        else candidates
+        else tuple((candidate, None) for candidate in candidates)
     )
-    compatible = tuple(
-        item for item in authoritative_candidates if item.residual_compatible
-    )
-    incompatible = tuple(
-        item for item in authoritative_candidates if not item.residual_compatible
+    terminal_records = tuple(
+        (input_candidate, projection)
+        for input_candidate, projected, projection in projection_records
+        if projected is None
     )
 
-    ordered = tuple(sorted(compatible, key=_rank, reverse=True))
-    best = ordered[0] if ordered else None
+    def record_rank(
+        record: tuple[_BoundFit, PhaseCandidateAuthorityProjection | None],
+    ) -> tuple[object, ...]:
+        candidate, projection = record
+        return (
+            *_rank(candidate),
+            int(
+                projection is None
+                or projection.outcome == PhaseCandidateProjectionOutcome.UNCHANGED
+            ),
+            0 if projection is None else -len(projection.projected_out_bindings),
+            ()
+            if projection is None
+            else tuple(
+                (item.role_index, str(item.observation_id))
+                for item in projection.projected_out_bindings
+            ),
+        )
+
+    projected_by_binding: dict[
+        tuple[int, tuple[ObservationId | None, ...]],
+        tuple[_BoundFit, PhaseCandidateAuthorityProjection | None],
+    ] = {}
+    for record in eligible_records:
+        candidate, _projection = record
+        key = (
+            candidate.fit.phase_lattice_fit.integer_slot_offset,
+            candidate.fit.binding_observation_ids,
+        )
+        current = projected_by_binding.get(key)
+        if current is None or record_rank(record) > record_rank(current):
+            projected_by_binding[key] = record
+    canonical_records = tuple(projected_by_binding.values())
+    compatible = tuple(
+        record for record in canonical_records if record[0].residual_compatible
+    )
+    incompatible = tuple(
+        record for record in canonical_records if not record[0].residual_compatible
+    )
+
+    ordered = tuple(sorted(compatible, key=record_rank, reverse=True))
+    best_record = ordered[0] if ordered else None
+    best = None if best_record is None else best_record[0]
+    best_projection = None if best_record is None else best_record[1]
+    runner_record: (
+        tuple[_BoundFit, PhaseCandidateAuthorityProjection | None] | None
+    ) = None
     if len(ordered) > 1:
-        discrete: list[_BoundFit] = []
-        for candidate in ordered[1:]:
+        discrete: list[
+            tuple[_BoundFit, PhaseCandidateAuthorityProjection | None]
+        ] = []
+        for candidate_record in ordered[1:]:
             assert best is not None
+            candidate = candidate_record[0]
             if _same_continuous_placement(best.fit, candidate.fit):
                 best = _merge_continuous_placement(best, candidate)
             else:
-                discrete.append(candidate)
-        runner = discrete[0] if discrete else None
-    else:
-        runner = None
+                discrete.append(candidate_record)
+        runner_record = discrete[0] if discrete else None
+    runner = None if runner_record is None else runner_record[0]
+    runner_projection = None if runner_record is None else runner_record[1]
     receipt = TemplateSearchReceipt(
         observation_count=len(facts),
         role_count=len(roles),
@@ -732,29 +805,45 @@ def fit_template_phase(
         candidate_direct_role_authority_evaluation_count=len(
             candidate_authorities
         ),
-        candidate_direct_role_authority_rejection_count=sum(
-            item.state != EvidenceState.SUPPORTED
-            for item in candidate_authorities
+        candidate_direct_role_authority_terminal_count=sum(
+            projected is None
+            for _input, projected, _projection in projection_records
         ),
         candidate_direct_role_authority_role_check_count=sum(
             len(item.facts) for item in candidate_authorities
+        ),
+        candidate_direct_role_projection_evaluation_count=len(
+            projection_records
+        ),
+        candidate_direct_role_projection_success_count=sum(
+            projection.outcome == PhaseCandidateProjectionOutcome.PROJECTED
+            for _input, _projected, projection in projection_records
+        ),
+        candidate_direct_role_projection_binding_count=sum(
+            len(projection.projected_out_bindings)
+            for _input, _projected, projection in projection_records
+            if projection.outcome == PhaseCandidateProjectionOutcome.PROJECTED
         ),
     )
     receipt.validate_bounds()
     if best is None:
         raw_compatible = tuple(
             sorted(
-                (item for item in candidates if item.residual_compatible),
-                key=_rank,
+                (
+                    (input_candidate, projection)
+                    for input_candidate, projected, projection in projection_records
+                    if projected is None and input_candidate.residual_compatible
+                ),
+                key=record_rank,
                 reverse=True,
             )
         )
         if raw_compatible and measurement_sets:
-            diagnostic_best = raw_compatible[0]
+            diagnostic_best, best_projection = raw_compatible[0]
             diagnostic_runner = next(
                 (
                     item
-                    for item in raw_compatible[1:]
+                    for item, _projection in raw_compatible[1:]
                     if not _same_continuous_placement(
                         diagnostic_best.fit,
                         item.fit,
@@ -762,15 +851,13 @@ def fit_template_phase(
                 ),
                 None,
             )
-            authority_by_candidate = {
-                id(candidate): authority
-                for candidate, authority in assessed
-            }
-            best_authority = authority_by_candidate[id(diagnostic_best)]
-            runner_authority = (
-                None
-                if diagnostic_runner is None
-                else authority_by_candidate[id(diagnostic_runner)]
+            runner_projection = next(
+                (
+                    projection
+                    for item, projection in raw_compatible[1:]
+                    if item is diagnostic_runner
+                ),
+                None,
             )
             return PhaseFitResult(
                 template=template,
@@ -779,7 +866,7 @@ def fit_template_phase(
                     None if diagnostic_runner is None else diagnostic_runner.fit
                 ),
                 status=PhaseFitStatus.UNRESOLVED,
-                ambiguity_reason=best_authority.reason,
+                ambiguity_reason=best_projection.reason,
                 receipt=replace(
                     receipt,
                     inferred_role_count=len(
@@ -789,12 +876,13 @@ def fit_template_phase(
                 registered_direct_observation_ids=direct_ids,
                 failure_kind=(
                     PhaseFailureKind.SEPARATOR_MATERIAL_CONFLICT
-                    if best_authority.state == EvidenceState.CONTRADICTED
+                    if best_projection.outcome
+                    == PhaseCandidateProjectionOutcome.DIRECT_ROLE_CONTRADICTION
                     else PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE
                 ),
                 winner_basis=None,
-                best_phase_candidate_direct_role_authority=best_authority,
-                runner_phase_candidate_direct_role_authority=runner_authority,
+                best_phase_candidate_authority_projection=best_projection,
+                runner_phase_candidate_authority_projection=runner_projection,
             )
         return PhaseFitResult(
             template,
@@ -806,10 +894,11 @@ def fit_template_phase(
             direct_ids,
             PhaseFailureKind.FIXED_TEMPLATE_MISMATCH,
         )
-    contradictory_runner = max(
+    contradictory_runner_record = max(
         (
-            item
-            for item in incompatible
+            record
+            for record in incompatible
+            for item in (record[0],)
             if item.fit.phase_support_count > best.fit.phase_support_count
             and not (
                 _intervals_overlap(
@@ -828,22 +917,28 @@ def fit_template_phase(
                 )
             )
         ),
-        key=_rank,
+        key=record_rank,
         default=None,
+    )
+    contradictory_runner = (
+        None
+        if contradictory_runner_record is None
+        else contradictory_runner_record[0]
     )
     if contradictory_runner is not None:
         runner = contradictory_runner
+        runner_projection = contradictory_runner_record[1]
         winner_basis = None
     elif runner is None:
         rejected_runner = (
             max(
                 (
-                    candidate
-                    for candidate, authority in assessed
-                    if authority.state != EvidenceState.SUPPORTED
-                    and not _same_continuous_placement(best.fit, candidate.fit)
+                    record
+                    for record in terminal_records
+                    for candidate in (record[0],)
+                    if not _same_continuous_placement(best.fit, candidate.fit)
                 ),
-                key=_rank,
+                key=record_rank,
                 default=None,
             )
             if measurement_sets
@@ -852,7 +947,7 @@ def fit_template_phase(
         if rejected_runner is None:
             winner_basis = PhaseWinnerBasis.ONLY_PHYSICAL_FIT
         else:
-            runner = rejected_runner
+            runner, runner_projection = rejected_runner
             winner_basis = PhaseWinnerBasis.UNIQUE_DIRECT_ROLE_AUTHORITY
     else:
         winner_basis = _clear_winner_basis(best, runner)
@@ -868,20 +963,6 @@ def fit_template_phase(
             else "runner-up is not clearly separated from the best template"
         )
         failure_kind = PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS
-    final_candidate_authorities = (
-        assess_direct_role_binding_authorities(
-            tuple(
-                item.fit
-                for item in (best, runner)
-                if item is not None
-            ),
-            registered_observations,
-            tuple(separator_bands),
-            measurement_sets,
-        )
-        if measurement_sets
-        else ()
-    )
     return PhaseFitResult(
         template,
         best.fit,
@@ -892,16 +973,8 @@ def fit_template_phase(
         direct_ids,
         failure_kind,
         winner_basis,
-        best_phase_candidate_direct_role_authority=(
-            final_candidate_authorities[0]
-            if final_candidate_authorities
-            else None
-        ),
-        runner_phase_candidate_direct_role_authority=(
-            final_candidate_authorities[1]
-            if len(final_candidate_authorities) > 1
-            else None
-        ),
+        best_phase_candidate_authority_projection=best_projection,
+        runner_phase_candidate_authority_projection=runner_projection,
     )
 
 
@@ -946,12 +1019,24 @@ def _aggregate_phase_work(
             item.candidate_direct_role_authority_evaluation_count
             for item in receipts
         ),
-        candidate_direct_role_authority_rejection_count=sum(
-            item.candidate_direct_role_authority_rejection_count
+        candidate_direct_role_authority_terminal_count=sum(
+            item.candidate_direct_role_authority_terminal_count
             for item in receipts
         ),
         candidate_direct_role_authority_role_check_count=sum(
             item.candidate_direct_role_authority_role_check_count
+            for item in receipts
+        ),
+        candidate_direct_role_projection_evaluation_count=sum(
+            item.candidate_direct_role_projection_evaluation_count
+            for item in receipts
+        ),
+        candidate_direct_role_projection_success_count=sum(
+            item.candidate_direct_role_projection_success_count
+            for item in receipts
+        ),
+        candidate_direct_role_projection_binding_count=sum(
+            item.candidate_direct_role_projection_binding_count
             for item in receipts
         ),
     )

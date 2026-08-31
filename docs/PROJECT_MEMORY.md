@@ -1,81 +1,76 @@
 # 项目记忆
 
-更新：2026-08-31。现场 `main`、tracked cohort、原 TIFF、source SHA、本地 source record 与最新命令
-输出高于历史记录。长期合同见 [ARCHITECTURE.md](ARCHITECTURE.md)，标注规则见
+更新：2026-08-31。现场 `main`、tracked cohort、原 TIFF、source SHA、current report 与最新命令输出
+高于历史记录。长期合同见 [ARCHITECTURE.md](ARCHITECTURE.md)，标注规则见
 [MANUAL_ANNOTATION.md](MANUAL_ANNOTATION.md)，协作与验证规则见 [AGENTS.md](../AGENTS.md)。
 
 ## 当前目标
 
 按基础 nominal、较难 nominal、challenge 三层提高 V5 的通用检测能力。全部角色必须保持
-`unsafe_approved_auto = 0`；development nominal 与未来 sealed nominal 的目标是全部安全
-`approved_auto`。不得改样片角色、放宽黄金合同、缩窄真实物理先验、隐藏 runner，或牺牲正式
-mean `<= 5s` 来提高覆盖；3 秒 mean 是持续优化目标。
+`unsafe_approved_auto = 0`；development nominal 与未来 sealed nominal 的发布目标是全部安全
+`approved_auto`。不得改样片角色、隐藏 runner、放宽黄金合同或牺牲正式 mean `<= 5s` 达标；3 秒 mean
+仍是持续优化目标。
 
-每次只闭合一个通用物理机制，并同时交付合同与真值表、canonical owner、typed evidence/failure、
-Debug、正反例、少量真实样片、完整黄金验收和性能。已闭合全局 lattice authority、逐 adjacency
-coverage、候选无关查询走廊、polarity-complete separator、跨高度弱边缘、source-level W/H direct
-aperture、有界的 W/H compatibility 与 aspect-ratio authority，以及不依赖比例推导的 fixed-H enclosing
-support、直接坐标权限、coordinate/evidence identity 分离和真实 TIFF 外缘的显式 source saturation。
-Contact/overlap 以后仍只扩展同一 adjacency/placement 模型。
+Grid 是唯一 placement 的主生成模型：format 提供带不确定性的理想 `W/H/pitch`，直接观察负责 absolute
+phase、native boundary、source-level extent 与 local advance，反证负责淘汰非法状态。Grid 可以生成默认
+placement，但不能靠自身取得自动批准。`approved_auto` 表示当前校准、证据、硬物理合同、剩余不确定性和
+OOD 共同支持“风险低到可直接使用”，不是 runtime 已知黄金真值的数学证明。
+
+每次只闭合一个通用物理机制，并同时交付合同/真值表、canonical owner、typed evidence/failure、Debug、
+正反例、少量真实样片、完整黄金验收和性能。当前不启用概率 scorer；未来只允许在硬合法候选之后加入
+经过独立 calibration、带高阈值、runner margin、OOD 与 abstention 的概率选择。
 
 ## 当前检查点
 
-- `ded3b715` 删除 pre-selection source-W calibration、template recompile 与第二次 phase/pitch 搜索。
-  离散竞争先在没有 source W evidence 的候选空间中结束；唯一 selected placement 只有满足 pre-W rank、
-  adjacency coverage、outer authority、direct-role authority 且至少两张完整 Frame 独立闭合时，才取得 typed
-  `SourceFrameWidthAuthority`。W 只收紧 selected fit 与相关 opposite inference，不能删除 runner、改变
-  ordinal/winner 或回写选择证据。旧入口已删除，report revision 为 `x5crop_v5_template_report_29`。
+- 每个 bounded phase candidate 在离散竞争前对称执行 `PhaseCandidateAuthorityProjection`：
+  `contradicted` 终止；`unavailable` binding 只有在投影后每张 Frame 至少保留一侧直接坐标、相关
+  evidence-group 去重后的 `(phase,W,pitch)` rank 为 3、且原 template/ordinal/local topology 可以有界
+  重拟合时才退出几何。Eligible candidate 重新 canonicalize 并竞争；弱线保留 provenance，不拥有 phase、
+  收窄 W 或隐藏 runner。Report revision 为 `x5crop_v5_template_report_30`。
 - 完整 development gold 为 110/110 完成、分析错误 0、`unsafe_approved_auto = 0`。安全 auto 为基础
-  nominal 14/66、较难 nominal 3/30、challenge 0/14；基础 nominal candidate 为 49 个不可用、14 个安全、
-  3 个不安全。S013、S017、S051 的不安全 candidate 均被 direct-use budget 阻断；全部 challenge 安全
-  review。安全 auto 共 17 个：S003、S021、S022、S025、S059、S063、S064、S067、S070、S081、
-  S083、S085、S087、S088、S089、S094、S095。
-- 相对上一检查点，S021、S070、S088 安全进入 auto，S084、S092 保守回到 review；这证明旧 source W
-  确实能够改变离散选择，selected-only 权限修正不是单纯重排代码。所有变化均保持危险自动批准为 0。
-- 黄金 receipt 精确匹配 `ded3b715`；detector manifest 为
-  `4b736e577cd9dba18bc1757ab4a6f0cfa4534d8ff9d4c836e7034b7e7789bfad`，comparator manifest 为
-  `af39310d3b30e3047c3a22babf8fc989fd2b2457dbb737ea660b246f4f4e53a6`，cohort SHA-256 为
-  `c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`。黄金 summary SHA-256 为
-  `1e2b42e37418ccffe997f3e625ab0335fe238c73bdf798223fbdbe419a3cdad9`。
-- 同 commit 的 24-source 正式性能 mean 为 3.204 秒，p95 为 5.231 秒，最慢 S109 为 5.521 秒；5 秒
-  mean Gate 通过，3 秒 non-blocking 目标未达到。性能 receipt SHA-256 为
-  `46429c4ad8cd85e497cc98ac362c232b2c8111d8c4ef6279d86eaf62df5958d2`；receipt 只证明记录的依赖与
-  M2 Max 主机。
+  nominal 14/66、较难 nominal 3/30、challenge 0/14；candidate 为 88 个不可用、18 个安全、4 个不安全。
+  四个不安全 candidate 均保持 review；全部 challenge 安全 review。
+- 安全 auto 共 17 个：S003、S021、S022、S023、S025、S059、S063、S064、S067、S070、S081、S083、
+  S085、S087、S089、S094、S095。相对上一检查点，S023 安全进入 auto；S088 因投影后暴露第二个 rank-3
+  直接解释而回到 review。S098 暴露不安全 review candidate，S109 暴露安全 review candidate；总自动覆盖
+  不变。
+- 24-source 正式性能在 M2 Max 上继续通过 5 秒 mean Gate，3 秒 non-blocking 目标未达到。精确时间、RSS、
+  依赖与机器身份只由绑定最终干净 commit 的 performance receipt 拥有，不在本文件复制成第二真相来源。
 
-## 当前物理证据
+## 证据与数据边界
 
-- W/H guard 使用 105 个合格 source、494 个完整 Frame 校准。只接受 `slot_kind=image` 且 START、END、
-  共享 top/bottom 全为 `directly_visible` 的 Frame；按 source 取中位尺寸、按名义轴长计算绝对偏差 q95，
-  再拟合一个混合式并向外量化。运行时公式与完整黄金重算一致。S095 的 W，以及 S021、S086、
-  S098 的 H 位于 q95 guard 外；它们是 review 证据，不是 format 例外。
-- `135`、`half`、`120-66`、`120-67` 已注册 raw aspect calibration；`xpan`、`120-645` 没有合格黄金
-  observation，保持 unavailable。`120-67` 只有 3 个 source，不能据此宣称已泛化。
-- Catalog separator gap 只适合作搜索中心。黄金实际 gap 的变化大且非对称，不能复用 aperture mixed
-  guard；实际宽度仍由直接 material edges 与 local advance 拥有。以后扩大召回应单独校准候选无关的
-  非对称搜索 coverage。
-- Holder extent 仍是外部设计先验 ±3.5%。同一批 holder-normalized 黄金尺寸不能独立校准 holder 自身；
-  `1.1H` enclosing support、lattice residual、mixed bleed 与逐侧 5% 输出上限继续由各自物理含义拥有。
+- 106-source/110-task development gold 用于发现机制、调试和回归，不估计真实生产频率。生产中发现的危险
+  自动裁切在完成人工 reference 后永久加入 development gold，作为 incident regression；修复必须通用，
+  不能读取样片 identity 或建立 whitelist。
+- 未来 sealed representative 必须在查看 detector 结果前按 source SHA 冻结，只输出 aggregate acceptance。
+  打开 sealed source 调试后永久转入 development，并补充新的 sealed source。当前没有 sealed cohort，
+  因而不能宣称未见 X5 扫描上的错误率或发布准确性。
+- 概率选择还需要独立 calibration source；development、calibration、sealed 三种用途不能互相冒充。
+  Incident regression 是 development 的来源，不建立第四套 reference 或平行黄金池。
+- W/H guard 继续由 105 个合格 source、494 个完整直接 Frame 的 source-level 统计拥有；aspect ratio 是带
+  不确定性的强先验，不是零误差 W→H 等式。Separator、holder extent、enclosing support、bleed 与 5%
+  产品预算仍按各自物理含义独立拥有数值。
 
 ## 开放风险
 
-- 基础 nominal 仍有 52/66 review，较难 nominal 有 27/30 review。当前完整集的 phase 根因包括 31 个
-  `direct_role_binding_authority_unavailable`、11 个 `discrete_phase_ambiguous`、10 个
-  `frame_width_inference_unavailable`、8 个 `global_lattice_authority_unavailable`、4 个
-  `separator_material_conflict` 与 4 个 `fixed_template_mismatch`。竞争必须由新的直接 observation identity、
-  权限或相关安全状态闭合；不得恢复 W 自授权、缩窄 guard、精确 W→H 或改 challenge 分类。
-- S013、S017、S051 是仅有的三个不安全 candidate，并继续由 `direct_use_budget_exceeded` 阻断；其余 90 个
-  review task 没有 selected candidate，不能把“没有输出”误当成精度问题。
-- 当前 direct-role candidate 权限仍按整组 binding 判定。下一机制必须验证：删除无权限 binding 后，保留
-  的直接角色是否仍能独立闭合 rank 3；不能把 `contradicted` 当成可删噪声，也不能让 projection 生成新
-  Frame、隐藏 runner 或使 validation-only 弱线获得权限。
-- 当前黄金同时参与 development calibration 与 development 验收，只能证明该集合上的安全与可复算性；
-  尚无 sealed acceptance，也没有 `xpan`、`120-645`、`135-dual` 的独立黄金覆盖。
-- 当前开发集不能事后兼任概率 calibration。未来 scorer 仍需预先冻结的新数据、OOD、abstention 和独立
-  风险阈值。
+- 基础 nominal 仍有 52/66 review，较难 nominal 有 27/30 review。当前 phase 主要根因是 27 个
+  `direct_role_binding_authority_unavailable`、13 个 `discrete_phase_ambiguous`、10 个
+  `frame_width_inference_unavailable`、7 个 `global_lattice_authority_unavailable`、4 个
+  `fixed_template_mismatch` 与 3 个 `separator_material_conflict`。
+- 当前 direct-evidence 路径仍要求 rank 3，并把投影后双侧都未观察的 Frame 标为
+  `complete_frame_unobserved`。这是一条保守路径，不是 Grid 的永久物理上限；规则 blank/低显著 Frame
+  需要下一机制的 calibrated nominal authority 才能在不伪造直接证据的情况下安全补齐。
+- S088 证明“去掉弱线”既可能释放正确候选，也可能揭示真实 runner。后续不能用 residual、support 或
+  未校准 score 强选；它适合作为未来概率选择层的机制样片。
+- 现有黄金没有 `xpan`、`120-645`、`135-dual` 的合格覆盖；`120-67` 只有 3 个 source。
 
 ## 精确下一步
 
-1. 为每个 bounded candidate 增加对称的 authority projection：只删除
-   `unavailable` binding、绝不删除 `contradicted`，保留的直接角色必须重新独立闭合 rank 3；随后全部投影
-   candidate 重新 canonicalize 并竞争。它不能生成双侧都未观察的 Frame，也不能让 validation-only 弱线
-   增加 rank、收窄 W 或决定 winner。
+1. 以一个小机制闭环实现 `CalibratedNominalGridAuthority`：format-specific calibrated W/H/pitch interval、
+   至少一个 direct absolute phase anchor、逐 adjacency 完整走廊 coverage、无局部反证、相关 uncertainty
+   随 slot 传播，并以最坏 OutputFootprint 检查 5% 预算。它是 direct rank-3 之外的另一条显式 authority，
+   不冒充 direct evidence，也不建立第二 Grid。
+2. 完成上述 owner、typed failure、Debug、正反例与真实 nominal 后，先跑完整黄金和正式性能，再扩大
+   candidate-independent 查询 coverage；不能通过删除安全检查提高通过率。
+3. 随后处理 nominal 弱边缘与真实片距变化，再依次闭合 adjacency continuity、contact、overlap。
+   概率选择层只做 schema/data/风险设计，等独立 calibration 与 sealed 数据具备后再进入 runtime。

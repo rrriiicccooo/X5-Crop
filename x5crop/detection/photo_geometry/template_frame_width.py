@@ -177,6 +177,22 @@ def calibrate_source_frame_width(
             SourceFrameWidthAuthorityFailureKind.DIRECT_ROLE_AUTHORITY_CONTRADICTED,
             "source W cannot consume a material-contradicted role binding",
         )
+    unavailable_phase_anchors = tuple(
+        fact.role_index
+        for fact in direct.facts
+        if fact.state == EvidenceState.UNAVAILABLE
+        and fit.role_bindings[fact.role_index] is not None
+        and fit.role_bindings[fact.role_index].use
+        == SequenceBindingUse.PHASE_ANCHOR
+    )
+    if unavailable_phase_anchors:
+        return source_geometry, _failed_source_width_authority(
+            phase,
+            EvidenceState.UNAVAILABLE,
+            SourceFrameWidthAuthorityFailureKind.DIRECT_ROLE_AUTHORITY_UNAVAILABLE,
+            "source W cannot consume unavailable phase-anchor roles: "
+            + ", ".join(map(str, unavailable_phase_anchors)),
+        )
     lattice = phase.global_lattice_authority
     if lattice is None or lattice.joint_constraint_rank < 2:
         return source_geometry, _failed_source_width_authority(

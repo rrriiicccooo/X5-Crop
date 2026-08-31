@@ -6,7 +6,12 @@ from typing import Sequence
 
 from ...domain import EvidenceState, ObservationId
 from .model import BoundaryRole
-from .template_model import SequenceBindingUse, SequenceFit
+from .template_model import (
+    SequenceBindingUse,
+    SequenceFit,
+    SequenceRoleBinding,
+    TemplateRole,
+)
 from .template_direct_role_authority import DirectRoleBindingAuthority
 from .template_phase_model import (
     GlobalLatticeAuthority,
@@ -54,6 +59,75 @@ def _constraint_rank(rows: Sequence[tuple[float, float, float]]) -> int:
     return rank
 
 
+def _direct_role_rows(
+    fit: SequenceFit,
+    authorized_role_indices: set[int] | None,
+) -> tuple[
+    tuple[TemplateRole, SequenceRoleBinding, tuple[float, float, float]],
+    ...,
+]:
+    by_evidence_group: dict[
+        ObservationId,
+        tuple[TemplateRole, SequenceRoleBinding, tuple[float, float, float]],
+    ] = {}
+    for role, binding in zip(
+        fit.template.roles,
+        fit.role_bindings,
+        strict=True,
+    ):
+        if (
+            binding is None
+            or binding.use != SequenceBindingUse.PHASE_ANCHOR
+            or authorized_role_indices is not None
+            and role.role_index not in authorized_role_indices
+        ):
+            continue
+        value = (
+            role,
+            binding,
+            (
+                1.0,
+                (
+                    float(fit.template.direction)
+                    if role.role == BoundaryRole.END
+                    else 0.0
+                ),
+                float(fit.template.direction * role.slot_index),
+            ),
+        )
+        current = by_evidence_group.get(binding.evidence_group_id)
+        if current is None or role.role_index < current[0].role_index:
+            by_evidence_group[binding.evidence_group_id] = value
+    return tuple(
+        by_evidence_group[identity]
+        for identity in sorted(by_evidence_group, key=str)
+    )
+
+
+def direct_role_constraint_rank(
+    fit: SequenceFit,
+    authorized_role_indices: Sequence[int] | None = None,
+) -> int:
+    """Return rank owned only by retained direct phase-anchor coordinates."""
+
+    if not isinstance(fit, SequenceFit):
+        raise TypeError("direct-role rank requires a sequence fit")
+    authorized = (
+        None
+        if authorized_role_indices is None
+        else set(authorized_role_indices)
+    )
+    return _constraint_rank(
+        tuple(
+            coefficients
+            for _role, _binding, coefficients in _direct_role_rows(
+                fit,
+                authorized,
+            )
+        )
+    )
+
+
 def assess_global_lattice_authority(
     fit: SequenceFit,
     phase_input: TemplatePhaseInput,
@@ -79,27 +153,10 @@ def assess_global_lattice_authority(
     constraints: list[GlobalLatticeConstraint] = []
     role_rows: list[tuple[float, float, float]] = []
     role_ids: list[ObservationId] = []
-    for role, binding in zip(
-        fit.template.roles,
-        fit.role_bindings,
-        strict=True,
+    for role, binding, coefficients in _direct_role_rows(
+        fit,
+        authorized_role_indices,
     ):
-        if (
-            binding is None
-            or binding.use != SequenceBindingUse.PHASE_ANCHOR
-            or authorized_role_indices is not None
-            and role.role_index not in authorized_role_indices
-        ):
-            continue
-        coefficients = (
-            1.0,
-            (
-                float(fit.template.direction)
-                if role.role == BoundaryRole.END
-                else 0.0
-            ),
-            float(fit.template.direction * role.slot_index),
-        )
         role_rows.append(coefficients)
         role_ids.append(binding.observation_id)
         constraints.append(
@@ -177,4 +234,7 @@ def assess_global_lattice_authority(
     )
 
 
-__all__ = ["assess_global_lattice_authority"]
+__all__ = [
+    "assess_global_lattice_authority",
+    "direct_role_constraint_rank",
+]

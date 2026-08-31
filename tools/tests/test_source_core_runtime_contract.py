@@ -364,6 +364,31 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             assert isinstance(outcome, CompletedInput)
             self.assertEqual(analysis_outcome.result["detail_level"], "development")
             self.assertIsNotNone(analysis_outcome.result["development"])
+            validate_current_report_record(analysis_outcome.result)
+            obsolete = deepcopy(analysis_outcome.result)
+            obsolete_phase = obsolete["development"]["lanes"][0][
+                "phase_competition"
+            ]
+            obsolete_phase["best_phase_candidate_direct_role_authority"] = (
+                obsolete_phase["best_phase_candidate_authority_projection"]
+            )
+            with self.assertRaisesRegex(
+                ValueError,
+                "phase competition schema",
+            ):
+                validate_current_report_record(obsolete)
+            inconsistent = deepcopy(analysis_outcome.result)
+            inconsistent_receipt = inconsistent["development"]["lanes"][0][
+                "phase_competition"
+            ]["receipt"]
+            inconsistent_receipt[
+                "candidate_direct_role_projection_evaluation_count"
+            ] += 1
+            with self.assertRaisesRegex(
+                ValueError,
+                "work receipt",
+            ):
+                validate_current_report_record(inconsistent)
             self.assertEqual(outcome.result["detail_level"], "production")
             self.assertIsNone(outcome.result["development"])
             production_geometry = outcome.result["photo_geometry"]

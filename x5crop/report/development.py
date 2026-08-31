@@ -234,13 +234,25 @@ def development_report_facts(
                         lane.prepared.phase_competition.receipt
                         .candidate_direct_role_authority_evaluation_count
                     ),
-                    "candidate_direct_role_authority_rejection_count": (
+                    "candidate_direct_role_authority_terminal_count": (
                         lane.prepared.phase_competition.receipt
-                        .candidate_direct_role_authority_rejection_count
+                        .candidate_direct_role_authority_terminal_count
                     ),
                     "candidate_direct_role_authority_role_check_count": (
                         lane.prepared.phase_competition.receipt
                         .candidate_direct_role_authority_role_check_count
+                    ),
+                    "candidate_direct_role_projection_evaluation_count": (
+                        lane.prepared.phase_competition.receipt
+                        .candidate_direct_role_projection_evaluation_count
+                    ),
+                    "candidate_direct_role_projection_success_count": (
+                        lane.prepared.phase_competition.receipt
+                        .candidate_direct_role_projection_success_count
+                    ),
+                    "candidate_direct_role_projection_binding_count": (
+                        lane.prepared.phase_competition.receipt
+                        .candidate_direct_role_projection_binding_count
                     ),
                     "separator_lattice_hypothesis_count": (
                         lane.prepared.phase_competition.receipt

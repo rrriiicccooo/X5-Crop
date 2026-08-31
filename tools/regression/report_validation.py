@@ -1439,6 +1439,193 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             raise ValueError("template peak-memory fact is invalid")
 
 
+def _validate_phase_candidate_projection(
+    value: object,
+    fit: object,
+) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict) or set(value) != {
+        "input_direct_role_authority",
+        "outcome",
+        "projected_out_bindings",
+        "retained_direct_constraint_rank",
+        "reason",
+    }:
+        raise ValueError("phase-candidate projection schema is invalid")
+    authority = value["input_direct_role_authority"]
+    _validate_direct_role_binding_authority(authority)
+    assert isinstance(authority, dict)
+    facts = authority["facts"]
+    projected = value["projected_out_bindings"]
+    if not isinstance(projected, list):
+        raise ValueError("phase-candidate authority facts are invalid")
+    assert isinstance(facts, list)
+    projected_fields = {"role_index", "observation_id"}
+    if any(
+        not isinstance(item, dict) or set(item) != projected_fields
+        for item in projected
+    ):
+        raise ValueError("phase-candidate projected binding schema is invalid")
+    projected_pairs = tuple(
+        (item["role_index"], item["observation_id"])
+        for item in projected
+    )
+    if projected_pairs != tuple(sorted(set(projected_pairs))):
+        raise ValueError("phase-candidate projected bindings are not canonical")
+    unavailable_pairs = tuple(
+        (item["role_index"], item["observation_id"])
+        for item in facts
+        if item["state"] == "unavailable"
+    )
+    outcome = value["outcome"]
+    rank = value["retained_direct_constraint_rank"]
+    reason = value["reason"]
+    outcomes = {
+        "unchanged",
+        "projected",
+        "direct_role_contradiction",
+        "complete_frame_unobserved",
+        "retained_rank_insufficient",
+        "refit_unavailable",
+        "discrete_identity_changed",
+    }
+    if (
+        outcome not in outcomes
+        or not isinstance(rank, int)
+        or isinstance(rank, bool)
+        or not 0 <= rank <= 3
+        or (outcome in {"unchanged", "projected"}) != (reason is None)
+        or reason is not None
+        and (not isinstance(reason, str) or not reason)
+        or (authority["state"] == "supported") != (outcome == "unchanged")
+        or (authority["state"] == "contradicted")
+        != (outcome == "direct_role_contradiction")
+        or (authority["state"] == "unavailable")
+        != (outcome not in {"unchanged", "direct_role_contradiction"})
+        or (outcome == "projected" and rank != 3)
+        or (outcome == "retained_rank_insufficient" and rank >= 3)
+        or (
+            authority["state"] == "unavailable"
+            and projected_pairs != unavailable_pairs
+        )
+        or (authority["state"] != "unavailable" and projected_pairs)
+    ):
+        raise ValueError("phase-candidate projection contract is invalid")
+    if fit is None or not isinstance(fit, dict):
+        raise ValueError("phase-candidate projection has no candidate")
+    bindings = fit.get("role_bindings")
+    if not isinstance(bindings, list):
+        raise ValueError("phase-candidate binding ledger is invalid")
+    if outcome == "projected":
+        for role_index, observation_id in projected_pairs:
+            if (
+                not isinstance(role_index, int)
+                or not 0 <= role_index < len(bindings)
+                or bindings[role_index] is not None
+                and bindings[role_index].get("use") == "phase_anchor"
+            ):
+                raise ValueError("projected binding still owns phase geometry")
+        for fact in facts:
+            if fact["state"] != "supported":
+                continue
+            role_index = fact["role_index"]
+            if (
+                not isinstance(role_index, int)
+                or not 0 <= role_index < len(bindings)
+                or not isinstance(bindings[role_index], dict)
+                or bindings[role_index].get("use") != "phase_anchor"
+                or bindings[role_index].get("observation_id")
+                != fact["observation_id"]
+            ):
+                raise ValueError("retained direct role lost its native binding")
+
+
+def _validate_phase_competition(value: object) -> None:
+    if not isinstance(value, dict) or set(value) != {
+        "template",
+        "best",
+        "runner_up",
+        "status",
+        "ambiguity_reason",
+        "receipt",
+        "registered_direct_observation_ids",
+        "failure_kind",
+        "winner_basis",
+        "best_phase_candidate_authority_projection",
+        "runner_phase_candidate_authority_projection",
+        "global_lattice_authority",
+        "adjacency_observation_coverage",
+        "direct_role_binding_authority",
+        "outer_frame_observation_authority",
+    }:
+        raise ValueError("development phase competition schema is invalid")
+    best = value["best"]
+    runner = value["runner_up"]
+    best_projection = value["best_phase_candidate_authority_projection"]
+    runner_projection = value["runner_phase_candidate_authority_projection"]
+    if (
+        best is None
+        and best_projection is not None
+        or runner is None
+        and runner_projection is not None
+    ):
+        raise ValueError("phase-candidate projection lost its candidate")
+    _validate_phase_candidate_projection(best_projection, best)
+    _validate_phase_candidate_projection(runner_projection, runner)
+    receipt = value["receipt"]
+    receipt_fields = {
+        "observation_count",
+        "role_count",
+        "phase_lookup_count",
+        "role_binding_count",
+        "local_relation_evaluation_count",
+        "local_refinement_lookup_count",
+        "local_refinement_binding_count",
+        "phase_hypothesis_count",
+        "phase_offset_lookup_count",
+        "direct_observation_count",
+        "inferred_role_count",
+        "peak_temporary_bytes",
+        "fit_pass_count",
+        "separator_lattice_hypothesis_count",
+        "candidate_direct_role_authority_evaluation_count",
+        "candidate_direct_role_authority_terminal_count",
+        "candidate_direct_role_authority_role_check_count",
+        "candidate_direct_role_projection_evaluation_count",
+        "candidate_direct_role_projection_success_count",
+        "candidate_direct_role_projection_binding_count",
+    }
+    if not isinstance(receipt, dict) or set(receipt) != receipt_fields:
+        raise ValueError("phase-candidate work receipt schema is invalid")
+    if any(
+        not isinstance(receipt[field], int)
+        or isinstance(receipt[field], bool)
+        or receipt[field] < 0
+        for field in receipt_fields
+    ):
+        raise ValueError("phase-candidate work receipt value is invalid")
+    authority_count = receipt[
+        "candidate_direct_role_authority_evaluation_count"
+    ]
+    projection_count = receipt[
+        "candidate_direct_role_projection_evaluation_count"
+    ]
+    if (
+        projection_count != authority_count
+        or receipt["candidate_direct_role_authority_terminal_count"]
+        + receipt["candidate_direct_role_projection_success_count"]
+        > projection_count
+        or receipt["candidate_direct_role_projection_binding_count"]
+        > receipt["candidate_direct_role_authority_role_check_count"]
+    ):
+        raise ValueError("phase-candidate work receipt is inconsistent")
+    if value["status"] == "bound_exceeded" and any(
+        item is not None for item in (best, runner, best_projection, runner_projection)
+    ):
+        raise ValueError("bound-exceeded phase carries a candidate")
+
+
 def _validate_development(record: dict[str, Any]) -> None:
     detail = record["detail_level"]
     development = record["development"]
@@ -1490,6 +1677,7 @@ def _validate_development(record: dict[str, Any]) -> None:
             != placement.get("runner_up_placement_id")
         ):
             raise ValueError("development template ledger is invalid")
+        _validate_phase_competition(lane["phase_competition"])
 
 
 def validate_current_report_record(record: dict[str, Any]) -> None:

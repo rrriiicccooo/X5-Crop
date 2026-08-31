@@ -264,6 +264,122 @@ class PhaseWinnerBasis(str, Enum):
     RESIDUAL_SEPARATION = "residual_separation"
 
 
+class PhaseCandidateProjectionOutcome(str, Enum):
+    """How direct-role authority changed one bounded phase candidate."""
+
+    UNCHANGED = "unchanged"
+    PROJECTED = "projected"
+    DIRECT_ROLE_CONTRADICTION = "direct_role_contradiction"
+    COMPLETE_FRAME_UNOBSERVED = "complete_frame_unobserved"
+    RETAINED_RANK_INSUFFICIENT = "retained_rank_insufficient"
+    REFIT_UNAVAILABLE = "refit_unavailable"
+    DISCRETE_IDENTITY_CHANGED = "discrete_identity_changed"
+
+
+@dataclass(frozen=True)
+class PhaseCandidateProjectedBinding:
+    """One unavailable coordinate retained only as candidate provenance."""
+
+    role_index: int
+    observation_id: ObservationId
+
+    def __post_init__(self) -> None:
+        if self.role_index < 0 or not isinstance(
+            self.observation_id,
+            ObservationId,
+        ):
+            raise ValueError("phase-candidate projected binding is invalid")
+
+
+@dataclass(frozen=True)
+class PhaseCandidateAuthorityProjection:
+    """Typed removal of unavailable coordinates before phase competition."""
+
+    input_direct_role_authority: DirectRoleBindingAuthority
+    outcome: PhaseCandidateProjectionOutcome
+    projected_out_bindings: tuple[PhaseCandidateProjectedBinding, ...]
+    retained_direct_constraint_rank: int
+    reason: str | None
+
+    def __post_init__(self) -> None:
+        if not isinstance(
+            self.input_direct_role_authority,
+            DirectRoleBindingAuthority,
+        ):
+            raise TypeError("phase-candidate input authority is invalid")
+        unavailable_bindings = tuple(
+            PhaseCandidateProjectedBinding(
+                role_index=item.role_index,
+                observation_id=item.observation_id,
+            )
+            for item in self.input_direct_role_authority.facts
+            if item.state == EvidenceState.UNAVAILABLE
+        )
+        projected = self.outcome == PhaseCandidateProjectionOutcome.PROJECTED
+        failed = self.outcome not in {
+            PhaseCandidateProjectionOutcome.UNCHANGED,
+            PhaseCandidateProjectionOutcome.PROJECTED,
+        }
+        canonical_bindings = tuple(
+            sorted(
+                set(self.projected_out_bindings),
+                key=lambda item: (item.role_index, str(item.observation_id)),
+            )
+        )
+        state = self.input_direct_role_authority.state
+        state_matches_outcome = {
+            EvidenceState.SUPPORTED: (
+                self.outcome == PhaseCandidateProjectionOutcome.UNCHANGED
+            ),
+            EvidenceState.CONTRADICTED: (
+                self.outcome
+                == PhaseCandidateProjectionOutcome.DIRECT_ROLE_CONTRADICTION
+            ),
+            EvidenceState.UNAVAILABLE: (
+                self.outcome
+                not in {
+                    PhaseCandidateProjectionOutcome.UNCHANGED,
+                    PhaseCandidateProjectionOutcome.DIRECT_ROLE_CONTRADICTION,
+                }
+            ),
+        }[state]
+        bindings_match_state = (
+            self.projected_out_bindings == unavailable_bindings
+            if state == EvidenceState.UNAVAILABLE
+            else not self.projected_out_bindings
+        )
+        if (
+            not isinstance(self.outcome, PhaseCandidateProjectionOutcome)
+            or any(
+                not isinstance(item, PhaseCandidateProjectedBinding)
+                for item in self.projected_out_bindings
+            )
+            or canonical_bindings != self.projected_out_bindings
+            or not 0 <= self.retained_direct_constraint_rank <= 3
+            or failed != (self.reason is not None)
+            or self.reason is not None
+            and not self.reason
+            or not state_matches_outcome
+            or not bindings_match_state
+            or projected
+            and (
+                not self.projected_out_bindings
+                or self.retained_direct_constraint_rank != 3
+            )
+            or self.outcome
+            == PhaseCandidateProjectionOutcome.RETAINED_RANK_INSUFFICIENT
+            and self.retained_direct_constraint_rank >= 3
+        ):
+            raise ValueError("phase-candidate authority projection is invalid")
+
+    @property
+    def eligible(self) -> bool:
+        return self.outcome in {
+            PhaseCandidateProjectionOutcome.UNCHANGED,
+            PhaseCandidateProjectionOutcome.PROJECTED,
+        }
+
+
 @dataclass(frozen=True)
 class PhaseFitResult:
     template: TemplateSpec
@@ -275,11 +391,11 @@ class PhaseFitResult:
     registered_direct_observation_ids: tuple[ObservationId, ...]
     failure_kind: PhaseFailureKind | None = None
     winner_basis: PhaseWinnerBasis | None = None
-    best_phase_candidate_direct_role_authority: (
-        DirectRoleBindingAuthority | None
+    best_phase_candidate_authority_projection: (
+        PhaseCandidateAuthorityProjection | None
     ) = None
-    runner_phase_candidate_direct_role_authority: (
-        DirectRoleBindingAuthority | None
+    runner_phase_candidate_authority_projection: (
+        PhaseCandidateAuthorityProjection | None
     ) = None
     global_lattice_authority: GlobalLatticeAuthority | None = None
     adjacency_observation_coverage: tuple[AdjacencyObservationCoverage, ...] = ()
@@ -311,28 +427,28 @@ class PhaseFitResult:
         ):
             raise ValueError("phase winner basis must match resolved status")
         if (
-            self.best_phase_candidate_direct_role_authority is not None
+            self.best_phase_candidate_authority_projection is not None
             and not isinstance(
-                self.best_phase_candidate_direct_role_authority,
-                DirectRoleBindingAuthority,
+                self.best_phase_candidate_authority_projection,
+                PhaseCandidateAuthorityProjection,
             )
         ):
-            raise TypeError("best phase-candidate direct-role authority is invalid")
+            raise TypeError("best phase-candidate authority projection is invalid")
         if (
-            self.runner_phase_candidate_direct_role_authority is not None
+            self.runner_phase_candidate_authority_projection is not None
             and not isinstance(
-                self.runner_phase_candidate_direct_role_authority,
-                DirectRoleBindingAuthority,
+                self.runner_phase_candidate_authority_projection,
+                PhaseCandidateAuthorityProjection,
             )
         ):
-            raise TypeError("runner phase-candidate direct-role authority is invalid")
+            raise TypeError("runner phase-candidate authority projection is invalid")
         if (
             self.best is None
-            and self.best_phase_candidate_direct_role_authority is not None
+            and self.best_phase_candidate_authority_projection is not None
             or self.runner_up is None
-            and self.runner_phase_candidate_direct_role_authority is not None
+            and self.runner_phase_candidate_authority_projection is not None
         ):
-            raise ValueError("phase-candidate authority requires its candidate")
+            raise ValueError("phase-candidate assessment requires its candidate")
         if self.global_lattice_authority is not None and not isinstance(
             self.global_lattice_authority,
             GlobalLatticeAuthority,
@@ -364,7 +480,6 @@ class PhaseFitResult:
             for item in self.adjacency_observation_coverage
         ) != tuple(range(1, self.template.count)):
             raise ValueError("phase adjacency coverage must follow template order")
-
 
 
 @dataclass(frozen=True)

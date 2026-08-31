@@ -93,16 +93,33 @@ def selection_summary(detection: FinalDetection) -> str:
         .candidate_direct_role_authority_evaluation_count
         for item in lanes
     )
-    authority_rejections = sum(
+    authority_terminals = sum(
         item.prepared.phase_competition.receipt
-        .candidate_direct_role_authority_rejection_count
+        .candidate_direct_role_authority_terminal_count
+        for item in lanes
+    )
+    projection_evaluations = sum(
+        item.prepared.phase_competition.receipt
+        .candidate_direct_role_projection_evaluation_count
+        for item in lanes
+    )
+    projection_successes = sum(
+        item.prepared.phase_competition.receipt
+        .candidate_direct_role_projection_success_count
+        for item in lanes
+    )
+    projected_bindings = sum(
+        item.prepared.phase_competition.receipt
+        .candidate_direct_role_projection_binding_count
         for item in lanes
     )
     vetoes = sum(len(item.content_veto_facts) for item in lanes)
     selected = sum(item.selected_placement is not None for item in lanes)
     bounded = any(item.work.bound_exceeded for item in lanes)
     return (
-        f"PHASE {phase} · AUTH {authority_evaluations}/{authority_rejections} REJECT · "
+        f"PHASE {phase} · AUTH {authority_evaluations}/{authority_terminals} TERMINAL · "
+        f"PROJECT {projection_evaluations}/{projection_successes} · "
+        f"DROP {projected_bindings} · "
         f"PLACEMENTS {placements} · SELECTED {selected} · "
         f"VETO {vetoes} · BOUND {'EXCEEDED' if bounded else 'OK'}"
     )
@@ -111,32 +128,43 @@ def selection_summary(detection: FinalDetection) -> str:
 def competition_summary(detection: FinalDetection) -> str:
     """Explain which physical fit differs without inventing a combined score."""
 
+    def projection_label(fit: object, projection: object) -> str:
+        if fit is None or projection is None:
+            return "NONE"
+        reason = "NONE" if projection.reason is None else projection.reason
+        return (
+            f"OFFSET {fit.phase_lattice_fit.integer_slot_offset} / "
+            f"{projection.outcome.value.upper()} / "
+            f"RANK {projection.retained_direct_constraint_rank} / "
+            f"DROP {len(projection.projected_out_bindings)} / "
+            f"FAILURE {reason}"
+        )
+
     lanes = detection.candidate.geometry.lane_reconstructions
     differences: set[str] = set()
     phase_bases: set[str] = set()
     cross_bases: set[str] = set()
-    phase_authority_states: set[str] = set()
+    phase_projection_states: set[str] = set()
     for lane in lanes:
         competition = lane.placement_competition
         phase_competition = lane.prepared.phase_competition
         phase_basis = phase_competition.winner_basis
         if phase_basis is not None:
             phase_bases.add(phase_basis.value.upper().replace("_", " "))
-        best_authority = (
-            phase_competition.best_phase_candidate_direct_role_authority
+        best_projection = (
+            phase_competition.best_phase_candidate_authority_projection
         )
-        runner_authority = (
-            phase_competition.runner_phase_candidate_direct_role_authority
+        runner_projection = (
+            phase_competition.runner_phase_candidate_authority_projection
         )
-        if best_authority is not None:
-            phase_authority_states.add(
+        if best_projection is not None:
+            phase_projection_states.add(
                 "BEST "
-                + best_authority.state.value.upper()
+                + projection_label(phase_competition.best, best_projection)
                 + " / RUNNER "
-                + (
-                    "NONE"
-                    if runner_authority is None
-                    else runner_authority.state.value.upper()
+                + projection_label(
+                    phase_competition.runner_up,
+                    runner_projection,
                 )
             )
         cross_basis = lane.prepared.cross_competition.winner_basis
@@ -185,11 +213,11 @@ def competition_summary(detection: FinalDetection) -> str:
     runner = "NONE" if not differences else "/".join(sorted(differences))
     authority = (
         "UNAVAILABLE"
-        if not phase_authority_states
-        else " + ".join(sorted(phase_authority_states))
+        if not phase_projection_states
+        else " + ".join(sorted(phase_projection_states))
     )
     return (
-        f"{subject} · {basis} · PHASE AUTH {authority} · "
+        f"{subject} · {basis} · PHASE PROJECT {authority} · "
         f"RUNNER DIFF {runner}"
     )
 
