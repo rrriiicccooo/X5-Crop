@@ -35,6 +35,7 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     CrossRoleBinding,
 )
 from x5crop.detection.photo_geometry.template_model import (
+    LatticeParameterFitBasis,
     PhaseLatticeAuthority,
     PhaseLatticeFit,
     PitchFit,
@@ -374,6 +375,9 @@ def placement_sequence(
             canonical_frame_width_px=width,
             canonical_pitch_px=pitch,
             observation_ids=tuple(item for item in ids if item is not None),
+        ),
+        lattice_parameter_fit_basis=(
+            LatticeParameterFitBasis.DIRECT_LEAST_SQUARES
         ),
         model_role_positions_px=positions,
         model_role_intervals_px=tuple(

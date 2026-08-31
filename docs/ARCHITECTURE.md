@@ -310,6 +310,22 @@ role = phase
   provenance 的线性约束；外部直接 phase、共同 W 或 pitch authority 也只能各形成自己拥有的一行。
   `GlobalLatticeAuthority` 保存全部约束与矩阵秩，只有 joint rank 为 3 才表示三个未知量独立闭合。
   Raw edge 数、同一位置的重复支持和连续缺失 adjacency 数都不是闭合证明。
+- Rank 3 直接坐标系统由 `template_phase_candidates.py` 在同一个连续 placement 内联合拟合
+  `(phase, W, source_pitch)`。无约束最小二乘若落在已编译的 phase、W、pitch 与
+  `pitch-W` 全部区间内，记录 `direct_least_squares`；若只越过这些硬区间，求解器在同一可行集合内取得
+  最近的 `bounded_direct_least_squares`，不能把 W/pitch 整体退回 catalog 中心后继续沿用不相容的
+  phase。同一离散 placement 经 source pitch、source W 或 local advance 重拟合时，报告保留该连续
+  lineage 中约束最强的一次参数依据；只有 template 身份、ordinal offset、phase 区间及共享
+  observation-role 映射一致才允许继承，runner 之间不能串用。区间不会扩张，直接 role 的 native
+  coordinate 也不会被拟合值覆盖。受约束后仍存在另一离散
+  ordinal/edge 解释时保留 runner 并产生 `discrete_phase_ambiguous`；连续最小二乘不能充当 best-score。
+
+| 直接约束状态 | 连续参数结果 | 离散选择结果 |
+|---|---|---|
+| rank < 3 | `template_interval_center` 只维持候选搜索；不能建立全局 authority | 后续由 `global_lattice_authority_unavailable` 阻断缺失角色推断 |
+| rank = 3，最小二乘位于全部硬区间内 | `direct_least_squares` | 继续按既有物理支持比较 placement |
+| rank = 3，无约束解越界但联合可行集非空 | `bounded_direct_least_squares` | 继续保留所有合法 runner |
+| 受约束后两个离散 fit 均合法且不能等价合并 | 两者各保留自己的参数与证据 | `discrete_phase_ambiguous`，不得强选 |
 - Source pitch 必须由至少两个不同直接 separator 位置或独立同角色 advance 支持。一个 separator
   只能证明自己所在 adjacency。
 - 两个 separator 可以收紧 pitch，但不能用同一对事实自证 absolute phase。短片条中的两点投影

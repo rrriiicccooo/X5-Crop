@@ -412,6 +412,31 @@ class PitchFit:
         )
 
 
+class LatticeParameterFitBasis(str, Enum):
+    """Most constrained solve used by one continuous placement lineage."""
+
+    TEMPLATE_INTERVAL_CENTER = "template_interval_center"
+    DIRECT_LEAST_SQUARES = "direct_least_squares"
+    BOUNDED_DIRECT_LEAST_SQUARES = "bounded_direct_least_squares"
+
+
+def most_constrained_lattice_parameter_fit_basis(
+    *bases: LatticeParameterFitBasis,
+) -> LatticeParameterFitBasis:
+    """Union continuous-fit provenance without changing evidence authority."""
+
+    if not bases or any(
+        not isinstance(basis, LatticeParameterFitBasis) for basis in bases
+    ):
+        raise TypeError("lattice parameter fit bases must be typed")
+    priority = {
+        LatticeParameterFitBasis.TEMPLATE_INTERVAL_CENTER: 0,
+        LatticeParameterFitBasis.DIRECT_LEAST_SQUARES: 1,
+        LatticeParameterFitBasis.BOUNDED_DIRECT_LEAST_SQUARES: 2,
+    }
+    return max(bases, key=priority.__getitem__)
+
+
 class FrameWidthInferenceFailureKind(str, Enum):
     """Why one required correlated-W inference has no direct authority."""
 
@@ -626,6 +651,7 @@ class SequenceFit:
     template: TemplateSpec
     phase_lattice_fit: PhaseLatticeFit
     pitch_fit: PitchFit
+    lattice_parameter_fit_basis: LatticeParameterFitBasis
     model_role_positions_px: tuple[float, ...]
     model_role_intervals_px: tuple[FiniteInterval, ...]
     model_full_role_intervals_px: tuple[FiniteInterval, ...]
@@ -711,6 +737,11 @@ class SequenceFit:
         )
 
     def __post_init__(self) -> None:
+        if not isinstance(
+            self.lattice_parameter_fit_basis,
+            LatticeParameterFitBasis,
+        ):
+            raise TypeError("sequence lattice fit basis must be typed")
         if (
             not isinstance(self.phase_lattice_fit, PhaseLatticeFit)
             or self.phase_lattice_fit.authority
@@ -928,6 +959,7 @@ class SequenceFit:
                 direction=template.direction,
             ),
             pitch_fit=self.pitch_fit.with_calibrated_template(template),
+            lattice_parameter_fit_basis=self.lattice_parameter_fit_basis,
             model_role_positions_px=tuple(canonical_positions),
             model_role_intervals_px=tuple(role_intervals),
             model_full_role_intervals_px=tuple(role_full_intervals),

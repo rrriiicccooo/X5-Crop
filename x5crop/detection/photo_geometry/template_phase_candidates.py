@@ -8,6 +8,7 @@ import math
 from typing import Sequence
 
 import numpy as np
+from scipy.optimize import lsq_linear
 
 from ...domain import FiniteInterval, ObservationId, PositiveInterval
 from .model import (
@@ -17,6 +18,7 @@ from .model import (
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .separator_material import normal_separator_material_bands
 from .template_model import (
+    LatticeParameterFitBasis,
     LocalAdvanceRelation,
     PitchFit,
     SequenceFit,
@@ -25,6 +27,7 @@ from .template_model import (
     SequenceRoleLineEvidence,
     TemplateRole,
     TemplateSpec,
+    most_constrained_lattice_parameter_fit_basis,
     phase_lattice_fit_from_absolute,
     template_role_refinement_radius_px,
 )
@@ -34,6 +37,7 @@ from .template_evidence import separator_support_authority
 
 
 _NUMERIC_RESIDUAL_EPSILON_PX = 1.0e-9
+_LINEAR_CONSTRAINT_EPSILON_PX = 1.0e-7
 
 
 @dataclass(frozen=True)
@@ -1176,7 +1180,7 @@ def _linear_fit(
     pitch_authority: FiniteInterval,
     gap_authority: FiniteInterval,
     phase_authority: FiniteInterval | None,
-) -> tuple[float, float, float]:
+) -> tuple[float, float, float, LatticeParameterFitBasis]:
     if not matches:
         raise ValueError("global template fit requires direct matches")
     straight = tuple(
@@ -1217,26 +1221,17 @@ def _linear_fit(
         dtype=np.float64,
     )
     solution = None
+    fit_basis = LatticeParameterFitBasis.TEMPLATE_INTERVAL_CENTER
     if len(fit_matches) >= 3 and np.linalg.matrix_rank(matrix) == 3:
-        solution = np.linalg.lstsq(
+        solution = _bounded_lattice_least_squares(
             matrix,
             values,
-            rcond=None,
-        )[0]
-        phase_fit, width_fit, pitch_fit = solution
-        proposed_width = (
-            float(width_fit)
-            if width_authority.minimum <= width_fit <= width_authority.maximum
-            else width
+            width_authority=width_authority,
+            pitch_authority=pitch_authority,
+            gap_authority=gap_authority,
+            phase_authority=phase_authority,
         )
-        proposed_pitch = (
-            float(pitch_fit)
-            if pitch_authority.contains(float(pitch_fit))
-            else pitch
-        )
-        if gap_authority.contains(proposed_pitch - proposed_width):
-            width = proposed_width
-            pitch = proposed_pitch
+        phase, width, pitch, fit_basis = solution
     offsets = tuple(
         direction
         * (
@@ -1252,15 +1247,205 @@ def _linear_fit(
     )
     phase = float(phase_values[len(phase_values) // 2])
     if solution is not None:
-        phase_fit = float(solution[0])
-        if math.isfinite(phase_fit):
-            phase = phase_fit
-    if phase_authority is not None:
+        phase = float(solution[0])
+    elif phase_authority is not None:
         phase = min(
             max(phase, phase_authority.minimum),
             phase_authority.maximum,
         )
-    return phase, width, pitch
+    return phase, width, pitch, fit_basis
+
+
+def _bounded_lattice_least_squares(
+    matrix: np.ndarray,
+    values: np.ndarray,
+    *,
+    width_authority: PositiveInterval,
+    pitch_authority: FiniteInterval,
+    gap_authority: FiniteInterval,
+    phase_authority: FiniteInterval | None,
+) -> tuple[float, float, float, LatticeParameterFitBasis]:
+    """Fit one continuous lattice inside every compiled physical interval.
+
+    The unknown vector is ``(phase, W, pitch)``.  A rank-three direct system
+    may have an unconstrained least-squares solution just outside the coupled
+    ``pitch - W`` interval even though a nearby physical solution exists.
+    Discarding both fitted axes in that case creates a synthetic source-wide
+    drift.  This fixed three-variable solve keeps the nearest joint solution;
+    it neither widens an authority nor compares placements.
+    """
+
+    def snap_numeric_boundary(candidate: np.ndarray) -> np.ndarray:
+        snapped = candidate.copy()
+        for index, authority in (
+            (1, width_authority),
+            (2, pitch_authority),
+        ):
+            if (
+                authority.minimum - _LINEAR_CONSTRAINT_EPSILON_PX
+                <= snapped[index]
+                < authority.minimum
+            ):
+                snapped[index] = authority.minimum
+            elif (
+                authority.maximum
+                < snapped[index]
+                <= authority.maximum + _LINEAR_CONSTRAINT_EPSILON_PX
+            ):
+                snapped[index] = authority.maximum
+        if phase_authority is not None:
+            if (
+                phase_authority.minimum - _LINEAR_CONSTRAINT_EPSILON_PX
+                <= snapped[0]
+                < phase_authority.minimum
+            ):
+                snapped[0] = phase_authority.minimum
+            elif (
+                phase_authority.maximum
+                < snapped[0]
+                <= phase_authority.maximum + _LINEAR_CONSTRAINT_EPSILON_PX
+            ):
+                snapped[0] = phase_authority.maximum
+        gap = float(snapped[2] - snapped[1])
+        if (
+            gap_authority.minimum - _LINEAR_CONSTRAINT_EPSILON_PX
+            <= gap
+            < gap_authority.minimum
+        ):
+            target_gap = gap_authority.minimum
+        elif (
+            gap_authority.maximum
+            < gap
+            <= gap_authority.maximum + _LINEAR_CONSTRAINT_EPSILON_PX
+        ):
+            target_gap = gap_authority.maximum
+        else:
+            target_gap = None
+        if target_gap is not None:
+            snapped[2] = snapped[1] + target_gap
+            if target_gap == gap_authority.minimum:
+                while snapped[2] - snapped[1] < target_gap:
+                    snapped[2] = math.nextafter(snapped[2], math.inf)
+            else:
+                while snapped[2] - snapped[1] > target_gap:
+                    snapped[2] = math.nextafter(snapped[2], -math.inf)
+            if snapped[2] < pitch_authority.minimum:
+                snapped[2] = pitch_authority.minimum
+                snapped[1] = snapped[2] - target_gap
+            elif snapped[2] > pitch_authority.maximum:
+                snapped[2] = pitch_authority.maximum
+                snapped[1] = snapped[2] - target_gap
+        return snapped
+
+    def inside_authorities(candidate: np.ndarray) -> bool:
+        return (
+            width_authority.minimum <= candidate[1] <= width_authority.maximum
+            and pitch_authority.contains(float(candidate[2]))
+            and gap_authority.contains(float(candidate[2] - candidate[1]))
+            and (
+                phase_authority is None
+                or phase_authority.contains(float(candidate[0]))
+            )
+        )
+
+    def box_fit(
+        design: np.ndarray,
+        target: np.ndarray,
+        lower: tuple[float, ...],
+        upper: tuple[float, ...],
+    ) -> np.ndarray:
+        fixed = tuple(
+            index
+            for index, (minimum, maximum) in enumerate(
+                zip(lower, upper, strict=True)
+            )
+            if minimum == maximum
+        )
+        free = tuple(index for index in range(len(lower)) if index not in fixed)
+        candidate = np.empty(len(lower), dtype=np.float64)
+        adjusted = target.copy()
+        if fixed:
+            fixed_values = np.asarray([lower[index] for index in fixed])
+            candidate[list(fixed)] = fixed_values
+            adjusted = adjusted - design[:, fixed] @ fixed_values
+        if free:
+            result = lsq_linear(
+                design[:, free],
+                adjusted,
+                bounds=(
+                    np.asarray([lower[index] for index in free]),
+                    np.asarray([upper[index] for index in free]),
+                ),
+                method="bvls",
+                tol=1.0e-12,
+                max_iter=50,
+            )
+            if not result.success:
+                raise RuntimeError("bounded lattice box fit did not converge")
+            candidate[list(free)] = result.x
+        return candidate
+
+    phase_bounds = (
+        (-math.inf, math.inf)
+        if phase_authority is None
+        else (phase_authority.minimum, phase_authority.maximum)
+    )
+    unconstrained = snap_numeric_boundary(
+        np.linalg.lstsq(matrix, values, rcond=None)[0]
+    )
+    if inside_authorities(unconstrained):
+        return (
+            float(unconstrained[0]),
+            float(unconstrained[1]),
+            float(unconstrained[2]),
+            LatticeParameterFitBasis.DIRECT_LEAST_SQUARES,
+        )
+    selected = snap_numeric_boundary(
+        box_fit(
+            matrix,
+            values,
+            (phase_bounds[0], width_authority.minimum, pitch_authority.minimum),
+            (phase_bounds[1], width_authority.maximum, pitch_authority.maximum),
+        )
+    )
+    gap = float(selected[2] - selected[1])
+    if not gap_authority.contains(gap):
+        target_gap = (
+            gap_authority.minimum
+            if gap < gap_authority.minimum
+            else gap_authority.maximum
+        )
+        width_minimum = max(
+            width_authority.minimum,
+            pitch_authority.minimum - target_gap,
+        )
+        width_maximum = min(
+            width_authority.maximum,
+            pitch_authority.maximum - target_gap,
+        )
+        if width_minimum > width_maximum:
+            raise RuntimeError("compiled lattice authorities have no feasible fit")
+        reduced = box_fit(
+            np.column_stack((matrix[:, 0], matrix[:, 1] + matrix[:, 2])),
+            values - matrix[:, 2] * target_gap,
+            (phase_bounds[0], width_minimum),
+            (phase_bounds[1], width_maximum),
+        )
+        selected = snap_numeric_boundary(
+            np.asarray((reduced[0], reduced[1], reduced[1] + target_gap))
+        )
+    if not inside_authorities(selected):
+        raise RuntimeError(
+            "bounded lattice least-squares fit escaped authority: "
+            f"phase={selected[0]}, W={selected[1]}, pitch={selected[2]}, "
+            f"gap={selected[2] - selected[1]}"
+        )
+    return (
+        float(selected[0]),
+        float(selected[1]),
+        float(selected[2]),
+        LatticeParameterFitBasis.BOUNDED_DIRECT_LEAST_SQUARES,
+    )
 
 
 def _fit_seed(
@@ -1280,6 +1465,7 @@ def _fit_seed(
     ) / 2.0
     pitch = seed.pitch_px
     phase = seed.phase_px
+    fit_basis = LatticeParameterFitBasis.TEMPLATE_INTERVAL_CENTER
     prefixes = _prefixes(relations, template.count)
     matches: tuple[tuple[TemplateRole, _AnchorFact], ...] = ()
     required = set(seed.required_bindings)
@@ -1321,10 +1507,20 @@ def _fit_seed(
             gap_authority=template.gap_prior_px,
             phase_authority=phase_authority,
         )
-        if updated_matches == matches and updated == (phase, width, pitch):
+        updated_phase, updated_width, updated_pitch, updated_basis = updated
+        converged = updated_matches == matches and (
+            updated_phase,
+            updated_width,
+            updated_pitch,
+        ) == (phase, width, pitch)
+        fit_basis = most_constrained_lattice_parameter_fit_basis(
+            fit_basis,
+            updated_basis,
+        )
+        if converged:
             break
         matches = updated_matches
-        phase, width, pitch = updated
+        phase, width, pitch = updated_phase, updated_width, updated_pitch
     residual_limit = max(3.0, width * 0.035)
     retained = tuple(
         (role, anchor)
@@ -1345,7 +1541,7 @@ def _fit_seed(
     if retained and retained != matches:
         if not retains_seed_identity(retained):
             return None
-        phase, width, pitch = _linear_fit(
+        phase, width, pitch, retained_basis = _linear_fit(
             retained,
             width=width,
             pitch=pitch,
@@ -1355,6 +1551,10 @@ def _fit_seed(
             pitch_authority=pitch_authority,
             gap_authority=template.gap_prior_px,
             phase_authority=phase_authority,
+        )
+        fit_basis = most_constrained_lattice_parameter_fit_basis(
+            fit_basis,
+            retained_basis,
         )
         matches = retained
     if not matches:
@@ -1492,6 +1692,7 @@ def _fit_seed(
             canonical_pitch_px=pitch,
             observation_ids=direct_ids,
         ),
+        lattice_parameter_fit_basis=fit_basis,
         model_role_positions_px=canonical_positions,
         model_role_intervals_px=tuple(role_intervals),
         model_full_role_intervals_px=tuple(role_full_intervals),

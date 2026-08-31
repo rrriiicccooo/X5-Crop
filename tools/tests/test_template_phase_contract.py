@@ -4,6 +4,8 @@ from dataclasses import replace
 import math
 import unittest
 
+import numpy as np
+
 from tools.tests.template_test_support import (
     phase_edge as edge,
     phase_sequence_measurement,
@@ -24,6 +26,7 @@ from x5crop.detection.photo_geometry.observation_types import (
 )
 from x5crop.detection.photo_geometry.template_model import (
     FrameWidthInferenceFailureKind,
+    LatticeParameterFitBasis,
     LocalAdvanceKind,
     LocalAdvanceRelation,
     PhaseLatticeAuthority,
@@ -34,11 +37,13 @@ from x5crop.detection.photo_geometry.template_model import (
 from x5crop.detection.photo_geometry.template_phase import (
     _merge_continuous_placement,
     _same_continuous_placement,
+    account_prior_phase_fit,
     fit_template_phase,
     fit_template_phase_with_local_advance,
 )
 from x5crop.detection.photo_geometry.template_phase_candidates import (
     _BoundFit,
+    _bounded_lattice_least_squares,
     _facts,
     _match_roles,
 )
@@ -1181,6 +1186,122 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         self.assertEqual(result.global_lattice_authority.joint_constraint_rank, 2)
 
+    def test_rank_three_fit_uses_nearest_joint_physical_solution(self) -> None:
+        matrix = np.asarray(
+            [
+                (1.0, 0.0, 0.0),
+                (1.0, 1.0, 0.0),
+                (1.0, 0.0, 1.0),
+                (1.0, 1.0, 1.0),
+                (1.0, 0.0, 2.0),
+                (1.0, 1.0, 2.0),
+            ],
+            dtype=np.float64,
+        )
+        values = np.asarray(
+            (10.0, 108.0, 131.0, 229.0, 252.0, 350.0),
+            dtype=np.float64,
+        )
+
+        phase, width, pitch, basis = _bounded_lattice_least_squares(
+            matrix,
+            values,
+            width_authority=PositiveInterval(95.0, 105.0),
+            pitch_authority=FiniteInterval(115.0, 125.0),
+            gap_authority=FiniteInterval(18.0, 22.0),
+            phase_authority=None,
+        )
+
+        self.assertAlmostEqual(pitch - width, 22.0)
+        self.assertEqual(
+            basis,
+            LatticeParameterFitBasis.BOUNDED_DIRECT_LEAST_SQUARES,
+        )
+        self.assertNotEqual((width, pitch), (100.0, 120.0))
+        bounded_residual = np.sum(
+            (matrix @ np.asarray((phase, width, pitch)) - values) ** 2
+        )
+        nominal_phase = float(
+            np.mean(values - matrix @ np.asarray((0.0, 100.0, 120.0)))
+        )
+        nominal_residual = np.sum(
+            (
+                matrix @ np.asarray((nominal_phase, 100.0, 120.0))
+                - values
+            )
+            ** 2
+        )
+        self.assertLess(bounded_residual, nominal_residual)
+
+    def test_rank_three_fit_never_widens_compiled_authorities(self) -> None:
+        matrix = np.asarray(
+            [
+                (1.0, 0.0, 0.0),
+                (1.0, 1.0, 0.0),
+                (1.0, 0.0, 1.0),
+                (1.0, 1.0, 2.0),
+            ],
+            dtype=np.float64,
+        )
+        values = np.asarray((0.0, 70.0, 150.0, 390.0), dtype=np.float64)
+
+        phase, width, pitch, basis = _bounded_lattice_least_squares(
+            matrix,
+            values,
+            width_authority=PositiveInterval(95.0, 105.0),
+            pitch_authority=FiniteInterval(115.0, 125.0),
+            gap_authority=FiniteInterval(18.0, 22.0),
+            phase_authority=FiniteInterval(-2.0, 2.0),
+        )
+
+        self.assertTrue(FiniteInterval(-2.0, 2.0).contains(phase))
+        self.assertTrue(FiniteInterval(95.0, 105.0).contains(width))
+        self.assertTrue(FiniteInterval(115.0, 125.0).contains(pitch))
+        self.assertTrue(FiniteInterval(18.0, 22.0).contains(pitch - width))
+        self.assertEqual(
+            basis,
+            LatticeParameterFitBasis.BOUNDED_DIRECT_LEAST_SQUARES,
+        )
+
+    def test_parameter_basis_follows_only_the_same_discrete_lineage(self) -> None:
+        coordinates = (10.0, 110.0, 130.0, 230.0)
+        observations = tuple(
+            edge(f"lineage:{index}", coordinate)
+            for index, coordinate in enumerate(coordinates)
+        )
+        current = fit_template_phase(observations, template(2))
+        assert current.best is not None
+        prior = replace(
+            current,
+            best=replace(
+                current.best,
+                lattice_parameter_fit_basis=(
+                    LatticeParameterFitBasis.BOUNDED_DIRECT_LEAST_SQUARES
+                ),
+            ),
+        )
+
+        inherited = account_prior_phase_fit(current, prior)
+
+        assert inherited.best is not None
+        self.assertEqual(
+            inherited.best.lattice_parameter_fit_basis,
+            LatticeParameterFitBasis.BOUNDED_DIRECT_LEAST_SQUARES,
+        )
+        unrelated = fit_template_phase(
+            tuple(
+                edge(f"other:{index}", coordinate)
+                for index, coordinate in enumerate(coordinates)
+            ),
+            template(2),
+        )
+        retained = account_prior_phase_fit(unrelated, prior)
+        assert retained.best is not None
+        self.assertEqual(
+            retained.best.lattice_parameter_fit_basis,
+            LatticeParameterFitBasis.DIRECT_LEAST_SQUARES,
+        )
+
     def test_direct_phase_authority_preserves_calibrated_placement(self) -> None:
         observations = (
             edge("prior-start", 40.0),
@@ -1477,7 +1598,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         assert result.best is not None
         self.assertEqual(result.best.phase_support_count, 4)
 
-    def test_more_supported_lattice_locations_outrank_more_local_edges(
+    def test_equal_supported_discrete_lattices_remain_ambiguous_after_joint_fit(
         self,
     ) -> None:
         coordinates = (10.0, 126.0, 227.0, 247.0, 350.0, 370.0, 470.0)
@@ -1503,10 +1624,14 @@ class TemplatePhaseContractTest(unittest.TestCase):
 
         result = fit_template_phase(observations, template(3))
 
-        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
-        self.assertEqual(result.winner_basis, PhaseWinnerBasis.INDEPENDENT_SUPPORT)
+        self.assertEqual(result.status, PhaseFitStatus.AMBIGUOUS)
+        self.assertEqual(
+            result.failure_kind,
+            PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS,
+        )
+        self.assertIsNone(result.winner_basis)
         assert result.best is not None and result.runner_up is not None
-        self.assertGreater(
+        self.assertEqual(
             result.best.phase_support_count,
             result.runner_up.phase_support_count,
         )
@@ -1543,7 +1668,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         assert result.best is not None and result.runner_up is not None
         self.assertEqual(result.best.phase_support_count, 4)
         self.assertEqual(result.runner_up.phase_support_count, 4)
-        self.assertAlmostEqual(result.runner_up.residual_sum_px, 12.0)
+        self.assertAlmostEqual(result.runner_up.residual_sum_px, 9.0)
 
     def test_fixed_width_pair_rejects_nearer_interior_end_edge(self) -> None:
         observations = (

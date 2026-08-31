@@ -113,6 +113,10 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertIn("COARSE ORIENTATION ", cross)
         self.assertIn("ENCLOSING ", cross)
         self.assertIn("SEQUENCE FIT ·", sequence)
+        self.assertIn(
+            "PARAM BOUNDED_DIRECT_LEAST_SQUARES",
+            sequence,
+        )
         self.assertIn("SOURCE FIT ·", source)
 
     def test_three_panels_preserve_four_v5_fact_layers(self) -> None:

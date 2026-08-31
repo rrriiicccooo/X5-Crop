@@ -43,6 +43,11 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   同一 adjacency 的另一侧传递一次 `partial_height_separator_pair` 权限；传递不能级联，且最终必须使用
   两侧直接的 `aperture_pair` 短轴域。Enclosing support 或单侧推断 aperture 产生 typed
   `direct_role_aperture_domain_unavailable`，不能把两个不完整机制叠加成批准。
+- Rank 3 直接坐标现在在 phase、W、pitch 与 `pitch-W` 的联合硬区间内执行有界最小二乘。无约束解轻微
+  越界时不再把 W/pitch 整体退回 catalog 中心却保留原 phase；报告以
+  `direct_least_squares | bounded_direct_least_squares | template_interval_center` 记录连续参数依据。
+  该求解不扩张物理区间、不覆盖 direct native coordinate，也不选择离散 runner；受约束后暴露出的另一
+  合法解释仍安全进入 review。
 - Format W/H compatibility 由一个 current-only 混合物理合同统一计算：
   `guard_W=max(0.95 mm, 2.4%W)`、`guard_H=max(0.70 mm, 1.8%H)`。参数来自 105 个合格黄金 source、
   494 个完整且全部直接可见 Frame 的 source-level 中位尺寸、分轴长 q95 与向外量化；不再保存 `half`
@@ -101,7 +106,8 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   阻断原因；报告同时保存全局未知量 constraint rank、逐 adjacency query/trace/coordinate coverage 与
   直接角色/外侧 Frame observation authority，以及 dark/light material、逐区域状态和冲突。Debug 不重新
   求解，也不把 review candidate 伪装为正式输出。当前 report revision 为
-  `x5crop_v5_template_report_25`，并显式报告三层 source footprint、typed saturation、同一状态 cross
+  `x5crop_v5_template_report_26`，并显式报告连续 lattice 参数依据、三层 source footprint、typed
+  saturation、同一状态 cross
   alignment padding、source W/H、相关
   Frame-width inference 及 validation-only role/observation provenance、aspect calibration、raw/guarded
   ratio、两轴 guard、推导 H、Cross typed root

@@ -16,6 +16,7 @@ from .template_model import (
     SequenceRoleBinding,
     TemplateSearchReceipt,
     TemplateSpec,
+    most_constrained_lattice_parameter_fit_basis,
     ordered_template_roles,
 )
 from .template_phase_candidates import (
@@ -60,6 +61,74 @@ from .template_phase_model import (
 def _intervals_overlap(left: FiniteInterval, right: FiniteInterval) -> bool:
     return not (
         left.maximum < right.minimum or right.maximum < left.minimum
+    )
+
+
+def _same_lattice_fit_lineage(
+    current: SequenceFit,
+    prior: SequenceFit,
+) -> bool:
+    """Identify one discrete placement across continuous calibration passes."""
+
+    if (
+        current.template.template_id != prior.template.template_id
+        or current.template.count != prior.template.count
+        or current.template.direction != prior.template.direction
+        or current.phase_lattice_fit.integer_slot_offset
+        != prior.phase_lattice_fit.integer_slot_offset
+        or not _intervals_overlap(
+            current.phase_lattice_fit.absolute_phase_interval_px,
+            prior.phase_lattice_fit.absolute_phase_interval_px,
+        )
+    ):
+        return False
+    current_roles = {
+        binding.observation_id: role_index
+        for role_index, binding in enumerate(current.role_bindings)
+        if binding is not None
+    }
+    prior_roles = {
+        binding.observation_id: role_index
+        for role_index, binding in enumerate(prior.role_bindings)
+        if binding is not None
+    }
+    shared = current_roles.keys() & prior_roles.keys()
+    return bool(shared) and all(
+        current_roles[observation_id] == prior_roles[observation_id]
+        for observation_id in shared
+    )
+
+
+def _inherit_prior_lattice_fit_basis(
+    result: PhaseFitResult,
+    prior: PhaseFitResult,
+) -> PhaseFitResult:
+    """Retain the most constrained parameter solve in each fit lineage."""
+
+    prior_fits = tuple(
+        fit for fit in (prior.best, prior.runner_up) if fit is not None
+    )
+
+    def inherit(current: SequenceFit | None) -> SequenceFit | None:
+        if current is None:
+            return None
+        bases = (
+            current.lattice_parameter_fit_basis,
+            *(
+                candidate.lattice_parameter_fit_basis
+                for candidate in prior_fits
+                if _same_lattice_fit_lineage(current, candidate)
+            ),
+        )
+        basis = most_constrained_lattice_parameter_fit_basis(*bases)
+        if basis == current.lattice_parameter_fit_basis:
+            return current
+        return replace(current, lattice_parameter_fit_basis=basis)
+
+    return replace(
+        result,
+        best=inherit(result.best),
+        runner_up=inherit(result.runner_up),
     )
 
 
@@ -1062,6 +1131,7 @@ def fit_template_phase_with_local_advance(
         observations,
         separator_bands,
     )
+    adjusted = _inherit_prior_lattice_fit_basis(adjusted, normal)
     adjusted = _aggregate_phase_work(
         adjusted,
         normal.receipt,
@@ -1080,4 +1150,7 @@ def account_prior_phase_fit(
 ) -> PhaseFitResult:
     """Attach a prior calibration fit to the lane's auditable work receipt."""
 
-    return _aggregate_phase_work(result, prior.receipt)
+    return _aggregate_phase_work(
+        _inherit_prior_lattice_fit_basis(result, prior),
+        prior.receipt,
+    )

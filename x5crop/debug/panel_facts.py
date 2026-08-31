@@ -424,6 +424,19 @@ def axis_authority_summaries(
             }
         )
     )
+    lattice_fit_bases = "/".join(
+        sorted(
+            {
+                lane.prepared.phase_competition.best
+                .lattice_parameter_fit_basis.value.upper()
+                for lane in lanes
+                if lane.prepared.phase_competition.best is not None
+            }
+        )
+    )
+    lattice_fit_suffix = (
+        "" if not lattice_fit_bases else f" · PARAM {lattice_fit_bases}"
+    )
     cross_status = "/".join(
         sorted(
             {
@@ -542,7 +555,7 @@ def axis_authority_summaries(
             f"COARSE ORIENTATION {direction} · ENCLOSING {enclosing} · "
             f"RUNNER {cross_runners}{cross_failure_suffix}",
             f"SEQUENCE FIT · {phase_status} · COARSE {coarse_long} · "
-            f"RUNNER {phase_runners}",
+            f"RUNNER {phase_runners}{lattice_fit_suffix}",
             f"SOURCE FIT · {competitors} PLACEMENTS · APERTURE "
             f"W {width_calibrated}/{len(lanes)} H "
             f"{height_calibrated}/{len(lanes)} · RATIO {aspect_summary} · "
@@ -589,7 +602,8 @@ def axis_authority_summaries(
         + f" · DIRECT {direct_cross} · INFERRED {inferred_cross}"
         + cross_pair_mode_suffix,
         f"SEQUENCE FIT · {phase_status} · COARSE {coarse_long} → "
-        f"DIRECT {direct_sequence} · INFERRED {inferred_sequence}",
+        f"DIRECT {direct_sequence} · INFERRED {inferred_sequence}"
+        f"{lattice_fit_suffix}",
         f"SOURCE FIT · LANES {len(lanes)} · APERTURE W "
         f"{width_calibrated}/{len(lanes)} H {height_calibrated}/{len(lanes)} · "
         f"RATIO {aspect_summary} · RUNNERS {runners} · GATE SUPPORTED",
