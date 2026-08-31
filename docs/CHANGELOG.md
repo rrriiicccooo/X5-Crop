@@ -32,7 +32,10 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   中至少两张完整直接 Frame 可闭合 source W；当每个缺失 Frame 仍有一侧直接边缘时，同一份相关 W 可补
   多条 opposite。若某个双侧未绑定 Frame 的完整物理 W 走廊内已经存在多组 registered native edge，
   独立 source W 还可在固定 placement 上追加一次有界 lookup；只有它唯一留下一个各自具有直接坐标权限的
-  pair 时才绑定，零组或多组继续 typed review。缺失 separator 只有在
+  pair 时才绑定。双侧未绑定 Frame 若只有一侧存在唯一 intrinsic edge、另一侧完整 corridor 无候选，也可
+  保留该 native coordinate 并由同一相关 W 推导 opposite；该路径可作用于 calibrated Grid selected fit，
+  但 Grid/format W 自身不能授权。没有合格 pair/单侧 edge、多组解释或任一 opposite 候选继续 typed
+  review。缺失 separator 只有在
   直接约束矩阵独立闭合 `phase/W/pitch`、对应 adjacency 的完整不确定性走廊被已执行窗口逐 trace 覆盖、
   且没有局部反证时才按 `local_delta = 0` 补齐；不再用 edge 数、连续缺失数或全局 query-complete
   布尔值代替证明。候选无关 sequence 窗口按左右 holder 端分别投影完整且相关的 `W/pitch` 状态，覆盖

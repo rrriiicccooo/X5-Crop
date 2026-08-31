@@ -1,6 +1,6 @@
 # 项目记忆
 
-更新：2026-08-31。现场 `main`、tracked cohort、原 TIFF、source SHA、current report 与最新命令输出
+更新：2026-09-01。现场 `main`、tracked cohort、原 TIFF、source SHA、current report 与最新命令输出
 高于历史记录。长期合同见 [ARCHITECTURE.md](ARCHITECTURE.md)，标注规则见
 [MANUAL_ANNOTATION.md](MANUAL_ANNOTATION.md)，协作与验证规则见 [AGENTS.md](../AGENTS.md)。
 
@@ -36,7 +36,10 @@ OOD 共同支持“风险低到可直接使用”，不是 runtime 已知黄金�
   S056 是该合同的真实安全反例。Report revision 为 `x5crop_v5_template_report_32`。
 - 普通 local refinement 使用完整 format W，不能让正在受检验的 fitted Grid W 过滤自己的反证。唯一
   placement 中至少两张其它完整直接 Frame 闭合的 `SourceFrameWidthAuthority` 可以追加一次有界 lookup，
-  在某个双侧未绑定 Frame 中唯一选择已经注册且各自有坐标权限的 native edge pair；零组或多组仍 review。
+  在某个双侧未绑定 Frame 中唯一选择已经注册且各自有坐标权限的 native edge pair；没有合格解释或多解
+  仍 review。
+  双侧未绑定 Frame 若只有一侧唯一 intrinsic edge、另一侧完整 corridor 无候选，也可保留该 native 坐标并
+  由同一相关 W 推导 opposite；这同样适用于 calibrated Grid selected fit，但 format/Grid W 没有该权限。
   Source W 不创造坐标、不改变 phase/pitch/ordinal，最终仍重新检查 direct-role、outer、coverage 与预算。
 - `SequenceAnchorDiscoveryDomain` 现在以左右锚定的完整 W/pitch role core 为种子，把 coarse support 内每个
   可测整数像素中心恰好分给一个预登记窗口。相邻窗口的 measurement halo 可以重叠，transition ownership
@@ -49,7 +52,8 @@ OOD 共同支持“风险低到可直接使用”，不是 runtime 已知黄金�
 - 完整 development gold 为 110/110、分析错误 0、`unsafe_approved_auto = 0`。安全 auto 为基础 nominal
   17/66、较难 nominal 2/30、challenge 0/14；candidate 为 87 个不可用、20 个安全、3 个不安全，全部不安全
   candidate 均保持 review。S079、S090 通过 source-W native-pair rebind 新增安全自动批准，既有安全 auto
-  无回退；S070 继续以 `source_frame_width_conflict` 阻断 Grid 自证错误边缘。
+  无回退；S070 继续以 `source_frame_width_conflict` 阻断 Grid 自证错误边缘。单侧 source-W closure 没有
+  放宽终态：S110 从完整 Frame 无观察迁移为直接角色权限缺口，S011 在弱线让位后继续由独立比例预算阻断。
 - 正式性能只由绑定最终干净 commit 的 24-source receipt 判断；5 秒 mean 是阻断 Gate，3 秒 mean 是持续
   优化目标。精确时间、RSS、依赖与机器身份不在本文件复制。
 
@@ -69,9 +73,9 @@ OOD 共同支持“风险低到可直接使用”，不是 runtime 已知黄金�
 
 ## 开放风险
 
-- 基础 nominal 仍有 49/66 review，较难 nominal 有 28/30 review。主要 Gate 根因是 24 个
+- 基础 nominal 仍有 49/66 review，较难 nominal 有 28/30 review。主要 Gate 根因是 23 个
   `nominal_grid_complete_frame_unobserved`、12 个 `phase_template_mismatch`、10 个
-  `phase_placement_ambiguous`、9 个 `direct_role_binding_authority_unavailable`、8 个
+  `phase_placement_ambiguous`、9 个 `direct_role_binding_authority_unavailable`、9 个
   `aperture_aspect_ratio_budget_exhausted`、6 个 `placement_unresolved`、5 个
   `direct_role_aperture_domain_unavailable` 与 4 个 `nominal_grid_phase_anchor_unavailable`。
 - S040/S056 证明完整 query receipt 与 calibrated Grid 仍不足以硬授权整张未观察 Frame；这不是 Grid 的
@@ -84,9 +88,9 @@ OOD 共同支持“风险低到可直接使用”，不是 runtime 已知黄金�
 
 ## 精确下一步
 
-1. 对剩余 24 个 `nominal_grid_complete_frame_unobserved` 区分 source W 不可用、没有 intrinsic native pair
-   与仍有多组合法 pair；先提高真实 observation/coordinate authority，不能删除完整 Frame 安全反例或让
-   Grid/source W 创造像素事实。
+1. 剩余 23 个 `nominal_grid_complete_frame_unobserved` 已没有可由现有 source W 唯一闭合的 intrinsic
+   pair 或单侧 edge；下一步提高候选无关 observation/coordinate authority，不能删除完整 Frame 安全反例
+   或让 Grid/source W 创造像素事实。
 2. 继续处理极低显著边缘与真实片距变化，让同一 registered measurement owner 提供更多 typed
    observation，不建立 enhanced detector、样片规则或未经校准的 score。
 3. 再依次闭合 adjacency continuity、contact、overlap。概率选择层只设计 feature/calibration/OOD/

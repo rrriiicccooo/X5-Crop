@@ -419,6 +419,100 @@ class TemplatePhaseContractTest(unittest.TestCase):
             (true_start.observation_id, end.observation_id),
         )
 
+    def test_independent_source_width_closes_one_intrinsic_edge(self) -> None:
+        fit = placement_sequence(template(2), missing=(0, 1))
+        start = self._local_line(
+            "source-width:start-only:1",
+            100.0,
+            BoundaryRole.START,
+        )
+
+        physical_only = _refine_local_role_bindings(
+            fit,
+            (start,),
+            (),
+            intrinsic_coordinate_authority_ids=frozenset(
+                {start.observation_id}
+            ),
+        )
+        source_closed = _refine_local_role_bindings(
+            fit,
+            (start,),
+            (),
+            intrinsic_coordinate_authority_ids=frozenset(
+                {start.observation_id}
+            ),
+            frame_width_authority_px=FiniteInterval(99.5, 100.5),
+        )
+
+        self.assertEqual(
+            physical_only.fit.binding_observation_ids[:2],
+            (None, None),
+        )
+        self.assertEqual(
+            source_closed.fit.binding_observation_ids[:2],
+            (start.observation_id, None),
+        )
+
+    def test_source_width_single_edge_rejects_an_opposite_candidate(self) -> None:
+        fit = placement_sequence(template(2), missing=(0, 1, 2))
+        start = self._local_line(
+            "source-width:intrinsic:start:1",
+            100.0,
+            BoundaryRole.START,
+        )
+        conflicting_end = self._local_line(
+            "source-width:weak:end:1",
+            210.0,
+            BoundaryRole.END,
+        )
+        conflicting_end = replace(
+            conflicting_end,
+            qualified_anchor_roles=(
+                BoundaryRole.END,
+                BoundaryRole.START,
+            ),
+        )
+
+        refined = _refine_local_role_bindings(
+            fit,
+            (start, conflicting_end),
+            (),
+            intrinsic_coordinate_authority_ids=frozenset(
+                {start.observation_id}
+            ),
+            frame_width_authority_px=FiniteInterval(99.5, 100.5),
+        )
+
+        self.assertEqual(refined.fit.binding_observation_ids[:2], (None, None))
+
+    def test_source_width_single_edge_rejects_multiple_intrinsic_edges(
+        self,
+    ) -> None:
+        fit = placement_sequence(template(2), missing=(0, 1))
+        first = self._local_line(
+            "source-width:first:start:1",
+            99.0,
+            BoundaryRole.START,
+        )
+        second = self._local_line(
+            "source-width:second:start:1",
+            101.0,
+            BoundaryRole.START,
+        )
+
+        refined = _refine_local_role_bindings(
+            fit,
+            (first, second),
+            (),
+            intrinsic_coordinate_authority_ids=frozenset(
+                {first.observation_id, second.observation_id}
+            ),
+            frame_width_authority_px=FiniteInterval(99.5, 100.5),
+        )
+
+        self.assertEqual(refined.fit.binding_observation_ids[:2], (None, None))
+
     def test_locally_bound_separator_drives_one_wide_advance(self) -> None:
         anchor = replace(
             self._local_line("anchor:start:1", 100.0, BoundaryRole.START),

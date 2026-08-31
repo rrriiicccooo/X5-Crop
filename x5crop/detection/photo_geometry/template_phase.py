@@ -1379,7 +1379,14 @@ def _apply_final_lattice_contract(
     )
     if (
         result.best is not None
-        and result.best.calibrated_nominal_grid_fit_state is None
+        and (
+            result.best.calibrated_nominal_grid_fit_state is None
+            or (
+                source_frame_width_authority is not None
+                and source_frame_width_authority.state
+                == EvidenceState.SUPPORTED
+            )
+        )
     ):
         assessed_best = apply_correlated_frame_width_inference(
             result.best,

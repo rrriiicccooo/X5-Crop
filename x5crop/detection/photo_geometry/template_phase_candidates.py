@@ -587,6 +587,9 @@ def _refine_local_role_bindings(
     # One observation may refine at most one already placed role.  A line that
     # falls in more than one role corridor retains validation-only authority.
     candidate_roles: dict[ObservationId, list[int]] = {}
+    registered_candidate_ids_by_role: dict[int, set[ObservationId]] = {
+        role.role_index: set() for role in roles
+    }
     for role, expected in zip(
         roles,
         fit.model_role_positions_px,
@@ -595,14 +598,18 @@ def _refine_local_role_bindings(
         for fact in facts:
             if (
                 fit.role_bindings[role.role_index] is None
-                and fact.observation_id not in bound_ids
                 and fact.line_evidence is not None
                 and role.role in fact.qualified_anchor_roles
                 and abs(fact.coordinate_px - expected) <= corridor
             ):
-                candidate_roles.setdefault(fact.observation_id, []).append(
-                    role.role_index
+                registered_candidate_ids_by_role[role.role_index].add(
+                    fact.observation_id
                 )
+                if fact.observation_id not in bound_ids:
+                    candidate_roles.setdefault(
+                        fact.observation_id,
+                        [],
+                    ).append(role.role_index)
     candidate_lists: dict[int, list[_AnchorFact]] = {
         role.role_index: [] for role in roles
     }
@@ -812,18 +819,38 @@ def _refine_local_role_bindings(
         start = bindings[start_index]
         end = bindings[end_index]
         if start is None and end is None:
+            remaining_starts = remaining(start_index)
+            remaining_ends = remaining(end_index)
+            intrinsic_starts = remaining(start_index, intrinsic=True)
+            intrinsic_ends = remaining(end_index, intrinsic=True)
             pair = unique_pair(
-                remaining(start_index, intrinsic=True),
-                remaining(end_index, intrinsic=True),
+                intrinsic_starts,
+                intrinsic_ends,
             )
             if pair is None:
                 pair = unique_pair(
-                    remaining(start_index),
-                    remaining(end_index),
+                    remaining_starts,
+                    remaining_ends,
                 )
             if pair is not None:
                 bind(start_index, pair[0])
                 bind(end_index, pair[1])
+            elif frame_width_authority_px is not None:
+                # An independently closed source W may complete one Frame
+                # from one native coordinate.  It cannot choose between two
+                # observed sides: the opposite registered corridor must be
+                # empty, and the retained side must own its coordinate
+                # without relational transfer from that missing opposite.
+                if (
+                    len(intrinsic_starts) == 1
+                    and not registered_candidate_ids_by_role[end_index]
+                ):
+                    bind(start_index, intrinsic_starts[0])
+                elif (
+                    len(intrinsic_ends) == 1
+                    and not registered_candidate_ids_by_role[start_index]
+                ):
+                    bind(end_index, intrinsic_ends[0])
         elif start is None:
             candidate = unique_missing(
                 remaining(start_index, intrinsic=True),

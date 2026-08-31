@@ -413,8 +413,12 @@ Constraint rank 只由 `template_lattice_authority.py` 计算。相同 `evidence
   `opposite + correlated W`。局部 observation 只保留为 validation provenance，不能收窄 W 或增加 rank。
   若某张 Frame 原本双侧都未绑定，但完整 format W 走廊内已有多组 registered native edge，而独立 source W
   能唯一留下其中一组，则允许在固定 placement 上追加一次有界 local lookup 并绑定该原生 pair。它不读取
-  新像素、不生成坐标、不改变 phase/pitch/ordinal，也不能在多解时强选。最终直接角色权限、outer authority、
-  adjacency coverage、counterevidence 与 5% 预算仍须重新完整评估。
+  新像素、不生成坐标、不改变 phase/pitch/ordinal，也不能在多解时强选。若双侧未绑定 Frame 只有一侧存在
+  唯一 intrinsic-authorized native edge，且另一侧完整 registered corridor 没有任何候选，同一份独立
+  source W 也可以先保留该 native coordinate，再以完整相关 W 推导 opposite；另一侧存在任何观察、同侧
+  intrinsic 多解或 source W 不可用时均不得使用。该合同同样适用于 calibrated Grid 生成的 selected fit，
+  但 format/Grid W 自身没有这项权限。最终直接角色权限、outer authority、adjacency coverage、
+  counterevidence 与 5% 预算仍须重新完整评估。
 
 | source W 与缺失角色状态 | 结果 |
 |---|---|
@@ -424,7 +428,8 @@ Constraint rank 只由 `template_lattice_authority.py` 计算。相同 `evidence
 | 没有缺失角色 | 不需要 W 推断，全部直接 native coordinate 保持不变 |
 | 至少两张完整直接 Frame 闭合共同 W，且每个缺失 Frame 仍有一侧直接边缘 | `supported`；同一相关 W 补齐全部 opposite |
 | 至少两张其它完整直接 Frame 闭合共同 W；某个双侧未绑定 Frame 在该 W 内只有一组 registered、intrinsic-authorized native edge pair | 固定 placement 上绑定该 pair；随后重新计算直接权限、outer、coverage 与 Gate |
-| 双侧未绑定 Frame 在 source W 内仍有零组或多组合法 native pair | 保持 `complete_frame_unobserved`；source W 不创造坐标也不强选 |
+| 至少两张其它完整直接 Frame 闭合共同 W；某个双侧未绑定 Frame 只有一侧唯一 intrinsic edge，另一侧 registered corridor 为空 | 保留该 native edge，以同一相关 W 推导 opposite；calibrated Grid 不能把自己的 W 冒充这份 authority |
+| 双侧未绑定 Frame 没有上述唯一 pair 或唯一单侧 edge，或仍有多组合法解释 | 保持 `complete_frame_unobserved`；source W 不创造坐标也不强选 |
 | 无权 `LOCAL_REFINEMENT`，opposite 已授权，W 来自至少两张其它双边授权 Frame，且 W 走廊中只有该线相容 | 该角色成为 `validation_only`；完整相关 W 推导坐标，记录 role index 与 validation observation ID |
 | 弱线参与 W、opposite 未授权、W 走廊多解，或该线承担 `PHASE_ANCHOR` | 不让位；原 `direct_role_binding_authority_unavailable` 保持 |
 | 任一 Frame 的 START/END 都未观察，且上述 source-W native-pair rebind 未唯一成立 | `complete_frame_unobserved` → `frame_width_inference_unavailable` |
@@ -447,6 +452,7 @@ placement；“观察到了”本身不等于“有权决定裁切”。权限�
 | 两高度 separator 的两侧都只有局部 edge | 不能互相授权；`direct_role_binding_authority_unavailable` |
 | 两条局部 edge 的间距只与 catalog 或 source W 相容 | 只能证明尺寸未冲突，不能让两条无 intrinsic/pair 权限的线互相授予 native coordinate |
 | source W 在固定 placement 中唯一选择一组各自具有 intrinsic 权限的 registered pair | source W 只消除本地多解；两条 native coordinate 的权限仍来自各自 source-wide/cross-height basis |
+| 双侧未绑定 Frame 只有一侧唯一 intrinsic edge，另一侧完整 corridor 无候选，且 source W 已独立闭合 | 该 edge 保留自己的 native coordinate；opposite 只来自相关 W，不冒充 direct observation |
 | 无权局部 refinement 满足上方独立 W 让位合同 | 弱线不取得 native coordinate；由已授权 opposite 与完整相关 W 推导该角色 |
 | 只覆盖局部高度，且没有上述任一直接闭环 | `direct_role_binding_authority_unavailable` |
 
