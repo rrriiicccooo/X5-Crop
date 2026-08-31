@@ -126,7 +126,13 @@ class TemplateSelectionContractTest(unittest.TestCase):
                     "dual_lane_fill",
                     "source_lane_authority",
                 ),
-                "direct_use_budget": ("selected_output_footprint",),
+                "calibrated_nominal_grid_authority": (
+                    "selected_output_footprint",
+                ),
+                "direct_use_budget": (
+                    "selected_output_footprint",
+                    "calibrated_nominal_grid_authority",
+                ),
             },
         )
 
@@ -257,6 +263,11 @@ class TemplateSelectionContractTest(unittest.TestCase):
                 MinimumMissingFact.ADJACENCY_OBSERVATION_COVERAGE,
             ),
             (
+                PhaseFailureKind.NOMINAL_GRID_COMPLETE_FRAME_UNOBSERVED,
+                GateGap.NOMINAL_GRID_COMPLETE_FRAME_UNOBSERVED,
+                MinimumMissingFact.DIRECT_ROLE_BINDING_AUTHORITY,
+            ),
+            (
                 PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE,
                 GateGap.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE,
                 MinimumMissingFact.DIRECT_ROLE_BINDING_AUTHORITY,
@@ -270,6 +281,11 @@ class TemplateSelectionContractTest(unittest.TestCase):
                 PhaseFailureKind.OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE,
                 GateGap.OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE,
                 MinimumMissingFact.OUTER_FRAME_OBSERVATION_AUTHORITY,
+            ),
+            (
+                PhaseFailureKind.SOURCE_FRAME_WIDTH_CONFLICT,
+                GateGap.SOURCE_FRAME_WIDTH_CONFLICT,
+                MinimumMissingFact.SOURCE_PHYSICAL_COMPATIBILITY,
             ),
         )
         for failure_kind, expected_gap, expected_fact in cases:

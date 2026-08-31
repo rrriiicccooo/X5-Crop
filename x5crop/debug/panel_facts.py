@@ -235,6 +235,27 @@ def alignment_summary(detection: FinalDetection) -> str:
         label = diagnostic.pattern.value.upper().replace("_", " ")
         authority = diagnostic.global_lattice_authority
         rank = 0 if authority is None else authority.joint_constraint_rank
+        nominal = diagnostic.calibrated_nominal_grid_evidence
+        nominal_frames = (
+            "-"
+            if nominal is None or not nominal.unobserved_frame_ordinals
+            else ",".join(map(str, nominal.unobserved_frame_ordinals))
+        )
+        nominal_failure = (
+            ""
+            if nominal is None or nominal.failure_kind is None
+            else f"{nominal.failure_kind.value.upper()} "
+        )
+        nominal_proof = (
+            "N/A"
+            if nominal is None
+            else (
+                f"{nominal.state.value.upper()} {nominal_failure}"
+                f"A{len(nominal.phase_anchor_role_indices)} "
+                f"G{len(nominal.inferred_adjacency_ordinals)} "
+                f"F{nominal_frames}"
+            )
+        )
         inferred_coverage = tuple(
             item
             for item in diagnostic.adjacency_observation_coverage
@@ -315,7 +336,7 @@ def alignment_summary(detection: FinalDetection) -> str:
             for item in lane.prepared.cross_height_edge_resolutions
         )
         proof = (
-            f"GLOBAL {rank}/3 · ADJ "
+            f"GLOBAL {rank}/3 · NOMINAL {nominal_proof} · ADJ "
             f"{complete_coverage}/{len(inferred_coverage)} · DIRECT "
             f"{direct_supported}/{direct_total} G{direct_evidence_group_count} · "
             f"APERTURE DOMAIN "

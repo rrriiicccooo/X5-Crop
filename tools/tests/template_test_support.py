@@ -48,6 +48,10 @@ from x5crop.detection.photo_geometry.template_placement import (
     FormatPlacement,
     compose_format_placement,
 )
+from x5crop.detection.photo_geometry.template_nominal_grid_model import (
+    CalibratedNominalGridPrior,
+    NominalGridFailureKind,
+)
 from x5crop.domain import (
     EvidenceState,
     FiniteInterval,
@@ -55,6 +59,76 @@ from x5crop.domain import (
     PositiveInterval,
 )
 from x5crop.formats import FramePhysicalSpec
+
+
+def unavailable_nominal_grid_prior(
+    template: TemplateSpec,
+    *,
+    format_id: str = "test-format",
+) -> CalibratedNominalGridPrior:
+    """Explicitly disable calibrated Grid authority in legacy unit scenarios."""
+
+    return CalibratedNominalGridPrior(
+        prior_id=f"nominal-grid-prior:unavailable:{template.template_id}",
+        state=EvidenceState.UNAVAILABLE,
+        format_id=format_id,
+        template_id=template.template_id,
+        calibration_cohort_sha256=None,
+        aperture_calibration_id=None,
+        pitch_calibration_id=None,
+        frame_width_mm=None,
+        frame_height_mm=None,
+        pitch_mm=None,
+        scale_px_per_mm=PositiveInterval.exact(1.0),
+        frame_width_px=None,
+        frame_height_px=None,
+        pitch_px=None,
+        failure_kind=NominalGridFailureKind.CALIBRATED_PRIOR_UNAVAILABLE,
+        reason="unit scenario intentionally has no calibrated nominal Grid",
+    )
+
+
+def calibrated_nominal_grid_prior(
+    template: TemplateSpec,
+    *,
+    format_id: str = "test-format",
+) -> CalibratedNominalGridPrior:
+    """Provide an explicit exact calibration for mechanism-level unit tests."""
+
+    width = FiniteInterval(
+        template.frame_width_px.minimum,
+        template.frame_width_px.maximum,
+    )
+    pitch = FiniteInterval(
+        template.pitch_px.minimum,
+        template.pitch_px.maximum,
+    )
+    height = (
+        FiniteInterval.exact(1.0)
+        if template.frame_height_px is None
+        else FiniteInterval(
+            template.frame_height_px.minimum,
+            template.frame_height_px.maximum,
+        )
+    )
+    return CalibratedNominalGridPrior(
+        prior_id=f"nominal-grid-prior:supported:{template.template_id}",
+        state=EvidenceState.SUPPORTED,
+        format_id=format_id,
+        template_id=template.template_id,
+        calibration_cohort_sha256="0" * 64,
+        aperture_calibration_id="unit-aperture-calibration",
+        pitch_calibration_id="unit-pitch-calibration",
+        frame_width_mm=width,
+        frame_height_mm=height,
+        pitch_mm=pitch,
+        scale_px_per_mm=PositiveInterval.exact(1.0),
+        frame_width_px=width,
+        frame_height_px=height,
+        pitch_px=pitch,
+        failure_kind=None,
+        reason=None,
+    )
 
 
 def phase_edge(

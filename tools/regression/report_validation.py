@@ -65,6 +65,7 @@ _TEMPLATE_ALIGNMENT_FIELDS = {
     "maximum_absolute_role_residual_px",
     "local_advance_relations",
     "global_lattice_authority",
+    "calibrated_nominal_grid_evidence",
     "adjacency_observation_coverage",
     "direct_role_binding_authority",
     "outer_frame_observation_authority",
@@ -120,6 +121,36 @@ _SOURCE_FRAME_WIDTH_FAILURE_KINDS = {
     "outer_frame_authority_unavailable",
     "independent_complete_frames_unavailable",
     "physical_width_conflict",
+}
+
+_NOMINAL_GRID_EVIDENCE_FIELDS = {
+    "evidence_id",
+    "state",
+    "prior_id",
+    "phase_anchor_role_indices",
+    "phase_anchor_observation_ids",
+    "inferred_adjacency_ordinals",
+    "unobserved_frame_ordinals",
+    "covering_query_ids",
+    "failure_kind",
+    "reason",
+}
+_NOMINAL_GRID_AUTHORITY_FIELDS = {
+    "authority_id",
+    "state",
+    "evidence_id",
+    "placement_id",
+    "output_geometry_ids",
+    "failure_kind",
+    "reason",
+}
+_NOMINAL_GRID_FAILURE_KINDS = {
+    "calibrated_nominal_grid_authority_unavailable",
+    "nominal_grid_phase_anchor_unavailable",
+    "adjacency_observation_coverage_incomplete",
+    "complete_frame_unobserved",
+    "nominal_grid_counterevidence",
+    "output_footprint_unavailable",
 }
 
 
@@ -272,6 +303,117 @@ def _validate_global_lattice_authority(value: object) -> None:
         or supported != (value["reason"] is None)
     ):
         raise ValueError("global lattice closure summary is invalid")
+
+
+def _validate_nominal_grid_evidence(value: object) -> None:
+    if value is None:
+        return
+    if (
+        not isinstance(value, dict)
+        or set(value) != _NOMINAL_GRID_EVIDENCE_FIELDS
+        or value["state"] not in {"supported", "unavailable", "contradicted"}
+        or not isinstance(value["evidence_id"], str)
+        or not value["evidence_id"]
+        or not isinstance(value["prior_id"], str)
+        or not value["prior_id"]
+        or not _valid_ids(value["phase_anchor_observation_ids"], allow_empty=False)
+        or not _valid_ids(value["covering_query_ids"])
+        or not isinstance(value["phase_anchor_role_indices"], list)
+        or not isinstance(value["inferred_adjacency_ordinals"], list)
+        or not isinstance(value["unobserved_frame_ordinals"], list)
+        or value["phase_anchor_role_indices"]
+        != sorted(set(value["phase_anchor_role_indices"]))
+        or value["inferred_adjacency_ordinals"]
+        != sorted(set(value["inferred_adjacency_ordinals"]))
+        or value["unobserved_frame_ordinals"]
+        != sorted(set(value["unobserved_frame_ordinals"]))
+        or len(value["phase_anchor_role_indices"])
+        != len(value["phase_anchor_observation_ids"])
+    ):
+        raise ValueError("calibrated nominal Grid evidence summary is invalid")
+    supported = value["state"] == "supported"
+    failed = value["state"] in {"unavailable", "contradicted"}
+    if (
+        any(
+            not isinstance(index, int) or index < 0
+            for index in value["phase_anchor_role_indices"]
+        )
+        or any(
+            not isinstance(ordinal, int) or ordinal <= 0
+            for ordinal in value["inferred_adjacency_ordinals"]
+        )
+        or any(
+            not isinstance(ordinal, int) or ordinal <= 0
+            for ordinal in value["unobserved_frame_ordinals"]
+        )
+        or bool(value["unobserved_frame_ordinals"])
+        != (value["failure_kind"] == "complete_frame_unobserved")
+        or supported
+        != (value["failure_kind"] is None and value["reason"] is None)
+        or failed
+        != (
+            value["failure_kind"] in _NOMINAL_GRID_FAILURE_KINDS
+            and isinstance(value["reason"], str)
+            and bool(value["reason"])
+        )
+    ):
+        raise ValueError("calibrated nominal Grid evidence state is invalid")
+
+
+def _validate_nominal_grid_authority(
+    value: object,
+    *,
+    selected_placement_id: object,
+    output_geometry_ids: set[str],
+) -> None:
+    if (
+        not isinstance(value, dict)
+        or set(value) != _NOMINAL_GRID_AUTHORITY_FIELDS
+        or value["state"]
+        not in {"supported", "unavailable", "contradicted", "not_applicable"}
+        or not isinstance(value["authority_id"], str)
+        or not value["authority_id"]
+        or not _valid_ids(value["output_geometry_ids"])
+    ):
+        raise ValueError("calibrated nominal Grid authority summary is invalid")
+    state = value["state"]
+    supported = state == "supported"
+    not_applicable = state == "not_applicable"
+    failed = state in {"unavailable", "contradicted"}
+    if (
+        supported
+        != (
+            isinstance(value["evidence_id"], str)
+            and bool(value["evidence_id"])
+            and value["placement_id"] == selected_placement_id
+            and set(value["output_geometry_ids"]) == output_geometry_ids
+            and bool(output_geometry_ids)
+            and value["failure_kind"] is None
+            and value["reason"] is None
+        )
+        or not_applicable
+        != (
+            value["evidence_id"] is None
+            and value["placement_id"] is None
+            and not value["output_geometry_ids"]
+            and value["failure_kind"] is None
+            and value["reason"] is None
+        )
+        or failed
+        != (
+            isinstance(value["evidence_id"], str)
+            and bool(value["evidence_id"])
+            and (
+                value["placement_id"] is None
+                or isinstance(value["placement_id"], str)
+                and bool(value["placement_id"])
+            )
+            and value["failure_kind"] in _NOMINAL_GRID_FAILURE_KINDS
+            and isinstance(value["reason"], str)
+            and bool(value["reason"])
+        )
+    ):
+        raise ValueError("calibrated nominal Grid authority state is invalid")
 
 
 def _valid_interval(value: object) -> bool:
@@ -1268,6 +1410,9 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         _validate_global_lattice_authority(
             alignment["global_lattice_authority"]
         )
+        _validate_nominal_grid_evidence(
+            alignment["calibrated_nominal_grid_evidence"]
+        )
         _validate_adjacency_coverage(
             alignment["adjacency_observation_coverage"]
         )
@@ -1284,6 +1429,11 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             item["geometry_id"] for item in budgets
         }:
             raise ValueError("budget does not cover selected output")
+        _validate_nominal_grid_authority(
+            lane.get("calibrated_nominal_grid_authority"),
+            selected_placement_id=lane.get("selected_placement_id"),
+            output_geometry_ids=set(outputs_by_id),
+        )
         for budget in budgets:
             if (
                 not isinstance(budget, dict)
@@ -1448,6 +1598,7 @@ def _validate_phase_candidate_projection(
     if not isinstance(value, dict) or set(value) != {
         "input_direct_role_authority",
         "outcome",
+        "basis",
         "projected_out_bindings",
         "retained_direct_constraint_rank",
         "reason",
@@ -1484,27 +1635,48 @@ def _validate_phase_candidate_projection(
     outcomes = {
         "unchanged",
         "projected",
+        "calibrated_nominal_grid",
         "direct_role_contradiction",
-        "complete_frame_unobserved",
-        "retained_rank_insufficient",
+        "calibrated_nominal_grid_unavailable",
+        "calibrated_nominal_grid_conflict",
+        "nominal_grid_phase_anchor_unavailable",
         "refit_unavailable",
         "discrete_identity_changed",
     }
+    basis = value["basis"]
+    expected_basis = {
+        "unchanged": "direct_bindings",
+        "projected": "direct_rank_three",
+        "calibrated_nominal_grid": "calibrated_nominal_grid",
+    }.get(outcome)
+    state = authority["state"]
+    state_matches_outcome = {
+        "supported": outcome
+        in {
+            "unchanged",
+            "calibrated_nominal_grid",
+            "calibrated_nominal_grid_unavailable",
+            "calibrated_nominal_grid_conflict",
+            "refit_unavailable",
+        },
+        "contradicted": outcome == "direct_role_contradiction",
+        "unavailable": outcome
+        not in {"unchanged", "direct_role_contradiction"},
+    }[state]
     if (
         outcome not in outcomes
+        or basis != expected_basis
         or not isinstance(rank, int)
         or isinstance(rank, bool)
         or not 0 <= rank <= 3
-        or (outcome in {"unchanged", "projected"}) != (reason is None)
+        or (
+            outcome in {"unchanged", "projected", "calibrated_nominal_grid"}
+        )
+        != (reason is None)
         or reason is not None
         and (not isinstance(reason, str) or not reason)
-        or (authority["state"] == "supported") != (outcome == "unchanged")
-        or (authority["state"] == "contradicted")
-        != (outcome == "direct_role_contradiction")
-        or (authority["state"] == "unavailable")
-        != (outcome not in {"unchanged", "direct_role_contradiction"})
+        or not state_matches_outcome
         or (outcome == "projected" and rank != 3)
-        or (outcome == "retained_rank_insufficient" and rank >= 3)
         or (
             authority["state"] == "unavailable"
             and projected_pairs != unavailable_pairs
@@ -1517,7 +1689,7 @@ def _validate_phase_candidate_projection(
     bindings = fit.get("role_bindings")
     if not isinstance(bindings, list):
         raise ValueError("phase-candidate binding ledger is invalid")
-    if outcome == "projected":
+    if outcome in {"projected", "calibrated_nominal_grid"}:
         for role_index, observation_id in projected_pairs:
             if (
                 not isinstance(role_index, int)
@@ -1555,6 +1727,7 @@ def _validate_phase_competition(value: object) -> None:
         "best_phase_candidate_authority_projection",
         "runner_phase_candidate_authority_projection",
         "global_lattice_authority",
+        "calibrated_nominal_grid_evidence",
         "adjacency_observation_coverage",
         "direct_role_binding_authority",
         "outer_frame_observation_authority",
@@ -1573,6 +1746,9 @@ def _validate_phase_competition(value: object) -> None:
         raise ValueError("phase-candidate projection lost its candidate")
     _validate_phase_candidate_projection(best_projection, best)
     _validate_phase_candidate_projection(runner_projection, runner)
+    _validate_nominal_grid_evidence(
+        value["calibrated_nominal_grid_evidence"]
+    )
     receipt = value["receipt"]
     receipt_fields = {
         "observation_count",
@@ -1595,6 +1771,8 @@ def _validate_phase_competition(value: object) -> None:
         "candidate_direct_role_projection_evaluation_count",
         "candidate_direct_role_projection_success_count",
         "candidate_direct_role_projection_binding_count",
+        "candidate_nominal_grid_solve_count",
+        "candidate_nominal_grid_solve_success_count",
     }
     if not isinstance(receipt, dict) or set(receipt) != receipt_fields:
         raise ValueError("phase-candidate work receipt schema is invalid")
@@ -1618,6 +1796,9 @@ def _validate_phase_competition(value: object) -> None:
         > projection_count
         or receipt["candidate_direct_role_projection_binding_count"]
         > receipt["candidate_direct_role_authority_role_check_count"]
+        or receipt["candidate_nominal_grid_solve_success_count"]
+        > receipt["candidate_nominal_grid_solve_count"]
+        or receipt["candidate_nominal_grid_solve_count"] > projection_count
     ):
         raise ValueError("phase-candidate work receipt is inconsistent")
     if value["status"] == "bound_exceeded" and any(

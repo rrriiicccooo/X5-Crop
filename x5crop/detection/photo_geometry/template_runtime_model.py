@@ -50,6 +50,7 @@ from .template_frame_width import SourceFrameWidthAuthority
 from .template_holder_fill import HolderFillAssessment
 from .template_model import TemplateSpec
 from .template_measurement_plan_model import TemplateMeasurementPlan
+from .template_nominal_grid_model import CalibratedNominalGridAuthority
 from .template_phase_model import PhaseFitResult, TemplatePhaseInput
 from .template_placement import FormatPlacement
 
@@ -508,6 +509,7 @@ class TemplateLaneReconstruction:
     placement_competition: TemplatePlacementCompetition
     selected_placement: FormatPlacement | None
     output_footprints: tuple[OutputFootprint, ...]
+    calibrated_nominal_grid_authority: CalibratedNominalGridAuthority
     direct_use_budget_assessments: tuple[DirectUseBudgetAssessment, ...]
     holder_fill_assessment: HolderFillAssessment | None
     content_veto_facts: tuple[ContentVetoFact, ...]
@@ -520,6 +522,11 @@ class TemplateLaneReconstruction:
         if any(item.lane_id != self.lane_id for item in placements):
             raise ValueError("placement competition crosses lane authority")
         selected_id = self.placement_competition.selected_placement_id
+        if not isinstance(
+            self.calibrated_nominal_grid_authority,
+            CalibratedNominalGridAuthority,
+        ):
+            raise TypeError("template reconstruction nominal Grid authority is invalid")
         if (self.selected_placement is None) != (selected_id is None):
             raise ValueError("selected placement and competition state disagree")
         if self.selected_placement is not None and self.selected_placement.placement_id != selected_id:
@@ -548,6 +555,25 @@ class TemplateLaneReconstruction:
                 raise ValueError("every output footprint requires one direct-use assessment")
         elif self.direct_use_budget_assessments:
             raise ValueError("direct-use assessments require output footprints")
+        nominal_fit = (
+            None
+            if self.selected_placement is None
+            else self.selected_placement.sequence_fit.calibrated_nominal_grid_fit_state
+        )
+        nominal_authority = self.calibrated_nominal_grid_authority
+        if nominal_fit is None:
+            if nominal_authority.state not in {
+                EvidenceState.NOT_APPLICABLE,
+                EvidenceState.UNAVAILABLE,
+            }:
+                raise ValueError("direct placement cannot consume nominal Grid authority")
+        elif (
+            nominal_authority.state != EvidenceState.SUPPORTED
+            or nominal_authority.placement_id != selected_id
+            or nominal_authority.output_geometry_ids
+            != tuple(item.geometry_id for item in self.output_footprints)
+        ):
+            raise ValueError("nominal Grid placement lacks selected-output authority")
         if any(not isinstance(item, ContentVetoFact) for item in self.content_veto_facts):
             raise TypeError("content veto ledger requires typed facts")
 

@@ -42,6 +42,9 @@ from x5crop.detection.photo_geometry.template_cross_model import (
 from x5crop.detection.photo_geometry.template_gate import build_template_gate
 from x5crop.detection.photo_geometry.template_holder_fill import HolderFillState
 from x5crop.detection.photo_geometry.template_phase_model import PhaseFitStatus
+from x5crop.detection.photo_geometry.template_nominal_grid_authority import (
+    assess_calibrated_nominal_grid_authority,
+)
 from x5crop.detection.photo_geometry.template_output import (
     output_footprint_from_template_placement,
     template_direct_use_budget_assessment,
@@ -254,6 +257,13 @@ def _selected_output_gate_fact(output, assessment):
         placement_competition=SimpleNamespace(placements=(object(),)),
         selected_placement=object(),
         output_footprints=(output,),
+        calibrated_nominal_grid_authority=(
+            assess_calibrated_nominal_grid_authority(
+                None,
+                placement_id=None,
+                output_geometry_ids=(),
+            )
+        ),
         direct_use_budget_assessments=(assessment,),
         holder_fill_assessment=SimpleNamespace(state=HolderFillState.FILLED),
         content_veto_facts=(),

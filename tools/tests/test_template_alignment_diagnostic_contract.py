@@ -28,6 +28,7 @@ from tools.tests.template_test_support import (
     phase_sequence_measurement,
     phase_separator as separator,
     phase_template as template,
+    unavailable_nominal_grid_prior,
 )
 
 
@@ -90,6 +91,7 @@ class TemplateAlignmentDiagnosticContractTest(unittest.TestCase):
                 observations=observations,
                 separator_bands=(),
                 template=template(3),
+                calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(template(3)),
                 scale_px_per_mm=None,
                 holder_span_px=FiniteInterval(0.0, 400.0),
                 phase_authority_px=FiniteInterval.exact(40.0),

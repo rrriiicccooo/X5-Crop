@@ -6,6 +6,11 @@ from types import MappingProxyType
 from ..utils import require_positive
 
 
+DEVELOPMENT_GOLD_CALIBRATION_COHORT_SHA256 = (
+    "c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f"
+)
+
+
 @dataclass(frozen=True, order=True)
 class ApertureAxisGuardSpec:
     """One axis guard shared by every format through a mixed physical rule."""
@@ -160,6 +165,63 @@ class ApertureAspectRatioSpec:
 
 
 @dataclass(frozen=True, order=True)
+class NominalPitchCalibrationSpec:
+    """Source-level nominal pitch interval calibrated from development gold.
+
+    This is a bounded physical prior for the one shared source pitch.  It is
+    not separator evidence, does not provide absolute phase, and does not
+    authorize an ordinal mapping by itself.
+    """
+
+    calibration_id: str
+    development_gold_cohort_sha256: str
+    eligibility_revision: str
+    minimum_pitch_mm: float
+    maximum_pitch_mm: float
+    development_source_count: int
+    development_measurement_count: int
+    minimum_measurements_per_source: int
+    outward_rounding_mm: float
+
+    def __post_init__(self) -> None:
+        if (
+            not self.calibration_id
+            or len(self.development_gold_cohort_sha256) != 64
+            or any(
+                character not in "0123456789abcdef"
+                for character in self.development_gold_cohort_sha256
+            )
+            or not self.eligibility_revision
+        ):
+            raise ValueError("nominal pitch calibration identity is invalid")
+        require_positive("nominal pitch minimum", self.minimum_pitch_mm)
+        if self.maximum_pitch_mm < self.minimum_pitch_mm:
+            raise ValueError("nominal pitch calibration interval is reversed")
+        if (
+            self.development_source_count < 3
+            or self.minimum_measurements_per_source < 2
+            or self.development_measurement_count
+            < self.development_source_count * self.minimum_measurements_per_source
+        ):
+            raise ValueError("nominal pitch calibration support is insufficient")
+        require_positive("nominal pitch outward rounding", self.outward_rounding_mm)
+
+    @property
+    def identity_fields(self) -> tuple[str, ...]:
+        return (
+            self.calibration_id,
+            self.development_gold_cohort_sha256,
+            self.eligibility_revision,
+            self.minimum_pitch_mm.hex(),
+            self.maximum_pitch_mm.hex(),
+            str(self.development_source_count),
+            str(self.development_measurement_count),
+            str(self.minimum_measurements_per_source),
+            self.outward_rounding_mm.hex(),
+        )
+
+
+@dataclass(frozen=True, order=True)
 class FramePhysicalSpec:
     """One format's design aperture and bounded cross-camera prior."""
 
@@ -287,6 +349,7 @@ class FormatSpec:
     frame: FramePhysicalSpec
     layout: ScanLayoutSpec
     scan_canvas_fits: tuple[ScanCanvasFit, ...]
+    nominal_pitch_calibration: NominalPitchCalibrationSpec | None = None
 
     def __post_init__(self) -> None:
         if not self.format_id:
@@ -294,6 +357,11 @@ class FormatSpec:
         profile_ids = tuple(item.profile_id for item in self.scan_canvas_fits)
         if not profile_ids or len(set(profile_ids)) != len(profile_ids):
             raise ValueError("format scan-canvas fits must be non-empty and unique")
+        if self.nominal_pitch_calibration is not None and not isinstance(
+            self.nominal_pitch_calibration,
+            NominalPitchCalibrationSpec,
+        ):
+            raise TypeError("format nominal pitch calibration is invalid")
 
     def holder_full_count(self, profile_id: str) -> int | None:
         return next(
@@ -312,6 +380,36 @@ class FormatSpec:
 ASPECT_RATIO_CALIBRATION_METHOD = (
     "development_gold_source_median_direct_frame_and_design_hull_v1"
 )
+
+NOMINAL_PITCH_CALIBRATION_ELIGIBILITY_REVISION = (
+    "x5crop_nominal_pitch_source_median_direct_separator_nominal_v1"
+)
+
+
+def _nominal_pitch_spec(
+    format_id: str,
+    minimum_pitch_mm: float,
+    maximum_pitch_mm: float,
+    *,
+    source_count: int,
+    measurement_count: int,
+) -> NominalPitchCalibrationSpec:
+    return NominalPitchCalibrationSpec(
+        calibration_id=(
+            f"x5crop_nominal_pitch:{format_id}:development_gold_"
+            "source_median_hull_outward_0p05mm_v1"
+        ),
+        development_gold_cohort_sha256=(
+            DEVELOPMENT_GOLD_CALIBRATION_COHORT_SHA256
+        ),
+        eligibility_revision=NOMINAL_PITCH_CALIBRATION_ELIGIBILITY_REVISION,
+        minimum_pitch_mm=minimum_pitch_mm,
+        maximum_pitch_mm=maximum_pitch_mm,
+        development_source_count=source_count,
+        development_measurement_count=measurement_count,
+        minimum_measurements_per_source=2,
+        outward_rounding_mm=0.05,
+    )
 
 
 def _aspect_ratio_spec(
@@ -360,6 +458,13 @@ _FORMAT_SPECS: dict[str, FormatSpec] = {
             ScanCanvasFit("135_standard", 6),
             ScanCanvasFit("135_narrow", 6),
         ),
+        nominal_pitch_calibration=_nominal_pitch_spec(
+            "135",
+            37.65,
+            38.20,
+            source_count=44,
+            measurement_count=198,
+        ),
     ),
     "135-dual": FormatSpec(
         "135-dual",
@@ -385,6 +490,13 @@ _FORMAT_SPECS: dict[str, FormatSpec] = {
         (
             ScanCanvasFit("135_standard", 12),
             ScanCanvasFit("135_narrow", 12),
+        ),
+        nominal_pitch_calibration=_nominal_pitch_spec(
+            "half",
+            18.70,
+            19.05,
+            source_count=11,
+            measurement_count=98,
         ),
     ),
     "xpan": FormatSpec(
@@ -428,6 +540,13 @@ _FORMAT_SPECS: dict[str, FormatSpec] = {
             ScanCanvasFit("120_wide_223", 3),
             ScanCanvasFit("120_wide_188_5", 3),
         ),
+        nominal_pitch_calibration=_nominal_pitch_spec(
+            "120-66",
+            60.05,
+            62.55,
+            source_count=26,
+            measurement_count=52,
+        ),
     ),
     "120-67": FormatSpec(
         "120-67",
@@ -449,6 +568,13 @@ _FORMAT_SPECS: dict[str, FormatSpec] = {
             ScanCanvasFit("120_wide_224_5", 3),
             ScanCanvasFit("120_wide_223", 3),
             ScanCanvasFit("120_wide_188_5", 2),
+        ),
+        nominal_pitch_calibration=_nominal_pitch_spec(
+            "120-67",
+            73.40,
+            74.45,
+            source_count=3,
+            measurement_count=6,
         ),
     ),
 }

@@ -576,6 +576,9 @@ def prepare_template_lane(
         scale_px_per_mm=scales.width_axis_px_per_mm,
         holder_span_px=width_authority,
         phase_authority_px=phase_search_authority,
+        calibrated_nominal_grid_prior=(
+            measurement_plan.calibrated_nominal_grid_prior
+        ),
         sequence_measurement_sets=tuple(
             item
             for item in measurement_sets
@@ -606,6 +609,7 @@ def prepare_template_lane(
                 best_phase_candidate_authority_projection=None,
                 runner_phase_candidate_authority_projection=None,
                 global_lattice_authority=None,
+                calibrated_nominal_grid_evidence=None,
                 adjacency_observation_coverage=(),
                 direct_role_binding_authority=None,
                 outer_frame_observation_authority=None,

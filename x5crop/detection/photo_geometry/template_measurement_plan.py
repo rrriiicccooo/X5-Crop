@@ -41,6 +41,9 @@ from .template_model import (
     TemplateSpec,
     generic_separator_gap_interval_px,
 )
+from .template_nominal_grid_authority import (
+    compile_calibrated_nominal_grid_prior,
+)
 
 
 def compile_template_measurement_plan(
@@ -61,6 +64,11 @@ def compile_template_measurement_plan(
         FORMAT_CATALOG_REVISION,
         format_spec.format_id,
         frame_spec.identity_fields,
+        (
+            "nominal-pitch-calibration-unavailable"
+            if format_spec.nominal_pitch_calibration is None
+            else format_spec.nominal_pitch_calibration.identity_fields
+        ),
         count,
         full_count,
         holder_full_count,
@@ -117,6 +125,12 @@ def compile_template_measurement_plan(
         nominal_gap_px=gap_px,
         count=count,
         phase_lattice_authority=phase_lattice,
+    )
+    calibrated_nominal_grid_prior = compile_calibrated_nominal_grid_prior(
+        format_spec=format_spec,
+        frame_spec=frame_spec,
+        template_id=template_spec.template_id,
+        scale_px_per_mm=scale_authority.width_axis_px_per_mm,
     )
     query_intents = _query_intents(
         physical_identity=physical_identity,
@@ -191,6 +205,7 @@ def compile_template_measurement_plan(
         lane_authority=lane_authority,
         scale_authority=scale_authority,
         template_spec=template_spec,
+        calibrated_nominal_grid_prior=calibrated_nominal_grid_prior,
         query_intents=query_intents,
         projected_queries=projected_queries,
         phase_bounds=phase_bounds,

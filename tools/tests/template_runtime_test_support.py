@@ -48,6 +48,7 @@ from x5crop.detection.source_core import (
 )
 from x5crop.domain import Box, EvidenceState, FiniteInterval, PositiveInterval
 from x5crop.formats import FramePhysicalSpec
+from tools.tests.template_test_support import unavailable_nominal_grid_prior
 
 
 def runtime_lane() -> SourceLaneEvidence:
@@ -221,6 +222,9 @@ def prepared_template_lane() -> PreparedTemplateLane:
         observations=(),
         separator_bands=(),
         template=template,
+        calibrated_nominal_grid_prior=(
+            unavailable_nominal_grid_prior(template)
+        ),
         scale_px_per_mm=None,
         holder_span_px=None,
         phase_authority_px=None,

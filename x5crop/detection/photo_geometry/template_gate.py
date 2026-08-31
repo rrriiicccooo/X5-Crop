@@ -132,6 +132,22 @@ def build_template_gate(
         and all(item.state == EvidenceState.SUPPORTED for item in budgets)
         else unavailable(GateGap.DIRECT_USE_BUDGET_UNAVAILABLE)
     )
+    nominal_authorities = tuple(
+        lane.calibrated_nominal_grid_authority for lane in reconstructions
+    )
+    nominal_grid_fact = (
+        contradicted(GateGap.CALIBRATED_NOMINAL_GRID_AUTHORITY_UNAVAILABLE)
+        if any(
+            item.state == EvidenceState.CONTRADICTED
+            for item in nominal_authorities
+        )
+        else unavailable(GateGap.CALIBRATED_NOMINAL_GRID_AUTHORITY_UNAVAILABLE)
+        if any(
+            item.state == EvidenceState.UNAVAILABLE
+            for item in nominal_authorities
+        )
+        else supported()
+    )
     selection_failure = source_selection.failure
     selection_gap = (
         selection_failure.gap
@@ -192,6 +208,7 @@ def build_template_gate(
             if output_complete
             else unavailable(GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE)
         ),
+        "calibrated_nominal_grid_authority": nominal_grid_fact,
         "direct_use_budget": budget_fact,
     }
     return facts

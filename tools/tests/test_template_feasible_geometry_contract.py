@@ -3,13 +3,17 @@ from __future__ import annotations
 from dataclasses import replace
 import unittest
 
-from x5crop.domain import FiniteInterval
+from x5crop.domain import FiniteInterval, ObservationId, PositiveInterval
 from x5crop.detection.photo_geometry.template_feasible_geometry import (
     project_selected_placement,
 )
 from x5crop.detection.photo_geometry.template_model import (
+    LatticeParameterFitBasis,
     PhaseLatticeFit,
     PitchFit,
+)
+from x5crop.detection.photo_geometry.template_nominal_grid_model import (
+    CalibratedNominalGridFitState,
 )
 from tools.tests.template_test_support import (
     placement_compose as _compose,
@@ -133,6 +137,72 @@ class TemplateFeasibleGeometryContractTest(unittest.TestCase):
         self.assertEqual(
             self._sequence_interval(projection, 0, 1),
             FiniteInterval(199.0, 201.0),
+        )
+
+    def test_nominal_width_and_pitch_retain_one_shared_source_scale(self) -> None:
+        original = _template(2)
+        template = replace(
+            original,
+            frame_width_px=FiniteInterval(50.0, 150.0),
+            pitch_px=FiniteInterval(60.0, 180.0),
+            nominal_gap_px=FiniteInterval(10.0, 30.0),
+            phase_lattice_authority=(
+                original.phase_lattice_authority.with_period(
+                    FiniteInterval(60.0, 180.0)
+                )
+            ),
+        )
+        sequence = _sequence(template, missing=(1, 2, 3))
+        sequence = replace(
+            sequence,
+            lattice_parameter_fit_basis=(
+                LatticeParameterFitBasis.CALIBRATED_NOMINAL_GRID
+            ),
+            calibrated_nominal_grid_fit_state=(
+                CalibratedNominalGridFitState(
+                    prior_id="nominal-grid:correlated",
+                    scale_px_per_mm=PositiveInterval(1.0, 3.0),
+                    frame_width_mm=FiniteInterval.exact(50.0),
+                    pitch_mm=FiniteInterval.exact(60.0),
+                    canonical_scale_px_per_mm=2.0,
+                    phase_anchor_role_indices=(0,),
+                    phase_anchor_observation_ids=(ObservationId("sequence:0"),),
+                    retained_direct_constraint_rank=1,
+                )
+            ),
+            model_role_intervals_px=(
+                FiniteInterval.exact(100.0),
+                FiniteInterval(150.0, 250.0),
+                FiniteInterval(160.0, 280.0),
+                FiniteInterval(210.0, 430.0),
+            ),
+            model_full_role_intervals_px=(
+                FiniteInterval.exact(100.0),
+                FiniteInterval(150.0, 250.0),
+                FiniteInterval(160.0, 280.0),
+                FiniteInterval(210.0, 430.0),
+            ),
+        )
+        placement = _compose(
+            template,
+            sequence,
+            _cross(template, direction=_direction()),
+        )
+
+        projection = project_selected_placement(placement)
+
+        for state in projection.frame_states[1]:
+            scale = (state.sequence_start_px - 100.0) / 60.0
+            self.assertAlmostEqual(
+                state.sequence_end_px - state.sequence_start_px,
+                50.0 * scale,
+            )
+        self.assertNotIn(
+            (160.0, 310.0),
+            {
+                (state.sequence_start_px, state.sequence_end_px)
+                for state in projection.frame_states[1]
+            },
         )
 
     def test_fixed_height_keeps_top_and_bottom_correlated(self) -> None:

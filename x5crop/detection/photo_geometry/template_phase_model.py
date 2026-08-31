@@ -17,6 +17,10 @@ from .template_model import (
     TemplateSearchReceipt,
     TemplateSpec,
 )
+from .template_nominal_grid_model import (
+    CalibratedNominalGridEvidence,
+    CalibratedNominalGridPrior,
+)
 
 
 @dataclass(frozen=True)
@@ -143,6 +147,7 @@ class TemplatePhaseInput:
     scale_px_per_mm: PositiveInterval | None
     holder_span_px: FiniteInterval | None
     phase_authority_px: FiniteInterval | None
+    calibrated_nominal_grid_prior: CalibratedNominalGridPrior
     sequence_measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...] = ()
     global_lattice_evidence: GlobalLatticeAuthorityEvidence = field(
         default_factory=GlobalLatticeAuthorityEvidence
@@ -152,6 +157,15 @@ class TemplatePhaseInput:
     def __post_init__(self) -> None:
         if not isinstance(self.template, TemplateSpec):
             raise TypeError("phase input requires a fixed template")
+        if (
+            not isinstance(
+                self.calibrated_nominal_grid_prior,
+                CalibratedNominalGridPrior,
+            )
+            or self.calibrated_nominal_grid_prior.template_id
+            != self.template.template_id
+        ):
+            raise TypeError("phase input nominal Grid prior is invalid")
         if self.scale_px_per_mm is not None and not isinstance(
             self.scale_px_per_mm,
             PositiveInterval,
@@ -237,8 +251,17 @@ class PhaseFailureKind(str, Enum):
     GLOBAL_LATTICE_AUTHORITY_UNAVAILABLE = (
         "global_lattice_authority_unavailable"
     )
+    CALIBRATED_NOMINAL_GRID_AUTHORITY_UNAVAILABLE = (
+        "calibrated_nominal_grid_authority_unavailable"
+    )
+    NOMINAL_GRID_PHASE_ANCHOR_UNAVAILABLE = (
+        "nominal_grid_phase_anchor_unavailable"
+    )
     ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE = (
         "adjacency_observation_coverage_incomplete"
+    )
+    NOMINAL_GRID_COMPLETE_FRAME_UNOBSERVED = (
+        "nominal_grid_complete_frame_unobserved"
     )
     DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE = (
         "direct_role_binding_authority_unavailable"
@@ -250,6 +273,7 @@ class PhaseFailureKind(str, Enum):
     FRAME_WIDTH_INFERENCE_UNAVAILABLE = (
         "frame_width_inference_unavailable"
     )
+    SOURCE_FRAME_WIDTH_CONFLICT = "source_frame_width_conflict"
     FIXED_TEMPLATE_MISMATCH = "fixed_template_mismatch"
     DISCRETE_PHASE_AMBIGUOUS = "discrete_phase_ambiguous"
     LOCAL_ADVANCE_AMBIGUOUS = "local_advance_ambiguous"
@@ -269,11 +293,27 @@ class PhaseCandidateProjectionOutcome(str, Enum):
 
     UNCHANGED = "unchanged"
     PROJECTED = "projected"
+    CALIBRATED_NOMINAL_GRID = "calibrated_nominal_grid"
     DIRECT_ROLE_CONTRADICTION = "direct_role_contradiction"
-    COMPLETE_FRAME_UNOBSERVED = "complete_frame_unobserved"
-    RETAINED_RANK_INSUFFICIENT = "retained_rank_insufficient"
+    CALIBRATED_NOMINAL_GRID_UNAVAILABLE = (
+        "calibrated_nominal_grid_unavailable"
+    )
+    CALIBRATED_NOMINAL_GRID_CONFLICT = (
+        "calibrated_nominal_grid_conflict"
+    )
+    NOMINAL_GRID_PHASE_ANCHOR_UNAVAILABLE = (
+        "nominal_grid_phase_anchor_unavailable"
+    )
     REFIT_UNAVAILABLE = "refit_unavailable"
     DISCRETE_IDENTITY_CHANGED = "discrete_identity_changed"
+
+
+class PhaseCandidateProjectionBasis(str, Enum):
+    """Authority used after removing unavailable direct coordinates."""
+
+    DIRECT_BINDINGS = "direct_bindings"
+    DIRECT_RANK_THREE = "direct_rank_three"
+    CALIBRATED_NOMINAL_GRID = "calibrated_nominal_grid"
 
 
 @dataclass(frozen=True)
@@ -297,6 +337,7 @@ class PhaseCandidateAuthorityProjection:
 
     input_direct_role_authority: DirectRoleBindingAuthority
     outcome: PhaseCandidateProjectionOutcome
+    basis: PhaseCandidateProjectionBasis | None
     projected_out_bindings: tuple[PhaseCandidateProjectedBinding, ...]
     retained_direct_constraint_rank: int
     reason: str | None
@@ -315,10 +356,21 @@ class PhaseCandidateAuthorityProjection:
             for item in self.input_direct_role_authority.facts
             if item.state == EvidenceState.UNAVAILABLE
         )
-        projected = self.outcome == PhaseCandidateProjectionOutcome.PROJECTED
+        eligible_basis = {
+            PhaseCandidateProjectionOutcome.UNCHANGED: (
+                PhaseCandidateProjectionBasis.DIRECT_BINDINGS
+            ),
+            PhaseCandidateProjectionOutcome.PROJECTED: (
+                PhaseCandidateProjectionBasis.DIRECT_RANK_THREE
+            ),
+            PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID: (
+                PhaseCandidateProjectionBasis.CALIBRATED_NOMINAL_GRID
+            ),
+        }
         failed = self.outcome not in {
             PhaseCandidateProjectionOutcome.UNCHANGED,
             PhaseCandidateProjectionOutcome.PROJECTED,
+            PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID,
         }
         canonical_bindings = tuple(
             sorted(
@@ -329,7 +381,16 @@ class PhaseCandidateAuthorityProjection:
         state = self.input_direct_role_authority.state
         state_matches_outcome = {
             EvidenceState.SUPPORTED: (
-                self.outcome == PhaseCandidateProjectionOutcome.UNCHANGED
+                self.outcome
+                in {
+                    PhaseCandidateProjectionOutcome.UNCHANGED,
+                    PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID,
+                    PhaseCandidateProjectionOutcome
+                    .CALIBRATED_NOMINAL_GRID_UNAVAILABLE,
+                    PhaseCandidateProjectionOutcome
+                    .CALIBRATED_NOMINAL_GRID_CONFLICT,
+                    PhaseCandidateProjectionOutcome.REFIT_UNAVAILABLE,
+                }
             ),
             EvidenceState.CONTRADICTED: (
                 self.outcome
@@ -356,19 +417,17 @@ class PhaseCandidateAuthorityProjection:
             )
             or canonical_bindings != self.projected_out_bindings
             or not 0 <= self.retained_direct_constraint_rank <= 3
+            or self.basis != eligible_basis.get(self.outcome)
             or failed != (self.reason is not None)
             or self.reason is not None
             and not self.reason
             or not state_matches_outcome
             or not bindings_match_state
-            or projected
+            or self.outcome == PhaseCandidateProjectionOutcome.PROJECTED
             and (
                 not self.projected_out_bindings
                 or self.retained_direct_constraint_rank != 3
             )
-            or self.outcome
-            == PhaseCandidateProjectionOutcome.RETAINED_RANK_INSUFFICIENT
-            and self.retained_direct_constraint_rank >= 3
         ):
             raise ValueError("phase-candidate authority projection is invalid")
 
@@ -377,6 +436,7 @@ class PhaseCandidateAuthorityProjection:
         return self.outcome in {
             PhaseCandidateProjectionOutcome.UNCHANGED,
             PhaseCandidateProjectionOutcome.PROJECTED,
+            PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID,
         }
 
 
@@ -398,6 +458,9 @@ class PhaseFitResult:
         PhaseCandidateAuthorityProjection | None
     ) = None
     global_lattice_authority: GlobalLatticeAuthority | None = None
+    calibrated_nominal_grid_evidence: (
+        CalibratedNominalGridEvidence | None
+    ) = None
     adjacency_observation_coverage: tuple[AdjacencyObservationCoverage, ...] = ()
     direct_role_binding_authority: DirectRoleBindingAuthority | None = None
     outer_frame_observation_authority: (
@@ -454,6 +517,21 @@ class PhaseFitResult:
             GlobalLatticeAuthority,
         ):
             raise TypeError("phase global lattice authority is invalid")
+        if (
+            self.calibrated_nominal_grid_evidence is not None
+            and not isinstance(
+                self.calibrated_nominal_grid_evidence,
+                CalibratedNominalGridEvidence,
+            )
+        ):
+            raise TypeError("phase calibrated nominal Grid evidence is invalid")
+        if self.calibrated_nominal_grid_evidence is not None and (
+            self.best is None
+            or self.best.calibrated_nominal_grid_fit_state is None
+            or self.calibrated_nominal_grid_evidence.prior_id
+            != self.best.calibrated_nominal_grid_fit_state.prior_id
+        ):
+            raise ValueError("phase nominal Grid evidence lost its fit state")
         if any(
             not isinstance(item, AdjacencyObservationCoverage)
             for item in self.adjacency_observation_coverage

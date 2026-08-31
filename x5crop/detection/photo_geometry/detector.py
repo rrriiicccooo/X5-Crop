@@ -35,6 +35,9 @@ from .template_output import (
     output_footprint_from_template_placement,
     template_direct_use_budget_assessment,
 )
+from .template_nominal_grid_authority import (
+    assess_calibrated_nominal_grid_authority,
+)
 from .template_phase_model import PhaseFitStatus
 from .template_placement import FormatPlacement, compose_format_placement
 from .template_runtime_model import (
@@ -171,6 +174,9 @@ def _empty_result(
             else unavailable(GateGap.SOURCE_LANE_AUTHORITY_INVALID)
         ),
         "selected_output_footprint": unavailable(GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE),
+        "calibrated_nominal_grid_authority": unavailable(
+            GateGap.CALIBRATED_NOMINAL_GRID_AUTHORITY_UNAVAILABLE
+        ),
         "direct_use_budget": unavailable(GateGap.DIRECT_USE_BUDGET_UNAVAILABLE),
     }
     return PhotoGeometryDetectionResult(None, (), selection, (), facts)
@@ -325,6 +331,15 @@ def reconstruct_photo_geometry(
             for output in output_footprints
             if selected is not None
         )
+        nominal_grid_authority = assess_calibrated_nominal_grid_authority(
+            lane.phase_competition.calibrated_nominal_grid_evidence,
+            placement_id=(
+                None if selected is None else selected.placement_id
+            ),
+            output_geometry_ids=tuple(
+                item.geometry_id for item in output_footprints
+            ),
+        )
         holder_fill = (
             None
             if selected is None
@@ -350,6 +365,7 @@ def reconstruct_photo_geometry(
                 placement_competition=competition,
                 selected_placement=selected,
                 output_footprints=output_footprints,
+                calibrated_nominal_grid_authority=nominal_grid_authority,
                 direct_use_budget_assessments=budgets,
                 holder_fill_assessment=holder_fill,
                 content_veto_facts=(

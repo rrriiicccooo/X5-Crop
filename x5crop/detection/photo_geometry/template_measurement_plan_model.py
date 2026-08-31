@@ -10,6 +10,7 @@ from ...formats import FormatSpec, FramePhysicalSpec
 from ..evidence.scan_canvas import CanvasAxisScaleIntervals
 from ..source_core import SourceStripValidationDomain
 from .template_model import TemplateSpec
+from .template_nominal_grid_model import CalibratedNominalGridPrior
 
 MAX_QUERY_INTENTS = 8
 MAX_REGISTERED_QUERIES = 64
@@ -277,6 +278,7 @@ class TemplateMeasurementPlan:
     lane_authority: SourceStripValidationDomain
     scale_authority: CanvasAxisScaleIntervals
     template_spec: TemplateSpec
+    calibrated_nominal_grid_prior: CalibratedNominalGridPrior
     query_intents: tuple[TemplateQueryIntent, ...]
     projected_queries: TemplateProjectedQueryPlan
     phase_bounds: TemplatePhaseBounds
@@ -330,6 +332,14 @@ class TemplateMeasurementPlan:
             )
             != (("x", "y") if self.layout == "horizontal" else ("y", "x"))
             or not isinstance(self.template_spec, TemplateSpec)
+            or not isinstance(
+                self.calibrated_nominal_grid_prior,
+                CalibratedNominalGridPrior,
+            )
+            or self.calibrated_nominal_grid_prior.template_id
+            != self.template_spec.template_id
+            or self.calibrated_nominal_grid_prior.format_id
+            != self.format_spec.format_id
             or not isinstance(self.projected_queries, TemplateProjectedQueryPlan)
             or self.template_spec.count != self.count
             or not self.query_intents

@@ -6,6 +6,7 @@ import unittest
 from tools.tests.template_test_support import (
     phase_edge as edge,
     phase_template as template,
+    unavailable_nominal_grid_prior,
 )
 from x5crop.detection.photo_geometry.template_cross import fit_template_cross
 from x5crop.detection.photo_geometry.template_cross_model import (
@@ -63,6 +64,7 @@ class TemplateEvidenceContractTest(unittest.TestCase):
                 observations=(start, end),
                 separator_bands=(),
                 template=spec,
+                calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(spec),
                 scale_px_per_mm=PositiveInterval.exact(100.0),
                 holder_span_px=None,
                 phase_authority_px=FiniteInterval.exact(100.0),

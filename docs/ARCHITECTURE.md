@@ -448,8 +448,8 @@ candidate 与最终 selected fit 的直接坐标权限都由 `template_direct_ro
 相关 W 推断由 `template_frame_width.py` 唯一拥有，
 短轴联合条件由 `template_selection.py` 检查；三者都不读取新像素，也不按强度选择 winner。
 
-未观察 separator 的正常 adjacency 不是 detector miss 的默认值。它只有同时满足以下条件时，才可使用
-`local_delta = 0` 并由已确定 Grid 补齐 START/END：
+在完全由 direct evidence 闭合的路径中，未观察 separator 的正常 adjacency 只有同时满足以下条件时，
+才可使用 `local_delta = 0` 并由已确定 Grid 补齐 START/END：
 
 1. 全部已选直接角色的 `DirectRoleBindingAuthority` 为 `supported`；
 2. `GlobalLatticeAuthority` 已用独立直接证据达到 rank 3；Grid 没有参与创造 phase 或 ordinal mapping；
@@ -558,39 +558,54 @@ separator 的 typed 反证，再分别闭合 contact、overlap，最后运行完
 runtime 自动批准权限。开始实现时由单一 `photo_geometry/template_adjacency_topology.py` 拥有 observation
 到 relation 的闭合；当前不为尚未启用的能力建立占位模块。
 
-### 7.2 已确认、尚未启用的 calibrated nominal Grid authority
+### 7.2 Calibrated nominal Grid authority
 
-当前 direct-evidence 路径要求投影后 rank 3，并禁止它生成一张 START/END 都未观察的 Frame。这是当前
-runtime 的保守权限边界，不是 Grid 物理模型的最终上限。下一小机制建立
-`CalibratedNominalGridAuthority`，让经过独立校准的默认 Grid 成为另一条显式闭合路径，而不冒充 direct
-evidence：
+`CalibratedNominalGridAuthority` 是 direct rank-3 之外已经启用的显式闭合路径。默认 Grid 始终是同一个
+primary generative model；这项 authority 只决定它何时足以进入自动批准，不建立第二套 placement：
 
 ```text
 format-specific calibrated W/H/pitch intervals
-+ 至少一个直接 absolute phase anchor
++ 至少一个获得坐标权限的 direct absolute phase anchor
 + 每个使用 local_delta=0 的 adjacency 完整覆盖其合法不确定性走廊
-+ 没有 wide/narrow/contact/overlap/conflict/content counterevidence
-+ 全部相关 phase/W/H/pitch 状态的最坏 OutputFootprint 仍在 5% 预算内
-→ calibrated nominal placement 可进入后续选择与 Gate
++ 没有 wide/narrow/contact/overlap/conflict 等直接反证
++ 当前 hard-fact 层中，每张 Frame 至少有一侧直接角色
++ selected OutputFootprint 完整通过既有 source containment 与 5% 预算
+→ calibrated nominal Grid 可以获得 selected-output authority
 ```
 
-Format/count 只提供有界尺子，不能提供 absolute phase。Pitch uncertainty 按离 anchor 的 slot 距离以同一
-相关状态传播，不能按每格独立取有利值，也不能为了批准而收窄。直接 START/END 一旦存在，始终保留 native
-coordinate 并收紧或修正默认模型；直接 separator 的实际宽度继续产生一次 local advance，不能被 nominal
-gap 拉回。逐 adjacency coverage 必须覆盖该 placement 的完整合法走廊；“query 全部执行”或“没有检测到
-edge”都不是 normal adjacency 的充分证明。
+Format/count 提供一把有界尺子，但不能知道它应放在 TIFF 的哪个像素；absolute phase 始终来自直接
+START/END 或其它获得权限的 anchor。Pitch、W 与 source scale 保留为同一相关状态，pitch uncertainty 按
+离 anchor 的 slot 距离传播，不能按每格独立选择有利值。直接 START/END 保留 native coordinate 并收紧
+默认模型；直接 separator 的实际宽度继续只产生一次 local advance，不能被 nominal gap 拉回。
 
-这条 authority 成立后，可以在没有两侧直接边界的 blank/低显著 Frame 上生成默认角色，因为它不再是
-“凭空”生成：absolute anchor、校准 prior、逐关系完整观察、无反证和最坏安全包络共同拥有该推断。
-任一条件缺失仍 review。当前 `complete_frame_unobserved` 只描述 direct-role projection 路径；未来不能把它
-误用为 calibrated Grid 的永久禁令。
+逐 adjacency coverage 必须覆盖当前 placement 的完整合法走廊；“所有 query 都执行完成”或“没有检测到
+edge”不是 normal adjacency 的充分证明。直接角色反证优先于 Grid，coverage incomplete 次之。Grid 可以
+生成 START/END 都未绑定的完整 Frame 供 candidate diagnostic 使用，但 S040、S056 证明多个相邻局部偏差
+可能在全局 anchor 间互相抵消；在未来校准概率层或更强 topology/continuity 证据闭合前，该候选以
+`complete_frame_unobserved` evidence 和 `nominal_grid_complete_frame_unobserved` Gate failure 进入 review，
+不能由 Grid 自己授权。这是当前自动批准合同，不删除候选，也不把“无法硬证明”误写成像素事实不存在。
 
-该机制必须由一个 canonical type/owner 同时保存 calibration identity、W/H/pitch prior intervals、phase
-anchor、逐 slot 累积 envelope、direct/local corrections、counterevidence 和 typed result。至少表达
-`calibrated_nominal_grid_authority_unavailable`、`nominal_grid_phase_anchor_unavailable`、
-`adjacency_observation_coverage_incomplete` 与 `nominal_grid_uncertainty_budget_exhausted`；Debug 展示默认
-Grid、实际修正和最终可行包络。实现保持 `O(count)`，不增加 TIFF query、样片特例、format denylist、
-第二 placement 模型或未经校准的 score。
+Nominal pitch 使用冻结 development gold 的 source-level calibration：只接受 nominal source 中一个
+separator 两侧均为 `directly_visible` 的完整 adjacency，每个 source 至少两次测量，先取 source 中位值，
+再取跨 source hull 并向外量化到 0.05 mm。当前注册值为：
+
+| format | pitch interval | source / measurement |
+|---|---:|---:|
+| `135` | 37.65–38.20 mm | 44 / 198 |
+| `half` | 18.70–19.05 mm | 11 / 98 |
+| `120-66` | 60.05–62.55 mm | 26 / 52 |
+| `120-67` | 73.40–74.45 mm | 3 / 6 |
+
+`xpan`、`120-645` 和 `135-dual` 当前没有独立合格 pitch calibration，因此该 authority 为 unavailable；
+不能从其它 format 外推或建立 format 特例。
+
+`formats/__init__.py` 唯一拥有 calibration identity 与毫米区间；
+`template_nominal_grid_authority.py` 唯一编译 prior、求解相关 envelope 并建立 evidence/selected authority；
+`template_phase_candidates.py` 只让同一 candidate 使用该 envelope，`template_phase.py` 负责 selected-only
+权限与 typed failure，`template_feasible_geometry.py` 把相关状态传播到输出包络。Report 与 Debug 显示
+calibration identity、参数依据、anchor、推断 adjacency、逐关系 coverage、完整未观察 Frame、工作量与
+failure。该路径保持 `O(count)`，不增加 TIFF query、样片特例、format denylist、fallback、第二 Grid 或
+未经校准的 score。
 
 ## 8. Cross、outer 与固定 H
 

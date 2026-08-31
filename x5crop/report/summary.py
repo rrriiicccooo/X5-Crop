@@ -124,6 +124,10 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                     "global_lattice_authority": typed_read_model(
                         alignments[lane.lane_id].global_lattice_authority
                     ),
+                    "calibrated_nominal_grid_evidence": typed_read_model(
+                        alignments[lane.lane_id]
+                        .calibrated_nominal_grid_evidence
+                    ),
                     "adjacency_observation_coverage": typed_read_model(
                         alignments[lane.lane_id]
                         .adjacency_observation_coverage
@@ -170,6 +174,9 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                     lane.holder_fill_assessment
                 ),
                 "output_footprints": typed_read_model(lane.output_footprints),
+                "calibrated_nominal_grid_authority": typed_read_model(
+                    lane.calibrated_nominal_grid_authority
+                ),
                 "direct_use_budget_assessments": typed_read_model(
                     lane.direct_use_budget_assessments
                 ),

@@ -8,6 +8,7 @@ from tools.tests.template_test_support import (
     phase_template,
     placement_sequence,
     placement_template,
+    unavailable_nominal_grid_prior,
 )
 from x5crop.detection.photo_geometry.template_frame_width import (
     apply_correlated_frame_width_inference,
@@ -87,6 +88,7 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             observations=observations,
             separator_bands=(),
             template=phase.template,
+            calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(phase.template),
             scale_px_per_mm=None,
             holder_span_px=None,
             phase_authority_px=None,
@@ -140,6 +142,7 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             observations=observations,
             separator_bands=(),
             template=selected.template,
+            calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(selected.template),
             scale_px_per_mm=None,
             holder_span_px=None,
             phase_authority_px=None,
@@ -279,8 +282,7 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
         )
 
         width = calibrated.width_state.extent_projection_px()
-        self.assertLessEqual(width.minimum, 99.0)
-        self.assertGreaterEqual(width.maximum, 101.0)
+        self.assertEqual(width, FiniteInterval.exact(100.0))
         self.assertEqual(len(calibrated.width_state.observation_ids), 4)
         self.assertEqual(authority.state, EvidenceState.SUPPORTED)
         self.assertEqual(authority.supporting_frame_ordinals, (1, 3))
@@ -318,6 +320,52 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
         self.assertGreaterEqual(
             selected.best.pitch_fit.frame_width_px.maximum,
             selected.best.pitch_fit.canonical_frame_width_px,
+        )
+
+    def test_selected_width_conflict_is_typed_counterevidence(self) -> None:
+        observations = (
+            phase_edge("conflicting-frame-1-start", 40.0),
+            phase_edge("conflicting-frame-1-end", 139.0),
+            phase_edge("conflicting-frame-3-start", 280.0),
+            phase_edge("conflicting-frame-3-end", 381.0),
+        )
+        phase = fit_template_phase(observations, phase_template(3))
+        phase = self._with_selected_width_prerequisites(phase, observations)
+        assert phase.best is not None
+        phase = replace(
+            phase,
+            best=replace(
+                phase.best,
+                pitch_fit=replace(
+                    phase.best.pitch_fit,
+                    frame_width_px=FiniteInterval(80.0, 90.0),
+                    canonical_frame_width_px=85.0,
+                ),
+            ),
+        )
+        source = SourceScanGeometry.create(
+            FramePhysicalSpec(10.0, 24.0, None),
+            width_scale_px_per_mm=PositiveInterval.exact(10.0),
+            height_scale_px_per_mm=PositiveInterval.exact(10.0),
+        )
+
+        retained, authority = calibrate_source_frame_width(
+            source,
+            phase,
+            observations,
+        )
+
+        self.assertEqual(retained, source)
+        self.assertEqual(authority.state, EvidenceState.CONTRADICTED)
+        self.assertEqual(
+            authority.failure_kind,
+            SourceFrameWidthAuthorityFailureKind.PHYSICAL_WIDTH_CONFLICT,
+        )
+        rejected = apply_selected_source_frame_width(phase, authority)
+        self.assertEqual(rejected.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(
+            rejected.failure_kind,
+            PhaseFailureKind.SOURCE_FRAME_WIDTH_CONFLICT,
         )
 
     def test_source_width_never_resolves_an_ambiguous_placement(self) -> None:
@@ -390,6 +438,7 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             observations=observations,
             separator_bands=(),
             template=phase.template,
+            calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(phase.template),
             scale_px_per_mm=None,
             holder_span_px=None,
             phase_authority_px=None,
@@ -422,6 +471,7 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             observations=observations,
             separator_bands=(),
             template=phase.template,
+            calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(phase.template),
             scale_px_per_mm=None,
             holder_span_px=None,
             phase_authority_px=None,

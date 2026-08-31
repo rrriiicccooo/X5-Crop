@@ -25,6 +25,7 @@ from .separator_material import normal_separator_material_bands
 from .template_model import (
     LatticeParameterFitBasis,
     LocalAdvanceRelation,
+    PhaseLatticeFit,
     PitchFit,
     SequenceFit,
     SequenceBindingUse,
@@ -36,12 +37,21 @@ from .template_model import (
     phase_lattice_fit_from_absolute,
     template_role_refinement_radius_px,
 )
+from .template_nominal_grid_authority import (
+    NominalGridRoleConstraint,
+    solve_calibrated_nominal_grid_envelope,
+)
+from .template_nominal_grid_model import CalibratedNominalGridPrior
 from .template_pitch import refine_placement_pitch_interval
 from .template_evidence import separator_support_authority
-from .template_direct_role_authority import DirectRoleBindingAuthority
+from .template_direct_role_authority import (
+    DirectRoleAuthorityFact,
+    DirectRoleBindingAuthority,
+)
 from .template_lattice_authority import direct_role_constraint_rank
 from .template_phase_model import (
     PhaseCandidateAuthorityProjection,
+    PhaseCandidateProjectionBasis,
     PhaseCandidateProjectionOutcome,
     PhaseCandidateProjectedBinding,
     PhaseWinnerBasis,
@@ -1717,6 +1727,145 @@ def _fit_seed(
     return _BoundFit(fit, residual_compatible)
 
 
+def _interval_hull(
+    left: FiniteInterval,
+    right: FiniteInterval,
+) -> FiniteInterval:
+    return FiniteInterval(
+        min(left.minimum, right.minimum),
+        max(left.maximum, right.maximum),
+    )
+
+
+def _fit_calibrated_nominal_grid_candidate(
+    candidate: _BoundFit,
+    *,
+    prior: CalibratedNominalGridPrior,
+    retained_facts: tuple[DirectRoleAuthorityFact, ...],
+    direct: tuple[_AnchorFact, ...],
+    template: TemplateSpec,
+    relations: tuple[LocalAdvanceRelation, ...],
+    phase_authority: FiniteInterval | None,
+    retained_direct_constraint_rank: int,
+) -> _BoundFit | None:
+    """Refit one existing discrete mapping against the calibrated Grid."""
+
+    retained_ids = {item.observation_id for item in retained_facts}
+    direct_by_id = {item.observation_id: item for item in direct}
+    if not retained_ids or any(identity not in direct_by_id for identity in retained_ids):
+        return None
+    constraints = tuple(
+        NominalGridRoleConstraint(
+            role_index=item.role_index,
+            observation_id=item.observation_id,
+            coordinate_px=direct_by_id[item.observation_id].coordinate_px,
+            full_interval_px=direct_by_id[item.observation_id].full_interval_px,
+        )
+        for item in retained_facts
+    )
+    try:
+        envelope, fit_state = solve_calibrated_nominal_grid_envelope(
+            prior=prior,
+            template=template,
+            integer_slot_offset=(
+                candidate.fit.phase_lattice_fit.integer_slot_offset
+            ),
+            role_constraints=constraints,
+            relations=relations,
+            phase_authority_px=phase_authority,
+            retained_direct_constraint_rank=retained_direct_constraint_rank,
+        )
+    except ValueError:
+        return None
+
+    retained_by_role = {item.role_index: item for item in retained_facts}
+    role_bindings: list[SequenceRoleBinding | None] = []
+    role_intervals: list[FiniteInterval] = []
+    role_full_intervals: list[FiniteInterval] = []
+    for role_index, nominal_interval in enumerate(envelope.role_intervals_px):
+        fact = retained_by_role.get(role_index)
+        if fact is None:
+            binding = None
+            role_interval = nominal_interval
+            full_interval = nominal_interval
+        else:
+            binding = candidate.fit.role_bindings[role_index]
+            if binding is None or binding.observation_id != fact.observation_id:
+                raise ValueError(
+                    "nominal Grid projection lost its discrete role binding"
+                )
+            role_interval = _interval_hull(
+                nominal_interval,
+                binding.fit_position_interval_px,
+            )
+            full_interval = _interval_hull(
+                nominal_interval,
+                binding.full_position_interval_px,
+            )
+        role_bindings.append(binding)
+        role_intervals.append(role_interval)
+        role_full_intervals.append(full_interval)
+
+    direct_ids = tuple(
+        binding.observation_id
+        for binding in role_bindings
+        if binding is not None
+    )
+    support_by_location: dict[int, float] = {}
+    for fact in retained_facts:
+        anchor = direct_by_id[fact.observation_id]
+        location = (fact.role_index + 1) // 2
+        support_by_location[location] = max(
+            support_by_location.get(location, 0.0),
+            anchor.support_fraction,
+        )
+    fit = SequenceFit(
+        template=template,
+        phase_lattice_fit=PhaseLatticeFit(
+            authority=template.phase_lattice_authority,
+            cycle_phase_interval_px=envelope.cycle_phase_interval_px,
+            canonical_cycle_phase_px=envelope.canonical_cycle_phase_px,
+            integer_slot_offset=(
+                candidate.fit.phase_lattice_fit.integer_slot_offset
+            ),
+            canonical_period_px=envelope.canonical_pitch_px,
+            absolute_phase_interval_px=envelope.absolute_phase_interval_px,
+            canonical_absolute_phase_px=envelope.canonical_absolute_phase_px,
+            direction=template.direction,
+        ),
+        pitch_fit=PitchFit(
+            frame_width_px=envelope.frame_width_interval_px,
+            gap_interval_px=envelope.gap_interval_px,
+            pitch_interval_px=envelope.pitch_interval_px,
+            canonical_frame_width_px=envelope.canonical_frame_width_px,
+            canonical_pitch_px=envelope.canonical_pitch_px,
+            scale_px_per_mm=envelope.scale_interval_px_per_mm,
+            observation_ids=direct_ids,
+        ),
+        lattice_parameter_fit_basis=(
+            LatticeParameterFitBasis.CALIBRATED_NOMINAL_GRID
+        ),
+        calibrated_nominal_grid_fit_state=fit_state,
+        model_role_positions_px=envelope.role_positions_px,
+        model_role_intervals_px=tuple(role_intervals),
+        model_full_role_intervals_px=tuple(role_full_intervals),
+        role_bindings=tuple(role_bindings),
+        local_advance_relations=relations,
+        contradicted_observation_count=max(0, len(direct) - len(direct_ids)),
+        residual_sum_px=sum(
+            abs(binding.canonical_position_px - canonical)
+            for binding, canonical in zip(
+                role_bindings,
+                envelope.role_positions_px,
+                strict=True,
+            )
+            if binding is not None
+        ),
+        phase_support_coverage=sum(support_by_location.values()),
+    )
+    return _BoundFit(fit, candidate.residual_compatible)
+
+
 def project_candidate_to_authorized_direct_roles(
     candidate: _BoundFit,
     authority: DirectRoleBindingAuthority,
@@ -1728,6 +1877,7 @@ def project_candidate_to_authorized_direct_roles(
     pitch_authority: FiniteInterval,
     phase_authority: FiniteInterval | None,
     fit_residual_limit_px: float | None,
+    calibrated_nominal_grid_prior: CalibratedNominalGridPrior | None,
 ) -> tuple[_BoundFit | None, PhaseCandidateAuthorityProjection]:
     """Remove only unavailable coordinates, then refit one fixed mapping."""
 
@@ -1737,20 +1887,13 @@ def project_candidate_to_authorized_direct_roles(
         raise TypeError("direct-role projection requires typed authority")
     retained_indices = authority.supported_role_indices
     retained_rank = direct_role_constraint_rank(candidate.fit, retained_indices)
-    if authority.state == EvidenceState.SUPPORTED:
-        return candidate, PhaseCandidateAuthorityProjection(
-            input_direct_role_authority=authority,
-            outcome=PhaseCandidateProjectionOutcome.UNCHANGED,
-            projected_out_bindings=(),
-            retained_direct_constraint_rank=retained_rank,
-            reason=None,
-        )
     if authority.state == EvidenceState.CONTRADICTED:
         return None, PhaseCandidateAuthorityProjection(
             input_direct_role_authority=authority,
             outcome=(
                 PhaseCandidateProjectionOutcome.DIRECT_ROLE_CONTRADICTION
             ),
+            basis=None,
             projected_out_bindings=(),
             retained_direct_constraint_rank=retained_rank,
             reason=authority.reason or "direct-role evidence is contradicted",
@@ -1766,38 +1909,6 @@ def project_candidate_to_authorized_direct_roles(
         )
         for item in removed_facts
     )
-    retained_role_indices = set(retained_indices)
-    if any(
-        2 * frame_index not in retained_role_indices
-        and 2 * frame_index + 1 not in retained_role_indices
-        for frame_index in range(template.count)
-    ):
-        return None, PhaseCandidateAuthorityProjection(
-            input_direct_role_authority=authority,
-            outcome=(
-                PhaseCandidateProjectionOutcome.COMPLETE_FRAME_UNOBSERVED
-            ),
-            projected_out_bindings=projected_out,
-            retained_direct_constraint_rank=retained_rank,
-            reason=(
-                "direct-role projection cannot create a Frame whose START "
-                "and END are both unobserved"
-            ),
-        )
-    if retained_rank < 3:
-        return None, PhaseCandidateAuthorityProjection(
-            input_direct_role_authority=authority,
-            outcome=(
-                PhaseCandidateProjectionOutcome.RETAINED_RANK_INSUFFICIENT
-            ),
-            projected_out_bindings=projected_out,
-            retained_direct_constraint_rank=retained_rank,
-            reason=(
-                "authorized direct coordinates do not independently close "
-                "phase, W, and pitch"
-            ),
-        )
-
     retained_facts = tuple(
         item for item in authority.facts if item.state == EvidenceState.SUPPORTED
     )
@@ -1817,6 +1928,94 @@ def project_candidate_to_authorized_direct_roles(
         if pair[0].observation_id in retained_ids
         and pair[1].observation_id in retained_ids
     )
+    retained_role_indices = set(retained_indices)
+    complete_frame_unobserved = any(
+        2 * frame_index not in retained_role_indices
+        and 2 * frame_index + 1 not in retained_role_indices
+        for frame_index in range(template.count)
+    )
+    if (
+        authority.state == EvidenceState.SUPPORTED
+        and retained_rank == 3
+        and not complete_frame_unobserved
+    ):
+        return candidate, PhaseCandidateAuthorityProjection(
+            input_direct_role_authority=authority,
+            outcome=PhaseCandidateProjectionOutcome.UNCHANGED,
+            basis=PhaseCandidateProjectionBasis.DIRECT_BINDINGS,
+            projected_out_bindings=(),
+            retained_direct_constraint_rank=retained_rank,
+            reason=None,
+        )
+    if retained_rank < 3 or complete_frame_unobserved:
+        if not retained_facts:
+            return None, PhaseCandidateAuthorityProjection(
+                input_direct_role_authority=authority,
+                outcome=(
+                    PhaseCandidateProjectionOutcome
+                    .NOMINAL_GRID_PHASE_ANCHOR_UNAVAILABLE
+                ),
+                basis=None,
+                projected_out_bindings=projected_out,
+                retained_direct_constraint_rank=retained_rank,
+                reason=(
+                    "calibrated nominal Grid requires one authorized direct "
+                    "absolute phase anchor"
+                ),
+            )
+        if calibrated_nominal_grid_prior is None or (
+            calibrated_nominal_grid_prior.state != EvidenceState.SUPPORTED
+        ):
+            return None, PhaseCandidateAuthorityProjection(
+                input_direct_role_authority=authority,
+                outcome=(
+                    PhaseCandidateProjectionOutcome
+                    .CALIBRATED_NOMINAL_GRID_UNAVAILABLE
+                ),
+                basis=None,
+                projected_out_bindings=projected_out,
+                retained_direct_constraint_rank=retained_rank,
+                reason=(
+                    "authorized direct coordinates do not close phase, W, and "
+                    "pitch, and this format has no calibrated nominal Grid"
+                ),
+            )
+        nominal = _fit_calibrated_nominal_grid_candidate(
+            candidate,
+            prior=calibrated_nominal_grid_prior,
+            retained_facts=retained_facts,
+            direct=direct,
+            template=template,
+            relations=relations,
+            phase_authority=phase_authority,
+            retained_direct_constraint_rank=retained_rank,
+        )
+        if nominal is None:
+            return None, PhaseCandidateAuthorityProjection(
+                input_direct_role_authority=authority,
+                outcome=(
+                    PhaseCandidateProjectionOutcome
+                    .CALIBRATED_NOMINAL_GRID_CONFLICT
+                ),
+                basis=None,
+                projected_out_bindings=projected_out,
+                retained_direct_constraint_rank=retained_rank,
+                reason=(
+                    "authorized direct coordinates conflict with the bounded "
+                    "calibrated nominal Grid"
+                ),
+            )
+        return nominal, PhaseCandidateAuthorityProjection(
+            input_direct_role_authority=authority,
+            outcome=(
+                PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID
+            ),
+            basis=PhaseCandidateProjectionBasis.CALIBRATED_NOMINAL_GRID,
+            projected_out_bindings=projected_out,
+            retained_direct_constraint_rank=retained_rank,
+            reason=None,
+        )
+
     projected = _fit_seed(
         _PhaseSeed(
             phase_px=(
@@ -1838,6 +2037,7 @@ def project_candidate_to_authorized_direct_roles(
         return None, PhaseCandidateAuthorityProjection(
             input_direct_role_authority=authority,
             outcome=PhaseCandidateProjectionOutcome.REFIT_UNAVAILABLE,
+            basis=None,
             projected_out_bindings=projected_out,
             retained_direct_constraint_rank=retained_rank,
             reason="authorized direct coordinates have no bounded lattice refit",
@@ -1860,6 +2060,7 @@ def project_candidate_to_authorized_direct_roles(
             outcome=(
                 PhaseCandidateProjectionOutcome.DISCRETE_IDENTITY_CHANGED
             ),
+            basis=None,
             projected_out_bindings=projected_out,
             retained_direct_constraint_rank=retained_rank,
             reason="authorized refit changed the bounded discrete mapping",
@@ -1877,6 +2078,7 @@ def project_candidate_to_authorized_direct_roles(
     return projected, PhaseCandidateAuthorityProjection(
         input_direct_role_authority=authority,
         outcome=PhaseCandidateProjectionOutcome.PROJECTED,
+        basis=PhaseCandidateProjectionBasis.DIRECT_RANK_THREE,
         projected_out_bindings=projected_out,
         retained_direct_constraint_rank=retained_rank,
         reason=None,

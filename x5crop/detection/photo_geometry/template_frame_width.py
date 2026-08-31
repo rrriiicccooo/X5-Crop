@@ -20,7 +20,11 @@ from .template_model import (
     SequenceBindingUse,
     SequenceFit,
 )
-from .template_phase_model import PhaseFitResult, PhaseFitStatus
+from .template_phase_model import (
+    PhaseFailureKind,
+    PhaseFitResult,
+    PhaseFitStatus,
+)
 
 
 _INDEPENDENT_WIDTH_ROLE_BASES = frozenset(
@@ -325,6 +329,24 @@ def calibrate_source_frame_width(
             SourceFrameWidthAuthorityFailureKind.PHYSICAL_WIDTH_CONFLICT,
             "authorized Frame widths have no common physical source state",
         )
+    try:
+        # The selected fit is a compatibility constraint, not new pixel
+        # evidence.  Clip the correlated source state before publishing the
+        # authority so an incompatible W becomes typed counterevidence rather
+        # than a runtime exception in the selected-only consumer.
+        width_state = width_state.intersect_inferred_extent(
+            FiniteInterval(
+                fit.pitch_fit.frame_width_px.minimum,
+                fit.pitch_fit.frame_width_px.maximum,
+            )
+        )
+    except ValueError:
+        return source_geometry, _failed_source_width_authority(
+            phase,
+            EvidenceState.CONTRADICTED,
+            SourceFrameWidthAuthorityFailureKind.PHYSICAL_WIDTH_CONFLICT,
+            "selected placement W contradicts the direct source W state",
+        )
     calibrated = SourceScanGeometry.from_axis_states(
         source_geometry.frame_spec,
         width_state,
@@ -364,6 +386,17 @@ def apply_selected_source_frame_width(
 ) -> PhaseFitResult:
     """Narrow only the selected fit's continuous W; preserve every runner."""
 
+    if authority.state == EvidenceState.CONTRADICTED:
+        return replace(
+            phase,
+            status=PhaseFitStatus.UNRESOLVED,
+            ambiguity_reason=(
+                authority.reason
+                or "direct source W contradicts the selected placement"
+            ),
+            failure_kind=PhaseFailureKind.SOURCE_FRAME_WIDTH_CONFLICT,
+            winner_basis=None,
+        )
     if authority.state != EvidenceState.SUPPORTED:
         return phase
     fit = phase.best
@@ -608,14 +641,7 @@ def apply_correlated_frame_width_inference(
     missing = fit.unbound_role_indices
     if not missing:
         return fit
-    pairs = tuple(
-        zip(
-            fit.role_bindings[0::2],
-            fit.role_bindings[1::2],
-            strict=True,
-        )
-    )
-    if any(start is None and end is None for start, end in pairs):
+    if fit.completely_unobserved_frame_ordinals:
         return replace(
             fit,
             frame_width_inference=FrameWidthInferenceAssessment(

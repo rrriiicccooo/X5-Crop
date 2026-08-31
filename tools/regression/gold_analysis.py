@@ -47,8 +47,8 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v8"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v8"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v9"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v10"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
 SOURCE_TIMEOUT_SECONDS = 600
@@ -977,6 +977,15 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
             record,
             gold_frame_diagnostics(record, report),
         )
+        phase_competition = development_lanes[0]["phase_competition"]
+        phase_best = phase_competition["best"]
+        nominal_evidence = phase_competition[
+            "calibrated_nominal_grid_evidence"
+        ]
+        nominal_authority = production_lanes[0][
+            "calibrated_nominal_grid_authority"
+        ]
+        phase_receipt = phase_competition["receipt"]
     development_contract_passed = development_contract_failure is None
     unsafe_approved_auto = (
         status == "approved_auto" and not development_contract_passed
@@ -1012,6 +1021,29 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         "phase_failure_kind": development_lanes[0]["phase_competition"].get(
             "failure_kind"
         ),
+        "lattice_parameter_fit_basis": (
+            None
+            if phase_best is None
+            else phase_best["lattice_parameter_fit_basis"]
+        ),
+        "calibrated_nominal_grid_evidence_state": (
+            None if nominal_evidence is None else nominal_evidence["state"]
+        ),
+        "calibrated_nominal_grid_evidence_failure_kind": (
+            None
+            if nominal_evidence is None
+            else nominal_evidence["failure_kind"]
+        ),
+        "calibrated_nominal_grid_authority_state": nominal_authority["state"],
+        "calibrated_nominal_grid_authority_failure_kind": nominal_authority[
+            "failure_kind"
+        ],
+        "candidate_nominal_grid_solve_count": phase_receipt[
+            "candidate_nominal_grid_solve_count"
+        ],
+        "candidate_nominal_grid_solve_success_count": phase_receipt[
+            "candidate_nominal_grid_solve_success_count"
+        ],
         "cross_status": production_lanes[0]["cross_status"],
         "cross_failure_kind": development_lanes[0][
             "cross_competition"
@@ -1139,16 +1171,167 @@ def _unique_source_physical_diagnostics(
             selected[source_sha] = {
                 **diagnostic,
                 "sample_id": str(record["sample_id"]),
+                "cohort_role": str(record["cohort_role"]),
             }
     return tuple(
         selected[source_sha] for source_sha in sorted(selected)
     )
 
 
+def _unique_nominal_pitch_diagnostics(
+    records: Sequence[dict[str, Any]],
+) -> tuple[dict[str, Any], ...]:
+    """Select one nominal task per source for pitch calibration only."""
+
+    selected: dict[str, dict[str, Any]] = {}
+    for record in records:
+        if record["cohort_role"] != "nominal":
+            continue
+        diagnostic = record["physical_prior_diagnostic"]
+        if diagnostic.get("analysis_error") is not None:
+            continue
+        source_sha = str(record["source_sha256"])
+        current = selected.get(source_sha)
+        if current is None or (
+            int(diagnostic["count"]),
+            str(record["sample_id"]),
+        ) > (
+            int(current["count"]),
+            str(current["sample_id"]),
+        ):
+            selected[source_sha] = {
+                **diagnostic,
+                "sample_id": str(record["sample_id"]),
+                "cohort_role": "nominal",
+            }
+    return tuple(selected[source_sha] for source_sha in sorted(selected))
+
+
 def _round_outward(value: float, quantum: float) -> float:
     if min(value, quantum) <= 0.0:
         raise ValueError("calibration rounding requires positive values")
     return math.ceil((value - 1.0e-12) / quantum) * quantum
+
+
+def _round_outward_lower(value: float, quantum: float) -> float:
+    if min(value, quantum) <= 0.0:
+        raise ValueError("calibration rounding requires positive values")
+    return math.floor((value + 1.0e-12) / quantum) * quantum
+
+
+def _nominal_pitch_calibration(
+    format_id: str,
+    diagnostics: Sequence[dict[str, Any]],
+    *,
+    cohort_sha256: str | None,
+) -> dict[str, Any]:
+    """Reproduce one format's source-level calibrated nominal pitch."""
+
+    physical = format_spec(format_id)
+    configured = physical.nominal_pitch_calibration
+    minimum_measurements = (
+        2 if configured is None else configured.minimum_measurements_per_source
+    )
+    sources = []
+    for diagnostic in diagnostics:
+        measurements = tuple(
+            float(value)
+            for value in diagnostic["holder_normalized_pitch_estimates_mm"]
+        )
+        if (
+            diagnostic["cohort_role"] != "nominal"
+            or len(measurements) < minimum_measurements
+        ):
+            continue
+        sources.append(
+            {
+                "sample_id": str(diagnostic["sample_id"]),
+                "measurement_count": len(measurements),
+                "source_center_mm": statistics.median(measurements),
+            }
+        )
+    raw_minimum = (
+        None
+        if not sources
+        else min(float(item["source_center_mm"]) for item in sources)
+    )
+    raw_maximum = (
+        None
+        if not sources
+        else max(float(item["source_center_mm"]) for item in sources)
+    )
+    rounding = 0.05 if configured is None else configured.outward_rounding_mm
+    expected_minimum = (
+        None
+        if raw_minimum is None
+        else _round_outward_lower(raw_minimum, rounding)
+    )
+    expected_maximum = (
+        None if raw_maximum is None else _round_outward(raw_maximum, rounding)
+    )
+    measurement_count = sum(int(item["measurement_count"]) for item in sources)
+    matches = (
+        configured is not None
+        and cohort_sha256 == configured.development_gold_cohort_sha256
+        and len(sources) == configured.development_source_count
+        and measurement_count == configured.development_measurement_count
+        and math.isclose(
+            float(expected_minimum),
+            configured.minimum_pitch_mm,
+        )
+        and math.isclose(
+            float(expected_maximum),
+            configured.maximum_pitch_mm,
+        )
+    )
+    return {
+        "method": (
+            "nominal development source; directly visible START/END around a "
+            "separator adjacency; per-source median; source-center hull; "
+            "outward quantization"
+        ),
+        "minimum_measurements_per_source": minimum_measurements,
+        "outward_rounding_mm": rounding,
+        "eligible_source_count": len(sources),
+        "eligible_measurement_count": measurement_count,
+        "source_center_distribution_mm": _distribution(
+            float(item["source_center_mm"]) for item in sources
+        ),
+        "derived_raw_interval_mm": {
+            "minimum": raw_minimum,
+            "maximum": raw_maximum,
+        },
+        "derived_outward_interval_mm": {
+            "minimum": expected_minimum,
+            "maximum": expected_maximum,
+        },
+        "registered_calibration_id": (
+            None if configured is None else configured.calibration_id
+        ),
+        "registered_cohort_sha256": (
+            None
+            if configured is None
+            else configured.development_gold_cohort_sha256
+        ),
+        "actual_cohort_sha256": cohort_sha256,
+        "registered_interval_mm": (
+            None
+            if configured is None
+            else {
+                "minimum": configured.minimum_pitch_mm,
+                "maximum": configured.maximum_pitch_mm,
+            }
+        ),
+        "registered_source_count": (
+            None if configured is None else configured.development_source_count
+        ),
+        "registered_measurement_count": (
+            None
+            if configured is None
+            else configured.development_measurement_count
+        ),
+        "configured_matches_calibration": matches,
+    }
 
 
 def _fit_mixed_axis_guard(
@@ -1358,6 +1541,9 @@ def _aperture_compatibility_calibration(
 def _physical_format_summary(
     format_id: str,
     diagnostics: Sequence[dict[str, Any]],
+    *,
+    cohort_sha256: str | None,
+    nominal_pitch_diagnostics: Sequence[dict[str, Any]],
 ) -> dict[str, Any]:
     physical = format_spec(format_id)
     frame = physical.frame
@@ -1569,6 +1755,11 @@ def _physical_format_summary(
             diagnostics,
             "holder_normalized_pitch_estimates_mm",
         ),
+        "nominal_pitch_calibration": _nominal_pitch_calibration(
+            format_id,
+            nominal_pitch_diagnostics,
+            cohort_sha256=cohort_sha256,
+        ),
         "pitch_within_runtime_interval_count": sum(pitch_containment),
         "pitch_runtime_interval_comparison_count": len(pitch_containment),
         "excluded_separator_count": sum(
@@ -1616,11 +1807,19 @@ def _physical_format_summary(
 
 def _physical_prior_validation(
     records: Sequence[dict[str, Any]],
+    *,
+    cohort_sha256: str | None,
 ) -> dict[str, Any]:
     diagnostics = _unique_source_physical_diagnostics(records)
+    nominal_pitch_diagnostics = _unique_nominal_pitch_diagnostics(records)
     by_format: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    nominal_pitch_by_format: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for diagnostic in diagnostics:
         by_format[str(diagnostic["format_id"])].append(diagnostic)
+    for diagnostic in nominal_pitch_diagnostics:
+        nominal_pitch_by_format[str(diagnostic["format_id"])].append(
+            diagnostic
+        )
     return {
         "scope": (
             "unique_source_gold_geometry_against_current_runtime_physical_priors"
@@ -1644,7 +1843,12 @@ def _physical_prior_validation(
             _aperture_compatibility_calibration(diagnostics)
         ),
         "formats": {
-            format_id: _physical_format_summary(format_id, items)
+            format_id: _physical_format_summary(
+                format_id,
+                items,
+                cohort_sha256=cohort_sha256,
+                nominal_pitch_diagnostics=nominal_pitch_by_format[format_id],
+            )
             for format_id, items in sorted(by_format.items())
         },
     }
@@ -1902,11 +2106,42 @@ def _summary(
             item["candidate_safety_mismatch"] for item in variants
         ),
         "count_variant_diagnostics": variants,
-        "physical_prior_validation": _physical_prior_validation(records),
+        "physical_prior_validation": _physical_prior_validation(
+            records,
+            cohort_sha256=identity.get("development_gold_cohort_sha256"),
+        ),
         "decision_status_counts": _counter(records, "decision_status"),
         "phase_failure_kind_counts": _counter(
             records,
             "phase_failure_kind",
+        ),
+        "lattice_parameter_fit_basis_counts": _counter(
+            records,
+            "lattice_parameter_fit_basis",
+        ),
+        "calibrated_nominal_grid_evidence_state_counts": _counter(
+            records,
+            "calibrated_nominal_grid_evidence_state",
+        ),
+        "calibrated_nominal_grid_evidence_failure_kind_counts": _counter(
+            records,
+            "calibrated_nominal_grid_evidence_failure_kind",
+        ),
+        "calibrated_nominal_grid_authority_state_counts": _counter(
+            records,
+            "calibrated_nominal_grid_authority_state",
+        ),
+        "calibrated_nominal_grid_authority_failure_kind_counts": _counter(
+            records,
+            "calibrated_nominal_grid_authority_failure_kind",
+        ),
+        "candidate_nominal_grid_solve_count": sum(
+            int(record["candidate_nominal_grid_solve_count"])
+            for record in records
+        ),
+        "candidate_nominal_grid_solve_success_count": sum(
+            int(record["candidate_nominal_grid_solve_success_count"])
+            for record in records
         ),
         "cross_failure_reason_counts": _counter(
             records,
@@ -2067,6 +2302,13 @@ def run_gold_analysis(
                 "source_placement_state": None,
                 "phase_status": None,
                 "phase_failure_kind": None,
+                "lattice_parameter_fit_basis": None,
+                "calibrated_nominal_grid_evidence_state": None,
+                "calibrated_nominal_grid_evidence_failure_kind": None,
+                "calibrated_nominal_grid_authority_state": None,
+                "calibrated_nominal_grid_authority_failure_kind": None,
+                "candidate_nominal_grid_solve_count": 0,
+                "candidate_nominal_grid_solve_success_count": 0,
                 "cross_status": None,
                 "cross_failure_kind": None,
                 "cross_failure_reason": None,

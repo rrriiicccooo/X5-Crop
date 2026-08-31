@@ -14,6 +14,7 @@ from tools.regression.gold_analysis import (
     _analysis_identity,
     _axis_guard_calibration,
     _fit_mixed_axis_guard,
+    _nominal_pitch_calibration,
     _round_outward,
     _source_variation_summary,
     _summary,
@@ -23,6 +24,7 @@ from tools.regression.gold_analysis import (
     sequence_boundary_diagnostics,
     validate_gold_analysis_artifacts,
 )
+from x5crop.formats import format_spec
 
 
 class GoldAnalysisContractTest(unittest.TestCase):
@@ -185,6 +187,13 @@ class GoldAnalysisContractTest(unittest.TestCase):
             "source_placement_state": "supported",
             "phase_status": "resolved",
             "phase_failure_kind": None,
+            "lattice_parameter_fit_basis": "bounded_direct_least_squares",
+            "calibrated_nominal_grid_evidence_state": None,
+            "calibrated_nominal_grid_evidence_failure_kind": None,
+            "calibrated_nominal_grid_authority_state": "not_applicable",
+            "calibrated_nominal_grid_authority_failure_kind": None,
+            "candidate_nominal_grid_solve_count": 0,
+            "candidate_nominal_grid_solve_success_count": 0,
             "cross_status": "resolved",
             "cross_failure_kind": None,
             "cross_failure_reason": None,
@@ -355,6 +364,46 @@ class GoldAnalysisContractTest(unittest.TestCase):
             groups[36.0]["q95_source_center_deviation_mm"],
             0.5,
         )
+
+    def test_nominal_pitch_calibration_is_source_level_and_reproducible(
+        self,
+    ) -> None:
+        configured = format_spec("135").nominal_pitch_calibration
+        assert configured is not None
+        centers = [37.9] * 44
+        centers[0] = 37.69292831335652
+        centers[-1] = 38.18633241598057
+        diagnostics = tuple(
+            {
+                "sample_id": f"S{index:03d}",
+                "cohort_role": "nominal",
+                "holder_normalized_pitch_estimates_mm": [
+                    center
+                ]
+                * (5 if index <= 22 else 4),
+            }
+            for index, center in enumerate(centers, start=1)
+        ) + (
+            {
+                "sample_id": "challenge",
+                "cohort_role": "challenge",
+                "holder_normalized_pitch_estimates_mm": [20.0, 60.0],
+            },
+        )
+
+        calibration = _nominal_pitch_calibration(
+            "135",
+            diagnostics,
+            cohort_sha256=configured.development_gold_cohort_sha256,
+        )
+
+        self.assertEqual(calibration["eligible_source_count"], 44)
+        self.assertEqual(calibration["eligible_measurement_count"], 198)
+        self.assertEqual(
+            calibration["derived_outward_interval_mm"],
+            {"minimum": 37.65, "maximum": 38.2},
+        )
+        self.assertTrue(calibration["configured_matches_calibration"])
 
     def test_analysis_artifact_binds_comparator_and_reaggregates(self) -> None:
         identity = _analysis_identity()

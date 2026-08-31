@@ -12,6 +12,7 @@ from .model import BoundaryRole, PHOTO_BOUNDARY_MEASUREMENT_SPEC
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_model import (
     FrameWidthInferenceFailureKind,
+    LatticeParameterFitBasis,
     LocalAdvanceRelation,
     SequenceFit,
     SequenceRoleBinding,
@@ -54,6 +55,7 @@ from .template_outer_frame_authority import (
 )
 from .template_phase_model import (
     PhaseCandidateAuthorityProjection,
+    PhaseCandidateProjectionBasis,
     PhaseCandidateProjectionOutcome,
     PhaseFailureKind,
     PhaseFitResult,
@@ -61,6 +63,15 @@ from .template_phase_model import (
     PhaseWinnerBasis,
     TemplatePhaseCandidateCompetition,
     TemplatePhaseInput,
+)
+from .template_nominal_grid_authority import (
+    failed_nominal_grid_evidence,
+    nominal_grid_evidence_id,
+)
+from .template_nominal_grid_model import (
+    CalibratedNominalGridEvidence,
+    CalibratedNominalGridPrior,
+    NominalGridFailureKind,
 )
 
 
@@ -109,7 +120,7 @@ def _inherit_prior_lattice_fit_basis(
     result: PhaseFitResult,
     prior: PhaseFitResult,
 ) -> PhaseFitResult:
-    """Retain the most constrained parameter solve in each fit lineage."""
+    """Retain direct-fit provenance without reclassifying a nominal solve."""
 
     prior_fits = tuple(
         fit for fit in (prior.best, prior.runner_up) if fit is not None
@@ -118,18 +129,28 @@ def _inherit_prior_lattice_fit_basis(
     def inherit(current: SequenceFit | None) -> SequenceFit | None:
         if current is None:
             return None
+        # A calibrated Grid state belongs to the exact bounded solve that
+        # produced the current coordinates.  Earlier direct passes remain in
+        # the work receipt, but cannot relabel that solve or donate nominal
+        # authority to a later non-nominal fit.
+        if current.calibrated_nominal_grid_fit_state is not None:
+            return current
         bases = (
             current.lattice_parameter_fit_basis,
             *(
                 candidate.lattice_parameter_fit_basis
                 for candidate in prior_fits
                 if _same_lattice_fit_lineage(current, candidate)
+                and candidate.calibrated_nominal_grid_fit_state is None
             ),
         )
         basis = most_constrained_lattice_parameter_fit_basis(*bases)
         if basis == current.lattice_parameter_fit_basis:
             return current
-        return replace(current, lattice_parameter_fit_basis=basis)
+        return replace(
+            current,
+            lattice_parameter_fit_basis=basis,
+        )
 
     return replace(
         result,
@@ -191,6 +212,10 @@ def _same_continuous_placement(
     merged_bindings = _continuous_role_bindings(left, right)
     return (
         left.template == right.template
+        and left.lattice_parameter_fit_basis
+        == right.lattice_parameter_fit_basis
+        and left.calibrated_nominal_grid_fit_state
+        == right.calibrated_nominal_grid_fit_state
         and left.phase_lattice_fit.integer_slot_offset
         == right.phase_lattice_fit.integer_slot_offset
         and left.local_advance_relations == right.local_advance_relations
@@ -331,6 +356,7 @@ def fit_template_phase(
     phase_authority_px: FiniteInterval | None = None,
     local_advance_relations: Sequence[LocalAdvanceRelation] = (),
     sequence_measurement_sets: Sequence[PhotoBoundaryMeasurementSet] = (),
+    calibrated_nominal_grid_prior: CalibratedNominalGridPrior | None = None,
     max_observations: int = 512,
 ) -> PhaseFitResult:
     """Fit `{phase, W, pitch}` without building a chain product."""
@@ -704,6 +730,7 @@ def fit_template_phase(
                     pitch_authority,
                     phase_authority_px,
                     fit_residual_limit_px,
+                    calibrated_nominal_grid_prior,
                 ),
             )
             for index, candidate in enumerate(candidates)
@@ -734,9 +761,18 @@ def fit_template_phase(
         candidate, projection = record
         return (
             *_rank(candidate),
-            int(
-                projection is None
-                or projection.outcome == PhaseCandidateProjectionOutcome.UNCHANGED
+            (
+                3
+                if projection is None
+                or projection.basis
+                == PhaseCandidateProjectionBasis.DIRECT_BINDINGS
+                else 2
+                if projection.basis
+                == PhaseCandidateProjectionBasis.DIRECT_RANK_THREE
+                else 1
+                if projection.basis
+                == PhaseCandidateProjectionBasis.CALIBRATED_NOMINAL_GRID
+                else 0
             ),
             0 if projection is None else -len(projection.projected_out_bindings),
             ()
@@ -824,6 +860,20 @@ def fit_template_phase(
             for _input, _projected, projection in projection_records
             if projection.outcome == PhaseCandidateProjectionOutcome.PROJECTED
         ),
+        candidate_nominal_grid_solve_count=sum(
+            projection.outcome
+            in {
+                PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID,
+                PhaseCandidateProjectionOutcome
+                .CALIBRATED_NOMINAL_GRID_CONFLICT,
+            }
+            for _input, _projected, projection in projection_records
+        ),
+        candidate_nominal_grid_solve_success_count=sum(
+            projection.outcome
+            == PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID
+            for _input, _projected, projection in projection_records
+        ),
     )
     receipt.validate_bounds()
     if best is None:
@@ -874,11 +924,32 @@ def fit_template_phase(
                     ),
                 ),
                 registered_direct_observation_ids=direct_ids,
-                failure_kind=(
-                    PhaseFailureKind.SEPARATOR_MATERIAL_CONFLICT
-                    if best_projection.outcome
-                    == PhaseCandidateProjectionOutcome.DIRECT_ROLE_CONTRADICTION
-                    else PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE
+                failure_kind={
+                    PhaseCandidateProjectionOutcome.DIRECT_ROLE_CONTRADICTION: (
+                        PhaseFailureKind.SEPARATOR_MATERIAL_CONFLICT
+                    ),
+                    PhaseCandidateProjectionOutcome
+                    .CALIBRATED_NOMINAL_GRID_UNAVAILABLE: (
+                        PhaseFailureKind
+                        .CALIBRATED_NOMINAL_GRID_AUTHORITY_UNAVAILABLE
+                    ),
+                    PhaseCandidateProjectionOutcome
+                    .NOMINAL_GRID_PHASE_ANCHOR_UNAVAILABLE: (
+                        PhaseFailureKind.NOMINAL_GRID_PHASE_ANCHOR_UNAVAILABLE
+                    ),
+                    PhaseCandidateProjectionOutcome
+                    .CALIBRATED_NOMINAL_GRID_CONFLICT: (
+                        PhaseFailureKind.FIXED_TEMPLATE_MISMATCH
+                    ),
+                    PhaseCandidateProjectionOutcome.REFIT_UNAVAILABLE: (
+                        PhaseFailureKind.FIXED_TEMPLATE_MISMATCH
+                    ),
+                    PhaseCandidateProjectionOutcome.DISCRETE_IDENTITY_CHANGED: (
+                        PhaseFailureKind.FIXED_TEMPLATE_MISMATCH
+                    ),
+                }.get(
+                    best_projection.outcome,
+                    PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE,
                 ),
                 winner_basis=None,
                 best_phase_candidate_authority_projection=best_projection,
@@ -1039,6 +1110,13 @@ def _aggregate_phase_work(
             item.candidate_direct_role_projection_binding_count
             for item in receipts
         ),
+        candidate_nominal_grid_solve_count=sum(
+            item.candidate_nominal_grid_solve_count for item in receipts
+        ),
+        candidate_nominal_grid_solve_success_count=sum(
+            item.candidate_nominal_grid_solve_success_count
+            for item in receipts
+        ),
     )
     receipt.validate_bounds()
     return replace(result, receipt=receipt)
@@ -1113,9 +1191,99 @@ def _attach_selected_candidate_authorities(
         if result.best is None
         else assess_outer_frame_observation_authority(result.best)
     )
+    nominal_evidence = None
+    nominal_state = (
+        None
+        if result.best is None
+        else result.best.calibrated_nominal_grid_fit_state
+    )
+    if nominal_state is not None:
+        unobserved_frames = result.best.completely_unobserved_frame_ordinals
+        inferred = tuple(
+            item for item in coverage if item.normal_inference_required
+        )
+        ordinals = tuple(item.relation_ordinal for item in inferred)
+        query_ids = tuple(
+            sorted(
+                {
+                    query_id
+                    for item in inferred
+                    for query_id in item.covering_query_ids
+                }
+            )
+        )
+        if direct_role_authority is not None and (
+            direct_role_authority.state == EvidenceState.CONTRADICTED
+        ):
+            nominal_evidence = failed_nominal_grid_evidence(
+                nominal_state,
+                inferred_adjacency_ordinals=ordinals,
+                covering_query_ids=query_ids,
+                state=EvidenceState.CONTRADICTED,
+                failure_kind=NominalGridFailureKind.COUNTEREVIDENCE,
+                reason=(
+                    direct_role_authority.reason
+                    or "direct role evidence contradicts the nominal Grid"
+                ),
+            )
+        elif any(
+            item.state != AdjacencyCoverageState.COMPLETE for item in inferred
+        ):
+            nominal_evidence = failed_nominal_grid_evidence(
+                nominal_state,
+                inferred_adjacency_ordinals=ordinals,
+                covering_query_ids=query_ids,
+                state=EvidenceState.UNAVAILABLE,
+                failure_kind=(
+                    NominalGridFailureKind.ADJACENCY_COVERAGE_INCOMPLETE
+                ),
+                reason=(
+                    "one or more nominal adjacency corridors were not fully "
+                    "covered by registered measurements"
+                ),
+            )
+        elif unobserved_frames:
+            nominal_evidence = failed_nominal_grid_evidence(
+                nominal_state,
+                inferred_adjacency_ordinals=ordinals,
+                unobserved_frame_ordinals=unobserved_frames,
+                covering_query_ids=query_ids,
+                state=EvidenceState.UNAVAILABLE,
+                failure_kind=(
+                    NominalGridFailureKind.COMPLETE_FRAME_UNOBSERVED
+                ),
+                reason=(
+                    "the calibrated Grid generated both sequence roles for "
+                    "Frame ordinals: "
+                    + ", ".join(map(str, unobserved_frames))
+                ),
+            )
+        else:
+            nominal_evidence = CalibratedNominalGridEvidence(
+                evidence_id=nominal_grid_evidence_id(
+                    nominal_state,
+                    ordinals,
+                    (),
+                    query_ids,
+                ),
+                state=EvidenceState.SUPPORTED,
+                prior_id=nominal_state.prior_id,
+                phase_anchor_role_indices=(
+                    nominal_state.phase_anchor_role_indices
+                ),
+                phase_anchor_observation_ids=(
+                    nominal_state.phase_anchor_observation_ids
+                ),
+                inferred_adjacency_ordinals=ordinals,
+                unobserved_frame_ordinals=(),
+                covering_query_ids=query_ids,
+                failure_kind=None,
+                reason=None,
+            )
     result = replace(
         result,
         global_lattice_authority=authority,
+        calibrated_nominal_grid_evidence=nominal_evidence,
         adjacency_observation_coverage=coverage,
         direct_role_binding_authority=direct_role_authority,
         outer_frame_observation_authority=outer_authority,
@@ -1136,7 +1304,10 @@ def _apply_final_lattice_contract(
         phase_input,
         directly_observed_ordinals=directly_observed_ordinals,
     )
-    if result.best is not None:
+    if (
+        result.best is not None
+        and result.best.calibrated_nominal_grid_fit_state is None
+    ):
         assessed_best = apply_correlated_frame_width_inference(
             result.best,
             frame_width_observation_ids=(
@@ -1163,9 +1334,25 @@ def _apply_final_lattice_contract(
     )
     direct_role_authority = result.direct_role_binding_authority
     authority = result.global_lattice_authority
+    nominal_evidence = result.calibrated_nominal_grid_evidence
     coverage = result.adjacency_observation_coverage
     outer_authority = result.outer_frame_observation_authority
     inferred = tuple(item for item in coverage if item.normal_inference_required)
+    if (
+        result.status == PhaseFitStatus.RESOLVED
+        and nominal_evidence is not None
+        and nominal_evidence.failure_kind
+        == NominalGridFailureKind.COMPLETE_FRAME_UNOBSERVED
+    ):
+        return replace(
+            result,
+            status=PhaseFitStatus.UNRESOLVED,
+            ambiguity_reason=nominal_evidence.reason,
+            failure_kind=(
+                PhaseFailureKind.NOMINAL_GRID_COMPLETE_FRAME_UNOBSERVED
+            ),
+            winner_basis=None,
+        )
     if (
         result.status == PhaseFitStatus.RESOLVED
         and direct_role_authority is not None
@@ -1189,6 +1376,7 @@ def _apply_final_lattice_contract(
             authority is None
             or authority.state != EvidenceState.SUPPORTED
         )
+        and nominal_evidence is None
     ):
         return replace(
             result,
@@ -1229,6 +1417,7 @@ def _apply_final_lattice_contract(
     if (
         result.status == PhaseFitStatus.RESOLVED
         and inferred
+        and nominal_evidence is None
         and (
             outer_authority is None
             or outer_authority.state != EvidenceState.SUPPORTED
@@ -1249,6 +1438,8 @@ def _apply_final_lattice_contract(
     if result.status == PhaseFitStatus.RESOLVED and result.best is not None:
         width_inference = result.best.frame_width_inference
         if (
+            nominal_evidence is None
+            and
             width_inference is not None
             and width_inference.state != EvidenceState.SUPPORTED
         ):
@@ -1294,6 +1485,9 @@ def fit_template_phase_candidate_with_local_advance(
         holder_span_px=holder_span_px,
         phase_authority_px=phase_authority_px,
         sequence_measurement_sets=phase_input.sequence_measurement_sets,
+        calibrated_nominal_grid_prior=(
+            phase_input.calibrated_nominal_grid_prior
+        ),
         max_observations=max_observations,
     )
     if normal.status != PhaseFitStatus.RESOLVED or normal.best is None:
@@ -1374,6 +1568,9 @@ def fit_template_phase_candidate_with_local_advance(
         phase_authority_px=phase_authority_px,
         local_advance_relations=analysis.relations,
         sequence_measurement_sets=phase_input.sequence_measurement_sets,
+        calibrated_nominal_grid_prior=(
+            phase_input.calibrated_nominal_grid_prior
+        ),
         max_observations=max_observations,
     )
     adjusted = _with_local_role_refinement(

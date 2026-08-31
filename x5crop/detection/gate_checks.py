@@ -25,8 +25,17 @@ class GateGap(str, Enum):
     GLOBAL_LATTICE_AUTHORITY_UNAVAILABLE = (
         "global_lattice_authority_unavailable"
     )
+    CALIBRATED_NOMINAL_GRID_AUTHORITY_UNAVAILABLE = (
+        "calibrated_nominal_grid_authority_unavailable"
+    )
+    NOMINAL_GRID_PHASE_ANCHOR_UNAVAILABLE = (
+        "nominal_grid_phase_anchor_unavailable"
+    )
     ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE = (
         "adjacency_observation_coverage_incomplete"
+    )
+    NOMINAL_GRID_COMPLETE_FRAME_UNOBSERVED = (
+        "nominal_grid_complete_frame_unobserved"
     )
     DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE = (
         "direct_role_binding_authority_unavailable"
@@ -38,6 +47,7 @@ class GateGap(str, Enum):
     OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE = (
         "outer_frame_observation_authority_unavailable"
     )
+    SOURCE_FRAME_WIDTH_CONFLICT = "source_frame_width_conflict"
     PHASE_TEMPLATE_MISMATCH = "phase_template_mismatch"
     PHASE_PLACEMENT_AMBIGUOUS = "phase_placement_ambiguous"
     CROSS_AUTHORITY_UNAVAILABLE = "cross_authority_unavailable"
@@ -76,6 +86,9 @@ class MinimumMissingFact(str, Enum):
     COMPLETE_SCAN_CANVAS = "complete_scan_canvas"
     ABSOLUTE_PHASE_ANCHOR = "absolute_phase_anchor"
     GLOBAL_LATTICE_AUTHORITY = "global_lattice_authority"
+    CALIBRATED_NOMINAL_GRID_AUTHORITY = (
+        "calibrated_nominal_grid_authority"
+    )
     ADJACENCY_OBSERVATION_COVERAGE = "adjacency_observation_coverage"
     DIRECT_ROLE_BINDING_AUTHORITY = "direct_role_binding_authority"
     DIRECT_APERTURE_DOMAIN = "direct_aperture_domain"
@@ -180,10 +193,25 @@ def failure_fact(
             MinimumMissingFact.GLOBAL_LATTICE_AUTHORITY,
             RecoveryAction.OPEN_DEBUG_ANALYSIS,
         ),
+        GateGap.CALIBRATED_NOMINAL_GRID_AUTHORITY_UNAVAILABLE: (
+            FailureRecovery.REMEASURE,
+            MinimumMissingFact.CALIBRATED_NOMINAL_GRID_AUTHORITY,
+            RecoveryAction.OPEN_DEBUG_ANALYSIS,
+        ),
+        GateGap.NOMINAL_GRID_PHASE_ANCHOR_UNAVAILABLE: (
+            FailureRecovery.REMEASURE,
+            MinimumMissingFact.ABSOLUTE_PHASE_ANCHOR,
+            RecoveryAction.RERUN_MEASUREMENT,
+        ),
         GateGap.ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE: (
             FailureRecovery.REMEASURE,
             MinimumMissingFact.ADJACENCY_OBSERVATION_COVERAGE,
             RecoveryAction.OPEN_DEBUG_ANALYSIS,
+        ),
+        GateGap.NOMINAL_GRID_COMPLETE_FRAME_UNOBSERVED: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.DIRECT_ROLE_BINDING_AUTHORITY,
+            RecoveryAction.REVIEW_PLACEMENT,
         ),
         GateGap.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE: (
             FailureRecovery.UNRECOVERABLE,
@@ -203,6 +231,11 @@ def failure_fact(
         GateGap.OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE: (
             FailureRecovery.UNRECOVERABLE,
             MinimumMissingFact.OUTER_FRAME_OBSERVATION_AUTHORITY,
+            RecoveryAction.REVIEW_PLACEMENT,
+        ),
+        GateGap.SOURCE_FRAME_WIDTH_CONFLICT: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.SOURCE_PHYSICAL_COMPATIBILITY,
             RecoveryAction.REVIEW_PLACEMENT,
         ),
         GateGap.PHASE_TEMPLATE_MISMATCH: (
@@ -327,7 +360,13 @@ GATE_CHECK_DEPENDENCIES: dict[str, tuple[str, ...]] = {
         "dual_lane_fill",
         "source_lane_authority",
     ),
-    "direct_use_budget": ("selected_output_footprint",),
+    "calibrated_nominal_grid_authority": (
+        "selected_output_footprint",
+    ),
+    "direct_use_budget": (
+        "selected_output_footprint",
+        "calibrated_nominal_grid_authority",
+    ),
 }
 
 

@@ -8,11 +8,13 @@ from unittest.mock import patch
 import numpy as np
 
 from tools.tests.template_test_support import (
+    calibrated_nominal_grid_prior,
     phase_edge as edge,
     phase_sequence_measurement,
     phase_separator as separator,
     phase_template as template,
     transformed_phase_edge as transformed_edge,
+    unavailable_nominal_grid_prior,
 )
 from x5crop.detection.photo_geometry.model import (
     BoundaryEvidenceState,
@@ -34,6 +36,9 @@ from x5crop.detection.photo_geometry.template_model import (
     SequenceBindingUse,
     TemplateSearchReceipt,
     TemplateSpec,
+)
+from x5crop.detection.photo_geometry.template_nominal_grid_model import (
+    NominalGridFailureKind,
 )
 from x5crop.detection.photo_geometry.template_phase import (
     _merge_continuous_placement,
@@ -152,6 +157,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                     ),
                 ),
                 template=spec,
+                calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(spec),
                 scale_px_per_mm=PositiveInterval.exact(100.0),
                 holder_span_px=None,
                 phase_authority_px=FiniteInterval.exact(100.0),
@@ -179,6 +185,10 @@ class TemplatePhaseContractTest(unittest.TestCase):
             self._local_line("anchor:start:1", 100.0, BoundaryRole.START),
             fit_residual_px=0.0,
         )
+        spec = replace(
+            template(2),
+            frame_width_px=PositiveInterval(99.0, 101.0),
+        )
         result = fit_template_phase_with_local_advance(
             TemplatePhaseInput(
                 observations=(
@@ -197,9 +207,9 @@ class TemplatePhaseContractTest(unittest.TestCase):
                     ),
                 ),
                 separator_bands=(),
-                template=replace(
-                    template(2),
-                    frame_width_px=PositiveInterval(99.0, 101.0),
+                template=spec,
+                calibrated_nominal_grid_prior=(
+                    unavailable_nominal_grid_prior(spec)
                 ),
                 scale_px_per_mm=PositiveInterval.exact(100.0),
                 holder_span_px=None,
@@ -228,6 +238,10 @@ class TemplatePhaseContractTest(unittest.TestCase):
         end1 = self._local_line("local:end:1", 201.0, BoundaryRole.END)
         start2 = self._local_line("local:start:2", 231.0, BoundaryRole.START)
         end2 = self._local_line("local:end:2", 331.0, BoundaryRole.END)
+        spec = replace(
+            template(2),
+            frame_width_px=PositiveInterval(98.0, 102.0),
+        )
         result = fit_template_phase_with_local_advance(
             TemplatePhaseInput(
                 observations=(anchor, end1, start2, end2),
@@ -239,9 +253,9 @@ class TemplatePhaseContractTest(unittest.TestCase):
                         FiniteInterval(29.0, 31.0),
                     ),
                 ),
-                template=replace(
-                    template(2),
-                    frame_width_px=PositiveInterval(98.0, 102.0),
+                template=spec,
+                calibrated_nominal_grid_prior=(
+                    unavailable_nominal_grid_prior(spec)
                 ),
                 scale_px_per_mm=PositiveInterval.exact(100.0),
                 holder_span_px=None,
@@ -494,6 +508,9 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 observations=observations,
                 separator_bands=(),
                 template=template(6),
+                calibrated_nominal_grid_prior=calibrated_nominal_grid_prior(
+                    template(6)
+                ),
                 scale_px_per_mm=None,
                 holder_span_px=FiniteInterval(0.0, 800.0),
                 phase_authority_px=None,
@@ -548,7 +565,9 @@ class TemplatePhaseContractTest(unittest.TestCase):
             "supported",
         )
 
-    def test_grid_cannot_create_an_unobserved_internal_frame(self) -> None:
+    def test_calibrated_grid_generates_but_does_not_authorize_an_unobserved_internal_frame(
+        self,
+    ) -> None:
         specs = (
             ("internal:start:1", 40.0, BoundaryRole.START),
             ("internal:start:2", 160.0, BoundaryRole.START),
@@ -572,6 +591,9 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 observations=observations,
                 separator_bands=(),
                 template=template(6),
+                calibrated_nominal_grid_prior=calibrated_nominal_grid_prior(
+                    template(6)
+                ),
                 scale_px_per_mm=None,
                 holder_span_px=FiniteInterval(0.0, 800.0),
                 phase_authority_px=None,
@@ -595,16 +617,31 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
         self.assertEqual(
             result.failure_kind,
-            PhaseFailureKind.FRAME_WIDTH_INFERENCE_UNAVAILABLE,
+            PhaseFailureKind.NOMINAL_GRID_COMPLETE_FRAME_UNOBSERVED,
         )
         assert result.best is not None
-        assert result.best.frame_width_inference is not None
         self.assertEqual(
-            result.best.frame_width_inference.failure_kind,
-            FrameWidthInferenceFailureKind.COMPLETE_FRAME_UNOBSERVED,
+            result.best.lattice_parameter_fit_basis,
+            LatticeParameterFitBasis.CALIBRATED_NOMINAL_GRID,
+        )
+        self.assertIsNotNone(result.best.calibrated_nominal_grid_fit_state)
+        assert result.calibrated_nominal_grid_evidence is not None
+        self.assertEqual(
+            result.calibrated_nominal_grid_evidence.state,
+            EvidenceState.UNAVAILABLE,
+        )
+        self.assertEqual(
+            result.calibrated_nominal_grid_evidence.failure_kind,
+            NominalGridFailureKind.COMPLETE_FRAME_UNOBSERVED,
+        )
+        self.assertEqual(
+            result.calibrated_nominal_grid_evidence.unobserved_frame_ordinals,
+            (5,),
         )
 
-    def test_grid_cannot_invent_an_entire_unanchored_outer_frame(self) -> None:
+    def test_calibrated_grid_generates_but_does_not_authorize_an_unobserved_outer_frame(
+        self,
+    ) -> None:
         observations = tuple(
             replace(
                 edge(identity, coordinate),
@@ -626,6 +663,9 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 observations=observations,
                 separator_bands=(),
                 template=template(6),
+                calibrated_nominal_grid_prior=calibrated_nominal_grid_prior(
+                    template(6)
+                ),
                 scale_px_per_mm=None,
                 holder_span_px=FiniteInterval(0.0, 800.0),
                 phase_authority_px=None,
@@ -641,7 +681,30 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
         self.assertEqual(
             result.failure_kind,
-            PhaseFailureKind.OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE,
+            PhaseFailureKind.NOMINAL_GRID_COMPLETE_FRAME_UNOBSERVED,
+        )
+        assert result.best is not None
+        self.assertEqual(
+            result.best.lattice_parameter_fit_basis,
+            LatticeParameterFitBasis.CALIBRATED_NOMINAL_GRID,
+        )
+        assert result.calibrated_nominal_grid_evidence is not None
+        self.assertEqual(
+            result.calibrated_nominal_grid_evidence.state,
+            EvidenceState.UNAVAILABLE,
+        )
+        self.assertEqual(
+            result.calibrated_nominal_grid_evidence.failure_kind,
+            NominalGridFailureKind.COMPLETE_FRAME_UNOBSERVED,
+        )
+        self.assertEqual(
+            result.calibrated_nominal_grid_evidence.unobserved_frame_ordinals,
+            (1, 5),
+        )
+        self.assertGreater(result.receipt.candidate_nominal_grid_solve_count, 0)
+        self.assertEqual(
+            result.receipt.candidate_nominal_grid_solve_count,
+            result.receipt.candidate_nominal_grid_solve_success_count,
         )
         assert result.global_lattice_authority is not None
         self.assertEqual(result.global_lattice_authority.joint_constraint_rank, 3)
@@ -693,6 +756,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 observations=observations,
                 separator_bands=(),
                 template=template(6),
+                calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(template(6)),
                 scale_px_per_mm=None,
                 holder_span_px=FiniteInterval(0.0, 800.0),
                 phase_authority_px=None,
@@ -708,7 +772,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
         self.assertEqual(
             result.failure_kind,
-            PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE,
+            PhaseFailureKind.CALIBRATED_NOMINAL_GRID_AUTHORITY_UNAVAILABLE,
         )
         assert result.direct_role_binding_authority is not None
         self.assertEqual(
@@ -747,6 +811,9 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 observations=observations,
                 separator_bands=(),
                 template=template(4),
+                calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(
+                    template(4)
+                ),
                 scale_px_per_mm=None,
                 holder_span_px=FiniteInterval(0.0, 540.0),
                 phase_authority_px=None,
@@ -773,7 +840,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
         self.assertEqual(
             result.failure_kind,
-            PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE,
+            PhaseFailureKind.CALIBRATED_NOMINAL_GRID_AUTHORITY_UNAVAILABLE,
         )
         assert result.direct_role_binding_authority is not None
         self.assertEqual(
@@ -890,7 +957,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             0,
         )
 
-    def test_candidate_projection_requires_retained_rank_three(self) -> None:
+    def test_rank_two_projection_requires_a_calibrated_nominal_grid(self) -> None:
         observations = tuple(
             replace(
                 edge(identity, coordinate),
@@ -924,11 +991,11 @@ class TemplatePhaseContractTest(unittest.TestCase):
         assert projection is not None
         self.assertEqual(
             projection.outcome,
-            PhaseCandidateProjectionOutcome.RETAINED_RANK_INSUFFICIENT,
+            PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID_UNAVAILABLE,
         )
         self.assertEqual(projection.retained_direct_constraint_rank, 2)
 
-    def test_candidate_projection_cannot_create_an_unobserved_frame(self) -> None:
+    def test_unobserved_frame_requires_a_calibrated_nominal_grid(self) -> None:
         observations = tuple(
             replace(
                 edge(identity, coordinate),
@@ -966,13 +1033,67 @@ class TemplatePhaseContractTest(unittest.TestCase):
         assert projection is not None
         self.assertEqual(
             projection.outcome,
-            PhaseCandidateProjectionOutcome.COMPLETE_FRAME_UNOBSERVED,
+            PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID_UNAVAILABLE,
         )
         self.assertEqual(projection.retained_direct_constraint_rank, 3)
         self.assertEqual(
             tuple(item.role_index for item in projection.projected_out_bindings),
             (4, 5),
         )
+
+    def test_calibrated_grid_replaces_an_unauthorized_complete_frame(
+        self,
+    ) -> None:
+        observations = tuple(
+            replace(
+                edge(identity, coordinate),
+                qualified_anchor_roles=(role,),
+                polarity=1 if role == BoundaryRole.START else -1,
+                trace_coordinates_px=((10, 20) if weak else (0, 10, 20)),
+                support_fraction=(2.0 / 3.0 if weak else 1.0),
+                continuous_support_fraction=(2.0 / 3.0 if weak else 1.0),
+            )
+            for identity, coordinate, role, weak in (
+                ("start:1", 40.0, BoundaryRole.START, False),
+                ("end:1", 140.0, BoundaryRole.END, False),
+                ("start:2", 160.0, BoundaryRole.START, False),
+                ("end:2", 260.0, BoundaryRole.END, False),
+                ("weak:start:3", 280.0, BoundaryRole.START, True),
+                ("weak:end:3", 380.0, BoundaryRole.END, True),
+                ("start:4", 400.0, BoundaryRole.START, False),
+                ("end:4", 500.0, BoundaryRole.END, False),
+            )
+        )
+
+        result = fit_template_phase(
+            observations,
+            template(4),
+            holder_span_px=FiniteInterval(0.0, 540.0),
+            sequence_measurement_sets=(
+                phase_sequence_measurement(
+                    "candidate-projection-calibrated-frame",
+                    FiniteInterval(0.0, 540.0),
+                ),
+            ),
+            calibrated_nominal_grid_prior=calibrated_nominal_grid_prior(
+                template(4)
+            ),
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        projection = result.best_phase_candidate_authority_projection
+        assert projection is not None and result.best is not None
+        self.assertEqual(
+            projection.outcome,
+            PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID,
+        )
+        self.assertEqual(projection.retained_direct_constraint_rank, 3)
+        self.assertEqual(
+            tuple(item.role_index for item in projection.projected_out_bindings),
+            (4, 5),
+        )
+        self.assertIsNone(result.best.role_bindings[4])
+        self.assertIsNone(result.best.role_bindings[5])
 
     def test_candidate_authority_rejects_a_material_contradiction(self) -> None:
         supported = self._phase_candidate_group("supported", 0.0)
@@ -1097,7 +1218,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
         self.assertEqual(
             result.failure_kind,
-            PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE,
+            PhaseFailureKind.NOMINAL_GRID_PHASE_ANCHOR_UNAVAILABLE,
         )
         self.assertIsNotNone(result.best)
         self.assertIsNotNone(result.runner_up)
@@ -1149,6 +1270,9 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 observations=observations,
                 separator_bands=(),
                 template=template(4),
+                calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(
+                    template(4)
+                ),
                 scale_px_per_mm=PositiveInterval.exact(100.0),
                 holder_span_px=FiniteInterval(0.0, 600.0),
                 phase_authority_px=FiniteInterval.exact(100.0),
@@ -1215,6 +1339,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 observations=observations,
                 separator_bands=(),
                 template=template(4),
+                calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(template(4)),
                 scale_px_per_mm=None,
                 holder_span_px=FiniteInterval(0.0, 540.0),
                 phase_authority_px=None,
@@ -1230,7 +1355,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
         self.assertEqual(
             result.failure_kind,
-            PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE,
+            PhaseFailureKind.CALIBRATED_NOMINAL_GRID_AUTHORITY_UNAVAILABLE,
         )
         assert result.direct_role_binding_authority is not None
         self.assertEqual(
@@ -1289,6 +1414,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                     ),
                 ),
                 template=template(4),
+                calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(template(4)),
                 scale_px_per_mm=None,
                 holder_span_px=FiniteInterval(0.0, 540.0),
                 phase_authority_px=None,
@@ -1358,6 +1484,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                     ),
                 ),
                 template=template(4),
+                calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(template(4)),
                 scale_px_per_mm=None,
                 holder_span_px=FiniteInterval(0.0, 540.0),
                 phase_authority_px=None,
@@ -1432,6 +1559,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 observations=observations,
                 separator_bands=(),
                 template=template(4),
+                calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(template(4)),
                 scale_px_per_mm=None,
                 holder_span_px=FiniteInterval(0.0, 540.0),
                 phase_authority_px=None,
@@ -1485,6 +1613,9 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 observations=observations,
                 separator_bands=(),
                 template=template(4),
+                calibrated_nominal_grid_prior=calibrated_nominal_grid_prior(
+                    template(4)
+                ),
                 scale_px_per_mm=None,
                 holder_span_px=FiniteInterval(0.0, 520.0),
                 phase_authority_px=FiniteInterval.exact(40.0),
@@ -1519,7 +1650,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             )
         )
 
-    def test_edge_count_cannot_replace_phase_width_pitch_rank(self) -> None:
+    def test_calibrated_grid_closes_rank_two_direct_system(self) -> None:
         observations = tuple(
             replace(
                 edge(f"start:{slot}", 40.0 + 120.0 * slot),
@@ -1532,6 +1663,9 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 observations=observations,
                 separator_bands=(),
                 template=template(4),
+                calibrated_nominal_grid_prior=calibrated_nominal_grid_prior(
+                    template(4)
+                ),
                 scale_px_per_mm=None,
                 holder_span_px=FiniteInterval(0.0, 520.0),
                 phase_authority_px=FiniteInterval.exact(40.0),
@@ -1544,10 +1678,16 @@ class TemplatePhaseContractTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        assert result.best is not None
         self.assertEqual(
-            result.failure_kind,
-            PhaseFailureKind.GLOBAL_LATTICE_AUTHORITY_UNAVAILABLE,
+            result.best.lattice_parameter_fit_basis,
+            LatticeParameterFitBasis.CALIBRATED_NOMINAL_GRID,
+        )
+        assert result.calibrated_nominal_grid_evidence is not None
+        self.assertEqual(
+            result.calibrated_nominal_grid_evidence.state,
+            EvidenceState.SUPPORTED,
         )
         assert result.global_lattice_authority is not None
         self.assertEqual(
@@ -1671,6 +1811,54 @@ class TemplatePhaseContractTest(unittest.TestCase):
             retained.best.lattice_parameter_fit_basis,
             LatticeParameterFitBasis.DIRECT_LEAST_SQUARES,
         )
+
+    def test_prior_direct_pass_cannot_relabel_a_calibrated_grid_solve(
+        self,
+    ) -> None:
+        spec = template(4)
+        observations = tuple(
+            replace(
+                edge(f"nominal-lineage:{slot}", 40.0 + 120.0 * slot),
+                qualified_anchor_roles=(BoundaryRole.START,),
+            )
+            for slot in range(4)
+        )
+        nominal = fit_template_phase_with_local_advance(
+            TemplatePhaseInput(
+                observations=observations,
+                separator_bands=(),
+                template=spec,
+                calibrated_nominal_grid_prior=calibrated_nominal_grid_prior(
+                    spec
+                ),
+                scale_px_per_mm=None,
+                holder_span_px=FiniteInterval(0.0, 520.0),
+                phase_authority_px=FiniteInterval.exact(40.0),
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "nominal-lineage-complete",
+                        FiniteInterval(0.0, 520.0),
+                    ),
+                ),
+            )
+        )
+        direct_prior = fit_template_phase(
+            observations,
+            spec,
+            phase_authority_px=FiniteInterval.exact(40.0),
+        )
+
+        retained = account_prior_phase_fit(nominal, direct_prior)
+
+        assert retained.best is not None
+        self.assertEqual(
+            retained.best.lattice_parameter_fit_basis,
+            LatticeParameterFitBasis.CALIBRATED_NOMINAL_GRID,
+        )
+        self.assertIsNotNone(
+            retained.best.calibrated_nominal_grid_fit_state
+        )
+        self.assertIsNotNone(retained.calibrated_nominal_grid_evidence)
 
     def test_direct_phase_authority_preserves_calibrated_placement(self) -> None:
         observations = (
@@ -2260,6 +2448,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 observations=observations,
                 separator_bands=(conflict,),
                 template=template(4),
+                calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(template(4)),
                 scale_px_per_mm=None,
                 holder_span_px=FiniteInterval(0.0, 540.0),
                 phase_authority_px=None,
@@ -2459,6 +2648,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 observations=observations,
                 separator_bands=(),
                 template=compiled,
+                calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(compiled),
                 scale_px_per_mm=None,
                 holder_span_px=None,
                 phase_authority_px=None,
@@ -2496,6 +2686,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 observations=observations,
                 separator_bands=(band,),
                 template=compiled,
+                calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(compiled),
                 scale_px_per_mm=None,
                 holder_span_px=None,
                 phase_authority_px=None,
@@ -2540,6 +2731,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             observations=observations,
             separator_bands=(),
             template=compiled,
+            calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(compiled),
             scale_px_per_mm=None,
             holder_span_px=None,
             phase_authority_px=None,
@@ -2589,6 +2781,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 observations=observations,
                 separator_bands=(),
                 template=compiled,
+                calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(compiled),
                 scale_px_per_mm=None,
                 holder_span_px=None,
                 phase_authority_px=None,
@@ -2623,6 +2816,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 observations=observations,
                 separator_bands=(),
                 template=compiled,
+                calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(compiled),
                 scale_px_per_mm=None,
                 holder_span_px=None,
                 phase_authority_px=None,
@@ -2877,6 +3071,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 ),
                 ),
                 template=template(3),
+                calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(template(3)),
                 scale_px_per_mm=None,
                 holder_span_px=None,
                 phase_authority_px=None,
@@ -2930,6 +3125,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                     ),
                 ),
                 template=template(3),
+                calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(template(3)),
                 scale_px_per_mm=None,
                 holder_span_px=None,
                 phase_authority_px=None,
@@ -2985,6 +3181,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 ),
                 ),
                 template=template(2),
+                calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(template(2)),
                 scale_px_per_mm=None,
                 holder_span_px=None,
                 phase_authority_px=None,
@@ -3179,6 +3376,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 observations=regular,
                 separator_bands=bands,
                 template=template(4),
+                calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(template(4)),
                 scale_px_per_mm=None,
                 holder_span_px=None,
                 phase_authority_px=None,

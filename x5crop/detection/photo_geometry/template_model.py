@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from enum import Enum
 import math
 from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
+from .template_nominal_grid_model import CalibratedNominalGridFitState
 
 
 MAX_TEMPLATE_FIT_PASSES = 5
@@ -162,7 +163,7 @@ class PhaseLatticeFit:
             )
             and self.cycle_phase_interval_px.minimum >= 0.0
             and self.cycle_phase_interval_px.maximum
-            <= self.canonical_period_px + 1.0e-9
+            <= self.authority.period_px.maximum + 1.0e-9
         ):
             raise ValueError("phase lattice cycle phase is invalid")
         expected = self.authority.cycle_origin_px + self.direction * (
@@ -391,6 +392,7 @@ class LatticeParameterFitBasis(str, Enum):
     """Most constrained solve used by one continuous placement lineage."""
 
     TEMPLATE_INTERVAL_CENTER = "template_interval_center"
+    CALIBRATED_NOMINAL_GRID = "calibrated_nominal_grid"
     DIRECT_LEAST_SQUARES = "direct_least_squares"
     BOUNDED_DIRECT_LEAST_SQUARES = "bounded_direct_least_squares"
 
@@ -406,8 +408,9 @@ def most_constrained_lattice_parameter_fit_basis(
         raise TypeError("lattice parameter fit bases must be typed")
     priority = {
         LatticeParameterFitBasis.TEMPLATE_INTERVAL_CENTER: 0,
-        LatticeParameterFitBasis.DIRECT_LEAST_SQUARES: 1,
-        LatticeParameterFitBasis.BOUNDED_DIRECT_LEAST_SQUARES: 2,
+        LatticeParameterFitBasis.CALIBRATED_NOMINAL_GRID: 1,
+        LatticeParameterFitBasis.DIRECT_LEAST_SQUARES: 2,
+        LatticeParameterFitBasis.BOUNDED_DIRECT_LEAST_SQUARES: 3,
     }
     return max(bases, key=priority.__getitem__)
 
@@ -631,6 +634,9 @@ class SequenceFit:
     model_role_intervals_px: tuple[FiniteInterval, ...]
     model_full_role_intervals_px: tuple[FiniteInterval, ...]
     role_bindings: tuple[SequenceRoleBinding | None, ...]
+    calibrated_nominal_grid_fit_state: (
+        CalibratedNominalGridFitState | None
+    ) = None
     frame_width_inference: FrameWidthInferenceAssessment | None = None
     local_advance_relations: tuple[LocalAdvanceRelation, ...] = ()
     contradicted_observation_count: int = 0
@@ -711,6 +717,23 @@ class SequenceFit:
             if binding is None
         )
 
+    @property
+    def completely_unobserved_frame_ordinals(self) -> tuple[int, ...]:
+        """Frames whose START and END both come only from the Grid model."""
+
+        return tuple(
+            ordinal
+            for ordinal, (start, end) in enumerate(
+                zip(
+                    self.role_bindings[0::2],
+                    self.role_bindings[1::2],
+                    strict=True,
+                ),
+                start=1,
+            )
+            if start is None and end is None
+        )
+
     def __post_init__(self) -> None:
         if not isinstance(
             self.lattice_parameter_fit_basis,
@@ -724,6 +747,19 @@ class SequenceFit:
             or self.phase_lattice_fit.direction != self.template.direction
         ):
             raise ValueError("sequence phase lattice disagrees with template")
+        if (
+            self.calibrated_nominal_grid_fit_state is not None
+            and not isinstance(
+                self.calibrated_nominal_grid_fit_state,
+                CalibratedNominalGridFitState,
+            )
+        ):
+            raise TypeError("sequence nominal Grid fit state is invalid")
+        if (
+            self.lattice_parameter_fit_basis
+            == LatticeParameterFitBasis.CALIBRATED_NOMINAL_GRID
+        ) != (self.calibrated_nominal_grid_fit_state is not None):
+            raise ValueError("sequence nominal Grid basis and state disagree")
         if (
             len(self.model_role_positions_px) != 2 * self.template.count
             or len(self.model_role_intervals_px) != 2 * self.template.count
@@ -789,11 +825,7 @@ class SequenceFit:
                     )
                     or self.pitch_fit.canonical_frame_width_px
                     != width_inference.canonical_width_px
-                    or any(
-                        self.role_bindings[index // 2 * 2] is None
-                        and self.role_bindings[index // 2 * 2 + 1] is None
-                        for index in width_inference.inferred_role_indices
-                    )
+                    or self.completely_unobserved_frame_ordinals
                 ):
                     raise ValueError(
                         "supported common-W inference disagrees with sequence"
@@ -885,6 +917,8 @@ class TemplateSearchReceipt:
     candidate_direct_role_projection_evaluation_count: int = 0
     candidate_direct_role_projection_success_count: int = 0
     candidate_direct_role_projection_binding_count: int = 0
+    candidate_nominal_grid_solve_count: int = 0
+    candidate_nominal_grid_solve_success_count: int = 0
 
     def __post_init__(self) -> None:
         values = (
@@ -908,6 +942,8 @@ class TemplateSearchReceipt:
             self.candidate_direct_role_projection_evaluation_count,
             self.candidate_direct_role_projection_success_count,
             self.candidate_direct_role_projection_binding_count,
+            self.candidate_nominal_grid_solve_count,
+            self.candidate_nominal_grid_solve_success_count,
         )
         if any(not isinstance(value, int) or value < 0 for value in values):
             raise ValueError("template work receipt values must be non-negative integers")
@@ -941,6 +977,10 @@ class TemplateSearchReceipt:
             > self.candidate_direct_role_authority_role_check_count
             or self.candidate_direct_role_authority_terminal_count
             + self.candidate_direct_role_projection_success_count
+            > self.candidate_direct_role_projection_evaluation_count
+            or self.candidate_nominal_grid_solve_success_count
+            > self.candidate_nominal_grid_solve_count
+            or self.candidate_nominal_grid_solve_count
             > self.candidate_direct_role_projection_evaluation_count
         ):
             raise ValueError("phase-candidate authority work is inconsistent")

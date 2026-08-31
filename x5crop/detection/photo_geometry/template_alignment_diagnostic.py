@@ -17,6 +17,7 @@ from .template_model import (
 from .template_adjacency_coverage import AdjacencyObservationCoverage
 from .template_direct_role_authority import DirectRoleBindingAuthority
 from .template_outer_frame_authority import OuterFrameObservationAuthority
+from .template_nominal_grid_model import CalibratedNominalGridEvidence
 from .template_phase_model import (
     GlobalLatticeAuthority,
     PhaseFitResult,
@@ -74,6 +75,7 @@ class TemplateAlignmentDiagnostic:
     role_residuals: tuple[TemplateRoleResidual, ...]
     local_advance_relations: tuple[LocalAdvanceRelation, ...]
     global_lattice_authority: GlobalLatticeAuthority | None
+    calibrated_nominal_grid_evidence: CalibratedNominalGridEvidence | None
     adjacency_observation_coverage: tuple[
         AdjacencyObservationCoverage, ...
     ]
@@ -104,6 +106,11 @@ class TemplateAlignmentDiagnostic:
             and not isinstance(
                 self.global_lattice_authority,
                 GlobalLatticeAuthority,
+            )
+            or self.calibrated_nominal_grid_evidence is not None
+            and not isinstance(
+                self.calibrated_nominal_grid_evidence,
+                CalibratedNominalGridEvidence,
             )
             or any(
                 not isinstance(item, AdjacencyObservationCoverage)
@@ -316,6 +323,9 @@ def template_alignment_diagnostic(
             () if fit is None else fit.local_advance_relations
         ),
         global_lattice_authority=phase.global_lattice_authority,
+        calibrated_nominal_grid_evidence=(
+            phase.calibrated_nominal_grid_evidence
+        ),
         adjacency_observation_coverage=(
             phase.adjacency_observation_coverage
         ),

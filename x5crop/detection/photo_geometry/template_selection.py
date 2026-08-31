@@ -74,8 +74,17 @@ def select_lane_template_placement(
             PhaseFailureKind.GLOBAL_LATTICE_AUTHORITY_UNAVAILABLE: (
                 GateGap.GLOBAL_LATTICE_AUTHORITY_UNAVAILABLE
             ),
+            PhaseFailureKind.CALIBRATED_NOMINAL_GRID_AUTHORITY_UNAVAILABLE: (
+                GateGap.CALIBRATED_NOMINAL_GRID_AUTHORITY_UNAVAILABLE
+            ),
+            PhaseFailureKind.NOMINAL_GRID_PHASE_ANCHOR_UNAVAILABLE: (
+                GateGap.NOMINAL_GRID_PHASE_ANCHOR_UNAVAILABLE
+            ),
             PhaseFailureKind.ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE: (
                 GateGap.ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE
+            ),
+            PhaseFailureKind.NOMINAL_GRID_COMPLETE_FRAME_UNOBSERVED: (
+                GateGap.NOMINAL_GRID_COMPLETE_FRAME_UNOBSERVED
             ),
             PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE: (
                 GateGap.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE
@@ -85,6 +94,9 @@ def select_lane_template_placement(
             ),
             PhaseFailureKind.OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE: (
                 GateGap.OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE
+            ),
+            PhaseFailureKind.SOURCE_FRAME_WIDTH_CONFLICT: (
+                GateGap.SOURCE_FRAME_WIDTH_CONFLICT
             ),
             PhaseFailureKind.FIXED_TEMPLATE_MISMATCH: (
                 GateGap.PHASE_TEMPLATE_MISMATCH

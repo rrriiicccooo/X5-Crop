@@ -314,8 +314,10 @@ def _sequence_system(
     sequence = placement.sequence_fit
     lattice = sequence.phase_lattice_fit
     relations = sequence.local_advance_relations
-    variable_count = 3 + len(relations)
-    bounds = (
+    nominal_state = sequence.calibrated_nominal_grid_fit_state
+    scale_index = 3 + len(relations) if nominal_state is not None else None
+    variable_count = 3 + len(relations) + int(nominal_state is not None)
+    bounds: tuple[tuple[float, float], ...] = (
         (
             lattice.cycle_phase_interval_px.minimum,
             lattice.cycle_phase_interval_px.maximum,
@@ -331,6 +333,16 @@ def _sequence_system(
         *tuple(
             (item.delta_interval_px.minimum, item.delta_interval_px.maximum)
             for item in relations
+        ),
+        *(
+            ()
+            if nominal_state is None
+            else (
+                (
+                    nominal_state.scale_px_per_mm.minimum,
+                    nominal_state.scale_px_per_mm.maximum,
+                ),
+            )
         ),
     )
     origin = lattice.authority.cycle_origin_px
@@ -370,7 +382,42 @@ def _sequence_system(
         ),
         (_LinearExpression(gap, 0.0), sequence.pitch_fit.gap_interval_px),
     )
-    return _FeasibleSystem(bounds, _constraints(constraints)), roles
+    inequality_rows, inequality_limits = _constraints(constraints)
+    if nominal_state is not None:
+        assert scale_index is not None
+        correlated_rows: list[np.ndarray] = []
+        correlated_limits: list[float] = []
+        for variable_index, physical_interval in (
+            (1, nominal_state.frame_width_mm),
+            (2, nominal_state.pitch_mm),
+        ):
+            upper = np.zeros(variable_count, dtype=np.float64)
+            upper[variable_index] = 1.0
+            upper[scale_index] = -physical_interval.maximum
+            correlated_rows.append(upper)
+            correlated_limits.append(0.0)
+            lower = np.zeros(variable_count, dtype=np.float64)
+            lower[variable_index] = -1.0
+            lower[scale_index] = physical_interval.minimum
+            correlated_rows.append(lower)
+            correlated_limits.append(0.0)
+        inequality_rows = np.concatenate(
+            (
+                inequality_rows,
+                np.asarray(correlated_rows, dtype=np.float64),
+            ),
+            axis=0,
+        )
+        inequality_limits = np.concatenate(
+            (
+                inequality_limits,
+                np.asarray(correlated_limits, dtype=np.float64),
+            )
+        )
+    return _FeasibleSystem(
+        bounds,
+        (inequality_rows, inequality_limits),
+    ), roles
 
 
 def _direct_sequence_solutions(

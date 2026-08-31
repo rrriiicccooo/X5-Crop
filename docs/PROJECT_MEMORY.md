@@ -22,20 +22,24 @@ OOD 共同支持“风险低到可直接使用”，不是 runtime 已知黄金�
 
 ## 当前检查点
 
-- 每个 bounded phase candidate 在离散竞争前对称执行 `PhaseCandidateAuthorityProjection`：
-  `contradicted` 终止；`unavailable` binding 只有在投影后每张 Frame 至少保留一侧直接坐标、相关
-  evidence-group 去重后的 `(phase,W,pitch)` rank 为 3、且原 template/ordinal/local topology 可以有界
-  重拟合时才退出几何。Eligible candidate 重新 canonicalize 并竞争；弱线保留 provenance，不拥有 phase、
-  收窄 W 或隐藏 runner。Report revision 为 `x5crop_v5_template_report_30`。
-- 完整 development gold 为 110/110 完成、分析错误 0、`unsafe_approved_auto = 0`。安全 auto 为基础
-  nominal 14/66、较难 nominal 3/30、challenge 0/14；candidate 为 88 个不可用、18 个安全、4 个不安全。
-  四个不安全 candidate 均保持 review；全部 challenge 安全 review。
-- 安全 auto 共 17 个：S003、S021、S022、S023、S025、S059、S063、S064、S067、S070、S081、S083、
-  S085、S087、S089、S094、S095。相对上一检查点，S023 安全进入 auto；S088 因投影后暴露第二个 rank-3
-  直接解释而回到 review。S098 暴露不安全 review candidate，S109 暴露安全 review candidate；总自动覆盖
-  不变。
-- 24-source 正式性能在 M2 Max 上继续通过 5 秒 mean Gate，3 秒 non-blocking 目标未达到。精确时间、RSS、
-  依赖与机器身份只由绑定最终干净 commit 的 performance receipt 拥有，不在本文件复制成第二真相来源。
+- `CalibratedNominalGridAuthority` 已进入唯一 Grid 路径。Format-specific W/H calibration 与 source-level
+  nominal pitch interval 编译为 `CalibratedNominalGridPrior`；至少一个直接角色提供 absolute phase，
+  `CalibratedNominalGridFitState` 保存相关 phase/W/pitch/scale，逐 adjacency coverage 和反证决定 selected
+  evidence，最终 output geometry 另行绑定 authority。直接边界保留 native coordinate，local advance 仍只
+  传播一次；该路径不新增 TIFF query、第二 Grid、fallback 或 score。
+- Pitch calibration 使用 frozen development cohort、每 source 至少两个直接 separator adjacency、source
+  中位值、跨 source hull 与 0.05 mm 向外量化。当前为：135 37.65–38.20 mm（44/198）、half
+  18.70–19.05 mm（11/98）、120-66 60.05–62.55 mm（26/52）、120-67 73.40–74.45 mm（3/6）；其它
+  format 保持 unavailable。
+- Grid 可以生成完整 diagnostic candidate，但当前 hard-fact 自动批准要求每张 Frame 至少有一侧直接角色。
+  双侧都未绑定时，evidence 保存 Frame ordinal，并以 `nominal_grid_complete_frame_unobserved` review；S040、
+  S056 是该合同的真实安全反例。Report revision 为 `x5crop_v5_template_report_31`。
+- 完整 development gold 为 110/110、分析错误 0、`unsafe_approved_auto = 0`。安全 auto 为基础 nominal
+  14/66、较难 nominal 2/30、challenge 0/14；candidate 为 88 个不可用、17 个安全、5 个不安全，全部不安全
+  candidate 均保持 review。相对上一检查点，S023 安全进入 auto；S070 因 source W 冲突、S088 因两个合法
+  direct placement 竞争回到 review。该阶段净少 1 个 auto，但关闭了两项危险自动批准，不以覆盖换安全。
+- 24-source 性能只接受绑定最终干净 commit 的 receipt；5 秒 mean 是 blocking Gate，3 秒是 non-blocking
+  目标。精确时间、RSS、依赖与机器身份不在本文件复制。
 
 ## 证据与数据边界
 
@@ -53,24 +57,24 @@ OOD 共同支持“风险低到可直接使用”，不是 runtime 已知黄金�
 
 ## 开放风险
 
-- 基础 nominal 仍有 52/66 review，较难 nominal 有 27/30 review。当前 phase 主要根因是 27 个
-  `direct_role_binding_authority_unavailable`、13 个 `discrete_phase_ambiguous`、10 个
-  `frame_width_inference_unavailable`、7 个 `global_lattice_authority_unavailable`、4 个
-  `fixed_template_mismatch` 与 3 个 `separator_material_conflict`。
-- 当前 direct-evidence 路径仍要求 rank 3，并把投影后双侧都未观察的 Frame 标为
-  `complete_frame_unobserved`。这是一条保守路径，不是 Grid 的永久物理上限；规则 blank/低显著 Frame
-  需要下一机制的 calibrated nominal authority 才能在不伪造直接证据的情况下安全补齐。
-- S088 证明“去掉弱线”既可能释放正确候选，也可能揭示真实 runner。后续不能用 residual、support 或
-  未校准 score 强选；它适合作为未来概率选择层的机制样片。
+- 基础 nominal 仍有 52/66 review，较难 nominal 有 28/30 review。主要 Gate 根因是 26 个
+  `nominal_grid_complete_frame_unobserved`、12 个 `phase_placement_ambiguous`、9 个
+  `phase_template_mismatch`、8 个 `aperture_aspect_ratio_budget_exhausted`、7 个
+  `direct_role_binding_authority_unavailable`、5 个 `direct_role_aperture_domain_unavailable`，另有 4 个
+  `adjacency_observation_coverage_incomplete` 与 4 个 `nominal_grid_phase_anchor_unavailable`。
+- S040/S056 证明完整 query receipt 与 calibrated Grid 仍不足以硬授权整张未观察 Frame；这不是 Grid 的
+  永久物理上限。未来只有更强的直接/continuity/topology evidence，或独立校准且可拒绝的概率层，才能
+  改变该权限，不能简单删除 failure。
+- S088 证明多个 direct placement 可以都满足硬物理合同。后续不能用 residual、support 或未校准 score
+  强选；它适合作为未来概率选择层的机制样片。
 - 现有黄金没有 `xpan`、`120-645`、`135-dual` 的合格覆盖；`120-67` 只有 3 个 source。
 
 ## 精确下一步
 
-1. 以一个小机制闭环实现 `CalibratedNominalGridAuthority`：format-specific calibrated W/H/pitch interval、
-   至少一个 direct absolute phase anchor、逐 adjacency 完整走廊 coverage、无局部反证、相关 uncertainty
-   随 slot 传播，并以最坏 OutputFootprint 检查 5% 预算。它是 direct rank-3 之外的另一条显式 authority，
-   不冒充 direct evidence，也不建立第二 Grid。
-2. 完成上述 owner、typed failure、Debug、正反例与真实 nominal 后，先跑完整黄金和正式性能，再扩大
-   candidate-independent 查询 coverage；不能通过删除安全检查提高通过率。
-3. 随后处理 nominal 弱边缘与真实片距变化，再依次闭合 adjacency continuity、contact、overlap。
-   概率选择层只做 schema/data/风险设计，等独立 calibration 与 sealed 数据具备后再进入 runtime。
+1. 以一个小机制闭环完善 candidate-independent sequence 查询走廊，先消除真实的
+   `adjacency_observation_coverage_incomplete`，并提高每张 Frame 至少一侧直接角色的观察覆盖；不得放宽
+   `nominal_grid_complete_frame_unobserved` 或新增 winner-specific query。
+2. 随后处理 nominal 的跨高度弱边缘、极低显著边缘与真实片距变化，让同一 registered measurement owner
+   提供更多 typed observation，不建立 enhanced detector 或样片规则。
+3. 再依次闭合 adjacency continuity、contact、overlap。概率选择层只设计 feature/calibration/OOD/
+   abstention schema，等独立 calibration 与 sealed 数据具备后再进入 runtime。

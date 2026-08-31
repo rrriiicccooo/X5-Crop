@@ -61,6 +61,15 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   `discrete_phase_ambiguous`；弱线只保留为 provenance，不能拥有 phase、收窄 W 或隐藏 runner。
   `complete_frame_unobserved`、`retained_rank_insufficient`、material contradiction 与 refit/identity failure
   均为 typed terminal outcome。该机制复用 registered evidence，不增加 TIFF 读取或第二 detector。
+- 默认 Grid 现在具有独立的 `CalibratedNominalGridAuthority`，不再要求普通 format 先由像素从零重证
+  W/pitch。`135`、`half`、`120-66`、`120-67` 使用同一 source-level 方法校准 nominal pitch interval；
+  至少一个直接 absolute phase anchor 把理想尺子放到 source 上，直接 START/END 保留 native coordinate，
+  局部 separator 继续只传播一次 advance。每个 inferred adjacency 必须具有逐 trace 完整 registered
+  coverage 且无反证；相关 phase/W/pitch/scale uncertainty 一次传播到最终 footprint。Grid 可以生成诊断
+  candidate，但若任一 Frame 的 START/END 都未绑定，当前 hard-fact 层产生
+  `nominal_grid_complete_frame_unobserved` 并 review，不能由先验自我授权。Calibration、evidence、authority、
+  anchor、coverage、未观察 Frame、work receipt 和 root failure 均进入 report/Debug；没有新增 TIFF query、
+  fallback、第二 Grid、样片规则或 score。
 - Format W/H compatibility 由一个 current-only 混合物理合同统一计算：
   `guard_W=max(0.95 mm, 2.4%W)`、`guard_H=max(0.70 mm, 1.8%H)`。参数来自 105 个合格黄金 source、
   494 个完整且全部直接可见 Frame 的 source-level 中位尺寸、分轴长 q95 与向外量化；不再保存 `half`
@@ -119,9 +128,10 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   阻断原因；报告同时保存全局未知量 constraint rank、逐 adjacency query/trace/coordinate coverage 与
   直接角色/外侧 Frame observation authority，以及 dark/light material、逐区域状态和冲突。Debug 不重新
   求解，也不把 review candidate 伪装为正式输出。当前 report revision 为
-  `x5crop_v5_template_report_30`，并显式区分直接角色的 coordinate `observation_id` 与相关
+  `x5crop_v5_template_report_31`，并显式区分直接角色的 coordinate `observation_id` 与相关
   `evidence_group_id`，同时报告 phase candidate 的输入权限、projection outcome、保留 rank、投影 binding、
-  terminal/成功/role-check 工作量、连续 lattice 参数依据、三层 source footprint、typed
+  calibrated nominal prior/evidence/selected authority、phase anchor、推断 adjacency、未观察 Frame、
+  nominal solve/local-prefix 工作量、连续 lattice 参数依据、三层 source footprint、typed
   saturation、同一状态 cross
   alignment padding、selected-only source W authority、source W/H、相关
   Frame-width inference 及 validation-only role/observation provenance、aspect calibration、raw/guarded
@@ -183,15 +193,15 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
 - `tools/verify` 是 Hook、CI 与本地验证的唯一入口。Diagnostic 只证明工程合同；gold accuracy、性能与
   platform receipt 分层记录，不互相冒充。
 - 正式性能 Gate 为 24-source 完整用户路径 mean 不超过 5 秒；3 秒只是不阻断的 challenge。
-- Direct-role projection 检查点的完整 development gold 为 110/110 完成、分析错误 0、
-  `unsafe_approved_auto = 0`；安全 auto 为基础 nominal 14/66、较难 nominal 3/30、challenge 0/14。
-  Candidate 为 88 个不可用、18 个安全、4 个不安全；全部不安全 candidate 均保持 review。相对
-  selected-only source-W 检查点，S023 安全进入 auto；S088 因投影后暴露第二个 rank-3 直接解释而回到
-  review；S098 暴露不安全 review candidate，S109 暴露安全 review candidate。自动覆盖总数不变，真实
-  runner、弱线和反证没有被隐藏。
-- 24-source 正式性能仍须在干净提交上独立生成 receipt；本机制保持 5 秒 mean Gate 通过，3 秒
-  non-blocking 目标尚未达到。当前 review 表达真实的 phase/cross、Grid/W 与预算证明缺口，不以调窄
-  guard、静默隐藏 saturation、恢复精确 W→H 或改变样片角色掩盖。
+- Calibrated nominal Grid 检查点的完整 development gold 为 110/110 完成、分析错误 0、
+  `unsafe_approved_auto = 0`；安全 auto 为基础 nominal 14/66、较难 nominal 2/30、challenge 0/14。
+  Candidate 为 88 个不可用、17 个安全、5 个不安全；全部不安全 candidate 均保持 review。相对上一
+  检查点，S023 安全进入 auto；S070 因 source W 冲突、S088 因两个 direct placement 竞争回到 review。
+  S040、S056 暴露“整张 Frame 双侧都由 Grid 生成”不足以单独批准，现以同一个 typed 机制安全 review。
+  该阶段主要完善安全证明，不用放宽 Gate 换取覆盖。
+- 24-source 正式性能只由绑定最终干净 commit 的 receipt 判定；5 秒 mean 仍是 blocking Gate，3 秒仍是
+  non-blocking 目标。当前 review 表达真实的 phase/cross、Grid/W 与预算证明缺口，不以调窄 guard、静默
+  隐藏 saturation、恢复精确 W→H 或改变样片角色掩盖。
 - Apple Silicon macOS、Intel macOS 与 Windows x64 必须在同一最终 commit 取得实机 receipt。Accuracy、
   性能与平台证据未全部绑定该 commit 前，不创建 RC、tag、Release 或公开 ZIP。
 - 发布包由唯一 manifest 构建，不包含 modular source、tests、tools、内部文档或开发输出。

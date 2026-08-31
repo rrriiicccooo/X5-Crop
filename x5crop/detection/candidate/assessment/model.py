@@ -18,6 +18,7 @@ CANDIDATE_GATE_CHECK_CODES = (
     "dual_lane_fill",
     "source_lane_authority",
     "selected_output_footprint",
+    "calibrated_nominal_grid_authority",
     "direct_use_budget",
 )
 
