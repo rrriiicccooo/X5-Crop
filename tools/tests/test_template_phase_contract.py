@@ -76,6 +76,37 @@ from x5crop.domain import (
 
 class TemplatePhaseContractTest(unittest.TestCase):
     @staticmethod
+    def _phase_candidate_group(
+        prefix: str,
+        offset_px: float,
+        *,
+        short: bool = False,
+    ) -> tuple[BoundaryEdgeObservation, ...]:
+        values = []
+        for index, (coordinate, role) in enumerate(
+            (
+                (40.0, BoundaryRole.START),
+                (140.0, BoundaryRole.END),
+                (160.0, BoundaryRole.START),
+                (260.0, BoundaryRole.END),
+            )
+        ):
+            observation = replace(
+                edge(f"{prefix}:{index}", coordinate + offset_px),
+                qualified_anchor_roles=(role,),
+                polarity=1 if role == BoundaryRole.START else -1,
+            )
+            if short:
+                observation = replace(
+                    observation,
+                    trace_coordinates_px=(10, 20),
+                    support_fraction=2.0 / 3.0,
+                    continuous_support_fraction=2.0 / 3.0,
+                )
+            values.append(observation)
+        return tuple(values)
+
+    @staticmethod
     def _local_line(
         name: str,
         coordinate: float,
@@ -746,6 +777,175 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(
             result.direct_role_binding_authority.unsupported_role_indices,
             (4,),
+        )
+
+    def test_candidate_authority_rejects_an_unauthorized_discrete_runner(
+        self,
+    ) -> None:
+        observations = (
+            *self._phase_candidate_group("supported", 0.0),
+            *self._phase_candidate_group("short", 5.0, short=True),
+        )
+        result = fit_template_phase(
+            observations,
+            template(2),
+            holder_span_px=FiniteInterval(0.0, 320.0),
+            sequence_measurement_sets=(
+                phase_sequence_measurement(
+                    "candidate-direct-role-authority",
+                    FiniteInterval(0.0, 320.0),
+                ),
+            ),
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        self.assertEqual(
+            result.winner_basis,
+            PhaseWinnerBasis.UNIQUE_DIRECT_ROLE_AUTHORITY,
+        )
+        self.assertIsNotNone(result.runner_up)
+        assert result.best_phase_candidate_direct_role_authority is not None
+        assert result.runner_phase_candidate_direct_role_authority is not None
+        self.assertEqual(
+            result.best_phase_candidate_direct_role_authority.state,
+            EvidenceState.SUPPORTED,
+        )
+        self.assertEqual(
+            result.runner_phase_candidate_direct_role_authority.state,
+            EvidenceState.UNAVAILABLE,
+        )
+        self.assertEqual(
+            result.receipt.candidate_direct_role_authority_evaluation_count,
+            2,
+        )
+        self.assertEqual(
+            result.receipt.candidate_direct_role_authority_rejection_count,
+            1,
+        )
+        self.assertEqual(
+            result.receipt.candidate_direct_role_authority_role_check_count,
+            8,
+        )
+
+    def test_candidate_authority_rejects_a_material_contradiction(self) -> None:
+        supported = self._phase_candidate_group("supported", 0.0)
+        contradicted = self._phase_candidate_group("contradicted", 5.0)
+        alternative = replace(
+            edge("contradicted:alternative", 155.0),
+            qualified_anchor_roles=(BoundaryRole.END,),
+            polarity=-1,
+            support_fraction=0.34,
+            continuous_support_fraction=0.34,
+        )
+        conflict = separator(
+            "candidate-material-conflict",
+            contradicted[1],
+            alternative,
+            FiniteInterval(9.0, 11.0),
+        )
+        conflict = replace(
+            conflict,
+            material_support_region_count=1,
+            material_regions=tuple(
+                region
+                if region.region_index == 0
+                else replace(
+                    region,
+                    state=SeparatorMaterialRegionState.TONE_UNRESOLVED,
+                )
+                for region in conflict.material_regions
+            ),
+            evidence_state=BoundaryEvidenceState.CONTRADICTION,
+        )
+
+        result = fit_template_phase(
+            (*supported, *contradicted, alternative),
+            template(2),
+            separator_bands=(conflict,),
+            holder_span_px=FiniteInterval(0.0, 320.0),
+            sequence_measurement_sets=(
+                phase_sequence_measurement(
+                    "candidate-material-conflict",
+                    FiniteInterval(0.0, 320.0),
+                ),
+            ),
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        self.assertEqual(
+            result.winner_basis,
+            PhaseWinnerBasis.UNIQUE_DIRECT_ROLE_AUTHORITY,
+        )
+        assert result.runner_phase_candidate_direct_role_authority is not None
+        self.assertEqual(
+            result.runner_phase_candidate_direct_role_authority.state,
+            EvidenceState.CONTRADICTED,
+        )
+        self.assertEqual(
+            result.runner_phase_candidate_direct_role_authority
+            .unsupported_role_indices,
+            (1,),
+        )
+
+    def test_two_authorized_discrete_candidates_remain_ambiguous(self) -> None:
+        result = fit_template_phase(
+            (
+                *self._phase_candidate_group("first", 0.0),
+                *self._phase_candidate_group("second", 5.0),
+            ),
+            template(2),
+            holder_span_px=FiniteInterval(0.0, 320.0),
+            sequence_measurement_sets=(
+                phase_sequence_measurement(
+                    "two-authorized-candidates",
+                    FiniteInterval(0.0, 320.0),
+                ),
+            ),
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.AMBIGUOUS)
+        self.assertEqual(
+            result.failure_kind,
+            PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS,
+        )
+        assert result.best_phase_candidate_direct_role_authority is not None
+        assert result.runner_phase_candidate_direct_role_authority is not None
+        self.assertEqual(
+            result.best_phase_candidate_direct_role_authority.state,
+            EvidenceState.SUPPORTED,
+        )
+        self.assertEqual(
+            result.runner_phase_candidate_direct_role_authority.state,
+            EvidenceState.SUPPORTED,
+        )
+
+    def test_no_authorized_candidate_returns_a_typed_failure(self) -> None:
+        result = fit_template_phase(
+            (
+                *self._phase_candidate_group("first-short", 0.0, short=True),
+                *self._phase_candidate_group("second-short", 5.0, short=True),
+            ),
+            template(2),
+            holder_span_px=FiniteInterval(0.0, 320.0),
+            sequence_measurement_sets=(
+                phase_sequence_measurement(
+                    "no-authorized-candidate",
+                    FiniteInterval(0.0, 320.0),
+                ),
+            ),
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE,
+        )
+        self.assertIsNotNone(result.best)
+        self.assertIsNotNone(result.runner_up)
+        assert result.best_phase_candidate_direct_role_authority is not None
+        self.assertEqual(
+            result.best_phase_candidate_direct_role_authority.state,
+            EvidenceState.UNAVAILABLE,
         )
 
     def test_local_short_edge_yields_to_correlated_source_width(self) -> None:

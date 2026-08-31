@@ -992,6 +992,9 @@ class TemplateSearchReceipt:
     peak_temporary_bytes: int = 0
     fit_pass_count: int = 1
     separator_lattice_hypothesis_count: int = 0
+    candidate_direct_role_authority_evaluation_count: int = 0
+    candidate_direct_role_authority_rejection_count: int = 0
+    candidate_direct_role_authority_role_check_count: int = 0
 
     def __post_init__(self) -> None:
         values = (
@@ -1009,6 +1012,9 @@ class TemplateSearchReceipt:
             self.peak_temporary_bytes,
             self.fit_pass_count,
             self.separator_lattice_hypothesis_count,
+            self.candidate_direct_role_authority_evaluation_count,
+            self.candidate_direct_role_authority_rejection_count,
+            self.candidate_direct_role_authority_role_check_count,
         )
         if any(not isinstance(value, int) or value < 0 for value in values):
             raise ValueError("template work receipt values must be non-negative integers")
@@ -1027,6 +1033,15 @@ class TemplateSearchReceipt:
             raise ValueError("template fit pass count must be positive")
         if self.phase_offset_lookup_count > self.phase_hypothesis_count:
             raise ValueError("phase offset lookups exceed phase hypotheses")
+        if (
+            self.candidate_direct_role_authority_rejection_count
+            > self.candidate_direct_role_authority_evaluation_count
+            or self.candidate_direct_role_authority_evaluation_count
+            > self.phase_hypothesis_count
+            or self.candidate_direct_role_authority_role_check_count
+            > self.role_binding_count
+        ):
+            raise ValueError("phase-candidate authority work is inconsistent")
 
     def validate_bounds(
         self,

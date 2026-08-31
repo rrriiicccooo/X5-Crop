@@ -544,6 +544,8 @@ class DebugAnalysisContractTest(unittest.TestCase):
                         phase_competition=SimpleNamespace(
                             runner_up="phase:runner",
                             winner_basis=SimpleNamespace(value="direct_support"),
+                            best_phase_candidate_direct_role_authority=None,
+                            runner_phase_candidate_direct_role_authority=None,
                         ),
                         cross_competition=SimpleNamespace(
                             runner_up=None,
@@ -576,6 +578,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
             competition_summary(detection),
         )
         self.assertIn("RUNNER DIFF PHASE", competition_summary(detection))
+        self.assertIn("PHASE AUTH UNAVAILABLE", competition_summary(detection))
         self.assertFalse(hasattr(debug_panel_facts, "geometry_by_identity"))
 
     def test_debug_names_the_root_blocking_gate_and_recovery(self) -> None:

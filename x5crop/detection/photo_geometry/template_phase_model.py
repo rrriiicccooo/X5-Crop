@@ -257,6 +257,7 @@ class PhaseFailureKind(str, Enum):
 
 class PhaseWinnerBasis(str, Enum):
     ONLY_PHYSICAL_FIT = "only_physical_fit"
+    UNIQUE_DIRECT_ROLE_AUTHORITY = "unique_direct_role_authority"
     RESIDUAL_COMPATIBILITY = "residual_compatibility"
     INDEPENDENT_SUPPORT = "independent_support"
     INDEPENDENT_COVERAGE = "independent_coverage"
@@ -275,6 +276,12 @@ class PhaseFitResult:
     registered_direct_observation_ids: tuple[ObservationId, ...]
     failure_kind: PhaseFailureKind | None = None
     winner_basis: PhaseWinnerBasis | None = None
+    best_phase_candidate_direct_role_authority: (
+        DirectRoleBindingAuthority | None
+    ) = None
+    runner_phase_candidate_direct_role_authority: (
+        DirectRoleBindingAuthority | None
+    ) = None
     global_lattice_authority: GlobalLatticeAuthority | None = None
     adjacency_observation_coverage: tuple[AdjacencyObservationCoverage, ...] = ()
     direct_role_binding_authority: DirectRoleBindingAuthority | None = None
@@ -304,6 +311,29 @@ class PhaseFitResult:
             self.winner_basis, PhaseWinnerBasis
         ):
             raise ValueError("phase winner basis must match resolved status")
+        if (
+            self.best_phase_candidate_direct_role_authority is not None
+            and not isinstance(
+                self.best_phase_candidate_direct_role_authority,
+                DirectRoleBindingAuthority,
+            )
+        ):
+            raise TypeError("best phase-candidate direct-role authority is invalid")
+        if (
+            self.runner_phase_candidate_direct_role_authority is not None
+            and not isinstance(
+                self.runner_phase_candidate_direct_role_authority,
+                DirectRoleBindingAuthority,
+            )
+        ):
+            raise TypeError("runner phase-candidate direct-role authority is invalid")
+        if (
+            self.best is None
+            and self.best_phase_candidate_direct_role_authority is not None
+            or self.runner_up is None
+            and self.runner_phase_candidate_direct_role_authority is not None
+        ):
+            raise ValueError("phase-candidate authority requires its candidate")
         if self.global_lattice_authority is not None and not isinstance(
             self.global_lattice_authority,
             GlobalLatticeAuthority,
@@ -375,6 +405,14 @@ class PhaseFitResult:
             ),
             failure_kind=(None if status == PhaseFitStatus.RESOLVED else self.failure_kind),
             winner_basis=winner_basis,
+            best_phase_candidate_direct_role_authority=(
+                self.best_phase_candidate_direct_role_authority
+            ),
+            runner_phase_candidate_direct_role_authority=(
+                None
+                if runner is None
+                else self.runner_phase_candidate_direct_role_authority
+            ),
             global_lattice_authority=self.global_lattice_authority,
             adjacency_observation_coverage=self.adjacency_observation_coverage,
             direct_role_binding_authority=self.direct_role_binding_authority,

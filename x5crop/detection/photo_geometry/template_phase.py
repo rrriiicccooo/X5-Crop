@@ -7,6 +7,7 @@ from dataclasses import replace
 from typing import Sequence
 
 from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
+from .measurement_model import PhotoBoundaryMeasurementSet
 from .model import BoundaryRole, PHOTO_BOUNDARY_MEASUREMENT_SPEC
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_model import (
@@ -44,6 +45,7 @@ from .template_adjacency_coverage import (
 )
 from .template_lattice_authority import assess_global_lattice_authority
 from .template_direct_role_authority import (
+    assess_direct_role_binding_authorities,
     assess_direct_role_binding_authority,
 )
 from .template_outer_frame_authority import (
@@ -333,12 +335,14 @@ def fit_template_phase(
     holder_span_px: FiniteInterval | None = None,
     phase_authority_px: FiniteInterval | None = None,
     local_advance_relations: Sequence[LocalAdvanceRelation] = (),
+    sequence_measurement_sets: Sequence[PhotoBoundaryMeasurementSet] = (),
     max_observations: int = 512,
 ) -> PhaseFitResult:
     """Fit `{phase, W, pitch}` without building a chain product."""
 
     if max_observations <= 0:
         raise ValueError("phase observation bound must be positive")
+    registered_observations = tuple(observations)
     phase_separator_bands = normal_separator_material_bands(
         tuple(separator_bands),
         maximum_material_gap_px=template.gap_prior_px.maximum,
@@ -675,16 +679,42 @@ def fit_template_phase(
         current = by_binding.get(key)
         if current is None or _rank(candidate) > _rank(current):
             by_binding[key] = candidate
+    candidates = tuple(by_binding.values())
+    measurement_sets = tuple(sequence_measurement_sets)
+    candidate_authorities = (
+        assess_direct_role_binding_authorities(
+            tuple(item.fit for item in candidates),
+            registered_observations,
+            tuple(separator_bands),
+            measurement_sets,
+        )
+        if candidates and measurement_sets
+        else ()
+    )
+    assessed = tuple(
+        (candidate, candidate_authorities[index])
+        for index, candidate in enumerate(candidates)
+    ) if candidate_authorities else ()
+    authoritative_candidates = (
+        tuple(
+            candidate
+            for candidate, authority in assessed
+            if authority.state == EvidenceState.SUPPORTED
+        )
+        if measurement_sets
+        else candidates
+    )
     compatible = tuple(
-        item for item in by_binding.values() if item.residual_compatible
+        item for item in authoritative_candidates if item.residual_compatible
     )
     incompatible = tuple(
-        item for item in by_binding.values() if not item.residual_compatible
+        item for item in authoritative_candidates if not item.residual_compatible
     )
+
     ordered = tuple(sorted(compatible, key=_rank, reverse=True))
     best = ordered[0] if ordered else None
     if len(ordered) > 1:
-        discrete = []
+        discrete: list[_BoundFit] = []
         for candidate in ordered[1:]:
             assert best is not None
             if _same_continuous_placement(best.fit, candidate.fit):
@@ -707,9 +737,73 @@ def fit_template_phase(
         direct_observation_count=len(direct),
         inferred_role_count=(0 if best is None else len(best.fit.unbound_role_indices)),
         peak_temporary_bytes=len(seeds) * len(roles) * 32,
+        candidate_direct_role_authority_evaluation_count=len(
+            candidate_authorities
+        ),
+        candidate_direct_role_authority_rejection_count=sum(
+            item.state != EvidenceState.SUPPORTED
+            for item in candidate_authorities
+        ),
+        candidate_direct_role_authority_role_check_count=sum(
+            len(item.facts) for item in candidate_authorities
+        ),
     )
     receipt.validate_bounds()
     if best is None:
+        raw_compatible = tuple(
+            sorted(
+                (item for item in candidates if item.residual_compatible),
+                key=_rank,
+                reverse=True,
+            )
+        )
+        if raw_compatible and measurement_sets:
+            diagnostic_best = raw_compatible[0]
+            diagnostic_runner = next(
+                (
+                    item
+                    for item in raw_compatible[1:]
+                    if not _same_continuous_placement(
+                        diagnostic_best.fit,
+                        item.fit,
+                    )
+                ),
+                None,
+            )
+            authority_by_candidate = {
+                id(candidate): authority
+                for candidate, authority in assessed
+            }
+            best_authority = authority_by_candidate[id(diagnostic_best)]
+            runner_authority = (
+                None
+                if diagnostic_runner is None
+                else authority_by_candidate[id(diagnostic_runner)]
+            )
+            return PhaseFitResult(
+                template=template,
+                best=diagnostic_best.fit,
+                runner_up=(
+                    None if diagnostic_runner is None else diagnostic_runner.fit
+                ),
+                status=PhaseFitStatus.UNRESOLVED,
+                ambiguity_reason=best_authority.reason,
+                receipt=replace(
+                    receipt,
+                    inferred_role_count=len(
+                        diagnostic_best.fit.unbound_role_indices
+                    ),
+                ),
+                registered_direct_observation_ids=direct_ids,
+                failure_kind=(
+                    PhaseFailureKind.SEPARATOR_MATERIAL_CONFLICT
+                    if best_authority.state == EvidenceState.CONTRADICTED
+                    else PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE
+                ),
+                winner_basis=None,
+                best_phase_candidate_direct_role_authority=best_authority,
+                runner_phase_candidate_direct_role_authority=runner_authority,
+            )
         return PhaseFitResult(
             template,
             None,
@@ -749,7 +843,25 @@ def fit_template_phase(
         runner = contradictory_runner
         winner_basis = None
     elif runner is None:
-        winner_basis = PhaseWinnerBasis.ONLY_PHYSICAL_FIT
+        rejected_runner = (
+            max(
+                (
+                    candidate
+                    for candidate, authority in assessed
+                    if authority.state != EvidenceState.SUPPORTED
+                    and not _same_continuous_placement(best.fit, candidate.fit)
+                ),
+                key=_rank,
+                default=None,
+            )
+            if measurement_sets
+            else None
+        )
+        if rejected_runner is None:
+            winner_basis = PhaseWinnerBasis.ONLY_PHYSICAL_FIT
+        else:
+            runner = rejected_runner
+            winner_basis = PhaseWinnerBasis.UNIQUE_DIRECT_ROLE_AUTHORITY
     else:
         winner_basis = _clear_winner_basis(best, runner)
     if winner_basis is not None:
@@ -764,6 +876,20 @@ def fit_template_phase(
             else "runner-up is not clearly separated from the best template"
         )
         failure_kind = PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS
+    final_candidate_authorities = (
+        assess_direct_role_binding_authorities(
+            tuple(
+                item.fit
+                for item in (best, runner)
+                if item is not None
+            ),
+            registered_observations,
+            tuple(separator_bands),
+            measurement_sets,
+        )
+        if measurement_sets
+        else ()
+    )
     return PhaseFitResult(
         template,
         best.fit,
@@ -774,6 +900,16 @@ def fit_template_phase(
         direct_ids,
         failure_kind,
         winner_basis,
+        best_phase_candidate_direct_role_authority=(
+            final_candidate_authorities[0]
+            if final_candidate_authorities
+            else None
+        ),
+        runner_phase_candidate_direct_role_authority=(
+            final_candidate_authorities[1]
+            if len(final_candidate_authorities) > 1
+            else None
+        ),
     )
 
 
@@ -813,6 +949,18 @@ def _aggregate_phase_work(
         fit_pass_count=sum(item.fit_pass_count for item in receipts),
         separator_lattice_hypothesis_count=sum(
             item.separator_lattice_hypothesis_count for item in receipts
+        ),
+        candidate_direct_role_authority_evaluation_count=sum(
+            item.candidate_direct_role_authority_evaluation_count
+            for item in receipts
+        ),
+        candidate_direct_role_authority_rejection_count=sum(
+            item.candidate_direct_role_authority_rejection_count
+            for item in receipts
+        ),
+        candidate_direct_role_authority_role_check_count=sum(
+            item.candidate_direct_role_authority_role_check_count
+            for item in receipts
         ),
     )
     receipt.validate_bounds()
@@ -1054,6 +1202,7 @@ def fit_template_phase_with_local_advance(
         scale_px_per_mm=scale_px_per_mm,
         holder_span_px=holder_span_px,
         phase_authority_px=phase_authority_px,
+        sequence_measurement_sets=phase_input.sequence_measurement_sets,
         max_observations=max_observations,
     )
     if normal.status != PhaseFitStatus.RESOLVED or normal.best is None:
@@ -1124,6 +1273,7 @@ def fit_template_phase_with_local_advance(
         holder_span_px=holder_span_px,
         phase_authority_px=phase_authority_px,
         local_advance_relations=analysis.relations,
+        sequence_measurement_sets=phase_input.sequence_measurement_sets,
         max_observations=max_observations,
     )
     adjusted = _with_local_role_refinement(

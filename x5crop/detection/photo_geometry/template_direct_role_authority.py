@@ -161,24 +161,26 @@ class DirectRoleBindingAuthority:
         )
 
 
-def assess_direct_role_binding_authority(
+@dataclass(frozen=True)
+class _DirectRoleAuthorityLedger:
+    trace_lattice: tuple[float, ...]
+    observations_by_id: dict[ObservationId, BoundaryEdgeObservation]
+    support_region_counts: dict[ObservationId, int]
+    source_wide_pairs: frozenset[frozenset[ObservationId]]
+    partial_height_pairs: frozenset[frozenset[ObservationId]]
+    supported_material_roles: frozenset[tuple[ObservationId, BoundaryRole]]
+    conflicts_by_edge_role: dict[
+        tuple[ObservationId, BoundaryRole],
+        tuple[ObservationId, ...],
+    ]
+
+
+def _direct_role_authority_ledger(
     fit: SequenceFit,
     observations: tuple[BoundaryEdgeObservation, ...],
     separator_bands: tuple[SeparatorBandObservation, ...],
     measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
-) -> DirectRoleBindingAuthority:
-    """Authorize a short line only through another independent physical fact.
-
-    A source-wide edge owns its coordinate directly.  A source-wide separator
-    atomically owns its END/START pair.  Source ``W`` may infer an unobserved
-    opposite after independent closure, but it cannot turn two selected local
-    observations into native-coordinate authority.  A short line without a
-    direct spatial or material relation remains observation, not final
-    crop-coordinate authority.
-    """
-
-    if not isinstance(fit, SequenceFit):
-        raise TypeError("direct-role authority requires a sequence fit")
+) -> _DirectRoleAuthorityLedger:
     if not measurement_sets:
         raise ValueError("direct-role authority requires registered sequence queries")
     trace_lattice = measurement_sets[0].query.trace_positions_px
@@ -190,124 +192,46 @@ def assess_direct_role_binding_authority(
     by_id = {item.observation_id: item for item in observations}
     if len(by_id) != len(observations):
         raise ValueError("direct-role observations must be unique")
-
-    selected: dict[int, BoundaryEdgeObservation] = {}
-    for role, binding in zip(fit.template.roles, fit.role_bindings, strict=True):
-        if binding is None:
-            continue
-        observation = by_id.get(binding.observation_id)
-        if observation is None:
-            raise ValueError("selected direct role is absent from the observation ledger")
-        selected[role.role_index] = observation
-
-    bases: dict[int, set[DirectRoleAuthorityBasis]] = {
-        role_index: set() for role_index in selected
-    }
     region_counts = {
-        role_index: independent_spatial_support_count(
+        observation.observation_id: independent_spatial_support_count(
             trace_lattice,
             observation.trace_coordinates_px,
         )
-        for role_index, observation in selected.items()
+        for observation in observations
     }
-    for role_index, count in region_counts.items():
-        observation = selected[role_index]
-        if (
-            count == SPATIAL_SUPPORT_REGION_COUNT
-            and observation.measurement_basis
-            == BoundaryEdgeMeasurementBasis.DIRECT_TRACE
-        ):
-            bases[role_index].add(DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE)
-        if (
-            observation.measurement_basis
-            == BoundaryEdgeMeasurementBasis.DIRECT_WITH_CROSS_HEIGHT
-        ):
-            bases[role_index].add(
-                DirectRoleAuthorityBasis.CROSS_HEIGHT_UNION
-            )
-
     role_authority_bands = normal_separator_material_bands(
         separator_bands,
         maximum_material_gap_px=fit.template.gap_prior_px.maximum,
     )
-    source_wide_pairs = {
+    source_wide_pairs = frozenset(
         frozenset(
             (band.left_edge_observation_id, band.right_edge_observation_id)
         )
         for band in role_authority_bands
         if band.material_support_region_count == SPATIAL_SUPPORT_REGION_COUNT
-    }
-    partial_height_pairs = {
+    )
+    partial_height_pairs = frozenset(
         frozenset(
             (band.left_edge_observation_id, band.right_edge_observation_id)
         )
         for band in role_authority_bands
         if band.material_support_region_count
         == SPATIAL_SUPPORT_REGION_COUNT - 1
-    }
-    supported_material_roles = {
-        (band.left_edge_observation_id, BoundaryRole.END)
-        for band in role_authority_bands
-        if band.material_support_region_count == SPATIAL_SUPPORT_REGION_COUNT
-    } | {
-        (band.right_edge_observation_id, BoundaryRole.START)
-        for band in role_authority_bands
-        if band.material_support_region_count == SPATIAL_SUPPORT_REGION_COUNT
-    }
-    for adjacency_index in range(max(0, fit.template.count - 1)):
-        end_index = 2 * adjacency_index + 1
-        start_index = end_index + 1
-        end = selected.get(end_index)
-        start = selected.get(start_index)
-        if end is None or start is None:
-            continue
-        selected_pair = frozenset(
-            (end.observation_id, start.observation_id)
-        )
-        if selected_pair in source_wide_pairs:
-            bases[end_index].add(DirectRoleAuthorityBasis.SEPARATOR_PAIR)
-            bases[start_index].add(DirectRoleAuthorityBasis.SEPARATOR_PAIR)
+    )
+    supported_material_roles = frozenset(
+        {
+            (band.left_edge_observation_id, BoundaryRole.END)
+            for band in role_authority_bands
+            if band.material_support_region_count == SPATIAL_SUPPORT_REGION_COUNT
+        }
+        | {
+            (band.right_edge_observation_id, BoundaryRole.START)
+            for band in role_authority_bands
+            if band.material_support_region_count == SPATIAL_SUPPORT_REGION_COUNT
+        }
+    )
 
-    # A material band seen in only two independent height regions cannot make
-    # two short edges authoritative by itself.  It may transfer coordinate
-    # authority from one already-authoritative side to the other side of the
-    # same normal adjacency.  This pass is intentionally non-recursive: a
-    # transferred role cannot seed another transfer.
-    for adjacency_index in range(max(0, fit.template.count - 1)):
-        end_index = 2 * adjacency_index + 1
-        start_index = end_index + 1
-        end = selected.get(end_index)
-        start = selected.get(start_index)
-        if end is None or start is None:
-            continue
-        selected_pair = frozenset(
-            (end.observation_id, start.observation_id)
-        )
-        if (
-            selected_pair not in partial_height_pairs
-            or selected_pair in source_wide_pairs
-            or region_counts[end_index]
-            < SPATIAL_SUPPORT_REGION_COUNT - 1
-            or region_counts[start_index]
-            < SPATIAL_SUPPORT_REGION_COUNT - 1
-        ):
-            continue
-        end_unconditional = bool(
-            bases[end_index] & _UNCONDITIONAL_DIRECT_ROLE_BASES
-        )
-        start_unconditional = bool(
-            bases[start_index] & _UNCONDITIONAL_DIRECT_ROLE_BASES
-        )
-        if end_unconditional and not start_unconditional:
-            bases[start_index].add(
-                DirectRoleAuthorityBasis.PARTIAL_HEIGHT_SEPARATOR_PAIR
-            )
-        elif start_unconditional and not end_unconditional:
-            bases[end_index].add(
-                DirectRoleAuthorityBasis.PARTIAL_HEIGHT_SEPARATOR_PAIR
-            )
-
-    conflicts_by_edge_role: dict[
+    conflict_sets: dict[
         tuple[ObservationId, BoundaryRole],
         set[ObservationId],
     ] = {}
@@ -331,24 +255,111 @@ def assess_direct_role_binding_authority(
                     "separator material conflict references an unregistered edge"
                 )
             for role in alternative.qualified_anchor_roles:
-                conflicts_by_edge_role.setdefault((edge_id, role), set()).add(
+                conflict_sets.setdefault((edge_id, role), set()).add(
                     conflict.observation_id
                 )
+    return _DirectRoleAuthorityLedger(
+        trace_lattice=trace_lattice,
+        observations_by_id=by_id,
+        support_region_counts=region_counts,
+        source_wide_pairs=source_wide_pairs,
+        partial_height_pairs=partial_height_pairs,
+        supported_material_roles=supported_material_roles,
+        conflicts_by_edge_role={
+            key: tuple(sorted(values)) for key, values in conflict_sets.items()
+        },
+    )
+
+
+def _assess_direct_role_binding_authority(
+    fit: SequenceFit,
+    ledger: _DirectRoleAuthorityLedger,
+) -> DirectRoleBindingAuthority:
+    selected: dict[int, BoundaryEdgeObservation] = {}
+    for role, binding in zip(fit.template.roles, fit.role_bindings, strict=True):
+        if binding is None:
+            continue
+        observation = ledger.observations_by_id.get(binding.observation_id)
+        if observation is None:
+            raise ValueError("selected direct role is absent from the observation ledger")
+        selected[role.role_index] = observation
+
+    bases: dict[int, set[DirectRoleAuthorityBasis]] = {
+        role_index: set() for role_index in selected
+    }
+    region_counts = {
+        role_index: ledger.support_region_counts[observation.observation_id]
+        for role_index, observation in selected.items()
+    }
+    for role_index, count in region_counts.items():
+        observation = selected[role_index]
+        if (
+            count == SPATIAL_SUPPORT_REGION_COUNT
+            and observation.measurement_basis
+            == BoundaryEdgeMeasurementBasis.DIRECT_TRACE
+        ):
+            bases[role_index].add(DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE)
+        if (
+            observation.measurement_basis
+            == BoundaryEdgeMeasurementBasis.DIRECT_WITH_CROSS_HEIGHT
+        ):
+            bases[role_index].add(DirectRoleAuthorityBasis.CROSS_HEIGHT_UNION)
+
+    for adjacency_index in range(max(0, fit.template.count - 1)):
+        end_index = 2 * adjacency_index + 1
+        start_index = end_index + 1
+        end = selected.get(end_index)
+        start = selected.get(start_index)
+        if end is None or start is None:
+            continue
+        selected_pair = frozenset((end.observation_id, start.observation_id))
+        if selected_pair in ledger.source_wide_pairs:
+            bases[end_index].add(DirectRoleAuthorityBasis.SEPARATOR_PAIR)
+            bases[start_index].add(DirectRoleAuthorityBasis.SEPARATOR_PAIR)
+
+    # A two-region material band may transfer authority from one independently
+    # authoritative side to the other side of the same normal adjacency.  The
+    # pass is deliberately non-recursive.
+    for adjacency_index in range(max(0, fit.template.count - 1)):
+        end_index = 2 * adjacency_index + 1
+        start_index = end_index + 1
+        end = selected.get(end_index)
+        start = selected.get(start_index)
+        if end is None or start is None:
+            continue
+        selected_pair = frozenset((end.observation_id, start.observation_id))
+        if (
+            selected_pair not in ledger.partial_height_pairs
+            or selected_pair in ledger.source_wide_pairs
+            or region_counts[end_index] < SPATIAL_SUPPORT_REGION_COUNT - 1
+            or region_counts[start_index] < SPATIAL_SUPPORT_REGION_COUNT - 1
+        ):
+            continue
+        end_unconditional = bool(
+            bases[end_index] & _UNCONDITIONAL_DIRECT_ROLE_BASES
+        )
+        start_unconditional = bool(
+            bases[start_index] & _UNCONDITIONAL_DIRECT_ROLE_BASES
+        )
+        if end_unconditional and not start_unconditional:
+            bases[start_index].add(
+                DirectRoleAuthorityBasis.PARTIAL_HEIGHT_SEPARATOR_PAIR
+            )
+        elif start_unconditional and not end_unconditional:
+            bases[end_index].add(
+                DirectRoleAuthorityBasis.PARTIAL_HEIGHT_SEPARATOR_PAIR
+            )
 
     blocking_conflicts = {
-        role_index: tuple(
-            sorted(
-                conflicts_by_edge_role.get(
-                    (
-                        observation.observation_id,
-                        fit.template.roles[role_index].role,
-                    ),
-                    set(),
-                )
-            )
+        role_index: ledger.conflicts_by_edge_role.get(
+            (
+                observation.observation_id,
+                fit.template.roles[role_index].role,
+            ),
+            (),
         )
         if (observation.observation_id, fit.template.roles[role_index].role)
-        not in supported_material_roles
+        not in ledger.supported_material_roles
         else ()
         for role_index, observation in selected.items()
     }
@@ -416,9 +427,48 @@ def assess_direct_role_binding_authority(
     )
 
 
+def assess_direct_role_binding_authorities(
+    fits: tuple[SequenceFit, ...],
+    observations: tuple[BoundaryEdgeObservation, ...],
+    separator_bands: tuple[SeparatorBandObservation, ...],
+    measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
+) -> tuple[DirectRoleBindingAuthority, ...]:
+    """Assess bounded phase candidates against one pre-indexed evidence ledger."""
+
+    if any(not isinstance(fit, SequenceFit) for fit in fits):
+        raise TypeError("direct-role authority requires sequence fits")
+    if not fits:
+        return ()
+    template = fits[0].template
+    if any(fit.template != template for fit in fits[1:]):
+        raise ValueError("direct-role candidate batch requires one fixed template")
+    ledger = _direct_role_authority_ledger(
+        fits[0], observations, separator_bands, measurement_sets
+    )
+    return tuple(
+        _assess_direct_role_binding_authority(fit, ledger) for fit in fits
+    )
+
+
+def assess_direct_role_binding_authority(
+    fit: SequenceFit,
+    observations: tuple[BoundaryEdgeObservation, ...],
+    separator_bands: tuple[SeparatorBandObservation, ...],
+    measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
+) -> DirectRoleBindingAuthority:
+    """Authorize a short line only through another independent physical fact."""
+
+    if not isinstance(fit, SequenceFit):
+        raise TypeError("direct-role authority requires a sequence fit")
+    return assess_direct_role_binding_authorities(
+        (fit,), observations, separator_bands, measurement_sets
+    )[0]
+
+
 __all__ = [
     "DirectRoleAuthorityBasis",
     "DirectRoleAuthorityFact",
     "DirectRoleBindingAuthority",
+    "assess_direct_role_binding_authorities",
     "assess_direct_role_binding_authority",
 ]

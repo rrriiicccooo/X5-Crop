@@ -88,11 +88,22 @@ def selection_summary(detection: FinalDetection) -> str:
     lanes = detection.candidate.geometry.lane_reconstructions
     placements = sum(len(item.placement_competition.placements) for item in lanes)
     phase = sum(item.prepared.phase_competition.receipt.phase_hypothesis_count for item in lanes)
+    authority_evaluations = sum(
+        item.prepared.phase_competition.receipt
+        .candidate_direct_role_authority_evaluation_count
+        for item in lanes
+    )
+    authority_rejections = sum(
+        item.prepared.phase_competition.receipt
+        .candidate_direct_role_authority_rejection_count
+        for item in lanes
+    )
     vetoes = sum(len(item.content_veto_facts) for item in lanes)
     selected = sum(item.selected_placement is not None for item in lanes)
     bounded = any(item.work.bound_exceeded for item in lanes)
     return (
-        f"PHASE {phase} · PLACEMENTS {placements} · SELECTED {selected} · "
+        f"PHASE {phase} · AUTH {authority_evaluations}/{authority_rejections} REJECT · "
+        f"PLACEMENTS {placements} · SELECTED {selected} · "
         f"VETO {vetoes} · BOUND {'EXCEEDED' if bounded else 'OK'}"
     )
 
@@ -104,11 +115,30 @@ def competition_summary(detection: FinalDetection) -> str:
     differences: set[str] = set()
     phase_bases: set[str] = set()
     cross_bases: set[str] = set()
+    phase_authority_states: set[str] = set()
     for lane in lanes:
         competition = lane.placement_competition
-        phase_basis = lane.prepared.phase_competition.winner_basis
+        phase_competition = lane.prepared.phase_competition
+        phase_basis = phase_competition.winner_basis
         if phase_basis is not None:
             phase_bases.add(phase_basis.value.upper().replace("_", " "))
+        best_authority = (
+            phase_competition.best_phase_candidate_direct_role_authority
+        )
+        runner_authority = (
+            phase_competition.runner_phase_candidate_direct_role_authority
+        )
+        if best_authority is not None:
+            phase_authority_states.add(
+                "BEST "
+                + best_authority.state.value.upper()
+                + " / RUNNER "
+                + (
+                    "NONE"
+                    if runner_authority is None
+                    else runner_authority.state.value.upper()
+                )
+            )
         cross_basis = lane.prepared.cross_competition.winner_basis
         if cross_basis is not None:
             cross_bases.add(cross_basis.value.upper().replace("_", " "))
@@ -153,7 +183,15 @@ def competition_summary(detection: FinalDetection) -> str:
         basis = "NO UNIQUE SAFE SOURCE PLACEMENT"
         subject = "BEST CANDIDATE ONLY"
     runner = "NONE" if not differences else "/".join(sorted(differences))
-    return f"{subject} · {basis} · RUNNER DIFF {runner}"
+    authority = (
+        "UNAVAILABLE"
+        if not phase_authority_states
+        else " + ".join(sorted(phase_authority_states))
+    )
+    return (
+        f"{subject} · {basis} · PHASE AUTH {authority} · "
+        f"RUNNER DIFF {runner}"
+    )
 
 
 def alignment_summary(detection: FinalDetection) -> str:
