@@ -78,26 +78,30 @@ def build_template_gate(
             for lane in reconstructions
             if lane.prepared.phase_competition.failure_kind
             in {
-                PhaseFailureKind.LOCAL_ADVANCE_AMBIGUOUS,
+                PhaseFailureKind.ADJACENCY_RELATION_AMBIGUOUS,
                 PhaseFailureKind.ADJACENCY_CONTINUITY_UNRESOLVED,
+                PhaseFailureKind.ADJACENCY_TOPOLOGY_AMBIGUOUS,
                 PhaseFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED,
             }
         ),
         None,
     )
-    local_advance_unresolved = local_phase_failure is not None
-    local_advance_failure = (
+    adjacency_relation_unresolved = local_phase_failure is not None
+    adjacency_relation_failure = (
         None
         if local_phase_failure is None
         else failure_fact(
             (
                 GateGap.ADJACENCY_TOPOLOGY_UNRESOLVED
                 if local_phase_failure.failure_kind
-                == PhaseFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED
+                in {
+                    PhaseFailureKind.ADJACENCY_TOPOLOGY_AMBIGUOUS,
+                    PhaseFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED,
+                }
                 else GateGap.ADJACENCY_CONTINUITY_UNRESOLVED
                 if local_phase_failure.failure_kind
                 == PhaseFailureKind.ADJACENCY_CONTINUITY_UNRESOLVED
-                else GateGap.LOCAL_ADVANCE_UNRESOLVED
+                else GateGap.ADJACENCY_RELATION_UNRESOLVED
             ),
             detail=(
                 local_phase_failure.ambiguity_reason
@@ -190,12 +194,12 @@ def build_template_gate(
             if bounds_valid
             else contradicted(GateGap.PRODUCER_BOUND_EXCEEDED)
         ),
-        "local_advance_authority": (
+        "adjacency_relation_authority": (
             unavailable(
-                local_advance_failure.gap,
-                local_advance_failure,
+                adjacency_relation_failure.gap,
+                adjacency_relation_failure,
             )
-            if local_advance_unresolved
+            if adjacency_relation_unresolved
             else supported()
         ),
         "content_protection": (

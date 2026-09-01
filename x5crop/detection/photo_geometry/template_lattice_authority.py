@@ -11,6 +11,7 @@ from .template_model import (
     SequenceFit,
     SequenceRoleBinding,
     TemplateRole,
+    adjacency_prefix_coefficients,
 )
 from .template_direct_role_authority import DirectRoleBindingAuthority
 from .template_phase_model import (
@@ -82,17 +83,22 @@ def _direct_role_rows(
             and role.role_index not in authorized_role_indices
         ):
             continue
+        width_count, pitch_count, _fixed_delta = (
+            adjacency_prefix_coefficients(
+                fit.adjacency_relations,
+                role.slot_index,
+            )
+        )
         value = (
             role,
             binding,
             (
                 1.0,
-                (
-                    float(fit.template.direction)
-                    if role.role == BoundaryRole.END
-                    else 0.0
+                float(
+                    fit.template.direction
+                    * (width_count + int(role.role == BoundaryRole.END))
                 ),
-                float(fit.template.direction * role.slot_index),
+                float(fit.template.direction * pitch_count),
             ),
         )
         current = by_evidence_group.get(binding.evidence_group_id)

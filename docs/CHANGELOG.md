@@ -31,9 +31,18 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
 - Selected placement 现在由 `AdjacencyContinuityObservation` 为每个 adjacency 建立唯一 typed ledger。
   唯一正序 separator band 可以授权实测 local advance；完整 corridor 但无反证只保留正常 Grid，不能
   冒充直接 separator；material unavailable、band/角色冲突、跨零 gap 与非正 gap 分别保留独立状态。
-  普通 adjacency 的歧义和拓扑反证通过专用 Gate reason 安全 review，report revision 更新为
-  `x5crop_v5_template_report_34`。该映射只复用已登记事实，不新增 TIFF 读取、低梯度 detector 或
-  contact/overlap 选择。
+  普通 adjacency 的歧义和拓扑反证通过专用 Gate reason 安全 review。该映射只复用已登记事实，不新增
+  TIFF 读取、低梯度 detector 或 winner-specific query。
+- `AdjacencyRelation` 现在显式区分 `SeparatorRelation` 与 `ContactRelation`。Candidate-independent
+  `ContactEdgeObservation` 只接受具有独立坐标权限、未被正 separator material 拥有且没有另一条重叠
+  authoritative identity 的物理边；phase solver 把同一 edge 原子绑定为前一 Frame END 与后一 Frame
+  START，并以 `delta = W - pitch` 进入原有 O(count) prefix。走廊不完整、多个 physical identity 或多种
+  ordinal 映射保持 typed review；两条独立反序边仍是尚未闭合的 overlap，不能冒充 contact。Contact
+  相邻 Frame 不参加 source W 独立支撑，避免共享线自证 W。
+- 已证明 Contact 的输出只在前一 Frame END 与后一 Frame START 增加一份同状态 sequence base bleed 作为
+  `topology_protection`，并继续消耗原有每侧 5% 总预算；其它边不变，预算或 containment 不成立时 review。
+  Report/Debug 分开保存 relation identity、基础 bleed、topology protection、uncertainty 与 residual。
+  Report revision 更新为 `x5crop_v5_template_report_35`，不保留旧 schema 兼容路径。
 - 直接观察到的 start/end 在最终 placement 中保留 native coordinate 与完整 interval；Grid 只补齐缺失
   角色。同一连续 placement 的互补 endpoint evidence 合并为联合可行状态，不伪造 runner。唯一 placement
   中至少两张完整直接 Frame 可闭合 source W；当每个缺失 Frame 仍有一侧直接边缘时，同一份相关 W 可补
@@ -129,8 +138,8 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   aperture side 的 W/H 比例推导。
 - 任一 slot 不安全时整张 source `needs_review`，不做 slot salvage。Contact 与 overlap 始终属于
   challenge，但 challenge 不预设终态：标准 detector/Gate 可产生安全自动批准，证据不足时安全 review
-  同样合格。当前尚未启用异常 topology；后续只允许在同一 adjacency/placement 中加入显式关系，并让
-  受影响边界的 topology protection 消耗既有 5% 总预算，不建立第二套 detector 或独立特殊 bleed 预算。
+  同样合格。Contact 已进入同一 adjacency/placement；overlap 仍未启用。后续 relation 仍必须让受影响
+  边界的 topology protection 消耗既有 5% 总预算，不建立第二套 detector 或独立特殊 bleed 预算。
 - Placement 保持 source-axis；局部直线 slope 只扩大安全包络。Deskew 是批准后的可选整理，不参与
   placement、Gate 或黄金准确性；证据不足或超限时保持原始倾斜。
 - 安全层只处理唯一 selected placement 的联合可行状态。Aperture 每侧共用 5% 外扩预算；直接 enclosing
@@ -147,14 +156,15 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   阻断原因；报告同时保存全局未知量 constraint rank、逐 adjacency query/trace/coordinate coverage 与
   直接角色/外侧 Frame observation authority，以及 dark/light material、逐区域状态和冲突。Debug 不重新
   求解，也不把 review candidate 伪装为正式输出。当前 report revision 为
-  `x5crop_v5_template_report_34`，并显式区分直接角色的 coordinate `observation_id` 与相关
+  `x5crop_v5_template_report_35`，并显式区分直接角色的 coordinate `observation_id` 与相关
   `evidence_group_id`，同时报告 phase candidate 的输入权限、projection outcome、保留 rank、投影 binding、
   calibrated nominal prior/evidence/selected authority、phase anchor、推断 adjacency、未观察 Frame、
   nominal solve/local-prefix 工作量、连续 lattice 参数依据、三层 source footprint、typed
   saturation、同一状态 cross
   alignment padding、selected-only source W authority、source W/H、相关
   Frame-width inference 及 validation-only role/observation provenance、aspect calibration、raw/guarded
-  ratio、两轴 guard、推导 H、逐 adjacency continuity ledger、Cross typed root
+  ratio、两轴 guard、推导 H、逐 adjacency continuity ledger、Contact edge/relation 与 topology
+  protection、Cross typed root
   failure、pair support mode、family resolution 与预算；不保留旧 schema 兼容路径。
 - 正式 TIFF 保真 16-bit RGB、ICC、resolution、支持的 metadata 与无损压缩，并写
   `Orientation=1`。完整 source 先写 staging，再原子发布到尚不存在的目录。
@@ -212,14 +222,15 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
 - `tools/verify` 是 Hook、CI 与本地验证的唯一入口。Diagnostic 只证明工程合同；gold accuracy、性能与
   platform receipt 分层记录，不互相冒充。
 - 正式性能 Gate 为 24-source 完整用户路径 mean 不超过 5 秒；3 秒只是不阻断的 challenge。
-- Source-W native-pair rebind 检查点的完整 development gold 为 110/110 完成、分析错误 0、
+- Contact 检查点的完整 development gold 为 110/110 完成、分析错误 0、
   `unsafe_approved_auto = 0`；安全 auto 为基础 nominal 17/66、较难 nominal 2/30、challenge 0/14。
-  Candidate 为 87 个不可用、20 个安全、3 个不安全；全部不安全 candidate 均保持 review。S079、S090
-  新增安全自动批准，既有安全 auto 无回退；S070 保持 typed `source_frame_width_conflict` review，证明 fitted
-  Grid W 不能过滤自己的直接反证。该阶段没有放宽 Grid、Gate、5% 预算或黄金合同。
+  Candidate 为 87 个不可用、20 个安全、3 个不安全；全部不安全 candidate 均保持 review，自动批准集合
+  与上一检查点一致。S041/S050 能表达唯一共享边 Contact；S014 的重叠独立 identity 保持竞争，S009/S056
+  的反序边没有被误判成 Contact。该阶段没有放宽 Grid、Gate、5% 预算或黄金合同。
 - 24-source 正式性能只由绑定最终干净 commit 的 receipt 判定；5 秒 mean 仍是 blocking Gate，3 秒仍是
-  non-blocking 目标。当前 review 表达真实的 phase/cross、Grid/W 与预算证明缺口，不以调窄 guard、静默
-  隐藏 saturation、恢复精确 W→H 或改变样片角色掩盖。
+  non-blocking 目标。Contact 检查点通过 5 秒 Gate，尚未达到 3 秒 challenge。当前 review 表达真实的
+  phase/cross、Grid/W、topology 与预算证明缺口，不以调窄 guard、静默隐藏 saturation、恢复精确 W→H
+  或改变样片角色掩盖。
 - Apple Silicon macOS、Intel macOS 与 Windows x64 必须在同一最终 commit 取得实机 receipt。Accuracy、
   性能与平台证据未全部绑定该 commit 前，不创建 RC、tag、Release 或公开 ZIP。
 - 发布包由唯一 manifest 构建，不包含 modular source、tests、tools、内部文档或开发输出。

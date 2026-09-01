@@ -9,6 +9,10 @@ from x5crop.detection.candidate.assessment.model import CANDIDATE_GATE_CHECK_COD
 from x5crop.detection.decision.vocabulary import FINAL_REVIEW_REASONS
 from x5crop.detection.output_deskew import DeskewSkipReason
 from x5crop.detection.photo_geometry.output_model import FootprintSaturationKind
+from x5crop.detection.photo_geometry.template_phase_model import (
+    PhaseFailureKind,
+    PhaseFitStatus,
+)
 from x5crop.domain import Box
 from x5crop.formats import OUTPUT_PROTECTION_SPEC
 from x5crop.geometry.convex import clip_convex_polygon_to_box
@@ -52,6 +56,8 @@ _DIRECT_USE_EDGE_FIELDS = {
     "within_limit",
 }
 _DESKEW_SKIP_REASONS = tuple(item.value for item in DeskewSkipReason)
+_PHASE_FAILURE_KINDS = {None, *(item.value for item in PhaseFailureKind)}
+_PHASE_STATUSES = {item.value for item in PhaseFitStatus}
 _OBSERVED_DESKEW_SKIP_REASONS = {
     DeskewSkipReason.ROTATION_NOT_NEEDED.value,
     DeskewSkipReason.ROTATION_EXCEEDS_CLEANUP_LIMIT.value,
@@ -63,7 +69,7 @@ _TEMPLATE_ALIGNMENT_FIELDS = {
     "canonical_pitch_px",
     "pitch_delta_from_compiled_center_px",
     "maximum_absolute_role_residual_px",
-    "local_advance_relations",
+    "adjacency_relations",
     "global_lattice_authority",
     "calibrated_nominal_grid_evidence",
     "adjacency_observation_coverage",
@@ -673,6 +679,7 @@ def _validate_adjacency_continuity(value: object) -> None:
             "end_observation_id",
             "next_start_observation_id",
             "separator_band_observation_ids",
+            "contact_observation_id",
             "signed_gap_interval_px",
             "failure_kind",
             "reason",
@@ -685,6 +692,7 @@ def _validate_adjacency_continuity(value: object) -> None:
         end_id = observation["end_observation_id"]
         start_id = observation["next_start_observation_id"]
         separator_band_ids = observation["separator_band_observation_ids"]
+        contact_id = observation["contact_observation_id"]
         signed_gap = observation["signed_gap_interval_px"]
         failure_kind = observation["failure_kind"]
         reason = observation["reason"]
@@ -697,6 +705,7 @@ def _validate_adjacency_continuity(value: object) -> None:
             or kind
             not in {
                 "separator_material",
+                "contact",
                 "no_counterevidence_observed",
                 "normal_separator_counterevidence",
                 "separator_material_unresolved",
@@ -707,6 +716,7 @@ def _validate_adjacency_continuity(value: object) -> None:
             not in {
                 None,
                 "positive_separator_band",
+                "shared_physical_edge",
                 "complete_registered_corridor",
                 "reversed_direct_edges",
             }
@@ -721,6 +731,8 @@ def _validate_adjacency_continuity(value: object) -> None:
             )
             or not _valid_ids(separator_band_ids)
             or separator_band_ids != sorted(separator_band_ids)
+            or contact_id is not None
+            and (not isinstance(contact_id, str) or not contact_id)
             or signed_gap is not None
             and not _valid_interval(signed_gap)
             or failure_kind
@@ -743,7 +755,14 @@ def _validate_adjacency_continuity(value: object) -> None:
             "coverage_incomplete",
         }
         if (
-            (kind in {"separator_material", "no_counterevidence_observed"})
+            (
+                kind
+                in {
+                    "separator_material",
+                    "contact",
+                    "no_counterevidence_observed",
+                }
+            )
             != (state == "supported")
             or (kind == "normal_separator_counterevidence")
             != (state == "contradicted")
@@ -777,6 +796,16 @@ def _validate_adjacency_continuity(value: object) -> None:
                 or float(signed_gap["minimum"]) <= 1.0e-7
             ):
                 raise ValueError("separator continuity fact is incomplete")
+        elif kind == "contact":
+            if (
+                basis != "shared_physical_edge"
+                or not direct_pair
+                or end_id != start_id
+                or separator_band_ids
+                or signed_gap != {"minimum": 0.0, "maximum": 0.0}
+                or contact_id is None
+            ):
+                raise ValueError("contact continuity fact is incomplete")
         elif kind == "no_counterevidence_observed":
             if (
                 basis != "complete_registered_corridor"
@@ -794,6 +823,8 @@ def _validate_adjacency_continuity(value: object) -> None:
                 raise ValueError("normal-separator counterevidence is invalid")
         elif basis is not None:
             raise ValueError("unresolved continuity cannot claim a basis")
+        if kind != "contact" and contact_id is not None:
+            raise ValueError("non-contact continuity retained contact evidence")
         if kind == "separator_material_unresolved" and (
             not direct_pair
             or not separator_band_ids
@@ -826,6 +857,134 @@ def _validate_adjacency_continuity(value: object) -> None:
             raise ValueError("incomplete coverage retained a material band")
     if ordinals != list(range(1, len(ordinals) + 1)):
         raise ValueError("adjacency continuity ordinals are invalid")
+
+
+def _validate_adjacency_relations(value: object) -> dict[str, int]:
+    """Validate the serialized adjacency sum type and return contacts."""
+
+    if not isinstance(value, list):
+        raise ValueError("adjacency relation summary is invalid")
+    ordinals: list[int] = []
+    contacts: dict[str, int] = {}
+    separator_fields = {
+        "relation_ordinal",
+        "kind",
+        "delta_interval_px",
+        "canonical_delta_px",
+        "observation_ids",
+    }
+    contact_fields = {
+        "relation_ordinal",
+        "contact_observation_id",
+        "physical_edge_id",
+        "shared_edge_observation_id",
+        "delta_interval_px",
+        "canonical_delta_px",
+        "supporting_observation_ids",
+        "kind",
+    }
+    for relation in value:
+        if not isinstance(relation, dict):
+            raise ValueError("adjacency relation is invalid")
+        fields = set(relation)
+        ordinal = relation.get("relation_ordinal")
+        interval = relation.get("delta_interval_px")
+        canonical = relation.get("canonical_delta_px")
+        if (
+            not isinstance(ordinal, int)
+            or ordinal <= 0
+            or not _valid_interval(interval)
+            or not _finite_number(canonical)
+            or not float(interval["minimum"])
+            <= float(canonical)
+            <= float(interval["maximum"])
+        ):
+            raise ValueError("adjacency relation geometry is invalid")
+        ordinals.append(ordinal)
+        if fields == separator_fields:
+            kind = relation["kind"]
+            ids = relation["observation_ids"]
+            if (
+                kind not in {"nominal", "wide", "narrow"}
+                or not _valid_ids(ids, allow_empty=True)
+                or ids != list(dict.fromkeys(ids))
+                or kind != "nominal" and not ids
+                or (kind == "nominal")
+                != (
+                    interval == {"minimum": 0.0, "maximum": 0.0}
+                    and float(canonical) == 0.0
+                    and not ids
+                )
+            ):
+                raise ValueError("separator relation is invalid")
+            continue
+        if fields != contact_fields or relation["kind"] != "contact":
+            raise ValueError("adjacency relation sum type is invalid")
+        contact_id = relation["contact_observation_id"]
+        physical_id = relation["physical_edge_id"]
+        shared_id = relation["shared_edge_observation_id"]
+        supporting_ids = relation["supporting_observation_ids"]
+        if (
+            any(
+                not isinstance(identity, str) or not identity
+                for identity in (contact_id, physical_id, shared_id)
+            )
+            or physical_id != shared_id
+            or not _valid_ids(supporting_ids, allow_empty=False)
+            or supporting_ids != list(dict.fromkeys(supporting_ids))
+            or physical_id not in supporting_ids
+            or contact_id in contacts
+        ):
+            raise ValueError("contact relation is invalid")
+        contacts[contact_id] = ordinal
+    if ordinals != list(range(1, len(ordinals) + 1)):
+        raise ValueError("adjacency relation ordinals are invalid")
+    return contacts
+
+
+def _validate_contact_edge_observations(value: object) -> dict[str, str]:
+    """Validate role-free contact proposals without granting placement."""
+
+    if not isinstance(value, list):
+        raise ValueError("contact-edge observation summary is invalid")
+    observations: dict[str, str] = {}
+    fields = {
+        "observation_id",
+        "physical_edge_id",
+        "shared_edge_observation_id",
+        "authority_bases",
+        "qualified_anchor_roles",
+    }
+    for observation in value:
+        if not isinstance(observation, dict) or set(observation) != fields:
+            raise ValueError("contact-edge observation is invalid")
+        identity = observation["observation_id"]
+        physical_id = observation["physical_edge_id"]
+        shared_id = observation["shared_edge_observation_id"]
+        bases = observation["authority_bases"]
+        roles = observation["qualified_anchor_roles"]
+        if (
+            any(
+                not isinstance(item, str) or not item
+                for item in (identity, physical_id, shared_id)
+            )
+            or physical_id != shared_id
+            or identity in observations
+            or not isinstance(bases, list)
+            or not bases
+            or bases != list(dict.fromkeys(bases))
+            or any(
+                item not in {"source_wide_edge", "aggregate_union"}
+                for item in bases
+            )
+            or not isinstance(roles, list)
+            or not roles
+            or roles != list(dict.fromkeys(roles))
+            or any(item not in {"start", "end"} for item in roles)
+        ):
+            raise ValueError("contact-edge observation is invalid")
+        observations[identity] = shared_id
+    return observations
 
 
 def _validate_outer_frame_observation_authority(value: object) -> None:
@@ -1190,6 +1349,52 @@ def validate_output_footprint_authority(output: dict[str, Any]) -> None:
     same_state_cross_padding = output.get(
         "maximum_same_state_cross_alignment_padding_px"
     )
+    protections = output.get("boundary_protections")
+    protection_fields = {
+        "role",
+        "measurement_expansion_px",
+        "base_bleed_px",
+        "topology_protection_px",
+        "topology_relation_id",
+        "local_boundary_residual_px",
+        "joint_expansion_px",
+    }
+    if not isinstance(protections, list) or any(
+        not isinstance(item, dict) for item in protections
+    ):
+        raise ValueError("boundary protection facts are invalid")
+    if (
+        tuple(item.get("role") for item in protections)
+        != ("start", "end", "top", "bottom")
+        or any(
+            set(item) != protection_fields
+            or any(
+                not _finite_number(item[key]) or float(item[key]) < 0.0
+                for key in (
+                    "measurement_expansion_px",
+                    "base_bleed_px",
+                    "topology_protection_px",
+                    "local_boundary_residual_px",
+                    "joint_expansion_px",
+                )
+            )
+            or (float(item["topology_protection_px"]) > 0.0)
+            != (
+                isinstance(item["topology_relation_id"], str)
+                and bool(item["topology_relation_id"])
+            )
+            or item["topology_relation_id"] is not None
+            and item["role"] not in {"start", "end"}
+            or item["topology_relation_id"] is not None
+            and abs(
+                float(item["topology_protection_px"])
+                - float(item["base_bleed_px"])
+            )
+            > 1.0e-8
+            for item in protections
+        )
+    ):
+        raise ValueError("boundary protection facts are invalid")
     support_output = boundary_use == "enclosing_support_pair"
     if support_output != _finite_number(same_state_cross_padding) or (
         support_output and float(same_state_cross_padding) < 0.0
@@ -1526,6 +1731,9 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         budgets = lane["direct_use_budget_assessments"]
         outputs_by_id = {item["geometry_id"]: item for item in outputs}
         alignment = lane.get("template_alignment")
+        contact_edge_observations = _validate_contact_edge_observations(
+            lane.get("contact_edge_observations")
+        )
         coarse = lane.get("coarse_strip_support")
         _validate_aperture_aspect_ratio_authority(
             lane.get("aperture_aspect_ratio_authority")
@@ -1543,6 +1751,24 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             if not isinstance(width_state, dict)
             else width_state.get("observation_ids")
         )
+        phase_status = lane.get("phase_status")
+        phase_failure_kind = lane.get("phase_failure_kind")
+        phase_failure_reason = lane.get("phase_failure_reason")
+        if (
+            phase_status not in _PHASE_STATUSES
+            or phase_failure_kind not in _PHASE_FAILURE_KINDS
+            or (phase_status == PhaseFitStatus.RESOLVED.value)
+            != (
+                phase_failure_kind is None
+                and phase_failure_reason is None
+            )
+            or phase_failure_reason is not None
+            and (
+                not isinstance(phase_failure_reason, str)
+                or not phase_failure_reason
+            )
+        ):
+            raise ValueError("phase status is invalid")
         if (
             not isinstance(width_ids, list)
             or (source_width["state"] == "supported") != bool(width_ids)
@@ -1570,7 +1796,7 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             or alignment["path"]
             != {
                 "normal": "normal",
-                "measured_advances": "local_advance",
+                "measured_advances": "adjacency_relations",
                 "unresolved": None,
             }[alignment["pattern"]]
             or (alignment["pattern"] == "unresolved")
@@ -1591,6 +1817,22 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         _validate_adjacency_continuity(
             alignment["adjacency_continuity_observations"]
         )
+        contact_relations = _validate_adjacency_relations(
+            alignment["adjacency_relations"]
+        )
+        if not set(contact_relations).issubset(contact_edge_observations):
+            raise ValueError(
+                "contact relation leaves the registered contact observations"
+            )
+        for relation in alignment["adjacency_relations"]:
+            if relation["kind"] != "contact":
+                continue
+            if contact_edge_observations[
+                relation["contact_observation_id"]
+            ] != relation["shared_edge_observation_id"]:
+                raise ValueError(
+                    "contact relation changed its registered physical edge"
+                )
         if [
             item["relation_ordinal"]
             for item in alignment["adjacency_observation_coverage"]
@@ -1599,6 +1841,18 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             for item in alignment["adjacency_continuity_observations"]
         ]:
             raise ValueError("adjacency coverage and continuity disagree")
+        continuity_contacts = {
+            item["contact_observation_id"]: item["relation_ordinal"]
+            for item in alignment["adjacency_continuity_observations"]
+            if item["kind"] == "contact"
+        }
+        if any(
+            contact_relations.get(identity) != ordinal
+            for identity, ordinal in continuity_contacts.items()
+        ):
+            raise ValueError(
+                "contact continuity leaves the selected adjacency relation"
+            )
         _validate_direct_role_binding_authority(
             alignment["direct_role_binding_authority"]
         )
@@ -1763,6 +2017,29 @@ def _validate_geometry(record: dict[str, Any]) -> None:
                 raise ValueError("direct-use budget state is invalid")
         for output in outputs:
             validate_output_footprint_authority(output)
+        protected_contact_sides = {
+            (
+                protection["topology_relation_id"],
+                output["envelope"]["lane_ordinal"],
+                protection["role"],
+            )
+            for output in outputs
+            for protection in output["boundary_protections"]
+            if protection["topology_relation_id"] is not None
+        }
+        expected_contact_sides = {
+            (identity, ordinal, "end")
+            for identity, ordinal in contact_relations.items()
+        }.union(
+            {
+                (identity, ordinal + 1, "start")
+                for identity, ordinal in contact_relations.items()
+            }
+        )
+        if outputs and protected_contact_sides != expected_contact_sides:
+            raise ValueError(
+                "output topology protection disagrees with contact relations"
+            )
         selected = lane["selected_placement_id"]
         if (selected is None) != (not outputs):
             raise ValueError("selected template output is incomplete")
@@ -1951,7 +2228,7 @@ def _validate_phase_competition(value: object) -> None:
         "role_count",
         "phase_lookup_count",
         "role_binding_count",
-        "local_relation_evaluation_count",
+        "adjacency_relation_evaluation_count",
         "local_refinement_lookup_count",
         "local_refinement_binding_count",
         "phase_hypothesis_count",

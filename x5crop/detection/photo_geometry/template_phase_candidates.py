@@ -22,19 +22,25 @@ from .model import (
 )
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .separator_material import normal_separator_material_bands
+from .template_contact import ContactEdgeObservation
 from .template_model import (
+    AdjacencyRelation,
+    ContactRelation,
     LatticeParameterFitBasis,
-    LocalAdvanceRelation,
     PhaseLatticeFit,
     PitchFit,
+    SeparatorRelation,
+    SeparatorRelationKind,
     SequenceFit,
     SequenceBindingUse,
     SequenceRoleBinding,
     SequenceRoleLineEvidence,
     TemplateRole,
     TemplateSpec,
+    adjacency_prefix_coefficients,
     most_constrained_lattice_parameter_fit_basis,
     phase_lattice_fit_from_absolute,
+    realize_contact_relations,
     template_role_refinement_radius_px,
 )
 from .template_nominal_grid_authority import (
@@ -101,19 +107,42 @@ class _PhaseSeed:
     phase_px: float
     pitch_px: float
     required_bindings: tuple[tuple[int, ObservationId], ...] = ()
+    adjacency_relations: tuple[AdjacencyRelation, ...] = ()
 
     def __post_init__(self) -> None:
         role_indices = tuple(item[0] for item in self.required_bindings)
-        observation_ids = tuple(item[1] for item in self.required_bindings)
         if (
             not math.isfinite(self.phase_px)
             or not math.isfinite(self.pitch_px)
             or self.pitch_px <= 0.0
             or any(index < 0 for index in role_indices)
             or len(set(role_indices)) != len(role_indices)
-            or len(set(observation_ids)) != len(observation_ids)
+            or tuple(
+                item.relation_ordinal for item in self.adjacency_relations
+            )
+            != tuple(range(1, len(self.adjacency_relations) + 1))
         ):
             raise ValueError("phase seed identity is invalid")
+        duplicate_roles: dict[ObservationId, list[int]] = {}
+        for role_index, observation_id in self.required_bindings:
+            duplicate_roles.setdefault(observation_id, []).append(role_index)
+        contacts = {
+            item.shared_edge_observation_id: item
+            for item in self.adjacency_relations
+            if isinstance(item, ContactRelation)
+        }
+        for observation_id, indices in duplicate_roles.items():
+            if len(indices) == 1:
+                continue
+            contact = contacts.get(observation_id)
+            expected = (
+                2 * contact.relation_ordinal - 1,
+                2 * contact.relation_ordinal,
+            ) if contact is not None else ()
+            if tuple(sorted(indices)) != expected:
+                raise ValueError(
+                    "one seed observation may repeat only for one contact"
+                )
 
 
 def _interval(value: FiniteInterval | PositiveInterval | float | int) -> FiniteInterval:
@@ -184,19 +213,21 @@ def _facts(
 
 
 def _relations(
-    values: Sequence[LocalAdvanceRelation],
+    values: Sequence[AdjacencyRelation],
     count: int,
-) -> tuple[LocalAdvanceRelation, ...]:
+) -> tuple[AdjacencyRelation, ...]:
     result = tuple(values)
     if tuple(item.relation_ordinal for item in result) != tuple(
         range(1, len(result) + 1)
     ) or len(result) > max(0, count - 1):
-        raise ValueError("local relations must be ordered fixed adjacencies")
+        raise ValueError(
+            "adjacency relations must be ordered fixed adjacencies"
+        )
     return result
 
 
 def _prefixes(
-    relations: tuple[LocalAdvanceRelation, ...],
+    relations: tuple[AdjacencyRelation, ...],
     count: int,
 ) -> tuple[float, ...]:
     result = [0.0]
@@ -208,11 +239,120 @@ def _prefixes(
     return tuple(result)
 
 
+def _contact_phase_seeds(
+    contact_edges: Sequence[ContactEdgeObservation],
+    direct: tuple[_AnchorFact, ...],
+    roles: tuple[TemplateRole, ...],
+    template: TemplateSpec,
+    *,
+    width: FiniteInterval,
+    pitch: FiniteInterval,
+    base_relations: tuple[AdjacencyRelation, ...],
+) -> tuple[_PhaseSeed, ...]:
+    """Project every registered shared edge onto every legal adjacency."""
+
+    by_id = {item.observation_id: item for item in direct}
+    existing_contacts = tuple(
+        item for item in base_relations if isinstance(item, ContactRelation)
+    )
+    if len(existing_contacts) > 1:
+        raise ValueError("contact stage supports one bounded contact relation")
+    observations_by_id = {
+        item.observation_id: item for item in contact_edges
+    }
+    hypotheses: list[tuple[ContactEdgeObservation, int]] = []
+    if existing_contacts:
+        relation = existing_contacts[0]
+        observation = observations_by_id.get(relation.contact_observation_id)
+        if observation is None:
+            raise ValueError("contact relation left its registered observation")
+        hypotheses.append((observation, relation.relation_ordinal))
+    else:
+        hypotheses.extend(
+            (observation, ordinal)
+            for observation in contact_edges
+            for ordinal in range(1, template.count)
+        )
+
+    delta_interval = FiniteInterval(
+        width.minimum - pitch.maximum,
+        width.maximum - pitch.minimum,
+    )
+    seeds: set[_PhaseSeed] = set()
+    for observation, ordinal in hypotheses:
+        anchor = by_id.get(observation.shared_edge_observation_id)
+        if anchor is None:
+            continue
+        relations = list(base_relations)
+        while len(relations) < ordinal:
+            relation_ordinal = len(relations) + 1
+            relations.append(
+                SeparatorRelation(
+                    relation_ordinal=relation_ordinal,
+                    kind=SeparatorRelationKind.NOMINAL,
+                    delta_interval_px=FiniteInterval.exact(0.0),
+                    canonical_delta_px=0.0,
+                )
+            )
+        current = relations[ordinal - 1]
+        if (
+            isinstance(current, SeparatorRelation)
+            and current.kind != SeparatorRelationKind.NOMINAL
+        ):
+            continue
+        contact = ContactRelation(
+            relation_ordinal=ordinal,
+            contact_observation_id=observation.observation_id,
+            physical_edge_id=observation.physical_edge_id,
+            shared_edge_observation_id=(
+                observation.shared_edge_observation_id
+            ),
+            delta_interval_px=delta_interval,
+            canonical_delta_px=width.center - pitch.center,
+            supporting_observation_ids=(
+                observation.shared_edge_observation_id,
+            ),
+        )
+        relations[ordinal - 1] = contact
+        realized = tuple(relations)
+        prefixes = _prefixes(realized, template.count)
+        end_role_index = 2 * ordinal - 1
+        start_role_index = 2 * ordinal
+        end_role = roles[end_role_index]
+        relative = (
+            end_role.slot_index * pitch.center
+            + prefixes[end_role.slot_index]
+            + width.center
+        )
+        phase = anchor.coordinate_px - template.direction * relative
+        seeds.add(
+            _PhaseSeed(
+                phase_px=round(phase, 9),
+                pitch_px=round(pitch.center, 9),
+                required_bindings=(
+                    (end_role_index, anchor.observation_id),
+                    (start_role_index, anchor.observation_id),
+                ),
+                adjacency_relations=realized,
+            )
+        )
+    return tuple(
+        sorted(
+            seeds,
+            key=lambda item: (
+                item.phase_px,
+                item.pitch_px,
+                tuple(map(repr, item.adjacency_relations)),
+            ),
+        )
+    )
+
+
 def _prefix_intervals(
-    relations: tuple[LocalAdvanceRelation, ...],
+    relations: tuple[AdjacencyRelation, ...],
     count: int,
 ) -> tuple[FiniteInterval, ...]:
-    """Propagate each directly authorized local advance exactly once."""
+    """Propagate each directly authorized adjacency relation exactly once."""
 
     result = [FiniteInterval.exact(0.0)]
     minimum = 0.0
@@ -947,6 +1087,7 @@ def _match_roles(
     frame_width: PositiveInterval,
     fit_residual_limit_px: float | None,
     required_bindings: tuple[tuple[int, ObservationId], ...] = (),
+    adjacency_relations: tuple[AdjacencyRelation, ...] = (),
 ) -> tuple[tuple[TemplateRole, _AnchorFact], ...]:
     centers = tuple(item.coordinate_px for item in direct)
     used: set[ObservationId] = set()
@@ -962,6 +1103,14 @@ def _match_roles(
     has_both_polarities = {item.polarity for item in direct} >= {-1, 1}
     role_by_index = {item.role_index: item for item in roles}
     direct_by_id = {item.observation_id: item for item in direct}
+    contact_roles = {
+        item.shared_edge_observation_id: (
+            2 * item.relation_ordinal - 1,
+            2 * item.relation_ordinal,
+        )
+        for item in adjacency_relations
+        if isinstance(item, ContactRelation)
+    }
 
     def candidates(
         role: TemplateRole,
@@ -1063,6 +1212,8 @@ def _match_roles(
             or (
                 anchor.qualified_anchor_roles
                 and role.role not in anchor.qualified_anchor_roles
+                and role_index
+                not in contact_roles.get(anchor.observation_id, ())
             )
         ):
             return ()
@@ -1086,12 +1237,18 @@ def _match_roles(
             return ()
         ordered_group = tuple(sorted(group, key=lambda item: item[0].role_index))
         (left_role, left), (right_role, right) = ordered_group
-        if (
-            (left.observation_id, right.observation_id) not in separator_pair_ids
-            or left_role.role != BoundaryRole.END
-            or right_role.role != BoundaryRole.START
-            or right_role.slot_index != left_role.slot_index + 1
-        ):
+        is_contact = (
+            left.observation_id == right.observation_id
+            and contact_roles.get(left.observation_id)
+            == (left_role.role_index, right_role.role_index)
+        )
+        is_separator = (
+            (left.observation_id, right.observation_id) in separator_pair_ids
+            and left_role.role == BoundaryRole.END
+            and right_role.role == BoundaryRole.START
+            and right_role.slot_index == left_role.slot_index + 1
+        )
+        if not (is_contact or is_separator):
             return ()
     for role, anchor in required:
         used.add(anchor.observation_id)
@@ -1267,7 +1424,7 @@ def _linear_fit(
     width: float,
     pitch: float,
     direction: int,
-    prefixes: tuple[float, ...],
+    relations: tuple[AdjacencyRelation, ...],
     width_authority: PositiveInterval,
     pitch_authority: FiniteInterval,
     gap_authority: FiniteInterval,
@@ -1278,15 +1435,28 @@ def _linear_fit(
     straight = tuple(
         item for item in matches if item[1].line_evidence is not None
     )
+
+    def coefficients(role: TemplateRole) -> tuple[float, float, float]:
+        width_count, pitch_count, _fixed_delta = (
+            adjacency_prefix_coefficients(relations, role.slot_index)
+        )
+        return (
+            1.0,
+            float(
+                direction
+                * (width_count + int(role.role == BoundaryRole.END))
+            ),
+            float(direction * pitch_count),
+        )
+
+    def fixed_delta(role: TemplateRole) -> float:
+        return adjacency_prefix_coefficients(
+            relations,
+            role.slot_index,
+        )[2]
+
     straight_matrix = np.asarray(
-        [
-            (
-                1.0,
-                float(direction if role.role == BoundaryRole.END else 0),
-                float(direction * role.slot_index),
-            )
-            for role, _anchor in straight
-        ],
+        [coefficients(role) for role, _anchor in straight],
         dtype=np.float64,
     )
     fit_matches = (
@@ -1295,19 +1465,12 @@ def _linear_fit(
         else matches
     )
     matrix = np.asarray(
-        [
-            (
-                1.0,
-                float(direction if role.role == BoundaryRole.END else 0),
-                float(direction * role.slot_index),
-            )
-            for role, _anchor in fit_matches
-        ],
+        [coefficients(role) for role, _anchor in fit_matches],
         dtype=np.float64,
     )
     values = np.asarray(
         [
-            anchor.coordinate_px - direction * prefixes[role.slot_index]
+            anchor.coordinate_px - direction * fixed_delta(role)
             for role, anchor in fit_matches
         ],
         dtype=np.float64,
@@ -1325,12 +1488,9 @@ def _linear_fit(
         )
         phase, width, pitch, fit_basis = solution
     offsets = tuple(
-        direction
-        * (
-            role.slot_index * pitch
-            + prefixes[role.slot_index]
-            + (width if role.role == BoundaryRole.END else 0.0)
-        )
+        coefficients(role)[1] * width
+        + coefficients(role)[2] * pitch
+        + direction * fixed_delta(role)
         for role, _anchor in fit_matches
     )
     phase_values = sorted(
@@ -1546,7 +1706,7 @@ def _fit_seed(
     separator_pairs: tuple[tuple[_AnchorFact, _AnchorFact], ...],
     roles: tuple[TemplateRole, ...],
     template: TemplateSpec,
-    relations: tuple[LocalAdvanceRelation, ...],
+    relations: tuple[AdjacencyRelation, ...],
     pitch_authority: FiniteInterval,
     phase_authority: FiniteInterval | None,
     fit_residual_limit_px: float | None,
@@ -1558,6 +1718,12 @@ def _fit_seed(
     pitch = seed.pitch_px
     phase = seed.phase_px
     fit_basis = LatticeParameterFitBasis.TEMPLATE_INTERVAL_CENTER
+    relations = seed.adjacency_relations or relations
+    relations = realize_contact_relations(
+        relations,
+        frame_width_px=width,
+        pitch_px=pitch,
+    )
     prefixes = _prefixes(relations, template.count)
     matches: tuple[tuple[TemplateRole, _AnchorFact], ...] = ()
     required = set(seed.required_bindings)
@@ -1585,6 +1751,7 @@ def _fit_seed(
             frame_width=template.frame_width_px,
             fit_residual_limit_px=fit_residual_limit_px,
             required_bindings=seed.required_bindings,
+            adjacency_relations=relations,
         )
         if not updated_matches or not retains_seed_identity(updated_matches):
             return None
@@ -1593,7 +1760,7 @@ def _fit_seed(
             width=width,
             pitch=pitch,
             direction=template.direction,
-            prefixes=prefixes,
+            relations=relations,
             width_authority=template.frame_width_px,
             pitch_authority=pitch_authority,
             gap_authority=template.gap_prior_px,
@@ -1613,6 +1780,12 @@ def _fit_seed(
             break
         matches = updated_matches
         phase, width, pitch = updated_phase, updated_width, updated_pitch
+        relations = realize_contact_relations(
+            relations,
+            frame_width_px=width,
+            pitch_px=pitch,
+        )
+        prefixes = _prefixes(relations, template.count)
     residual_limit = max(3.0, width * 0.035)
     retained = tuple(
         (role, anchor)
@@ -1638,7 +1811,7 @@ def _fit_seed(
             width=width,
             pitch=pitch,
             direction=template.direction,
-            prefixes=prefixes,
+            relations=relations,
             width_authority=template.frame_width_px,
             pitch_authority=pitch_authority,
             gap_authority=template.gap_prior_px,
@@ -1649,6 +1822,12 @@ def _fit_seed(
             retained_basis,
         )
         matches = retained
+        relations = realize_contact_relations(
+            relations,
+            frame_width_px=width,
+            pitch_px=pitch,
+        )
+        prefixes = _prefixes(relations, template.count)
     if not matches:
         return None
     if not template.gap_prior_px.contains(pitch - width):
@@ -1687,7 +1866,8 @@ def _fit_seed(
     # fit uncertainty; every directly bound role keeps only its own observed
     # interval plus its fitted coordinate.  Missing roles propagate the full
     # continuous template authority: pitch uncertainty grows with the slot
-    # ordinal and a directly authorized local advance changes the suffix once.
+    # ordinal and a directly authorized adjacency relation changes the suffix
+    # once.
     uncertainty = max(1.0, min(width * 0.04, residual_mean + 1.0))
     phase_interval = FiniteInterval(phase - uncertainty, phase + uncertainty)
     prefix_intervals = _prefix_intervals(relations, template.count)
@@ -1751,9 +1931,11 @@ def _fit_seed(
                 )
             )
     direct_ids = tuple(
-        binding.observation_id
-        for binding in role_bindings
-        if binding is not None
+        dict.fromkeys(
+            binding.observation_id
+            for binding in role_bindings
+            if binding is not None
+        )
     )
     support_groups: dict[int, list[tuple[TemplateRole, _AnchorFact]]] = {}
     for role, anchor in matches:
@@ -1789,7 +1971,7 @@ def _fit_seed(
         model_role_intervals_px=tuple(role_intervals),
         model_full_role_intervals_px=tuple(role_full_intervals),
         role_bindings=tuple(role_bindings),
-        local_advance_relations=relations,
+        adjacency_relations=relations,
         contradicted_observation_count=max(0, len(direct) - len(direct_ids)),
         residual_sum_px=residual_sum,
         phase_support_coverage=phase_support_coverage,
@@ -1814,7 +1996,7 @@ def _fit_calibrated_nominal_grid_candidate(
     retained_facts: tuple[DirectRoleAuthorityFact, ...],
     direct: tuple[_AnchorFact, ...],
     template: TemplateSpec,
-    relations: tuple[LocalAdvanceRelation, ...],
+    relations: tuple[AdjacencyRelation, ...],
     phase_authority: FiniteInterval | None,
     retained_direct_constraint_rank: int,
 ) -> _BoundFit | None:
@@ -1877,9 +2059,11 @@ def _fit_calibrated_nominal_grid_candidate(
         role_full_intervals.append(full_interval)
 
     direct_ids = tuple(
-        binding.observation_id
-        for binding in role_bindings
-        if binding is not None
+        dict.fromkeys(
+            binding.observation_id
+            for binding in role_bindings
+            if binding is not None
+        )
     )
     support_by_location: dict[int, float] = {}
     for fact in retained_facts:
@@ -1920,7 +2104,7 @@ def _fit_calibrated_nominal_grid_candidate(
         model_role_intervals_px=tuple(role_intervals),
         model_full_role_intervals_px=tuple(role_full_intervals),
         role_bindings=tuple(role_bindings),
-        local_advance_relations=relations,
+        adjacency_relations=relations,
         contradicted_observation_count=max(0, len(direct) - len(direct_ids)),
         residual_sum_px=sum(
             abs(binding.canonical_position_px - canonical)
@@ -1943,7 +2127,7 @@ def project_candidate_to_authorized_direct_roles(
     separator_pairs: tuple[tuple[_AnchorFact, _AnchorFact], ...],
     roles: tuple[TemplateRole, ...],
     template: TemplateSpec,
-    relations: tuple[LocalAdvanceRelation, ...],
+    relations: tuple[AdjacencyRelation, ...],
     pitch_authority: FiniteInterval,
     phase_authority: FiniteInterval | None,
     fit_residual_limit_px: float | None,
@@ -2093,6 +2277,7 @@ def project_candidate_to_authorized_direct_roles(
             ),
             pitch_px=candidate.fit.pitch_fit.canonical_pitch_px,
             required_bindings=required_bindings,
+            adjacency_relations=relations,
         ),
         retained_direct,
         retained_pairs,
@@ -2121,8 +2306,8 @@ def project_candidate_to_authorized_direct_roles(
         projected.fit.phase_lattice_fit.integer_slot_offset
         != candidate.fit.phase_lattice_fit.integer_slot_offset
         or projected.fit.template != candidate.fit.template
-        or projected.fit.local_advance_relations
-        != candidate.fit.local_advance_relations
+        or projected.fit.adjacency_relations
+        != candidate.fit.adjacency_relations
         or projected_bindings != dict(required_bindings)
     ):
         return None, PhaseCandidateAuthorityProjection(

@@ -9,12 +9,12 @@ from x5crop.detection.photo_geometry.template_alignment_diagnostic import (
 )
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.template_model import (
-    LocalAdvanceKind,
-    LocalAdvanceRelation,
+    SeparatorRelationKind,
+    SeparatorRelation,
 )
 from x5crop.detection.photo_geometry.template_phase import (
     fit_template_phase,
-    fit_template_phase_with_local_advance,
+    fit_template_phase_with_adjacency_relations,
 )
 from x5crop.detection.photo_geometry.template_phase_model import (
     GlobalLatticeAuthorityEvidence,
@@ -86,7 +86,7 @@ class TemplateAlignmentDiagnosticContractTest(unittest.TestCase):
                 ("start:3", 280.0, BoundaryRole.START),
             )
         )
-        phase = fit_template_phase_with_local_advance(
+        phase = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=observations,
                 separator_bands=(),
@@ -158,23 +158,23 @@ class TemplateAlignmentDiagnosticContractTest(unittest.TestCase):
         )
         phase = fit_template_phase(observations, template(2))
         assert phase.best is not None
-        relation = LocalAdvanceRelation(
+        relation = SeparatorRelation(
             relation_ordinal=1,
-            kind=LocalAdvanceKind.WIDE,
+            kind=SeparatorRelationKind.WIDE,
             delta_interval_px=FiniteInterval.exact(10.0),
             canonical_delta_px=10.0,
             observation_ids=(ObservationId("start:2"), ObservationId("end:1")),
         )
         phase = replace(
             phase,
-            best=replace(phase.best, local_advance_relations=(relation,)),
+            best=replace(phase.best, adjacency_relations=(relation,)),
         )
         diagnostic = template_alignment_diagnostic(phase, observations)
         self.assertEqual(
             diagnostic.pattern,
             ResidualPattern.MEASURED_ADVANCES,
         )
-        self.assertEqual(diagnostic.local_advance_relations, (relation,))
+        self.assertEqual(diagnostic.adjacency_relations, (relation,))
 
     def test_unresolved_fit_preserves_the_minimum_reason(self) -> None:
         observations = (edge("only", 40.0),)

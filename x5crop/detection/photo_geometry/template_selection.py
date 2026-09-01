@@ -104,11 +104,14 @@ def select_lane_template_placement(
             PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS: (
                 GateGap.PHASE_PLACEMENT_AMBIGUOUS
             ),
-            PhaseFailureKind.LOCAL_ADVANCE_AMBIGUOUS: (
-                GateGap.LOCAL_ADVANCE_UNRESOLVED
+            PhaseFailureKind.ADJACENCY_RELATION_AMBIGUOUS: (
+                GateGap.ADJACENCY_RELATION_UNRESOLVED
             ),
             PhaseFailureKind.ADJACENCY_CONTINUITY_UNRESOLVED: (
                 GateGap.ADJACENCY_CONTINUITY_UNRESOLVED
+            ),
+            PhaseFailureKind.ADJACENCY_TOPOLOGY_AMBIGUOUS: (
+                GateGap.ADJACENCY_TOPOLOGY_UNRESOLVED
             ),
             PhaseFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED: (
                 GateGap.ADJACENCY_TOPOLOGY_UNRESOLVED

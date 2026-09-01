@@ -15,6 +15,7 @@ from .template_direct_role_authority import (
     DirectRoleBindingAuthority,
 )
 from .template_model import (
+    ContactRelation,
     FrameWidthInferenceAssessment,
     FrameWidthInferenceFailureKind,
     SequenceBindingUse,
@@ -34,6 +35,18 @@ _INDEPENDENT_WIDTH_ROLE_BASES = frozenset(
         DirectRoleAuthorityBasis.SEPARATOR_PAIR,
     }
 )
+
+
+def _contact_frame_ordinals(fit: SequenceFit) -> frozenset[int]:
+    return frozenset(
+        ordinal
+        for relation in fit.adjacency_relations
+        if isinstance(relation, ContactRelation)
+        for ordinal in (
+            relation.relation_ordinal,
+            relation.relation_ordinal + 1,
+        )
+    )
 
 
 class SourceFrameWidthAuthorityFailureKind(str, Enum):
@@ -227,6 +240,7 @@ def calibrate_source_frame_width(
     spans: list[
         tuple[int, FiniteInterval, tuple[ObservationId, ObservationId]]
     ] = []
+    contact_frames = _contact_frame_ordinals(fit)
     for frame_index, (start, end) in enumerate(
         zip(
             fit.role_bindings[0::2],
@@ -236,6 +250,8 @@ def calibrate_source_frame_width(
     ):
         start_index = 2 * frame_index
         end_index = start_index + 1
+        if frame_index + 1 in contact_frames:
+            continue
         start_fact = facts.get(start_index)
         end_fact = facts.get(end_index)
         if (
@@ -427,6 +443,7 @@ def _supporting_frame_ordinals(
     authority_ids: tuple[ObservationId, ...],
 ) -> tuple[int, ...]:
     registered = set(authority_ids)
+    contact_frames = _contact_frame_ordinals(fit)
     ordinals: list[int] = []
     pairs = zip(
         fit.role_bindings[0::2],
@@ -435,7 +452,8 @@ def _supporting_frame_ordinals(
     )
     for frame_ordinal, (start, end) in enumerate(pairs, start=1):
         if (
-            start is None
+            frame_ordinal in contact_frames
+            or start is None
             or end is None
             or start.evidence_group_id == end.evidence_group_id
             or start.observation_id not in registered
@@ -509,9 +527,12 @@ def _yield_local_roles_to_correlated_width(
     width_ids = set(frame_width_observation_ids)
     strong_frames: list[int] = []
     strong_observations: set[ObservationId] = set()
+    contact_frames = _contact_frame_ordinals(fit)
     for slot_index in range(fit.template.count):
         start_index = 2 * slot_index
         end_index = start_index + 1
+        if slot_index + 1 in contact_frames:
+            continue
         start = fit.role_bindings[start_index]
         end = fit.role_bindings[end_index]
         start_fact = facts.get(start_index)

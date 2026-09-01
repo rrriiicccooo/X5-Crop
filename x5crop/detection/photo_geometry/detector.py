@@ -164,7 +164,9 @@ def _empty_result(
         "source_scan_geometry": unavailable(GateGap.SOURCE_SCAN_GEOMETRY_UNAVAILABLE),
         "complete_placement": unavailable(GateGap.COMPLETE_PLACEMENT_UNAVAILABLE),
         "producer_coverage": unavailable(GateGap.PRODUCER_BOUND_EXCEEDED),
-        "local_advance_authority": unavailable(GateGap.LOCAL_ADVANCE_UNRESOLVED),
+        "adjacency_relation_authority": unavailable(
+            GateGap.ADJACENCY_RELATION_UNRESOLVED
+        ),
         "content_protection": supported(),
         "selected_placement": unavailable(GateGap.PLACEMENT_UNRESOLVED),
         "dual_lane_fill": unavailable(GateGap.DUAL_LANE_FILL_UNRESOLVED),

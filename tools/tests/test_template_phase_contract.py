@@ -31,8 +31,8 @@ from x5crop.detection.photo_geometry.observation_types import (
 from x5crop.detection.photo_geometry.template_model import (
     FrameWidthInferenceFailureKind,
     LatticeParameterFitBasis,
-    LocalAdvanceKind,
-    LocalAdvanceRelation,
+    SeparatorRelationKind,
+    SeparatorRelation,
     PhaseLatticeAuthority,
     SequenceBindingUse,
     TemplateSearchReceipt,
@@ -57,7 +57,7 @@ from x5crop.detection.photo_geometry.template_phase import (
     _same_continuous_placement,
     account_prior_phase_fit,
     fit_template_phase,
-    fit_template_phase_with_local_advance,
+    fit_template_phase_with_adjacency_relations,
 )
 from x5crop.detection.photo_geometry.template_phase_candidates import (
     _BoundFit,
@@ -80,7 +80,7 @@ from x5crop.detection.photo_geometry.template_phase_model import (
 )
 from x5crop.detection.photo_geometry.template_residual import (
     ResidualPattern,
-    derive_bounded_local_advances,
+    derive_adjacency_relations,
 )
 from x5crop.detection.photo_geometry.template_stability import (
     AnchorDependencyEffect,
@@ -177,7 +177,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             template(2),
             frame_width_px=PositiveInterval(98.0, 102.0),
         )
-        result = fit_template_phase_with_local_advance(
+        result = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=(anchor, end1, start2, end2),
                 separator_bands=(
@@ -221,7 +221,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             template(2),
             frame_width_px=PositiveInterval(99.0, 101.0),
         )
-        result = fit_template_phase_with_local_advance(
+        result = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=(
                     anchor,
@@ -550,7 +550,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             template(2),
             frame_width_px=PositiveInterval(98.0, 102.0),
         )
-        result = fit_template_phase_with_local_advance(
+        result = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=(anchor, end1, start2, end2),
                 separator_bands=(
@@ -574,9 +574,9 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
         assert result.best is not None
         self.assertEqual(result.best.phase_support_locations, (0,))
-        self.assertEqual(len(result.best.local_advance_relations), 1)
-        relation = result.best.local_advance_relations[0]
-        self.assertEqual(relation.kind, LocalAdvanceKind.WIDE)
+        self.assertEqual(len(result.best.adjacency_relations), 1)
+        relation = result.best.adjacency_relations[0]
+        self.assertEqual(relation.kind, SeparatorRelationKind.WIDE)
         self.assertEqual(relation.canonical_delta_px, 10.0)
         self.assertEqual(
             result.best.model_role_positions_px,
@@ -750,7 +750,10 @@ class TemplatePhaseContractTest(unittest.TestCase):
         bindings = list(result.best.role_bindings)
         assert bindings[1] is not None
         bindings[1] = replace(bindings[1], observation_id=duplicate)
-        with self.assertRaisesRegex(ValueError, "multiple template roles"):
+        with self.assertRaisesRegex(
+            ValueError,
+            "one observation may bind only one proven adjacent contact",
+        ):
             replace(result.best, role_bindings=tuple(bindings))
 
     def test_regular_sequence_uses_direct_phase(self) -> None:
@@ -811,7 +814,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             for identity, coordinate, role in specs
         )
 
-        result = fit_template_phase_with_local_advance(
+        result = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=observations,
                 separator_bands=(),
@@ -894,7 +897,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             for identity, coordinate, role in specs
         )
 
-        result = fit_template_phase_with_local_advance(
+        result = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=observations,
                 separator_bands=(),
@@ -966,7 +969,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             )
         )
 
-        result = fit_template_phase_with_local_advance(
+        result = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=observations,
                 separator_bands=(),
@@ -1059,7 +1062,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             )
         )
 
-        result = fit_template_phase_with_local_advance(
+        result = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=observations,
                 separator_bands=(),
@@ -1119,7 +1122,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         spec = template(2)
 
-        result = fit_template_phase_with_local_advance(
+        result = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=(start1, end1, start2, end2),
                 separator_bands=(
@@ -1188,7 +1191,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 ("end:4", 500.0, BoundaryRole.END),
             )
         )
-        result = fit_template_phase_with_local_advance(
+        result = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=observations,
                 separator_bands=(),
@@ -1770,7 +1773,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             for identity in ("start:1", "end:1", "start:2", "end:2")
         )
 
-        result = fit_template_phase_with_local_advance(
+        result = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=observations,
                 separator_bands=(),
@@ -1839,7 +1842,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 ("end:4", 500.0, BoundaryRole.END),
             )
         )
-        result = fit_template_phase_with_local_advance(
+        result = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=observations,
                 separator_bands=(),
@@ -1906,7 +1909,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 ("end:4", 500.0, BoundaryRole.END),
             )
         )
-        result = fit_template_phase_with_local_advance(
+        result = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=observations,
                 separator_bands=(
@@ -1976,7 +1979,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 ("end:4", 500.0, BoundaryRole.END),
             )
         )
-        result = fit_template_phase_with_local_advance(
+        result = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=observations,
                 separator_bands=(
@@ -2059,7 +2062,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             )
         )
 
-        result = fit_template_phase_with_local_advance(
+        result = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=observations,
                 separator_bands=(),
@@ -2113,7 +2116,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 ("start:3", 280.0, BoundaryRole.START),
             )
         )
-        result = fit_template_phase_with_local_advance(
+        result = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=observations,
                 separator_bands=(),
@@ -2163,7 +2166,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             )
             for slot in range(4)
         )
-        result = fit_template_phase_with_local_advance(
+        result = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=observations,
                 separator_bands=(),
@@ -2328,7 +2331,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             )
             for slot in range(4)
         )
-        nominal = fit_template_phase_with_local_advance(
+        nominal = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=observations,
                 separator_bands=(),
@@ -2948,7 +2951,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             evidence_state=BoundaryEvidenceState.CONTRADICTION,
         )
 
-        result = fit_template_phase_with_local_advance(
+        result = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=observations,
                 separator_bands=(conflict,),
@@ -3119,10 +3122,10 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         self.assertLess(result.best.model_role_intervals_px[8].width, 3.0)
 
-    def test_local_advance_interval_is_applied_once_to_the_suffix(self) -> None:
-        relation = LocalAdvanceRelation(
+    def test_adjacency_interval_is_applied_once_to_the_suffix(self) -> None:
+        relation = SeparatorRelation(
             relation_ordinal=1,
-            kind=LocalAdvanceKind.WIDE,
+            kind=SeparatorRelationKind.WIDE,
             delta_interval_px=FiniteInterval(18.0, 22.0),
             canonical_delta_px=20.0,
             observation_ids=(ObservationId("gap:interval"),),
@@ -3130,7 +3133,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         result = fit_template_phase(
             (edge("start", 10.0), edge("end", 110.0)),
             template(3),
-            local_advance_relations=(relation,),
+            adjacency_relations=(relation,),
         )
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
         assert result.best is not None
@@ -3262,7 +3265,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
 
         with patch(
             "x5crop.detection.photo_geometry.template_stability."
-            "fit_template_phase_with_local_advance",
+            "fit_template_phase_with_adjacency_relations",
             side_effect=capture_refit,
         ):
             leave_one_anchor_out_phase_stability(result, phase_input)
@@ -3527,9 +3530,9 @@ class TemplatePhaseContractTest(unittest.TestCase):
     def test_local_anomaly_prefix_is_transmitted_once_per_competing_fit(
         self,
     ) -> None:
-        relation = LocalAdvanceRelation(
+        relation = SeparatorRelation(
             relation_ordinal=1,
-            kind=LocalAdvanceKind.WIDE,
+            kind=SeparatorRelationKind.WIDE,
             delta_interval_px=FiniteInterval.exact(20.0),
             canonical_delta_px=20.0,
             observation_ids=(ObservationId("gap:1"),),
@@ -3541,7 +3544,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         result = fit_template_phase(
             observations,
             template(3),
-            local_advance_relations=(relation,),
+            adjacency_relations=(relation,),
         )
         self.assertEqual(result.status, PhaseFitStatus.AMBIGUOUS)
         assert result.best is not None and result.runner_up is not None
@@ -3564,7 +3567,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 (10.0, 110.0, 130.0, 230.0, 253.0, 353.0)
             )
         )
-        result = fit_template_phase_with_local_advance(
+        result = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=observations,
                 separator_bands=(
@@ -3582,7 +3585,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 phase_authority_px=None,
                 sequence_measurement_sets=(
                     phase_sequence_measurement(
-                        "wide-local-advance",
+                        "wide-adjacency-relation",
                         FiniteInterval(0.0, 400.0),
                     ),
                 ),
@@ -3601,14 +3604,17 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         anomalies = tuple(
             relation
-            for relation in result.best.local_advance_relations
+            for relation in result.best.adjacency_relations
             if relation.is_anomaly
         )
         self.assertEqual(len(anomalies), 1)
         self.assertEqual(anomalies[0].relation_ordinal, 2)
         self.assertAlmostEqual(result.best.model_role_positions_px[4], 253.0)
         self.assertAlmostEqual(result.best.model_role_positions_px[5], 353.0)
-        self.assertEqual(result.receipt.local_relation_evaluation_count, 2)
+        self.assertEqual(
+            result.receipt.adjacency_relation_evaluation_count,
+            2,
+        )
         self.assertEqual(result.receipt.fit_pass_count, 2)
 
     def test_direct_narrow_separator_uses_the_same_single_suffix_relation(self) -> None:
@@ -3618,7 +3624,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 (10.0, 110.0, 127.0, 227.0, 247.0, 347.0)
             )
         )
-        result = fit_template_phase_with_local_advance(
+        result = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=observations,
                 separator_bands=(
@@ -3636,7 +3642,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 phase_authority_px=None,
                 sequence_measurement_sets=(
                     phase_sequence_measurement(
-                        "narrow-local-advance",
+                        "narrow-adjacency-relation",
                         FiniteInterval(0.0, 400.0),
                     ),
                 ),
@@ -3647,11 +3653,11 @@ class TemplatePhaseContractTest(unittest.TestCase):
         assert result.best is not None
         anomalies = tuple(
             relation
-            for relation in result.best.local_advance_relations
+            for relation in result.best.adjacency_relations
             if relation.is_anomaly
         )
         self.assertEqual(len(anomalies), 1)
-        self.assertEqual(anomalies[0].kind, LocalAdvanceKind.NARROW)
+        self.assertEqual(anomalies[0].kind, SeparatorRelationKind.NARROW)
         self.assertEqual(anomalies[0].relation_ordinal, 1)
         self.assertAlmostEqual(result.best.model_role_positions_px[2], 127.0)
         self.assertAlmostEqual(result.best.model_role_positions_px[4], 247.0)
@@ -3673,7 +3679,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             polarity=1,
             qualified_anchor_roles=(BoundaryRole.END,),
         )
-        result = fit_template_phase_with_local_advance(
+        result = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=tuple(observations),
                 separator_bands=(
@@ -3812,7 +3818,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 FiniteInterval(22.8, 23.2),
             ),
         )
-        analysis = derive_bounded_local_advances(
+        analysis = derive_adjacency_relations(
             fit,
             _continuity_for_residual(fit, nominal_edges, bands),
         )
@@ -3823,7 +3829,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(analysis.anomaly_ordinals, (1, 2))
         self.assertEqual(
             tuple(item.kind for item in analysis.relations),
-            (LocalAdvanceKind.WIDE, LocalAdvanceKind.WIDE),
+            (SeparatorRelationKind.WIDE, SeparatorRelationKind.WIDE),
         )
         self.assertIsNone(analysis.unresolved_reason)
         self.assertEqual(analysis.evaluated_adjacency_count, 2)
@@ -3840,7 +3846,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         overlap = list(regular)
         overlap[2] = edge("edge:contact:2", 105.0)
 
-        analysis = derive_bounded_local_advances(
+        analysis = derive_adjacency_relations(
             fit,
             _continuity_for_residual(fit, tuple(overlap), ()),
         )
@@ -3867,7 +3873,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             )
             for index in range(3)
         )
-        analysis = derive_bounded_local_advances(
+        analysis = derive_adjacency_relations(
             fit,
             _continuity_for_residual(fit, regular, bands),
         )
@@ -3877,7 +3883,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         self.assertEqual(len(analysis.relations), 3)
         self.assertTrue(all(item.is_anomaly for item in analysis.relations))
-        result = fit_template_phase_with_local_advance(
+        result = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=regular,
                 separator_bands=bands,
@@ -3890,7 +3896,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
         assert result.best is not None
-        self.assertEqual(len(result.best.local_advance_relations), 3)
+        self.assertEqual(len(result.best.adjacency_relations), 3)
 
     def test_bound_overflow_is_explicit_and_receipt_cannot_be_overstated(self) -> None:
         result = fit_template_phase(
@@ -3916,7 +3922,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             role_count=2,
             phase_lookup_count=4,
             role_binding_count=4,
-            local_relation_evaluation_count=0,
+            adjacency_relation_evaluation_count=0,
             local_refinement_lookup_count=0,
             local_refinement_binding_count=0,
             phase_hypothesis_count=4,

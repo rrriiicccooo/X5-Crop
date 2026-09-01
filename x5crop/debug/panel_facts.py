@@ -271,6 +271,7 @@ def alignment_summary(detection: FinalDetection) -> str:
             )
             for kind in (
                 "separator_material",
+                "contact",
                 "no_counterevidence_observed",
                 "normal_separator_counterevidence",
                 "separator_material_unresolved",
@@ -278,6 +279,10 @@ def alignment_summary(detection: FinalDetection) -> str:
                 "coverage_incomplete",
             )
         }
+        selected_contacts = sum(
+            relation.kind.value == "contact"
+            for relation in diagnostic.adjacency_relations
+        )
         direct = diagnostic.direct_role_binding_authority
         direct_supported = (
             0
@@ -386,6 +391,7 @@ def alignment_summary(detection: FinalDetection) -> str:
             f"GLOBAL {rank}/3 · NOMINAL {nominal_proof} · ADJ "
             f"{complete_coverage}/{len(inferred_coverage)} · CONT "
             f"S{continuity_counts['separator_material']} "
+            f"C{continuity_counts['contact']} "
             f"N{continuity_counts['no_counterevidence_observed']} "
             f"X{continuity_counts['normal_separator_counterevidence']} "
             f"M{continuity_counts['separator_material_unresolved']} "
@@ -399,7 +405,10 @@ def alignment_summary(detection: FinalDetection) -> str:
             f"D {separator_counts['dark'][0]}/{separator_counts['dark'][1]}"
             f" C{separator_counts['dark'][2]} "
             f"L {separator_counts['light'][0]}/{separator_counts['light'][1]}"
-            f" C{separator_counts['light'][2]} · JOINT "
+            f" C{separator_counts['light'][2]} · CONTACT "
+            f"{selected_contacts}/"
+            f"{len(lane.prepared.phase_input.contact_edge_observations)} · "
+            f"JOINT "
             f"B{joint_authority} S{joint_standalone}/{joint_total} "
             f"A{joint_ambiguous} "
             f"U{joint_unavailable} P{joint_separator} · BROAD "
@@ -468,7 +477,7 @@ def selected_output_safety_summary(detection: FinalDetection) -> str:
     )
     sequence_bleed = max(
         (
-            item.bleed_px
+            item.base_bleed_px
             for item in protections
             if item.role.value in {"start", "end"}
         ),
@@ -476,11 +485,18 @@ def selected_output_safety_summary(detection: FinalDetection) -> str:
     )
     cross_bleed = max(
         (
-            item.bleed_px
+            item.base_bleed_px
             for item in protections
             if item.role.value in {"top", "bottom"}
         ),
         default=0.0,
+    )
+    topology_protection = max(
+        (item.topology_protection_px for item in protections),
+        default=0.0,
+    )
+    topology_side_count = sum(
+        item.topology_relation_id is not None for item in protections
     )
     maximum = "N/A" if not ratios else f"{100.0 * max(ratios):.1f}%"
     source_saturations = tuple(
@@ -509,7 +525,9 @@ def selected_output_safety_summary(detection: FinalDetection) -> str:
     return (
         f"SELECTED OUTPUT SAFETY · {uses} · JOINT {measurement:.1f}px · "
         f"RESIDUAL {residual:.1f}px · BLEED S{sequence_bleed:.1f}/"
-        f"C{cross_bleed:.1f}px · MAX 5% BUDGET USE {maximum}{saturation}"
+        f"C{cross_bleed:.1f}px · TOPOLOGY {topology_protection:.1f}px/"
+        f"{topology_side_count} SIDES · MAX 5% BUDGET USE {maximum}"
+        f"{saturation}"
     )
 
 

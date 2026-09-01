@@ -444,7 +444,7 @@ def refine_placement_pitch_interval(
 
     Farthest START-to-START and END-to-END advances cancel fixed frame width.
     At most two relations are evaluated in one O(R) pass.  A relation that
-    disagrees with the selected base pitch is left to bounded local-advance
+    disagrees with the selected base pitch is left to bounded adjacency
     analysis instead of rejecting or recalibrating the placement here.
     """
 

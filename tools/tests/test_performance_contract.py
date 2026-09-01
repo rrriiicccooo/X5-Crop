@@ -321,7 +321,7 @@ class V5PerformanceContractTest(unittest.TestCase):
         self.assertEqual(output.strip(), "profile-child")
         self.assertGreater(peak, 0)
 
-    def test_diagnostic_local_relations_are_bounded_by_template_adjacencies(
+    def test_diagnostic_adjacency_relations_are_bounded_by_template_adjacencies(
         self,
     ) -> None:
         work = {field: 0 for field in WORK_FIELDS}
@@ -330,7 +330,7 @@ class V5PerformanceContractTest(unittest.TestCase):
             phase_fit_pass_count=2,
             phase_role_lookup_count=4,
             phase_role_binding_count=24,
-            local_relation_evaluation_count=4,
+            adjacency_relation_evaluation_count=4,
             local_refinement_lookup_count=6,
             local_refinement_binding_count=3,
             domain_pixels=100,
@@ -346,7 +346,7 @@ class V5PerformanceContractTest(unittest.TestCase):
         }
 
         self.assertTrue(bounded_work(report, source_pixels=100))
-        work["local_relation_evaluation_count"] = 5
+        work["adjacency_relation_evaluation_count"] = 5
         self.assertFalse(bounded_work(report, source_pixels=100))
 
 

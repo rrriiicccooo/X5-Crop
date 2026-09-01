@@ -10,10 +10,12 @@ from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInte
 from .measurement_model import PhotoBoundaryMeasurementSet
 from .model import BoundaryRole, PHOTO_BOUNDARY_MEASUREMENT_SPEC
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
+from .template_contact import ContactEdgeObservation
 from .template_model import (
+    AdjacencyRelation,
+    ContactRelation,
     FrameWidthInferenceFailureKind,
     LatticeParameterFitBasis,
-    LocalAdvanceRelation,
     SequenceFit,
     SequenceRoleBinding,
     TemplateSearchReceipt,
@@ -25,6 +27,7 @@ from .template_phase_candidates import (
     _BoundFit,
     _PhaseSeed,
     _clear_winner_basis,
+    _contact_phase_seeds,
     _facts,
     _fit_seed,
     _holder_limits,
@@ -86,6 +89,16 @@ from .template_nominal_grid_model import (
 def _intervals_overlap(left: FiniteInterval, right: FiniteInterval) -> bool:
     return not (
         left.maximum < right.minimum or right.maximum < left.minimum
+    )
+
+
+def _contact_topology_signature(
+    fit: SequenceFit,
+) -> tuple[tuple[int, ObservationId], ...]:
+    return tuple(
+        (relation.relation_ordinal, relation.contact_observation_id)
+        for relation in fit.adjacency_relations
+        if isinstance(relation, ContactRelation)
     )
 
 
@@ -187,13 +200,28 @@ def _continuous_role_bindings(
             merged.append(left_binding)
         else:
             return None
-    identities = tuple(
-        binding.observation_id
-        for binding in merged
-        if binding is not None
-    )
-    if len(set(identities)) != len(identities):
-        return None
+    roles_by_observation: dict[ObservationId, list[int]] = {}
+    for role_index, binding in enumerate(merged):
+        if binding is not None:
+            roles_by_observation.setdefault(
+                binding.observation_id,
+                [],
+            ).append(role_index)
+    contacts = {
+        item.shared_edge_observation_id: item
+        for item in left.adjacency_relations
+        if isinstance(item, ContactRelation)
+    }
+    for identity, role_indices in roles_by_observation.items():
+        if len(role_indices) == 1:
+            continue
+        contact = contacts.get(identity)
+        expected = (
+            2 * contact.relation_ordinal - 1,
+            2 * contact.relation_ordinal,
+        ) if contact is not None else ()
+        if tuple(role_indices) != expected:
+            return None
     return tuple(merged)
 
 
@@ -226,7 +254,7 @@ def _same_continuous_placement(
         == right.calibrated_nominal_grid_fit_state
         and left.phase_lattice_fit.integer_slot_offset
         == right.phase_lattice_fit.integer_slot_offset
-        and left.local_advance_relations == right.local_advance_relations
+        and left.adjacency_relations == right.adjacency_relations
         and merged_bindings is not None
         and _intervals_overlap(
             left.phase_lattice_fit.absolute_phase_interval_px,
@@ -271,9 +299,11 @@ def _merge_continuous_placement(
     if role_bindings is None:
         raise ValueError("continuous phase bindings cannot be combined")
     observation_ids = tuple(
-        binding.observation_id
-        for binding in role_bindings
-        if binding is not None
+        dict.fromkeys(
+            binding.observation_id
+            for binding in role_bindings
+            if binding is not None
+        )
     )
     left_direct_count = (
         left.contradicted_observation_count + len(left.bound_observation_ids)
@@ -362,7 +392,8 @@ def fit_template_phase(
     scale_px_per_mm: PositiveInterval | float | None = None,
     holder_span_px: FiniteInterval | None = None,
     phase_authority_px: FiniteInterval | None = None,
-    local_advance_relations: Sequence[LocalAdvanceRelation] = (),
+    adjacency_relations: Sequence[AdjacencyRelation] = (),
+    contact_edge_observations: Sequence[ContactEdgeObservation] = (),
     sequence_measurement_sets: Sequence[PhotoBoundaryMeasurementSet] = (),
     calibrated_nominal_grid_prior: CalibratedNominalGridPrior | None = None,
     max_observations: int = 512,
@@ -393,13 +424,19 @@ def fit_template_phase(
         maximum_material_gap_px=template.gap_prior_px.maximum,
     )
     roles = ordered_template_roles(template.count)
-    relations = _relations(local_advance_relations, template.count)
+    relations = _relations(adjacency_relations, template.count)
+    contact_edges = tuple(contact_edge_observations)
+    if any(
+        not isinstance(item, ContactEdgeObservation)
+        for item in contact_edges
+    ):
+        raise TypeError("phase contact observations must be typed")
     base = TemplateSearchReceipt(
         observation_count=len(facts),
         role_count=len(roles),
         phase_lookup_count=0,
         role_binding_count=0,
-        local_relation_evaluation_count=len(relations),
+        adjacency_relation_evaluation_count=len(relations),
         local_refinement_lookup_count=0,
         local_refinement_binding_count=0,
         phase_hypothesis_count=0,
@@ -467,10 +504,13 @@ def fit_template_phase(
         + prefixes[-1]
     )
     span_window = max(3.0, pitch0 * 0.35)
-    seed_values: dict[tuple[float, float], _PhaseSeed | None] = {}
+    seed_values: dict[
+        tuple[float, float, tuple[AdjacencyRelation, ...]],
+        _PhaseSeed | None,
+    ] = {}
 
     def register_seed(seed: _PhaseSeed) -> None:
-        key = (seed.phase_px, seed.pitch_px)
+        key = (seed.phase_px, seed.pitch_px, seed.adjacency_relations)
         if key not in seed_values:
             seed_values[key] = seed
             return
@@ -479,39 +519,59 @@ def fit_template_phase(
             return
         merged = set(current.required_bindings) | set(seed.required_bindings)
         role_to_observation: dict[int, ObservationId] = {}
-        observation_to_role: dict[ObservationId, int] = {}
         for role_index, observation_id in merged:
             if (
                 role_index in role_to_observation
                 and role_to_observation[role_index] != observation_id
-                or observation_id in observation_to_role
-                and observation_to_role[observation_id] != role_index
             ):
                 seed_values[key] = None
                 return
             role_to_observation[role_index] = observation_id
-            observation_to_role[observation_id] = role_index
-        seed_values[key] = _PhaseSeed(
-            seed.phase_px,
-            seed.pitch_px,
-            tuple(sorted(merged, key=lambda item: (item[0], str(item[1])))),
-        )
+        try:
+            seed_values[key] = _PhaseSeed(
+                seed.phase_px,
+                seed.pitch_px,
+                tuple(
+                    sorted(merged, key=lambda item: (item[0], str(item[1])))
+                ),
+                seed.adjacency_relations,
+            )
+        except ValueError:
+            seed_values[key] = None
 
-    for seed in _separator_phase_seeds(
-            phase_separator_bands,
+    existing_contact = any(
+        isinstance(item, ContactRelation) for item in relations
+    )
+    ordinary_topology = not existing_contact
+    if ordinary_topology:
+        for seed in _separator_phase_seeds(
+                phase_separator_bands,
+                direct,
+                roles,
+                template,
+                width=width0,
+                pitch=pitch0,
+                prefixes=prefixes,
+            ):
+            register_seed(replace(seed, adjacency_relations=relations))
+    if not relations or existing_contact:
+        for seed in _contact_phase_seeds(
+            contact_edges,
             direct,
             roles,
             template,
-            width=width0,
-            pitch=pitch0,
-            prefixes=prefixes,
+            width=width,
+            pitch=pitch_authority,
+            base_relations=relations,
         ):
-        register_seed(seed)
+            register_seed(seed)
     # Count-one templates have no pitch relation.  Their START and END seeds
     # already close the fixed-width pair below; treating every nearby END as a
     # second full-span origin would merge distinct physical edge alternatives
     # into one seed identity.
-    if template.count == 1:
+    if not ordinary_topology:
+        pass
+    elif template.count == 1:
         pass
     elif template.direction > 0:
         for first in direct:
@@ -546,6 +606,7 @@ def fit_template_phase(
                             (roles[0].role_index, first.observation_id),
                             (roles[-1].role_index, last.observation_id),
                         ),
+                        relations,
                     )
                 )
     else:
@@ -581,6 +642,7 @@ def fit_template_phase(
                             (roles[0].role_index, first.observation_id),
                             (roles[-1].role_index, last.observation_id),
                         ),
+                        relations,
                     )
                 )
     # Missing or dark outer frames are common.  A direct role-qualified edge
@@ -588,7 +650,7 @@ def fit_template_phase(
     # remains the phase authority; the template contributes only the finite
     # ordinal alternatives.  Different ordinal mappings survive as discrete
     # placements and can never be averaged or selected by coarse support.
-    for anchor in direct:
+    for anchor in direct if ordinary_topology else ():
         for role in roles:
             if anchor.role_index is not None and anchor.role_index != role.role_index:
                 continue
@@ -609,13 +671,15 @@ def fit_template_phase(
                     ),
                     round(pitch0, 9),
                     ((role.role_index, anchor.observation_id),),
+                    relations,
                 )
             )
-    if phase_authority_px is not None:
+    if phase_authority_px is not None and ordinary_topology:
         register_seed(
             _PhaseSeed(
                 round(phase_authority_px.center, 9),
                 round(pitch0, 9),
+                adjacency_relations=relations,
             )
         )
     seeds = tuple(
@@ -630,7 +694,7 @@ def fit_template_phase(
             role_count=len(roles),
             phase_lookup_count=len(seeds),
             role_binding_count=0,
-            local_relation_evaluation_count=len(relations),
+            adjacency_relation_evaluation_count=len(relations),
             local_refinement_lookup_count=0,
             local_refinement_binding_count=0,
             phase_hypothesis_count=len(seeds),
@@ -659,7 +723,7 @@ def fit_template_phase(
                 separator_pairs,
                 roles,
                 template,
-                relations,
+                seed.adjacency_relations,
                 pitch_authority,
                 phase_authority_px,
                 fit_residual_limit_px,
@@ -669,6 +733,7 @@ def fit_template_phase(
                 key=lambda item: (
                     item.phase_px,
                     item.pitch_px,
+                    tuple(map(repr, item.adjacency_relations)),
                     tuple(
                         (role_index, str(observation_id))
                         for role_index, observation_id in item.required_bindings
@@ -697,13 +762,18 @@ def fit_template_phase(
         )
     )
     by_binding: dict[
-        tuple[int, tuple[ObservationId | None, ...]],
+        tuple[
+            int,
+            tuple[ObservationId | None, ...],
+            tuple[AdjacencyRelation, ...],
+        ],
         _BoundFit,
     ] = {}
     for candidate in local_candidates:
         key = (
             candidate.fit.phase_lattice_fit.integer_slot_offset,
             candidate.fit.binding_observation_ids,
+            candidate.fit.adjacency_relations,
         )
         current = by_binding.get(key)
         if current is None or _rank(candidate) > _rank(current):
@@ -734,7 +804,7 @@ def fit_template_phase(
                     separator_pairs,
                     roles,
                     template,
-                    relations,
+                    candidate.fit.adjacency_relations,
                     pitch_authority,
                     phase_authority_px,
                     fit_residual_limit_px,
@@ -792,7 +862,11 @@ def fit_template_phase(
         )
 
     projected_by_binding: dict[
-        tuple[int, tuple[ObservationId | None, ...]],
+        tuple[
+            int,
+            tuple[ObservationId | None, ...],
+            tuple[AdjacencyRelation, ...],
+        ],
         tuple[_BoundFit, PhaseCandidateAuthorityProjection | None],
     ] = {}
     for record in eligible_records:
@@ -800,6 +874,7 @@ def fit_template_phase(
         key = (
             candidate.fit.phase_lattice_fit.integer_slot_offset,
             candidate.fit.binding_observation_ids,
+            candidate.fit.adjacency_relations,
         )
         current = projected_by_binding.get(key)
         if current is None or record_rank(record) > record_rank(current):
@@ -838,7 +913,7 @@ def fit_template_phase(
         role_count=len(roles),
         phase_lookup_count=len(seeds),
         role_binding_count=len(seeds) * len(roles),
-        local_relation_evaluation_count=len(relations),
+        adjacency_relation_evaluation_count=len(relations),
         local_refinement_lookup_count=0,
         local_refinement_binding_count=0,
         phase_hypothesis_count=len(seeds),
@@ -1036,12 +1111,27 @@ def fit_template_phase(
         failure_kind = None
     else:
         status = PhaseFitStatus.AMBIGUOUS
+        contact_topology_ambiguous = (
+            runner is not None
+            and _contact_topology_signature(best.fit)
+            != _contact_topology_signature(runner.fit)
+            and bool(
+                _contact_topology_signature(best.fit)
+                or _contact_topology_signature(runner.fit)
+            )
+        )
         reason = (
-            "higher-support direct evidence contradicts the selected fixed template"
+            "multiple physically legal contact topologies remain"
+            if contact_topology_ambiguous
+            else "higher-support direct evidence contradicts the selected fixed template"
             if contradictory_runner is not None
             else "runner-up is not clearly separated from the best template"
         )
-        failure_kind = PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS
+        failure_kind = (
+            PhaseFailureKind.ADJACENCY_TOPOLOGY_AMBIGUOUS
+            if contact_topology_ambiguous
+            else PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS
+        )
     return PhaseFitResult(
         template,
         best.fit,
@@ -1060,7 +1150,7 @@ def fit_template_phase(
 def _aggregate_phase_work(
     result: PhaseFitResult,
     *prior: TemplateSearchReceipt,
-    local_relation_evaluation_count: int | None = None,
+    adjacency_relation_evaluation_count: int | None = None,
 ) -> PhaseFitResult:
     receipts = (*prior, result.receipt)
     receipt = TemplateSearchReceipt(
@@ -1068,10 +1158,13 @@ def _aggregate_phase_work(
         role_count=result.receipt.role_count,
         phase_lookup_count=sum(item.phase_lookup_count for item in receipts),
         role_binding_count=sum(item.role_binding_count for item in receipts),
-        local_relation_evaluation_count=(
-            sum(item.local_relation_evaluation_count for item in receipts)
-            if local_relation_evaluation_count is None
-            else local_relation_evaluation_count
+        adjacency_relation_evaluation_count=(
+            sum(
+                item.adjacency_relation_evaluation_count
+                for item in receipts
+            )
+            if adjacency_relation_evaluation_count is None
+            else adjacency_relation_evaluation_count
         ),
         local_refinement_lookup_count=sum(
             item.local_refinement_lookup_count for item in receipts
@@ -1600,13 +1693,15 @@ def _apply_final_lattice_contract(
     return result
 
 
-def fit_template_phase_candidate_with_local_advance(
+def fit_template_phase_candidate_with_adjacency_relations(
     phase_input: TemplatePhaseInput,
 ) -> TemplatePhaseCandidateCompetition:
     """Resolve discrete/local competition before selected-only source W."""
 
     if not isinstance(phase_input, TemplatePhaseInput):
-        raise TypeError("local-advance phase fit requires TemplatePhaseInput")
+        raise TypeError(
+            "adjacency-relation phase fit requires TemplatePhaseInput"
+        )
     observations = phase_input.observations
     separator_bands = phase_input.separator_bands
     template = phase_input.template
@@ -1622,6 +1717,7 @@ def fit_template_phase_candidate_with_local_advance(
         scale_px_per_mm=scale_px_per_mm,
         holder_span_px=holder_span_px,
         phase_authority_px=phase_authority_px,
+        contact_edge_observations=phase_input.contact_edge_observations,
         sequence_measurement_sets=phase_input.sequence_measurement_sets,
         calibrated_nominal_grid_prior=(
             phase_input.calibrated_nominal_grid_prior
@@ -1645,8 +1741,8 @@ def fit_template_phase_candidate_with_local_advance(
     # Import here keeps the residual owner dependent on the canonical phase
     # types without creating a module import cycle.
     from .template_residual import (
-        LocalAdvanceFailureKind,
-        derive_bounded_local_advances,
+        AdjacencyRelationFailureKind,
+        derive_adjacency_relations,
     )
 
     initial_coverage = assess_adjacency_observation_coverage(
@@ -1665,7 +1761,7 @@ def fit_template_phase_candidate_with_local_advance(
         initial_coverage,
     )
 
-    analysis = derive_bounded_local_advances(
+    analysis = derive_adjacency_relations(
         normal.best,
         continuity,
     )
@@ -1680,16 +1776,16 @@ def fit_template_phase_candidate_with_local_advance(
             failure_kind=(
                 PhaseFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED
                 if analysis.failure_kind
-                == LocalAdvanceFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED
+                == AdjacencyRelationFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED
                 else PhaseFailureKind.ADJACENCY_CONTINUITY_UNRESOLVED
                 if analysis.failure_kind
-                == LocalAdvanceFailureKind.ADJACENCY_CONTINUITY_UNRESOLVED
-                else PhaseFailureKind.LOCAL_ADVANCE_AMBIGUOUS
+                == AdjacencyRelationFailureKind.ADJACENCY_CONTINUITY_UNRESOLVED
+                else PhaseFailureKind.ADJACENCY_RELATION_AMBIGUOUS
             ),
             winner_basis=None,
             receipt=replace(
                 normal.receipt,
-                local_relation_evaluation_count=(
+                adjacency_relation_evaluation_count=(
                     analysis.evaluated_adjacency_count
                 ),
             ),
@@ -1708,7 +1804,7 @@ def fit_template_phase_candidate_with_local_advance(
             normal,
             receipt=replace(
                 normal.receipt,
-                local_relation_evaluation_count=(
+                adjacency_relation_evaluation_count=(
                     analysis.evaluated_adjacency_count
                 ),
             ),
@@ -1729,7 +1825,8 @@ def fit_template_phase_candidate_with_local_advance(
         scale_px_per_mm=scale_px_per_mm,
         holder_span_px=holder_span_px,
         phase_authority_px=phase_authority_px,
-        local_advance_relations=analysis.relations,
+        adjacency_relations=analysis.relations,
+        contact_edge_observations=phase_input.contact_edge_observations,
         sequence_measurement_sets=phase_input.sequence_measurement_sets,
         calibrated_nominal_grid_prior=(
             phase_input.calibrated_nominal_grid_prior
@@ -1746,7 +1843,9 @@ def fit_template_phase_candidate_with_local_advance(
     adjusted = _aggregate_phase_work(
         adjusted,
         normal.receipt,
-        local_relation_evaluation_count=analysis.evaluated_adjacency_count,
+        adjacency_relation_evaluation_count=(
+            analysis.evaluated_adjacency_count
+        ),
     )
     assessed = _attach_selected_candidate_authorities(
         adjusted,
@@ -1781,12 +1880,14 @@ def finalize_template_phase_candidate(
     )
 
 
-def fit_template_phase_with_local_advance(
+def fit_template_phase_with_adjacency_relations(
     phase_input: TemplatePhaseInput,
 ) -> PhaseFitResult:
     """Run canonical candidate competition and final lattice assessment."""
 
-    candidate = fit_template_phase_candidate_with_local_advance(phase_input)
+    candidate = fit_template_phase_candidate_with_adjacency_relations(
+        phase_input
+    )
     return finalize_template_phase_candidate(
         candidate,
         phase_input,

@@ -10,6 +10,21 @@ from tools.regression.diagnostic_cohort import (
 from tools.regression.report_validation import validate_output_footprint_authority
 
 
+def _boundary_protections():
+    return [
+        {
+            "role": role,
+            "measurement_expansion_px": 0.0,
+            "base_bleed_px": 0.0,
+            "topology_protection_px": 0.0,
+            "topology_relation_id": None,
+            "local_boundary_residual_px": 0.0,
+            "joint_expansion_px": 0.0,
+        }
+        for role in ("start", "end", "top", "bottom")
+    ]
+
+
 class CurrentRuntimeContractTest(unittest.TestCase):
     def test_diagnostic_cohort_schema_is_current_and_complete(self) -> None:
         self.assertEqual(RECORD_SCHEMA, "x5crop_diagnostic_record_v5")
@@ -45,6 +60,7 @@ class CurrentRuntimeContractTest(unittest.TestCase):
                 "right": 100,
                 "bottom": 100,
             },
+            "boundary_protections": _boundary_protections(),
             "saturation_facts": [
                 {
                     "authority_side": "left",
@@ -85,6 +101,7 @@ class CurrentRuntimeContractTest(unittest.TestCase):
                 "right": 100,
                 "bottom": 100,
             },
+            "boundary_protections": _boundary_protections(),
             "saturation_facts": [
                 {
                     "authority_side": "left",
@@ -130,6 +147,7 @@ class CurrentRuntimeContractTest(unittest.TestCase):
                 "right": 100,
                 "bottom": 100,
             },
+            "boundary_protections": _boundary_protections(),
             "saturation_facts": [],
         }
 
@@ -198,7 +216,7 @@ class CurrentRuntimeContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_ID, "x5crop_detection_report_v5")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "x5crop_v5_template_report_34",
+            "x5crop_v5_template_report_35",
         )
         candidate = candidate_gate_assessment(
             {

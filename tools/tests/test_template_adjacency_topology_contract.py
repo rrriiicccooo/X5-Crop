@@ -19,15 +19,17 @@ from x5crop.detection.photo_geometry.template_adjacency_topology import (
     AdjacencyContinuityKind,
     observe_adjacency_continuity,
 )
+from x5crop.detection.photo_geometry.template_contact import observe_contact_edges
 from x5crop.detection.photo_geometry.model import BoundaryEvidenceState
 from x5crop.detection.photo_geometry.observation_types import (
     SeparatorMaterialRegionState,
 )
 from x5crop.detection.photo_geometry.template_residual import (
-    LocalAdvanceFailureKind,
+    AdjacencyRelationFailureKind,
     ResidualPattern,
-    derive_bounded_local_advances,
+    derive_adjacency_relations,
 )
+from x5crop.detection.photo_geometry.template_phase import fit_template_phase
 from x5crop.domain import EvidenceState, FiniteInterval
 
 
@@ -63,7 +65,61 @@ def _observe(
     )
 
 
+def _contact_fit():
+    edges = _edges(100.0, 200.0, 300.0)
+    measurement = phase_sequence_measurement(
+        "contact-candidate",
+        FiniteInterval(0.0, 320.0),
+    )
+    contacts = observe_contact_edges(edges, (), (measurement,))
+    result = fit_template_phase(
+        edges,
+        phase_template(2),
+        contact_edge_observations=contacts,
+    )
+    assert result.best is not None
+    return result.best, edges
+
+
 class TemplateAdjacencyTopologyContractTests(unittest.TestCase):
+    def test_selected_shared_edge_is_typed_contact(self) -> None:
+        fit, edges = _contact_fit()
+
+        (observation,) = _observe(fit, edges)
+        analysis = derive_adjacency_relations(fit, (observation,))
+
+        self.assertEqual(observation.state, EvidenceState.SUPPORTED)
+        self.assertEqual(observation.kind, AdjacencyContinuityKind.CONTACT)
+        self.assertEqual(
+            observation.basis,
+            AdjacencyContinuityBasis.SHARED_PHYSICAL_EDGE,
+        )
+        self.assertEqual(
+            observation.end_observation_id,
+            observation.next_start_observation_id,
+        )
+        self.assertEqual(
+            observation.signed_gap_interval_px,
+            FiniteInterval.exact(0.0),
+        )
+        self.assertEqual(analysis.pattern, ResidualPattern.MEASURED_ADVANCES)
+        self.assertEqual(analysis.relations, fit.adjacency_relations)
+
+    def test_contact_requires_complete_registered_corridor(self) -> None:
+        fit, edges = _contact_fit()
+
+        (observation,) = _observe(fit, edges, complete=False)
+
+        self.assertEqual(observation.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(
+            observation.kind,
+            AdjacencyContinuityKind.COVERAGE_INCOMPLETE,
+        )
+        self.assertEqual(
+            observation.failure_kind,
+            AdjacencyContinuityFailureKind.REGISTERED_COVERAGE_INCOMPLETE,
+        )
+
     def test_unique_positive_material_band_supports_normal_separator(self) -> None:
         fit = placement_sequence(phase_template(2))
         edges = _edges(100.0, 200.0, 220.0, 320.0)
@@ -175,7 +231,7 @@ class TemplateAdjacencyTopologyContractTests(unittest.TestCase):
         edges = _edges(100.0, 200.0, 195.0, 295.0)
 
         (observation,) = _observe(fit, edges)
-        analysis = derive_bounded_local_advances(fit, (observation,))
+        analysis = derive_adjacency_relations(fit, (observation,))
 
         self.assertEqual(observation.state, EvidenceState.CONTRADICTED)
         self.assertEqual(
@@ -189,7 +245,7 @@ class TemplateAdjacencyTopologyContractTests(unittest.TestCase):
         self.assertEqual(analysis.pattern, ResidualPattern.UNRESOLVED)
         self.assertEqual(
             analysis.failure_kind,
-            LocalAdvanceFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED,
+            AdjacencyRelationFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED,
         )
 
     def test_material_unavailable_cannot_hide_reversed_direct_edges(self) -> None:

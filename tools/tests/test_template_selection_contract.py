@@ -118,7 +118,7 @@ class TemplateSelectionContractTest(unittest.TestCase):
                 "selected_placement": (
                     "complete_placement",
                     "content_protection",
-                    "local_advance_authority",
+                    "adjacency_relation_authority",
                 ),
                 "dual_lane_fill": ("selected_placement",),
                 "selected_output_footprint": (
@@ -184,7 +184,7 @@ class TemplateSelectionContractTest(unittest.TestCase):
             code: TypedAssessment(EvidenceState.SUPPORTED, None)
             for code in CANDIDATE_GATE_CHECK_CODES
         }
-        facts["local_advance_authority"] = TypedAssessment(
+        facts["adjacency_relation_authority"] = TypedAssessment(
             EvidenceState.UNAVAILABLE,
             GateGap.ADJACENCY_TOPOLOGY_UNRESOLVED,
             competition.failure,
@@ -193,6 +193,33 @@ class TemplateSelectionContractTest(unittest.TestCase):
         self.assertEqual(
             decision.final_review_reasons,
             ("adjacency_topology_unresolved",),
+        )
+
+    def test_competing_contact_topologies_keep_the_topology_gate_reason(
+        self,
+    ) -> None:
+        phase, cross, placement = _resolved()
+        phase = replace(
+            phase,
+            status=PhaseFitStatus.AMBIGUOUS,
+            ambiguity_reason="multiple contact ordinals remain legal",
+            failure_kind=PhaseFailureKind.ADJACENCY_TOPOLOGY_AMBIGUOUS,
+            winner_basis=None,
+        )
+
+        competition = select_lane_template_placement(
+            lane_id="lane:0",
+            best=placement,
+            runner_up=None,
+            phase=phase,
+            cross=cross,
+            content_assessment=None,
+        )
+
+        assert competition.failure is not None
+        self.assertEqual(
+            competition.failure.gap,
+            GateGap.ADJACENCY_TOPOLOGY_UNRESOLVED,
         )
 
     def test_adjacency_continuity_failure_has_one_typed_gate_reason(
@@ -227,7 +254,7 @@ class TemplateSelectionContractTest(unittest.TestCase):
             code: TypedAssessment(EvidenceState.SUPPORTED, None)
             for code in CANDIDATE_GATE_CHECK_CODES
         }
-        facts["local_advance_authority"] = TypedAssessment(
+        facts["adjacency_relation_authority"] = TypedAssessment(
             EvidenceState.UNAVAILABLE,
             GateGap.ADJACENCY_CONTINUITY_UNRESOLVED,
             competition.failure,

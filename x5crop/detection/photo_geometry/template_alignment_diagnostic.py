@@ -10,8 +10,8 @@ from .model import BoundaryRole, SPATIAL_SUPPORT_REGION_COUNT
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_evidence import separator_support_authority
 from .template_model import (
+    AdjacencyRelation,
     FrameWidthInferenceAssessment,
-    LocalAdvanceRelation,
     SequenceFit,
 )
 from .template_adjacency_coverage import AdjacencyObservationCoverage
@@ -74,7 +74,7 @@ class TemplateAlignmentDiagnostic:
     canonical_pitch_px: float | None
     pitch_delta_from_compiled_center_px: float | None
     role_residuals: tuple[TemplateRoleResidual, ...]
-    local_advance_relations: tuple[LocalAdvanceRelation, ...]
+    adjacency_relations: tuple[AdjacencyRelation, ...]
     global_lattice_authority: GlobalLatticeAuthority | None
     calibrated_nominal_grid_evidence: CalibratedNominalGridEvidence | None
     adjacency_observation_coverage: tuple[
@@ -139,10 +139,10 @@ class TemplateAlignmentDiagnostic:
                 self.frame_width_inference,
                 FrameWidthInferenceAssessment,
             )
-            or (self.pattern == ResidualPattern.NORMAL and self.local_advance_relations)
+            or (self.pattern == ResidualPattern.NORMAL and self.adjacency_relations)
             or (
                 self.pattern == ResidualPattern.MEASURED_ADVANCES
-                and not any(item.is_anomaly for item in self.local_advance_relations)
+                and not any(item.is_anomaly for item in self.adjacency_relations)
             )
             or (self.pattern == ResidualPattern.UNRESOLVED)
             != (self.unresolved_reason is not None)
@@ -299,7 +299,7 @@ def template_alignment_diagnostic(
         pattern = ResidualPattern.UNRESOLVED
         reason = phase.ambiguity_reason or phase.status.value
     elif fit is not None and any(
-        relation.is_anomaly for relation in fit.local_advance_relations
+        relation.is_anomaly for relation in fit.adjacency_relations
     ):
         pattern = ResidualPattern.MEASURED_ADVANCES
         reason = None
@@ -327,8 +327,8 @@ def template_alignment_diagnostic(
             / 2.0
         ),
         role_residuals=role_residuals,
-        local_advance_relations=(
-            () if fit is None else fit.local_advance_relations
+        adjacency_relations=(
+            () if fit is None else fit.adjacency_relations
         ),
         global_lattice_authority=phase.global_lattice_authority,
         calibrated_nominal_grid_evidence=(

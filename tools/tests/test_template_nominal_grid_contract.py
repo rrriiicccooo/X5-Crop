@@ -7,8 +7,9 @@ from tools.tests.template_test_support import (
     phase_template,
 )
 from x5crop.detection.photo_geometry.template_model import (
-    LocalAdvanceKind,
-    LocalAdvanceRelation,
+    ContactRelation,
+    SeparatorRelationKind,
+    SeparatorRelation,
 )
 from x5crop.detection.photo_geometry.template_nominal_grid_authority import (
     NominalGridRoleConstraint,
@@ -88,13 +89,13 @@ class TemplateNominalGridContractTest(unittest.TestCase):
             (ObservationId("start:1"),),
         )
 
-    def test_one_local_advance_propagates_once_through_the_same_grid(
+    def test_one_adjacency_relation_propagates_once_through_the_same_grid(
         self,
     ) -> None:
         template = phase_template(3)
-        relation = LocalAdvanceRelation(
+        relation = SeparatorRelation(
             relation_ordinal=1,
-            kind=LocalAdvanceKind.WIDE,
+            kind=SeparatorRelationKind.WIDE,
             delta_interval_px=FiniteInterval.exact(5.0),
             canonical_delta_px=5.0,
             observation_ids=(ObservationId("separator:1"),),
@@ -120,6 +121,51 @@ class TemplateNominalGridContractTest(unittest.TestCase):
         self.assertEqual(
             envelope.role_positions_px,
             (40.0, 140.0, 165.0, 265.0, 285.0, 385.0),
+        )
+
+    def test_contact_is_the_exact_w_minus_pitch_grid_relation(self) -> None:
+        template = phase_template(2)
+        shared_id = ObservationId("contact:shared-edge")
+        relation = ContactRelation(
+            relation_ordinal=1,
+            contact_observation_id=ObservationId("contact:observation"),
+            physical_edge_id=shared_id,
+            shared_edge_observation_id=shared_id,
+            delta_interval_px=FiniteInterval.exact(-20.0),
+            canonical_delta_px=-20.0,
+            supporting_observation_ids=(shared_id,),
+        )
+
+        envelope, _state = solve_calibrated_nominal_grid_envelope(
+            prior=calibrated_nominal_grid_prior(template),
+            template=template,
+            integer_slot_offset=0,
+            role_constraints=(
+                NominalGridRoleConstraint(
+                    role_index=0,
+                    observation_id=ObservationId("start:1"),
+                    coordinate_px=40.0,
+                    full_interval_px=FiniteInterval.exact(40.0),
+                ),
+                NominalGridRoleConstraint(
+                    role_index=1,
+                    observation_id=shared_id,
+                    coordinate_px=140.0,
+                    full_interval_px=FiniteInterval.exact(140.0),
+                ),
+            ),
+            relations=(relation,),
+            phase_authority_px=None,
+            retained_direct_constraint_rank=2,
+        )
+
+        self.assertEqual(
+            envelope.role_positions_px,
+            (40.0, 140.0, 140.0, 240.0),
+        )
+        self.assertEqual(
+            envelope.role_intervals_px[1],
+            envelope.role_intervals_px[2],
         )
 
     def test_selected_output_binding_is_a_separate_authority(self) -> None:

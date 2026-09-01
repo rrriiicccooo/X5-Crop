@@ -11,6 +11,7 @@ from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .measurement_model import PhotoBoundaryMeasurementSet
 from .template_adjacency_coverage import AdjacencyObservationCoverage
 from .template_adjacency_topology import AdjacencyContinuityObservation
+from .template_contact import ContactEdgeObservation
 from .template_direct_role_authority import DirectRoleBindingAuthority
 from .template_outer_frame_authority import OuterFrameObservationAuthority
 from .template_model import (
@@ -149,6 +150,7 @@ class TemplatePhaseInput:
     holder_span_px: FiniteInterval | None
     phase_authority_px: FiniteInterval | None
     calibrated_nominal_grid_prior: CalibratedNominalGridPrior
+    contact_edge_observations: tuple[ContactEdgeObservation, ...] = ()
     sequence_measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...] = ()
     global_lattice_evidence: GlobalLatticeAuthorityEvidence = field(
         default_factory=GlobalLatticeAuthorityEvidence
@@ -188,6 +190,11 @@ class TemplatePhaseInput:
             for item in self.sequence_measurement_sets
         ):
             raise TypeError("phase input sequence measurement ledger is invalid")
+        if any(
+            not isinstance(item, ContactEdgeObservation)
+            for item in self.contact_edge_observations
+        ):
+            raise TypeError("phase input contact-edge ledger is invalid")
         query_ids = tuple(
             item.query.query_id for item in self.sequence_measurement_sets
         )
@@ -211,6 +218,9 @@ class TemplatePhaseInput:
         ):
             raise ValueError("phase evidence requires an absolute phase authority")
         identities = tuple(item.observation_id for item in self.observations)
+        contact_ids = tuple(
+            item.observation_id for item in self.contact_edge_observations
+        )
         band_ids = tuple(item.observation_id for item in self.separator_bands)
         registered_ids = set(identities).union(band_ids)
         evidence_ids = {
@@ -224,6 +234,13 @@ class TemplatePhaseInput:
         }
         if len(set(identities)) != len(identities):
             raise ValueError("phase input observation identities are not unique")
+        if len(set(contact_ids)) != len(contact_ids):
+            raise ValueError("phase input contact identities are not unique")
+        if not {
+            item.shared_edge_observation_id
+            for item in self.contact_edge_observations
+        }.issubset(set(identities)):
+            raise ValueError("contact edge leaves the registered observation ledger")
         if len(set(band_ids)) != len(band_ids):
             raise ValueError("phase input separator identities are not unique")
         if not evidence_ids.issubset(registered_ids):
@@ -277,10 +294,11 @@ class PhaseFailureKind(str, Enum):
     SOURCE_FRAME_WIDTH_CONFLICT = "source_frame_width_conflict"
     FIXED_TEMPLATE_MISMATCH = "fixed_template_mismatch"
     DISCRETE_PHASE_AMBIGUOUS = "discrete_phase_ambiguous"
-    LOCAL_ADVANCE_AMBIGUOUS = "local_advance_ambiguous"
+    ADJACENCY_RELATION_AMBIGUOUS = "adjacency_relation_ambiguous"
     ADJACENCY_CONTINUITY_UNRESOLVED = (
         "adjacency_continuity_unresolved"
     )
+    ADJACENCY_TOPOLOGY_AMBIGUOUS = "adjacency_topology_ambiguous"
     ADJACENCY_TOPOLOGY_UNRESOLVED = "adjacency_topology_unresolved"
 
 

@@ -18,8 +18,10 @@ from .template_adjacency_topology import (
     AdjacencyContinuityObservation,
 )
 from .template_model import (
-    LocalAdvanceKind,
-    LocalAdvanceRelation,
+    AdjacencyRelation,
+    ContactRelation,
+    SeparatorRelationKind,
+    SeparatorRelation,
     SequenceFit,
 )
 
@@ -32,8 +34,8 @@ class ResidualPattern(str, Enum):
     UNRESOLVED = "unresolved"
 
 
-class LocalAdvanceFailureKind(str, Enum):
-    """Typed reason why no bounded local relation can be authorized."""
+class AdjacencyRelationFailureKind(str, Enum):
+    """Typed reason why no bounded adjacency relation can be authorized."""
 
     ADJACENCY_CONTINUITY_UNRESOLVED = (
         "adjacency_continuity_unresolved"
@@ -65,15 +67,15 @@ class AdjacencyGapFact:
 
 
 @dataclass(frozen=True)
-class LocalAdvanceAnalysis:
+class AdjacencyRelationAnalysis:
     """Result of one bounded adjacency scan over an existing sequence fit."""
 
     pattern: ResidualPattern
-    relations: tuple[LocalAdvanceRelation, ...]
+    relations: tuple[AdjacencyRelation, ...]
     adjacency_facts: tuple[AdjacencyGapFact, ...]
     evaluated_adjacency_count: int
     anomaly_ordinals: tuple[int, ...] = ()
-    failure_kind: LocalAdvanceFailureKind | None = None
+    failure_kind: AdjacencyRelationFailureKind | None = None
     unresolved_reason: str | None = None
 
     def __post_init__(self) -> None:
@@ -112,38 +114,43 @@ def _difference(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval:
     )
 
 
-def _nominal_relation(ordinal: int) -> LocalAdvanceRelation:
-    return LocalAdvanceRelation(
+def _nominal_relation(ordinal: int) -> SeparatorRelation:
+    return SeparatorRelation(
         relation_ordinal=ordinal,
-        kind=LocalAdvanceKind.NOMINAL,
+        kind=SeparatorRelationKind.NOMINAL,
         delta_interval_px=FiniteInterval.exact(0.0),
         canonical_delta_px=0.0,
     )
 
 
-def derive_bounded_local_advances(
+def derive_adjacency_relations(
     fit: SequenceFit,
     continuity_observations: tuple[AdjacencyContinuityObservation, ...],
-) -> LocalAdvanceAnalysis:
+) -> AdjacencyRelationAnalysis:
     """Classify normal versus directly measured adjacency advances in O(count)."""
 
     evaluated = max(0, fit.template.count - 1)
     if evaluated == 0:
-        return LocalAdvanceAnalysis(ResidualPattern.NORMAL, (), (), 0)
+        return AdjacencyRelationAnalysis(ResidualPattern.NORMAL, (), (), 0)
     if tuple(item.relation_ordinal for item in continuity_observations) != tuple(
         range(1, fit.template.count)
     ):
         raise ValueError("adjacency continuity ledger is incomplete")
     facts: list[AdjacencyGapFact] = []
+    contacts_by_ordinal = {
+        item.relation_ordinal: item
+        for item in fit.adjacency_relations
+        if isinstance(item, ContactRelation)
+    }
     for observation in continuity_observations:
         if observation.kind == AdjacencyContinuityKind.UNRESOLVED:
-            return LocalAdvanceAnalysis(
+            return AdjacencyRelationAnalysis(
                 ResidualPattern.UNRESOLVED,
                 (),
                 tuple(facts),
                 evaluated,
                 failure_kind=(
-                    LocalAdvanceFailureKind.ADJACENCY_CONTINUITY_UNRESOLVED
+                    AdjacencyRelationFailureKind.ADJACENCY_CONTINUITY_UNRESOLVED
                 ),
                 unresolved_reason=(
                     observation.reason
@@ -153,19 +160,41 @@ def derive_bounded_local_advances(
         if observation.kind == (
             AdjacencyContinuityKind.NORMAL_SEPARATOR_COUNTEREVIDENCE
         ):
-            return LocalAdvanceAnalysis(
+            return AdjacencyRelationAnalysis(
                 ResidualPattern.UNRESOLVED,
                 (),
                 tuple(facts),
                 evaluated,
                 failure_kind=(
-                    LocalAdvanceFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED
+                    AdjacencyRelationFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED
                 ),
                 unresolved_reason=(
                     "direct adjacency contradicts an ordinary positive "
                     "separator; contact or overlap is not yet authorized"
                 ),
             )
+        if observation.kind == AdjacencyContinuityKind.CONTACT:
+            contact = contacts_by_ordinal.get(observation.relation_ordinal)
+            if (
+                contact is None
+                or observation.contact_observation_id
+                != contact.contact_observation_id
+                or observation.end_observation_id
+                != contact.shared_edge_observation_id
+                or observation.next_start_observation_id
+                != contact.shared_edge_observation_id
+            ):
+                raise ValueError("contact continuity lost its selected relation")
+            facts.append(
+                AdjacencyGapFact(
+                    relation_ordinal=observation.relation_ordinal,
+                    gap_interval_px=FiniteInterval.exact(0.0),
+                    canonical_gap_px=0.0,
+                    observation_ids=(contact.shared_edge_observation_id,),
+                    separator_band_id=None,
+                )
+            )
+            continue
         if observation.kind != AdjacencyContinuityKind.SEPARATOR_MATERIAL:
             continue
         gap = observation.signed_gap_interval_px
@@ -192,16 +221,25 @@ def derive_bounded_local_advances(
 
     ordered_facts = tuple(facts)
     gap_prior = fit.template.gap_prior_px
-    anomalies = tuple(
+    separator_anomalies = tuple(
         fact
         for fact in ordered_facts
+        if fact.relation_ordinal not in contacts_by_ordinal
         if (
             fact.gap_interval_px.maximum < gap_prior.minimum
             or gap_prior.maximum < fact.gap_interval_px.minimum
         )
     )
-    if not anomalies:
-        return LocalAdvanceAnalysis(
+    anomaly_ordinals = tuple(
+        sorted(
+            {
+                *contacts_by_ordinal,
+                *(item.relation_ordinal for item in separator_anomalies),
+            }
+        )
+    )
+    if not anomaly_ordinals:
+        return AdjacencyRelationAnalysis(
             ResidualPattern.NORMAL,
             (),
             ordered_facts,
@@ -209,10 +247,14 @@ def derive_bounded_local_advances(
         )
 
     anomalies_by_ordinal = {
-        item.relation_ordinal: item for item in anomalies
+        item.relation_ordinal: item for item in separator_anomalies
     }
-    relations: list[LocalAdvanceRelation] = []
-    for ordinal in range(1, max(anomalies_by_ordinal) + 1):
+    relations: list[AdjacencyRelation] = []
+    for ordinal in range(1, max(anomaly_ordinals) + 1):
+        contact = contacts_by_ordinal.get(ordinal)
+        if contact is not None:
+            relations.append(contact)
+            continue
         anomaly = anomalies_by_ordinal.get(ordinal)
         if anomaly is None:
             relations.append(_nominal_relation(ordinal))
@@ -223,16 +265,16 @@ def derive_bounded_local_advances(
             relations.append(_nominal_relation(ordinal))
             continue
         kind = (
-            LocalAdvanceKind.WIDE
+            SeparatorRelationKind.WIDE
             if canonical_delta > 0.0
-            else LocalAdvanceKind.NARROW
+            else SeparatorRelationKind.NARROW
         )
         relation_ids = (
             anomaly.separator_band_id,
             *anomaly.observation_ids,
         )
         relations.append(
-            LocalAdvanceRelation(
+            SeparatorRelation(
                 relation_ordinal=ordinal,
                 kind=kind,
                 delta_interval_px=delta,
@@ -244,10 +286,10 @@ def derive_bounded_local_advances(
                 ),
             )
         )
-    return LocalAdvanceAnalysis(
+    return AdjacencyRelationAnalysis(
         ResidualPattern.MEASURED_ADVANCES,
         tuple(relations),
         ordered_facts,
         evaluated,
-        anomaly_ordinals=tuple(item.relation_ordinal for item in anomalies),
+        anomaly_ordinals=anomaly_ordinals,
     )

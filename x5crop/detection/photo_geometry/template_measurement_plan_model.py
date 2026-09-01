@@ -190,13 +190,13 @@ class TemplatePhaseBounds:
 class TemplateRoleBounds:
     max_role_bindings: int
     max_inferred_roles: int
-    max_local_relations: int
+    max_adjacency_relations: int
 
     def __post_init__(self) -> None:
         if min(
             self.max_role_bindings,
             self.max_inferred_roles,
-            self.max_local_relations,
+            self.max_adjacency_relations,
         ) < 0:
             raise ValueError("role bounds cannot be negative")
 

@@ -66,11 +66,12 @@ from .template_cross import (
     fit_template_cross,
 )
 from .template_cross_model import CrossRoleBinding, TemplateCrossInput
+from .template_contact import observe_contact_edges
 from .template_phase import (
     account_prior_phase_fit,
     finalize_template_phase_candidate,
     fit_template_phase,
-    fit_template_phase_candidate_with_local_advance,
+    fit_template_phase_candidate_with_adjacency_relations,
     refine_template_phase_with_source_frame_width,
 )
 from .template_phase_model import (
@@ -720,6 +721,16 @@ def prepare_template_lane(
             )
         )
     )
+    sequence_measurement_sets = tuple(
+        item
+        for item in measurement_sets
+        if item.query.purpose == QueryPurpose.SEQUENCE_ANCHOR_WINDOW
+    )
+    contact_edge_observations = observe_contact_edges(
+        placement_sequence_edges,
+        separator_bands,
+        sequence_measurement_sets,
+    )
     phase_input = TemplatePhaseInput(
         observations=placement_sequence_edges,
         separator_bands=separator_bands,
@@ -730,18 +741,15 @@ def prepare_template_lane(
         calibrated_nominal_grid_prior=(
             measurement_plan.calibrated_nominal_grid_prior
         ),
-        sequence_measurement_sets=tuple(
-            item
-            for item in measurement_sets
-            if item.query.purpose == QueryPurpose.SEQUENCE_ANCHOR_WINDOW
-        ),
+        contact_edge_observations=contact_edge_observations,
+        sequence_measurement_sets=sequence_measurement_sets,
         global_lattice_evidence=GlobalLatticeAuthorityEvidence(
             phase_observation_ids=phase_authority_observation_ids,
             frame_width_observation_ids=(),
             pitch_observation_ids=registered_pitch_authority_ids,
         ),
     )
-    phase_candidate = fit_template_phase_candidate_with_local_advance(
+    phase_candidate = fit_template_phase_candidate_with_adjacency_relations(
         phase_input
     )
     if pitch_lattice_bound_exceeded:

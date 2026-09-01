@@ -53,6 +53,7 @@ from x5crop.detection.photo_geometry.template_feasible_geometry import (
     project_selected_placement,
 )
 from x5crop.detection.photo_geometry.template_model import (
+    ContactRelation,
     SequenceRoleLineEvidence,
 )
 from x5crop.detection.source_core import (
@@ -76,6 +77,83 @@ def _placement():
         template,
         _sequence(template),
         _cross(template, direction=direction),
+    )
+
+
+def _contact_placement(
+    *,
+    shared_uncertainty_px: float = 0.0,
+    shared_direction_uncertainty_degrees: float = 0.0,
+):
+    template = _template(2)
+    sequence = _sequence(template)
+    shared_id = ObservationId("sequence:contact-shared")
+    contact_id = ObservationId("contact-edge:test")
+    shared_interval = FiniteInterval(
+        200.0 - shared_uncertainty_px,
+        200.0 + shared_uncertainty_px,
+    )
+    shared_binding = replace(
+        sequence.role_bindings[1],
+        observation_id=shared_id,
+        evidence_group_id=shared_id,
+        canonical_position_px=200.0,
+        fit_position_interval_px=shared_interval,
+        full_position_interval_px=shared_interval,
+        line_evidence=(
+            None
+            if shared_direction_uncertainty_degrees == 0.0
+            else SequenceRoleLineEvidence(
+                observation_id=shared_id,
+                reference_trace_px=150.0,
+                fit_position_interval_px=shared_interval,
+                fit_direction_interval_degrees=FiniteInterval(
+                    -shared_direction_uncertainty_degrees,
+                    shared_direction_uncertainty_degrees,
+                ),
+            )
+        ),
+    )
+    assert shared_binding is not None
+    final_binding = replace(
+        sequence.role_bindings[3],
+        canonical_position_px=300.0,
+        fit_position_interval_px=FiniteInterval.exact(300.0),
+        full_position_interval_px=FiniteInterval.exact(300.0),
+    )
+    assert final_binding is not None
+    positions = (100.0, 200.0, 200.0, 300.0)
+    fit_intervals = tuple(FiniteInterval.exact(value) for value in positions)
+    full_intervals = list(fit_intervals)
+    full_intervals[1] = shared_interval
+    full_intervals[2] = shared_interval
+    sequence = replace(
+        sequence,
+        model_role_positions_px=positions,
+        model_role_intervals_px=fit_intervals,
+        model_full_role_intervals_px=tuple(full_intervals),
+        role_bindings=(
+            sequence.role_bindings[0],
+            shared_binding,
+            shared_binding,
+            final_binding,
+        ),
+        adjacency_relations=(
+            ContactRelation(
+                relation_ordinal=1,
+                contact_observation_id=contact_id,
+                physical_edge_id=shared_id,
+                shared_edge_observation_id=shared_id,
+                delta_interval_px=FiniteInterval.exact(-20.0),
+                canonical_delta_px=-20.0,
+                supporting_observation_ids=(shared_id,),
+            ),
+        ),
+    )
+    return _compose(
+        template,
+        sequence,
+        _cross(template, direction=_direction()),
     )
 
 
@@ -279,6 +357,72 @@ def _selected_output_gate_fact(output, assessment):
 
 
 class TemplateOutputContractTest(unittest.TestCase):
+    def test_contact_protection_applies_only_to_the_two_shared_sides(
+        self,
+    ) -> None:
+        placement = _contact_placement()
+        projection = project_selected_placement(placement)
+        outputs = tuple(
+            output_footprint_from_template_placement(
+                placement,
+                projection,
+                lane=_lane(),
+                lane_ordinal=ordinal,
+                layout="horizontal",
+            )
+            for ordinal in (1, 2)
+        )
+        protections = {
+            (output.envelope.lane_ordinal, item.role): item
+            for output in outputs
+            for item in output.boundary_protections
+        }
+        relation_id = ObservationId("contact-edge:test")
+
+        for key in (
+            (1, BoundaryRole.END),
+            (2, BoundaryRole.START),
+        ):
+            fact = protections[key]
+            self.assertEqual(fact.topology_relation_id, relation_id)
+            self.assertAlmostEqual(
+                fact.topology_protection_px,
+                fact.base_bleed_px,
+            )
+            self.assertGreater(fact.topology_protection_px, 0.0)
+        for key, fact in protections.items():
+            if key in {
+                (1, BoundaryRole.END),
+                (2, BoundaryRole.START),
+            }:
+                continue
+            self.assertIsNone(fact.topology_relation_id)
+            self.assertEqual(fact.topology_protection_px, 0.0)
+
+    def test_contact_protection_uses_the_existing_five_percent_budget(
+        self,
+    ) -> None:
+        placement = _contact_placement(
+            shared_direction_uncertainty_degrees=10.0,
+        )
+        projection = project_selected_placement(placement)
+        output = output_footprint_from_template_placement(
+            placement,
+            projection,
+            lane=_lane(),
+            lane_ordinal=1,
+            layout="horizontal",
+        )
+
+        assessment = template_direct_use_budget_assessment(placement, output)
+        end = next(
+            item
+            for item in assessment.edge_assessments
+            if item.role == BoundaryRole.END
+        )
+        self.assertFalse(end.within_limit)
+        self.assertEqual(assessment.state, EvidenceState.CONTRADICTED)
+
     def test_enclosing_support_keeps_its_same_state_target_projection(self) -> None:
         placement = _enclosing_support_placement(
             frame_count=2,
@@ -343,7 +487,9 @@ class TemplateOutputContractTest(unittest.TestCase):
             for item in output.boundary_protections
             if item.role in {BoundaryRole.TOP, BoundaryRole.BOTTOM}
         )
-        self.assertTrue(all(item.bleed_px == 0.0 for item in cross_protections))
+        self.assertTrue(
+            all(item.base_bleed_px == 0.0 for item in cross_protections)
+        )
         assessment = template_direct_use_budget_assessment(placement, output)
         self.assertEqual(assessment.state, EvidenceState.SUPPORTED)
         self.assertLessEqual(

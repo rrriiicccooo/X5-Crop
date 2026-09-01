@@ -9,7 +9,7 @@ runtime path.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from enum import Enum
 import math
 from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
@@ -47,7 +47,7 @@ def generic_separator_gap_interval_px(
 
     This interval only compiles candidate-independent search and lattice work.
     It is not aperture compatibility, does not override a measured separator,
-    and cannot authorize a local advance by itself.
+    and cannot authorize an adjacency relation by itself.
     """
 
     if not isinstance(frame_width_px, (FiniteInterval, PositiveInterval)):
@@ -222,8 +222,8 @@ def phase_lattice_fit_from_absolute(
     )
 
 
-class LocalAdvanceKind(str, Enum):
-    """A local departure from the normal pitch relation."""
+class SeparatorRelationKind(str, Enum):
+    """A positive-material separator's departure from nominal pitch."""
 
     NOMINAL = "nominal"
     WIDE = "wide"
@@ -504,41 +504,156 @@ class FrameWidthInferenceAssessment:
 
 
 @dataclass(frozen=True)
-class LocalAdvanceRelation:
-    """One adjacency's prefix adjustment from the nominal pitch.
+class SeparatorRelation:
+    """One positive-separator adjacency's prefix adjustment.
 
     ``delta_interval_px`` is an adjustment, not a second free frame width.  A
     relation at ordinal ``i`` affects slot ``i + 1`` and every later slot once.
     """
 
     relation_ordinal: int
-    kind: LocalAdvanceKind
+    kind: SeparatorRelationKind
     delta_interval_px: FiniteInterval
     canonical_delta_px: float
     observation_ids: tuple[ObservationId, ...] = ()
 
     def __post_init__(self) -> None:
         if self.relation_ordinal <= 0:
-            raise ValueError("local relation ordinal must be positive")
-        if not isinstance(self.kind, LocalAdvanceKind):
-            raise TypeError("local relation kind must be typed")
+            raise ValueError("adjacency relation ordinal must be positive")
+        if not isinstance(self.kind, SeparatorRelationKind):
+            raise TypeError("adjacency relation kind must be typed")
         if not self.delta_interval_px.contains(self.canonical_delta_px, epsilon=1.0e-9):
-            raise ValueError("local relation canonical delta is outside interval")
+            raise ValueError(
+                "adjacency relation canonical delta is outside interval"
+            )
         if len(set(self.observation_ids)) != len(self.observation_ids):
-            raise ValueError("local relation observations must be unique")
+            raise ValueError("adjacency relation observations must be unique")
         if any(not isinstance(item, ObservationId) for item in self.observation_ids):
-            raise TypeError("local relation observations must be typed identities")
-        if self.kind == LocalAdvanceKind.NOMINAL and (
+            raise TypeError(
+                "adjacency relation observations must be typed identities"
+            )
+        if self.kind == SeparatorRelationKind.NOMINAL and (
             self.delta_interval_px != FiniteInterval.exact(0.0)
             or self.canonical_delta_px != 0.0
         ):
-            raise ValueError("nominal local relation must have zero adjustment")
-        if self.kind != LocalAdvanceKind.NOMINAL and not self.observation_ids:
-            raise ValueError("non-nominal local relation needs direct evidence")
+            raise ValueError(
+                "nominal adjacency relation must have zero adjustment"
+            )
+        if self.kind != SeparatorRelationKind.NOMINAL and not self.observation_ids:
+            raise ValueError(
+                "non-nominal adjacency relation needs direct evidence"
+            )
 
     @property
     def is_anomaly(self) -> bool:
-        return self.kind != LocalAdvanceKind.NOMINAL
+        return self.kind != SeparatorRelationKind.NOMINAL
+
+
+class ContactRelationKind(str, Enum):
+    """Explicit discriminator for the contact branch of the sum type."""
+
+    CONTACT = "contact"
+
+
+@dataclass(frozen=True)
+class ContactRelation:
+    """One proven shared physical edge between adjacent Frames.
+
+    ``delta`` remains the prefix projection used by the single sequence
+    model.  It is not an independent degree of freedom: every joint feasible
+    state additionally enforces ``delta = W - pitch``, which is equivalent to
+    ``END(i) == START(i + 1)``.
+    """
+
+    relation_ordinal: int
+    contact_observation_id: ObservationId
+    physical_edge_id: ObservationId
+    shared_edge_observation_id: ObservationId
+    delta_interval_px: FiniteInterval
+    canonical_delta_px: float
+    supporting_observation_ids: tuple[ObservationId, ...]
+    kind: ContactRelationKind = field(
+        init=False,
+        default=ContactRelationKind.CONTACT,
+    )
+
+    def __post_init__(self) -> None:
+        if (
+            self.relation_ordinal <= 0
+            or self.kind != ContactRelationKind.CONTACT
+            or not isinstance(self.contact_observation_id, ObservationId)
+            or not isinstance(self.physical_edge_id, ObservationId)
+            or not isinstance(self.shared_edge_observation_id, ObservationId)
+            or self.physical_edge_id != self.shared_edge_observation_id
+            or not self.delta_interval_px.contains(
+                self.canonical_delta_px,
+                epsilon=1.0e-9,
+            )
+            or not self.supporting_observation_ids
+            or tuple(dict.fromkeys(self.supporting_observation_ids))
+            != self.supporting_observation_ids
+            or self.physical_edge_id not in self.supporting_observation_ids
+            or self.shared_edge_observation_id
+            not in self.supporting_observation_ids
+            or any(
+                not isinstance(identity, ObservationId)
+                for identity in self.supporting_observation_ids
+            )
+        ):
+            raise ValueError("contact relation is invalid")
+
+    @property
+    def observation_ids(self) -> tuple[ObservationId, ...]:
+        return self.supporting_observation_ids
+
+    @property
+    def is_anomaly(self) -> bool:
+        return True
+
+
+AdjacencyRelation = SeparatorRelation | ContactRelation
+
+
+def adjacency_prefix_coefficients(
+    relations: tuple[AdjacencyRelation, ...],
+    slot_index: int,
+) -> tuple[int, int, float]:
+    """Return ``W``, pitch and fixed-delta coefficients for one slot.
+
+    A contact contributes ``W - pitch`` exactly once to the suffix.  Positive
+    separator adjustments remain fixed typed deltas.  This is the canonical
+    algebra shared by phase fitting and rank accounting.
+    """
+
+    if slot_index < 0:
+        raise ValueError("adjacency prefix slot must be non-negative")
+    applicable = relations[: min(slot_index, len(relations))]
+    contact_count = sum(
+        isinstance(item, ContactRelation) for item in applicable
+    )
+    fixed_delta = sum(
+        item.canonical_delta_px
+        for item in applicable
+        if isinstance(item, SeparatorRelation)
+    )
+    return contact_count, slot_index - contact_count, fixed_delta
+
+
+def realize_contact_relations(
+    relations: tuple[AdjacencyRelation, ...],
+    *,
+    frame_width_px: float,
+    pitch_px: float,
+) -> tuple[AdjacencyRelation, ...]:
+    """Bind every contact's diagnostic delta to the same fitted W/pitch."""
+
+    delta = frame_width_px - pitch_px
+    return tuple(
+        replace(item, canonical_delta_px=delta)
+        if isinstance(item, ContactRelation)
+        else item
+        for item in relations
+    )
 
 
 @dataclass(frozen=True)
@@ -638,7 +753,7 @@ class SequenceFit:
         CalibratedNominalGridFitState | None
     ) = None
     frame_width_inference: FrameWidthInferenceAssessment | None = None
-    local_advance_relations: tuple[LocalAdvanceRelation, ...] = ()
+    adjacency_relations: tuple[AdjacencyRelation, ...] = ()
     contradicted_observation_count: int = 0
     residual_sum_px: float = 0.0
     phase_support_coverage: float = 0.0
@@ -646,9 +761,11 @@ class SequenceFit:
     @property
     def bound_observation_ids(self) -> tuple[ObservationId, ...]:
         return tuple(
-            binding.observation_id
-            for binding in self.role_bindings
-            if binding is not None
+            dict.fromkeys(
+                binding.observation_id
+                for binding in self.role_bindings
+                if binding is not None
+            )
         )
 
     @property
@@ -666,10 +783,12 @@ class SequenceFit:
     @property
     def phase_anchor_observation_ids(self) -> tuple[ObservationId, ...]:
         return tuple(
-            binding.observation_id
-            for binding in self.role_bindings
-            if binding is not None
-            and binding.use == SequenceBindingUse.PHASE_ANCHOR
+            dict.fromkeys(
+                binding.observation_id
+                for binding in self.role_bindings
+                if binding is not None
+                and binding.use == SequenceBindingUse.PHASE_ANCHOR
+            )
         )
 
     @property
@@ -852,15 +971,58 @@ class SequenceFit:
             raise ValueError("sequence phase support coverage is invalid")
         if not math.isfinite(self.residual_sum_px) or self.residual_sum_px < 0.0:
             raise ValueError("sequence residual is invalid")
-        if tuple(item.relation_ordinal for item in self.local_advance_relations) != tuple(
-            range(1, len(self.local_advance_relations) + 1)
+        if tuple(item.relation_ordinal for item in self.adjacency_relations) != tuple(
+            range(1, len(self.adjacency_relations) + 1)
         ):
-            raise ValueError("local relation ordinals must be contiguous")
-        if len(self.local_advance_relations) > max(0, self.template.count - 1):
-            raise ValueError("local relations exceed template adjacencies")
-        bound_ids = self.bound_observation_ids
-        if len(set(bound_ids)) != len(bound_ids):
-            raise ValueError("one observation cannot bind multiple template roles")
+            raise ValueError(
+                "adjacency relation ordinals must be contiguous"
+            )
+        if len(self.adjacency_relations) > max(0, self.template.count - 1):
+            raise ValueError(
+                "adjacency relations exceed template adjacencies"
+            )
+        roles_by_observation: dict[ObservationId, list[int]] = {}
+        for role_index, binding in enumerate(self.role_bindings):
+            if binding is not None:
+                roles_by_observation.setdefault(
+                    binding.observation_id,
+                    [],
+                ).append(role_index)
+        contacts = {
+            item.shared_edge_observation_id: item
+            for item in self.adjacency_relations
+            if isinstance(item, ContactRelation)
+        }
+        if len(contacts) != sum(
+            isinstance(item, ContactRelation)
+            for item in self.adjacency_relations
+        ):
+            raise ValueError("one physical edge cannot prove two contacts")
+        for identity, role_indices in roles_by_observation.items():
+            if len(role_indices) == 1:
+                continue
+            contact = contacts.get(identity)
+            expected = (
+                2 * contact.relation_ordinal - 1,
+                2 * contact.relation_ordinal,
+            ) if contact is not None else ()
+            if tuple(role_indices) != expected:
+                raise ValueError(
+                    "one observation may bind only one proven adjacent contact"
+                )
+            left = self.role_bindings[expected[0]]
+            right = self.role_bindings[expected[1]]
+            assert left is not None and right is not None
+            if (
+                left.evidence_group_id != contact.physical_edge_id
+                or right.evidence_group_id != contact.physical_edge_id
+                or abs(
+                    left.canonical_position_px
+                    - right.canonical_position_px
+                )
+                > 1.0e-9
+            ):
+                raise ValueError("contact bindings lost their shared edge")
         direction = self.template.direction
         starts = self.model_role_positions_px[0::2]
         ends = self.model_role_positions_px[1::2]
@@ -877,6 +1039,25 @@ class SequenceFit:
             for width in widths
         ):
             raise ValueError("sequence frame order contradicts fixed width")
+        for relation in self.adjacency_relations:
+            if not isinstance(relation, ContactRelation):
+                continue
+            end_index = 2 * relation.relation_ordinal - 1
+            start_index = 2 * relation.relation_ordinal
+            end_binding = self.role_bindings[end_index]
+            start_binding = self.role_bindings[start_index]
+            end = self.model_role_positions_px[end_index]
+            next_start = self.model_role_positions_px[start_index]
+            if (
+                end_binding is None
+                or start_binding is None
+                or end_binding.observation_id
+                != relation.shared_edge_observation_id
+                or start_binding.observation_id
+                != relation.shared_edge_observation_id
+                or abs(end - next_start) > 1.0e-7
+            ):
+                raise ValueError("contact relation does not share one coordinate")
         if any(
             direction * (right - left) < -1.0e-7
             for left, right in zip(starts, starts[1:])
@@ -901,7 +1082,7 @@ class TemplateSearchReceipt:
     role_count: int
     phase_lookup_count: int
     role_binding_count: int
-    local_relation_evaluation_count: int
+    adjacency_relation_evaluation_count: int
     local_refinement_lookup_count: int
     local_refinement_binding_count: int
     phase_hypothesis_count: int
@@ -926,7 +1107,7 @@ class TemplateSearchReceipt:
             self.role_count,
             self.phase_lookup_count,
             self.role_binding_count,
-            self.local_relation_evaluation_count,
+            self.adjacency_relation_evaluation_count,
             self.local_refinement_lookup_count,
             self.local_refinement_binding_count,
             self.phase_hypothesis_count,
@@ -998,8 +1179,8 @@ class TemplateSearchReceipt:
         Phase lookup and role binding are each at most ``H * R``.  Local
         relations are per adjacency (``count - 1``) per declared numeric fit
         pass, never per candidate chain.  Five passes cover provisional fit,
-        physical rebind, one bounded local-advance refit, source-pitch rebind,
-        and its bounded local-advance refit. The method fails explicitly;
+        physical rebind, one bounded adjacency refit, source-pitch rebind,
+        and its bounded adjacency refit. The method fails explicitly;
         callers must not truncate.
         """
 
@@ -1022,7 +1203,7 @@ class TemplateSearchReceipt:
             self.phase_lookup_count > max_hypotheses
             or self.phase_hypothesis_count > max_hypotheses
             or self.role_binding_count > self.phase_hypothesis_count * r
-            or self.local_relation_evaluation_count
+            or self.adjacency_relation_evaluation_count
             > max(0, slot_count - 1) * self.fit_pass_count
             or self.local_refinement_lookup_count
             > self.observation_count * r * self.fit_pass_count

@@ -7,7 +7,7 @@ from enum import Enum
 
 from ...domain import ObservationId
 from .template_model import SequenceFit
-from .template_phase import fit_template_phase_with_local_advance
+from .template_phase import fit_template_phase_with_adjacency_relations
 from .template_phase_model import (
     GlobalLatticeAuthorityEvidence,
     PhaseFitResult,
@@ -121,11 +121,18 @@ def leave_one_anchor_out_phase_stability(
                 )
             )
         )
-        refit = fit_template_phase_with_local_advance(
+        reduced_ids = {item.observation_id for item in reduced}
+        reduced_contact_edges = tuple(
+            item
+            for item in phase_input.contact_edge_observations
+            if item.shared_edge_observation_id in reduced_ids
+        )
+        refit = fit_template_phase_with_adjacency_relations(
             replace(
                 phase_input,
                 observations=reduced,
                 separator_bands=reduced_bands,
+                contact_edge_observations=reduced_contact_edges,
                 # The final search authority may itself have been estimated
                 # from the removed atom.  Reusing it would make the
                 # leave-one-out check circular.
@@ -142,9 +149,7 @@ def leave_one_anchor_out_phase_stability(
                             .pitch_observation_ids
                         )
                         if identity
-                        in {
-                            item.observation_id for item in reduced
-                        }.union(
+                        in reduced_ids.union(
                             band.observation_id for band in reduced_bands
                         )
                     ),

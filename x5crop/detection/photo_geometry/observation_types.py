@@ -340,7 +340,7 @@ class SeparatorBandObservation:
     """Directly visible positive-width separator material.
 
     Contact and overlap have no positive material band and therefore
-    travel through role-bound edge/local-advance evidence instead.  Keeping
+    travel through role-bound edge/adjacency evidence instead.  Keeping
     this interval non-negative is a type boundary, not a clamp on ``g[i]``.
     """
 

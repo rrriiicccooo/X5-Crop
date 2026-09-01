@@ -12,7 +12,7 @@ CANDIDATE_GATE_CHECK_CODES = (
     "source_scan_geometry",
     "complete_placement",
     "producer_coverage",
-    "local_advance_authority",
+    "adjacency_relation_authority",
     "content_protection",
     "selected_placement",
     "dual_lane_fill",

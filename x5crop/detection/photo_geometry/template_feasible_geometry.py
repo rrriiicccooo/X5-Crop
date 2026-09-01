@@ -12,6 +12,7 @@ from ...domain import FiniteInterval
 from ...run_local_identity import run_local_id
 from .model import BoundaryRole, PositionSource
 from .output_model import OutputBoundaryUse
+from .template_model import ContactRelation
 from .template_placement import FormatPlacement
 
 
@@ -313,7 +314,7 @@ def _sequence_system(
 ) -> tuple[_FeasibleSystem, tuple[_LinearExpression, ...]]:
     sequence = placement.sequence_fit
     lattice = sequence.phase_lattice_fit
-    relations = sequence.local_advance_relations
+    relations = sequence.adjacency_relations
     nominal_state = sequence.calibrated_nominal_grid_fit_state
     scale_index = 3 + len(relations) if nominal_state is not None else None
     variable_count = 3 + len(relations) + int(nominal_state is not None)
@@ -383,6 +384,26 @@ def _sequence_system(
         (_LinearExpression(gap, 0.0), sequence.pitch_fit.gap_interval_px),
     )
     inequality_rows, inequality_limits = _constraints(constraints)
+    contact_rows: list[np.ndarray] = []
+    for relation_index, relation in enumerate(relations):
+        if not isinstance(relation, ContactRelation):
+            continue
+        equality = np.zeros(variable_count, dtype=np.float64)
+        equality[1] = -1.0
+        equality[2] = 1.0
+        equality[3 + relation_index] = 1.0
+        contact_rows.extend((equality, -equality))
+    if contact_rows:
+        inequality_rows = np.concatenate(
+            (inequality_rows, np.asarray(contact_rows, dtype=np.float64)),
+            axis=0,
+        )
+        inequality_limits = np.concatenate(
+            (
+                inequality_limits,
+                np.zeros(len(contact_rows), dtype=np.float64),
+            )
+        )
     if nominal_state is not None:
         assert scale_index is not None
         correlated_rows: list[np.ndarray] = []

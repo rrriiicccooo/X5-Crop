@@ -58,6 +58,9 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                 "source_frame_width_authority": typed_read_model(
                     lane.prepared.source_frame_width_authority
                 ),
+                "contact_edge_observations": typed_read_model(
+                    lane.prepared.phase_input.contact_edge_observations
+                ),
                 "aperture_aspect_ratio_authority": typed_read_model(
                     lane.prepared.cross_competition
                     .aperture_aspect_ratio_authority
@@ -77,6 +80,14 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                     ),
                 },
                 "phase_status": lane.prepared.phase_competition.status.value,
+                "phase_failure_kind": (
+                    None
+                    if lane.prepared.phase_competition.failure_kind is None
+                    else lane.prepared.phase_competition.failure_kind.value
+                ),
+                "phase_failure_reason": (
+                    lane.prepared.phase_competition.ambiguity_reason
+                ),
                 "cross_status": lane.prepared.cross_competition.status.value,
                 "cross_failure_kind": (
                     None
@@ -96,10 +107,10 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                             or alignments[lane.lane_id].pattern.value
                             == "unresolved"
                         )
-                        else "local_advance"
+                        else "adjacency_relations"
                         if any(
-                            relation.kind.value != "nominal"
-                            for relation in lane.prepared.phase_competition.best.local_advance_relations
+                            relation.is_anomaly
+                            for relation in lane.prepared.phase_competition.best.adjacency_relations
                         )
                         else "normal"
                     ),
@@ -118,8 +129,8 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                         alignments[lane.lane_id]
                         .maximum_absolute_role_residual_px
                     ),
-                    "local_advance_relations": typed_read_model(
-                        alignments[lane.lane_id].local_advance_relations
+                    "adjacency_relations": typed_read_model(
+                        alignments[lane.lane_id].adjacency_relations
                     ),
                     "global_lattice_authority": typed_read_model(
                         alignments[lane.lane_id].global_lattice_authority

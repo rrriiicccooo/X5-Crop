@@ -26,7 +26,7 @@ WORK_FIELDS = (
     "phase_fit_pass_count",
     "phase_role_lookup_count",
     "phase_role_binding_count",
-    "local_relation_evaluation_count",
+    "adjacency_relation_evaluation_count",
     "local_refinement_lookup_count",
     "local_refinement_binding_count",
     "cross_registered_run_count",
@@ -90,7 +90,7 @@ def bounded_work(
         <= int(row["phase_hypothesis_count"]) * count * 2
         and int(row["separator_lattice_hypothesis_count"])
         <= MAX_PHASE_OBSERVATIONS * max(6, count * 2) * 2
-        and int(row["local_relation_evaluation_count"])
+        and int(row["adjacency_relation_evaluation_count"])
         <= max(0, count - 1) * int(row["phase_fit_pass_count"])
         and int(row["local_refinement_lookup_count"])
         <= MAX_PHASE_OBSERVATIONS * count * 2 * int(row["phase_fit_pass_count"])

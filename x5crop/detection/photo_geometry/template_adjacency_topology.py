@@ -21,6 +21,7 @@ from .template_adjacency_coverage import (
     AdjacencyObservationCoverage,
 )
 from .template_model import SequenceFit
+from .template_model import ContactRelation
 
 
 _NUMERIC_EPSILON_PX = 1.0e-7
@@ -30,6 +31,7 @@ class AdjacencyContinuityKind(str, Enum):
     """Observed material state relevant to an ordinary adjacency."""
 
     SEPARATOR_MATERIAL = "separator_material"
+    CONTACT = "contact"
     NO_COUNTEREVIDENCE_OBSERVED = "no_counterevidence_observed"
     NORMAL_SEPARATOR_COUNTEREVIDENCE = "normal_separator_counterevidence"
     SEPARATOR_MATERIAL_UNRESOLVED = "separator_material_unresolved"
@@ -41,6 +43,7 @@ class AdjacencyContinuityBasis(str, Enum):
     """Physical fact behind one continuity state."""
 
     POSITIVE_SEPARATOR_BAND = "positive_separator_band"
+    SHARED_PHYSICAL_EDGE = "shared_physical_edge"
     COMPLETE_REGISTERED_CORRIDOR = "complete_registered_corridor"
     REVERSED_DIRECT_EDGES = "reversed_direct_edges"
 
@@ -69,6 +72,7 @@ class AdjacencyContinuityObservation:
     end_observation_id: ObservationId | None
     next_start_observation_id: ObservationId | None
     separator_band_observation_ids: tuple[ObservationId, ...]
+    contact_observation_id: ObservationId | None
     signed_gap_interval_px: FiniteInterval | None
     failure_kind: AdjacencyContinuityFailureKind | None
     reason: str | None
@@ -76,6 +80,7 @@ class AdjacencyContinuityObservation:
     def __post_init__(self) -> None:
         supported = self.kind in {
             AdjacencyContinuityKind.SEPARATOR_MATERIAL,
+            AdjacencyContinuityKind.CONTACT,
             AdjacencyContinuityKind.NO_COUNTEREVIDENCE_OBSERVED,
         }
         contradicted = (
@@ -142,6 +147,17 @@ class AdjacencyContinuityObservation:
                 <= _NUMERIC_EPSILON_PX
             ):
                 raise ValueError("separator continuity fact is incomplete")
+        elif self.kind == AdjacencyContinuityKind.CONTACT:
+            if (
+                self.basis != AdjacencyContinuityBasis.SHARED_PHYSICAL_EDGE
+                or not direct_pair
+                or self.end_observation_id
+                != self.next_start_observation_id
+                or self.separator_band_observation_ids
+                or self.signed_gap_interval_px != FiniteInterval.exact(0.0)
+                or not isinstance(self.contact_observation_id, ObservationId)
+            ):
+                raise ValueError("contact continuity fact is incomplete")
         elif self.kind == (
             AdjacencyContinuityKind.NO_COUNTEREVIDENCE_OBSERVED
         ):
@@ -164,6 +180,11 @@ class AdjacencyContinuityObservation:
                 raise ValueError("normal-separator counterevidence is invalid")
         elif self.basis is not None:
             raise ValueError("unresolved continuity cannot claim a basis")
+        if (
+            self.kind != AdjacencyContinuityKind.CONTACT
+            and self.contact_observation_id is not None
+        ):
+            raise ValueError("non-contact continuity retained contact evidence")
         if (
             self.kind
             == AdjacencyContinuityKind.SEPARATOR_MATERIAL_UNRESOLVED
@@ -280,6 +301,9 @@ def observe_adjacency_continuity(
         set(by_id),
     )
     values: list[AdjacencyContinuityObservation] = []
+    relations_by_ordinal = {
+        item.relation_ordinal: item for item in fit.adjacency_relations
+    }
     for item in coverage:
         adjacency_index = item.relation_ordinal - 1
         end_id = fit.binding_observation_ids[2 * adjacency_index + 1]
@@ -326,6 +350,8 @@ def observe_adjacency_continuity(
             item.state.value,
             item.covering_query_ids,
         )
+        relation = relations_by_ordinal.get(item.relation_ordinal)
+        contact = relation if isinstance(relation, ContactRelation) else None
 
         def observation(
             *,
@@ -333,6 +359,7 @@ def observe_adjacency_continuity(
             kind: AdjacencyContinuityKind,
             basis: AdjacencyContinuityBasis | None = None,
             separator_band_observation_ids: tuple[ObservationId, ...] = (),
+            contact_observation_id: ObservationId | None = None,
             signed_gap_interval_px: FiniteInterval | None = None,
             failure_kind: AdjacencyContinuityFailureKind | None = None,
             reason: str | None = None,
@@ -356,10 +383,62 @@ def observe_adjacency_continuity(
                 end_observation_id=end_id,
                 next_start_observation_id=next_start_id,
                 separator_band_observation_ids=separator_band_observation_ids,
+                contact_observation_id=contact_observation_id,
                 signed_gap_interval_px=signed_gap_interval_px,
                 failure_kind=failure_kind,
                 reason=reason,
             )
+
+        if contact is not None:
+            if (
+                end_id != contact.shared_edge_observation_id
+                or next_start_id != contact.shared_edge_observation_id
+            ):
+                raise ValueError("selected contact lost its shared edge binding")
+            if item.state != AdjacencyCoverageState.COMPLETE:
+                values.append(
+                    observation(
+                        state=EvidenceState.UNAVAILABLE,
+                        kind=AdjacencyContinuityKind.COVERAGE_INCOMPLETE,
+                        failure_kind=(
+                            AdjacencyContinuityFailureKind
+                            .REGISTERED_COVERAGE_INCOMPLETE
+                        ),
+                        reason=(
+                            "registered queries do not cover the complete "
+                            "contact corridor"
+                        ),
+                    )
+                )
+                continue
+            if exact_bands:
+                values.append(
+                    observation(
+                        state=EvidenceState.UNAVAILABLE,
+                        kind=AdjacencyContinuityKind.UNRESOLVED,
+                        failure_kind=(
+                            AdjacencyContinuityFailureKind
+                            .SEPARATOR_ROLE_CONFLICT
+                        ),
+                        reason=(
+                            "positive separator material competes with the "
+                            "shared-edge contact interpretation"
+                        ),
+                        separator_band_observation_ids=exact_band_ids,
+                        signed_gap_interval_px=direct_signed_gap,
+                    )
+                )
+                continue
+            values.append(
+                observation(
+                    state=EvidenceState.SUPPORTED,
+                    kind=AdjacencyContinuityKind.CONTACT,
+                    basis=AdjacencyContinuityBasis.SHARED_PHYSICAL_EDGE,
+                    contact_observation_id=contact.contact_observation_id,
+                    signed_gap_interval_px=FiniteInterval.exact(0.0),
+                )
+            )
+            continue
 
         if len(supported_bands) > 1 or (
             supported_bands and material_conflicts

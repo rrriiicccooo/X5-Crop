@@ -5,11 +5,14 @@ import unittest
 
 from tools.tests.template_test_support import (
     phase_edge,
+    phase_separator,
+    phase_sequence_measurement,
     phase_template,
     placement_sequence,
     placement_template,
     unavailable_nominal_grid_prior,
 )
+from x5crop.detection.photo_geometry.template_contact import observe_contact_edges
 from x5crop.detection.photo_geometry.template_frame_width import (
     apply_correlated_frame_width_inference,
     apply_selected_source_frame_width,
@@ -324,6 +327,65 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             selected.best.pitch_fit.frame_width_px.maximum,
             selected.best.pitch_fit.canonical_frame_width_px,
         )
+
+    def test_contact_adjacent_frames_do_not_calibrate_source_width(
+        self,
+    ) -> None:
+        observations = tuple(
+            phase_edge(f"contact-width:{index}", coordinate)
+            for index, coordinate in enumerate(
+                (40.0, 140.0, 160.0, 260.0, 360.0, 380.0, 480.0)
+            )
+        )
+        bands = (
+            phase_separator(
+                "contact-width:separator:1",
+                observations[1],
+                observations[2],
+                FiniteInterval(19.8, 20.2),
+            ),
+            phase_separator(
+                "contact-width:separator:3",
+                observations[4],
+                observations[5],
+                FiniteInterval(19.8, 20.2),
+            ),
+        )
+        contacts = observe_contact_edges(
+            observations,
+            bands,
+            (
+                phase_sequence_measurement(
+                    "contact-width",
+                    FiniteInterval(0.0, 500.0),
+                ),
+            ),
+        )
+        phase = fit_template_phase(
+            observations,
+            phase_template(4),
+            separator_bands=bands,
+            contact_edge_observations=contacts,
+        )
+        self.assertEqual(phase.status, PhaseFitStatus.RESOLVED)
+        phase = self._with_selected_width_prerequisites(
+            phase,
+            observations,
+        )
+        source = SourceScanGeometry.create(
+            FramePhysicalSpec(10.0, 24.0, None),
+            width_scale_px_per_mm=PositiveInterval.exact(10.0),
+            height_scale_px_per_mm=PositiveInterval.exact(10.0),
+        )
+
+        _calibrated, authority = calibrate_source_frame_width(
+            source,
+            phase,
+            observations,
+        )
+
+        self.assertEqual(authority.state, EvidenceState.SUPPORTED)
+        self.assertEqual(authority.supporting_frame_ordinals, (1, 4))
 
     def test_observed_inner_frames_close_source_width_before_outer_refinement(
         self,

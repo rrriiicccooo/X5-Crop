@@ -33,7 +33,7 @@ OOD 共同支持“风险低到可直接使用”，不是 runtime 已知黄金�
   format 保持 unavailable。
 - Grid 可以生成完整 diagnostic candidate，但当前 hard-fact 自动批准要求每张 Frame 至少有一侧直接角色。
   双侧都未绑定时，evidence 保存 Frame ordinal，并以 `nominal_grid_complete_frame_unobserved` review；S040、
-  S056 是该合同的真实安全反例。Report revision 为 `x5crop_v5_template_report_34`。
+  S056 是该合同的真实安全反例。Report revision 为 `x5crop_v5_template_report_35`。
 - 普通 local refinement 使用完整 format W，不能让正在受检验的 fitted Grid W 过滤自己的反证。唯一
   placement 中至少两张其它完整直接 Frame 闭合的 `SourceFrameWidthAuthority` 可以追加一次有界 lookup，
   在某个双侧未绑定 Frame 中唯一选择已经注册且各自有坐标权限的 native edge pair；没有合格解释或多解
@@ -47,9 +47,14 @@ OOD 共同支持“风险低到可直接使用”，不是 runtime 已知黄金�
   query、winner-specific requery 或第二 detector。
 - `AdjacencyContinuityObservation` 现在把 selected placement 的既有 registered facts 按 ordinal 映射为
   `separator_material | no_counterevidence_observed | separator_material_unresolved |
-  normal_separator_counterevidence | unresolved | coverage_incomplete`。只有正序 material band 能产生
-  local advance；完整走廊无反证只维持正常 Grid。Continuity 与 topology 分别使用 typed Gate failure，
-  report/Debug 保存完整 ledger。该机制没有新增像素读取，也尚未选择 contact/overlap。
+  contact | normal_separator_counterevidence | unresolved | coverage_incomplete`。正序 material band 产生
+  separator delta；完整走廊无反证只维持正常 Grid；唯一共享 physical edge 可以产生 Contact。Continuity
+  与 topology 分别使用 typed Gate failure，report/Debug 保存完整 ledger。
+- `template_contact.py` 从既有 authoritative edge ledger 候选无关地产生 `ContactEdgeObservation`；
+  `ContactRelation` 把同一 edge 原子绑定到相邻 END/START，并以 `delta = W - pitch` 进入唯一 prefix 模型。
+  重叠的独立 edge identity、separator 竞争、覆盖不完整或多种 ordinal 映射均保持 review。Contact 两侧
+  不参加 source W 独立支撑；输出只在两个共享边界增加一份基础 sequence bleed，并继续受同一 5% 预算。
+  该机制不新增像素读取、第二 detector、fallback、score 或 topology 特例；Overlap 仍未启用。
 - 三个固定高度区域现在复用同一 registered 全长 baseline，同时观察 0.25 mm local 与 0.50 mm broad
   material scale。Broad observation 要求 signed tone、uniformity/texture、polarity、低纹理背景侧和位置
   一致；不扩大 query halo、不增加 TIFF 读取，也不形成 enhanced detector。单条 aggregate edge 默认只作
@@ -61,9 +66,8 @@ OOD 共同支持“风险低到可直接使用”，不是 runtime 已知黄金�
   17/66、较难 nominal 2/30、challenge 0/14；candidate 为 87 个不可用、20 个安全、3 个不安全，全部不安全
   candidate 均保持 review。与上一机制检查点相比，自动批准集合和 candidate 安全分类不变；9 张样片只
   迁移了最先暴露的 typed root failure，全部仍为 `needs_review / not_available`。
-- 代码检查点 `d958c839` 的 24-source performance receipt 为 mean 3.293 秒，正式 5 秒 Gate 通过，3 秒
-  challenge 尚未达到；最大未插桩 RSS 为 1.21 GB。完整工程验证为 653 项通过、2 项按设计跳过，GitHub
-  Verify 的 macOS、Intel macOS、Windows、Ubuntu 全部 job 通过。
+- Contact 检查点的 24-source 正式性能通过 mean `<= 5s` Gate；3 秒 non-blocking challenge 尚未达到。
+  Receipt 必须绑定最终 clean commit，后续 tree 变化会立即使它失效。
 
 ## 证据与数据边界
 
@@ -81,12 +85,11 @@ OOD 共同支持“风险低到可直接使用”，不是 runtime 已知黄金�
 
 ## 开放风险
 
-- 基础 nominal 仍有 49/66 review，较难 nominal 有 28/30 review。主要 Gate 根因是 22 个
-  `nominal_grid_complete_frame_unobserved`、12 个 `phase_placement_ambiguous`、11 个
-  `phase_template_mismatch`、11 个 `direct_role_binding_authority_unavailable`、6 个
-  `aperture_aspect_ratio_budget_exhausted`、6 个 `direct_role_aperture_domain_unavailable`、6 个
-  `placement_unresolved`、4 个 `nominal_grid_phase_anchor_unavailable` 与 2 个
-  `adjacency_continuity_unresolved`。
+- 基础 nominal 仍有 49/66 review，较难 nominal 有 28/30 review。当前 phase typed root 主要为 22 个
+  `nominal_grid_complete_frame_unobserved`、12 个 `discrete_phase_ambiguous`、11 个
+  `direct_role_binding_authority_unavailable`、10 个 `fixed_template_mismatch`、3 个
+  `nominal_grid_phase_anchor_unavailable` 与 2 个 `adjacency_continuity_unresolved`；其它失败均保留各自
+  typed owner，不能合并成“没找到线”。
 - S040/S056 证明完整 query receipt 与 calibrated Grid 仍不足以硬授权整张未观察 Frame；这不是 Grid 的
   永久物理上限。未来只有更强的直接/continuity/topology evidence，或独立校准且可拒绝的概率层，才能
   改变该权限，不能简单删除 failure。
@@ -97,11 +100,12 @@ OOD 共同支持“风险低到可直接使用”，不是 runtime 已知黄金�
 
 ## 精确下一步
 
-1. 剩余 22 个 `nominal_grid_complete_frame_unobserved` 已没有可由现有 source W 唯一闭合的 intrinsic
-   pair 或单侧 edge；下一步提高候选无关 observation/coordinate authority，不能删除完整 Frame 安全反例
-   或让 Grid/source W 创造像素事实。
-2. 下一个小机制是 contact：在现有 `AdjacencyContinuityObservation` 之上证明一条共享 physical edge，
-   建立显式 relation、相关 W 推导、同一 5% 预算内的边界保护、Gate 和 Debug；不能把“内容连续”单独
-   当成 contact 证明。
-3. Contact 闭合后再独立实现 overlap。完全未观察 Frame 的 Grid 风险权限和概率选择只先设计
-   feature/calibration/OOD/abstention schema，等独立 calibration 与 sealed 数据具备后再进入 runtime。
+1. 下一个小机制是 Overlap：两条独立角色 edge 反序、合法 overlap interval、同一 5% 预算内的两侧保护、
+   Gate 与 Debug；内容连续只能否定普通 separator，不能单独证明 overlap。
+2. 剩余 22 个 `nominal_grid_complete_frame_unobserved` 不能靠继续加强边缘 detector 全部解决。完全未观察
+   Frame 的校准 Grid 风险权限须先冻结条件、误差包络、OOD 与 abstention schema，并取得独立 calibration
+   与 sealed representative；没有这些数据前不进入 runtime，也不能让 Grid/source W 创造像素事实。
+3. 带拒绝选项的概率选择只在硬合法候选之后工作，必须冻结 feature/model/calibration schema、绝对概率、
+   runner margin、coverage、OOD、性能上界与 typed failure；当前 development gold 不得自校准该权限。
+4. 补充不同相机、片夹、曝光与扫描状态，以及缺失的 `xpan`、`120-645`、`135-dual` 格式；生产危险自动
+   裁切经人工确认后进入 incident regression，并同时补充新的 sealed source。

@@ -260,7 +260,7 @@ def _output_footprint():
         requested_source_footprint=polygon,
         required_source_footprint=polygon,
         boundary_protections=tuple(
-            BoundaryProtectionFact(role, 0.0, 0.0, 0.0, 0.0)
+            BoundaryProtectionFact(role, 0.0, 0.0, 0.0, None, 0.0, 0.0)
             for role in (
                 BoundaryRole.START,
                 BoundaryRole.END,

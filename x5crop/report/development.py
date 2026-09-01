@@ -114,6 +114,9 @@ def development_report_facts(
                     "separator_bands": typed_read_model(
                         lane.prepared.separator_bands
                     ),
+                    "contact_edge_observations": typed_read_model(
+                        lane.prepared.phase_input.contact_edge_observations
+                    ),
                     "side_transition_regions": typed_read_model(
                         lane.prepared.side_regions
                     ),
@@ -163,10 +166,10 @@ def development_report_facts(
                 "alignment_path": (
                     None
                     if lane.prepared.phase_competition.best is None
-                    else "local_advance"
+                    else "adjacency_relations"
                     if any(
-                        relation.kind.value != "nominal"
-                        for relation in lane.prepared.phase_competition.best.local_advance_relations
+                        relation.is_anomaly
+                        for relation in lane.prepared.phase_competition.best.adjacency_relations
                     )
                     else "normal"
                 ),
@@ -293,9 +296,9 @@ def development_report_facts(
                     "phase_role_binding_count": (
                         lane.prepared.phase_competition.receipt.role_binding_count
                     ),
-                    "local_relation_evaluation_count": (
+                    "adjacency_relation_evaluation_count": (
                         lane.prepared.phase_competition.receipt
-                        .local_relation_evaluation_count
+                        .adjacency_relation_evaluation_count
                     ),
                     "local_refinement_lookup_count": (
                         lane.prepared.phase_competition.receipt

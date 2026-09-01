@@ -13,7 +13,7 @@ from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInte
 from ...formats import APERTURE_COMPATIBILITY_SPEC, FormatSpec, FramePhysicalSpec
 from .physical_identity import physical_fact_id
 from .model import BoundaryRole
-from .template_model import LocalAdvanceRelation, TemplateSpec
+from .template_model import AdjacencyRelation, ContactRelation, TemplateSpec
 from .template_nominal_grid_model import (
     CalibratedNominalGridAuthority,
     CalibratedNominalGridEvidence,
@@ -267,7 +267,7 @@ def solve_calibrated_nominal_grid_envelope(
     template: TemplateSpec,
     integer_slot_offset: int,
     role_constraints: tuple[NominalGridRoleConstraint, ...],
-    relations: tuple[LocalAdvanceRelation, ...],
+    relations: tuple[AdjacencyRelation, ...],
     phase_authority_px: FiniteInterval | None,
     retained_direct_constraint_rank: int,
 ) -> tuple[CalibratedNominalGridEnvelope, CalibratedNominalGridFitState]:
@@ -363,6 +363,15 @@ def solve_calibrated_nominal_grid_envelope(
     non_negative_gap[2] = -1.0
     rows.append(non_negative_gap)
     limits.append(0.0)
+    for relation_index, relation in enumerate(relations):
+        if not isinstance(relation, ContactRelation):
+            continue
+        equality = np.zeros(variable_count, dtype=np.float64)
+        equality[1] = -1.0
+        equality[2] = 1.0
+        equality[3 + relation_index] = 1.0
+        rows.extend((equality, -equality))
+        limits.extend((0.0, 0.0))
     for constraint in role_constraints:
         _append_interval_constraints(
             rows,

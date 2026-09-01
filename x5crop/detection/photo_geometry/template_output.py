@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from ...domain import Box, EvidenceState
+from ...domain import Box, EvidenceState, ObservationId
 from ...formats import OUTPUT_PROTECTION_SPEC
 from ...geometry.convex import (
     ConvexPolygon,
@@ -18,6 +18,7 @@ from .template_feasible_geometry import (
     FeasiblePlacementProjection,
     JointFrameState,
 )
+from .template_model import ContactRelation
 from .model import (
     AuthoritySide,
     BoundaryRole,
@@ -92,8 +93,21 @@ def _footprint(
                 if apply_bleed
                 else {role: 0.0 for role in _ROLES}
             )
+            topology_protections = (
+                _state_topology_protection_px(
+                    placement,
+                    frame,
+                    state,
+                )[0]
+                if apply_bleed
+                else {role: 0.0 for role in _ROLES}
+            )
             expansions = {
-                role: residuals[role] + bleeds[role]
+                role: (
+                    residuals[role]
+                    + bleeds[role]
+                    + topology_protections[role]
+                )
                 for role in _ROLES
             }
         else:
@@ -424,13 +438,77 @@ def _state_bleed_px(
     }
 
 
+def _contact_relations_by_role(
+    placement: FormatPlacement,
+    frame: TemplateFrame,
+) -> dict[BoundaryRole, ContactRelation]:
+    """Map only the two boundaries owned by a proven adjacent contact."""
+
+    values: dict[BoundaryRole, ContactRelation] = {}
+    for relation in placement.sequence_fit.adjacency_relations:
+        if not isinstance(relation, ContactRelation):
+            continue
+        role = (
+            BoundaryRole.END
+            if frame.lane_ordinal == relation.relation_ordinal
+            else BoundaryRole.START
+            if frame.lane_ordinal == relation.relation_ordinal + 1
+            else None
+        )
+        if role is None:
+            continue
+        if role in values:
+            raise ValueError(
+                "one output boundary cannot belong to multiple contacts"
+            )
+        values[role] = relation
+    return values
+
+
+def _state_topology_protection_px(
+    placement: FormatPlacement,
+    frame: TemplateFrame,
+    state: JointFrameState,
+) -> tuple[
+    dict[BoundaryRole, float],
+    dict[BoundaryRole, ObservationId | None],
+]:
+    """Use one extra base sequence bleed only on proven contact sides."""
+
+    sequence_scale = (
+        abs(state.sequence_end_px - state.sequence_start_px)
+        / placement.frame_spec.frame_width_mm
+    )
+    sequence = OUTPUT_PROTECTION_SPEC.sequence_bleed_mm(
+        placement.frame_spec.frame_width_mm
+    ) * sequence_scale
+    relations = _contact_relations_by_role(placement, frame)
+    protections = {role: 0.0 for role in _ROLES}
+    relation_ids: dict[BoundaryRole, ObservationId | None] = {
+        role: None for role in _ROLES
+    }
+    for role, relation in relations.items():
+        protections[role] = sequence
+        relation_ids[role] = relation.contact_observation_id
+    return protections, relation_ids
+
+
 def _maximum_state_components(
     placement: FormatPlacement,
     frame: TemplateFrame,
     projection: FeasiblePlacementProjection,
-) -> tuple[dict[BoundaryRole, float], dict[BoundaryRole, float]]:
+) -> tuple[
+    dict[BoundaryRole, float],
+    dict[BoundaryRole, float],
+    dict[BoundaryRole, float],
+    dict[BoundaryRole, ObservationId | None],
+]:
     residuals = {role: 0.0 for role in _ROLES}
     bleeds = {role: 0.0 for role in _ROLES}
+    topology_protections = {role: 0.0 for role in _ROLES}
+    topology_relation_ids: dict[BoundaryRole, ObservationId | None] = {
+        role: None for role in _ROLES
+    }
     for state in projection.frame_states[frame.lane_ordinal - 1]:
         state_residuals = _state_boundary_residuals(placement, frame, state)
         state_bleeds = _state_bleed_px(
@@ -438,10 +516,34 @@ def _maximum_state_components(
             state,
             placement.cross_fit.boundary_use,
         )
+        state_topology, state_relation_ids = _state_topology_protection_px(
+            placement,
+            frame,
+            state,
+        )
         for role in _ROLES:
             residuals[role] = max(residuals[role], state_residuals[role])
             bleeds[role] = max(bleeds[role], state_bleeds[role])
-    return residuals, bleeds
+            topology_protections[role] = max(
+                topology_protections[role],
+                state_topology[role],
+            )
+            relation_id = state_relation_ids[role]
+            if (
+                relation_id is not None
+                and topology_relation_ids[role] not in {None, relation_id}
+            ):
+                raise ValueError(
+                    "one output boundary cannot change topology relation"
+                )
+            if relation_id is not None:
+                topology_relation_ids[role] = relation_id
+    return (
+        residuals,
+        bleeds,
+        topology_protections,
+        topology_relation_ids,
+    )
 
 
 def joint_placement_envelope(
@@ -570,7 +672,12 @@ def output_footprint_from_template_placement(
         raise ValueError("source-lane authority disagrees with placement")
     envelope = joint_placement_envelope(placement, projection, lane_ordinal)
     parameter_footprint = _footprint(placement, frame, projection)
-    local_residuals, bleed_by_role = _maximum_state_components(
+    (
+        local_residuals,
+        bleed_by_role,
+        topology_protection_by_role,
+        topology_relation_by_role,
+    ) = _maximum_state_components(
         placement,
         frame,
         projection,
@@ -617,7 +724,9 @@ def output_footprint_from_template_placement(
                 boundaries[role],
                 parameter_footprint,
             ),
-            bleed_px=bleed_by_role[role],
+            base_bleed_px=bleed_by_role[role],
+            topology_protection_px=topology_protection_by_role[role],
+            topology_relation_id=topology_relation_by_role[role],
             local_boundary_residual_px=local_residuals[role],
             joint_expansion_px=_expansion_px(boundaries[role], requested),
         )

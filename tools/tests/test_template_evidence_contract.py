@@ -24,7 +24,7 @@ from x5crop.detection.photo_geometry.observation_types import (
 )
 from x5crop.detection.photo_geometry.template_phase import (
     fit_template_phase,
-    fit_template_phase_with_local_advance,
+    fit_template_phase_with_adjacency_relations,
 )
 from x5crop.detection.photo_geometry.template_phase_model import (
     TemplatePhaseInput,
@@ -59,7 +59,7 @@ class TemplateEvidenceContractTest(unittest.TestCase):
             template(1),
             frame_width_px=PositiveInterval(98.0, 102.0),
         )
-        phase = fit_template_phase_with_local_advance(
+        phase = fit_template_phase_with_adjacency_relations(
             TemplatePhaseInput(
                 observations=(start, end),
                 separator_bands=(),

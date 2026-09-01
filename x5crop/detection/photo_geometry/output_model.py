@@ -246,7 +246,9 @@ class BoundaryProtectionFact:
 
     role: BoundaryRole
     measurement_expansion_px: float
-    bleed_px: float
+    base_bleed_px: float
+    topology_protection_px: float
+    topology_relation_id: ObservationId | None
     local_boundary_residual_px: float
     joint_expansion_px: float
 
@@ -260,12 +262,28 @@ class BoundaryProtectionFact:
             raise ValueError("boundary protection requires an output role")
         values = (
             self.measurement_expansion_px,
-            self.bleed_px,
+            self.base_bleed_px,
+            self.topology_protection_px,
             self.local_boundary_residual_px,
             self.joint_expansion_px,
         )
         if any(not math.isfinite(value) or value < 0.0 for value in values):
             raise ValueError("boundary protection distances must be non-negative")
+        topology_applies = self.topology_protection_px > 0.0
+        if topology_applies != isinstance(
+            self.topology_relation_id,
+            ObservationId,
+        ):
+            raise ValueError(
+                "topology protection requires exactly one typed relation"
+            )
+        if topology_applies and self.role not in {
+            BoundaryRole.START,
+            BoundaryRole.END,
+        }:
+            raise ValueError(
+                "topology protection may affect only sequence boundaries"
+            )
 
 
 @dataclass(frozen=True)

@@ -154,7 +154,7 @@ def compile_template_measurement_plan(
     role_bounds = TemplateRoleBounds(
         max_role_bindings=2 * count,
         max_inferred_roles=2 * count,
-        max_local_relations=max(0, count - 1),
+        max_adjacency_relations=max(0, count - 1),
     )
     cross_bounds = TemplateCrossBounds(
         max_registered_runs=MAX_PHASE_OBSERVATIONS,

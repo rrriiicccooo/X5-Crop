@@ -65,7 +65,7 @@ class GateGap(str, Enum):
     )
     SHARED_AUTHORITY_UNAVAILABLE = "shared_authority_unavailable"
     CONTENT_VETO_REJECTED = "content_veto_rejected"
-    LOCAL_ADVANCE_UNRESOLVED = "local_advance_unresolved"
+    ADJACENCY_RELATION_UNRESOLVED = "adjacency_relation_unresolved"
     ADJACENCY_CONTINUITY_UNRESOLVED = (
         "adjacency_continuity_unresolved"
     )
@@ -102,7 +102,7 @@ class MinimumMissingFact(str, Enum):
     CROSS_POSITION = "cross_position"
     APERTURE_ASPECT_RATIO_AUTHORITY = "aperture_aspect_ratio_authority"
     REGISTERED_QUERY_COVERAGE = "registered_query_coverage"
-    LOCAL_GAP_ORDINAL = "local_gap_ordinal"
+    ADJACENCY_RELATION = "adjacency_relation"
     ADJACENCY_CONTINUITY = "adjacency_continuity"
     ADJACENCY_TOPOLOGY = "adjacency_topology"
     UNIQUE_PLACEMENT = "unique_placement"
@@ -284,9 +284,9 @@ def failure_fact(
             MinimumMissingFact.SOURCE_PHYSICAL_COMPATIBILITY,
             RecoveryAction.REVIEW_PLACEMENT,
         ),
-        GateGap.LOCAL_ADVANCE_UNRESOLVED: (
+        GateGap.ADJACENCY_RELATION_UNRESOLVED: (
             FailureRecovery.UNRECOVERABLE,
-            MinimumMissingFact.LOCAL_GAP_ORDINAL,
+            MinimumMissingFact.ADJACENCY_RELATION,
             RecoveryAction.REVIEW_PLACEMENT,
         ),
         GateGap.ADJACENCY_CONTINUITY_UNRESOLVED: (
@@ -368,7 +368,7 @@ GATE_CHECK_DEPENDENCIES: dict[str, tuple[str, ...]] = {
     "selected_placement": (
         "complete_placement",
         "content_protection",
-        "local_advance_authority",
+        "adjacency_relation_authority",
     ),
     "dual_lane_fill": ("selected_placement",),
     "selected_output_footprint": (

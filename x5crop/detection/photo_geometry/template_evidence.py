@@ -32,7 +32,7 @@ class PhysicalUnknown(str, Enum):
     PITCH = "pitch"
     DIRECTION = "direction"
     CROSS_POSITION = "cross_position"
-    LOCAL_GAP_DELTA = "local_gap_delta"
+    ADJACENCY_RELATION = "adjacency_relation"
     LOCAL_BOUNDARY = "local_boundary"
 
 
@@ -101,9 +101,9 @@ def template_evidence_use_ledger(
 ) -> tuple[EvidenceUseFact, ...]:
     """Return one non-compensating use for every registered observation."""
 
-    local_ids = {
+    adjacency_ids = {
         identity
-        for relation in (() if phase.best is None else phase.best.local_advance_relations)
+        for relation in (() if phase.best is None else phase.best.adjacency_relations)
         for identity in relation.observation_ids
     }
     local_boundary_ids = set(
@@ -118,7 +118,7 @@ def template_evidence_use_ledger(
             else (
                 identity
                 for identity in phase.best.phase_anchor_observation_ids
-                if identity is not None and identity not in local_ids
+                if identity is not None and identity not in adjacency_ids
             )
         )
     )
@@ -143,8 +143,8 @@ def template_evidence_use_ledger(
     for observation in sequence_edges:
         identity = observation.observation_id
         owner = (
-            PhysicalUnknown.LOCAL_GAP_DELTA
-            if identity in local_ids
+            PhysicalUnknown.ADJACENCY_RELATION
+            if identity in adjacency_ids
             else PhysicalUnknown.LOCAL_BOUNDARY
             if identity in local_boundary_ids
             else PhysicalUnknown.PHASE
@@ -163,8 +163,10 @@ def template_evidence_use_ledger(
         values.append(
             EvidenceUseFact(
                 identity,
-                EvidenceUse.FIT if identity in local_ids else EvidenceUse.VALIDATION,
-                PhysicalUnknown.LOCAL_GAP_DELTA,
+                EvidenceUse.FIT
+                if identity in adjacency_ids
+                else EvidenceUse.VALIDATION,
+                PhysicalUnknown.ADJACENCY_RELATION,
             )
         )
     for observation in cross_observations:
