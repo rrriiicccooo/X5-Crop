@@ -246,12 +246,17 @@ def alignment_summary(detection: FinalDetection) -> str:
             if nominal is None or nominal.failure_kind is None
             else f"{nominal.failure_kind.value.upper()} "
         )
+        nominal_anchor_roles = (
+            "-"
+            if nominal is None or not nominal.phase_anchor_role_indices
+            else ",".join(map(str, nominal.phase_anchor_role_indices))
+        )
         nominal_proof = (
             "N/A"
             if nominal is None
             else (
                 f"{nominal.state.value.upper()} {nominal_failure}"
-                f"A{len(nominal.phase_anchor_role_indices)} "
+                f"A[{nominal_anchor_roles}] "
                 f"G{len(nominal.inferred_adjacency_ordinals)} "
                 f"F{nominal_frames}"
             )
@@ -263,6 +268,24 @@ def alignment_summary(detection: FinalDetection) -> str:
         )
         complete_coverage = sum(
             item.state.value == "complete" for item in inferred_coverage
+        )
+        coverage_proof = (
+            "-"
+            if not diagnostic.adjacency_observation_coverage
+            else "/".join(
+                f"{item.relation_ordinal}:"
+                f"{item.state.value.upper()}"
+                f"{'*' if item.normal_inference_required else ''}"
+                for item in diagnostic.adjacency_observation_coverage
+            )
+        )
+        continuity_proof = (
+            "-"
+            if not diagnostic.adjacency_continuity_observations
+            else "/".join(
+                f"{item.relation_ordinal}:{item.kind.value.upper()}"
+                for item in diagnostic.adjacency_continuity_observations
+            )
         )
         continuity_counts = {
             kind: sum(
@@ -294,6 +317,16 @@ def alignment_summary(detection: FinalDetection) -> str:
             )
             for kind in ("normal", "wide", "narrow")
         }
+        local_delta_proof = (
+            "-"
+            if not diagnostic.adjacency_relations
+            else "/".join(
+                f"{relation.relation_ordinal}:"
+                f"{relation.kind.value.upper()}"
+                f"{relation.canonical_delta_px:+.2f}px"
+                for relation in diagnostic.adjacency_relations
+            )
+        )
         direct = diagnostic.direct_role_binding_authority
         direct_supported = (
             0
@@ -407,7 +440,8 @@ def alignment_summary(detection: FinalDetection) -> str:
             f"N{continuity_counts['no_counterevidence_observed']} "
             f"M{continuity_counts['separator_material_unresolved']} "
             f"U{continuity_counts['unresolved']} "
-            f"I{continuity_counts['coverage_incomplete']} · DIRECT "
+            f"I{continuity_counts['coverage_incomplete']} · COVER "
+            f"{coverage_proof} · OBS {continuity_proof} · DIRECT "
             f"{direct_supported}/{direct_total} G{direct_evidence_group_count} · "
             f"APERTURE DOMAIN "
             f"{direct_aperture_required} · OUTER "
@@ -424,6 +458,7 @@ def alignment_summary(detection: FinalDetection) -> str:
             f"{len(lane.prepared.phase_input.contact_edge_observations)} · "
             f"OVERLAP {selected_overlaps}/"
             f"{len(lane.prepared.phase_input.overlap_edge_pair_observations)} · "
+            f"LOCAL Δ {local_delta_proof} · "
             f"JOINT "
             f"B{joint_authority} S{joint_standalone}/{joint_total} "
             f"A{joint_ambiguous} "
@@ -432,17 +467,13 @@ def alignment_summary(detection: FinalDetection) -> str:
             f"A{broad_ambiguous} "
             f"U{broad_unavailable} P{broad_separator}"
         )
-        if diagnostic.pattern.value == "unresolved":
-            values.append(f"{lane.lane_id} {label} · {proof}")
-            continue
-        pitch_delta = float(
-            diagnostic.pitch_delta_from_compiled_center_px or 0.0
-        )
+        pitch_delta = diagnostic.pitch_delta_from_compiled_center_px
         residual = diagnostic.maximum_absolute_role_residual_px
         values.append(
             f"{lane.lane_id} {label} · {proof} · "
-            f"PITCH Δ {pitch_delta:+.2f}px · "
-            f"ROLE RESIDUAL {'N/A' if residual is None else f'{residual:.2f}px'}"
+            f"PITCH Δ "
+            f"{'N/A' if pitch_delta is None else f'{pitch_delta:+.2f}px'} · "
+            f"DIRECT Δ {'N/A' if residual is None else f'{residual:.2f}px'}"
         )
     return "ALIGNMENT · " + " | ".join(values)
 

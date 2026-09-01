@@ -8,6 +8,12 @@
 
 V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行 detector 只保存在 Git history。
 
+V5 的定位明确为：以 v4.2.8 已在真实样片中证明有效的 Grid、separator、outer/cross、deskew、候选无关
+复用与 TIFF 输出经验为能力基础，在 current-only 的 typed evidence、uncertainty、Gate、Debug 和黄金验收
+下重建其物理权限。旧机制不能因名称或来源被直接整体删除；必须先把有效事实迁入 observation、anchor、
+local correction、risk feature、veto、protection 或 selection 的唯一 owner，再删除旧式自证、任意评分、
+重试 mutation 与兼容路径。
+
 发布验收现在明确分为两层：检测能力要求当前 development nominal 全部安全 `approved_auto` 且全部角色
 `unsafe_approved_auto = 0`，challenge 的安全 auto 或安全 review 都合格；工程能力另行要求正式性能、
 TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 sealed cohort，以及黄金未覆盖 `xpan`、
@@ -69,10 +75,25 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   `direct_separator_refit/direct_separator_gap` 保存依据，并核对 immutable relation evidence identity；越过
   ceiling 或改变 template/ordinal/evidence/role mapping 时 typed review。完整路径仍为 O(count)、不新增
   TIFF query，fit pass 上界为 6。
-- Report revision 更新为 `x5crop_v5_template_report_38`，不保留旧 schema 兼容路径。当前 110 个
+- 校准 Grid 现在正式作为唯一 placement 的 primary generative model。Format/count 提供黄金集校准且带
+  完整区间的 W/H/pitch 与 normal adjacency；至少一个获得坐标权限的 absolute anchor 将它放入 TIFF。
+  Direct rank 3 仍是更强的完全直接闭合路径，但不再是 Grid 的唯一使用权限。某张 Frame 即使 START/END
+  都未直接观察，只要校准 prior、anchor、逐 adjacency 完整 coverage 和无 typed 反证全部成立，仍可由
+  同一 Grid 生成；`unobserved_frame_ordinals` 只作 provenance，不再是硬失败。全部 W/pitch/scale/local
+  关系以联合可行状态传播到 output，最终仍由 source containment、content veto 和每侧 5% 最坏包络决定
+  auto/review。无 anchor、coverage 不完整、直接反证、校准包络冲突或预算超限分别保留自己的 typed
+  failure；没有 fallback、第二 Grid、样片特例或零不确定性 nominal 值。
+- Report revision 更新为 `x5crop_v5_template_report_39`，不保留旧 schema 兼容路径。当前 110 个
   development task 的完整机制验收无分析错误：15 个安全 auto、95 个安全 review、
-  `unsafe_approved_auto = 0`；14 个 challenge 均安全 review。新增证明揭示的 authority 缺口保持 review，
-  没有为恢复上一检查点覆盖而放宽 Gate。
+  `unsafe_approved_auto = 0`；14 个 challenge 均安全 review。Review candidate 的黄金偏差只作机制诊断，
+  不再把未输出候选误写成 challenge 终态失败；approved output 仍必须完整通过黄金几何。校准 Grid 让
+  9 个原本没有候选的任务进入下游评估，其中 9 个候选均被真实证据或安全预算保守拦截，因此当前
+  nominal 自动覆盖未虚增。
+- 对 96 个 nominal 的同源机制对照显示：v4.2.8 有 80 个 auto，但其中 70 个是黄金危险自动裁切；只有
+  11 个 v4 geometry 安全。v4 安全而 V5 Review 的 9 个 task 是下一步能力迁移样本，当前分别落在
+  aspect/cross、fixed-template、direct-role、Grid conflict、continuity、phase ambiguity 与 output budget
+  等 typed root；不能据此恢复旧终判。当前 V5 有 17 个安全 candidate，其中没有“双方 geometry 都安全但
+  仅因 Grid direct-rank 权限而 Review”的遗留项，说明本阶段已把默认生成权限与后续安全阻断分开。
 - 直接观察到的 start/end 在最终 placement 中保留 native coordinate 与完整 interval；Grid 只补齐缺失
   角色。同一连续 placement 的互补 endpoint evidence 合并为联合可行状态，不伪造 runner。唯一 placement
   中至少两张完整直接 Frame 可闭合 source W；当每个缺失 Frame 仍有一侧直接边缘时，同一份相关 W 可补
@@ -81,15 +102,15 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   pair 时才绑定。双侧未绑定 Frame 若只有一侧存在唯一 intrinsic edge、另一侧完整 corridor 无候选，也可
   保留该 native coordinate 并由同一相关 W 推导 opposite；该路径可作用于 calibrated Grid selected fit，
   但 Grid/format W 自身不能授权。没有合格 pair/单侧 edge、多组解释或任一 opposite 候选继续 typed
-  review。缺失 separator 只有在
-  直接约束矩阵独立闭合 `phase/W/pitch`、对应 adjacency 的完整不确定性走廊被已执行窗口逐 trace 覆盖、
-  且没有局部反证时才按 `local_delta = 0` 补齐；不再用 edge 数、连续缺失数或全局 query-complete
-  布尔值代替证明。候选无关 sequence 窗口按左右 holder 端分别投影完整且相关的 `W/pitch` 状态，覆盖
+  review。缺失 separator 只有在 direct rank-3，或校准 Grid 已有 absolute anchor 时，才能继续检查对应
+  adjacency 的完整不确定性走廊；走廊被已执行窗口逐 trace 覆盖且没有局部反证，才按
+  `local_delta = 0` 补齐。不再用 edge 数、连续缺失数或全局 query-complete 布尔值代替证明。候选无关
+  sequence 窗口按左右 holder 端分别投影完整且相关的 `W/pitch` 状态，覆盖
   传播走廊但不重复相加互斥极值；理论 core 合并后按中点把 coarse support 的每个整数像素中心恰好分给
   一个窗口，measurement halo 可重叠而 transition ownership 无重叠、无缺口。覆盖以真实可测的离散坐标
   判断，不再把相邻像素中心之间的亚像素距离误报为缺口；扩大 ownership 不增加 TIFF 读取或 query。
-  带 Grid 推断的 placement 还要求
-  首尾输出 Frame 各至少绑定一条直接长轴角色，不能由片夹位置凭空创造整张外侧 Frame。任一已选直接
+  direct rank-3 推断路径还要求首尾输出 Frame 各至少绑定一条直接长轴角色；校准 Grid 路径则由 absolute
+  anchor 和完整联合包络承担外侧位置，不从片夹中心创造 phase。任一已选直接
   START/END 只有获得 source-wide edge、跨高度联合或同一 separator pair 的直接坐标权限后，才能进入
   最终 placement；两条局部 edge 不能仅因间距与 catalog/source W 相容就互相授权。独立 source W 只推导
   真正缺失的 opposite，不覆盖已经授权的 native coordinate。无权 `LOCAL_REFINEMENT` 只有在同 Frame
@@ -117,17 +138,13 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   evidence-group 去重后的 `(phase,W,pitch)` rank 仍为 3、且同一 template/ordinal/local topology 可以
   有界重拟合时才投影出去。全部 eligible candidate 重新 canonicalize 并竞争，真实双解仍保持
   `discrete_phase_ambiguous`；弱线只保留为 provenance，不能拥有 phase、收窄 W 或隐藏 runner。
-  `complete_frame_unobserved`、`retained_rank_insufficient`、material contradiction 与 refit/identity failure
-  均为 typed terminal outcome。该机制复用 registered evidence，不增加 TIFF 读取或第二 detector。
-- 默认 Grid 现在具有独立的 `CalibratedNominalGridAuthority`，不再要求普通 format 先由像素从零重证
-  W/pitch。`135`、`half`、`120-66`、`120-67` 使用同一 source-level 方法校准 nominal pitch interval；
-  至少一个直接 absolute phase anchor 把理想尺子放到 source 上，直接 START/END 保留 native coordinate，
-  局部 separator 继续只传播一次 advance。每个 inferred adjacency 必须具有逐 trace 完整 registered
-  coverage 且无反证；相关 phase/W/pitch/scale uncertainty 一次传播到最终 footprint。Grid 可以生成诊断
-  candidate，但若任一 Frame 的 START/END 都未绑定，当前 hard-fact 层产生
-  `nominal_grid_complete_frame_unobserved` 并 review，不能由先验自我授权。Calibration、evidence、authority、
-  anchor、coverage、未观察 Frame、work receipt 和 root failure 均进入 report/Debug；没有新增 TIFF query、
-  fallback、第二 Grid、样片规则或 score。
+  完全未观察 Frame 或 direct rank 0–2 会离开纯 direct projection，并只在第 7.2 节的校准 Grid 合同完整
+  成立时继续；material contradiction 与 refit/identity failure 仍是 typed terminal outcome。该机制复用
+  registered evidence，不增加 TIFF 读取或第二 detector。
+- `135`、`half`、`120-66`、`120-67` 使用同一 source-level 方法校准 nominal pitch interval，并与 W、
+  source scale 保持相关；`xpan`、`120-645`、`135-dual` 没有合格真实 calibration 时明确 unavailable，
+  不跨 format 外推。Calibration identity、anchor、coverage、未观察 Frame、work receipt 和 root failure
+  全部进入 report/Debug。
 - Format W/H compatibility 由一个 current-only 混合物理合同统一计算：
   `guard_W=max(0.95 mm, 2.4%W)`、`guard_H=max(0.70 mm, 1.8%H)`。参数来自 105 个合格黄金 source、
   494 个完整且全部直接可见 Frame 的 source-level 中位尺寸、分轴长 q95 与向外量化；不再保存 `half`
@@ -273,9 +290,11 @@ V4.9 建立 fixed-format template-first、source geometry、两级 Gate 与 sour
 
 ## v4.2.8（当前稳定发布）
 
-v4.2.8 证明“先看整条片带，再在理论位置附近找 outer 和 separator”可以快速覆盖规则片条。V5 继承
-理论 pitch、material band、有限局部搜索与缺边投影，不恢复旧版未经校准且直接决定终态的 confidence /
-best-score、Grid 自证、content equal-split、固定像素 bleed 或 separator-center crop。
+v4.2.8 证明“先看整条片带，再在理论位置附近找 outer 和 separator”可以快速覆盖规则片条。V5 继承并
+重建理论 pitch/规则间距、material band、native gap edge、outer/cross、有限局部搜索、缺边投影、deskew、
+候选无关复用与 TIFF readback。被删除的是由临时 content 区域驱动且未校准的 equal split、Grid 自证、
+未经校准且直接决定终态的 confidence/best-score、selection 后 mutation、无条件固定像素 bleed 和
+separator-center crop；它们曾承载的有效物理事实必须先迁入 current canonical owner。
 
 ## 回滚
 

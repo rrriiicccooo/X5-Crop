@@ -235,7 +235,7 @@ class TemplateNominalGridContractTest(unittest.TestCase):
             evidence_id=nominal_grid_evidence_id(
                 state,
                 (1,),
-                (),
+                (2,),
                 ("query:1",),
             ),
             state=EvidenceState.SUPPORTED,
@@ -243,7 +243,7 @@ class TemplateNominalGridContractTest(unittest.TestCase):
             phase_anchor_role_indices=state.phase_anchor_role_indices,
             phase_anchor_observation_ids=state.phase_anchor_observation_ids,
             inferred_adjacency_ordinals=(1,),
-            unobserved_frame_ordinals=(),
+            unobserved_frame_ordinals=(2,),
             covering_query_ids=("query:1",),
             failure_kind=None,
             reason=None,
@@ -255,6 +255,7 @@ class TemplateNominalGridContractTest(unittest.TestCase):
             output_geometry_ids=("geometry:1", "geometry:2"),
         )
         self.assertEqual(authority.state, EvidenceState.SUPPORTED)
+        self.assertEqual(evidence.unobserved_frame_ordinals, (2,))
 
         incomplete = assess_calibrated_nominal_grid_authority(
             evidence,

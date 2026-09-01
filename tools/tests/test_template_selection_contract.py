@@ -371,14 +371,14 @@ class TemplateSelectionContractTest(unittest.TestCase):
                 MinimumMissingFact.GLOBAL_LATTICE_AUTHORITY,
             ),
             (
+                PhaseFailureKind.CALIBRATED_NOMINAL_GRID_CONFLICT,
+                GateGap.CALIBRATED_NOMINAL_GRID_CONFLICT,
+                MinimumMissingFact.SOURCE_PHYSICAL_COMPATIBILITY,
+            ),
+            (
                 PhaseFailureKind.ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE,
                 GateGap.ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE,
                 MinimumMissingFact.ADJACENCY_OBSERVATION_COVERAGE,
-            ),
-            (
-                PhaseFailureKind.NOMINAL_GRID_COMPLETE_FRAME_UNOBSERVED,
-                GateGap.NOMINAL_GRID_COMPLETE_FRAME_UNOBSERVED,
-                MinimumMissingFact.DIRECT_ROLE_BINDING_AUTHORITY,
             ),
             (
                 PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE,

@@ -1170,7 +1170,7 @@ def fit_template_phase(
                     ),
                     PhaseCandidateProjectionOutcome
                     .CALIBRATED_NOMINAL_GRID_CONFLICT: (
-                        PhaseFailureKind.FIXED_TEMPLATE_MISMATCH
+                        PhaseFailureKind.CALIBRATED_NOMINAL_GRID_CONFLICT
                     ),
                     PhaseCandidateProjectionOutcome.REFIT_UNAVAILABLE: (
                         PhaseFailureKind.FIXED_TEMPLATE_MISMATCH
@@ -1569,28 +1569,12 @@ def _attach_selected_candidate_authorities(
                     "covered by registered measurements"
                 ),
             )
-        elif unobserved_frames:
-            nominal_evidence = failed_nominal_grid_evidence(
-                nominal_state,
-                inferred_adjacency_ordinals=ordinals,
-                unobserved_frame_ordinals=unobserved_frames,
-                covering_query_ids=query_ids,
-                state=EvidenceState.UNAVAILABLE,
-                failure_kind=(
-                    NominalGridFailureKind.COMPLETE_FRAME_UNOBSERVED
-                ),
-                reason=(
-                    "the calibrated Grid generated both sequence roles for "
-                    "Frame ordinals: "
-                    + ", ".join(map(str, unobserved_frames))
-                ),
-            )
         else:
             nominal_evidence = CalibratedNominalGridEvidence(
                 evidence_id=nominal_grid_evidence_id(
                     nominal_state,
                     ordinals,
-                    (),
+                    unobserved_frames,
                     query_ids,
                 ),
                 state=EvidenceState.SUPPORTED,
@@ -1602,7 +1586,7 @@ def _attach_selected_candidate_authorities(
                     nominal_state.phase_anchor_observation_ids
                 ),
                 inferred_adjacency_ordinals=ordinals,
-                unobserved_frame_ordinals=(),
+                unobserved_frame_ordinals=unobserved_frames,
                 covering_query_ids=query_ids,
                 failure_kind=None,
                 reason=None,
@@ -1697,21 +1681,6 @@ def _apply_final_lattice_contract(
                 or "adjacency continuity is unresolved"
             ),
             failure_kind=PhaseFailureKind.ADJACENCY_CONTINUITY_UNRESOLVED,
-            winner_basis=None,
-        )
-    if (
-        result.status == PhaseFitStatus.RESOLVED
-        and nominal_evidence is not None
-        and nominal_evidence.failure_kind
-        == NominalGridFailureKind.COMPLETE_FRAME_UNOBSERVED
-    ):
-        return replace(
-            result,
-            status=PhaseFitStatus.UNRESOLVED,
-            ambiguity_reason=nominal_evidence.reason,
-            failure_kind=(
-                PhaseFailureKind.NOMINAL_GRID_COMPLETE_FRAME_UNOBSERVED
-            ),
             winner_basis=None,
         )
     if (

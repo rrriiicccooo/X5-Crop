@@ -16,7 +16,6 @@ class NominalGridFailureKind(str, Enum):
     ADJACENCY_COVERAGE_INCOMPLETE = (
         "adjacency_observation_coverage_incomplete"
     )
-    COMPLETE_FRAME_UNOBSERVED = "complete_frame_unobserved"
     COUNTEREVIDENCE = "nominal_grid_counterevidence"
     OUTPUT_FOOTPRINT_UNAVAILABLE = "output_footprint_unavailable"
 
@@ -178,11 +177,6 @@ class CalibratedNominalGridEvidence:
             != (
                 isinstance(self.failure_kind, NominalGridFailureKind)
                 and bool(self.reason)
-            )
-            or bool(self.unobserved_frame_ordinals)
-            != (
-                self.failure_kind
-                == NominalGridFailureKind.COMPLETE_FRAME_UNOBSERVED
             )
         ):
             raise ValueError("calibrated nominal Grid evidence is invalid")

@@ -201,7 +201,8 @@ column 支撑至少 1%，outer 长轴至少 100 px；沿长轴约每 350 px 取�
 ## 5. 从整体到局部的模板编译
 
 V5 吸收 v4.2.8 的有效行为，不复制其代码、未经校准且直接决定终态的任意加权分数、把未校准 Grid
-当作答案的 fallback，或 content equal-split：
+当作答案的 fallback，或由临时 content 区域驱动且没有 anchor/coverage 的机械 equal-split。规则间距
+本身属于校准 Grid，而不是被禁止的能力：
 
 ```text
 format/count/holder 编译固定模板、coarse intents 与工作上界
@@ -235,6 +236,29 @@ direct coarse observation 时才使用一个保守全长窗口。所有计划内
 Registered measurement 始终 candidate-independent；每个已唯一绑定的直接 separator 可以在同一次
 O(count) 传播中约束自己的 adjacency advance，但不能触发额外像素读取、fit pass、winner-specific
 query 或无界 hypothesis。
+
+### 5.1 v4.2.8 能力迁移边界
+
+`v4.2.8` tag 只作为已经由真实运行暴露过的能力证据，不是 Runtime 依赖。旧机制必须先识别其物理作用，
+再迁入唯一 current owner；迁移完成后删除旧式决策权、重试路径与兼容表达：
+
+| 发布版能力 | 有效的像素/物理作用 | V5 canonical 表达 | 处理 |
+|---|---|---|---|
+| theoretical pitch、Grid、equal positions | format/count 给出规则 W、pitch、ordinal 与 nominal adjacency | `formats` + `template_nominal_grid_authority.py` + phase/feasible geometry | 保留校准 Grid；删除 content 区域机械等分、无 anchor/coverage 的 fallback 与 Grid 自证 |
+| separator profile、material band | 在理论间隔附近观察暗/亮材料、均匀性、跨高度一致性 | registered measurement、`separator_material.py`、`separator_observations.py` | 保留并扩展为 typed polarity-complete observation；不恢复 enhanced 平行 detector |
+| `gap.start/end`、edge-pair gap | separator 两侧 native edge 直接决定相邻 END/START | `SeparatorRelation`、direct role binding、source W、一次 local advance | 保留并迁移；禁止 Grid 或 score 覆盖 native coordinate |
+| robust Grid fit | anchor 后以规则 lattice 补缺失角色并吸收局部 gap 变化 | `CalibratedNominalGridAuthority`、逐 adjacency coverage、相关 uncertainty | 保留生成能力；删除未校准 fit、自身 residual 自证和覆盖直接线 |
+| BW/white/mask outer 与 separator-first outer | 不同极性和跨高度材料变化提供 enclosing/phase 线索 | coarse strip、broad enclosing material、cross 与 outer-frame authority | 保留 polarity-neutral observation；多个 box 不按 score 选。宽缓单边和 clipped outer 的权限仍须按小机制闭合 |
+| content bbox、content runs | 暴露内容穿越、空白、危险裁切与候选异常 | `content_veto`、adjacency continuity、Debug；未来只作冻结的 risk feature | 保留负向事实；永不单独移动或缩放 geometry |
+| confidence / best score | 在多个近似合法解释中聚合 contrast、距离和 residual | 当前 hard competition；未来为校准概率、runner margin、OOD 与 abstention | 保留可解释特征设计，删除旧任意加权终判；独立数据闭合前不进入 Runtime |
+| retry、nearby correction、approved polish | 曾隐式补偿 separator 宽度、anchor、aperture、source clipping 或 topology | local relation、source W、aspect authority、clipped-boundary/topology owner | 已迁移的物理修正保留；clipped boundary 仍开放。删除 selection/Gate 后 mutation 与无法解释的 retry |
+| fixed/extra bleed | 对真实边缘误差或异常 topology 提供输出保护 | base physical bleed + typed topology protection，共用每侧 5% 总预算 | 保留已证明关系的定向保护；删除无条件固定像素和借 bleed 掩盖位置错误 |
+| outer-edge deskew | 用两侧稳健线拟合整理输出方向 | `output_deskew.py` + finalization | 保留有界数值观察；整图旋转晚于 Gate，不恢复 competing enhanced angle 对 placement 的权限 |
+| gray/profile cache、TIFF readback | 候选无关复用与 metadata/像素保真 | workspace/registered measurement、`io/tiff.py`、output publication | 保留一次读取、复用和 readback；删除 candidate-specific 重跑与平行缓存状态 |
+
+迁移分类只有 observation、anchor、local correction、risk feature、veto、protection 与 selection 七类。
+一个旧函数若混合多类权限，必须拆到这些 owner；不能仅因旧名称是 `equal_split`、`content_bbox`、
+`score`、`correction` 或 `bleed` 就整体否认其曾承载的有效事实，也不能因它曾有效就保留旧决策方式。
 
 ## 6. Observation 与独立证据
 
@@ -382,7 +406,9 @@ Production phase competition 在离散比较前，对每个去重后的 bounded 
 始终终止该解释；`unavailable` 只表示某个被绑定像素线没有 native-coordinate 权限，因此先把这些 binding
 投影出去，再判断剩余直接坐标能否独立承担同一个离散解释。投影只允许使用原 candidate 已经绑定且获得
 权限的坐标，按原 template、ordinal、relation evidence 和完整硬区间精确重拟合；不能改变离散 identity、
-生成新 Frame 或读取像素。
+读取新像素或创造新的 ordinal mapping。若直接坐标不能闭合全部连续参数，唯一
+`CalibratedNominalGridAuthority` 可以在同一离散 identity 内补齐默认角色；这不是 direct evidence，也不能
+覆盖任何已授权 native coordinate。
 
 唯一映射到当前 ordinal 的直接 separator 可以在这一步追加两侧 native endpoint，并产生
 `direct_separator_refit`。重拟合前已经属于 `PHASE_ANCHOR` 的 endpoint 保持原权限；新追加的 endpoint
@@ -402,12 +428,14 @@ Debug。若所有解释都终止，最佳原 candidate 只作为诊断几何保�
 |---|---|---|
 | 全部直接 binding 均获授权 | `unchanged` | 原 candidate 进入竞争 |
 | 原全局 binding 保持不变；唯一 direct separator 为当前 adjacency 提供两侧 native endpoint | `direct_separator_refit` | 原 anchor 保持原权限，新 endpoint 只作 local refinement；保留原 phase authority 后进入竞争 |
-| 仅有 `unavailable` binding；投影后每张 Frame 至少保留一侧直接坐标，且相关 evidence-group 去重后的 `(phase,W,pitch)` rank 为 3 | `projected` | 只以保留坐标重拟合同一离散 identity，再进入竞争 |
-| 投影会使某张 Frame 的 START/END 都没有直接坐标 | `complete_frame_unobserved` | 当前 direct-evidence 路径终止；不让该弱线创造整张 Frame |
-| 保留坐标 rank 为 0–2 | `retained_rank_insufficient` | 终止；不能让已删除的弱线或 Grid 反向补 rank |
+| 投影后每张 Frame 至少保留一侧直接坐标，且相关 evidence-group 去重后的 `(phase,W,pitch)` rank 为 3 | `projected` | 只以保留坐标重拟合同一离散 identity，再进入竞争 |
+| 投影后存在完全未观察 Frame，或保留坐标 rank 为 0–2；有校准 prior、至少一个 absolute anchor，且联合有界解非空 | `calibrated_nominal_grid` | 同一 Grid 生成缺失角色；直接坐标保持 native，完整相关包络进入后续 coverage、反证与安全评估 |
+| 上述路径没有 absolute anchor | `nominal_grid_phase_anchor_unavailable` | 终止；format/count 不能自行决定 Grid 在 TIFF 中的位置 |
+| 上述路径没有当前 format 的合格 calibration | `calibrated_nominal_grid_unavailable` | 终止；不从其它 format 外推 |
+| 直接坐标与校准 W/pitch/scale 联合包络不相交 | `calibrated_nominal_grid_conflict` | 终止并保留直接反证；不得扩大 prior 或拉回 native coordinate |
 | 存在 separator material 或同角色直接反证 | `direct_role_contradiction` | 终止且反证保留；不得作为噪声删除 |
 | 有界重拟合不存在，或会改变 template/ordinal/relation evidence/role mapping/phase authority ceiling | `refit_unavailable | discrete_identity_changed` | 终止并报告 typed failure |
-| 两个非等价 eligible candidate 均成立 | `unchanged | direct_separator_refit | projected` 各自保留 | 继续硬物理比较；不能明确分离时 `discrete_phase_ambiguous` |
+| 两个非等价 eligible candidate 均成立 | `unchanged | direct_separator_refit | projected | calibrated_nominal_grid` 各自保留 | 继续硬物理比较；不能明确分离时 `discrete_phase_ambiguous` |
 
 Constraint rank 只由 `template_lattice_authority.py` 计算。相同 `evidence_group_id` 的多个坐标只贡献一行；
 若同组绑定多个 role，按最低 role index 选择该组的 canonical rank row，其余 native coordinates 仍完整保留，
@@ -512,8 +540,10 @@ source W 校准/相关推断由 `template_frame_width.py` 拥有，固定 placem
 `template_phase.py` 调度、`template_phase_candidates.py` 执行，
 短轴联合条件由 `template_selection.py` 检查；三者都不读取新像素，也不按强度选择 winner。
 
-在完全由 direct evidence 闭合的路径中，未观察 separator 的正常 adjacency 只有同时满足以下条件时，
-才可使用 `local_delta = 0` 并由已确定 Grid 补齐 START/END：
+在完全由 direct evidence 闭合的 rank-3 路径中，未观察 separator 的正常 adjacency 只有同时满足以下
+条件时，才可使用 `local_delta = 0` 并由已确定 Grid 补齐 START/END。下列首尾直接角色要求只属于这条
+direct-only 路径；第 7.2 节的校准 Grid 路径以绝对 anchor 和联合校准包络取代它，不把首尾 Frame 直接
+角色误当成通用要求：
 
 1. 全部已选直接角色的 `DirectRoleBindingAuthority` 为 `supported`；
 2. `GlobalLatticeAuthority` 已用独立直接证据达到 rank 3；Grid 没有参与创造 phase 或 ordinal mapping；
@@ -662,37 +692,54 @@ contact 或 overlap；存在多组合法解释时保持 `adjacency_topology_ambi
 topology、覆盖 direct native coordinate，或把 contact 共用线重复计票。无权 `LOCAL_REFINEMENT` 仍按第 6 节的
 validation-only 合同让位。
 
-剩余能力继续按独立小机制形成检查点：完全未观察 Frame 的校准 Grid 风险权限和带拒绝选项的概率选择
-仍只保留设计边界，须等独立 calibration 与 sealed representative 数据具备后再进入 runtime。每项都必须
-完整交付 type、owner、Gate、Debug、正反例、真实样片、性能和黄金安全验收；尚未闭合的能力不授予自动
-批准权限，也不建立占位 runtime。
+剩余能力继续按独立小机制形成检查点。带拒绝选项的概率选择仍只保留设计边界，须等独立 calibration
+与 sealed representative 数据具备后再进入 runtime；校准 Grid 的硬区间路径已经由第 7.2 节拥有。未来
+能力都必须完整交付 type、owner、Gate、Debug、正反例、真实样片、性能和黄金安全验收；尚未闭合的能力
+不授予自动批准权限，也不建立占位 runtime。
 
 ### 7.2 Calibrated nominal Grid authority
 
-`CalibratedNominalGridAuthority` 是 direct rank-3 之外已经启用的显式闭合路径。默认 Grid 始终是同一个
-primary generative model；这项 authority 只决定它何时足以进入自动批准，不建立第二套 placement：
+`CalibratedNominalGridAuthority` 是 direct rank-3 之外的显式闭合路径。默认 Grid 始终是同一个带校准
+不确定性的 primary generative model；authority 只证明它可以形成 selected placement 并进入统一安全评估，
+不直接授予 `approved_auto`，也不建立第二套 placement：
 
 ```text
 format-specific calibrated W/H/pitch intervals
 + 至少一个获得坐标权限的 direct absolute phase anchor
 + 每个使用 local_delta=0 的 adjacency 完整覆盖其合法不确定性走廊
 + 没有 wide/narrow/contact/overlap/conflict 等直接反证
-+ 当前 hard-fact 层中，每张 Frame 至少有一侧直接角色
-+ selected OutputFootprint 完整通过既有 source containment 与 5% 预算
-→ calibrated nominal Grid 可以获得 selected-output authority
+→ Grid 可以生成完整默认 placement，包括 START/END 都未直接观察的 Frame
+→ selected placement 的全部相关可行状态进入 source containment、content veto 与 5% 预算
+→ 只有最坏安全包络仍合格才可 approved_auto
 ```
 
 Format/count 提供一把有界尺子，但不能知道它应放在 TIFF 的哪个像素；absolute phase 始终来自直接
-START/END 或其它获得权限的 anchor。Pitch、W 与 source scale 保留为同一相关状态，pitch uncertainty 按
-离 anchor 的 slot 距离传播，不能按每格独立选择有利值。直接 START/END 保留 native coordinate 并收紧
-默认模型；直接 separator 的实际宽度继续只产生一次 local advance，不能被 nominal gap 拉回。
+START/END、outer 或其它获得坐标权限的 anchor。Pitch、W 与 source scale 保留为同一相关状态，pitch
+uncertainty 按离 anchor 的 slot 距离传播，不能按每格独立选择有利值；H 由短轴直接 authority 或有界
+format ratio 路径闭合，并在同一 selected output 中联合受检验。直接 START/END、top/bottom 保留 native
+coordinate 并收紧默认模型；直接 separator 的实际宽度继续只产生一次 local advance，不能被 nominal gap
+拉回。Direct rank 3 仍是更强的完全直接闭合路径，但不是 Grid 生成缺失角色的唯一许可。
 
 逐 adjacency coverage 必须覆盖当前 placement 的完整合法走廊；“所有 query 都执行完成”或“没有检测到
-edge”不是 normal adjacency 的充分证明。直接角色反证优先于 Grid，coverage incomplete 次之。Grid 可以
-生成 START/END 都未绑定的完整 Frame 供 candidate diagnostic 使用，但 S040、S056 证明多个相邻局部偏差
-可能在全局 anchor 间互相抵消；在未来校准概率层或更强 topology/continuity 证据闭合前，该候选以
-`complete_frame_unobserved` evidence 和 `nominal_grid_complete_frame_unobserved` Gate failure 进入 review，
-不能由 Grid 自己授权。这是当前自动批准合同，不删除候选，也不把“无法硬证明”误写成像素事实不存在。
+edge”不是 normal adjacency 的充分证明。直接角色反证和已证明 local relation 优先于 Grid，coverage
+incomplete 次之。完全未观察 Frame 不是 failure kind；它作为
+`CalibratedNominalGridEvidence.unobserved_frame_ordinals` 的显式 provenance 保留，并由联合 W/pitch/scale/
+local-delta 包络承担全部不确定性。多个相邻局部偏差可能在全局 anchor 间互相抵消；这类风险由逐
+adjacency coverage、typed counterevidence 和最坏输出包络处理，不能再以“是否直接看到某条线”替代
+真正的风险评估。
+
+最小真值表：
+
+| calibration / anchor | adjacency coverage | 直接反证或局部异常 | 联合输出结果 | 终态 |
+|---|---|---|---|---|
+| supported / supported | complete | 无 | 尚未评估 | Grid placement 进入统一安全评估；允许完全未观察 Frame |
+| supported / unavailable | 任意 | 任意 | 任意 | `nominal_grid_phase_anchor_unavailable` → Review |
+| supported / supported | incomplete | 无 | 任意 | `adjacency_observation_coverage_incomplete` → Review |
+| supported / supported | complete | wide/narrow/contact/overlap | 与 relation 相容 | 直接 relation 修正 Grid；不能保持普通 `local_delta=0` |
+| supported / supported | complete | coordinate/material/conflict | 任意 | 直接 evidence 优先；冲突路径 Review |
+| 与 direct coordinate 不相交 / supported | complete | 有 | 任意 | `calibrated_nominal_grid_conflict` → Review |
+| supported / supported | complete | 无 | source containment、content veto 或每侧 5% 最坏包络失败 | 对应 typed Gate failure → Review |
+| supported / supported | complete | 无 | 全部通过 | 才具备 `approved_auto` 条件 |
 
 Nominal pitch 使用冻结 development gold 的 source-level calibration：只接受 nominal source 中一个
 separator 两侧均为 `directly_visible` 的完整 adjacency，每个 source 至少两次测量，先取 source 中位值，
@@ -712,9 +759,9 @@ separator 两侧均为 `directly_visible` 的完整 adjacency，每个 source �
 `template_nominal_grid_authority.py` 唯一编译 prior、求解相关 envelope 并建立 evidence/selected authority；
 `template_phase_candidates.py` 只让同一 candidate 使用该 envelope，`template_phase.py` 负责 selected-only
 权限与 typed failure，`template_feasible_geometry.py` 把相关状态传播到输出包络。Report 与 Debug 显示
-calibration identity、参数依据、anchor、推断 adjacency、逐关系 coverage、完整未观察 Frame、工作量与
-failure。该路径保持 `O(count)`，不增加 TIFF query、样片特例、format denylist、fallback、第二 Grid 或
-未经校准的 score。
+calibration identity、参数依据、精确 anchor role、nominal Grid、direct correction、逐 adjacency local
+delta、逐关系 coverage、counterevidence、完整未观察 Frame、最终联合包络、工作量与 failure。该路径保持
+`O(count)`，不增加 TIFF query、样片特例、format denylist、fallback、第二 Grid 或未经校准的 score。
 
 ## 8. Cross、outer 与固定 H
 
@@ -1057,6 +1104,8 @@ Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决
 - `partial_height_separator_pair` 角色数、direct aperture domain 条件与对应 typed Gate；
 - selected-only source W authority 的 selected signature、支持 Frame、W interval、typed failure，及相关
   推导角色、validation-only 局部角色与 observation provenance；
+- nominal Grid calibration、精确 absolute anchor role、每个 adjacency 的 coverage/counterevidence、
+  measured local delta、direct correction 与最终联合 envelope；
 - 每个 bound role 的 residual 和 normal/measured-relations/unresolved pattern；
 - direct 与 inferred 边界；
 - best、runner 及真正不同之处；

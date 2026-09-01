@@ -619,7 +619,12 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertRegex(summary, r" · DIRECT \d+/\d+ G\d+ · ")
         self.assertIn(" · OUTER ", summary)
         self.assertIn(" · SEP D ", summary)
+        self.assertIn(" · LOCAL Δ ", summary)
+        self.assertIn(" · COVER ", summary)
+        self.assertIn(" · OBS ", summary)
         self.assertIn(" · JOINT ", summary)
+        self.assertIn(" · DIRECT Δ ", summary)
+        self.assertRegex(summary, r"NOMINAL .* A\[[0-9,-]+\] G\d+ F")
         self.assertTrue(
             selected_output_safety_summary(detection).startswith(
                 "SELECTED OUTPUT SAFETY · "

@@ -376,7 +376,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            "candidate crosses user-confirmed inward baseline",
+            "approved output crosses user-confirmed inward baseline",
         ):
             validate_gold_task_result(
                 _basis_aware_record(start_basis="visible_content_limit"),
@@ -404,7 +404,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            "candidate crosses user-confirmed inward baseline",
+            "approved output crosses user-confirmed inward baseline",
         ):
             validate_gold_task_result(_basis_aware_record(), _approved_report(output))
 
@@ -447,7 +447,9 @@ class GoldAccuracyContractTest(unittest.TestCase):
         ):
             validate_gold_task_result(record, _approved_report(output))
 
-    def test_challenge_review_cannot_bypass_candidate_coverage(self) -> None:
+    def test_challenge_review_keeps_candidate_accuracy_diagnostic_only(
+        self,
+    ) -> None:
         gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
         record = {
             "sample_id": "challenge-cut",
@@ -476,11 +478,15 @@ class GoldAccuracyContractTest(unittest.TestCase):
             "output": {"finalization": {"output_footprints": []}},
         }
 
+        self.assertEqual(
+            validate_gold_task_result(record, report),
+            "needs_review",
+        )
         with self.assertRaisesRegex(
             ValueError,
             "candidate crosses user-confirmed inward baseline",
         ):
-            validate_gold_task_result(record, report)
+            validate_selected_candidate_coverage(record, report)
 
     def test_safe_challenge_automatic_approval_is_a_valid_result(self) -> None:
         record = _basis_aware_record(start_basis="directly_visible")

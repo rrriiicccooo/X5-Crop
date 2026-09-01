@@ -890,7 +890,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             "supported",
         )
 
-    def test_calibrated_grid_generates_but_does_not_authorize_an_unobserved_internal_frame(
+    def test_calibrated_grid_authorizes_an_unobserved_internal_frame(
         self,
     ) -> None:
         specs = (
@@ -939,11 +939,8 @@ class TemplatePhaseContractTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
-        self.assertEqual(
-            result.failure_kind,
-            PhaseFailureKind.NOMINAL_GRID_COMPLETE_FRAME_UNOBSERVED,
-        )
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        self.assertIsNone(result.failure_kind)
         assert result.best is not None
         self.assertEqual(
             result.best.lattice_parameter_fit_basis,
@@ -953,18 +950,17 @@ class TemplatePhaseContractTest(unittest.TestCase):
         assert result.calibrated_nominal_grid_evidence is not None
         self.assertEqual(
             result.calibrated_nominal_grid_evidence.state,
-            EvidenceState.UNAVAILABLE,
+            EvidenceState.SUPPORTED,
         )
-        self.assertEqual(
-            result.calibrated_nominal_grid_evidence.failure_kind,
-            NominalGridFailureKind.COMPLETE_FRAME_UNOBSERVED,
+        self.assertIsNone(
+            result.calibrated_nominal_grid_evidence.failure_kind
         )
         self.assertEqual(
             result.calibrated_nominal_grid_evidence.unobserved_frame_ordinals,
             (5,),
         )
 
-    def test_calibrated_grid_generates_but_does_not_authorize_an_unobserved_outer_frame(
+    def test_calibrated_grid_authorizes_an_unobserved_outer_frame(
         self,
     ) -> None:
         observations = tuple(
@@ -1003,11 +999,8 @@ class TemplatePhaseContractTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
-        self.assertEqual(
-            result.failure_kind,
-            PhaseFailureKind.NOMINAL_GRID_COMPLETE_FRAME_UNOBSERVED,
-        )
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        self.assertIsNone(result.failure_kind)
         assert result.best is not None
         self.assertEqual(
             result.best.lattice_parameter_fit_basis,
@@ -1016,11 +1009,10 @@ class TemplatePhaseContractTest(unittest.TestCase):
         assert result.calibrated_nominal_grid_evidence is not None
         self.assertEqual(
             result.calibrated_nominal_grid_evidence.state,
-            EvidenceState.UNAVAILABLE,
+            EvidenceState.SUPPORTED,
         )
-        self.assertEqual(
-            result.calibrated_nominal_grid_evidence.failure_kind,
-            NominalGridFailureKind.COMPLETE_FRAME_UNOBSERVED,
+        self.assertIsNone(
+            result.calibrated_nominal_grid_evidence.failure_kind
         )
         self.assertEqual(
             result.calibrated_nominal_grid_evidence.unobserved_frame_ordinals,

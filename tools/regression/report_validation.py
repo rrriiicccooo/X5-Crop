@@ -155,7 +155,6 @@ _NOMINAL_GRID_FAILURE_KINDS = {
     "calibrated_nominal_grid_authority_unavailable",
     "nominal_grid_phase_anchor_unavailable",
     "adjacency_observation_coverage_incomplete",
-    "complete_frame_unobserved",
     "nominal_grid_counterevidence",
     "output_footprint_unavailable",
 }
@@ -353,8 +352,6 @@ def _validate_nominal_grid_evidence(value: object) -> None:
             not isinstance(ordinal, int) or ordinal <= 0
             for ordinal in value["unobserved_frame_ordinals"]
         )
-        or bool(value["unobserved_frame_ordinals"])
-        != (value["failure_kind"] == "complete_frame_unobserved")
         or supported
         != (value["failure_kind"] is None and value["reason"] is None)
         or failed

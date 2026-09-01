@@ -305,7 +305,6 @@ def validate_gold_task_result(
     record: dict[str, object],
     report: dict[str, object],
 ) -> str:
-    validate_selected_candidate_coverage(record, report)
     status = str(report["decision"]["status"])
     role = str(record["cohort_role"])
     if role == "nominal" and status != "approved_auto":

@@ -125,7 +125,10 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
   authority。全部 local advance 的数量始终不超过 `count - 1`，且只作一次 O(count) 传播。
 - 固定模板中的校准 Grid 是唯一 placement 主生成模型：format/count 定义带不确定性的理想尺子，直接
   observation 确定 absolute phase、保留 native boundary 并加入局部修正，counterevidence 淘汰非法状态。
-  Grid 不是 detector 失败后的 fallback，但也不能仅凭自身取得 `approved_auto` 权限。
+  Grid 不是 detector 失败后的 fallback，但也不能仅凭自身取得 `approved_auto` 权限。Direct rank 3 是更强
+  的完全直接闭合路径，不是唯一许可；校准 prior、至少一个 absolute anchor、逐 adjacency 完整 coverage
+  与无反证成立时，Grid 可以生成两侧都未直接观察的 Frame，但必须把完整相关包络交给 containment、
+  content veto 与每侧 5% 预算决定 auto/review。
 - Format 画幅比例是强物理先验，但不能作为零不确定性的 W→H 等式。跨轴推断必须由黄金集校准的
   format-specific ratio interval、typed authority 和完整相关 uncertainty 单独拥有；它不冒充 direct H、
   不增加独立 constraint rank，并继续受 5% 预算、反证和 sealed acceptance 约束。
@@ -150,6 +153,10 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
 
 - 每个概念只有一个 canonical name、type、owner 和真相来源。权限只沿 input、evidence、
   assessment、selection、decision、finalization、output、report、debug 单向流动。
+- 删除稳定发布版中曾对真实样片有效的机制前，必须先从对应 tag 源码确认其像素事实与物理作用，
+  将有效部分明确归入 observation、anchor、local correction、risk feature、veto、protection 或
+  selection 的唯一 current owner，或用黄金反例证明它本身不安全且已被现机制覆盖。完成迁移后才删除
+  旧式表达；这项审计不授权复制旧源码、保留兼容入口、平行 runtime 或无法解释的 fallback。
 - 问题修复必须消除根因，以唯一 canonical 逻辑直接定义正确行为；被替代的 API、schema、flag、
   alias、wrapper、test、import、错误路径、临时补丁、绕行分支、fallback、shim、feature flag、
   dead code 与平行 runtime 同批删除，production 只保留当前路径。

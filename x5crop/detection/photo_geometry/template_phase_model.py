@@ -296,14 +296,14 @@ class PhaseFailureKind(str, Enum):
     CALIBRATED_NOMINAL_GRID_AUTHORITY_UNAVAILABLE = (
         "calibrated_nominal_grid_authority_unavailable"
     )
+    CALIBRATED_NOMINAL_GRID_CONFLICT = (
+        "calibrated_nominal_grid_conflict"
+    )
     NOMINAL_GRID_PHASE_ANCHOR_UNAVAILABLE = (
         "nominal_grid_phase_anchor_unavailable"
     )
     ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE = (
         "adjacency_observation_coverage_incomplete"
-    )
-    NOMINAL_GRID_COMPLETE_FRAME_UNOBSERVED = (
-        "nominal_grid_complete_frame_unobserved"
     )
     DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE = (
         "direct_role_binding_authority_unavailable"
