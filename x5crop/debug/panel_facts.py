@@ -428,6 +428,20 @@ def alignment_summary(detection: FinalDetection) -> str:
             if source_width.state.value == "supported"
             else source_width.failure_kind.value.upper()
         )
+        width_topology = (
+            lane.prepared.phase_competition
+            .source_frame_width_topology_assessment
+        )
+        width_topology_proof = (
+            "N/A"
+            if width_topology is None
+            else "NOT USED"
+            if width_topology.state.value == "supported"
+            and not width_topology.facts
+            else f"OK {len(width_topology.facts)}R"
+            if width_topology.state.value == "supported"
+            else width_topology.failure_kind.value.upper()
+        )
         separator_counts = {
             polarity: (
                 sum(
@@ -505,6 +519,7 @@ def alignment_summary(detection: FinalDetection) -> str:
             f"APERTURE DOMAIN "
             f"{aperture_domain_proof} · OUTER "
             f"{outer_count}/2 · SOURCE W {source_width_proof} · "
+            f"W TOPO {width_topology_proof} · "
             f"W INFER {width_proof} · SEP "
             f"D {separator_counts['dark'][0]}/{separator_counts['dark'][1]}"
             f" C{separator_counts['dark'][2]} "

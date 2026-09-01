@@ -166,6 +166,10 @@ def development_report_facts(
                 "source_frame_width_authority": typed_read_model(
                     lane.prepared.source_frame_width_authority
                 ),
+                "source_frame_width_topology_assessment": typed_read_model(
+                    lane.prepared.phase_competition
+                    .source_frame_width_topology_assessment
+                ),
                 "alignment_path": (
                     None
                     if lane.prepared.phase_competition.best is None

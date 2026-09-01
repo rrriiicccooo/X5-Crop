@@ -120,6 +120,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
         )
         alignment = alignment_summary(detection)
         self.assertIn("SOURCE W ", alignment)
+        self.assertIn("W TOPO ", alignment)
         self.assertIn("W INFER ", alignment)
         self.assertIn("SOURCE FIT ·", source)
 

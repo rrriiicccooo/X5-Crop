@@ -370,6 +370,91 @@ class PhaseWinnerBasis(str, Enum):
     RESIDUAL_SEPARATION = "residual_separation"
 
 
+class SourceFrameWidthTopologyFailureKind(str, Enum):
+    """Why one independently closed source W cannot preserve normal topology."""
+
+    NORMAL_ADJACENCY_UNRESOLVED = "normal_adjacency_unresolved"
+    NORMAL_ADJACENCY_CONTRADICTED = "normal_adjacency_contradicted"
+
+
+@dataclass(frozen=True)
+class SourceFrameWidthTopologyFact:
+    """One normal adjacency whose output ordering depends on source W."""
+
+    relation_ordinal: int
+    inferred_role_indices: tuple[int, ...]
+    signed_gap_interval_px: FiniteInterval
+    canonical_signed_gap_px: float
+    state: EvidenceState
+
+    def __post_init__(self) -> None:
+        expected_state = (
+            EvidenceState.SUPPORTED
+            if self.signed_gap_interval_px.minimum >= -1.0e-9
+            else EvidenceState.CONTRADICTED
+            if self.signed_gap_interval_px.maximum < -1.0e-9
+            else EvidenceState.UNAVAILABLE
+        )
+        if (
+            self.relation_ordinal <= 0
+            or not self.inferred_role_indices
+            or self.inferred_role_indices
+            != tuple(sorted(set(self.inferred_role_indices)))
+            or any(index < 0 for index in self.inferred_role_indices)
+            or any(
+                index
+                not in {
+                    2 * self.relation_ordinal - 1,
+                    2 * self.relation_ordinal,
+                }
+                for index in self.inferred_role_indices
+            )
+            or not self.signed_gap_interval_px.contains(
+                self.canonical_signed_gap_px,
+                epsilon=1.0e-9,
+            )
+            or self.state != expected_state
+        ):
+            raise ValueError("source-W topology fact is invalid")
+
+
+@dataclass(frozen=True)
+class SourceFrameWidthTopologyAssessment:
+    """Selected-only proof that correlated-W inference keeps normal topology."""
+
+    source_frame_width_authority_id: str
+    state: EvidenceState
+    facts: tuple[SourceFrameWidthTopologyFact, ...]
+    failure_kind: SourceFrameWidthTopologyFailureKind | None
+    reason: str | None
+
+    def __post_init__(self) -> None:
+        expected_state = (
+            EvidenceState.CONTRADICTED
+            if any(item.state == EvidenceState.CONTRADICTED for item in self.facts)
+            else EvidenceState.UNAVAILABLE
+            if any(item.state == EvidenceState.UNAVAILABLE for item in self.facts)
+            else EvidenceState.SUPPORTED
+        )
+        expected_failure = (
+            SourceFrameWidthTopologyFailureKind.NORMAL_ADJACENCY_CONTRADICTED
+            if expected_state == EvidenceState.CONTRADICTED
+            else SourceFrameWidthTopologyFailureKind.NORMAL_ADJACENCY_UNRESOLVED
+            if expected_state == EvidenceState.UNAVAILABLE
+            else None
+        )
+        if (
+            not self.source_frame_width_authority_id
+            or tuple(item.relation_ordinal for item in self.facts)
+            != tuple(sorted({item.relation_ordinal for item in self.facts}))
+            or self.state != expected_state
+            or self.failure_kind != expected_failure
+            or (expected_state == EvidenceState.SUPPORTED) != (self.reason is None)
+            or (self.reason is not None and not self.reason)
+        ):
+            raise ValueError("source-W topology assessment is invalid")
+
+
 class PhaseCandidateProjectionOutcome(str, Enum):
     """How direct-role authority changed one bounded phase candidate."""
 
@@ -570,6 +655,9 @@ class PhaseFitResult:
     outer_frame_observation_authority: (
         OuterFrameObservationAuthority | None
     ) = None
+    source_frame_width_topology_assessment: (
+        SourceFrameWidthTopologyAssessment | None
+    ) = None
 
     def __post_init__(self) -> None:
         if (
@@ -674,6 +762,14 @@ class PhaseFitResult:
             )
         ):
             raise TypeError("phase outer-frame observation authority is invalid")
+        if (
+            self.source_frame_width_topology_assessment is not None
+            and not isinstance(
+                self.source_frame_width_topology_assessment,
+                SourceFrameWidthTopologyAssessment,
+            )
+        ):
+            raise TypeError("phase source-W topology assessment is invalid")
         if self.adjacency_observation_coverage and tuple(
             item.relation_ordinal
             for item in self.adjacency_observation_coverage

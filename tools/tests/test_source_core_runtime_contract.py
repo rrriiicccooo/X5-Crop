@@ -508,6 +508,15 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 "work receipt",
             ):
                 validate_current_report_record(inconsistent)
+            invalid_width_topology = deepcopy(analysis_outcome.result)
+            invalid_width_topology["photo_geometry"]["lanes"][0][
+                "source_frame_width_topology_assessment"
+            ] = {}
+            with self.assertRaisesRegex(
+                ValueError,
+                "source-W topology assessment schema",
+            ):
+                validate_current_report_record(invalid_width_topology)
             self.assertEqual(outcome.result["detail_level"], "production")
             self.assertIsNone(outcome.result["development"])
             production_geometry = outcome.result["photo_geometry"]

@@ -1391,6 +1391,99 @@ def _validate_source_frame_width_authority(value: object) -> None:
         raise ValueError("failed source Frame-width authority is invalid")
 
 
+def _validate_source_frame_width_topology_assessment(value: object) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict) or set(value) != {
+        "source_frame_width_authority_id",
+        "state",
+        "facts",
+        "failure_kind",
+        "reason",
+    }:
+        raise ValueError("source-W topology assessment schema is invalid")
+    authority_id = value["source_frame_width_authority_id"]
+    facts = value["facts"]
+    if (
+        not isinstance(authority_id, str)
+        or not authority_id
+        or not isinstance(facts, list)
+    ):
+        raise ValueError("source-W topology assessment ledger is invalid")
+    states: list[str] = []
+    ordinals: list[int] = []
+    for fact in facts:
+        if not isinstance(fact, dict) or set(fact) != {
+            "relation_ordinal",
+            "inferred_role_indices",
+            "signed_gap_interval_px",
+            "canonical_signed_gap_px",
+            "state",
+        }:
+            raise ValueError("source-W topology fact schema is invalid")
+        ordinal = fact["relation_ordinal"]
+        inferred = fact["inferred_role_indices"]
+        interval = fact["signed_gap_interval_px"]
+        canonical = fact["canonical_signed_gap_px"]
+        if (
+            not isinstance(ordinal, int)
+            or isinstance(ordinal, bool)
+            or ordinal <= 0
+            or not isinstance(inferred, list)
+            or not inferred
+            or inferred != sorted(set(inferred))
+            or any(
+                not isinstance(index, int)
+                or isinstance(index, bool)
+                or index not in {2 * ordinal - 1, 2 * ordinal}
+                for index in inferred
+            )
+            or not _valid_interval(interval)
+            or not _finite_number(canonical)
+            or float(canonical) < float(interval["minimum"]) - 1.0e-9
+            or float(canonical) > float(interval["maximum"]) + 1.0e-9
+        ):
+            raise ValueError("source-W topology fact geometry is invalid")
+        expected_state = (
+            "supported"
+            if float(interval["minimum"]) >= -1.0e-9
+            else "contradicted"
+            if float(interval["maximum"]) < -1.0e-9
+            else "unavailable"
+        )
+        if fact["state"] != expected_state:
+            raise ValueError("source-W topology fact state is invalid")
+        ordinals.append(ordinal)
+        states.append(expected_state)
+    if ordinals != sorted(set(ordinals)):
+        raise ValueError("source-W topology facts are not canonical")
+    expected_state = (
+        "contradicted"
+        if "contradicted" in states
+        else "unavailable"
+        if "unavailable" in states
+        else "supported"
+    )
+    expected_failure = (
+        "normal_adjacency_contradicted"
+        if expected_state == "contradicted"
+        else "normal_adjacency_unresolved"
+        if expected_state == "unavailable"
+        else None
+    )
+    if (
+        value["state"] != expected_state
+        or value["failure_kind"] != expected_failure
+        or (expected_state == "supported") != (value["reason"] is None)
+        or value["reason"] is not None
+        and (
+            not isinstance(value["reason"], str)
+            or not value["reason"]
+        )
+    ):
+        raise ValueError("source-W topology assessment state is invalid")
+
+
 def _validate_direct_role_binding_authority(value: object) -> None:
     if value is None:
         return
@@ -2132,6 +2225,22 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         _validate_aperture_aspect_ratio_authority(aspect_ratio)
         source_width = lane.get("source_frame_width_authority")
         _validate_source_frame_width_authority(source_width)
+        source_width_topology = lane.get(
+            "source_frame_width_topology_assessment"
+        )
+        _validate_source_frame_width_topology_assessment(
+            source_width_topology
+        )
+        if (
+            (source_width["state"] == "supported")
+            != isinstance(source_width_topology, dict)
+            or isinstance(source_width_topology, dict)
+            and source_width_topology["source_frame_width_authority_id"]
+            != source_width["authority_id"]
+        ):
+            raise ValueError(
+                "source W and its topology assessment disagree"
+            )
         if (
             aspect_ratio["calibration_id"] is not None
             and aspect_ratio["width_observation_ids"]
@@ -2679,6 +2788,7 @@ def _validate_phase_competition(value: object) -> None:
         "adjacency_continuity_observations",
         "direct_role_binding_authority",
         "outer_frame_observation_authority",
+        "source_frame_width_topology_assessment",
     }:
         raise ValueError("development phase competition schema is invalid")
     best = value["best"]
@@ -2713,6 +2823,9 @@ def _validate_phase_competition(value: object) -> None:
     _validate_adjacency_coverage(value["adjacency_observation_coverage"])
     _validate_adjacency_continuity(
         value["adjacency_continuity_observations"]
+    )
+    _validate_source_frame_width_topology_assessment(
+        value["source_frame_width_topology_assessment"]
     )
     if [
         item["relation_ordinal"]
@@ -2817,6 +2930,10 @@ def _validate_development(record: dict[str, Any]) -> None:
             != len(placement.get("placements", ()))
             or not isinstance(lane.get("phase_competition"), dict)
             or not isinstance(lane.get("source_frame_width_authority"), dict)
+            or lane.get("source_frame_width_topology_assessment")
+            != lane["phase_competition"].get(
+                "source_frame_width_topology_assessment"
+            )
             or not isinstance(lane.get("cross_competition"), dict)
             or lane.get("aperture_aspect_ratio_authority")
             != lane.get("cross_competition", {}).get(

@@ -53,6 +53,7 @@ from .template_frame_width import (
     SourceFrameWidthAuthority,
     apply_correlated_frame_width_inference,
     apply_selected_source_frame_width,
+    assess_selected_source_frame_width_topology,
 )
 from .template_adjacency_coverage import (
     AdjacencyCoverageState,
@@ -1998,6 +1999,17 @@ def _apply_final_lattice_contract(
             result,
             best=assessed_best,
             receipt=receipt,
+        )
+    if (
+        source_frame_width_authority is not None
+        and source_frame_width_authority.state == EvidenceState.SUPPORTED
+    ):
+        # Only an authorized correlated-W inference transfers boundary
+        # ownership.  Assess that final ledger, not every role that happened
+        # to be unbound earlier in the selected-only flow.
+        result = assess_selected_source_frame_width_topology(
+            result,
+            source_frame_width_authority,
         )
     result = _attach_selected_candidate_authorities(
         result,

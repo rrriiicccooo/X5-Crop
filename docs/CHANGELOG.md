@@ -126,6 +126,17 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   `unsafe_approved_auto = 0`；15 个安全 auto、95 个安全 Review。Candidate 为 70 unavailable / 21 safe /
   19 unsafe；S026 的反序 candidate 被精确淘汰后，真实 root 迁移为缺少显式 OverlapRelation 的
   `fixed_template_mismatch`。Development diagnostic mean 为 3.974 秒，不冒充正式 performance receipt。
+- Source W 闭合与其下游 topology 权限现在明确分层。只有 correlated-W inference 已实际取得的角色才进入
+  `SourceFrameWidthTopologyAssessment`；它以完整 W interval 和相邻 native boundary interval 检查普通
+  signed gap，不挑选有利 W，也不把未知 overlap 伪装成 `OverlapRelation`。跨零与全负 interval 分别保存
+  `normal_adjacency_unresolved | normal_adjacency_contradicted`，统一映射为
+  `adjacency_topology_unresolved`；未获权限的 W inference 显示为 `NOT USED`，不覆盖
+  `complete_frame_unobserved` 或 counterevidence。Report revision 更新为
+  `x5crop_v5_template_report_46`，Debug/Development report 显式保存逐 relation facts。完整 110-task 黄金
+  receipt 无分析错误且 `unsafe_approved_auto = 0`；auto 仍为 15，candidate 为 72 unavailable / 19 safe /
+  19 unsafe。S007/S026/S040/S110 从迟到的 `fixed_template_mismatch` 前移为准确的 topology root；S045/S109
+  先前的 candidate 对黄金虽安全，但完整 W 状态未闭合，因此保守 Review。Development diagnostic mean 为
+  3.894 秒；不新增 TIFF query、detector、candidate、score 或样片规则。
 - 对 96 个 nominal 的同源机制对照显示：v4.2.8 有 80 个 auto，但其中 70 个是黄金危险自动裁切；只有
   11 个 v4 geometry 安全。v4 安全而 V5 Review 的 9 个 task 是下一步能力迁移样本，当前分别落在
   aspect/cross、fixed-template/topology、content veto、Grid conflict、phase ambiguity 与 output budget

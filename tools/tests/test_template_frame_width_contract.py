@@ -16,6 +16,7 @@ from x5crop.detection.photo_geometry.template_contact import observe_contact_edg
 from x5crop.detection.photo_geometry.template_frame_width import (
     apply_correlated_frame_width_inference,
     apply_selected_source_frame_width,
+    assess_selected_source_frame_width_topology,
     calibrate_source_frame_width,
     SourceFrameWidthAuthority,
     SourceFrameWidthAuthorityFailureKind,
@@ -61,6 +62,7 @@ from x5crop.detection.photo_geometry.template_phase_model import (
     GlobalLatticeAuthorityEvidence,
     PhaseFailureKind,
     PhaseFitStatus,
+    SourceFrameWidthTopologyFailureKind,
     TemplatePhaseInput,
 )
 from x5crop.formats import FramePhysicalSpec
@@ -71,6 +73,8 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
     def _independent_width_authority(
         fit,
         observation_ids: tuple[ObservationId, ...],
+        *,
+        supporting_frame_ordinals: tuple[int, ...] = (1, 2),
     ) -> SourceFrameWidthAuthority:
         return SourceFrameWidthAuthority(
             authority_id="test-independent-source-width",
@@ -95,7 +99,7 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             basis=(
                 SourceFrameWidthAuthorityBasis.INDEPENDENT_COMPLETE_FRAMES
             ),
-            supporting_frame_ordinals=(1, 2),
+            supporting_frame_ordinals=supporting_frame_ordinals,
             supporting_constraint_ids=(),
             width_px=FiniteInterval(
                 fit.pitch_fit.frame_width_px.minimum,
@@ -106,6 +110,171 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             failure_kind=None,
             reason=None,
         )
+
+    @classmethod
+    def _source_width_topology_fixture(
+        cls,
+        previous_end_interval: FiniteInterval,
+    ):
+        observations = tuple(
+            phase_edge(f"source-width-topology:{index}", coordinate)
+            for index, coordinate in enumerate(
+                (40.0, 140.0, 160.0, 260.0, 280.0, 380.0, 400.0, 500.0)
+            )
+        )
+        phase = fit_template_phase(observations, phase_template(4))
+        assert phase.best is not None
+        bindings = list(phase.best.role_bindings)
+        assert bindings[3] is not None and bindings[4] is not None
+        bindings[3] = replace(
+            bindings[3],
+            canonical_position_px=previous_end_interval.center,
+            fit_position_interval_px=previous_end_interval,
+            full_position_interval_px=previous_end_interval,
+        )
+        bindings[4] = None
+        selected = replace(
+            phase.best,
+            role_bindings=tuple(bindings),
+        )
+        phase = replace(phase, best=selected)
+        authority = cls._independent_width_authority(
+            selected,
+            tuple(
+                observations[index].observation_id
+                for index in (0, 1, 6, 7)
+            ),
+            supporting_frame_ordinals=(1, 4),
+        )
+        return phase, authority
+
+    @staticmethod
+    def _apply_width_and_topology(phase, authority):
+        selected = apply_selected_source_frame_width(phase, authority)
+        assert selected.best is not None
+        inferred = apply_correlated_frame_width_inference(
+            selected.best,
+            source_frame_width_authority=authority,
+        )
+        return assess_selected_source_frame_width_topology(
+            replace(selected, best=inferred),
+            authority,
+        )
+
+    def test_source_width_inference_preserves_normal_adjacency_for_full_interval(
+        self,
+    ) -> None:
+        phase, authority = self._source_width_topology_fixture(
+            FiniteInterval(259.8, 260.2)
+        )
+
+        selected = self._apply_width_and_topology(phase, authority)
+
+        self.assertEqual(selected.status, PhaseFitStatus.RESOLVED)
+        assessment = selected.source_frame_width_topology_assessment
+        assert assessment is not None
+        self.assertEqual(assessment.state, EvidenceState.SUPPORTED)
+        self.assertIsNone(assessment.failure_kind)
+        self.assertEqual(len(assessment.facts), 1)
+        self.assertEqual(assessment.facts[0].relation_ordinal, 2)
+        self.assertEqual(assessment.facts[0].inferred_role_indices, (4,))
+        self.assertGreaterEqual(
+            assessment.facts[0].signed_gap_interval_px.minimum,
+            0.0,
+        )
+
+    def test_source_width_inference_cannot_choose_a_favorable_normal_state(
+        self,
+    ) -> None:
+        phase, authority = self._source_width_topology_fixture(
+            FiniteInterval(270.0, 290.0)
+        )
+
+        selected = self._apply_width_and_topology(phase, authority)
+
+        self.assertEqual(selected.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(
+            selected.failure_kind,
+            PhaseFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED,
+        )
+        assessment = selected.source_frame_width_topology_assessment
+        assert assessment is not None
+        self.assertEqual(assessment.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(
+            assessment.failure_kind,
+            SourceFrameWidthTopologyFailureKind.NORMAL_ADJACENCY_UNRESOLVED,
+        )
+        self.assertLess(assessment.facts[0].signed_gap_interval_px.minimum, 0.0)
+        self.assertGreater(
+            assessment.facts[0].signed_gap_interval_px.maximum,
+            0.0,
+        )
+
+    def test_source_width_inference_reports_certain_unproved_overlap(
+        self,
+    ) -> None:
+        phase, authority = self._source_width_topology_fixture(
+            FiniteInterval(285.0, 295.0)
+        )
+
+        selected = self._apply_width_and_topology(phase, authority)
+
+        self.assertEqual(selected.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(
+            selected.failure_kind,
+            PhaseFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED,
+        )
+        assessment = selected.source_frame_width_topology_assessment
+        assert assessment is not None
+        self.assertEqual(assessment.state, EvidenceState.CONTRADICTED)
+        self.assertEqual(
+            assessment.failure_kind,
+            SourceFrameWidthTopologyFailureKind.NORMAL_ADJACENCY_CONTRADICTED,
+        )
+        self.assertLess(assessment.facts[0].signed_gap_interval_px.maximum, 0.0)
+
+    def test_unavailable_width_inference_does_not_claim_topology_ownership(
+        self,
+    ) -> None:
+        phase, _authority = self._source_width_topology_fixture(
+            FiniteInterval(259.8, 260.2)
+        )
+        assert phase.best is not None
+        bindings = list(phase.best.role_bindings)
+        bindings[5] = None
+        fit = replace(phase.best, role_bindings=tuple(bindings))
+        phase = replace(phase, best=fit)
+        authority = self._independent_width_authority(
+            fit,
+            tuple(
+                binding.observation_id
+                for index in (0, 1, 6, 7)
+                if (binding := fit.role_bindings[index]) is not None
+            ),
+            supporting_frame_ordinals=(1, 4),
+        )
+        selected = apply_selected_source_frame_width(phase, authority)
+        assert selected.best is not None
+        inferred = apply_correlated_frame_width_inference(
+            selected.best,
+            source_frame_width_authority=authority,
+        )
+
+        assessed = assess_selected_source_frame_width_topology(
+            replace(selected, best=inferred),
+            authority,
+        )
+
+        assert inferred.frame_width_inference is not None
+        self.assertEqual(
+            inferred.frame_width_inference.failure_kind,
+            FrameWidthInferenceFailureKind.COMPLETE_FRAME_UNOBSERVED,
+        )
+        self.assertEqual(assessed.status, PhaseFitStatus.RESOLVED)
+        topology = assessed.source_frame_width_topology_assessment
+        assert topology is not None
+        self.assertEqual(topology.state, EvidenceState.SUPPORTED)
+        self.assertFalse(topology.facts)
 
     @staticmethod
     def _with_selected_width_prerequisites(phase, observations):

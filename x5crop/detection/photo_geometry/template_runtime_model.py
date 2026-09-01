@@ -500,6 +500,22 @@ class PreparedTemplateLane(RegisteredTemplateLane):
             raise TypeError("phase competition must be the canonical phase fit")
         if self.phase_competition.template != self.template_spec:
             raise ValueError("phase fit and template spec disagree")
+        width_topology = (
+            self.phase_competition.source_frame_width_topology_assessment
+        )
+        if (
+            (width_topology is not None)
+            != (
+                self.source_frame_width_authority.state
+                == EvidenceState.SUPPORTED
+            )
+            or width_topology is not None
+            and width_topology.source_frame_width_authority_id
+            != self.source_frame_width_authority.authority_id
+        ):
+            raise ValueError(
+                "phase source-W topology assessment lost its authority"
+            )
         if not isinstance(self.cross_competition, CrossFitCompetition):
             raise TypeError("cross competition must be the canonical cross fit")
         if self.cross_competition.template_id != self.template_spec.template_id:

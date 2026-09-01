@@ -26,6 +26,7 @@ from .template_model import (
     FrameWidthInferenceAssessment,
     FrameWidthInferenceFailureKind,
     OverlapRelation,
+    SeparatorRelation,
     SequenceBindingUse,
     SequenceFit,
     SourceFrameWidthAuthorityBasis,
@@ -36,6 +37,9 @@ from .template_phase_model import (
     PhaseFailureKind,
     PhaseFitResult,
     PhaseFitStatus,
+    SourceFrameWidthTopologyAssessment,
+    SourceFrameWidthTopologyFact,
+    SourceFrameWidthTopologyFailureKind,
 )
 
 
@@ -581,6 +585,204 @@ def calibrate_source_frame_width(
     return calibrated, authority
 
 
+def _source_width_boundary(
+    fit: SequenceFit,
+    role_index: int,
+    width_px: FiniteInterval,
+    canonical_width_px: float,
+) -> tuple[FiniteInterval, float, bool]:
+    """Resolve one output role and identify correlated-W opposite inference."""
+
+    binding = fit.role_bindings[role_index]
+    if binding is not None:
+        return (
+            binding.full_position_interval_px,
+            binding.canonical_position_px,
+            False,
+        )
+    opposite_index = (
+        role_index + 1 if role_index % 2 == 0 else role_index - 1
+    )
+    opposite = fit.role_bindings[opposite_index]
+    if opposite is None:
+        return (
+            fit.model_full_role_intervals_px[role_index],
+            fit.model_role_positions_px[role_index],
+            False,
+        )
+    direction = fit.template.direction
+    if role_index % 2 == 0:
+        canonical = (
+            opposite.canonical_position_px - direction * canonical_width_px
+        )
+        interval = (
+            FiniteInterval(
+                opposite.full_position_interval_px.minimum - width_px.maximum,
+                opposite.full_position_interval_px.maximum - width_px.minimum,
+            )
+            if direction > 0
+            else FiniteInterval(
+                opposite.full_position_interval_px.minimum + width_px.minimum,
+                opposite.full_position_interval_px.maximum + width_px.maximum,
+            )
+        )
+    else:
+        canonical = (
+            opposite.canonical_position_px + direction * canonical_width_px
+        )
+        interval = (
+            FiniteInterval(
+                opposite.full_position_interval_px.minimum + width_px.minimum,
+                opposite.full_position_interval_px.maximum + width_px.maximum,
+            )
+            if direction > 0
+            else FiniteInterval(
+                opposite.full_position_interval_px.minimum - width_px.maximum,
+                opposite.full_position_interval_px.maximum - width_px.minimum,
+            )
+        )
+    return interval, canonical, True
+
+
+def _assess_source_frame_width_topology(
+    fit: SequenceFit,
+    authority: SourceFrameWidthAuthority,
+) -> SourceFrameWidthTopologyAssessment:
+    """Require every correlated-W opposite to preserve normal adjacency.
+
+    This selected-only check does not choose a favorable width.  It evaluates
+    the complete authorized W interval against the native adjacent boundaries;
+    an interval spanning both normal and unproved-overlap states remains typed
+    unresolved.
+    """
+
+    if (
+        authority.state != EvidenceState.SUPPORTED
+        or authority.width_px is None
+        or authority.canonical_width_px is None
+    ):
+        raise ValueError("source-W topology requires one supported authority")
+    inference = fit.frame_width_inference
+    inferred_role_indices = (
+        frozenset(inference.inferred_role_indices)
+        if inference is not None
+        and inference.state == EvidenceState.SUPPORTED
+        else frozenset()
+    )
+    if inference is not None and inference.state == EvidenceState.SUPPORTED:
+        if inference.authority_id != authority.authority_id:
+            raise ValueError("source-W topology uses another inference authority")
+    facts: list[SourceFrameWidthTopologyFact] = []
+    relations = {
+        relation.relation_ordinal: relation
+        for relation in fit.adjacency_relations
+    }
+    direction = fit.template.direction
+    for relation_ordinal in range(1, fit.template.count):
+        relation = relations.get(relation_ordinal)
+        if relation is not None and (
+            not isinstance(relation, SeparatorRelation)
+            or relation.is_measured
+        ):
+            continue
+        end_index = 2 * relation_ordinal - 1
+        start_index = 2 * relation_ordinal
+        authorized_indices = inferred_role_indices.intersection(
+            {end_index, start_index}
+        )
+        if not authorized_indices:
+            continue
+        end_interval, end_canonical, end_inferred = _source_width_boundary(
+            fit,
+            end_index,
+            authority.width_px,
+            authority.canonical_width_px,
+        )
+        start_interval, start_canonical, start_inferred = (
+            _source_width_boundary(
+                fit,
+                start_index,
+                authority.width_px,
+                authority.canonical_width_px,
+            )
+        )
+        inferred_indices = tuple(
+            index
+            for index, inferred in (
+                (end_index, end_inferred),
+                (start_index, start_inferred),
+            )
+            if inferred and index in authorized_indices
+        )
+        if inferred_indices != tuple(sorted(authorized_indices)):
+            raise ValueError(
+                "source-W inference ledger disagrees with its missing roles"
+            )
+        signed_gap = (
+            FiniteInterval(
+                start_interval.minimum - end_interval.maximum,
+                start_interval.maximum - end_interval.minimum,
+            )
+            if direction > 0
+            else FiniteInterval(
+                end_interval.minimum - start_interval.maximum,
+                end_interval.maximum - start_interval.minimum,
+            )
+        )
+        canonical_signed_gap = direction * (
+            start_canonical - end_canonical
+        )
+        state = (
+            EvidenceState.SUPPORTED
+            if signed_gap.minimum >= -1.0e-9
+            else EvidenceState.CONTRADICTED
+            if signed_gap.maximum < -1.0e-9
+            else EvidenceState.UNAVAILABLE
+        )
+        facts.append(
+            SourceFrameWidthTopologyFact(
+                relation_ordinal=relation_ordinal,
+                inferred_role_indices=inferred_indices,
+                signed_gap_interval_px=signed_gap,
+                canonical_signed_gap_px=canonical_signed_gap,
+                state=state,
+            )
+        )
+    state = (
+        EvidenceState.CONTRADICTED
+        if any(item.state == EvidenceState.CONTRADICTED for item in facts)
+        else EvidenceState.UNAVAILABLE
+        if any(item.state == EvidenceState.UNAVAILABLE for item in facts)
+        else EvidenceState.SUPPORTED
+    )
+    blocked = tuple(
+        item.relation_ordinal
+        for item in facts
+        if item.state != EvidenceState.SUPPORTED
+    )
+    return SourceFrameWidthTopologyAssessment(
+        source_frame_width_authority_id=authority.authority_id,
+        state=state,
+        facts=tuple(facts),
+        failure_kind=(
+            SourceFrameWidthTopologyFailureKind
+            .NORMAL_ADJACENCY_CONTRADICTED
+            if state == EvidenceState.CONTRADICTED
+            else SourceFrameWidthTopologyFailureKind
+            .NORMAL_ADJACENCY_UNRESOLVED
+            if state == EvidenceState.UNAVAILABLE
+            else None
+        ),
+        reason=(
+            None
+            if state == EvidenceState.SUPPORTED
+            else "source W and native boundaries do not preserve normal "
+            "adjacency for every feasible state at relation ordinals: "
+            + ", ".join(map(str, blocked))
+        ),
+    )
+
+
 def apply_selected_source_frame_width(
     phase: PhaseFitResult,
     authority: SourceFrameWidthAuthority,
@@ -635,7 +837,43 @@ def apply_selected_source_frame_width(
         pitch_fit=selected_pitch_fit,
         adjacency_relations=selected_relations,
     )
-    return replace(phase, best=selected)
+    return replace(
+        phase,
+        best=selected,
+        source_frame_width_topology_assessment=None,
+    )
+
+
+def assess_selected_source_frame_width_topology(
+    phase: PhaseFitResult,
+    authority: SourceFrameWidthAuthority,
+) -> PhaseFitResult:
+    """Assess only roles that correlated-W inference actually owns."""
+
+    if authority.state != EvidenceState.SUPPORTED:
+        return phase
+    fit = phase.best
+    if fit is None:
+        raise ValueError("supported source W requires its selected placement")
+    if not authority.matches_selected_placement(fit):
+        raise ValueError("source W authority belongs to a different placement")
+    topology = _assess_source_frame_width_topology(fit, authority)
+    if (
+        topology.state != EvidenceState.SUPPORTED
+        and phase.status == PhaseFitStatus.RESOLVED
+    ):
+        return replace(
+            phase,
+            status=PhaseFitStatus.UNRESOLVED,
+            ambiguity_reason=topology.reason,
+            failure_kind=PhaseFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED,
+            winner_basis=None,
+            source_frame_width_topology_assessment=topology,
+        )
+    return replace(
+        phase,
+        source_frame_width_topology_assessment=topology,
+    )
 
 
 def _supporting_frame_ordinals(
@@ -1008,6 +1246,7 @@ def apply_correlated_frame_width_inference(
 __all__ = [
     "apply_correlated_frame_width_inference",
     "apply_selected_source_frame_width",
+    "assess_selected_source_frame_width_topology",
     "calibrate_source_frame_width",
     "SourceFrameWidthAuthority",
     "SourceFrameWidthAuthorityFailureKind",

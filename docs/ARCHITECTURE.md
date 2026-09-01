@@ -524,6 +524,24 @@ source pitch、base relation、direct separator refit 与 selected source-W refi
 | 任一 Frame 的 START/END 都未观察，且上述 source-W native-pair rebind 未唯一成立 | `complete_frame_unobserved` → `frame_width_inference_unavailable` |
 | 两种 source-W basis 均不能闭合 | `source_width_closure_unavailable`；缺失 opposite 时继续为 `common_width_authority_unavailable` |
 
+`SourceFrameWidthAuthority` 只回答 W 是否已独立闭合；它不自动证明由 W 推导的 opposite 与相邻 Frame
+仍保持普通 topology。`SourceFrameWidthTopologyAssessment` 在 correlated-W inference 已实际取得角色权限后，
+对每个受影响的 normal adjacency 单独检查完整 W interval 与相邻 native boundary interval。未执行或
+unavailable 的 W inference 不转移坐标所有权，因此 assessment 为 `supported` 且 facts 为空，原 typed
+failure 保持；direct measured separator、Contact 与 Overlap 已有自己的关系 owner，不由本检查重新解释。
+
+| correlated-W 对普通 adjacency 的最终影响 | 结果 |
+|---|---|
+| 完整 signed-gap interval 的下界 `>= 0` | `supported`；W inference 可以继续进入后续 authority、Gate 与预算 |
+| signed-gap interval 同时包含负值与非负值 | `normal_adjacency_unresolved` → `adjacency_topology_unresolved` |
+| signed-gap interval 全部 `< 0`，但没有已证明的 `OverlapRelation` | `normal_adjacency_contradicted` → `adjacency_topology_unresolved` |
+| W inference 未获权限，或最终没有由 W 拥有的相邻角色 | `supported`、空 facts；不得抢占 `complete_frame_unobserved`、counterevidence 或其它先发生的 root |
+
+该 assessment 不选择有利 W 子区间、不创造 Contact/Overlap、不新增 evidence、rank、query、candidate 或
+score；它只遍历至多 `count - 1` 个关系，工作量为 `O(count)`。同一 W authority identity、每个受影响
+relation ordinal、实际 inferred role、完整 signed-gap interval、canonical gap、state 与 typed failure
+进入 current report 和 Debug。
+
 Source H 的直接 authority 仍只来自 selected、唯一且直接的 aperture top/bottom pair；enclosing support
 或单侧 fixed-H 推断不能冒充 direct H。Source W 只能经第 2.1 节校准比例区间产生一份相关 H 推断；它
 不增加独立 rank，且 direct H 始终优先。
@@ -1169,7 +1187,8 @@ Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决
 - `partial_height_separator_pair` 角色数、direct aperture domain 条件与对应 typed Gate；
 - selected-only source W authority 的 `independent_complete_frames | direct_lattice_closure` basis、selected
   phase/W role signature、支持 Frame 或 rank-3 constraint、W interval、typed failure，及相关推导角色、
-  validation-only/counterevidence 局部角色与 observation provenance；
+  validation-only/counterevidence 局部角色与 observation provenance；另列 W topology assessment 的
+  `NOT USED | supported | unavailable | contradicted`、受影响 relation 与 signed-gap interval；
 - nominal Grid calibration、精确 absolute anchor role、每个 adjacency 的 coverage/counterevidence、
   measured local delta、direct correction 与最终联合 envelope；
 - 每个 bound role 的 residual 和 normal/measured-relations/unresolved pattern；
@@ -1256,7 +1275,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/template_contact.py` | candidate-independent `ContactEdgeObservation`：从既有 authoritative edge ledger 证明唯一共享 physical edge，不读取像素或选择 ordinal |
 | `photo_geometry/template_overlap.py` | candidate-independent `OverlapEdgePairObservation`：从既有 authoritative edge ledger 登记唯一反序 END/START pair，不读取像素或选择 ordinal |
 | `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source W/H extent、scan-scale authority 与不增加 direct provenance 的相关 interval 收紧 |
-| `photo_geometry/template_frame_width.py` | selected-only `SourceFrameWidthAuthority` 的两种 closure basis、相关 W 投影/校准、无权局部 refinement 让位与相关单侧角色推断；不得重复增加 rank、参与离散候选选择或重编译 template |
+| `photo_geometry/template_frame_width.py` | selected-only `SourceFrameWidthAuthority` 的两种 closure basis、相关 W 投影/校准、无权局部 refinement 让位、相关单侧角色推断，以及只检查实际 W-inferred role 的 `SourceFrameWidthTopologyAssessment`；不得重复增加 rank、参与离散候选选择或重编译 template |
 | `photo_geometry/template_aspect_ratio_model.py`、`template_aspect_ratio.py` | 校准 W/H 比例的 typed authority、相关 H 推断、direct H 对账与预算失败 |
 | `photo_geometry/template_model.py` | Sequence coordinate/evidence identity、`AdjacencyRelation` sum type、measured separator 的直接 gap identity 与相关 delta realization，以及统一 O(count) prefix |
 | `photo_geometry/template_phase_model.py`、`template_phase_candidates.py` | role binding、projection outcome/type、phase-authority ceiling、同一离散 identity 的有界投影重拟合，以及 physical/source W 下的有界 native-edge rebind |

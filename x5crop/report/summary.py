@@ -58,6 +58,10 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                 "source_frame_width_authority": typed_read_model(
                     lane.prepared.source_frame_width_authority
                 ),
+                "source_frame_width_topology_assessment": typed_read_model(
+                    lane.prepared.phase_competition
+                    .source_frame_width_topology_assessment
+                ),
                 "contact_edge_observations": typed_read_model(
                     lane.prepared.phase_input.contact_edge_observations
                 ),
