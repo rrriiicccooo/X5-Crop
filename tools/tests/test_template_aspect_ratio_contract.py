@@ -21,6 +21,13 @@ from x5crop.detection.photo_geometry.template_aspect_ratio import (
 from x5crop.detection.photo_geometry.template_aspect_ratio_model import (
     ApertureAspectRatioFailureKind,
 )
+from x5crop.detection.photo_geometry.template_frame_width import (
+    SourceFrameWidthAuthority,
+    SourceFrameWidthAuthorityFailureKind,
+)
+from x5crop.detection.photo_geometry.template_model import (
+    SourceFrameWidthAuthorityBasis,
+)
 from x5crop.detection.photo_geometry.template_cross import fit_template_cross
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossEvidence,
@@ -41,6 +48,7 @@ def _source(
     *,
     observed_width_px: FiniteInterval = FiniteInterval.exact(3600.0),
     design_height_mm: float = 24.0,
+    width_observation_count: int = 4,
 ) -> SourceScanGeometry:
     frame = FramePhysicalSpec(
         36.0,
@@ -62,7 +70,8 @@ def _source(
     width = source.width_state.intersect_observed_extent(
         observed_width_px,
         observation_ids=tuple(
-            ObservationId(f"direct-width:{index}") for index in range(4)
+            ObservationId(f"direct-width:{index}")
+            for index in range(width_observation_count)
         ),
     )
     return SourceScanGeometry.from_axis_states(
@@ -72,11 +81,76 @@ def _source(
     )
 
 
+def _source_width_authority(
+    source: SourceScanGeometry,
+    *,
+    basis: SourceFrameWidthAuthorityBasis = (
+        SourceFrameWidthAuthorityBasis.INDEPENDENT_COMPLETE_FRAMES
+    ),
+) -> SourceFrameWidthAuthority:
+    observation_ids = source.width_state.observation_ids
+    if not observation_ids:
+        return SourceFrameWidthAuthority(
+            authority_id="test-source-width-unavailable",
+            state=EvidenceState.UNAVAILABLE,
+            selected_integer_slot_offset=None,
+            selected_phase_anchor_observation_ids=(),
+            supporting_role_observation_ids=(),
+            basis=None,
+            supporting_frame_ordinals=(),
+            supporting_constraint_ids=(),
+            width_px=None,
+            canonical_width_px=None,
+            observation_ids=(),
+            failure_kind=(
+                SourceFrameWidthAuthorityFailureKind
+                .SOURCE_WIDTH_CLOSURE_UNAVAILABLE
+            ),
+            reason="test source W is unavailable",
+        )
+    direct_lattice = (
+        basis == SourceFrameWidthAuthorityBasis.DIRECT_LATTICE_CLOSURE
+    )
+    width = source.width_state.extent_projection_px()
+    return SourceFrameWidthAuthority(
+        authority_id=f"test-source-width:{basis.value}",
+        state=EvidenceState.SUPPORTED,
+        selected_integer_slot_offset=0,
+        selected_phase_anchor_observation_ids=observation_ids,
+        supporting_role_observation_ids=observation_ids,
+        basis=basis,
+        supporting_frame_ordinals=() if direct_lattice else (1, 2),
+        supporting_constraint_ids=(
+            tuple(f"constraint:{index}" for index in range(3))
+            if direct_lattice
+            else ()
+        ),
+        width_px=width,
+        canonical_width_px=width.center,
+        observation_ids=observation_ids,
+        failure_kind=None,
+        reason=None,
+    )
+
+
+def _derive(
+    source: SourceScanGeometry,
+    *,
+    basis: SourceFrameWidthAuthorityBasis = (
+        SourceFrameWidthAuthorityBasis.INDEPENDENT_COMPLETE_FRAMES
+    ),
+):
+    return derive_aperture_aspect_ratio_authority(
+        source,
+        _source_width_authority(source, basis=basis),
+    )
+
+
 class TemplateAspectRatioContractTest(unittest.TestCase):
     def test_direct_width_derives_correlated_height_without_rank(self) -> None:
         source = _source(1.48, 1.52)
 
-        authority = derive_aperture_aspect_ratio_authority(source)
+        authority = _derive(source)
 
         self.assertEqual(authority.state, EvidenceState.SUPPORTED)
         self.assertEqual(authority.scale_height_over_width, PositiveInterval.exact(1.0))
@@ -109,6 +183,26 @@ class TemplateAspectRatioContractTest(unittest.TestCase):
         )
         self.assertEqual(narrowed.height_state.observation_ids, ())
 
+    def test_direct_lattice_width_derives_the_same_rank_zero_height(self) -> None:
+        source = _source(
+            1.48,
+            1.52,
+            width_observation_count=3,
+        )
+
+        authority = _derive(
+            source,
+            basis=SourceFrameWidthAuthorityBasis.DIRECT_LATTICE_CLOSURE,
+        )
+
+        self.assertEqual(authority.state, EvidenceState.SUPPORTED)
+        self.assertEqual(len(authority.width_observation_ids), 3)
+        self.assertEqual(authority.independent_constraint_rank, 0)
+        self.assertEqual(
+            authority.source_width_px,
+            source.width_state.extent_projection_px(),
+        )
+
     def test_missing_calibration_or_direct_width_is_typed_unavailable(self) -> None:
         frame = FramePhysicalSpec(20.0, 10.0, None)
         uncalibrated = SourceScanGeometry.create(
@@ -123,7 +217,7 @@ class TemplateAspectRatioContractTest(unittest.TestCase):
         )
 
         for source in (uncalibrated, without_width):
-            authority = derive_aperture_aspect_ratio_authority(source)
+            authority = _derive(source)
             self.assertEqual(authority.state, EvidenceState.UNAVAILABLE)
             self.assertEqual(
                 authority.failure_kind,
@@ -131,7 +225,7 @@ class TemplateAspectRatioContractTest(unittest.TestCase):
             )
 
     def test_ratio_uncertainty_that_spends_five_percent_is_typed(self) -> None:
-        authority = derive_aperture_aspect_ratio_authority(
+        authority = _derive(
             _source(4.0, 5.0, design_height_mm=8.0)
         )
 
@@ -152,7 +246,7 @@ class TemplateAspectRatioContractTest(unittest.TestCase):
         self.assertFalse(direct.blocks_cross_resolution)
 
     def test_ratio_that_misses_height_prior_has_its_own_typed_failure(self) -> None:
-        authority = derive_aperture_aspect_ratio_authority(
+        authority = _derive(
             _source(10.0, 12.0)
         )
 
@@ -164,7 +258,7 @@ class TemplateAspectRatioContractTest(unittest.TestCase):
         self.assertIsNone(authority.effective_height_px)
 
     def test_direct_height_keeps_native_authority_or_reports_conflict(self) -> None:
-        authority = derive_aperture_aspect_ratio_authority(_source(1.48, 1.52))
+        authority = _derive(_source(1.48, 1.52))
         compatible = reconcile_direct_aperture_height(
             authority,
             FiniteInterval(2398.0, 2402.0),
@@ -190,7 +284,7 @@ class TemplateAspectRatioContractTest(unittest.TestCase):
     def test_cross_truth_table_preserves_direct_h_and_requires_ratio_for_inference(
         self,
     ) -> None:
-        unavailable = derive_aperture_aspect_ratio_authority(
+        unavailable = _derive(
             SourceScanGeometry.create(
                 FramePhysicalSpec(20.0, 10.0, None),
                 width_scale_px_per_mm=PositiveInterval.exact(100.0),
@@ -225,7 +319,7 @@ class TemplateAspectRatioContractTest(unittest.TestCase):
         )
 
     def test_one_side_consumes_full_ratio_height_interval(self) -> None:
-        authority = derive_aperture_aspect_ratio_authority(_source(1.48, 1.52))
+        authority = _derive(_source(1.48, 1.52))
         scaled = replace(
             authority,
             inferred_height_px=FiniteInterval(238.0, 242.0),
@@ -256,7 +350,7 @@ class TemplateAspectRatioContractTest(unittest.TestCase):
         )
 
     def test_unique_direct_h_conflict_with_ratio_refuses_resolution(self) -> None:
-        authority = derive_aperture_aspect_ratio_authority(_source(1.48, 1.52))
+        authority = _derive(_source(1.48, 1.52))
         scaled = replace(
             authority,
             inferred_height_px=FiniteInterval(238.0, 242.0),
@@ -305,7 +399,7 @@ class TemplateAspectRatioContractTest(unittest.TestCase):
         )
 
     def test_required_missing_ratio_reaches_the_typed_gate_failure(self) -> None:
-        unavailable = derive_aperture_aspect_ratio_authority(
+        unavailable = _derive(
             SourceScanGeometry.create(
                 FramePhysicalSpec(20.0, 10.0, None),
                 width_scale_px_per_mm=PositiveInterval.exact(100.0),
@@ -355,11 +449,11 @@ class TemplateAspectRatioContractTest(unittest.TestCase):
         )
         cases = (
             (
-                derive_aperture_aspect_ratio_authority(_source(10.0, 12.0)),
+                _derive(_source(10.0, 12.0)),
                 GateGap.APERTURE_ASPECT_RATIO_PHYSICAL_PRIOR_CONFLICT,
             ),
             (
-                derive_aperture_aspect_ratio_authority(
+                _derive(
                     _source(4.0, 5.0, design_height_mm=8.0)
                 ),
                 GateGap.APERTURE_ASPECT_RATIO_BUDGET_EXHAUSTED,

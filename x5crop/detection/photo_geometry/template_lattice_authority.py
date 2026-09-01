@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from typing import Sequence
 
-from ...domain import EvidenceState, ObservationId
+from ...domain import EvidenceState, FiniteInterval, ObservationId
 from .model import BoundaryRole
 from .template_model import (
+    OverlapRelation,
+    SeparatorRelation,
+    SeparatorRelationKind,
     SequenceBindingUse,
     SequenceFit,
     SequenceRoleBinding,
@@ -110,6 +113,39 @@ def _direct_role_rows(
     )
 
 
+def _direct_role_value_interval(
+    fit: SequenceFit,
+    role: TemplateRole,
+    binding: SequenceRoleBinding,
+) -> FiniteInterval:
+    """Remove measured fixed-gap prefixes from one native role interval."""
+
+    fixed_minimum = 0.0
+    fixed_maximum = 0.0
+    for relation in fit.adjacency_relations[: role.slot_index]:
+        signed_gap = None
+        if isinstance(relation, OverlapRelation):
+            signed_gap = relation.signed_gap_interval_px
+        elif (
+            isinstance(relation, SeparatorRelation)
+            and relation.kind != SeparatorRelationKind.NOMINAL
+        ):
+            signed_gap = relation.signed_gap_interval_px
+        if signed_gap is None:
+            continue
+        fixed_minimum += signed_gap.minimum
+        fixed_maximum += signed_gap.maximum
+    if fit.template.direction > 0:
+        offset = FiniteInterval(fixed_minimum, fixed_maximum)
+    else:
+        offset = FiniteInterval(-fixed_maximum, -fixed_minimum)
+    position = binding.full_position_interval_px
+    return FiniteInterval(
+        position.minimum - offset.maximum,
+        position.maximum - offset.minimum,
+    )
+
+
 def direct_role_constraint_rank(
     fit: SequenceFit,
     authorized_role_indices: Sequence[int] | None = None,
@@ -174,6 +210,12 @@ def assess_global_lattice_authority(
                 kind=GlobalLatticeConstraintKind.DIRECT_ROLE_COORDINATE,
                 coefficients=coefficients,
                 observation_ids=(binding.observation_id,),
+                role_index=role.role_index,
+                value_interval_px=_direct_role_value_interval(
+                    fit,
+                    role,
+                    binding,
+                ),
             )
         )
     direct_rank = _constraint_rank(role_rows)
@@ -191,6 +233,8 @@ def assess_global_lattice_authority(
                 kind=GlobalLatticeConstraintKind.ABSOLUTE_PHASE,
                 coefficients=coefficients,
                 observation_ids=evidence.phase_observation_ids,
+                role_index=None,
+                value_interval_px=phase_input.phase_authority_px,
             )
         )
     if evidence.frame_width_observation_ids:
@@ -202,6 +246,8 @@ def assess_global_lattice_authority(
                 kind=GlobalLatticeConstraintKind.FRAME_WIDTH,
                 coefficients=coefficients,
                 observation_ids=evidence.frame_width_observation_ids,
+                role_index=None,
+                value_interval_px=None,
             )
         )
     if evidence.pitch_observation_ids:
@@ -213,6 +259,8 @@ def assess_global_lattice_authority(
                 kind=GlobalLatticeConstraintKind.SOURCE_PITCH,
                 coefficients=coefficients,
                 observation_ids=evidence.pitch_observation_ids,
+                role_index=None,
+                value_interval_px=None,
             )
         )
     joint_rank = _constraint_rank(joint_rows)
@@ -240,7 +288,41 @@ def assess_global_lattice_authority(
     )
 
 
+def direct_lattice_constraint_basis(
+    authority: GlobalLatticeAuthority,
+) -> tuple[GlobalLatticeConstraint, ...]:
+    """Return one deterministic rank-three basis of direct role constraints."""
+
+    if not isinstance(authority, GlobalLatticeAuthority):
+        raise TypeError("direct lattice basis requires typed authority")
+    if (
+        authority.state != EvidenceState.SUPPORTED
+        or authority.basis != GlobalLatticeAuthorityBasis.DIRECT_ROLE_SYSTEM
+        or authority.direct_role_constraint_rank != 3
+    ):
+        return ()
+    selected: list[GlobalLatticeConstraint] = []
+    current_rank = 0
+    for constraint in authority.constraints:
+        if constraint.kind != GlobalLatticeConstraintKind.DIRECT_ROLE_COORDINATE:
+            continue
+        proposed = (*selected, constraint)
+        proposed_rank = _constraint_rank(
+            tuple(item.coefficients for item in proposed)
+        )
+        if proposed_rank <= current_rank:
+            continue
+        selected.append(constraint)
+        current_rank = proposed_rank
+        if current_rank == 3:
+            break
+    if len(selected) != 3:
+        raise ValueError("supported direct lattice lacks a rank-three basis")
+    return tuple(selected)
+
+
 __all__ = [
     "assess_global_lattice_authority",
+    "direct_lattice_constraint_basis",
     "direct_role_constraint_rank",
 ]

@@ -387,6 +387,7 @@ def alignment_summary(detection: FinalDetection) -> str:
             "N/A"
             if width_inference is None
             else (
+                f"{width_inference.authority_basis.value.upper()} "
                 f"{len(width_inference.supporting_frame_ordinals)}F/"
                 f"{len(width_inference.inferred_role_indices)}R/"
                 f"{len(width_inference.validation_only_role_indices)}V"
@@ -396,7 +397,10 @@ def alignment_summary(detection: FinalDetection) -> str:
         )
         source_width = lane.prepared.source_frame_width_authority
         source_width_proof = (
-            f"{len(source_width.supporting_frame_ordinals)}F"
+            f"{source_width.basis.value.upper()} "
+            f"{len(source_width.supporting_frame_ordinals)}F/"
+            f"{len(source_width.supporting_constraint_ids)}C/"
+            f"{len(source_width.observation_ids)}O"
             if source_width.state.value == "supported"
             else source_width.failure_kind.value.upper()
         )

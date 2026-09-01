@@ -187,6 +187,16 @@ class GoldAnalysisContractTest(unittest.TestCase):
             "source_placement_state": "supported",
             "phase_status": "resolved",
             "phase_failure_kind": None,
+            "global_lattice_authority_state": "supported",
+            "global_lattice_authority_basis": "direct_role_system",
+            "source_frame_width_authority_state": "supported",
+            "source_frame_width_authority_basis": (
+                "independent_complete_frames"
+            ),
+            "source_frame_width_authority_failure_kind": None,
+            "frame_width_inference_state": None,
+            "frame_width_inference_authority_basis": None,
+            "frame_width_inference_failure_kind": None,
             "coarse_enclosing_resolution_state": "supported",
             "coarse_enclosing_resolution_failure_kind": None,
             "coarse_enclosing_candidate_measurement_bases": [

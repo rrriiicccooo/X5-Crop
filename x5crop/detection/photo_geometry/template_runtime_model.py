@@ -52,7 +52,7 @@ from .template_direct_role_aperture_domain import (
 from .template_evidence import EvidenceUseFact
 from .template_frame_width import SourceFrameWidthAuthority
 from .template_holder_fill import HolderFillAssessment
-from .template_model import TemplateSpec
+from .template_model import SourceFrameWidthAuthorityBasis, TemplateSpec
 from .template_measurement_plan_model import TemplateMeasurementPlan
 from .template_nominal_grid_model import CalibratedNominalGridAuthority
 from .template_phase_model import PhaseFitResult, TemplatePhaseInput
@@ -471,6 +471,20 @@ class PreparedTemplateLane(RegisteredTemplateLane):
             raise ValueError("source geometry and source W authority disagree")
         if not isinstance(self.phase_input, TemplatePhaseInput):
             raise TypeError("prepared template lane requires its exact phase input")
+        registered_width_rank_ids = (
+            self.phase_input.global_lattice_evidence
+            .frame_width_observation_ids
+        )
+        expected_width_rank_ids = (
+            self.source_frame_width_authority.observation_ids
+            if self.source_frame_width_authority.basis
+            == SourceFrameWidthAuthorityBasis.INDEPENDENT_COMPLETE_FRAMES
+            else ()
+        )
+        if registered_width_rank_ids != expected_width_rank_ids:
+            raise ValueError(
+                "global lattice re-counted the canonical source W authority"
+            )
         if not isinstance(self.cross_input, TemplateCrossInput):
             raise TypeError("prepared template lane requires its exact cross input")
         if (
@@ -495,7 +509,12 @@ class PreparedTemplateLane(RegisteredTemplateLane):
             self.cross_competition.aperture_aspect_ratio_authority
         )
         if (
-            aspect_input.authority_id != aspect_result.authority_id
+            (
+                aspect_input.calibration_id is not None
+                and aspect_input.width_observation_ids
+                != self.source_frame_width_authority.observation_ids
+            )
+            or aspect_input.authority_id != aspect_result.authority_id
             or aspect_input.calibration_id != aspect_result.calibration_id
             or aspect_input.axis_guard_calibration_id
             != aspect_result.axis_guard_calibration_id

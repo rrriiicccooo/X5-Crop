@@ -3,21 +3,28 @@ from __future__ import annotations
 from dataclasses import replace
 import unittest
 
-from x5crop.domain import FiniteInterval, ObservationId
+from x5crop.domain import EvidenceState, FiniteInterval, ObservationId
 from x5crop.detection.photo_geometry.template_alignment_diagnostic import (
     template_alignment_diagnostic,
 )
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.template_model import (
+    SequenceBindingUse,
     SeparatorRelationKind,
     SeparatorRelation,
+    SourceFrameWidthAuthorityBasis,
+)
+from x5crop.detection.photo_geometry.template_frame_width import (
+    apply_selected_source_frame_width,
+    SourceFrameWidthAuthority,
 )
 from x5crop.detection.photo_geometry.template_phase import (
+    finalize_template_phase_candidate,
     fit_template_phase,
-    fit_template_phase_with_adjacency_relations,
+    fit_template_phase_candidate_with_adjacency_relations,
+    refine_template_phase_with_source_frame_width,
 )
 from x5crop.detection.photo_geometry.template_phase_model import (
-    GlobalLatticeAuthorityEvidence,
     PhaseFailureKind,
     PhaseFitStatus,
     TemplatePhaseInput,
@@ -86,33 +93,89 @@ class TemplateAlignmentDiagnosticContractTest(unittest.TestCase):
                 ("start:3", 280.0, BoundaryRole.START),
             )
         )
-        phase = fit_template_phase_with_adjacency_relations(
-            TemplatePhaseInput(
-                observations=observations,
-                separator_bands=(),
-                template=template(3),
-                calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(template(3)),
-                scale_px_per_mm=None,
-                holder_span_px=FiniteInterval(0.0, 400.0),
-                phase_authority_px=FiniteInterval.exact(40.0),
-                sequence_measurement_sets=(
-                    phase_sequence_measurement(
-                        "alignment-coverage",
-                        FiniteInterval(0.0, 400.0),
-                    ),
+        phase_input = TemplatePhaseInput(
+            observations=observations,
+            separator_bands=(),
+            template=template(3),
+            calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(
+                template(3)
+            ),
+            scale_px_per_mm=None,
+            holder_span_px=FiniteInterval(0.0, 400.0),
+            phase_authority_px=FiniteInterval.exact(40.0),
+            sequence_measurement_sets=(
+                phase_sequence_measurement(
+                    "alignment-coverage",
+                    FiniteInterval(0.0, 400.0),
                 ),
-                global_lattice_evidence=GlobalLatticeAuthorityEvidence(
-                    frame_width_observation_ids=tuple(
-                        ObservationId(identity)
-                        for identity in (
-                            "start:1",
-                            "end:1",
-                            "start:2",
-                            "end:2",
-                        )
-                    ),
+            ),
+        )
+        candidate = fit_template_phase_candidate_with_adjacency_relations(
+            phase_input
+        )
+        fit = candidate.result.best
+        self.assertIsNotNone(fit)
+        assert fit is not None
+        width_ids = tuple(
+            sorted(
+                (
+                    ObservationId("start:1"),
+                    ObservationId("end:1"),
+                    ObservationId("start:2"),
+                    ObservationId("end:2"),
                 ),
+                key=str,
             )
+        )
+        source_width = SourceFrameWidthAuthority(
+            authority_id="alignment-independent-source-width",
+            state=EvidenceState.SUPPORTED,
+            selected_integer_slot_offset=(
+                fit.phase_lattice_fit.integer_slot_offset
+            ),
+            selected_phase_anchor_observation_ids=tuple(
+                binding.observation_id
+                if binding is not None
+                and binding.use == SequenceBindingUse.PHASE_ANCHOR
+                else None
+                for binding in fit.role_bindings
+            ),
+            supporting_role_observation_ids=tuple(
+                binding.observation_id
+                if binding is not None
+                and binding.observation_id in set(width_ids)
+                else None
+                for binding in fit.role_bindings
+            ),
+            basis=(
+                SourceFrameWidthAuthorityBasis.INDEPENDENT_COMPLETE_FRAMES
+            ),
+            supporting_frame_ordinals=(1, 2),
+            supporting_constraint_ids=(),
+            width_px=FiniteInterval(
+                fit.pitch_fit.frame_width_px.minimum,
+                fit.pitch_fit.frame_width_px.maximum,
+            ),
+            canonical_width_px=fit.pitch_fit.canonical_frame_width_px,
+            observation_ids=width_ids,
+            failure_kind=None,
+            reason=None,
+        )
+        selected = apply_selected_source_frame_width(
+            candidate.result,
+            source_width,
+        )
+        selected = refine_template_phase_with_source_frame_width(
+            selected,
+            source_width,
+            phase_input.observations,
+            phase_input.separator_bands,
+            phase_input.sequence_measurement_sets,
+        )
+        phase = finalize_template_phase_candidate(
+            replace(candidate, result=selected),
+            phase_input,
+            source_frame_width_authority=source_width,
         )
         self.assertEqual(phase.status, PhaseFitStatus.RESOLVED)
 

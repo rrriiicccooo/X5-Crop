@@ -36,9 +36,14 @@ from x5crop.detection.photo_geometry.template_model import (
     SeparatorRelation,
     PhaseLatticeAuthority,
     SequenceBindingUse,
+    SourceFrameWidthAuthorityBasis,
     TemplateSearchReceipt,
     TemplateSpec,
     template_role_refinement_radius_px,
+)
+from x5crop.detection.photo_geometry.template_frame_width import (
+    apply_selected_source_frame_width,
+    SourceFrameWidthAuthority,
 )
 from x5crop.detection.photo_geometry.template_overlap import (
     observe_overlap_edge_pairs,
@@ -61,8 +66,11 @@ from x5crop.detection.photo_geometry.template_phase import (
     _merge_continuous_placement,
     _same_continuous_placement,
     account_prior_phase_fit,
+    finalize_template_phase_candidate,
     fit_template_phase,
+    fit_template_phase_candidate_with_adjacency_relations,
     fit_template_phase_with_adjacency_relations,
+    refine_template_phase_with_source_frame_width,
 )
 from x5crop.detection.photo_geometry.template_phase_candidates import (
     _BoundFit,
@@ -124,6 +132,65 @@ def _continuity_for_residual(fit, observations, bands):
         tuple(bands),
         coverage,
         overlap_pairs,
+    )
+
+
+def _fit_with_independent_source_width(
+    phase_input: TemplatePhaseInput,
+    observation_ids: tuple[ObservationId, ...],
+    supporting_frame_ordinals: tuple[int, ...],
+):
+    """Run the production selected-only flow with a typed test W authority."""
+
+    candidate = fit_template_phase_candidate_with_adjacency_relations(
+        phase_input
+    )
+    fit = candidate.result.best
+    assert candidate.result.status == PhaseFitStatus.RESOLVED and fit is not None
+    authority = SourceFrameWidthAuthority(
+        authority_id="test-independent-source-width",
+        state=EvidenceState.SUPPORTED,
+        selected_integer_slot_offset=(
+            fit.phase_lattice_fit.integer_slot_offset
+        ),
+        selected_phase_anchor_observation_ids=tuple(
+            binding.observation_id
+            if binding is not None
+            and binding.use == SequenceBindingUse.PHASE_ANCHOR
+            else None
+            for binding in fit.role_bindings
+        ),
+        supporting_role_observation_ids=tuple(
+            binding.observation_id
+            if binding is not None
+            and binding.observation_id in set(observation_ids)
+            else None
+            for binding in fit.role_bindings
+        ),
+        basis=SourceFrameWidthAuthorityBasis.INDEPENDENT_COMPLETE_FRAMES,
+        supporting_frame_ordinals=supporting_frame_ordinals,
+        supporting_constraint_ids=(),
+        width_px=FiniteInterval(
+            fit.pitch_fit.frame_width_px.minimum,
+            fit.pitch_fit.frame_width_px.maximum,
+        ),
+        canonical_width_px=fit.pitch_fit.canonical_frame_width_px,
+        observation_ids=tuple(sorted(observation_ids, key=str)),
+        failure_kind=None,
+        reason=None,
+    )
+    selected = apply_selected_source_frame_width(candidate.result, authority)
+    selected = refine_template_phase_with_source_frame_width(
+        selected,
+        authority,
+        phase_input.observations,
+        phase_input.separator_bands,
+        phase_input.sequence_measurement_sets,
+    )
+    return finalize_template_phase_candidate(
+        replace(candidate, result=selected),
+        phase_input,
+        source_frame_width_authority=authority,
     )
 
 
@@ -828,8 +895,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             for identity, coordinate, role in specs
         )
 
-        result = fit_template_phase_with_adjacency_relations(
-            TemplatePhaseInput(
+        phase_input = TemplatePhaseInput(
                 observations=observations,
                 separator_bands=(),
                 template=template(6),
@@ -845,15 +911,19 @@ class TemplatePhaseContractTest(unittest.TestCase):
                         FiniteInterval(0.0, 800.0),
                     ),
                 ),
-                global_lattice_evidence=GlobalLatticeAuthorityEvidence(
-                    frame_width_observation_ids=(
-                        ObservationId("gap:start:2"),
-                        ObservationId("gap:end:2"),
-                        ObservationId("gap:start:3"),
-                        ObservationId("gap:end:3"),
-                    ),
-                ),
             )
+        result = _fit_with_independent_source_width(
+            phase_input,
+            tuple(
+                ObservationId(identity)
+                for identity in (
+                    "gap:start:2",
+                    "gap:end:2",
+                    "gap:start:3",
+                    "gap:end:3",
+                )
+            ),
+            (2, 3),
         )
 
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
@@ -911,8 +981,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             for identity, coordinate, role in specs
         )
 
-        result = fit_template_phase_with_adjacency_relations(
-            TemplatePhaseInput(
+        phase_input = TemplatePhaseInput(
                 observations=observations,
                 separator_bands=(),
                 template=template(6),
@@ -928,15 +997,19 @@ class TemplatePhaseContractTest(unittest.TestCase):
                         FiniteInterval(0.0, 800.0),
                     ),
                 ),
-                global_lattice_evidence=GlobalLatticeAuthorityEvidence(
-                    frame_width_observation_ids=(
-                        ObservationId("internal:start:2"),
-                        ObservationId("internal:end:2"),
-                        ObservationId("internal:start:3"),
-                        ObservationId("internal:end:3"),
-                    ),
-                ),
             )
+        result = _fit_with_independent_source_width(
+            phase_input,
+            tuple(
+                ObservationId(identity)
+                for identity in (
+                    "internal:start:2",
+                    "internal:end:2",
+                    "internal:start:3",
+                    "internal:end:3",
+                )
+            ),
+            (2, 3),
         )
 
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
@@ -1679,7 +1752,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             (*observations, alternative),
             (conflict,),
             measurement_sets,
-            independent_frame_width_px=FiniteInterval(99.0, 101.0),
+            authorized_source_frame_width_px=FiniteInterval(99.0, 101.0),
         )
 
         self.assertEqual(
@@ -1788,28 +1861,30 @@ class TemplatePhaseContractTest(unittest.TestCase):
             for identity in ("start:1", "end:1", "start:2", "end:2")
         )
 
-        result = fit_template_phase_with_adjacency_relations(
-            TemplatePhaseInput(
-                observations=observations,
-                separator_bands=(),
-                template=template(4),
-                calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(
-                    template(4)
+        phase_input = TemplatePhaseInput(
+            observations=observations,
+            separator_bands=(),
+            template=template(4),
+            calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(
+                template(4)
+            ),
+            scale_px_per_mm=PositiveInterval.exact(100.0),
+            holder_span_px=FiniteInterval(0.0, 600.0),
+            phase_authority_px=FiniteInterval.exact(100.0),
+            sequence_measurement_sets=(
+                phase_sequence_measurement(
+                    "local-short-to-source-width",
+                    FiniteInterval(0.0, 600.0),
                 ),
-                scale_px_per_mm=PositiveInterval.exact(100.0),
-                holder_span_px=FiniteInterval(0.0, 600.0),
-                phase_authority_px=FiniteInterval.exact(100.0),
-                sequence_measurement_sets=(
-                    phase_sequence_measurement(
-                        "local-short-to-source-width",
-                        FiniteInterval(0.0, 600.0),
-                    ),
-                ),
-                global_lattice_evidence=GlobalLatticeAuthorityEvidence(
-                    frame_width_observation_ids=width_ids,
-                    pitch_observation_ids=(ObservationId("end:3"),),
-                ),
-            )
+            ),
+            global_lattice_evidence=GlobalLatticeAuthorityEvidence(
+                pitch_observation_ids=(ObservationId("end:3"),),
+            ),
+        )
+        result = _fit_with_independent_source_width(
+            phase_input,
+            width_ids,
+            (1, 2),
         )
 
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
@@ -2077,8 +2152,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             )
         )
 
-        result = fit_template_phase_with_adjacency_relations(
-            TemplatePhaseInput(
+        phase_input = TemplatePhaseInput(
                 observations=observations,
                 separator_bands=(),
                 template=template(4),
@@ -2092,15 +2166,19 @@ class TemplatePhaseContractTest(unittest.TestCase):
                         FiniteInterval(0.0, 540.0),
                     ),
                 ),
-                global_lattice_evidence=GlobalLatticeAuthorityEvidence(
-                    frame_width_observation_ids=(
-                        ObservationId("start:1"),
-                        ObservationId("end:1"),
-                        ObservationId("start:2"),
-                        ObservationId("end:2"),
-                    ),
-                ),
             )
+        result = _fit_with_independent_source_width(
+            phase_input,
+            tuple(
+                ObservationId(identity)
+                for identity in (
+                    "start:1",
+                    "end:1",
+                    "start:2",
+                    "end:2",
+                )
+            ),
+            (1, 2),
         )
 
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)

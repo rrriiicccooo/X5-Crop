@@ -36,9 +36,11 @@ separator 与 top/bottom 附近做有界局部测量。Format 尺寸是跨相机
 片门常量；唯一 placement 中的直接边缘可分别闭合该 source 的共同 W/H，并保留原生位置。像素证据用于
 对准模板和否决危险裁切，不能凭自身创造 format、count 或 placement。
 
-缺失的单侧 start/end 只有在至少两张完整直接 Frame 已闭合 source W、且该 Frame 的另一侧直接可见时
-才可推断；双侧都不可见的 Frame 不能由 Grid 凭空生成。Direct W/H 分别取证。Format 画幅比例可以在
-经过黄金集校准、保留完整不确定性后让 W 约束 H：W/H compatibility 对所有 format 使用同一个“物理
+缺失的单侧 start/end 只有在 source W 已由完整直接 Frame，或满秩的独立直接约束闭合，且该 Frame 的
+另一侧直接可见时才可由共同 W 推断；推断不能覆盖已观察边界或删除反证。双侧都不可见的 Frame 只有在
+校准 Grid 已有可靠 absolute anchor、对应 adjacency 完整检查且无反证时才可生成，并继续接受完整包络与
+5% 预算检查。Direct W/H 分别取证。Format 画幅比例可以在经过黄金集校准、保留完整不确定性后让 W 约束
+H：W/H compatibility 对所有 format 使用同一个“物理
 毫米下限 + 相对比例”的计算方法，再由两轴 guard 推导各 format 的有界比例区间。它不能冒充直接
 top/bottom、增加独立证据或用名义比例作零误差换算；比例校准不可用、与直接边界冲突或耗尽逐侧 5%
 预算时，整张 source 保守进入 review。直接 top/bottom 始终优先保留原生位置。

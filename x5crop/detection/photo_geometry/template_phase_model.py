@@ -62,6 +62,8 @@ class GlobalLatticeConstraint:
     kind: GlobalLatticeConstraintKind
     coefficients: tuple[float, float, float]
     observation_ids: tuple[ObservationId, ...]
+    role_index: int | None
+    value_interval_px: FiniteInterval | None
 
     def __post_init__(self) -> None:
         if (
@@ -75,6 +77,38 @@ class GlobalLatticeConstraint:
             or any(
                 not isinstance(identity, ObservationId)
                 for identity in self.observation_ids
+            )
+            or (
+                self.kind == GlobalLatticeConstraintKind.DIRECT_ROLE_COORDINATE
+                and (
+                    self.role_index is None
+                    or self.role_index < 0
+                    or not isinstance(
+                        self.value_interval_px,
+                        FiniteInterval,
+                    )
+                )
+            )
+            or (
+                self.kind == GlobalLatticeConstraintKind.ABSOLUTE_PHASE
+                and (
+                    self.role_index is not None
+                    or not isinstance(
+                        self.value_interval_px,
+                        FiniteInterval,
+                    )
+                )
+            )
+            or (
+                self.kind
+                in {
+                    GlobalLatticeConstraintKind.FRAME_WIDTH,
+                    GlobalLatticeConstraintKind.SOURCE_PITCH,
+                }
+                and (
+                    self.role_index is not None
+                    or self.value_interval_px is not None
+                )
             )
         ):
             raise ValueError("global lattice constraint is invalid")

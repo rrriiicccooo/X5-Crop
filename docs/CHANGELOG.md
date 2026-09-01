@@ -91,17 +91,23 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   `LOCAL_REFINEMENT` 保留 native binding，不能因不增加 global rank 而丢失。Report/Debug 保存 selected
   projection、投影 role、lattice basis、Grid solve 与 typed conflict；不新增 TIFF query、候选、detector
   或 fallback。
-- Report revision 更新为 `x5crop_v5_template_report_42`，不保留旧 schema 兼容路径。当前 110 个
-  development task 的完整机制验收无分析错误：16 个安全 auto、94 个安全 review、
-  `unsafe_approved_auto = 0`；14 个 challenge 均安全 review。Review candidate 的黄金偏差只作机制诊断，
-  不再把未输出候选误写成 challenge 终态失败；approved output 仍必须完整通过黄金几何。
+- `SourceFrameWidthAuthority` 成为 source W 的唯一消费 owner，并显式区分
+  `independent_complete_frames | direct_lattice_closure`。后者从保留的 rank-3 direct-role 系统有界投影相关
+  W，不作为新 observation 回写 Global lattice，不重复增加 rank，也不参与离散选择。比例层改为显式消费
+  同一 typed authority，不再用 observation 数量重新猜 W 的来源；W→H 仍为 rank 0 相关推断。
+- Report revision 更新为 `x5crop_v5_template_report_43`，不保留旧 schema 兼容路径。Report/Debug 与
+  development gold 分别显示 global lattice、source W、frame inference 的 state、basis 与 typed failure。
+  当前 110 个 development task 的完整机制验收无分析错误：16 个安全 auto、94 个安全 review、
+  `unsafe_approved_auto = 0`；14 个 challenge 均安全 review。50 个 task 闭合 source W，其中 39 个来自完整
+  Frame、11 个来自 direct lattice；4 个物理 W 冲突继续 review。
 - Direct-rank selected fit 的晚期 `LOCAL_REFINEMENT` 不再因投影 owner 只接受 calibrated Grid 而被笼统
   阻断。独立 source W 先获得闭合机会；仍无坐标权限时，原 candidate 在同一 template、ordinal、relation
   identity 和完整硬区间内重新投影。退出弱线继续作为 counterevidence，topology 必需 binding 不得退出，
-  `direct_lattice_conflict` 单独表达与 direct-rank 包络不相交。完整黄金中 S012、S076、S077、S090、S108
-  迁移到更下游的真实 typed root；auto 仍为 16、candidate 仍为 71 unavailable / 21 safe / 18 unsafe，
-  危险自动批准保持 0。Selected late projection 从 14/17 增至 19/22，Grid solve 仍为 13；不新增像素读取、
-  detector、candidate、fallback 或 score。
+  `direct_lattice_conflict` 单独表达与 direct-rank 包络不相交。Canonical W 闭合后，S076/S090 明确迁移为
+  `physical_width_conflict`；S077 的 W 已由 `direct_lattice_closure` 支持，但被投影退出的 registered local
+  line 形成 `direct_lattice_counterevidence`，不能删除反证后再用该 W 推断角色。Auto 仍为 16、candidate
+  仍为 71 unavailable / 21 safe / 18 unsafe，危险自动批准保持 0。Selected late projection 为 20/26，
+  selected Grid solve 为 16；不新增像素读取、detector、candidate、fallback 或 score。
 - 对 96 个 nominal 的同源机制对照显示：v4.2.8 有 80 个 auto，但其中 70 个是黄金危险自动裁切；只有
   11 个 v4 geometry 安全。v4 安全而 V5 Review 的 9 个 task 是下一步能力迁移样本，当前分别落在
   aspect/cross、fixed-template、direct-role、Grid conflict、continuity、phase ambiguity 与 output budget
@@ -109,8 +115,9 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   仅因 Grid direct-rank 权限而 Review”的遗留项，说明本阶段已把默认生成权限与后续安全阻断分开。
 - 直接观察到的 start/end 在最终 placement 中保留 native coordinate 与完整 interval；Grid 只补齐缺失
   角色。同一连续 placement 的互补 endpoint evidence 合并为联合可行状态，不伪造 runner。唯一 placement
-  中至少两张完整直接 Frame 可闭合 source W；当每个缺失 Frame 仍有一侧直接边缘时，同一份相关 W 可补
-  多条 opposite。若某个双侧未绑定 Frame 的完整物理 W 走廊内已经存在多组 registered native edge，
+  中的 source W 可由至少两张完整直接 Frame，或保留的独立 rank-3 direct-role 系统闭合；当每个缺失 Frame
+  仍有一侧直接边缘且没有同系统 counterevidence 时，同一相关 W 可补多条 opposite。若某个双侧未绑定
+  Frame 的完整物理 W 走廊内已经存在多组 registered native edge，
   独立 source W 还可在固定 placement 上追加一次有界 lookup；只有它唯一留下一个各自具有直接坐标权限的
   pair 时才绑定。双侧未绑定 Frame 若只有一侧存在唯一 intrinsic edge、另一侧完整 corridor 无候选，也可
   保留该 native coordinate 并由同一相关 W 推导 opposite；该路径可作用于 calibrated Grid selected fit，
@@ -127,8 +134,8 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   START/END 只有获得 source-wide edge、跨高度联合或同一 separator pair 的直接坐标权限后，才能进入
   最终 placement；两条局部 edge 不能仅因间距与 catalog/source W 相容就互相授权。独立 source W 只推导
   真正缺失的 opposite，不覆盖已经授权的 native coordinate。无权 `LOCAL_REFINEMENT` 只有在同 Frame
-  opposite 已授权、W 完全来自至少两张其它双边授权 Frame、且 W 走廊中只有该 observation 相容时，才让位
-  于完整相关 W；弱线仅保留为 validation provenance，不能收窄 W、增加 rank 或改变 phase。其它局部孤立
+  opposite 已授权、W 不依赖该线、且 W 走廊中只有该 observation 相容时，才让位于完整相关 W；弱线仅
+  保留为 validation provenance，不能收窄 W、增加 rank 或改变 phase。其它局部孤立
   edge 保留为观察并产生 typed review，不能反向参与 lattice 自证。两高度 normal separator 只有在一侧已具完整直接权限时，才可向
   同一 adjacency 的另一侧传递一次 `partial_height_separator_pair` 权限；传递不能级联。最终新增唯一
   `DirectRoleApertureDomainAuthority`：两侧 direct aperture，或两侧 enclosing support 经校准 fixed H
@@ -142,12 +149,13 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   迁移为 71 / 21 / 18，没有恢复发布版终判或放宽 Gate。
 - Source W 不再由 provisional/base phase 预先校准后重编译 template，也不再形成第二次 pitch/phase 搜索。
   离散与 local competition 先在没有 source W evidence 的同一候选空间中结束；只有唯一 selected candidate、
-  pre-W joint rank 至少为 2、必要 adjacency coverage 完整且没有直接反证时，至少两张独立
-  完整 Frame 才建立 typed `SourceFrameWidthAuthority`。它只收紧 selected fit 的连续 W，并在最终阶段
+  pre-W joint rank 至少为 2、必要 adjacency coverage 完整且没有直接反证时，至少两张独立完整 Frame 或
+  保留的 rank-3 direct-role basis 才建立 typed `SourceFrameWidthAuthority`。它只收紧 selected fit 的连续 W，并在最终阶段
   重新评估 rank、direct-role/outer authority 与相关 opposite inference；不能删除离散 runner、改变
   ordinal/winner、重编译 template 或回写先前候选选择。普通 local refinement 使用完整 format W，不能让
-  fitted Grid W 过滤自己的反证；只有 typed independent source W 能排除与同 Frame opposite role 物理不相容
-  的 material alternative。未支持与矛盾状态均进入 report/Debug，不建立旧 API、fallback 或并行 runtime。
+  fitted Grid W 过滤自己的反证；source W 的 authority identity 固定绑定 phase-anchor 与 W-support role，
+  direct-lattice basis 的三份 observation 不能再次登记成 Frame-width rank。未支持、物理矛盾与自证风险均
+  进入 report/Debug，不建立旧 API、fallback 或并行 runtime。
 - Rank 3 直接坐标现在在 phase、W、pitch 与 `pitch-W` 的联合硬区间内执行有界最小二乘。无约束解轻微
   越界时不再把 W/pitch 整体退回 catalog 中心却保留原 phase；报告以
   `direct_least_squares | bounded_direct_least_squares | template_interval_center` 记录连续参数依据。
@@ -171,7 +179,8 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   或其它 format 的 tolerance 特例。Direct complete Frames 以完整 uncertainty 收紧 source W，唯一直接
   aperture pair 收紧 source H，native boundary 始终优先。
 - `ApertureAspectRatioAuthority` 已启用：各 format 的 source-level raw W/H 包络由两轴混合 guard 传播成
-  format-specific guarded ratio，再从至少两张完整直接 Frame 闭合的 W 推导一份 rank 0 相关 H。
+  format-specific guarded ratio，再从 canonical `SourceFrameWidthAuthority` 的任一合法 basis 推导一份
+  rank 0 相关 H；比例层不按 observation 数量另建 W 权限。
   Calibration/共同 scale/W authority 不足、physical prior 冲突、direct H 冲突与 5% 预算耗尽均有 typed
   failure；direct H 存在时优先承担 cross。没有合格黄金数据的 format 保守 review，不作精确名义比例换算。
 - Separator 仍以 catalog gap 为搜索中心，实际宽度由直接 material edges 与 local advance 拥有；holder

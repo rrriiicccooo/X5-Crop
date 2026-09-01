@@ -14,21 +14,31 @@ from .template_aspect_ratio_model import (
     ApertureAspectRatioFailureKind,
     unavailable_aperture_aspect_ratio_authority,
 )
+from .template_frame_width import SourceFrameWidthAuthority
 
 
 def derive_aperture_aspect_ratio_authority(
     source_geometry: SourceScanGeometry,
+    source_frame_width_authority: SourceFrameWidthAuthority,
 ) -> ApertureAspectRatioAuthority:
-    """Map direct source W through calibrated R under one shared scan scale."""
+    """Map one canonical source W through calibrated R at rank zero."""
+
+    if not isinstance(
+        source_frame_width_authority,
+        SourceFrameWidthAuthority,
+    ):
+        raise TypeError("aspect ratio requires typed source W authority")
 
     spec = source_geometry.frame_spec.aperture_aspect_ratio
     if spec is None:
         return unavailable_aperture_aspect_ratio_authority()
-    width_ids = source_geometry.width_state.observation_ids
-    if len(width_ids) < 4:
+    if source_frame_width_authority.state != EvidenceState.SUPPORTED:
         return unavailable_aperture_aspect_ratio_authority(
-            "source W was not closed by two independent complete direct Frames"
+            "canonical source W authority is unavailable"
         )
+    width_ids = source_geometry.width_state.observation_ids
+    if width_ids != source_frame_width_authority.observation_ids:
+        raise ValueError("source geometry and canonical W authority disagree")
     if (
         source_geometry.width_state.scale_authority
         != source_geometry.height_state.scale_authority
@@ -80,6 +90,7 @@ def derive_aperture_aspect_ratio_authority(
         ratio,
         scale_ratio,
         width,
+        source_frame_width_authority.authority_id,
         width_ids,
     )
     if effective is None:

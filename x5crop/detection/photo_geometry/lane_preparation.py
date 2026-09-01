@@ -68,7 +68,10 @@ from .template_cross import (
 from .template_cross_model import CrossRoleBinding, TemplateCrossInput
 from .template_contact import observe_contact_edges
 from .template_overlap import observe_overlap_edge_pairs
-from .template_model import template_role_refinement_radius_px
+from .template_model import (
+    SourceFrameWidthAuthorityBasis,
+    template_role_refinement_radius_px,
+)
 from .template_phase import (
     account_prior_phase_fit,
     finalize_template_phase_candidate,
@@ -814,6 +817,10 @@ def prepare_template_lane(
             phase_input.global_lattice_evidence,
             frame_width_observation_ids=(
                 source_frame_width_authority.observation_ids
+                if source_frame_width_authority.basis
+                == SourceFrameWidthAuthorityBasis
+                .INDEPENDENT_COMPLETE_FRAMES
+                else ()
             ),
         ),
     )
@@ -915,7 +922,8 @@ def prepare_template_lane(
         coarse_support.shared_direction
     )
     aperture_aspect_ratio = derive_aperture_aspect_ratio_authority(
-        source_geometry
+        source_geometry,
+        source_frame_width_authority,
     )
     cross_input = TemplateCrossInput(
         template=template,

@@ -47,8 +47,8 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v11"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v12"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v12"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v13"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
 SOURCE_TIMEOUT_SECONDS = 600
@@ -979,6 +979,11 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         )
         phase_competition = development_lanes[0]["phase_competition"]
         phase_best = phase_competition["best"]
+        global_lattice = phase_competition["global_lattice_authority"]
+        source_width = development_lanes[0]["source_frame_width_authority"]
+        frame_width_inference = (
+            None if phase_best is None else phase_best["frame_width_inference"]
+        )
         nominal_evidence = phase_competition[
             "calibrated_nominal_grid_evidence"
         ]
@@ -1023,6 +1028,32 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         "phase_status": production_lanes[0]["phase_status"],
         "phase_failure_kind": development_lanes[0]["phase_competition"].get(
             "failure_kind"
+        ),
+        "global_lattice_authority_state": (
+            None if global_lattice is None else global_lattice["state"]
+        ),
+        "global_lattice_authority_basis": (
+            None if global_lattice is None else global_lattice["basis"]
+        ),
+        "source_frame_width_authority_state": source_width["state"],
+        "source_frame_width_authority_basis": source_width["basis"],
+        "source_frame_width_authority_failure_kind": source_width[
+            "failure_kind"
+        ],
+        "frame_width_inference_state": (
+            None
+            if frame_width_inference is None
+            else frame_width_inference["state"]
+        ),
+        "frame_width_inference_authority_basis": (
+            None
+            if frame_width_inference is None
+            else frame_width_inference["authority_basis"]
+        ),
+        "frame_width_inference_failure_kind": (
+            None
+            if frame_width_inference is None
+            else frame_width_inference["failure_kind"]
         ),
         "coarse_enclosing_resolution_state": enclosing_resolution["state"],
         "coarse_enclosing_resolution_failure_kind": enclosing_resolution[
@@ -2145,6 +2176,38 @@ def _summary(
             records,
             "phase_failure_kind",
         ),
+        "global_lattice_authority_state_counts": _counter(
+            records,
+            "global_lattice_authority_state",
+        ),
+        "global_lattice_authority_basis_counts": _counter(
+            records,
+            "global_lattice_authority_basis",
+        ),
+        "source_frame_width_authority_state_counts": _counter(
+            records,
+            "source_frame_width_authority_state",
+        ),
+        "source_frame_width_authority_basis_counts": _counter(
+            records,
+            "source_frame_width_authority_basis",
+        ),
+        "source_frame_width_authority_failure_kind_counts": _counter(
+            records,
+            "source_frame_width_authority_failure_kind",
+        ),
+        "frame_width_inference_state_counts": _counter(
+            records,
+            "frame_width_inference_state",
+        ),
+        "frame_width_inference_authority_basis_counts": _counter(
+            records,
+            "frame_width_inference_authority_basis",
+        ),
+        "frame_width_inference_failure_kind_counts": _counter(
+            records,
+            "frame_width_inference_failure_kind",
+        ),
         "coarse_enclosing_resolution_state_counts": _counter(
             records,
             "coarse_enclosing_resolution_state",
@@ -2373,6 +2436,14 @@ def run_gold_analysis(
                 "source_placement_state": None,
                 "phase_status": None,
                 "phase_failure_kind": None,
+                "global_lattice_authority_state": None,
+                "global_lattice_authority_basis": None,
+                "source_frame_width_authority_state": None,
+                "source_frame_width_authority_basis": None,
+                "source_frame_width_authority_failure_kind": None,
+                "frame_width_inference_state": None,
+                "frame_width_inference_authority_basis": None,
+                "frame_width_inference_failure_kind": None,
                 "coarse_enclosing_resolution_state": None,
                 "coarse_enclosing_resolution_failure_kind": None,
                 "coarse_enclosing_candidate_measurement_bases": [],

@@ -52,6 +52,7 @@ from .template_evidence import separator_support_authority
 from .template_frame_width import (
     SourceFrameWidthAuthority,
     apply_correlated_frame_width_inference,
+    apply_selected_source_frame_width,
 )
 from .template_adjacency_coverage import (
     AdjacencyCoverageState,
@@ -1477,7 +1478,7 @@ def _project_selected_late_local_refinements(
         phase_input.observations,
         phase_input.separator_bands,
         phase_input.sequence_measurement_sets,
-        independent_frame_width_px=(
+        authorized_source_frame_width_px=(
             None
             if source_frame_width_authority is None
             or source_frame_width_authority.state != EvidenceState.SUPPORTED
@@ -1623,11 +1624,11 @@ def refine_template_phase_with_source_frame_width(
 ) -> PhaseFitResult:
     """Bind only roles uniquely selected by an independent source-level W.
 
-    The discrete placement is already fixed and source W is derived from at
-    least two other directly observed complete Frames.  This pass may bind a
-    registered native edge pair that the broader format interval could not
-    distinguish.  It never creates a coordinate or changes phase, pitch, or
-    ordinal mapping.
+    The discrete placement is already fixed and source W is independently
+    closed either by complete Frames or by a retained full-rank direct
+    lattice.  This pass may bind a registered native edge pair that the
+    broader format interval could not distinguish.  It never creates a
+    coordinate or changes phase, pitch, or ordinal mapping.
     """
 
     if authority.state != EvidenceState.SUPPORTED:
@@ -1637,10 +1638,7 @@ def refine_template_phase_with_source_frame_width(
     if not result.best.unbound_role_indices:
         return result
     if (
-        authority.selected_integer_slot_offset
-        != result.best.phase_lattice_fit.integer_slot_offset
-        or authority.selected_role_observation_ids
-        != result.best.binding_observation_ids
+        not authority.matches_selected_placement(result.best)
         or authority.width_px is None
     ):
         raise ValueError("source W authority belongs to a different placement")
@@ -1671,7 +1669,7 @@ def _attach_selected_candidate_authorities(
             phase_input.observations,
             phase_input.separator_bands,
             phase_input.sequence_measurement_sets,
-            independent_frame_width_px=(
+            authorized_source_frame_width_px=(
                 None
                 if source_frame_width_authority is None
                 or source_frame_width_authority.state
@@ -1808,6 +1806,20 @@ def _apply_final_lattice_contract(
 ) -> PhaseFitResult:
     """Require direct-role, global, and local authority for one placement."""
 
+    # A local native-edge pass or late authority projection may rebuild the
+    # continuous fit after source W was first closed.  The source-W owner must
+    # narrow that final fit again before any authority or inference ledger is
+    # assessed; this is idempotent and does not register new evidence.
+    if (
+        source_frame_width_authority is not None
+        and source_frame_width_authority.state == EvidenceState.SUPPORTED
+        and result.status == PhaseFitStatus.RESOLVED
+        and result.best is not None
+    ):
+        result = apply_selected_source_frame_width(
+            result,
+            source_frame_width_authority,
+        )
     result = _attach_selected_candidate_authorities(
         result,
         phase_input,
@@ -1827,12 +1839,18 @@ def _apply_final_lattice_contract(
     ):
         assessed_best = apply_correlated_frame_width_inference(
             result.best,
-            frame_width_observation_ids=(
-                phase_input.global_lattice_evidence
-                .frame_width_observation_ids
-            ),
+            source_frame_width_authority=source_frame_width_authority,
             direct_role_authority=result.direct_role_binding_authority,
             sequence_edges=phase_input.observations,
+            projected_counterevidence_role_indices=tuple(
+                item.role_index
+                for item in (
+                    ()
+                    if result.best_phase_candidate_authority_projection is None
+                    else result.best_phase_candidate_authority_projection
+                    .projected_out_bindings
+                )
+            ),
         )
         receipt = replace(
             result.receipt,
@@ -1977,6 +1995,11 @@ def _apply_final_lattice_contract(
                     "created from the Grid"
                     if width_inference.failure_kind
                     == FrameWidthInferenceFailureKind.COMPLETE_FRAME_UNOBSERVED
+                    else "direct-lattice W cannot discard a registered local "
+                    "boundary and then authorize missing roles"
+                    if width_inference.failure_kind
+                    == FrameWidthInferenceFailureKind
+                    .DIRECT_LATTICE_COUNTEREVIDENCE
                     else "missing opposite Frame roles require one independently "
                     "closed source-level common W"
                 ),

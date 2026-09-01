@@ -82,7 +82,7 @@ class ApertureAspectRatioAuthority:
             )
             if (
                 any(value is None for value in required)
-                or len(ids) < 4
+                or len(ids) < 3
                 or self.failure_kind is not None
                 or self.failure_detail is not None
             ):

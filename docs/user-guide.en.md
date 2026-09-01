@@ -38,9 +38,12 @@ positions. Format dimensions are cross-camera priors, not an identical gate size
 in the unique placement may independently close that source's common W and H while retaining their native positions.
 Pixel evidence aligns or rejects the template; it cannot invent format, count, or placement authority.
 
-A missing single start/end side may be inferred only after at least two complete direct Frames close source W and that
-Frame still has its opposite direct side. Grid cannot create a Frame whose two sides are both unseen. Direct W and H
-retain separate evidence. A gold-calibrated aspect-ratio authority may let W constrain H with full uncertainty. Every
+A missing start/end side may be inferred only after source W is closed by complete direct Frames or a full-rank set of
+independent direct constraints, and that Frame still has its opposite direct side. Inference cannot override an observed
+edge or discard counterevidence. A Frame whose two sides are both unseen may be generated only when the calibrated Grid
+has a reliable absolute anchor, the corresponding adjacencies were fully checked, and no counterevidence exists; the
+complete envelope and five-percent budget still apply. Direct W and H retain separate evidence. A gold-calibrated
+aspect-ratio authority may let W constrain H with full uncertainty. Every
 format uses the same physical-millimetre-floor plus relative-ratio method for W/H compatibility, while the propagated
 axis guards produce a bounded ratio interval specific to that format. This authority cannot impersonate direct
 top/bottom, add independent evidence, or apply the nominal ratio as an exact conversion. Missing calibration, a true

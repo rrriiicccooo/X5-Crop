@@ -439,6 +439,14 @@ class FrameWidthInferenceFailureKind(str, Enum):
     COMMON_WIDTH_AUTHORITY_UNAVAILABLE = (
         "common_width_authority_unavailable"
     )
+    DIRECT_LATTICE_COUNTEREVIDENCE = "direct_lattice_counterevidence"
+
+
+class SourceFrameWidthAuthorityBasis(str, Enum):
+    """Independent physical route that closed one source-common Frame W."""
+
+    INDEPENDENT_COMPLETE_FRAMES = "independent_complete_frames"
+    DIRECT_LATTICE_CLOSURE = "direct_lattice_closure"
 
 
 @dataclass(frozen=True)
@@ -451,6 +459,8 @@ class FrameWidthInferenceAssessment:
     width_px: PositiveInterval | None
     canonical_width_px: float | None
     observation_ids: tuple[ObservationId, ...]
+    authority_id: str | None
+    authority_basis: SourceFrameWidthAuthorityBasis | None
     failure_kind: FrameWidthInferenceFailureKind | None
     validation_only_role_indices: tuple[int, ...] = ()
     validation_observation_ids: tuple[ObservationId, ...] = ()
@@ -500,8 +510,25 @@ class FrameWidthInferenceAssessment:
                 or not self.width_px.minimum - 1.0e-9
                 <= self.canonical_width_px
                 <= self.width_px.maximum + 1.0e-9
-                or len(self.supporting_frame_ordinals) < 2
-                or len(self.observation_ids) < 4
+                or not self.authority_id
+                or not isinstance(
+                    self.authority_basis,
+                    SourceFrameWidthAuthorityBasis,
+                )
+                or (
+                    self.authority_basis
+                    == SourceFrameWidthAuthorityBasis
+                    .INDEPENDENT_COMPLETE_FRAMES
+                    and (
+                        len(self.supporting_frame_ordinals) < 2
+                        or len(self.observation_ids) < 4
+                    )
+                )
+                or (
+                    self.authority_basis
+                    == SourceFrameWidthAuthorityBasis.DIRECT_LATTICE_CLOSURE
+                    and len(self.observation_ids) != 3
+                )
                 or self.failure_kind is not None
             ):
                 raise ValueError("supported Frame width inference is incomplete")
@@ -510,6 +537,8 @@ class FrameWidthInferenceAssessment:
             or self.canonical_width_px is not None
             or self.supporting_frame_ordinals
             or self.observation_ids
+            or self.authority_id is not None
+            or self.authority_basis is not None
             or self.validation_only_role_indices
             or self.validation_observation_ids
             or not isinstance(
@@ -1268,18 +1297,24 @@ class SequenceFit:
             if width_inference.state == EvidenceState.SUPPORTED:
                 assert width_inference.width_px is not None
                 assert width_inference.canonical_width_px is not None
-                if (
-                    self.pitch_fit.frame_width_px
-                    != PositiveInterval(
-                        width_inference.width_px.minimum,
-                        width_inference.width_px.maximum,
+                inferred_width = PositiveInterval(
+                    width_inference.width_px.minimum,
+                    width_inference.width_px.maximum,
+                )
+                if self.pitch_fit.frame_width_px != inferred_width:
+                    raise ValueError(
+                        "supported common-W interval disagrees with sequence"
                     )
-                    or self.pitch_fit.canonical_frame_width_px
+                if (
+                    self.pitch_fit.canonical_frame_width_px
                     != width_inference.canonical_width_px
-                    or self.completely_unobserved_frame_ordinals
                 ):
                     raise ValueError(
-                        "supported common-W inference disagrees with sequence"
+                        "supported common-W canonical state disagrees with sequence"
+                    )
+                if self.completely_unobserved_frame_ordinals:
+                    raise ValueError(
+                        "supported common-W inference cannot create a full Frame"
                     )
         phase_authority_role_count = sum(
             binding is not None

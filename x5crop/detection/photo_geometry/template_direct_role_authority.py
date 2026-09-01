@@ -381,7 +381,7 @@ def _assess_direct_role_binding_authority(
     fit: SequenceFit,
     ledger: _DirectRoleAuthorityLedger,
     *,
-    independent_frame_width_px: FiniteInterval | None = None,
+    authorized_source_frame_width_px: FiniteInterval | None = None,
 ) -> DirectRoleBindingAuthority:
     selected: dict[int, BoundaryEdgeObservation] = {}
     selected_evidence_groups: dict[int, ObservationId] = {}
@@ -398,7 +398,7 @@ def _assess_direct_role_binding_authority(
         role_index: int,
         alternative_id: ObservationId,
     ) -> bool:
-        if independent_frame_width_px is None:
+        if authorized_source_frame_width_px is None:
             return True
         opposite_index = (
             role_index + 1 if role_index % 2 == 0 else role_index - 1
@@ -424,8 +424,10 @@ def _assess_direct_role_binding_authority(
                 start_interval.maximum - end_interval.minimum,
             )
         return not (
-            possible_width.maximum < independent_frame_width_px.minimum
-            or independent_frame_width_px.maximum < possible_width.minimum
+            possible_width.maximum
+            < authorized_source_frame_width_px.minimum
+            or authorized_source_frame_width_px.maximum
+            < possible_width.minimum
         )
 
     bases: dict[int, set[DirectRoleAuthorityBasis]] = {
@@ -586,7 +588,7 @@ def assess_direct_role_binding_authorities(
     separator_bands: tuple[SeparatorBandObservation, ...],
     measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
     *,
-    independent_frame_width_px: FiniteInterval | None = None,
+    authorized_source_frame_width_px: FiniteInterval | None = None,
 ) -> tuple[DirectRoleBindingAuthority, ...]:
     """Assess bounded phase candidates against one pre-indexed evidence ledger."""
 
@@ -604,7 +606,9 @@ def assess_direct_role_binding_authorities(
         _assess_direct_role_binding_authority(
             fit,
             ledger,
-            independent_frame_width_px=independent_frame_width_px,
+            authorized_source_frame_width_px=(
+                authorized_source_frame_width_px
+            ),
         )
         for fit in fits
     )
@@ -616,9 +620,9 @@ def assess_direct_role_binding_authority(
     separator_bands: tuple[SeparatorBandObservation, ...],
     measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
     *,
-    independent_frame_width_px: FiniteInterval | None = None,
+    authorized_source_frame_width_px: FiniteInterval | None = None,
 ) -> DirectRoleBindingAuthority:
-    """Authorize a short line only through another independent physical fact."""
+    """Authorize a short line only through a source W that excludes it."""
 
     if not isinstance(fit, SequenceFit):
         raise TypeError("direct-role authority requires a sequence fit")
@@ -627,7 +631,7 @@ def assess_direct_role_binding_authority(
         observations,
         separator_bands,
         measurement_sets,
-        independent_frame_width_px=independent_frame_width_px,
+        authorized_source_frame_width_px=authorized_source_frame_width_px,
     )[0]
 
 

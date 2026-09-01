@@ -111,8 +111,11 @@ _SOURCE_FRAME_WIDTH_AUTHORITY_FIELDS = {
     "authority_id",
     "state",
     "selected_integer_slot_offset",
-    "selected_role_observation_ids",
+    "selected_phase_anchor_observation_ids",
+    "supporting_role_observation_ids",
+    "basis",
     "supporting_frame_ordinals",
+    "supporting_constraint_ids",
     "width_px",
     "canonical_width_px",
     "observation_ids",
@@ -125,8 +128,7 @@ _SOURCE_FRAME_WIDTH_FAILURE_KINDS = {
     "direct_role_authority_contradicted",
     "global_lattice_rank_insufficient",
     "adjacency_coverage_incomplete",
-    "outer_frame_authority_unavailable",
-    "independent_complete_frames_unavailable",
+    "source_width_closure_unavailable",
     "physical_width_conflict",
 }
 
@@ -260,6 +262,8 @@ def _validate_global_lattice_authority(value: object) -> None:
                 "kind",
                 "coefficients",
                 "observation_ids",
+                "role_index",
+                "value_interval_px",
             }
             or not isinstance(constraint["constraint_id"], str)
             or not constraint["constraint_id"]
@@ -277,6 +281,28 @@ def _validate_global_lattice_authority(value: object) -> None:
             or not _valid_ids(
                 constraint["observation_ids"],
                 allow_empty=False,
+            )
+            or (
+                constraint["kind"] == "direct_role_coordinate"
+                and (
+                    not isinstance(constraint["role_index"], int)
+                    or constraint["role_index"] < 0
+                    or not _valid_interval(constraint["value_interval_px"])
+                )
+            )
+            or (
+                constraint["kind"] == "absolute_phase"
+                and (
+                    constraint["role_index"] is not None
+                    or not _valid_interval(constraint["value_interval_px"])
+                )
+            )
+            or (
+                constraint["kind"] in {"frame_width", "source_pitch"}
+                and (
+                    constraint["role_index"] is not None
+                    or constraint["value_interval_px"] is not None
+                )
             )
         ):
             raise ValueError("global lattice constraint summary is invalid")
@@ -513,7 +539,7 @@ def _validate_aperture_aspect_ratio_authority(value: object) -> None:
             or not _finite_number(value["output_expansion_limit_mm"])
             or value["failure_kind"] is not None
             or value["failure_detail"] is not None
-            or len(value["width_observation_ids"]) < 4
+            or len(value["width_observation_ids"]) < 3
         ):
             raise ValueError("supported aspect-ratio authority is invalid")
     elif (
@@ -1177,6 +1203,8 @@ def _validate_frame_width_inference(value: object) -> None:
         "width_px",
         "canonical_width_px",
         "observation_ids",
+        "authority_id",
+        "authority_basis",
         "failure_kind",
         "validation_only_role_indices",
         "validation_observation_ids",
@@ -1188,6 +1216,7 @@ def _validate_frame_width_inference(value: object) -> None:
     validation_only = value["validation_only_role_indices"]
     validation_ids = value["validation_observation_ids"]
     supported = value["state"] == "supported"
+    authority_basis = value["authority_basis"]
     if (
         value["state"] not in {"supported", "unavailable"}
         or not isinstance(inferred, list)
@@ -1217,13 +1246,25 @@ def _validate_frame_width_inference(value: object) -> None:
         width = value["width_px"]
         canonical = value["canonical_width_px"]
         if (
-            len(supporting) < 2
-            or len(observation_ids) < 4
+            not isinstance(value["authority_id"], str)
+            or not value["authority_id"]
+            or authority_basis
+            not in {
+                "independent_complete_frames",
+                "direct_lattice_closure",
+            }
+            or (
+                authority_basis == "independent_complete_frames"
+                and (len(supporting) < 2 or len(observation_ids) < 4)
+            )
+            or (
+                authority_basis == "direct_lattice_closure"
+                and len(observation_ids) != 3
+            )
             or not _valid_interval(width)
             or not _finite_number(canonical)
-            or not float(width["minimum"])
-            <= float(canonical)
-            <= float(width["maximum"])
+            or float(canonical) < float(width["minimum"]) - 1.0e-9
+            or float(canonical) > float(width["maximum"]) + 1.0e-9
             or value["failure_kind"] is not None
         ):
             raise ValueError("supported Frame width inference is invalid")
@@ -1234,10 +1275,13 @@ def _validate_frame_width_inference(value: object) -> None:
         or validation_ids
         or value["width_px"] is not None
         or value["canonical_width_px"] is not None
+        or value["authority_id"] is not None
+        or authority_basis is not None
         or value["failure_kind"]
         not in {
             "complete_frame_unobserved",
             "common_width_authority_unavailable",
+            "direct_lattice_counterevidence",
         }
     ):
         raise ValueError("unavailable Frame width inference is invalid")
@@ -1252,22 +1296,33 @@ def _validate_source_frame_width_authority(value: object) -> None:
     ):
         raise ValueError("source Frame-width authority summary is invalid")
     state = value["state"]
-    role_ids = value["selected_role_observation_ids"]
+    phase_anchor_ids = value["selected_phase_anchor_observation_ids"]
+    supporting_role_ids = value["supporting_role_observation_ids"]
+    basis = value["basis"]
     supporting = value["supporting_frame_ordinals"]
+    constraint_ids = value["supporting_constraint_ids"]
     observation_ids = value["observation_ids"]
     if (
         state not in {"supported", "unavailable", "contradicted"}
-        or not isinstance(role_ids, list)
+        or not isinstance(phase_anchor_ids, list)
+        or not isinstance(supporting_role_ids, list)
+        or len(supporting_role_ids) != len(phase_anchor_ids)
         or any(
             identity is not None
             and (not isinstance(identity, str) or not identity)
-            for identity in role_ids
+            for identity in (*phase_anchor_ids, *supporting_role_ids)
         )
         or not isinstance(supporting, list)
         or supporting != sorted(set(supporting))
         or any(
             not isinstance(ordinal, int) or ordinal <= 0
             for ordinal in supporting
+        )
+        or not isinstance(constraint_ids, list)
+        or constraint_ids != sorted(set(constraint_ids))
+        or any(
+            not isinstance(identity, str) or not identity
+            for identity in constraint_ids
         )
         or not _valid_ids(observation_ids)
         or observation_ids != sorted(observation_ids)
@@ -1279,15 +1334,41 @@ def _validate_source_frame_width_authority(value: object) -> None:
     if supported:
         if (
             not isinstance(value["selected_integer_slot_offset"], int)
-            or not role_ids
-            or len(supporting) < 2
+            or not phase_anchor_ids
+            or not any(phase_anchor_ids)
+            or not any(supporting_role_ids)
+            or {
+                identity
+                for identity in supporting_role_ids
+                if identity is not None
+            }
+            != set(observation_ids)
+            or basis
+            not in {
+                "independent_complete_frames",
+                "direct_lattice_closure",
+            }
+            or (
+                basis == "independent_complete_frames"
+                and (
+                    len(supporting) < 2
+                    or constraint_ids
+                    or len(observation_ids) < 4
+                )
+            )
+            or (
+                basis == "direct_lattice_closure"
+                and (
+                    supporting
+                    or len(constraint_ids) != 3
+                    or len(observation_ids) != 3
+                )
+            )
             or not _valid_interval(width)
             or float(width["minimum"]) <= 0.0
             or not _finite_number(canonical)
-            or not float(width["minimum"])
-            <= float(canonical)
-            <= float(width["maximum"])
-            or len(observation_ids) < 4
+            or float(canonical) < float(width["minimum"]) - 1.0e-9
+            or float(canonical) > float(width["maximum"]) + 1.0e-9
             or value["failure_kind"] is not None
             or value["reason"] is not None
         ):
@@ -1295,8 +1376,11 @@ def _validate_source_frame_width_authority(value: object) -> None:
         return
     if (
         value["selected_integer_slot_offset"] is not None
-        or role_ids
+        or phase_anchor_ids
+        or supporting_role_ids
+        or basis is not None
         or supporting
+        or constraint_ids
         or width is not None
         or canonical is not None
         or observation_ids
@@ -2014,11 +2098,18 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             )
         )
         coarse = lane.get("coarse_strip_support")
-        _validate_aperture_aspect_ratio_authority(
-            lane.get("aperture_aspect_ratio_authority")
-        )
+        aspect_ratio = lane.get("aperture_aspect_ratio_authority")
+        _validate_aperture_aspect_ratio_authority(aspect_ratio)
         source_width = lane.get("source_frame_width_authority")
         _validate_source_frame_width_authority(source_width)
+        if (
+            aspect_ratio["calibration_id"] is not None
+            and aspect_ratio["width_observation_ids"]
+            != source_width["observation_ids"]
+        ):
+            raise ValueError(
+                "aspect ratio and canonical source W authority disagree"
+            )
         _validate_direct_role_aperture_domain_authority(
             lane.get("direct_role_aperture_domain_authority")
         )

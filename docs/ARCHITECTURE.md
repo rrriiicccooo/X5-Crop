@@ -108,7 +108,7 @@ H_px ∈ W_px × (scale_H / scale_W) / R_guarded
 | 证据状态 | 结果 |
 |---|---|
 | direct top/bottom 唯一闭合 H | 保留 native coordinate；direct H 优先 |
-| 至少两张完整直接 Frame 闭合 source W、共享 scale identity 与 `R_guarded` 均完整 | 产生一份相关 H interval；不冒充 direct H，不增加 constraint rank |
+| canonical `SourceFrameWidthAuthority` 由任一合法 basis 闭合、共享 scale identity 与 `R_guarded` 均完整 | 产生一份相关 H interval；消费同一 W authority identity，不冒充 direct H，不增加 constraint rank |
 | ratio calibration、direct source W 或共享 scale identity 不可用 | `aperture_aspect_ratio_authority_unavailable` |
 | ratio 推断与 format H compatibility 不相交 | `aperture_aspect_ratio_physical_prior_conflict` |
 | 已支持的 ratio 推断与唯一 direct H 不相交 | `aperture_aspect_ratio_direct_conflict` |
@@ -479,17 +479,25 @@ source pitch、base relation、direct separator refit 与 selected source-W refi
   refinement 必须使用 format 编译的完整物理 W interval，不能用正在受检验的 fitted Grid W 过滤自己的
   反证；source-wide 与跨高度联合 edge 优先尝试唯一闭合，不能唯一时仍保留全部注册观察参与冲突判断。
   随后对 selected candidate 评估直接角色权限、pre-W lattice rank 与逐 adjacency coverage；pre-W joint
-  rank 至少为 2、所有必要 coverage 完整且没有直接反证时，至少两张具有独立直接双边的完整 Frame 才可
-  建立一份 `SourceFrameWidthAuthority`。该 source-level 尺寸事实不要求首尾 Frame 已经取得直接角色，
-  因为它本身不创建输出；两端 Frame authority 仍在最终 Grid inference/Gate 阶段检查。W 收紧 selected
-  fit 的连续 W，并在最终阶段重新评估 rank 3、opposite inference 与 Gate。W 不得重编译 template、重新
-  搜索 phase、删除 runner、改变 ordinal 或把自己写回离散候选选择证据。所有物理相容的完整 Frame 都以
-  完整 uncertainty 进入一个保守 hull；非相邻 Frame 同样有效，不挑 dominant subset、不取中位 winner，
-  也不覆盖任何已经取得坐标权限的直接边界。若每个仍缺角色的 Frame 都至少有一侧直接边缘，同一份相关
-  W 可以推导多条 opposite；这些推导不是多份独立证据。一个仅由两高度局部 support 形成、没有直接坐标
-  权限的 `LOCAL_REFINEMENT` 不是应当保留的 native coordinate：当同 Frame 的 opposite 已独立授权、W
-  完全来自至少两张其它双边授权 Frame、W 走廊中只有该 observation 与角色相容时，该局部绑定让位于
-  `opposite + correlated W`。局部 observation 只保留为 validation provenance，不能收窄 W 或增加 rank。
+  rank 至少为 2、所有必要 coverage 完整且没有直接反证时，唯一 `SourceFrameWidthAuthority` 可以由两种
+  基础闭合：至少两张具有独立直接双边的完整 Frame 形成 `independent_complete_frames`；或保留下来的三个
+  独立 direct-role 坐标已使 `(phase,W,pitch)` 满秩时，把同一线性系统对 W 的有界投影记录为
+  `direct_lattice_closure`。后者只是一份相关 W，不是第四条证据，不回写
+  `GlobalLatticeAuthority.frame_width_observation_ids`，也不增加 constraint rank。每条 direct constraint 保存
+  native coordinate interval；若其前缀已有 measured gap，先扣除同一直接 signed-gap interval，再投影 W。
+  Contact/Overlap 不进入这条普通 source-W 闭合路径。
+
+  两种 basis 都只收紧 selected fit 的连续 W，并在最终阶段重新评估 opposite inference 与 Gate；不得重编译
+  template、搜索 phase、删除 runner、改变 ordinal 或参与先前的离散选择。Authority identity 固定绑定
+  template、integer offset、全部 phase-anchor role 与实际拥有 W 的 role；无关晚期 refinement 可以变化，
+  W-owning role 或 phase anchor 变化则 authority 失效。完整 Frame basis 中所有物理相容 Frame 以完整
+  uncertainty 进入一个保守 hull；direct-lattice basis 保留选定 rank-3 constraint IDs 与恰好三份 observation。
+  若每个仍缺角色的 Frame 都至少有一侧直接边缘，同一相关 W 可以推导多条 opposite，但这些推导不增加
+  独立证据。若 direct-lattice W 的建立伴随某条 registered local boundary 被投影退出，该线是直接反证，
+  不能再用同一 W 授权缺失角色；产生 `direct_lattice_counterevidence`。一个仅由两高度局部 support 形成、
+  没有直接坐标权限的 `LOCAL_REFINEMENT`，只有在 W 不依赖该线、opposite 已授权且 W 走廊内唯一相容时，
+  才可让位于 `opposite + correlated W`；原 observation 只保留为 validation provenance，不能收窄 W 或增加
+  rank。
   若某张 Frame 原本双侧都未绑定，但完整 format W 走廊内已有多组 registered native edge，而独立 source W
   能唯一留下其中一组，则允许在固定 placement 上追加一次有界 local lookup 并绑定该原生 pair。它不读取
   新像素、不生成坐标、不改变 phase/pitch/ordinal，也不能在多解时强选。若双侧未绑定 Frame 只有一侧存在
@@ -502,17 +510,19 @@ source pitch、base relation、direct separator refit 与 selected source-W refi
 | source W 与缺失角色状态 | 结果 |
 |---|---|
 | 离散 placement 仍有 runner、pre-W rank < 2、必要 adjacency coverage 不完整或存在直接反证 | `SourceFrameWidthAuthority` 保存对应 typed failure；source geometry 与候选均不改变 |
-| 唯一 placement、pre-W rank = 2、必要 coverage 完整、无反证，且至少两张独立完整 Frame | 建立 selected-only source W；它可以补最后一个 rank，但不能参与先前的离散候选选择 |
-| pre-W rank = 3 且其它条件完整 | source W 只收紧 selected continuous W 并提供相关推断，不增加新的离散选择权限 |
+| 唯一 placement、pre-W rank = 2、必要 coverage 完整、无反证，且至少两张独立完整 Frame | 建立 `independent_complete_frames` source W；它可以补最后一个 rank，但不能参与先前的离散候选选择 |
+| 保留的三个独立 direct-role constraint 已达到 rank 3，必要 coverage 完整且无反证 | 建立 `direct_lattice_closure` source W；只消费同一系统已经闭合的相关 W，不再登记 Frame-width rank |
+| Rank-3 direct system 与 source 物理 W 区间不相交 | `physical_width_conflict` → `source_frame_width_conflict`；直接反证优先 |
 | 没有缺失角色 | 不需要 W 推断，全部直接 native coordinate 保持不变 |
-| 至少两张完整直接 Frame 闭合共同 W，且每个缺失 Frame 仍有一侧直接边缘 | `supported`；同一相关 W 补齐全部 opposite |
+| 任一 source-W basis 已闭合，且每个缺失 Frame 仍有一侧直接边缘 | `supported`；同一相关 W 补齐全部 opposite，不增加 rank |
+| `direct_lattice_closure` 已闭合，但先前投影退出的 registered local boundary 仍构成 counterevidence | `direct_lattice_counterevidence` → `frame_width_inference_unavailable`；不能用相关 W 删除反证后自证缺失角色 |
 | 至少两张其它完整直接 Frame 闭合共同 W；某个双侧未绑定 Frame 在该 W 内只有一组 registered、intrinsic-authorized native edge pair | 固定 placement 上绑定该 pair；随后重新计算直接权限、outer、coverage 与 Gate |
 | 至少两张其它完整直接 Frame 闭合共同 W；某个双侧未绑定 Frame 只有一侧唯一 intrinsic edge，另一侧 registered corridor 为空 | 保留该 native edge，以同一相关 W 推导 opposite；calibrated Grid 不能把自己的 W 冒充这份 authority |
 | 双侧未绑定 Frame 没有上述唯一 pair 或唯一单侧 edge，或仍有多组合法解释 | 保持 `complete_frame_unobserved`；source W 不创造坐标也不强选 |
-| 无权 `LOCAL_REFINEMENT`，opposite 已授权，W 来自至少两张其它双边授权 Frame，且 W 走廊中只有该线相容 | 该角色成为 `validation_only`；完整相关 W 推导坐标，记录 role index 与 validation observation ID |
+| 无权 `LOCAL_REFINEMENT`，opposite 已授权，W 不依赖该线，且 W 走廊中只有该线相容 | 该角色成为 `validation_only`；完整相关 W 推导坐标，记录 role index 与 validation observation ID |
 | 弱线参与 W、opposite 未授权、W 走廊多解，或该线承担 `PHASE_ANCHOR` | 不让位；原 `direct_role_binding_authority_unavailable` 保持 |
 | 任一 Frame 的 START/END 都未观察，且上述 source-W native-pair rebind 未唯一成立 | `complete_frame_unobserved` → `frame_width_inference_unavailable` |
-| 缺失 opposite，但不足两张完整直接 Frame 建立共同 W | `common_width_authority_unavailable` → `frame_width_inference_unavailable` |
+| 两种 source-W basis 均不能闭合 | `source_width_closure_unavailable`；缺失 opposite 时继续为 `common_width_authority_unavailable` |
 
 Source H 的直接 authority 仍只来自 selected、唯一且直接的 aperture top/bottom pair；enclosing support
 或单侧 fixed-H 推断不能冒充 direct H。Source W 只能经第 2.1 节校准比例区间产生一份相关 H 推断；它
@@ -1133,8 +1143,9 @@ Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决
 - 每个 bounded phase candidate 的输入权限、projection outcome、保留 rank、退出几何的 binding、重拟合结果与
   terminal failure；
 - `partial_height_separator_pair` 角色数、direct aperture domain 条件与对应 typed Gate；
-- selected-only source W authority 的 selected signature、支持 Frame、W interval、typed failure，及相关
-  推导角色、validation-only 局部角色与 observation provenance；
+- selected-only source W authority 的 `independent_complete_frames | direct_lattice_closure` basis、selected
+  phase/W role signature、支持 Frame 或 rank-3 constraint、W interval、typed failure，及相关推导角色、
+  validation-only/counterevidence 局部角色与 observation provenance；
 - nominal Grid calibration、精确 absolute anchor role、每个 adjacency 的 coverage/counterevidence、
   measured local delta、direct correction 与最终联合 envelope；
 - 每个 bound role 的 residual 和 normal/measured-relations/unresolved pattern；
@@ -1221,14 +1232,14 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/template_contact.py` | candidate-independent `ContactEdgeObservation`：从既有 authoritative edge ledger 证明唯一共享 physical edge，不读取像素或选择 ordinal |
 | `photo_geometry/template_overlap.py` | candidate-independent `OverlapEdgePairObservation`：从既有 authoritative edge ledger 登记唯一反序 END/START pair，不读取像素或选择 ordinal |
 | `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source W/H extent、scan-scale authority 与不增加 direct provenance 的相关 interval 收紧 |
-| `photo_geometry/template_frame_width.py` | selected-only `SourceFrameWidthAuthority`、source W 校准、无权局部 refinement 让位与相关单侧角色推断；不得参与离散候选选择或重编译 template |
+| `photo_geometry/template_frame_width.py` | selected-only `SourceFrameWidthAuthority` 的两种 closure basis、相关 W 投影/校准、无权局部 refinement 让位与相关单侧角色推断；不得重复增加 rank、参与离散候选选择或重编译 template |
 | `photo_geometry/template_aspect_ratio_model.py`、`template_aspect_ratio.py` | 校准 W/H 比例的 typed authority、相关 H 推断、direct H 对账与预算失败 |
 | `photo_geometry/template_model.py` | Sequence coordinate/evidence identity、`AdjacencyRelation` sum type、measured separator 的直接 gap identity 与相关 delta realization，以及统一 O(count) prefix |
 | `photo_geometry/template_phase_model.py`、`template_phase_candidates.py` | role binding、projection outcome/type、phase-authority ceiling、同一离散 identity 的有界投影重拟合，以及 physical/source W 下的有界 native-edge rebind |
 | `photo_geometry/template_phase.py`、`template_pitch.py`、`template_residual.py` | phase/ordinal 求解、连续 placement identity、candidate-bound direct separator relation、Contact/Overlap/Separator 离散竞争、selected-only source-W rebind 调度与 source pitch |
 | `photo_geometry/template_direct_role_authority.py` | 每个 bounded phase candidate 与最终已选 START/END 的 native-coordinate 权限证明及共享 evidence ledger |
 | `photo_geometry/template_direct_role_aperture_domain.py` | partial-height separator role 在全部可行 cross 状态中的两侧 aperture-domain containment；不读取像素或创建 placement |
-| `photo_geometry/template_lattice_authority.py` | `(phase, W, pitch)` 直接约束矩阵与独立闭合证明 |
+| `photo_geometry/template_lattice_authority.py` | `(phase, W, pitch)` 直接约束矩阵、native coordinate interval、独立闭合证明与 deterministic rank-3 basis；不消费或重登记 source W |
 | `photo_geometry/template_adjacency_coverage.py` | selected adjacency 合法走廊到既有 query/trace/coordinate 的覆盖证明 |
 | `photo_geometry/template_adjacency_topology.py` | selected adjacency 的 continuity ledger、Contact/Overlap 验证与 typed topology failure；不读取像素或重新选择 placement |
 | `photo_geometry/template_outer_frame_authority.py` | 带 Grid 推断时首尾输出 Frame 的直接长轴角色证明 |
