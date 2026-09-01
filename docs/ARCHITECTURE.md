@@ -421,8 +421,13 @@ gap；任何越过 authority ceiling、改变 ordinal/template/relation evidence
 投影后的 candidate 重新按 coordinate identity canonicalize，再与全部其它 eligible candidate 对称竞争。
 同一连续 placement 的互补直接证据仍可合并，非等价 projected/unchanged placement 仍保留 runner。
 原弱线只保存在 projection provenance；它不能继续拥有 phase、收窄 W、提高 constraint rank 或消失于
-Debug。若所有解释都终止，最佳原 candidate 只作为诊断几何保留，并以 projection outcome 说明首个缺口，
-不得退回 residual、support 或 Grid 强选。
+Debug。投影出去的弱线仍是 counterevidence：它的完整位置区间必须与投影后同一 role 的完整模型包络
+相交；不相交时产生 `calibrated_nominal_grid_conflict`，不能以“没有坐标权限”为由静默删除。反过来，
+已经获得坐标权限的 `LOCAL_REFINEMENT` 在 direct-rank 重拟合后仍须保留 native binding 和完整区间，
+不能因它不增加 global rank 而消失。Local relation 或 source-W pass 较晚追加 binding 时，selected Grid
+仍由同一个 `PhaseCandidateAuthorityProjection` owner 再评估一次；不新增查询、候选或 detector。若所有
+解释都终止，最佳原 candidate 只作为诊断几何保留，并以 projection outcome 说明首个缺口，不得退回
+residual、support 或 Grid 强选。
 
 | bounded candidate 事实 | projection outcome | 离散竞争结果 |
 |---|---|---|
@@ -432,7 +437,7 @@ Debug。若所有解释都终止，最佳原 candidate 只作为诊断几何保�
 | 投影后存在完全未观察 Frame，或保留坐标 rank 为 0–2；有校准 prior、至少一个 absolute anchor，且联合有界解非空 | `calibrated_nominal_grid` | 同一 Grid 生成缺失角色；直接坐标保持 native，完整相关包络进入后续 coverage、反证与安全评估 |
 | 上述路径没有 absolute anchor | `nominal_grid_phase_anchor_unavailable` | 终止；format/count 不能自行决定 Grid 在 TIFF 中的位置 |
 | 上述路径没有当前 format 的合格 calibration | `calibrated_nominal_grid_unavailable` | 终止；不从其它 format 外推 |
-| 直接坐标与校准 W/pitch/scale 联合包络不相交 | `calibrated_nominal_grid_conflict` | 终止并保留直接反证；不得扩大 prior 或拉回 native coordinate |
+| 已授权直接坐标与校准 W/pitch/scale 联合包络不相交，或投影弱线的完整区间与对应 Grid role 包络不相交 | `calibrated_nominal_grid_conflict` | 终止并保留直接/validation 反证；不得扩大 prior、拉回 native coordinate 或静默丢线 |
 | 存在 separator material 或同角色直接反证 | `direct_role_contradiction` | 终止且反证保留；不得作为噪声删除 |
 | 有界重拟合不存在，或会改变 template/ordinal/relation evidence/role mapping/phase authority ceiling | `refit_unavailable | discrete_identity_changed` | 终止并报告 typed failure |
 | 两个非等价 eligible candidate 均成立 | `unchanged | direct_separator_refit | projected | calibrated_nominal_grid` 各自保留 | 继续硬物理比较；不能明确分离时 `discrete_phase_ambiguous` |
@@ -1127,6 +1132,7 @@ separator lattice hypotheses
 phase hypotheses / lookups / bindings / fit passes
 phase candidate authority evaluations / terminal outcomes / role checks
 phase candidate projection evaluations / successes / dropped bindings
+selected late-binding projection evaluations / dropped bindings / Grid solves
 local adjacency evaluations
 cross runs / fits
 placement / boundary / content evaluations

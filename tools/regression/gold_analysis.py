@@ -47,8 +47,8 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v10"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v11"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v11"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v12"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
 SOURCE_TIMEOUT_SECONDS = 600
@@ -1061,6 +1061,18 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         ],
         "candidate_nominal_grid_solve_success_count": phase_receipt[
             "candidate_nominal_grid_solve_success_count"
+        ],
+        "selected_direct_role_projection_evaluation_count": phase_receipt[
+            "selected_direct_role_projection_evaluation_count"
+        ],
+        "selected_direct_role_projection_binding_count": phase_receipt[
+            "selected_direct_role_projection_binding_count"
+        ],
+        "selected_nominal_grid_solve_count": phase_receipt[
+            "selected_nominal_grid_solve_count"
+        ],
+        "selected_nominal_grid_solve_success_count": phase_receipt[
+            "selected_nominal_grid_solve_success_count"
         ],
         "cross_status": production_lanes[0]["cross_status"],
         "cross_failure_kind": development_lanes[0][
@@ -2186,6 +2198,22 @@ def _summary(
             int(record["candidate_nominal_grid_solve_success_count"])
             for record in records
         ),
+        "selected_direct_role_projection_evaluation_count": sum(
+            int(record["selected_direct_role_projection_evaluation_count"])
+            for record in records
+        ),
+        "selected_direct_role_projection_binding_count": sum(
+            int(record["selected_direct_role_projection_binding_count"])
+            for record in records
+        ),
+        "selected_nominal_grid_solve_count": sum(
+            int(record["selected_nominal_grid_solve_count"])
+            for record in records
+        ),
+        "selected_nominal_grid_solve_success_count": sum(
+            int(record["selected_nominal_grid_solve_success_count"])
+            for record in records
+        ),
         "cross_failure_reason_counts": _counter(
             records,
             "cross_failure_reason",
@@ -2356,6 +2384,10 @@ def run_gold_analysis(
                 "calibrated_nominal_grid_authority_failure_kind": None,
                 "candidate_nominal_grid_solve_count": 0,
                 "candidate_nominal_grid_solve_success_count": 0,
+                "selected_direct_role_projection_evaluation_count": 0,
+                "selected_direct_role_projection_binding_count": 0,
+                "selected_nominal_grid_solve_count": 0,
+                "selected_nominal_grid_solve_success_count": 0,
                 "cross_status": None,
                 "cross_failure_kind": None,
                 "cross_failure_reason": None,

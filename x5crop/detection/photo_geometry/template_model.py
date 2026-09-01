@@ -1477,6 +1477,10 @@ class TemplateSearchReceipt:
     candidate_direct_role_projection_binding_count: int = 0
     candidate_nominal_grid_solve_count: int = 0
     candidate_nominal_grid_solve_success_count: int = 0
+    selected_direct_role_projection_evaluation_count: int = 0
+    selected_direct_role_projection_binding_count: int = 0
+    selected_nominal_grid_solve_count: int = 0
+    selected_nominal_grid_solve_success_count: int = 0
 
     def __post_init__(self) -> None:
         values = (
@@ -1502,6 +1506,10 @@ class TemplateSearchReceipt:
             self.candidate_direct_role_projection_binding_count,
             self.candidate_nominal_grid_solve_count,
             self.candidate_nominal_grid_solve_success_count,
+            self.selected_direct_role_projection_evaluation_count,
+            self.selected_direct_role_projection_binding_count,
+            self.selected_nominal_grid_solve_count,
+            self.selected_nominal_grid_solve_success_count,
         )
         if any(not isinstance(value, int) or value < 0 for value in values):
             raise ValueError("template work receipt values must be non-negative integers")
@@ -1540,6 +1548,15 @@ class TemplateSearchReceipt:
             > self.candidate_nominal_grid_solve_count
             or self.candidate_nominal_grid_solve_count
             > self.candidate_direct_role_projection_evaluation_count
+            or self.selected_direct_role_projection_evaluation_count
+            > 2 * self.fit_pass_count
+            or self.selected_direct_role_projection_binding_count
+            > self.role_count
+            * self.selected_direct_role_projection_evaluation_count
+            or self.selected_nominal_grid_solve_success_count
+            > self.selected_nominal_grid_solve_count
+            or self.selected_nominal_grid_solve_count
+            > self.selected_direct_role_projection_evaluation_count
         ):
             raise ValueError("phase-candidate authority work is inconsistent")
 

@@ -98,6 +98,36 @@ def _intervals_overlap(left: FiniteInterval, right: FiniteInterval) -> bool:
     )
 
 
+def _projection_failure_kind(
+    outcome: PhaseCandidateProjectionOutcome,
+) -> PhaseFailureKind:
+    """Map one canonical projection failure to its public phase failure."""
+
+    return {
+        PhaseCandidateProjectionOutcome.DIRECT_ROLE_CONTRADICTION: (
+            PhaseFailureKind.SEPARATOR_MATERIAL_CONFLICT
+        ),
+        PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID_UNAVAILABLE: (
+            PhaseFailureKind.CALIBRATED_NOMINAL_GRID_AUTHORITY_UNAVAILABLE
+        ),
+        PhaseCandidateProjectionOutcome.NOMINAL_GRID_PHASE_ANCHOR_UNAVAILABLE: (
+            PhaseFailureKind.NOMINAL_GRID_PHASE_ANCHOR_UNAVAILABLE
+        ),
+        PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID_CONFLICT: (
+            PhaseFailureKind.CALIBRATED_NOMINAL_GRID_CONFLICT
+        ),
+        PhaseCandidateProjectionOutcome.REFIT_UNAVAILABLE: (
+            PhaseFailureKind.FIXED_TEMPLATE_MISMATCH
+        ),
+        PhaseCandidateProjectionOutcome.DISCRETE_IDENTITY_CHANGED: (
+            PhaseFailureKind.FIXED_TEMPLATE_MISMATCH
+        ),
+    }.get(
+        outcome,
+        PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE,
+    )
+
+
 def _topology_signature(
     fit: SequenceFit,
 ) -> tuple[tuple[str, int, ObservationId], ...]:
@@ -1155,32 +1185,8 @@ def fit_template_phase(
                     ),
                 ),
                 registered_direct_observation_ids=direct_ids,
-                failure_kind={
-                    PhaseCandidateProjectionOutcome.DIRECT_ROLE_CONTRADICTION: (
-                        PhaseFailureKind.SEPARATOR_MATERIAL_CONFLICT
-                    ),
-                    PhaseCandidateProjectionOutcome
-                    .CALIBRATED_NOMINAL_GRID_UNAVAILABLE: (
-                        PhaseFailureKind
-                        .CALIBRATED_NOMINAL_GRID_AUTHORITY_UNAVAILABLE
-                    ),
-                    PhaseCandidateProjectionOutcome
-                    .NOMINAL_GRID_PHASE_ANCHOR_UNAVAILABLE: (
-                        PhaseFailureKind.NOMINAL_GRID_PHASE_ANCHOR_UNAVAILABLE
-                    ),
-                    PhaseCandidateProjectionOutcome
-                    .CALIBRATED_NOMINAL_GRID_CONFLICT: (
-                        PhaseFailureKind.CALIBRATED_NOMINAL_GRID_CONFLICT
-                    ),
-                    PhaseCandidateProjectionOutcome.REFIT_UNAVAILABLE: (
-                        PhaseFailureKind.FIXED_TEMPLATE_MISMATCH
-                    ),
-                    PhaseCandidateProjectionOutcome.DISCRETE_IDENTITY_CHANGED: (
-                        PhaseFailureKind.FIXED_TEMPLATE_MISMATCH
-                    ),
-                }.get(
-                    best_projection.outcome,
-                    PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE,
+                failure_kind=_projection_failure_kind(
+                    best_projection.outcome
                 ),
                 winner_basis=None,
                 best_phase_candidate_authority_projection=best_projection,
@@ -1366,6 +1372,21 @@ def _aggregate_phase_work(
             item.candidate_nominal_grid_solve_success_count
             for item in receipts
         ),
+        selected_direct_role_projection_evaluation_count=sum(
+            item.selected_direct_role_projection_evaluation_count
+            for item in receipts
+        ),
+        selected_direct_role_projection_binding_count=sum(
+            item.selected_direct_role_projection_binding_count
+            for item in receipts
+        ),
+        selected_nominal_grid_solve_count=sum(
+            item.selected_nominal_grid_solve_count for item in receipts
+        ),
+        selected_nominal_grid_solve_success_count=sum(
+            item.selected_nominal_grid_solve_success_count
+            for item in receipts
+        ),
     )
     receipt.validate_bounds()
     return replace(result, receipt=receipt)
@@ -1416,6 +1437,172 @@ def _with_local_role_refinement(
     )
     receipt.validate_bounds()
     return replace(result, best=refinement.fit, receipt=receipt)
+
+
+def _project_selected_grid_local_refinements(
+    result: PhaseFitResult,
+    phase_input: TemplatePhaseInput,
+    *,
+    source_frame_width_authority: SourceFrameWidthAuthority | None = None,
+) -> PhaseFitResult:
+    """Yield unsupported late local bindings back to the selected Grid.
+
+    Candidate projection runs before local relation analysis.  Local
+    refinement must remain free to bind registered lines while topology is
+    being derived, but a short line that still lacks coordinate authority
+    after that analysis cannot become output geometry merely because it was
+    added later.  Reuse the same bounded projection owner on the selected
+    discrete identity; the line remains typed projection provenance and the
+    calibrated Grid keeps its full interval.
+    """
+
+    if (
+        result.status != PhaseFitStatus.RESOLVED
+        or result.best is None
+        or not phase_input.sequence_measurement_sets
+        or result.best.calibrated_nominal_grid_fit_state is None
+    ):
+        return result
+    authority = assess_direct_role_binding_authority(
+        result.best,
+        phase_input.observations,
+        phase_input.separator_bands,
+        phase_input.sequence_measurement_sets,
+        independent_frame_width_px=(
+            None
+            if source_frame_width_authority is None
+            or source_frame_width_authority.state != EvidenceState.SUPPORTED
+            else source_frame_width_authority.width_px
+        ),
+    )
+    if authority.state != EvidenceState.UNAVAILABLE:
+        return result
+    unsupported_bindings = tuple(
+        result.best.role_bindings[role_index]
+        for role_index in authority.unsupported_role_indices
+    )
+    if not unsupported_bindings or any(
+        binding is None
+        or binding.use != SequenceBindingUse.LOCAL_REFINEMENT
+        for binding in unsupported_bindings
+    ):
+        return result
+
+    template = phase_input.template
+    phase_separator_bands = normal_separator_material_bands(
+        phase_input.separator_bands,
+        maximum_material_gap_px=template.gap_prior_px.maximum,
+    )
+    separator_support_ids = separator_support_authority(
+        phase_separator_bands
+    )
+    qualified_observations = _with_separator_role_authority(
+        phase_input.observations,
+        phase_input.separator_bands,
+        maximum_material_gap_px=template.gap_prior_px.maximum,
+    )
+    facts = _facts(
+        qualified_observations,
+        separator_support_ids=separator_support_ids,
+    )
+    direct = tuple(item for item in facts if item.direct)
+    separator_pairs = _separator_pair_facts(
+        phase_separator_bands,
+        direct,
+        maximum_material_gap_px=template.gap_prior_px.maximum,
+    )
+    width = FiniteInterval(
+        template.frame_width_px.minimum,
+        template.frame_width_px.maximum,
+    )
+    gap_pitch = FiniteInterval(
+        width.minimum + template.gap_prior_px.minimum,
+        width.maximum + template.gap_prior_px.maximum,
+    )
+    pitch = FiniteInterval(
+        max(gap_pitch.minimum, template.pitch_px.minimum),
+        min(gap_pitch.maximum, template.pitch_px.maximum),
+    )
+    fit_residual_limit_px = (
+        None
+        if phase_input.scale_px_per_mm is None
+        else PHOTO_BOUNDARY_MEASUREMENT_SPEC.line_connection_allowance_px(
+            phase_input.scale_px_per_mm.maximum
+        )
+    )
+    projected, projection = project_candidate_to_authorized_direct_roles(
+        _BoundFit(result.best, True),
+        authority,
+        direct,
+        separator_pairs,
+        ordered_template_roles(template.count),
+        template,
+        result.best.adjacency_relations,
+        pitch,
+        phase_input.phase_authority_px,
+        fit_residual_limit_px,
+        phase_input.calibrated_nominal_grid_prior,
+        frozenset(
+            (role_index, binding.observation_id)
+            for role_index, binding in enumerate(result.best.role_bindings)
+            if binding is not None
+            and binding.use == SequenceBindingUse.PHASE_ANCHOR
+        ),
+    )
+    nominal_solve = projection.outcome in {
+        PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID,
+        PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID_CONFLICT,
+    }
+    receipt = replace(
+        result.receipt,
+        selected_direct_role_projection_evaluation_count=(
+            result.receipt.selected_direct_role_projection_evaluation_count
+            + 1
+        ),
+        selected_direct_role_projection_binding_count=(
+            result.receipt.selected_direct_role_projection_binding_count
+            + len(projection.projected_out_bindings)
+        ),
+        selected_nominal_grid_solve_count=(
+            result.receipt.selected_nominal_grid_solve_count
+            + int(nominal_solve)
+        ),
+        selected_nominal_grid_solve_success_count=(
+            result.receipt.selected_nominal_grid_solve_success_count
+            + int(
+                projection.outcome
+                == PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID
+            )
+        ),
+        inferred_role_count=(
+            result.receipt.inferred_role_count
+            if projected is None
+            else len(projected.fit.unbound_role_indices)
+        ),
+    )
+    receipt.validate_bounds()
+    if projected is None:
+        return replace(
+            result,
+            status=PhaseFitStatus.UNRESOLVED,
+            ambiguity_reason=projection.reason,
+            failure_kind=_projection_failure_kind(projection.outcome),
+            winner_basis=None,
+            best_phase_candidate_authority_projection=projection,
+            receipt=receipt,
+        )
+    return replace(
+        result,
+        best=projected.fit,
+        best_phase_candidate_authority_projection=projection,
+        receipt=receipt,
+        global_lattice_authority=None,
+        calibrated_nominal_grid_evidence=None,
+        adjacency_observation_coverage=(),
+        adjacency_continuity_observations=(),
+        direct_role_binding_authority=None,
+        outer_frame_observation_authority=None,
+    )
 
 
 def refine_template_phase_with_source_frame_width(
@@ -1912,6 +2099,10 @@ def fit_template_phase_candidate_with_adjacency_relations(
                 ),
             ),
         )
+        measured = _project_selected_grid_local_refinements(
+            measured,
+            phase_input,
+        )
         assessed = _attach_selected_candidate_authorities(
             measured,
             phase_input,
@@ -1959,6 +2150,10 @@ def fit_template_phase_candidate_with_adjacency_relations(
             analysis.evaluated_adjacency_count
         ),
     )
+    adjusted = _project_selected_grid_local_refinements(
+        adjusted,
+        phase_input,
+    )
     assessed = _attach_selected_candidate_authorities(
         adjusted,
         phase_input,
@@ -1982,8 +2177,13 @@ def finalize_template_phase_candidate(
         raise TypeError("phase finalization requires a candidate competition")
     if candidate.result.template != phase_input.template:
         raise ValueError("phase candidate and final input use different templates")
-    return _apply_final_lattice_contract(
+    result = _project_selected_grid_local_refinements(
         candidate.result,
+        phase_input,
+        source_frame_width_authority=source_frame_width_authority,
+    )
+    return _apply_final_lattice_contract(
+        result,
         phase_input,
         directly_observed_ordinals=(
             candidate.directly_observed_adjacency_ordinals

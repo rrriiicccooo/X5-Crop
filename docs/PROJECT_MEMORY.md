@@ -44,17 +44,23 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   protection 共用原有每侧 5% 预算；输出 polygon 不被事后修补。
 - Coarse short-axis sharp/broad material 共用一次 registered measurement。唯一、跨高度一致且满足固定 H
   的 enclosing pair 可以取得权限；多解或不相容保持 typed review，不按 score 选解。
-- 当前 Report revision 为 `x5crop_v5_template_report_39`；Debug/报告显式保存 calibration identity、anchor、
+- Selected Grid 在 local relation/source-W 阶段追加 late binding 后，由同一 projection owner 重新核对。
+  无坐标权限弱线只有在完整区间与对应 Grid role 包络相交时才降为 validation provenance；不相交产生
+  `calibrated_nominal_grid_conflict`。仍有权限的 local native binding 在 direct-rank 重拟合后继续拥有其
+  role，不能因不增加 global rank 而消失。
+- 当前 Report revision 为 `x5crop_v5_template_report_40`；Debug/报告显式保存 calibration identity、anchor、
   inferred adjacency、完全未观察 Frame、联合参数依据、measured relation、projection outcome、typed
-  failure 与工作量。Debug 进一步列出精确 anchor role、逐 adjacency local delta、direct correction、
-  coverage/counterevidence 与最终联合 envelope。完整路径最多 6 次 fit pass，不增加 TIFF query、第二
-  detector 或旧 schema 兼容层。
+  failure 与工作量，并列出 selected late-binding projection role 与 Grid solve。Debug 进一步列出精确
+  anchor role、逐 adjacency local delta、direct correction、coverage/counterevidence 与最终联合 envelope。
+  完整路径最多 6 次 fit pass，不增加 TIFF query、第二 detector 或旧 schema 兼容层。
 
 完整 development gold 已完成 110/110，分析错误 0，`unsafe_approved_auto = 0`。安全 auto 为基础 nominal
-13/66、较难 nominal 2/30、challenge 0/14；95 个 task 安全 review。Candidate 为 81 个不可用、17 个安全、
-12 个不安全；全部不安全 candidate 均保持 review，14 个 challenge 的安全 Review 均合格。相较上一检查点，
-Grid 让 9 个原本不可用的 task 形成可审计候选，但它们的最坏包络均未通过黄金/预算，因此自动覆盖保持
-15，不以放宽 Gate 换数量。完整黄金 diagnostic mean 为 4.058 秒，只作开发归因，不冒充正式性能 receipt。
+13/66、较难 nominal 2/30、challenge 0/14；95 个 task 安全 review。Candidate 为 76 个不可用、18 个安全、
+16 个不安全；全部不安全 candidate 均保持 review，14 个 challenge 的安全 Review 均合格。Late-binding
+projection 共执行 14 次、投影 17 个无权限 binding、完成 13 次有界 Grid solve。它解除 12 个
+`direct_role_binding_authority_unavailable`：S084、S092 新增安全 auto；S079、S094 因重新保留 authorized
+native binding 而暴露真实冲突并回到 Review，自动覆盖净值仍为 15。完整黄金 diagnostic mean 为
+4.222 秒，只作开发归因，不冒充正式性能 receipt。
 
 对 96 个 nominal 的同源 v4.2.8/V5 对照中，发布版 80 个 auto 里有 70 个黄金危险自动裁切；发布版仅
 11 个 geometry 安全。发布版安全而 V5 Review 的 9 个 task 已按 typed root 分到 aspect/cross、
@@ -67,10 +73,11 @@ mean 或旧 commit receipt 替代。
 - 106-source/110-task development gold 用于发现机制、调试和 incident regression，不估计未来生产错误率。
   独立 calibration/sealed 是未来概率选择与未见来源声明的前提，但不再是首版发布前置条件。
 - 当前 96 个 nominal 仍有 81 个 review。主要 phase root failure 为
-  `direct_role_binding_authority_unavailable` 17、`discrete_phase_ambiguous` 15、
-  `fixed_template_mismatch` 10、`calibrated_nominal_grid_conflict` 5、
+  `discrete_phase_ambiguous` 13、`fixed_template_mismatch` 13、
+  `direct_role_binding_authority_unavailable` 7、`calibrated_nominal_grid_conflict` 5、
   `nominal_grid_phase_anchor_unavailable` 3、`direct_phase_anchor_unavailable` 2、
-  `frame_width_inference_unavailable` 2 与 `adjacency_continuity_unresolved` 1；另有 41 个 nominal 已通过
+  `frame_width_inference_unavailable` 2、`adjacency_continuity_unresolved` 1、
+  `separator_material_conflict` 1 与 `adjacency_observation_coverage_incomplete` 1；另有 48 个 nominal 已通过
   phase，其中只有 15 个最终安全 auto。
 - 完全不可见 Frame 已可由校准 Grid 生成，但这不是像素事实，也不直接授权 auto。当前新增的 9 个候选均
   因真实黄金偏差或最坏预算保持 Review，说明后续应改善 anchor、local correction 与直接 evidence，而非
@@ -80,10 +87,11 @@ mean 或旧 commit receipt 替代。
 
 ## 精确下一步
 
-1. 先逐一审计“v4 geometry 安全但 V5 Review”的 9 个 task，以及本阶段新增的 9 个不安全 Grid candidate
-   与 5 个 nominal calibration conflict；区分发布版的有效 observation/anchor/local correction、当前
-   counterevidence 和预算阻断，再选择一个 canonical owner 形成下一小机制，不恢复旧终判或放宽预算。
-2. 再处理数量最多的 `direct_role_binding_authority_unavailable`，随后才按真实 root 分布推进离散 ambiguity、
-   fixed mismatch、adjacency continuity 与 clipped-boundary geometry；每次只闭合一个通用机制。
+1. 继续逐一审计“v4 geometry 安全但 V5 Review”的 9 个 task，并优先解释本阶段迁移出的
+   `fixed_template_mismatch`、`direct_role_aperture_domain_unavailable`、aspect budget 与 unsafe Review
+   candidate；区分发布版的有效 observation/anchor/local correction、当前 counterevidence 和预算阻断，
+   再选择一个 canonical owner 形成下一小机制。
+2. 按当前真实 root 分布推进离散 ambiguity、fixed mismatch、剩余 direct-role、adjacency continuity 与
+   clipped-boundary geometry；每次只闭合一个通用机制，不恢复旧终判或放宽预算。
 3. 随真实使用逐步补充 calibration、sealed 和缺失 format 样片。出现危险自动裁切时保存原 TIFF、format、
    count 与 SHA，人工建立权威 baseline，加入 incident regression，并只用通用机制永久修复。

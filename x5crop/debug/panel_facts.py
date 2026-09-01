@@ -132,11 +132,16 @@ def competition_summary(detection: FinalDetection) -> str:
         if fit is None or projection is None:
             return "NONE"
         reason = "NONE" if projection.reason is None else projection.reason
+        validation_roles = ",".join(
+            f"F{item.role_index // 2 + 1}"
+            f"{'S' if item.role_index % 2 == 0 else 'E'}"
+            for item in projection.projected_out_bindings
+        ) or "NONE"
         return (
             f"OFFSET {fit.phase_lattice_fit.integer_slot_offset} / "
             f"{projection.outcome.value.upper()} / "
             f"RANK {projection.retained_direct_constraint_rank} / "
-            f"DROP {len(projection.projected_out_bindings)} / "
+            f"VALIDATION {validation_roles} / "
             f"FAILURE {reason}"
         )
 

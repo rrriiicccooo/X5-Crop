@@ -2461,6 +2461,10 @@ def _validate_phase_competition(value: object) -> None:
         "candidate_direct_role_projection_binding_count",
         "candidate_nominal_grid_solve_count",
         "candidate_nominal_grid_solve_success_count",
+        "selected_direct_role_projection_evaluation_count",
+        "selected_direct_role_projection_binding_count",
+        "selected_nominal_grid_solve_count",
+        "selected_nominal_grid_solve_success_count",
     }
     if not isinstance(receipt, dict) or set(receipt) != receipt_fields:
         raise ValueError("phase-candidate work receipt schema is invalid")
@@ -2477,6 +2481,9 @@ def _validate_phase_competition(value: object) -> None:
     projection_count = receipt[
         "candidate_direct_role_projection_evaluation_count"
     ]
+    selected_projection_count = receipt[
+        "selected_direct_role_projection_evaluation_count"
+    ]
     if (
         projection_count != authority_count
         or receipt["candidate_direct_role_authority_terminal_count"]
@@ -2487,6 +2494,13 @@ def _validate_phase_competition(value: object) -> None:
         or receipt["candidate_nominal_grid_solve_success_count"]
         > receipt["candidate_nominal_grid_solve_count"]
         or receipt["candidate_nominal_grid_solve_count"] > projection_count
+        or selected_projection_count > 2 * receipt["fit_pass_count"]
+        or receipt["selected_direct_role_projection_binding_count"]
+        > receipt["role_count"] * selected_projection_count
+        or receipt["selected_nominal_grid_solve_success_count"]
+        > receipt["selected_nominal_grid_solve_count"]
+        or receipt["selected_nominal_grid_solve_count"]
+        > selected_projection_count
     ):
         raise ValueError("phase-candidate work receipt is inconsistent")
     if value["status"] == "bound_exceeded" and any(

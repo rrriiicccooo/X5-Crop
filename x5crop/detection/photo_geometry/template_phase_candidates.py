@@ -2418,6 +2418,95 @@ def _fit_calibrated_nominal_grid_candidate(
     return _BoundFit(fit, candidate.residual_compatible)
 
 
+def _validation_only_grid_conflicts(
+    projected: _BoundFit,
+    candidate: _BoundFit,
+    removed_facts: tuple[DirectRoleAuthorityFact, ...],
+) -> tuple[DirectRoleAuthorityFact, ...]:
+    """Return weak native lines that contradict the projected Grid envelope."""
+
+    conflicts: list[DirectRoleAuthorityFact] = []
+    for fact in removed_facts:
+        binding = candidate.fit.role_bindings[fact.role_index]
+        if binding is None or binding.observation_id != fact.observation_id:
+            raise ValueError(
+                "projected validation fact lost its candidate binding"
+            )
+        model = projected.fit.model_full_role_intervals_px[fact.role_index]
+        observed = binding.full_position_interval_px
+        if observed.maximum < model.minimum or model.maximum < observed.minimum:
+            conflicts.append(fact)
+    return tuple(conflicts)
+
+
+def _restore_authorized_local_bindings(
+    projected: _BoundFit,
+    candidate: _BoundFit,
+    retained_facts: tuple[DirectRoleAuthorityFact, ...],
+    direct: tuple[_AnchorFact, ...],
+) -> _BoundFit | None:
+    """Keep supported native local coordinates after a direct-rank refit.
+
+    A refit may change the global lattice without promoting a local correction
+    into an independent phase constraint.  Supported local coordinates still
+    own their role, so copy only those existing native bindings back onto the
+    refitted lattice and carry their full interval.  Unavailable coordinates
+    are intentionally absent and remain projection provenance.
+    """
+
+    bindings = list(projected.fit.role_bindings)
+    role_intervals = list(projected.fit.model_role_intervals_px)
+    full_intervals = list(projected.fit.model_full_role_intervals_px)
+    bound_elsewhere = {
+        binding.observation_id: role_index
+        for role_index, binding in enumerate(bindings)
+        if binding is not None
+    }
+    direct_ids = {item.observation_id for item in direct}
+    added = 0
+    direct_added = 0
+    for fact in retained_facts:
+        role_index = fact.role_index
+        current = bindings[role_index]
+        if current is not None:
+            if current.observation_id != fact.observation_id:
+                return None
+            continue
+        original = candidate.fit.role_bindings[role_index]
+        if (
+            original is None
+            or original.use != SequenceBindingUse.LOCAL_REFINEMENT
+            or original.observation_id != fact.observation_id
+            or fact.observation_id in bound_elsewhere
+        ):
+            return None
+        bindings[role_index] = original
+        role_intervals[role_index] = _interval_hull(
+            role_intervals[role_index],
+            original.fit_position_interval_px,
+        )
+        full_intervals[role_index] = _interval_hull(
+            full_intervals[role_index],
+            original.full_position_interval_px,
+        )
+        bound_elsewhere[fact.observation_id] = role_index
+        added += 1
+        direct_added += int(fact.observation_id in direct_ids)
+    if not added:
+        return projected
+    fit = replace(
+        projected.fit,
+        model_role_intervals_px=tuple(role_intervals),
+        model_full_role_intervals_px=tuple(full_intervals),
+        role_bindings=tuple(bindings),
+        contradicted_observation_count=max(
+            0,
+            projected.fit.contradicted_observation_count - direct_added,
+        ),
+    )
+    return _BoundFit(fit, projected.residual_compatible)
+
+
 def project_candidate_to_authorized_direct_roles(
     candidate: _BoundFit,
     authority: DirectRoleBindingAuthority,
@@ -2616,6 +2705,29 @@ def project_candidate_to_authorized_direct_roles(
                     "calibrated nominal Grid"
                 ),
             )
+        validation_conflicts = _validation_only_grid_conflicts(
+            nominal,
+            candidate,
+            removed_facts,
+        )
+        if validation_conflicts:
+            return None, PhaseCandidateAuthorityProjection(
+                input_direct_role_authority=authority,
+                outcome=(
+                    PhaseCandidateProjectionOutcome
+                    .CALIBRATED_NOMINAL_GRID_CONFLICT
+                ),
+                basis=None,
+                projected_out_bindings=projected_out,
+                retained_direct_constraint_rank=retained_rank,
+                reason=(
+                    "validation-only direct coordinates conflict with the "
+                    "bounded calibrated nominal Grid at role indices: "
+                    + ", ".join(
+                        str(item.role_index) for item in validation_conflicts
+                    )
+                ),
+            )
         return nominal, PhaseCandidateAuthorityProjection(
             input_direct_role_authority=authority,
             outcome=(
@@ -2646,6 +2758,13 @@ def project_candidate_to_authorized_direct_roles(
         fit_residual_limit_px,
         phase_anchor_authority_ceiling,
     )
+    if projected is not None:
+        projected = _restore_authorized_local_bindings(
+            projected,
+            candidate,
+            retained_facts,
+            direct,
+        )
     if projected is None:
         return None, PhaseCandidateAuthorityProjection(
             input_direct_role_authority=authority,

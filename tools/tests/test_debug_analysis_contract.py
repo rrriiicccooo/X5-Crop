@@ -555,7 +555,9 @@ class DebugAnalysisContractTest(unittest.TestCase):
                                 SimpleNamespace(
                                     outcome=SimpleNamespace(value="projected"),
                                     retained_direct_constraint_rank=3,
-                                    projected_out_bindings=(object(),),
+                                    projected_out_bindings=(
+                                        SimpleNamespace(role_index=3),
+                                    ),
                                     reason=None,
                                 )
                             ),
@@ -593,7 +595,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
         )
         self.assertIn("RUNNER DIFF PHASE", competition_summary(detection))
         self.assertIn(
-            "OFFSET 0 / PROJECTED / RANK 3 / DROP 1 / FAILURE NONE",
+            "OFFSET 0 / PROJECTED / RANK 3 / VALIDATION F2E / FAILURE NONE",
             competition_summary(detection),
         )
         self.assertFalse(hasattr(debug_panel_facts, "geometry_by_identity"))

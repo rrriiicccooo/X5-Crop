@@ -2219,6 +2219,167 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         self.assertEqual(result.global_lattice_authority.joint_constraint_rank, 2)
 
+    def test_calibrated_grid_keeps_late_short_edge_validation_only(
+        self,
+    ) -> None:
+        spec = replace(
+            template(2),
+            frame_width_px=PositiveInterval(98.0, 102.0),
+        )
+        direction = FiniteInterval.exact(0.0)
+
+        def local(
+            identity: str,
+            coordinate: float,
+            role: BoundaryRole,
+            *,
+            source_wide: bool = False,
+        ) -> BoundaryEdgeObservation:
+            traces = (0, 10, 20) if source_wide else (10, 20)
+            support = 1.0 if source_wide else 2.0 / 3.0
+            return replace(
+                edge(identity, coordinate),
+                qualified_anchor_roles=(role,),
+                polarity=1 if role == BoundaryRole.START else -1,
+                trace_coordinates_px=traces,
+                support_fraction=support,
+                continuous_support_fraction=support,
+                fit_residual_px=0.0 if source_wide else 20.0,
+                canonical_direction_degrees=0.0,
+                fit_direction_interval_degrees=direction,
+                full_direction_interval_degrees=direction,
+                full_position_interval_px=(
+                    FiniteInterval(coordinate - 0.2, coordinate + 0.2)
+                    if source_wide
+                    else FiniteInterval(coordinate - 1.2, coordinate + 1.2)
+                ),
+            )
+
+        anchor = local(
+            "late-projection:anchor:start:1",
+            100.0,
+            BoundaryRole.START,
+            source_wide=True,
+        )
+        weak_edges = (
+            local(
+                "late-projection:weak:end:1",
+                201.0,
+                BoundaryRole.END,
+            ),
+            local(
+                "late-projection:weak:start:2",
+                221.0,
+                BoundaryRole.START,
+            ),
+            local(
+                "late-projection:weak:end:2",
+                321.0,
+                BoundaryRole.END,
+            ),
+        )
+
+        result = fit_template_phase_with_adjacency_relations(
+            TemplatePhaseInput(
+                observations=(anchor, *weak_edges),
+                separator_bands=(),
+                template=spec,
+                calibrated_nominal_grid_prior=calibrated_nominal_grid_prior(
+                    spec
+                ),
+                scale_px_per_mm=PositiveInterval.exact(100.0),
+                holder_span_px=FiniteInterval(0.0, 360.0),
+                phase_authority_px=FiniteInterval.exact(100.0),
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "late-selected-grid-projection",
+                        FiniteInterval(0.0, 360.0),
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertEqual(
+            result.best.binding_observation_ids,
+            (anchor.observation_id, None, None, None),
+        )
+        projection = result.best_phase_candidate_authority_projection
+        assert projection is not None
+        self.assertEqual(
+            projection.outcome,
+            PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID,
+        )
+        self.assertEqual(
+            tuple(
+                (item.role_index, item.observation_id)
+                for item in projection.projected_out_bindings
+            ),
+            tuple(
+                (role_index, observation.observation_id)
+                for role_index, observation in enumerate(weak_edges, start=1)
+            ),
+        )
+        assert result.direct_role_binding_authority is not None
+        self.assertEqual(
+            result.direct_role_binding_authority.state,
+            EvidenceState.SUPPORTED,
+        )
+        self.assertEqual(
+            result.receipt.selected_direct_role_projection_evaluation_count,
+            1,
+        )
+        self.assertEqual(
+            result.receipt.selected_direct_role_projection_binding_count,
+            3,
+        )
+        self.assertEqual(result.receipt.selected_nominal_grid_solve_count, 1)
+        self.assertEqual(
+            result.receipt.selected_nominal_grid_solve_success_count,
+            1,
+        )
+
+        conflicting_edges = (
+            weak_edges[0],
+            local(
+                "late-projection:conflict:start:2",
+                222.0,
+                BoundaryRole.START,
+            ),
+            weak_edges[2],
+        )
+        conflict = fit_template_phase_with_adjacency_relations(
+            TemplatePhaseInput(
+                observations=(anchor, *conflicting_edges),
+                separator_bands=(),
+                template=spec,
+                calibrated_nominal_grid_prior=(
+                    calibrated_nominal_grid_prior(spec)
+                ),
+                scale_px_per_mm=PositiveInterval.exact(100.0),
+                holder_span_px=FiniteInterval(0.0, 360.0),
+                phase_authority_px=FiniteInterval.exact(100.0),
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "late-selected-grid-validation-conflict",
+                        FiniteInterval(0.0, 360.0),
+                    ),
+                ),
+            )
+        )
+        self.assertEqual(conflict.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(
+            conflict.failure_kind,
+            PhaseFailureKind.CALIBRATED_NOMINAL_GRID_CONFLICT,
+        )
+        assert conflict.best_phase_candidate_authority_projection is not None
+        self.assertEqual(
+            conflict.best_phase_candidate_authority_projection.outcome,
+            PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID_CONFLICT,
+        )
+        self.assertIn("role indices: 2", conflict.ambiguity_reason or "")
+
     def test_rank_three_fit_uses_nearest_joint_physical_solution(self) -> None:
         matrix = np.asarray(
             [
