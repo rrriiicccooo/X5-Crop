@@ -53,6 +53,7 @@ class DirectRoleAuthorityFact:
     bases: tuple[DirectRoleAuthorityBasis, ...]
     blocking_material_conflict_ids: tuple[ObservationId, ...]
     state: EvidenceState
+    trace_coordinates_px: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         if (
@@ -104,6 +105,20 @@ class DirectRoleAuthorityFact:
             )
             or (self.state == EvidenceState.UNAVAILABLE)
             != (not self.bases and not self.blocking_material_conflict_ids)
+            or (
+                self.trace_coordinates_px
+                and tuple(sorted(set(self.trace_coordinates_px)))
+                != self.trace_coordinates_px
+            )
+            or any(
+                not isinstance(item, int)
+                for item in self.trace_coordinates_px
+            )
+            or (
+                DirectRoleAuthorityBasis.PARTIAL_HEIGHT_SEPARATOR_PAIR
+                in self.bases
+                and not self.trace_coordinates_px
+            )
         ):
             raise ValueError(
                 "direct-role authority fact is invalid: "
@@ -157,8 +172,8 @@ class DirectRoleBindingAuthority:
         )
 
     @property
-    def direct_aperture_required_role_indices(self) -> tuple[int, ...]:
-        """Roles whose local-height proof requires a direct short-axis pair."""
+    def aperture_domain_required_role_indices(self) -> tuple[int, ...]:
+        """Roles whose partial-height support needs a two-sided aperture domain."""
 
         return tuple(
             item.role_index
@@ -521,6 +536,7 @@ def _assess_direct_role_binding_authority(
                 if bases[role_index]
                 else EvidenceState.UNAVAILABLE
             ),
+            trace_coordinates_px=selected[role_index].trace_coordinates_px,
         )
         for role_index in sorted(selected)
     )

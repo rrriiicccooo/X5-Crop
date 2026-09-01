@@ -1341,11 +1341,13 @@ def _validate_direct_role_binding_authority(value: object) -> None:
             "bases",
             "blocking_material_conflict_ids",
             "state",
+            "trace_coordinates_px",
         }:
             raise ValueError("direct-role authority fact is invalid")
         index = fact["role_index"]
         bases = fact["bases"]
         conflicts = fact["blocking_material_conflict_ids"]
+        traces = fact["trace_coordinates_px"]
         supported = fact["state"] == "supported"
         conflict = fact["state"] == "contradicted"
         if (
@@ -1373,6 +1375,13 @@ def _validate_direct_role_binding_authority(value: object) -> None:
             or any(not isinstance(item, str) or not item for item in conflicts)
             or fact["state"]
             not in {"supported", "contradicted", "unavailable"}
+            or not isinstance(traces, list)
+            or traces != sorted(set(traces))
+            or any(not isinstance(item, int) for item in traces)
+            or (
+                "partial_height_separator_pair" in bases
+                and not traces
+            )
             or conflict != bool(conflicts)
             or supported != (bool(bases) and not conflicts)
             or (fact["state"] == "unavailable")
@@ -1395,6 +1404,121 @@ def _validate_direct_role_binding_authority(value: object) -> None:
         and (not isinstance(value["reason"], str) or not value["reason"])
     ):
         raise ValueError("direct-role binding authority summary is invalid")
+
+
+def _validate_direct_role_aperture_domain_authority(value: object) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict) or set(value) != {
+        "state",
+        "facts",
+        "unsupported_role_indices",
+        "reason",
+    }:
+        raise ValueError("direct-role aperture-domain authority is invalid")
+    facts = value["facts"]
+    unsupported = value["unsupported_role_indices"]
+    if not isinstance(facts, list) or not facts or not isinstance(unsupported, list):
+        raise ValueError("direct-role aperture-domain ledger is invalid")
+    indices: list[int] = []
+    blocked: list[int] = []
+    contradicted = False
+    for fact in facts:
+        if not isinstance(fact, dict) or set(fact) != {
+            "role_index",
+            "observation_id",
+            "role_position_interval_px",
+            "support_trace_interval_px",
+            "guaranteed_aperture_interval_px",
+            "basis",
+            "cross_observation_ids",
+            "state",
+            "failure_kind",
+        }:
+            raise ValueError("direct-role aperture-domain fact is invalid")
+        index = fact["role_index"]
+        state = fact["state"]
+        basis = fact["basis"]
+        failure = fact["failure_kind"]
+        domain = fact["guaranteed_aperture_interval_px"]
+        trace = fact["support_trace_interval_px"]
+        cross_ids = fact["cross_observation_ids"]
+        contained = (
+            _valid_interval(domain)
+            and _valid_interval(trace)
+            and float(domain["minimum"]) <= float(trace["minimum"])
+            and float(trace["maximum"]) <= float(domain["maximum"])
+        )
+        has_cross_domain = basis is not None and _valid_ids(
+            cross_ids,
+            allow_empty=False,
+        )
+        collapsed = failure == "aperture_domain_collapsed"
+        outside = failure == "support_outside_aperture_domain"
+        if (
+            not isinstance(index, int)
+            or index < 0
+            or not isinstance(fact["observation_id"], str)
+            or not fact["observation_id"]
+            or not _valid_interval(fact["role_position_interval_px"])
+            or not _valid_interval(trace)
+            or domain is not None and not _valid_interval(domain)
+            or basis not in {
+                None,
+                "direct_aperture_pair",
+                "enclosing_support_aperture",
+            }
+            or not _valid_ids(cross_ids)
+            or state not in {"supported", "contradicted", "unavailable"}
+            or failure
+            not in {
+                None,
+                "two_sided_cross_domain_unavailable",
+                "aperture_domain_collapsed",
+                "support_outside_aperture_domain",
+            }
+            or (state == "supported")
+            != (
+                has_cross_domain
+                and failure is None
+                and contained
+            )
+            or (state == "contradicted")
+            != (
+                has_cross_domain
+                and (
+                    (collapsed and domain is None)
+                    or (
+                        outside
+                        and domain is not None
+                        and not contained
+                    )
+                )
+            )
+            or (state == "unavailable")
+            != (
+                basis is None
+                and domain is None
+                and failure == "two_sided_cross_domain_unavailable"
+            )
+        ):
+            raise ValueError("direct-role aperture-domain fact is invalid")
+        indices.append(index)
+        if state != "supported":
+            blocked.append(index)
+        contradicted = contradicted or state == "contradicted"
+    expected = (
+        "contradicted" if contradicted else "unavailable" if blocked else "supported"
+    )
+    if (
+        indices != sorted(set(indices))
+        or unsupported != blocked
+        or value["state"] != expected
+        or (expected == "supported") != (value["reason"] is None)
+        or value["reason"] is not None
+        and (not isinstance(value["reason"], str) or not value["reason"])
+    ):
+        raise ValueError("direct-role aperture-domain authority is invalid")
 
 
 def _validate_polygon(value: object, label: str) -> list[list[float]]:
@@ -1895,6 +2019,9 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         )
         source_width = lane.get("source_frame_width_authority")
         _validate_source_frame_width_authority(source_width)
+        _validate_direct_role_aperture_domain_authority(
+            lane.get("direct_role_aperture_domain_authority")
+        )
         source_geometry = lane.get("source_scan_geometry")
         width_state = (
             None
@@ -1956,6 +2083,7 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             }[alignment["pattern"]]
             or (alignment["pattern"] == "unresolved")
             != (alignment["unresolved_reason"] is not None)
+            or "direct_role_aperture_domain_authority" not in lane
             or lane.get("selected_cross_boundary_use")
             not in {None, "aperture_pair", "enclosing_support_pair"}
         ):
@@ -2560,6 +2688,9 @@ def _validate_development(record: dict[str, Any]) -> None:
             != placement.get("runner_up_placement_id")
         ):
             raise ValueError("development template ledger is invalid")
+        _validate_direct_role_aperture_domain_authority(
+            placement.get("direct_role_aperture_domain_authority")
+        )
         _validate_phase_competition(lane["phase_competition"])
 
 

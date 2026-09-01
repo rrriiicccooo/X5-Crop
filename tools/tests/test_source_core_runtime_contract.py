@@ -22,6 +22,7 @@ from x5crop.detection.decision.vocabulary import (
 from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 from tools.regression.report_validation import (
     _validate_adjacency_relations,
+    _validate_direct_role_aperture_domain_authority,
     _validate_direct_role_binding_authority,
     _validate_phase_candidate_projection,
     validate_current_report_record,
@@ -240,6 +241,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                     "bases": ["source_wide_edge"],
                     "blocking_material_conflict_ids": [],
                     "state": "supported",
+                    "trace_coordinates_px": [0, 10, 20],
                 }
             ],
             "unsupported_role_indices": [],
@@ -253,6 +255,51 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             "direct-role authority fact is invalid",
         ):
             _validate_direct_role_binding_authority(authority)
+
+    def test_aperture_domain_report_retains_guaranteed_containment(self) -> None:
+        authority = {
+            "state": "supported",
+            "facts": [
+                {
+                    "role_index": 1,
+                    "observation_id": "boundary-edge:1",
+                    "role_position_interval_px": {
+                        "minimum": 100.0,
+                        "maximum": 101.0,
+                    },
+                    "support_trace_interval_px": {
+                        "minimum": 20.0,
+                        "maximum": 80.0,
+                    },
+                    "guaranteed_aperture_interval_px": {
+                        "minimum": 10.0,
+                        "maximum": 90.0,
+                    },
+                    "basis": "enclosing_support_aperture",
+                    "cross_observation_ids": ["cross:top", "cross:bottom"],
+                    "state": "supported",
+                    "failure_kind": None,
+                }
+            ],
+            "unsupported_role_indices": [],
+            "reason": None,
+        }
+        _validate_direct_role_aperture_domain_authority(authority)
+
+        authority["facts"][0]["support_trace_interval_px"]["minimum"] = 5.0
+        with self.assertRaisesRegex(
+            ValueError,
+            "direct-role aperture-domain fact is invalid",
+        ):
+            _validate_direct_role_aperture_domain_authority(authority)
+
+        authority["facts"][0]["support_trace_interval_px"]["minimum"] = 20.0
+        authority["facts"][0]["cross_observation_ids"] = []
+        with self.assertRaisesRegex(
+            ValueError,
+            "direct-role aperture-domain fact is invalid",
+        ):
+            _validate_direct_role_aperture_domain_authority(authority)
 
     def test_direct_separator_projection_retains_local_native_binding(self) -> None:
         authority = {
@@ -268,6 +315,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                     "bases": ["source_wide_edge"],
                     "blocking_material_conflict_ids": [],
                     "state": "supported",
+                    "trace_coordinates_px": [0, 10, 20],
                 }
             ],
             "unsupported_role_indices": [],

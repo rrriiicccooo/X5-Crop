@@ -43,6 +43,9 @@ class GateGap(str, Enum):
     DIRECT_ROLE_APERTURE_DOMAIN_UNAVAILABLE = (
         "direct_role_aperture_domain_unavailable"
     )
+    DIRECT_ROLE_APERTURE_DOMAIN_CONFLICT = (
+        "direct_role_aperture_domain_conflict"
+    )
     SEPARATOR_MATERIAL_CONFLICT = "separator_material_conflict"
     OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE = (
         "outer_frame_observation_authority_unavailable"
@@ -225,6 +228,11 @@ def failure_fact(
             RecoveryAction.REVIEW_PLACEMENT,
         ),
         GateGap.DIRECT_ROLE_APERTURE_DOMAIN_UNAVAILABLE: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.DIRECT_APERTURE_DOMAIN,
+            RecoveryAction.REVIEW_PLACEMENT,
+        ),
+        GateGap.DIRECT_ROLE_APERTURE_DOMAIN_CONFLICT: (
             FailureRecovery.UNRECOVERABLE,
             MinimumMissingFact.DIRECT_APERTURE_DOMAIN,
             RecoveryAction.REVIEW_PLACEMENT,

@@ -27,8 +27,10 @@ from x5crop.detection.photo_geometry.content_veto_model import (
 )
 from x5crop.detection.photo_geometry.template_cross import fit_template_cross
 from x5crop.detection.photo_geometry.template_cross_model import (
+    CrossFit,
     CrossFailureKind,
     CrossFitStatus,
+    EnclosingSupportPair,
     TemplateCrossInput,
 )
 from x5crop.detection.photo_geometry.template_phase import fit_template_phase
@@ -40,6 +42,10 @@ from x5crop.detection.photo_geometry.template_direct_role_authority import (
     DirectRoleAuthorityBasis,
     DirectRoleAuthorityFact,
     DirectRoleBindingAuthority,
+)
+from x5crop.detection.photo_geometry.output_model import (
+    OutputBoundaryUse,
+    SharedStripDirection,
 )
 from x5crop.detection.photo_geometry.template_selection import (
     select_lane_template_placement,
@@ -75,7 +81,11 @@ def _resolved():
     return phase, cross, placement
 
 
-def _with_partial_height_role_authority(phase):
+def _with_partial_height_role_authority(
+    phase,
+    *,
+    traces: tuple[int, ...] = (150, 300),
+):
     authority = DirectRoleBindingAuthority(
         state=EvidenceState.SUPPORTED,
         facts=(
@@ -91,12 +101,74 @@ def _with_partial_height_role_authority(phase):
                 ),
                 blocking_material_conflict_ids=(),
                 state=EvidenceState.SUPPORTED,
+                trace_coordinates_px=traces,
             ),
         ),
         unsupported_role_indices=(),
         reason=None,
     )
     return replace(phase, direct_role_binding_authority=authority)
+
+
+def _enclosing_cross_fit(spec) -> CrossFit:
+    top = binding(
+        BoundaryRole.TOP,
+        "holder-top",
+        90.0,
+        role_authorized=False,
+        enclosing_pair_id="holder-pair",
+    )
+    bottom = binding(
+        BoundaryRole.BOTTOM,
+        "holder-bottom",
+        350.0,
+        role_authorized=False,
+        enclosing_pair_id="holder-pair",
+    )
+    direction = SharedStripDirection(
+        direction_id="direction:holder-pair",
+        selected_observation_ids=(
+            top.observation_id,
+            bottom.observation_id,
+        ),
+        full_angle_interval_degrees=FiniteInterval(-0.2, 0.2),
+        observed_angle_interval_degrees=FiniteInterval(-0.2, 0.2),
+        canonical_angle_degrees=0.0,
+    )
+    support = EnclosingSupportPair(
+        top_canonical_px=90.0,
+        bottom_canonical_px=350.0,
+        top_full_interval_px=FiniteInterval.exact(90.0),
+        bottom_full_interval_px=FiniteInterval.exact(350.0),
+        top_provenance_ids=(top.observation_id,),
+        bottom_provenance_ids=(bottom.observation_id,),
+        observed_span_px=FiniteInterval.exact(260.0),
+        reference_trace_px=0.0,
+        trace_coordinates_px=top.trace_coordinates_px,
+        top_trace_intervals_px=top.trace_position_intervals_px,
+        bottom_trace_intervals_px=bottom.trace_position_intervals_px,
+    )
+    return CrossFit(
+        template_id=spec.template_id,
+        lane_reference_trace_px=0.0,
+        fixed_height_px=FiniteInterval.exact(240.0),
+        top_canonical_px=100.0,
+        bottom_canonical_px=340.0,
+        top_fit_interval_px=FiniteInterval.exact(100.0),
+        bottom_fit_interval_px=FiniteInterval.exact(340.0),
+        top_full_interval_px=FiniteInterval.exact(100.0),
+        bottom_full_interval_px=FiniteInterval.exact(340.0),
+        direct_bindings=(top, bottom),
+        inferred_bindings=(),
+        selected_direction=direction,
+        direct_pair=True,
+        shared_trace_support_count=3,
+        continuous_support_fraction=1.0,
+        residual_sum_px=0.0,
+        boundary_use=OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR,
+        pair_support_mode=None,
+        enclosing_support_pair=support,
+    )
 
 
 class TemplateSelectionContractTest(unittest.TestCase):
@@ -280,6 +352,109 @@ class TemplateSelectionContractTest(unittest.TestCase):
 
         self.assertEqual(competition.state, EvidenceState.SUPPORTED)
         self.assertEqual(competition.selected_placement_id, placement.placement_id)
+        authority = competition.direct_role_aperture_domain_authority
+        assert authority is not None
+        self.assertEqual(authority.state, EvidenceState.SUPPORTED)
+        self.assertEqual(
+            authority.facts[0].basis.value,
+            "direct_aperture_pair",
+        )
+
+    def test_partial_height_role_accepts_a_unique_enclosing_aperture(self) -> None:
+        phase, cross, _placement = _resolved()
+        phase = _with_partial_height_role_authority(phase)
+        assert phase.best is not None
+        enclosing_fit = _enclosing_cross_fit(phase.template)
+        enclosing_cross = replace(cross, best=enclosing_fit)
+        placement = _compose(
+            phase.template,
+            phase.best,
+            enclosing_fit,
+            lane_id="lane:0",
+        )
+
+        competition = select_lane_template_placement(
+            lane_id="lane:0",
+            best=placement,
+            runner_up=None,
+            phase=phase,
+            cross=enclosing_cross,
+            content_assessment=None,
+        )
+
+        self.assertEqual(competition.state, EvidenceState.SUPPORTED)
+        authority = competition.direct_role_aperture_domain_authority
+        assert authority is not None
+        self.assertEqual(
+            authority.facts[0].basis.value,
+            "enclosing_support_aperture",
+        )
+
+    def test_partial_height_role_outside_aperture_is_counterevidence(self) -> None:
+        phase, cross, placement = _resolved()
+        phase = _with_partial_height_role_authority(
+            phase,
+            traces=(50, 300),
+        )
+
+        competition = select_lane_template_placement(
+            lane_id="lane:0",
+            best=placement,
+            runner_up=None,
+            phase=phase,
+            cross=cross,
+            content_assessment=None,
+        )
+
+        self.assertEqual(competition.state, EvidenceState.CONTRADICTED)
+        assert competition.failure is not None
+        self.assertEqual(
+            competition.failure.gap,
+            GateGap.DIRECT_ROLE_APERTURE_DOMAIN_CONFLICT,
+        )
+        authority = competition.direct_role_aperture_domain_authority
+        assert authority is not None
+        self.assertEqual(authority.state, EvidenceState.CONTRADICTED)
+
+    def test_partial_height_role_rejects_a_collapsed_aperture_domain(self) -> None:
+        phase, cross, _placement = _resolved()
+        phase = _with_partial_height_role_authority(phase)
+        assert phase.best is not None and cross.best is not None
+        direction = cross.best.selected_direction
+        assert direction is not None
+        wide_direction = replace(
+            direction,
+            full_angle_interval_degrees=FiniteInterval(-80.0, 80.0),
+            observed_angle_interval_degrees=FiniteInterval(-80.0, 80.0),
+        )
+        collapsed_fit = replace(
+            cross.best,
+            selected_direction=wide_direction,
+        )
+        collapsed_cross = replace(cross, best=collapsed_fit)
+        placement = _compose(
+            phase.template,
+            phase.best,
+            collapsed_fit,
+            lane_id="lane:0",
+        )
+
+        competition = select_lane_template_placement(
+            lane_id="lane:0",
+            best=placement,
+            runner_up=None,
+            phase=phase,
+            cross=collapsed_cross,
+            content_assessment=None,
+        )
+
+        self.assertEqual(competition.state, EvidenceState.CONTRADICTED)
+        authority = competition.direct_role_aperture_domain_authority
+        assert authority is not None
+        self.assertEqual(
+            authority.facts[0].failure_kind.value,
+            "aperture_domain_collapsed",
+        )
 
     def test_partial_height_role_rejects_an_inferred_aperture_side(self) -> None:
         phase, cross, _placement = _resolved()
@@ -316,6 +491,9 @@ class TemplateSelectionContractTest(unittest.TestCase):
             competition.failure.minimum_missing_fact,
             MinimumMissingFact.DIRECT_APERTURE_DOMAIN,
         )
+        authority = competition.direct_role_aperture_domain_authority
+        assert authority is not None
+        self.assertEqual(authority.state, EvidenceState.UNAVAILABLE)
 
     def test_unresolved_phase_has_one_typed_minimum_missing_fact(self) -> None:
         _phase, cross, _placement = _resolved()

@@ -89,17 +89,14 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   `calibrated_nominal_grid_conflict`。仍有权限的 `LOCAL_REFINEMENT` 在 direct-rank 重拟合后保留 native
   binding，不能因不增加 global rank 而丢失。Report/Debug 保存 selected projection、投影 role、Grid solve
   与 typed conflict；不新增 TIFF query、候选、detector 或 fallback。
-- Report revision 更新为 `x5crop_v5_template_report_40`，不保留旧 schema 兼容路径。当前 110 个
-  development task 的完整机制验收无分析错误：15 个安全 auto、95 个安全 review、
+- Report revision 更新为 `x5crop_v5_template_report_41`，不保留旧 schema 兼容路径。当前 110 个
+  development task 的完整机制验收无分析错误：16 个安全 auto、94 个安全 review、
   `unsafe_approved_auto = 0`；14 个 challenge 均安全 review。Review candidate 的黄金偏差只作机制诊断，
-  不再把未输出候选误写成 challenge 终态失败；approved output 仍必须完整通过黄金几何。本阶段解除
-  12 个 `direct_role_binding_authority_unavailable`：S084、S092 新增安全 auto；S079、S094 因此前遗漏的
-  authorized native binding 重新参与而暴露 typed conflict，安全回到 review，故 nominal 自动覆盖净值
-  保持 15，不以丢弃反证或放宽 Gate 换数量。
+  不再把未输出候选误写成 challenge 终态失败；approved output 仍必须完整通过黄金几何。
 - 对 96 个 nominal 的同源机制对照显示：v4.2.8 有 80 个 auto，但其中 70 个是黄金危险自动裁切；只有
   11 个 v4 geometry 安全。v4 安全而 V5 Review 的 9 个 task 是下一步能力迁移样本，当前分别落在
   aspect/cross、fixed-template、direct-role、Grid conflict、continuity、phase ambiguity 与 output budget
-  等 typed root；不能据此恢复旧终判。当前 V5 有 17 个安全 candidate，其中没有“双方 geometry 都安全但
+  等 typed root；不能据此恢复旧终判。当前 V5 有 20 个安全 nominal candidate，其中没有“双方 geometry 都安全但
   仅因 Grid direct-rank 权限而 Review”的遗留项，说明本阶段已把默认生成权限与后续安全阻断分开。
 - 直接观察到的 start/end 在最终 placement 中保留 native coordinate 与完整 interval；Grid 只补齐缺失
   角色。同一连续 placement 的互补 endpoint evidence 合并为联合可行状态，不伪造 runner。唯一 placement
@@ -124,9 +121,16 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   opposite 已授权、W 完全来自至少两张其它双边授权 Frame、且 W 走廊中只有该 observation 相容时，才让位
   于完整相关 W；弱线仅保留为 validation provenance，不能收窄 W、增加 rank 或改变 phase。其它局部孤立
   edge 保留为观察并产生 typed review，不能反向参与 lattice 自证。两高度 normal separator 只有在一侧已具完整直接权限时，才可向
-  同一 adjacency 的另一侧传递一次 `partial_height_separator_pair` 权限；传递不能级联，且最终必须使用
-  两侧直接的 `aperture_pair` 短轴域。Enclosing support 或单侧推断 aperture 产生 typed
-  `direct_role_aperture_domain_unavailable`，不能把两个不完整机制叠加成批准。
+  同一 adjacency 的另一侧传递一次 `partial_height_separator_pair` 权限；传递不能级联。最终新增唯一
+  `DirectRoleApertureDomainAuthority`：两侧 direct aperture，或两侧 enclosing support 经校准 fixed H
+  闭合的 aperture，都必须在完整位置/方向不确定性下包含该 edge 的全部登记 trace span，才能保留 native
+  coordinate。单侧域产生 `direct_role_aperture_domain_unavailable`；域坍缩或 trace 越域产生
+  `direct_role_aperture_domain_conflict`。该 owner 不读取像素、不增加候选或 rank，后续 content veto 与
+  5% 预算仍优先。
+- 该 aperture-domain 迁移解除 S008、S010、S028、S030、S045、S049、S091 的旧笼统权限阻断。S091 在
+  全部后续检查通过后成为新增安全 auto；S030/S045 只有安全候选但仍因预算 Review；S008/S028 的候选
+  不安全并被预算阻断；S010/S049 被 content veto 阻断。候选从 76 unavailable / 18 safe / 16 unsafe
+  迁移为 71 / 21 / 18，没有恢复发布版终判或放宽 Gate。
 - Source W 不再由 provisional/base phase 预先校准后重编译 template，也不再形成第二次 pitch/phase 搜索。
   离散与 local competition 先在没有 source W evidence 的同一候选空间中结束；只有唯一 selected candidate、
   pre-W joint rank 至少为 2、必要 adjacency coverage 完整且没有直接反证时，至少两张独立
@@ -276,16 +280,11 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
 - `tools/verify` 是 Hook、CI 与本地验证的唯一入口。Diagnostic 只证明工程合同；gold accuracy、性能与
   platform receipt 分层记录，不互相冒充。
 - 正式性能 Gate 为 24-source 完整用户路径 mean 不超过 5 秒；3 秒只是不阻断的 challenge。
-- Direct measured separator relation 检查点的完整 development gold 为 110/110 完成、分析错误 0、
-  `unsafe_approved_auto = 0`；安全 auto 为基础 nominal 13/66、较难 nominal 2/30、challenge 0/14。
-  Candidate 为 90 个不可用、17 个安全、3 个不安全；全部不安全 candidate 均保持 review，14 个 challenge
-  均安全 review。相较上一检查点减少的 nominal 自动批准来自新揭示的 phase/direct-role 证明缺口，不以
-  样片规则、分类变化或 Gate 放宽恢复。
-- 24-source 正式性能只由绑定最终干净 commit 的 receipt 判定；5 秒 mean 仍是 blocking Gate，3 秒仍是
-  non-blocking 目标。当前 direct measured separator relation 检查点已通过 5 秒 Gate，尚未达到 3 秒
-  challenge；最终 receipt 必须绑定包含本结论的干净提交。当前 review 表达
-  真实的 phase/cross、Grid/W、topology 与预算证明缺口，不以调窄 guard、静默隐藏 saturation、恢复精确
-  W→H 或改变样片角色掩盖。
+- 当前 partial-height aperture-domain 检查点的完整 development gold 为 110/110、分析错误 0、
+  `unsafe_approved_auto = 0`；16 个 nominal 安全 auto、80 个 nominal 安全 Review，14 个 challenge 全部
+  安全 Review。24-source 正式性能 mean 约 4 秒，5 秒 Gate 通过，3 秒非阻断目标尚未达到。当前 Review
+  表达真实的 phase/cross、Grid/W、topology、content 与预算缺口，不以调窄 guard、隐藏 saturation、恢复
+  精确 W→H 或改变样片角色掩盖。
 - Apple Silicon macOS、Intel macOS 与 Windows x64 必须在同一最终 commit 取得实机 receipt。Accuracy、
   性能与平台证据未全部绑定该 commit 前，不创建 RC、tag、Release 或公开 ZIP。
 - 发布包由唯一 manifest 构建，不包含 modular source、tests、tools、内部文档或开发输出。

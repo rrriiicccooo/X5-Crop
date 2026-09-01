@@ -619,6 +619,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertTrue(summary.startswith("ALIGNMENT · "))
         self.assertIn(" · DIRECT ", summary)
         self.assertRegex(summary, r" · DIRECT \d+/\d+ G\d+ · ")
+        self.assertIn(" · APERTURE DOMAIN ", summary)
         self.assertIn(" · OUTER ", summary)
         self.assertIn(" · SEP D ", summary)
         self.assertIn(" · LOCAL Δ ", summary)

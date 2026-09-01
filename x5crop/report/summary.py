@@ -102,6 +102,10 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                 "placement_failure": typed_read_model(
                     lane.placement_competition.failure
                 ),
+                "direct_role_aperture_domain_authority": typed_read_model(
+                    lane.placement_competition
+                    .direct_role_aperture_domain_authority
+                ),
                 "template_alignment": {
                     "path": (
                         None

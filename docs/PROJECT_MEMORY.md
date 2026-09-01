@@ -48,49 +48,52 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   无坐标权限弱线只有在完整区间与对应 Grid role 包络相交时才降为 validation provenance；不相交产生
   `calibrated_nominal_grid_conflict`。仍有权限的 local native binding 在 direct-rank 重拟合后继续拥有其
   role，不能因不增加 global rank 而消失。
-- 当前 Report revision 为 `x5crop_v5_template_report_40`；Debug/报告显式保存 calibration identity、anchor、
+- Partial-height separator role 只有在 `DirectRoleApertureDomainAuthority` 证明全部登记 trace span 位于
+  同一个两侧 direct aperture，或两侧 enclosing support 经 fixed H 闭合出的 aperture 内时，才保留 native
+  coordinate。单侧/无唯一域为 unavailable，域坍缩或 trace 越域为 conflict；该证明不新增像素读取、候选
+  或 rank，content veto 与 5% 预算继续独立生效。
+- 当前 Report revision 为 `x5crop_v5_template_report_41`；Debug/报告显式保存 calibration identity、anchor、
   inferred adjacency、完全未观察 Frame、联合参数依据、measured relation、projection outcome、typed
-  failure 与工作量，并列出 selected late-binding projection role 与 Grid solve。Debug 进一步列出精确
-  anchor role、逐 adjacency local delta、direct correction、coverage/counterevidence 与最终联合 envelope。
-  完整路径最多 6 次 fit pass，不增加 TIFF query、第二 detector 或旧 schema 兼容层。
+  failure、partial-height aperture domain 与工作量。Debug 列出精确 anchor role、逐 adjacency local delta、
+  direct correction、coverage/counterevidence 与最终联合 envelope。完整路径最多 6 次 fit pass，不增加
+  TIFF query、第二 detector 或旧 schema 兼容层。
 
 完整 development gold 已完成 110/110，分析错误 0，`unsafe_approved_auto = 0`。安全 auto 为基础 nominal
-13/66、较难 nominal 2/30、challenge 0/14；95 个 task 安全 review。Candidate 为 76 个不可用、18 个安全、
-16 个不安全；全部不安全 candidate 均保持 review，14 个 challenge 的安全 Review 均合格。Late-binding
-projection 共执行 14 次、投影 17 个无权限 binding、完成 13 次有界 Grid solve。它解除 12 个
-`direct_role_binding_authority_unavailable`：S084、S092 新增安全 auto；S079、S094 因重新保留 authorized
-native binding 而暴露真实冲突并回到 Review，自动覆盖净值仍为 15。完整黄金 diagnostic mean 为
-4.222 秒，只作开发归因，不冒充正式性能 receipt。
+14/66、较难 nominal 2/30、challenge 0/14；94 个 task 安全 review。Candidate 为 71 个不可用、21 个安全、
+18 个不安全；全部不安全 candidate 均保持 review，14 个 challenge 的安全 Review 均合格。Late-binding
+projection 共执行 14 次、投影 17 个无权限 binding、完成 13 次有界 Grid solve。Partial-height aperture
+domain 影响 7 个旧权限阻断：S091 新增安全 auto；S030/S045 得到安全 candidate 但仍因预算 Review；
+S008/S028 的 candidate 不安全并被预算阻断；S010/S049 被 content veto 阻断。完整黄金 diagnostic mean 为
+4.110 秒，只作开发归因。24-source 正式完整用户路径 mean 约 4 秒，5 秒 Gate 通过，3 秒非阻断目标
+尚未达到；正式数值只由绑定当前干净 commit 的 performance receipt 证明。
 
 对 96 个 nominal 的同源 v4.2.8/V5 对照中，发布版 80 个 auto 里有 70 个黄金危险自动裁切；发布版仅
-11 个 geometry 安全。发布版安全而 V5 Review 的 9 个 task 已按 typed root 分到 aspect/cross、
-fixed-template、direct-role、Grid conflict、continuity、phase ambiguity 与 output budget，不以旧终判恢复
-通过。当前提交的正式 performance 必须在最终干净 commit 上重新绑定，不能用 development diagnostic
-mean 或旧 commit receipt 替代。
+11 个 geometry 安全。当前 V5 已让其中 S022、S025 安全 auto；其余 9 个仍按真实 typed root 安全 Review：
+S004/S033 为 aspect budget，S007 为 fixed-template，S010 为 content veto，S011 为 Grid conflict，S026 为
+continuity，S028/S038 为 output budget，S032 为 phase ambiguity。
 
 ## 证据边界与开放风险
 
 - 106-source/110-task development gold 用于发现机制、调试和 incident regression，不估计未来生产错误率。
   独立 calibration/sealed 是未来概率选择与未见来源声明的前提，但不再是首版发布前置条件。
-- 当前 96 个 nominal 仍有 81 个 review。主要 phase root failure 为
+- 当前 96 个 nominal 仍有 80 个 review。主要 phase root failure 为
   `discrete_phase_ambiguous` 13、`fixed_template_mismatch` 13、
   `direct_role_binding_authority_unavailable` 7、`calibrated_nominal_grid_conflict` 5、
   `nominal_grid_phase_anchor_unavailable` 3、`direct_phase_anchor_unavailable` 2、
-  `frame_width_inference_unavailable` 2、`adjacency_continuity_unresolved` 1、
-  `separator_material_conflict` 1 与 `adjacency_observation_coverage_incomplete` 1；另有 48 个 nominal 已通过
-  phase，其中只有 15 个最终安全 auto。
-- 完全不可见 Frame 已可由校准 Grid 生成，但这不是像素事实，也不直接授权 auto。当前新增的 9 个候选均
-  因真实黄金偏差或最坏预算保持 Review，说明后续应改善 anchor、local correction 与直接 evidence，而非
-  收窄传播不确定性。概率 scorer 当前不进入 Runtime。
+   `frame_width_inference_unavailable` 2、`adjacency_continuity_unresolved` 1、
+   `separator_material_conflict` 1 与 `adjacency_observation_coverage_incomplete` 1；另有 48 个 nominal 已通过
+   phase，其中只有 16 个最终安全 auto。
+- 完全不可见 Frame 已可由校准 Grid 生成，但这不是像素事实，也不直接授权 auto。候选仍须通过完整
+  containment、content veto 与最坏预算；后续应改善 anchor、local correction 与直接 evidence，而非收窄
+  传播不确定性。概率 scorer 当前不进入 Runtime。
 - 内容是否连续穿过理论间隔的 continuity 仍不完整；source truncation 与片夹遮挡也缺少统一
   clipped-boundary geometry。宽缓单根长轴 material 仍可能是构图线，不能单独创造 phase。
 
 ## 精确下一步
 
-1. 继续逐一审计“v4 geometry 安全但 V5 Review”的 9 个 task，并优先解释本阶段迁移出的
-   `fixed_template_mismatch`、`direct_role_aperture_domain_unavailable`、aspect budget 与 unsafe Review
-   candidate；区分发布版的有效 observation/anchor/local correction、当前 counterevidence 和预算阻断，
-   再选择一个 canonical owner 形成下一小机制。
+1. 继续逐一审计“v4 geometry 安全但 V5 Review”的 9 个 task。Partial-height aperture-domain 权限已经
+   闭合，下一机制只从 aspect budget、fixed-template、content veto、Grid conflict、continuity、phase
+   ambiguity 或 output budget 中选择一个 canonical root；不恢复旧终判。
 2. 按当前真实 root 分布推进离散 ambiguity、fixed mismatch、剩余 direct-role、adjacency continuity 与
    clipped-boundary geometry；每次只闭合一个通用机制，不恢复旧终判或放宽预算。
 3. 随真实使用逐步补充 calibration、sealed 和缺失 format 样片。出现危险自动裁切时保存原 TIFF、format、

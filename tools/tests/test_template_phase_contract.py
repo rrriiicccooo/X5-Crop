@@ -1954,7 +1954,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         authority = result.direct_role_binding_authority
         assert authority is not None
         self.assertEqual(
-            authority.direct_aperture_required_role_indices,
+            authority.aperture_domain_required_role_indices,
             (4,),
         )
         transferred = next(
@@ -2038,7 +2038,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         authority = result.direct_role_binding_authority
         assert authority is not None
         self.assertEqual(authority.unsupported_role_indices, ())
-        self.assertFalse(authority.direct_aperture_required_role_indices)
+        self.assertFalse(authority.aperture_domain_required_role_indices)
 
     def test_cross_height_union_authorizes_one_short_direct_edge(self) -> None:
         observations = tuple(

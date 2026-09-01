@@ -247,6 +247,7 @@ query 或无界 hypothesis。
 | theoretical pitch、Grid、equal positions | format/count 给出规则 W、pitch、ordinal 与 nominal adjacency | `formats` + `template_nominal_grid_authority.py` + phase/feasible geometry | 保留校准 Grid；删除 content 区域机械等分、无 anchor/coverage 的 fallback 与 Grid 自证 |
 | separator profile、material band | 在理论间隔附近观察暗/亮材料、均匀性、跨高度一致性 | registered measurement、`separator_material.py`、`separator_observations.py` | 保留并扩展为 typed polarity-complete observation；不恢复 enhanced 平行 detector |
 | `gap.start/end`、edge-pair gap | separator 两侧 native edge 直接决定相邻 END/START | `SeparatorRelation`、direct role binding、source W、一次 local advance | 保留并迁移；禁止 Grid 或 score 覆盖 native coordinate |
+| 局部高度 gap edge + 整体 outer/cross | 局部 separator 只在真实 aperture 内出现；两侧整体 enclosing support 可限定其短轴物理域 | `DirectRoleApertureDomainAuthority` | 只在全部登记支撑落入同一两侧 aperture 域时保留 native coordinate；单侧、越域或域坍缩保持 typed review |
 | robust Grid fit | anchor 后以规则 lattice 补缺失角色并吸收局部 gap 变化 | `CalibratedNominalGridAuthority`、逐 adjacency coverage、相关 uncertainty | 保留生成能力；删除未校准 fit、自身 residual 自证和覆盖直接线 |
 | BW/white/mask outer 与 separator-first outer | 不同极性和跨高度材料变化提供 enclosing/phase 线索 | coarse strip、broad enclosing material、cross 与 outer-frame authority | 保留 polarity-neutral observation；多个 box 不按 score 选。宽缓单边和 clipped outer 的权限仍须按小机制闭合 |
 | content bbox、content runs | 暴露内容穿越、空白、危险裁切与候选异常 | `content_veto`、adjacency continuity、Debug；未来只作冻结的 risk feature | 保留负向事实；永不单独移动或缩放 geometry |
@@ -522,7 +523,7 @@ placement；“观察到了”本身不等于“有权决定裁切”。权限�
 | 一条局部 direct edge 唯一绑定三区域局部弱信号 aggregate | `aggregate_union`，允许；两者仍是一份相关证据；宽缓 material aggregate 单边不取得该权限 |
 | 同一三区域联合 separator 的 material 与两侧 END/START edge 都覆盖三个独立高度区域 | `separator_pair`，两侧均允许；缺一项则只保留诊断事实 |
 | 同一 source-wide separator 的两侧 edge 原子绑定到一个 adjacency | `separator_pair`，两侧均允许 |
-| normal separator 在两个独立高度区域成立，且两侧原子绑定到同一 adjacency，其中一侧已由上述任一完整闭环授权 | 只向另一侧传递一次 `partial_height_separator_pair`；该 placement 还必须具有唯一、两侧直接的 `aperture_pair` 短轴域 |
+| normal separator 在两个独立高度区域成立，且两侧原子绑定到同一 adjacency，其中一侧已由上述任一完整闭环授权 | 只向另一侧传递一次 `partial_height_separator_pair`；该 placement 还必须取得下述两侧 aperture-domain authority |
 | 两高度 separator 的两侧都只有局部 edge | 不能互相授权；`direct_role_binding_authority_unavailable` |
 | 两条局部 edge 的间距只与 catalog 或 source W 相容 | 只能证明尺寸未冲突，不能让两条无 intrinsic/pair 权限的线互相授予 native coordinate |
 | source W 在固定 placement 中唯一选择一组各自具有 intrinsic 权限的 registered pair | source W 只消除本地多解；两条 native coordinate 的权限仍来自各自 source-wide/aggregate basis |
@@ -533,17 +534,38 @@ placement；“观察到了”本身不等于“有权决定裁切”。权限�
 短 edge 仍保留为 observation；失败只撤销它的坐标决定权，不删除像素事实。全局 rank 计算必须排除无权
 角色，不能先让短线闭合 lattice，再由该 lattice、catalog W 或同一 Frame 的另一条短线反向证明短线。
 两高度 separator 的权限传递只执行一遍，`partial_height_separator_pair` 不能继续为相邻关系播种，也不能
-把同一关系计成另一份独立 rank。它只允许 phase/lattice 保留该 native coordinate；最终 selection 若使用
-`enclosing_support_pair` 或由单侧推断的 aperture，则产生
-`direct_role_aperture_domain_unavailable`。这样不能把不完整的长轴空间支持与近似短轴支撑叠加成自动批准。
-独立闭合的 source W 只覆盖真正有权限的 native coordinate；上表的 validation-only 局部线不是 competing
-placement，也不能反向收窄 W。若同角色 separator-material alternative 与 opposite role 形成的全部可能 W
+把同一关系计成另一份独立 rank。它只允许 phase/lattice 暂时保留该 native coordinate；最终 selection 还须
+由 `template_direct_role_aperture_domain.py` 对每条这类 edge 建立独立
+`DirectRoleApertureDomainAuthority`：
+
+1. 短轴必须是唯一两侧 direct `APERTURE_PAIR`，或唯一两侧 `ENCLOSING_SUPPORT_PAIR` 经校准 fixed H
+   闭合出的 aperture；单侧 W→H 推断不能建立该域；
+2. 使用 cross 的完整 top/bottom 位置区间、共享方向区间和该 edge 的完整长轴位置区间，投影出所有可行
+   状态共同拥有的保守 aperture 内域；
+3. 该 edge 全部已登记 trace 的 pixel-center span（含两端各 `0.5 px`）必须完整位于该内域；不能只检查
+   canonical line、挑选有利方向或扩大 aperture prior；
+4. 该证明只消费 selected、registered evidence，不读取像素、不生成候选、不改变 rank、phase、W、pitch
+   或 native coordinate。
+
+| partial-height separator 权限 | 两侧 cross 域 | 全部 trace span | 结果 |
+|---|---|---|---|
+| supported | direct aperture pair | 域内 | `supported`；native role 进入后续 content/Gate/预算 |
+| supported | enclosing support 闭合的唯一 fixed-H aperture | 域内 | `supported`；enclosing support 不冒充 direct H |
+| supported | 单侧、无共享方向或无唯一两侧域 | 任意 | `direct_role_aperture_domain_unavailable` |
+| supported | 两侧域在完整不确定性下坍缩 | 任意 | `direct_role_aperture_domain_conflict` |
+| supported | 任一登记 trace 越过保守内域 | 域外 | `direct_role_aperture_domain_conflict` |
+
+这样可以吸收发布版“局部 separator edge 与整体 outer/cross 共同工作”的有效能力，同时仍禁止把两个不完整
+机制叠加成批准。独立闭合的 source W 只覆盖真正有权限的 native coordinate；上表的 validation-only 局部线
+不是 competing placement，也不能反向收窄 W。若同角色 separator-material alternative 与 opposite role
+形成的全部可能 W
 都和这份独立 source W 不相交，它不再是合法 runner；正在拟合的 Grid W、catalog 中心或未授权局部线都
 不能做同样过滤。其它局部观察与相关 W 不唯一相容时保持 unresolved。每个 bounded phase
 candidate 与最终 selected fit 的直接坐标权限都由 `template_direct_role_authority.py` 唯一拥有；让位与
 source W 校准/相关推断由 `template_frame_width.py` 拥有，固定 placement 上的本地 rebind 由
 `template_phase.py` 调度、`template_phase_candidates.py` 执行，
-短轴联合条件由 `template_selection.py` 检查；三者都不读取新像素，也不按强度选择 winner。
+短轴域由 `template_direct_role_aperture_domain.py` 唯一证明，`template_selection.py` 只消费其终态；这些
+owner 都不读取新像素，也不按强度选择 winner。
 
 在完全由 direct evidence 闭合的 rank-3 路径中，未观察 separator 的正常 adjacency 只有同时满足以下
 条件时，才可使用 `local_delta = 0` 并由已确定 Grid 补齐 START/END。下列首尾直接角色要求只属于这条
@@ -1201,6 +1223,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/template_phase_model.py`、`template_phase_candidates.py` | role binding、projection outcome/type、phase-authority ceiling、同一离散 identity 的有界投影重拟合，以及 physical/source W 下的有界 native-edge rebind |
 | `photo_geometry/template_phase.py`、`template_pitch.py`、`template_residual.py` | phase/ordinal 求解、连续 placement identity、candidate-bound direct separator relation、Contact/Overlap/Separator 离散竞争、selected-only source-W rebind 调度与 source pitch |
 | `photo_geometry/template_direct_role_authority.py` | 每个 bounded phase candidate 与最终已选 START/END 的 native-coordinate 权限证明及共享 evidence ledger |
+| `photo_geometry/template_direct_role_aperture_domain.py` | partial-height separator role 在全部可行 cross 状态中的两侧 aperture-domain containment；不读取像素或创建 placement |
 | `photo_geometry/template_lattice_authority.py` | `(phase, W, pitch)` 直接约束矩阵与独立闭合证明 |
 | `photo_geometry/template_adjacency_coverage.py` | selected adjacency 合法走廊到既有 query/trace/coordinate 的覆盖证明 |
 | `photo_geometry/template_adjacency_topology.py` | selected adjacency 的 continuity ledger、Contact/Overlap 验证与 typed topology failure；不读取像素或重新选择 placement |

@@ -46,6 +46,9 @@ from .template_cross_model import (
     CrossRoleBinding,
     TemplateCrossInput,
 )
+from .template_direct_role_aperture_domain import (
+    DirectRoleApertureDomainAuthority,
+)
 from .template_evidence import EvidenceUseFact
 from .template_frame_width import SourceFrameWidthAuthority
 from .template_holder_fill import HolderFillAssessment
@@ -537,10 +540,23 @@ class TemplatePlacementCompetition:
     runner_up_placement_id: str | None
     state: EvidenceState
     failure: DetectionFailureFact | None
+    direct_role_aperture_domain_authority: (
+        DirectRoleApertureDomainAuthority | None
+    ) = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.state, EvidenceState):
             raise TypeError("placement competition requires a typed state")
+        if (
+            self.direct_role_aperture_domain_authority is not None
+            and not isinstance(
+                self.direct_role_aperture_domain_authority,
+                DirectRoleApertureDomainAuthority,
+            )
+        ):
+            raise TypeError(
+                "placement competition aperture-domain authority is invalid"
+            )
         ids = tuple(item.placement_id for item in self.placements)
         if len(set(ids)) != len(ids) or any(not isinstance(item, FormatPlacement) for item in self.placements):
             raise ValueError("placement competition identities are invalid")

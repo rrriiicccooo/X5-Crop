@@ -344,10 +344,30 @@ def alignment_summary(detection: FinalDetection) -> str:
             if direct is None
             else len({item.evidence_group_id for item in direct.facts})
         )
-        direct_aperture_required = (
-            0
-            if direct is None
-            else len(direct.direct_aperture_required_role_indices)
+        aperture_domain = (
+            lane.placement_competition
+            .direct_role_aperture_domain_authority
+        )
+        aperture_domain_proof = (
+            "N/A"
+            if aperture_domain is None
+            else (
+                f"{aperture_domain.state.value.upper()} "
+                f"{len(aperture_domain.facts) - len(aperture_domain.unsupported_role_indices)}"
+                f"/{len(aperture_domain.facts)} "
+                + "/".join(
+                    sorted(
+                        {
+                            (
+                                "NONE"
+                                if item.basis is None
+                                else item.basis.value.upper()
+                            )
+                            for item in aperture_domain.facts
+                        }
+                    )
+                )
+            )
         )
         outer = diagnostic.outer_frame_observation_authority
         outer_count = (
@@ -449,7 +469,7 @@ def alignment_summary(detection: FinalDetection) -> str:
             f"{coverage_proof} · OBS {continuity_proof} · DIRECT "
             f"{direct_supported}/{direct_total} G{direct_evidence_group_count} · "
             f"APERTURE DOMAIN "
-            f"{direct_aperture_required} · OUTER "
+            f"{aperture_domain_proof} · OUTER "
             f"{outer_count}/2 · SOURCE W {source_width_proof} · "
             f"W INFER {width_proof} · SEP "
             f"D {separator_counts['dark'][0]}/{separator_counts['dark'][1]}"
