@@ -847,6 +847,9 @@ def _refine_local_role_bindings(
     *,
     intrinsic_coordinate_authority_ids: frozenset[ObservationId] = frozenset(),
     frame_width_authority_px: FiniteInterval | None = None,
+    excluded_role_bindings: frozenset[
+        tuple[int, ObservationId]
+    ] = frozenset(),
 ) -> _LocalRoleRefinement:
     """Bind uniquely closed local edges after global phase is immutable.
 
@@ -855,6 +858,11 @@ def _refine_local_role_bindings(
     one role-qualified fitted line and physical W or separator material makes
     its local interpretation unique.  It performs no pixel query, ranking, or
     candidate Cartesian product.
+
+    ``excluded_role_bindings`` contains a bounded set of exact role/edge
+    assignments already contradicted by ordered separator material in the
+    rejected winner.  Those lines remain registered counterevidence, but the
+    retained runner cannot attach the same illegal assignment again.
     """
 
     observations = _with_separator_role_authority(
@@ -914,7 +922,11 @@ def _refine_local_role_bindings(
                 registered_candidate_ids_by_role[role.role_index].add(
                     fact.observation_id
                 )
-                if fact.observation_id not in bound_ids:
+                if (
+                    fact.observation_id not in bound_ids
+                    and (role.role_index, fact.observation_id)
+                    not in excluded_role_bindings
+                ):
                     candidate_roles.setdefault(
                         fact.observation_id,
                         [],
@@ -2563,6 +2575,13 @@ def project_candidate_to_authorized_direct_roles(
         and candidate.fit.role_bindings[item.role_index].use
         == SequenceBindingUse.PHASE_ANCHOR
     )
+    retained_local_bindings = tuple(
+        (item.role_index, item.observation_id)
+        for item in retained_facts
+        if candidate.fit.role_bindings[item.role_index] is not None
+        and candidate.fit.role_bindings[item.role_index].use
+        == SequenceBindingUse.LOCAL_REFINEMENT
+    )
     supported_bindings = {
         (item.role_index, item.observation_id) for item in retained_facts
     }
@@ -2783,7 +2802,20 @@ def project_candidate_to_authorized_direct_roles(
         {
             *required_bindings,
             *separator_required_bindings,
+            *retained_local_bindings,
         }
+    )
+    role_binding_changes = tuple(
+        (
+            role_index,
+            expected_bindings.get(role_index),
+            projected_bindings.get(role_index),
+        )
+        for role_index in sorted(
+            set(expected_bindings) | set(projected_bindings)
+        )
+        if expected_bindings.get(role_index)
+        != projected_bindings.get(role_index)
     )
     separator_local_bindings_are_scoped = all(
         projected.fit.role_bindings[role_index] is not None
@@ -2814,7 +2846,7 @@ def project_candidate_to_authorized_direct_roles(
             ),
             (projected.fit.template != candidate.fit.template, "template"),
             (relation_identity_changed, "relation_evidence"),
-            (projected_bindings != expected_bindings, "role_bindings"),
+            (bool(role_binding_changes), "role_bindings"),
             (
                 not separator_local_bindings_are_scoped,
                 "separator_local_scope",
@@ -2834,6 +2866,28 @@ def project_candidate_to_authorized_direct_roles(
             reason=(
                 "authorized refit changed the bounded discrete mapping: "
                 + ", ".join(discrete_identity_changes)
+                + (
+                    " ("
+                    + "; ".join(
+                        "role "
+                        + str(role_index)
+                        + ": expected "
+                        + (
+                            "none"
+                            if expected is None
+                            else str(expected)
+                        )
+                        + ", got "
+                        + (
+                            "none" if actual is None else str(actual)
+                        )
+                        for role_index, expected, actual
+                        in role_binding_changes
+                    )
+                    + ")"
+                    if role_binding_changes
+                    else ""
+                )
             ),
         )
     validation_conflicts = _projected_role_counterevidence_conflicts(

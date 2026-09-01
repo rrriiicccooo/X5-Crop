@@ -1707,6 +1707,7 @@ def validate_output_footprint_authority(output: dict[str, Any]) -> None:
     same_state_cross_padding = output.get(
         "maximum_same_state_cross_alignment_padding_px"
     )
+    aperture_risk = output.get("enclosing_support_aperture_risk")
     protections = output.get("boundary_protections")
     protection_fields = {
         "role",
@@ -1721,6 +1722,35 @@ def validate_output_footprint_authority(output: dict[str, Any]) -> None:
         not isinstance(item, dict) for item in protections
     ):
         raise ValueError("boundary protection facts are invalid")
+    support_output = boundary_use == "enclosing_support_pair"
+    risk_fields = {
+        "canonical_height_px",
+        "maximum_center_shift_px",
+        "top_expansion_px",
+        "bottom_expansion_px",
+        "feasible_state_count",
+    }
+    if support_output:
+        if (
+            not isinstance(aperture_risk, dict)
+            or set(aperture_risk) != risk_fields
+            or any(
+                not _finite_number(aperture_risk[key])
+                or float(aperture_risk[key]) < 0.0
+                for key in (
+                    "maximum_center_shift_px",
+                    "top_expansion_px",
+                    "bottom_expansion_px",
+                )
+            )
+            or not _finite_number(aperture_risk["canonical_height_px"])
+            or float(aperture_risk["canonical_height_px"]) <= 0.0
+            or not isinstance(aperture_risk["feasible_state_count"], int)
+            or aperture_risk["feasible_state_count"] <= 0
+        ):
+            raise ValueError("enclosing-support aperture risk is invalid")
+    elif aperture_risk is not None:
+        raise ValueError("aperture output carries enclosing-support risk")
     if (
         tuple(item.get("role") for item in protections)
         != ("start", "end", "top", "bottom")
@@ -2373,6 +2403,26 @@ def _validate_geometry(record: dict[str, Any]) -> None:
                     )
                 ):
                     raise ValueError("same-state cross padding source is invalid")
+                aperture_risk = output.get(
+                    "enclosing_support_aperture_risk"
+                )
+                edge_by_role = {edge["role"]: edge for edge in edges}
+                if (
+                    not isinstance(aperture_risk, dict)
+                    or abs(
+                        float(edge_by_role["top"]["expansion_px"])
+                        - float(aperture_risk["top_expansion_px"])
+                    )
+                    > 1.0e-8
+                    or abs(
+                        float(edge_by_role["bottom"]["expansion_px"])
+                        - float(aperture_risk["bottom_expansion_px"])
+                    )
+                    > 1.0e-8
+                ):
+                    raise ValueError(
+                        "enclosing-support aperture risk budget is invalid"
+                    )
                 cross_limit = min(
                     float(edge["limit_mm"])
                     for edge in edges
@@ -2574,6 +2624,8 @@ def _validate_phase_candidate_projection(
     ):
         raise ValueError("phase-candidate projection contract is invalid")
     if fit is None or not isinstance(fit, dict):
+        if outcome == "direct_role_contradiction":
+            return
         raise ValueError("phase-candidate projection has no candidate")
     bindings = fit.get("role_bindings")
     if not isinstance(bindings, list):
@@ -2620,6 +2672,7 @@ def _validate_phase_competition(value: object) -> None:
         "winner_basis",
         "best_phase_candidate_authority_projection",
         "runner_phase_candidate_authority_projection",
+        "eliminated_candidate_authority_projections",
         "global_lattice_authority",
         "calibrated_nominal_grid_evidence",
         "adjacency_observation_coverage",
@@ -2641,6 +2694,19 @@ def _validate_phase_competition(value: object) -> None:
         raise ValueError("phase-candidate projection lost its candidate")
     _validate_phase_candidate_projection(best_projection, best)
     _validate_phase_candidate_projection(runner_projection, runner)
+    eliminated = value["eliminated_candidate_authority_projections"]
+    if (
+        not isinstance(eliminated, list)
+        or len(eliminated) > 2
+        or any(
+            not isinstance(item, dict)
+            or item.get("outcome") != "direct_role_contradiction"
+            for item in eliminated
+        )
+    ):
+        raise ValueError("eliminated phase-candidate ledger is invalid")
+    for projection in eliminated:
+        _validate_phase_candidate_projection(projection, None)
     _validate_nominal_grid_evidence(
         value["calibrated_nominal_grid_evidence"]
     )

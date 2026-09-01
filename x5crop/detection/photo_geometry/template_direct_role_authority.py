@@ -189,13 +189,34 @@ class _DirectRoleAuthorityLedger:
     trace_lattice: tuple[float, ...]
     observations_by_id: dict[ObservationId, BoundaryEdgeObservation]
     support_region_counts: dict[ObservationId, int]
-    source_wide_pairs: frozenset[frozenset[ObservationId]]
-    partial_height_pairs: frozenset[frozenset[ObservationId]]
+    source_wide_pairs: frozenset[tuple[ObservationId, ObservationId]]
+    partial_height_pairs: frozenset[tuple[ObservationId, ObservationId]]
+    reversed_normal_pair_conflicts: dict[
+        tuple[ObservationId, ObservationId],
+        tuple[ObservationId, ...],
+    ]
     supported_material_roles: frozenset[tuple[ObservationId, BoundaryRole]]
     conflicts_by_edge_role: dict[
         tuple[ObservationId, BoundaryRole],
         tuple[tuple[ObservationId, ObservationId], ...],
     ]
+
+
+def _ordered_separator_edge_pair(
+    band: SeparatorBandObservation,
+    direction: int,
+) -> tuple[ObservationId, ObservationId]:
+    """Return the physical END -> material -> START edge order."""
+
+    if direction > 0:
+        return (
+            band.left_edge_observation_id,
+            band.right_edge_observation_id,
+        )
+    return (
+        band.right_edge_observation_id,
+        band.left_edge_observation_id,
+    )
 
 
 def _trace_lattice_and_support_region_counts(
@@ -281,30 +302,39 @@ def _direct_role_authority_ledger(
         separator_bands,
         maximum_material_gap_px=fit.template.gap_prior_px.maximum,
     )
-    source_wide_pairs = frozenset(
-        frozenset(
-            (band.left_edge_observation_id, band.right_edge_observation_id)
-        )
+    ordered_role_authority_bands = tuple(
+        (band, _ordered_separator_edge_pair(band, fit.template.direction))
         for band in role_authority_bands
+    )
+    source_wide_pairs = frozenset(
+        ordered_pair
+        for band, ordered_pair in ordered_role_authority_bands
         if band.material_support_region_count == SPATIAL_SUPPORT_REGION_COUNT
     )
     partial_height_pairs = frozenset(
-        frozenset(
-            (band.left_edge_observation_id, band.right_edge_observation_id)
-        )
-        for band in role_authority_bands
+        ordered_pair
+        for band, ordered_pair in ordered_role_authority_bands
         if band.material_support_region_count
         == SPATIAL_SUPPORT_REGION_COUNT - 1
     )
+    reversed_normal_pair_conflict_sets: dict[
+        tuple[ObservationId, ObservationId],
+        set[ObservationId],
+    ] = {}
+    for band, ordered_pair in ordered_role_authority_bands:
+        reversed_normal_pair_conflict_sets.setdefault(
+            (ordered_pair[1], ordered_pair[0]),
+            set(),
+        ).add(band.observation_id)
     supported_material_roles = frozenset(
         {
-            (band.left_edge_observation_id, BoundaryRole.END)
-            for band in role_authority_bands
+            (ordered_pair[0], BoundaryRole.END)
+            for band, ordered_pair in ordered_role_authority_bands
             if band.material_support_region_count == SPATIAL_SUPPORT_REGION_COUNT
         }
         | {
-            (band.right_edge_observation_id, BoundaryRole.START)
-            for band in role_authority_bands
+            (ordered_pair[1], BoundaryRole.START)
+            for band, ordered_pair in ordered_role_authority_bands
             if band.material_support_region_count == SPATIAL_SUPPORT_REGION_COUNT
         }
     )
@@ -323,15 +353,14 @@ def _direct_role_authority_ledger(
     # an intrinsically authoritative opposite edge.  Include that exact
     # potential role when deciding whether a material conflict is a legal
     # counter-explanation.
-    for band in role_authority_bands:
+    for band, ordered_pair in ordered_role_authority_bands:
         if band.material_support_region_count != SPATIAL_SUPPORT_REGION_COUNT - 1:
             continue
-        left_id = band.left_edge_observation_id
-        right_id = band.right_edge_observation_id
-        if left_id in intrinsic_bases:
-            potential_authority_roles.add((right_id, BoundaryRole.START))
-        if right_id in intrinsic_bases:
-            potential_authority_roles.add((left_id, BoundaryRole.END))
+        end_id, start_id = ordered_pair
+        if end_id in intrinsic_bases:
+            potential_authority_roles.add((start_id, BoundaryRole.START))
+        if start_id in intrinsic_bases:
+            potential_authority_roles.add((end_id, BoundaryRole.END))
 
     conflict_sets: dict[
         tuple[ObservationId, BoundaryRole],
@@ -367,6 +396,10 @@ def _direct_role_authority_ledger(
         support_region_counts=region_counts,
         source_wide_pairs=source_wide_pairs,
         partial_height_pairs=partial_height_pairs,
+        reversed_normal_pair_conflicts={
+            key: tuple(sorted(values))
+            for key, values in reversed_normal_pair_conflict_sets.items()
+        },
         supported_material_roles=supported_material_roles,
         conflicts_by_edge_role={
             key: tuple(
@@ -458,7 +491,7 @@ def _assess_direct_role_binding_authority(
         start = selected.get(start_index)
         if end is None or start is None:
             continue
-        selected_pair = frozenset((end.observation_id, start.observation_id))
+        selected_pair = (end.observation_id, start.observation_id)
         if selected_pair in ledger.source_wide_pairs:
             bases[end_index].add(DirectRoleAuthorityBasis.SEPARATOR_PAIR)
             bases[start_index].add(DirectRoleAuthorityBasis.SEPARATOR_PAIR)
@@ -473,7 +506,7 @@ def _assess_direct_role_binding_authority(
         start = selected.get(start_index)
         if end is None or start is None:
             continue
-        selected_pair = frozenset((end.observation_id, start.observation_id))
+        selected_pair = (end.observation_id, start.observation_id)
         if (
             selected_pair not in ledger.partial_height_pairs
             or selected_pair in ledger.source_wide_pairs
@@ -496,26 +529,48 @@ def _assess_direct_role_binding_authority(
                 DirectRoleAuthorityBasis.PARTIAL_HEIGHT_SEPARATOR_PAIR
             )
 
-    blocking_conflicts = {
-        role_index: tuple(
-            conflict_id
-            for conflict_id, alternative_id in ledger.conflicts_by_edge_role.get(
-                (
-                    observation.observation_id,
-                    fit.template.roles[role_index].role,
-                ),
-                (),
+    reversed_pair_conflicts_by_role: dict[int, tuple[ObservationId, ...]] = {}
+    for adjacency_index in range(max(0, fit.template.count - 1)):
+        end_index = 2 * adjacency_index + 1
+        start_index = end_index + 1
+        end = selected.get(end_index)
+        start = selected.get(start_index)
+        if end is None or start is None:
+            continue
+        conflicts = ledger.reversed_normal_pair_conflicts.get(
+            (end.observation_id, start.observation_id),
+            (),
+        )
+        if conflicts:
+            reversed_pair_conflicts_by_role[end_index] = conflicts
+            reversed_pair_conflicts_by_role[start_index] = conflicts
+
+    blocking_conflicts: dict[int, tuple[ObservationId, ...]] = {}
+    for role_index, observation in selected.items():
+        selected_role = fit.template.roles[role_index].role
+        alternative_conflicts = (
+            tuple(
+                conflict_id
+                for conflict_id, alternative_id
+                in ledger.conflicts_by_edge_role.get(
+                    (observation.observation_id, selected_role),
+                    (),
+                )
+                if alternative_preserves_independent_width(
+                    role_index,
+                    alternative_id,
+                )
             )
-            if alternative_preserves_independent_width(
-                role_index,
-                alternative_id,
+            if (observation.observation_id, selected_role)
+            not in ledger.supported_material_roles
+            else ()
+        )
+        blocking_conflicts[role_index] = tuple(
+            sorted(
+                set(alternative_conflicts)
+                | set(reversed_pair_conflicts_by_role.get(role_index, ()))
             )
         )
-        if (observation.observation_id, fit.template.roles[role_index].role)
-        not in ledger.supported_material_roles
-        else ()
-        for role_index, observation in selected.items()
-    }
 
     facts = tuple(
         DirectRoleAuthorityFact(

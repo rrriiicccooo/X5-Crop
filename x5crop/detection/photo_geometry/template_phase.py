@@ -62,7 +62,10 @@ from .template_adjacency_topology import (
     AdjacencyContinuityKind,
     observe_adjacency_continuity,
 )
-from .template_lattice_authority import assess_global_lattice_authority
+from .template_lattice_authority import (
+    assess_global_lattice_authority,
+    direct_role_constraint_rank,
+)
 from .template_direct_role_authority import (
     assess_direct_role_binding_authorities,
     assess_direct_role_binding_authority,
@@ -1404,6 +1407,9 @@ def _with_local_role_refinement(
     *,
     frame_width_authority_px: FiniteInterval | None = None,
     additional_fit_pass: bool = False,
+    excluded_role_bindings: frozenset[
+        tuple[int, ObservationId]
+    ] = frozenset(),
 ) -> PhaseFitResult:
     if result.status != PhaseFitStatus.RESOLVED or result.best is None:
         return result
@@ -1423,6 +1429,7 @@ def _with_local_role_refinement(
         separator_bands,
         intrinsic_coordinate_authority_ids=authority_ids,
         frame_width_authority_px=frame_width_authority_px,
+        excluded_role_bindings=excluded_role_bindings,
     )
     receipt = replace(
         result.receipt,
@@ -1441,6 +1448,135 @@ def _with_local_role_refinement(
     )
     receipt.validate_bounds()
     return replace(result, best=refinement.fit, receipt=receipt)
+
+
+def _refine_selected_roles_with_candidate_elimination(
+    result: PhaseFitResult,
+    phase_input: TemplatePhaseInput,
+    *,
+    excluded_role_bindings: frozenset[
+        tuple[int, ObservationId]
+    ] = frozenset(),
+) -> PhaseFitResult:
+    """Reject a winner contradicted only after selected local refinement.
+
+    Candidate ranking is bounded before selected-only local refinement.  A
+    newly attached line can therefore complete an exact reversed
+    END/material/START pair that was not present in the candidate authority
+    ledger.  Reassess that one selected fit, eliminate it through the existing
+    typed direct-role contradiction, and promote only the already retained,
+    authority-eligible runner.  At most two selected fits are refined; no new
+    observation or TIFF query is created.
+    """
+
+    current = result
+    exclusions = excluded_role_bindings
+    for candidate_index in range(2):
+        current = _with_local_role_refinement(
+            current,
+            phase_input.observations,
+            phase_input.separator_bands,
+            phase_input.sequence_measurement_sets,
+            additional_fit_pass=candidate_index > 0,
+            excluded_role_bindings=exclusions,
+        )
+        if (
+            current.status != PhaseFitStatus.RESOLVED
+            or current.best is None
+            or not phase_input.sequence_measurement_sets
+        ):
+            return current
+        authority = assess_direct_role_binding_authority(
+            current.best,
+            phase_input.observations,
+            phase_input.separator_bands,
+            phase_input.sequence_measurement_sets,
+        )
+        if authority.state != EvidenceState.CONTRADICTED:
+            return current
+        projection = PhaseCandidateAuthorityProjection(
+            input_direct_role_authority=authority,
+            outcome=PhaseCandidateProjectionOutcome.DIRECT_ROLE_CONTRADICTION,
+            basis=None,
+            projected_out_bindings=(),
+            retained_direct_constraint_rank=direct_role_constraint_rank(
+                current.best,
+                authority.supported_role_indices,
+            ),
+            reason=(
+                authority.reason or "direct-role evidence is contradicted"
+            ),
+        )
+        receipt = replace(
+            current.receipt,
+            selected_direct_role_projection_evaluation_count=(
+                current.receipt
+                .selected_direct_role_projection_evaluation_count
+                + 1
+            ),
+        )
+        receipt.validate_bounds()
+        runner_projection = (
+            current.runner_phase_candidate_authority_projection
+        )
+        if (
+            candidate_index > 0
+            or current.runner_up is None
+            or runner_projection is None
+            or not runner_projection.eligible
+        ):
+            return replace(
+                current,
+                status=PhaseFitStatus.UNRESOLVED,
+                ambiguity_reason=projection.reason,
+                failure_kind=(
+                    PhaseFailureKind.SEPARATOR_MATERIAL_CONFLICT
+                ),
+                winner_basis=None,
+                best_phase_candidate_authority_projection=projection,
+                receipt=receipt,
+            )
+        exclusions = frozenset(
+            (item.role_index, item.observation_id)
+            for item in authority.facts
+            if item.state == EvidenceState.CONTRADICTED
+        )
+        current = replace(
+            current,
+            best=current.runner_up,
+            runner_up=current.best,
+            status=PhaseFitStatus.RESOLVED,
+            ambiguity_reason=None,
+            failure_kind=None,
+            winner_basis=PhaseWinnerBasis.UNIQUE_DIRECT_ROLE_AUTHORITY,
+            best_phase_candidate_authority_projection=runner_projection,
+            runner_phase_candidate_authority_projection=projection,
+            eliminated_candidate_authority_projections=(
+                *current.eliminated_candidate_authority_projections,
+                projection,
+            ),
+            receipt=receipt,
+            global_lattice_authority=None,
+            calibrated_nominal_grid_evidence=None,
+            adjacency_observation_coverage=(),
+            adjacency_continuity_observations=(),
+            direct_role_binding_authority=None,
+            outer_frame_observation_authority=None,
+        )
+    raise AssertionError("selected candidate elimination exceeded its bound")
+
+
+def _eliminated_candidate_role_bindings(
+    result: PhaseFitResult,
+) -> frozenset[tuple[int, ObservationId]]:
+    """Return exact role/edge assignments rejected by hard counterevidence."""
+
+    return frozenset(
+        (fact.role_index, fact.observation_id)
+        for projection in result.eliminated_candidate_authority_projections
+        for fact in projection.input_direct_role_authority.facts
+        if fact.state == EvidenceState.CONTRADICTED
+    )
 
 
 def _project_selected_late_local_refinements(
@@ -1649,6 +1785,7 @@ def refine_template_phase_with_source_frame_width(
         sequence_measurement_sets,
         frame_width_authority_px=authority.width_px,
         additional_fit_pass=True,
+        excluded_role_bindings=_eliminated_candidate_role_bindings(result),
     )
 
 
@@ -2052,12 +2189,17 @@ def fit_template_phase_candidate_with_adjacency_relations(
             directly_observed_ordinals=(),
         )
         return TemplatePhaseCandidateCompetition(assessed, ())
-    normal = _with_local_role_refinement(
+    normal = _refine_selected_roles_with_candidate_elimination(
         normal,
-        observations,
-        separator_bands,
-        phase_input.sequence_measurement_sets,
+        phase_input,
     )
+    if normal.status != PhaseFitStatus.RESOLVED or normal.best is None:
+        assessed = _attach_selected_candidate_authorities(
+            normal,
+            phase_input,
+            directly_observed_ordinals=(),
+        )
+        return TemplatePhaseCandidateCompetition(assessed, ())
     assert normal.best is not None
     # Import here keeps the residual owner dependent on the canonical phase
     # types without creating a module import cycle.
@@ -2168,11 +2310,16 @@ def fit_template_phase_candidate_with_adjacency_relations(
         ),
         max_observations=max_observations,
     )
-    adjusted = _with_local_role_refinement(
+    adjusted = replace(
         adjusted,
-        observations,
-        separator_bands,
-        phase_input.sequence_measurement_sets,
+        eliminated_candidate_authority_projections=(
+            normal.eliminated_candidate_authority_projections
+        ),
+    )
+    adjusted = _refine_selected_roles_with_candidate_elimination(
+        adjusted,
+        phase_input,
+        excluded_role_bindings=_eliminated_candidate_role_bindings(normal),
     )
     adjusted = _inherit_prior_lattice_fit_basis(adjusted, normal)
     adjusted = _aggregate_phase_work(

@@ -36,6 +36,7 @@ from x5crop.detection.photo_geometry.template_model import (
     SeparatorRelation,
     PhaseLatticeAuthority,
     SequenceBindingUse,
+    SequenceRoleBinding,
     SourceFrameWidthAuthorityBasis,
     TemplateSearchReceipt,
     TemplateSpec,
@@ -64,6 +65,7 @@ from x5crop.detection.photo_geometry.template_nominal_grid_model import (
 )
 from x5crop.detection.photo_geometry.template_phase import (
     _merge_continuous_placement,
+    _refine_selected_roles_with_candidate_elimination,
     _same_continuous_placement,
     account_prior_phase_fit,
     finalize_template_phase_candidate,
@@ -71,6 +73,9 @@ from x5crop.detection.photo_geometry.template_phase import (
     fit_template_phase_candidate_with_adjacency_relations,
     fit_template_phase_with_adjacency_relations,
     refine_template_phase_with_source_frame_width,
+)
+from x5crop.detection.photo_geometry.template_lattice_authority import (
+    direct_role_constraint_rank,
 )
 from x5crop.detection.photo_geometry.template_phase_candidates import (
     _BoundFit,
@@ -85,6 +90,8 @@ from x5crop.detection.photo_geometry.template_phase_candidates import (
 from x5crop.detection.photo_geometry.template_phase_model import (
     GlobalLatticeAuthorityEvidence,
     GlobalLatticeAuthorityBasis,
+    PhaseCandidateAuthorityProjection,
+    PhaseCandidateProjectionBasis,
     PhaseCandidateProjectionOutcome,
     PhaseFailureKind,
     PhaseFitStatus,
@@ -2340,10 +2347,14 @@ class TemplatePhaseContractTest(unittest.TestCase):
             source_wide=True,
         )
         weak_edges = (
-            local(
-                "late-projection:weak:end:1",
-                201.0,
-                BoundaryRole.END,
+            replace(
+                local(
+                    "late-projection:authorized-local:end:1",
+                    201.0,
+                    BoundaryRole.END,
+                    source_wide=True,
+                ),
+                fit_residual_px=20.0,
             ),
             local(
                 "late-projection:weak:start:2",
@@ -2381,7 +2392,12 @@ class TemplatePhaseContractTest(unittest.TestCase):
         assert result.best is not None
         self.assertEqual(
             result.best.binding_observation_ids,
-            (anchor.observation_id, None, None, None),
+            (
+                anchor.observation_id,
+                weak_edges[0].observation_id,
+                None,
+                None,
+            ),
         )
         projection = result.best_phase_candidate_authority_projection
         assert projection is not None
@@ -2396,7 +2412,10 @@ class TemplatePhaseContractTest(unittest.TestCase):
             ),
             tuple(
                 (role_index, observation.observation_id)
-                for role_index, observation in enumerate(weak_edges, start=1)
+                for role_index, observation in enumerate(
+                    weak_edges[1:],
+                    start=2,
+                )
             ),
         )
         assert result.direct_role_binding_authority is not None
@@ -2410,7 +2429,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         self.assertEqual(
             result.receipt.selected_direct_role_projection_binding_count,
-            3,
+            2,
         )
         self.assertEqual(result.receipt.selected_nominal_grid_solve_count, 1)
         self.assertEqual(
@@ -4105,42 +4124,280 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertAlmostEqual(result.best.model_role_positions_px[4], 247.0)
 
     def test_local_separator_cannot_override_conflicting_edge_roles(self) -> None:
-        observations = list(
+        observations = tuple(
             edge(f"edge:{index}", coordinate)
             for index, coordinate in enumerate(
                 (10.0, 110.0, 130.0, 230.0)
             )
         )
-        observations[1] = replace(
+        fit = fit_template_phase(observations, template(2)).best
+        assert fit is not None
+        bindings = list(fit.role_bindings)
+        bindings[1], bindings[2] = bindings[2], bindings[1]
+        reversed_fit = replace(fit, role_bindings=tuple(bindings))
+        band = separator(
+            "separator:direct-role-relation",
             observations[1],
-            polarity=-1,
-            qualified_anchor_roles=(BoundaryRole.START,),
-        )
-        observations[2] = replace(
             observations[2],
-            polarity=1,
-            qualified_anchor_roles=(BoundaryRole.END,),
+            FiniteInterval(19.8, 20.2),
+            region_count=2,
         )
-        result = fit_template_phase_with_adjacency_relations(
-            TemplatePhaseInput(
-                observations=tuple(observations),
-                separator_bands=(
-                separator(
-                    "separator:direct-role-relation",
-                    observations[1],
-                    observations[2],
-                    FiniteInterval(19.8, 20.2),
-                    region_count=2,
+
+        authority = assess_direct_role_binding_authority(
+            reversed_fit,
+            observations,
+            (band,),
+            (
+                phase_sequence_measurement(
+                    "reversed-local-separator-pair",
+                    FiniteInterval(0.0, 260.0),
                 ),
-                ),
-                template=template(2),
-                calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(template(2)),
-                scale_px_per_mm=None,
-                holder_span_px=None,
-                phase_authority_px=None,
+            ),
+        )
+
+        self.assertEqual(authority.state, EvidenceState.CONTRADICTED)
+        conflicts = tuple(
+            item
+            for item in authority.facts
+            if item.state == EvidenceState.CONTRADICTED
+        )
+        self.assertEqual(
+            tuple(item.role_index for item in conflicts),
+            (1, 2),
+        )
+        self.assertTrue(
+            all(
+                item.blocking_material_conflict_ids
+                == (band.observation_id,)
+                for item in conflicts
             )
         )
-        self.assertNotEqual(result.status, PhaseFitStatus.RESOLVED)
+
+    def test_unrelated_two_region_separator_does_not_block_selected_roles(
+        self,
+    ) -> None:
+        selected = self._phase_candidate_group("selected", 0.0)
+        spec = template(2)
+        fit = fit_template_phase(selected, spec).best
+        assert fit is not None
+        unrelated_left = replace(
+            edge("unrelated:separator:left", 500.0),
+            qualified_anchor_roles=(BoundaryRole.END,),
+            polarity=-1,
+            trace_coordinates_px=(10, 20),
+            support_fraction=2.0 / 3.0,
+            continuous_support_fraction=2.0 / 3.0,
+        )
+        unrelated_right = replace(
+            edge("unrelated:separator:right", 520.0),
+            qualified_anchor_roles=(BoundaryRole.START,),
+            polarity=1,
+            trace_coordinates_px=(10, 20),
+            support_fraction=2.0 / 3.0,
+            continuous_support_fraction=2.0 / 3.0,
+        )
+        unrelated_band = separator(
+            "unrelated:separator",
+            unrelated_left,
+            unrelated_right,
+            FiniteInterval(19.8, 20.2),
+            region_count=2,
+        )
+
+        authority = assess_direct_role_binding_authority(
+            fit,
+            (*selected, unrelated_left, unrelated_right),
+            (unrelated_band,),
+            (
+                phase_sequence_measurement(
+                    "unrelated-two-region-separator",
+                    FiniteInterval(0.0, 560.0),
+                ),
+            ),
+        )
+
+        self.assertEqual(authority.state, EvidenceState.SUPPORTED)
+        self.assertTrue(
+            all(not item.blocking_material_conflict_ids for item in authority.facts)
+        )
+
+    def test_late_reversed_pair_eliminates_winner_and_promotes_legal_runner(
+        self,
+    ) -> None:
+        observations = tuple(
+            replace(
+                edge(f"late-reversed:{index}", coordinate),
+                canonical_direction_degrees=0.0,
+                fit_direction_interval_degrees=FiniteInterval.exact(0.0),
+                full_direction_interval_degrees=FiniteInterval.exact(0.0),
+            )
+            for index, coordinate in enumerate(
+                (10.0, 120.0, 130.0, 230.0)
+            )
+        )
+        spec = replace(
+            template(2),
+            frame_width_px=PositiveInterval(80.0, 130.0),
+        )
+        base = fit_template_phase(observations, spec)
+        base_fit = base.best
+        assert base_fit is not None
+
+        def role_binding(
+            observation: BoundaryEdgeObservation,
+        ) -> SequenceRoleBinding:
+            return SequenceRoleBinding(
+                use=SequenceBindingUse.PHASE_ANCHOR,
+                observation_id=observation.observation_id,
+                evidence_group_id=observation.observation_id,
+                canonical_position_px=observation.canonical_position_px,
+                fit_position_interval_px=(
+                    observation.fit_position_interval_px
+                ),
+                full_position_interval_px=(
+                    observation.full_position_interval_px
+                ),
+                line_evidence=None,
+            )
+
+        normal_fit = replace(
+            base_fit,
+            model_role_positions_px=tuple(
+                item.canonical_position_px for item in observations
+            ),
+            model_role_intervals_px=tuple(
+                item.fit_position_interval_px for item in observations
+            ),
+            model_full_role_intervals_px=tuple(
+                item.full_position_interval_px for item in observations
+            ),
+            role_bindings=tuple(role_binding(item) for item in observations),
+            phase_support_coverage=0.0,
+        )
+        wrong_bindings = list(normal_fit.role_bindings)
+        wrong_bindings[1] = role_binding(observations[2])
+        wrong_bindings[2] = None
+        wrong_fit = replace(
+            normal_fit,
+            role_bindings=tuple(wrong_bindings),
+            phase_support_coverage=0.0,
+        )
+        band = separator(
+            "late-reversed:separator",
+            observations[1],
+            observations[2],
+            FiniteInterval(9.8, 10.2),
+            region_count=2,
+        )
+        measurement_sets = (
+            phase_sequence_measurement(
+                "late-reversed-candidate-elimination",
+                FiniteInterval(0.0, 260.0),
+            ),
+        )
+        wrong_authority = assess_direct_role_binding_authority(
+            wrong_fit,
+            observations,
+            (band,),
+            measurement_sets,
+        )
+        runner_authority = assess_direct_role_binding_authority(
+            normal_fit,
+            observations,
+            (band,),
+            measurement_sets,
+        )
+        self.assertEqual(wrong_authority.state, EvidenceState.SUPPORTED)
+        self.assertEqual(runner_authority.state, EvidenceState.SUPPORTED)
+        refined_wrong = _refine_local_role_bindings(
+            wrong_fit,
+            observations,
+            (band,),
+            intrinsic_coordinate_authority_ids=frozenset(
+                item.observation_id for item in observations
+            ),
+        ).fit
+        self.assertEqual(
+            refined_wrong.binding_observation_ids[2],
+            observations[1].observation_id,
+        )
+
+        def eligible_projection(fit, authority):
+            return PhaseCandidateAuthorityProjection(
+                input_direct_role_authority=authority,
+                outcome=PhaseCandidateProjectionOutcome.UNCHANGED,
+                basis=PhaseCandidateProjectionBasis.DIRECT_BINDINGS,
+                projected_out_bindings=(),
+                retained_direct_constraint_rank=direct_role_constraint_rank(
+                    fit,
+                    authority.supported_role_indices,
+                ),
+                reason=None,
+            )
+
+        competition = replace(
+            base,
+            best=wrong_fit,
+            runner_up=normal_fit,
+            status=PhaseFitStatus.RESOLVED,
+            ambiguity_reason=None,
+            failure_kind=None,
+            winner_basis=PhaseWinnerBasis.INDEPENDENT_SUPPORT,
+            best_phase_candidate_authority_projection=(
+                eligible_projection(wrong_fit, wrong_authority)
+            ),
+            runner_phase_candidate_authority_projection=(
+                eligible_projection(normal_fit, runner_authority)
+            ),
+        )
+        phase_input = TemplatePhaseInput(
+            observations=observations,
+            separator_bands=(band,),
+            template=spec,
+            calibrated_nominal_grid_prior=(
+                unavailable_nominal_grid_prior(spec)
+            ),
+            scale_px_per_mm=None,
+            holder_span_px=FiniteInterval(0.0, 260.0),
+            phase_authority_px=None,
+            sequence_measurement_sets=measurement_sets,
+        )
+
+        result = _refine_selected_roles_with_candidate_elimination(
+            competition,
+            phase_input,
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertEqual(
+            result.best.binding_observation_ids[1:3],
+            (
+                observations[1].observation_id,
+                observations[2].observation_id,
+            ),
+        )
+        self.assertEqual(
+            result.winner_basis,
+            PhaseWinnerBasis.UNIQUE_DIRECT_ROLE_AUTHORITY,
+        )
+        self.assertEqual(
+            len(result.eliminated_candidate_authority_projections),
+            1,
+        )
+        eliminated = result.eliminated_candidate_authority_projections[0]
+        self.assertEqual(
+            eliminated.outcome,
+            PhaseCandidateProjectionOutcome.DIRECT_ROLE_CONTRADICTION,
+        )
+        self.assertEqual(
+            tuple(
+                item.role_index
+                for item in eliminated.input_direct_role_authority.facts
+                if item.state == EvidenceState.CONTRADICTED
+            ),
+            (1, 2),
+        )
 
     def test_source_wide_band_excludes_a_competing_local_edge_pair(self) -> None:
         observations = list(

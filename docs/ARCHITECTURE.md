@@ -545,6 +545,15 @@ placement；“观察到了”本身不等于“有权决定裁切”。权限�
 | 无权局部 refinement 满足上方独立 W 让位合同 | 弱线不取得 native coordinate；由已授权 opposite 与完整相关 W 推导该角色 |
 | 只覆盖局部高度，且没有上述任一直接闭环 | `direct_role_binding_authority_unavailable` |
 
+Separator pair 的 identity 必须保留物理方向，canonical 顺序始终是
+`前一 Frame END → material → 后一 Frame START`。同一两条 edge 的反序 tuple 不是等价集合：若 selected-only
+local refinement 较晚补出精确反序绑定，该 candidate 产生 `direct_role_contradiction` 并被淘汰。只有已经在
+同一 bounded competition 中保留、且自身权限已完整评估的 runner 可以晋升；淘汰 candidate 的精确
+`(role_index, observation_id)` 不得在 runner 上重新绑定，但 observation 仍完整保留为 counterevidence。
+整个 late elimination 最多评估两个 selected fit，不生成候选、不读取 TIFF，也不按分数复活 runner。
+仍获权限的 `LOCAL_REFINEMENT` 属于原离散 identity，不能因它不增加 global rank 被误报为
+`discrete_identity_changed`。
+
 短 edge 仍保留为 observation；失败只撤销它的坐标决定权，不删除像素事实。全局 rank 计算必须排除无权
 角色，不能先让短线闭合 lattice，再由该 lattice、catalog W 或同一 Frame 的另一条短线反向证明短线。
 两高度 separator 的权限传递只执行一遍，`partial_height_separator_pair` 不能继续为相邻关系播种，也不能
@@ -1051,6 +1060,14 @@ uncertainty 与 residual。
 之和不超过 `5%H`。Support 的位置不确定性已经进入逐侧完整 expansion，不能再次算入 alignment padding；
 也不能把两个不同可行状态的 top/bottom 极值相加。Start/end 使用正常 sequence bleed 和各自 5% 预算。
 
+Enclosing support 只证明真实 aperture 位于两条 support 之间，不证明 fixed `H` 的 aperture 在其中居中。
+因此每个 `JointFrameState` 还必须同时评估该状态的 requested footprint 与其中最不利的合法 aperture：top
+边界可以位于 `bottom_support - H`，bottom 边界可以位于 `top_support + H`。Typed
+`EnclosingSupportApertureRisk` 保存 canonical `H`、最大中心平移、top/bottom 最坏 expansion 与可行状态数；
+这两项逐侧 expansion 取代 support line 自身距离参与 cross 预算，但不修改 output polygon。Requested
+footprint 与最不利 aperture 必须来自同一状态，既不能把互斥状态的极值相加，也不能假设未知中心恰好位于
+最有利位置。
+
 Support 的共享斜率属于同一个 `JointFrameState`，已经进入该状态的 boundary line 与联合 footprint。
 局部 residual 只保留实测 trace 相对这条同状态直线的 outward departure；超出实测 trace 域时，也只传播
 `observed_direction - state_slope` 的方向差。不得把绝对斜率再作为 residual 加一次，或用目标 trace 的
@@ -1059,14 +1076,15 @@ Support 的共享斜率属于同一个 `JointFrameState`，已经进入该状态
 
 | enclosing support 状态 | 结果 |
 |---|---|
-| span `<= 1.1H`，四边逐侧预算成立，同一状态 alignment padding `<= 5%H` | `supported` |
+| span `<= 1.1H`，未知 aperture 中心的逐侧最坏 expansion 与其它两边预算均成立，同一状态 alignment padding `<= 5%H` | `supported` |
 | 任一边完整 expansion 超过自己的 5% | `direct_use_budget_exceeded` |
 | support span 超过 `1.1H` | `direct_use_budget_exceeded` |
 | 每侧各自成立，但同一状态 alignment padding 合计超过 `5%H` | `direct_use_budget_exceeded` |
 | 只有不同状态的 top/bottom 极值相加才超过 5% | 不据此阻断 |
 
 `OutputFootprint` 同时保存三层 source-space polygon，以及
-`maximum_same_state_cross_alignment_padding_px`：`mandatory_source_footprint` 含联合测量不确定性、
+`maximum_same_state_cross_alignment_padding_px` 和 `enclosing_support_aperture_risk`：
+`mandatory_source_footprint` 含联合测量不确定性、
 直线 residual 与完整 pixel-center span；`requested_source_footprint` 再加入完整产品 bleed；
 `required_source_footprint` 是最终实际采样范围。完整 5% 预算始终按 requested 层评估，不能因源边界而
 收窄或掩盖超预算。
@@ -1161,7 +1179,7 @@ Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决
 - aspect calibration identity、`R_raw/R_guarded`、`gW/gH`、W 与推导 H interval、cross 消费状态、
   输出预算和 typed failure；
 - selected-only OutputFootprint，以分帧颜色半透明填充最终 required polygon，不另画白色虚线框，
-  并显示四边 bleed/联合 expansion/预算；
+  并显示四边 bleed/联合 expansion/预算；enclosing support 另显示未知 aperture 中心平移与同状态逐侧风险；
 - `DESKEW APPLIED`、`ROTATION NOT NEEDED` 或 typed `DESKEW SKIPPED`；
 - 第一个 blocking Gate gap，或全部事实已支持。
 
@@ -1255,7 +1273,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/template_holder_fill.py` | selected PhotoGroupOuter 与 W-only fill assessment |
 | `photo_geometry/content_*.py` | 最终 post-bleed polygon 上的二维 negative veto |
 | `photo_geometry/template_feasible_geometry.py` | selected placement 的低维联合可行集合 |
-| `photo_geometry/template_output.py`、`output_model.py` | JointPlacementEnvelope、基础 bleed、Contact/Overlap 两侧 topology protection、OutputFootprint 与同一 5% budget |
+| `photo_geometry/template_output.py`、`output_model.py` | JointPlacementEnvelope、基础 bleed、Contact/Overlap 两侧 topology protection、enclosing-support aperture-center risk、OutputFootprint 与同一 5% budget |
 | `photo_geometry/template_runtime_model.py`、`template_gate.py`、`detector.py` | current-only handoff、CandidateGate facts 与顶层编排 |
 | `x5crop/detection/output_deskew.py` | approved-only 6–24 trace、role-free、candidate-independent 的可选输出角度 observation |
 | `x5crop/detection/decision/`、`final/` | 最终决定、Decision 后 deskew assessment 与 approved geometry exposure |

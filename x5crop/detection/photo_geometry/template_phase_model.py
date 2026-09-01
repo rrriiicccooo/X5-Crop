@@ -555,6 +555,9 @@ class PhaseFitResult:
     runner_phase_candidate_authority_projection: (
         PhaseCandidateAuthorityProjection | None
     ) = None
+    eliminated_candidate_authority_projections: tuple[
+        PhaseCandidateAuthorityProjection, ...
+    ] = ()
     global_lattice_authority: GlobalLatticeAuthority | None = None
     calibrated_nominal_grid_evidence: (
         CalibratedNominalGridEvidence | None
@@ -606,6 +609,18 @@ class PhaseFitResult:
             )
         ):
             raise TypeError("runner phase-candidate authority projection is invalid")
+        if (
+            len(self.eliminated_candidate_authority_projections) > 2
+            or any(
+                not isinstance(item, PhaseCandidateAuthorityProjection)
+                or item.outcome
+                != PhaseCandidateProjectionOutcome.DIRECT_ROLE_CONTRADICTION
+                for item in self.eliminated_candidate_authority_projections
+            )
+        ):
+            raise ValueError(
+                "eliminated phase-candidate authority ledger is invalid"
+            )
         if (
             self.best is None
             and self.best_phase_candidate_authority_projection is not None

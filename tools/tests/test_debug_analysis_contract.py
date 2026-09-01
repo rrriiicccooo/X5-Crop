@@ -568,6 +568,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
                                 )
                             ),
                             runner_phase_candidate_authority_projection=None,
+                            eliminated_candidate_authority_projections=(),
                         ),
                         cross_competition=SimpleNamespace(
                             runner_up=None,

@@ -705,7 +705,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         self.assertTrue(assessment.enclosing_support_within_limit)
 
-    def test_support_position_uncertainty_is_not_alignment_padding(self) -> None:
+    def test_unknown_aperture_center_spends_the_same_per_side_budget(self) -> None:
         placement = _enclosing_support_placement(
             support_span_px=248.0,
             support_position_uncertainty_px=2.0,
@@ -722,13 +722,15 @@ class TemplateOutputContractTest(unittest.TestCase):
         edges = {item.role: item for item in assessment.edge_assessments}
         cross_limit = edges[BoundaryRole.TOP].limit_mm
 
-        self.assertGreater(
-            edges[BoundaryRole.TOP].expansion_mm
-            + edges[BoundaryRole.BOTTOM].expansion_mm,
-            cross_limit,
+        assert output.enclosing_support_aperture_risk is not None
+        self.assertEqual(
+            output.enclosing_support_aperture_risk.maximum_center_shift_px,
+            6.0,
         )
-        self.assertTrue(edges[BoundaryRole.TOP].within_limit)
-        self.assertTrue(edges[BoundaryRole.BOTTOM].within_limit)
+        self.assertEqual(edges[BoundaryRole.TOP].expansion_px, 13.0)
+        self.assertEqual(edges[BoundaryRole.BOTTOM].expansion_px, 13.0)
+        self.assertFalse(edges[BoundaryRole.TOP].within_limit)
+        self.assertFalse(edges[BoundaryRole.BOTTOM].within_limit)
         self.assertLessEqual(
             assessment.maximum_same_state_cross_alignment_padding_mm,
             cross_limit,
@@ -736,7 +738,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         self.assertTrue(
             assessment.maximum_same_state_cross_alignment_padding_within_limit
         )
-        self.assertEqual(assessment.state, EvidenceState.SUPPORTED)
+        self.assertEqual(assessment.state, EvidenceState.CONTRADICTED)
 
     def test_same_state_cross_alignment_padding_has_one_joint_limit(self) -> None:
         placement = _enclosing_support_placement(

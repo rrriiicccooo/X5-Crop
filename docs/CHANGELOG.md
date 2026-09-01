@@ -112,9 +112,23 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   trace 与同一状态直线，超出实测域时只增加 observed direction 相对该状态 slope 的差值；不再把已经进入
   footprint 的绝对斜率重复计入 local protection。最小斜线反例、100 项相关合同测试与完整 110-task 黄金
   验证通过；auto/candidate 分布不变，危险自动批准仍为 0，说明真实超预算继续 Review，而重复预算已移除。
+- Separator pair 的权限改为有序 `END → material → START`，不再把同一两条 edge 的正反序解释合并。
+  Selected-only refinement 若较晚补出精确反序绑定，会以 typed `direct_role_contradiction` 淘汰当前
+  candidate；只允许同一 bounded competition 中已完成权限评估的 runner 晋升，精确非法 role/edge 不得
+  再绑定。仍获授权的 local refinement 保持离散 identity。该机制最多评估两个 selected fit，不新增查询、
+  detector、候选或 score。
+- `ENCLOSING_SUPPORT_PAIR` 现在显式计算未知 aperture 中心的最坏风险。Support 只证明 fixed `H` 位于两条
+  边之间，不能证明居中；每个联合可行状态分别把 requested footprint 与该状态内最不利的 top/bottom
+  aperture 位置比较，结果由 `EnclosingSupportApertureRisk` 进入原有逐侧 5% 预算。它不修改输出 polygon，
+  也不混合互斥状态。该检查阻止了 S012 的危险自动批准，并让 S059 在中心权限不足时安全 Review；S091、
+  S095 仍安全 auto。
+- Report revision 更新为 `x5crop_v5_template_report_45`。完整 development gold 为 110/110、分析错误 0、
+  `unsafe_approved_auto = 0`；15 个安全 auto、95 个安全 Review。Candidate 为 70 unavailable / 21 safe /
+  19 unsafe；S026 的反序 candidate 被精确淘汰后，真实 root 迁移为缺少显式 OverlapRelation 的
+  `fixed_template_mismatch`。Development diagnostic mean 为 3.974 秒，不冒充正式 performance receipt。
 - 对 96 个 nominal 的同源机制对照显示：v4.2.8 有 80 个 auto，但其中 70 个是黄金危险自动裁切；只有
   11 个 v4 geometry 安全。v4 安全而 V5 Review 的 9 个 task 是下一步能力迁移样本，当前分别落在
-  aspect/cross、fixed-template、direct-role、Grid conflict、continuity、phase ambiguity 与 output budget
+  aspect/cross、fixed-template/topology、content veto、Grid conflict、phase ambiguity 与 output budget
   等 typed root；不能据此恢复旧终判。当前 V5 有 20 个安全 nominal candidate，其中没有“双方 geometry 都安全但
   仅因 Grid direct-rank 权限而 Review”的遗留项，说明本阶段已把默认生成权限与后续安全阻断分开。
 - 直接观察到的 start/end 在最终 placement 中保留 native coordinate 与完整 interval；Grid 只补齐缺失

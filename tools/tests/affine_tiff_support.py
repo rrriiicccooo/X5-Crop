@@ -93,6 +93,7 @@ def sampling_footprint(authority: Box) -> OutputFootprint:
             )
         ),
         maximum_same_state_cross_alignment_padding_px=None,
+        enclosing_support_aperture_risk=None,
         saturation_facts=(),
         sampling_authority_box=authority,
         authority_profile_id="sampling-fixture",

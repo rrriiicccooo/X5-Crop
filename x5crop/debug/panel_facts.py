@@ -98,6 +98,13 @@ def selection_summary(detection: FinalDetection) -> str:
         .candidate_direct_role_authority_terminal_count
         for item in lanes
     )
+    eliminated_candidates = sum(
+        len(
+            item.prepared.phase_competition
+            .eliminated_candidate_authority_projections
+        )
+        for item in lanes
+    )
     projection_evaluations = sum(
         item.prepared.phase_competition.receipt
         .candidate_direct_role_projection_evaluation_count
@@ -118,6 +125,7 @@ def selection_summary(detection: FinalDetection) -> str:
     bounded = any(item.work.bound_exceeded for item in lanes)
     return (
         f"PHASE {phase} · AUTH {authority_evaluations}/{authority_terminals} TERMINAL · "
+        f"ELIM {eliminated_candidates} · "
         f"PROJECT {projection_evaluations}/{projection_successes} · "
         f"DROP {projected_bindings} · "
         f"PLACEMENTS {placements} · SELECTED {selected} · "
@@ -177,6 +185,22 @@ def competition_summary(detection: FinalDetection) -> str:
                     phase_competition.runner_up,
                     runner_projection,
                 )
+            )
+        for projection in (
+            phase_competition.eliminated_candidate_authority_projections
+        ):
+            conflicted_roles = ",".join(
+                f"F{item.role_index // 2 + 1}"
+                f"{'S' if item.role_index % 2 == 0 else 'E'}"
+                for item in projection.input_direct_role_authority.facts
+                if item.state.value == "contradicted"
+            ) or "NONE"
+            phase_projection_states.add(
+                "ELIM "
+                + projection.outcome.value.upper()
+                + " ["
+                + conflicted_roles
+                + "]"
             )
         cross_basis = lane.prepared.cross_competition.winner_basis
         if cross_basis is not None:
@@ -580,6 +604,19 @@ def selected_output_safety_summary(detection: FinalDetection) -> str:
     topology_side_count = sum(
         item.topology_relation_id is not None for item in protections
     )
+    enclosing_center_risk = max(
+        (
+            float(output.enclosing_support_aperture_risk.maximum_center_shift_px)
+            for output in outputs
+            if output.enclosing_support_aperture_risk is not None
+        ),
+        default=0.0,
+    )
+    enclosing_risk = (
+        ""
+        if enclosing_center_risk == 0.0
+        else f" · ENC CENTER ±{enclosing_center_risk:.1f}px"
+    )
     maximum = "N/A" if not ratios else f"{100.0 * max(ratios):.1f}%"
     source_saturations = tuple(
         fact
@@ -609,7 +646,7 @@ def selected_output_safety_summary(detection: FinalDetection) -> str:
         f"RESIDUAL {residual:.1f}px · BLEED S{sequence_bleed:.1f}/"
         f"C{cross_bleed:.1f}px · TOPOLOGY {topology_protection:.1f}px/"
         f"{topology_side_count} SIDES · MAX 5% BUDGET USE {maximum}"
-        f"{saturation}"
+        f"{enclosing_risk}{saturation}"
     )
 
 

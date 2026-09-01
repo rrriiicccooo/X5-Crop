@@ -287,6 +287,42 @@ class BoundaryProtectionFact:
 
 
 @dataclass(frozen=True)
+class EnclosingSupportApertureRisk:
+    """Worst same-state output distance from any enclosed aperture center.
+
+    An enclosing pair proves that the aperture is inside two material
+    supports, but it does not prove that the aperture is centered between
+    them.  ``top_expansion_px`` and ``bottom_expansion_px`` therefore measure
+    the requested output against the most adverse canonical-H placement still
+    contained by each feasible support state.  They are safety distances, not
+    mutations of the output polygon.
+    """
+
+    canonical_height_px: float
+    maximum_center_shift_px: float
+    top_expansion_px: float
+    bottom_expansion_px: float
+    feasible_state_count: int
+
+    def __post_init__(self) -> None:
+        values = (
+            self.canonical_height_px,
+            self.maximum_center_shift_px,
+            self.top_expansion_px,
+            self.bottom_expansion_px,
+        )
+        if (
+            any(not math.isfinite(value) for value in values)
+            or self.canonical_height_px <= 0.0
+            or self.maximum_center_shift_px < 0.0
+            or self.top_expansion_px < 0.0
+            or self.bottom_expansion_px < 0.0
+            or self.feasible_state_count <= 0
+        ):
+            raise ValueError("enclosing-support aperture risk is invalid")
+
+
+@dataclass(frozen=True)
 class OutputFootprint:
     """Final selected-frame source requirement and its source-edge contract.
 
@@ -308,6 +344,7 @@ class OutputFootprint:
     required_source_footprint: ConvexPolygon
     boundary_protections: tuple[BoundaryProtectionFact, ...]
     maximum_same_state_cross_alignment_padding_px: float | None
+    enclosing_support_aperture_risk: EnclosingSupportApertureRisk | None
     saturation_facts: tuple[FootprintSaturationFact, ...]
     sampling_authority_box: Box
     authority_profile_id: str
@@ -345,8 +382,12 @@ class OutputFootprint:
         )
         if support != (
             self.maximum_same_state_cross_alignment_padding_px is not None
+        ) or support != (
+            self.enclosing_support_aperture_risk is not None
         ):
-            raise ValueError("same-state cross padding requires enclosing support")
+            raise ValueError(
+                "same-state cross risk requires enclosing support"
+            )
         if support and (
             not math.isfinite(
                 float(self.maximum_same_state_cross_alignment_padding_px)

@@ -14,6 +14,7 @@ from ...geometry.convex import (
 from ...run_local_identity import run_local_id
 from ..source_core import SourceLaneEvidence
 from .boundary_geometry import boundary_line_at_state
+from .line_observations import SourceCoordinateLine
 from .template_feasible_geometry import (
     FeasiblePlacementProjection,
     JointFrameState,
@@ -27,6 +28,7 @@ from .output_model import (
     BoundaryProtectionFact,
     DirectUseBudgetAssessment,
     DirectUseBudgetEdgeAssessment,
+    EnclosingSupportApertureRisk,
     FootprintSaturationFact,
     FootprintSaturationKind,
     FrameBoundaryGeometry,
@@ -60,6 +62,93 @@ def _frame(placement: FormatPlacement, lane_ordinal: int) -> TemplateFrame:
     return frame
 
 
+def _state_footprint(
+    placement: FormatPlacement,
+    frame: TemplateFrame,
+    state: JointFrameState,
+    *,
+    apply_residual: bool = False,
+    apply_bleed: bool = False,
+) -> ConvexPolygon:
+    """Materialize one feasible state's four boundary intersections."""
+
+    if apply_bleed and not apply_residual:
+        raise ValueError("product bleed cannot omit mandatory residual protection")
+    boundaries = _canonical_boundaries(frame)
+    points: list[tuple[float, float]] = []
+    if apply_residual:
+        residuals = _state_boundary_residuals(
+            placement,
+            frame,
+            state,
+        )
+        bleeds = (
+            _state_bleed_px(
+                placement,
+                state,
+                placement.cross_fit.boundary_use,
+            )
+            if apply_bleed
+            else {role: 0.0 for role in _ROLES}
+        )
+        topology_protections = (
+            _state_topology_protection_px(
+                placement,
+                frame,
+                state,
+            )[0]
+            if apply_bleed
+            else {role: 0.0 for role in _ROLES}
+        )
+        expansions = {
+            role: (
+                residuals[role]
+                + bleeds[role]
+                + topology_protections[role]
+            )
+            for role in _ROLES
+        }
+    else:
+        expansions = {role: 0.0 for role in _ROLES}
+    positions = {
+        BoundaryRole.START: (
+            state.sequence_start_px
+            - placement.sequence_fit.template.direction
+            * expansions[BoundaryRole.START]
+        ),
+        BoundaryRole.END: (
+            state.sequence_end_px
+            + placement.sequence_fit.template.direction
+            * expansions[BoundaryRole.END]
+        ),
+        BoundaryRole.TOP: (
+            state.top_at_lane_reference_px
+            - expansions[BoundaryRole.TOP]
+        ),
+        BoundaryRole.BOTTOM: (
+            state.bottom_at_lane_reference_px
+            + expansions[BoundaryRole.BOTTOM]
+        ),
+    }
+    for cross_role, sequence_role in (
+        (BoundaryRole.TOP, BoundaryRole.START),
+        (BoundaryRole.TOP, BoundaryRole.END),
+        (BoundaryRole.BOTTOM, BoundaryRole.END),
+        (BoundaryRole.BOTTOM, BoundaryRole.START),
+    ):
+        cross_line = boundary_line_at_state(
+            boundaries[cross_role],
+            position_px=positions[cross_role],
+            enclosing_support_slope=state.enclosing_support_slope,
+        )
+        sequence_line = boundary_line_at_state(
+            boundaries[sequence_role],
+            position_px=positions[sequence_role],
+        )
+        points.append(cross_line.intersection(sequence_line))
+    return convex_hull(tuple(points))
+
+
 def _footprint(
     placement: FormatPlacement,
     frame: TemplateFrame,
@@ -72,83 +161,19 @@ def _footprint(
 
     if projection.placement_id != placement.placement_id:
         raise ValueError("joint projection belongs to another placement")
-    if apply_bleed and not apply_residual:
-        raise ValueError("product bleed cannot omit mandatory residual protection")
-    states = projection.frame_states[frame.lane_ordinal - 1]
-    boundaries = _canonical_boundaries(frame)
-    points: list[tuple[float, float]] = []
-    for state in states:
-        if apply_residual:
-            residuals = _state_boundary_residuals(
+    return convex_hull(
+        tuple(
+            point
+            for state in projection.frame_states[frame.lane_ordinal - 1]
+            for point in _state_footprint(
                 placement,
                 frame,
                 state,
+                apply_residual=apply_residual,
+                apply_bleed=apply_bleed,
             )
-            bleeds = (
-                _state_bleed_px(
-                    placement,
-                    state,
-                    placement.cross_fit.boundary_use,
-                )
-                if apply_bleed
-                else {role: 0.0 for role in _ROLES}
-            )
-            topology_protections = (
-                _state_topology_protection_px(
-                    placement,
-                    frame,
-                    state,
-                )[0]
-                if apply_bleed
-                else {role: 0.0 for role in _ROLES}
-            )
-            expansions = {
-                role: (
-                    residuals[role]
-                    + bleeds[role]
-                    + topology_protections[role]
-                )
-                for role in _ROLES
-            }
-        else:
-            expansions = {role: 0.0 for role in _ROLES}
-        positions = {
-            BoundaryRole.START: (
-                state.sequence_start_px
-                - placement.sequence_fit.template.direction
-                * expansions[BoundaryRole.START]
-            ),
-            BoundaryRole.END: (
-                state.sequence_end_px
-                + placement.sequence_fit.template.direction
-                * expansions[BoundaryRole.END]
-            ),
-            BoundaryRole.TOP: (
-                state.top_at_lane_reference_px
-                - expansions[BoundaryRole.TOP]
-            ),
-            BoundaryRole.BOTTOM: (
-                state.bottom_at_lane_reference_px
-                + expansions[BoundaryRole.BOTTOM]
-            ),
-        }
-        for cross_role, sequence_role in (
-            (BoundaryRole.TOP, BoundaryRole.START),
-            (BoundaryRole.TOP, BoundaryRole.END),
-            (BoundaryRole.BOTTOM, BoundaryRole.END),
-            (BoundaryRole.BOTTOM, BoundaryRole.START),
-        ):
-            cross_line = boundary_line_at_state(
-                boundaries[cross_role],
-                position_px=positions[cross_role],
-                enclosing_support_slope=state.enclosing_support_slope,
-            )
-            sequence_line = boundary_line_at_state(
-                boundaries[sequence_role],
-                position_px=positions[sequence_role],
-            )
-            points.append(cross_line.intersection(sequence_line))
-    return convex_hull(tuple(points))
+        )
+    )
 
 
 def _maximum_same_state_cross_alignment_padding_px(
@@ -169,6 +194,109 @@ def _maximum_same_state_cross_alignment_padding_px(
         for residuals in (
             _state_boundary_residuals(placement, frame, state),
         )
+    )
+
+
+def _line_outward_expansion_px(
+    line: SourceCoordinateLine,
+    role: BoundaryRole,
+    footprint: ConvexPolygon,
+) -> float:
+    projections = tuple(
+        line.normal_x * x + line.normal_y * y for x, y in footprint
+    )
+    if role == BoundaryRole.TOP:
+        return max(0.0, line.offset_px - min(projections))
+    if role == BoundaryRole.BOTTOM:
+        return max(0.0, max(projections) - line.offset_px)
+    raise ValueError("aperture risk requires one cross role")
+
+
+def _enclosing_support_aperture_risk(
+    placement: FormatPlacement,
+    frame: TemplateFrame,
+    projection: FeasiblePlacementProjection,
+) -> EnclosingSupportApertureRisk | None:
+    """Bound output against every canonical-H position inside one support.
+
+    The support lines themselves are observed, but the aperture center is not.
+    For each retained support state, the top aperture can lie as far inward as
+    ``bottom - H`` and the bottom aperture as far inward as ``top + H``.  The
+    requested output and the adverse aperture position are evaluated in the
+    same state so unrelated extrema are never added.
+    """
+
+    if (
+        placement.cross_fit.boundary_use
+        != OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
+    ):
+        return None
+    states = projection.frame_states[frame.lane_ordinal - 1]
+    canonical_height = (
+        placement.cross_fit.bottom_canonical_px
+        - placement.cross_fit.top_canonical_px
+    )
+    boundaries = _canonical_boundaries(frame)
+    top_expansion = 0.0
+    bottom_expansion = 0.0
+    center_shift = 0.0
+    for state in states:
+        span = (
+            state.bottom_at_lane_reference_px
+            - state.top_at_lane_reference_px
+        )
+        if span < canonical_height - 1.0e-8:
+            raise ValueError("enclosing support state does not contain H")
+        center_shift = max(
+            center_shift,
+            0.5 * max(0.0, span - canonical_height),
+        )
+        requested = _state_footprint(
+            placement,
+            frame,
+            state,
+            apply_residual=True,
+            apply_bleed=True,
+        )
+        slope = state.enclosing_support_slope
+        if slope is None:
+            raise ValueError("enclosing support state lost its shared slope")
+        top_line = boundary_line_at_state(
+            boundaries[BoundaryRole.TOP],
+            position_px=(
+                state.bottom_at_lane_reference_px - canonical_height
+            ),
+            enclosing_support_slope=slope,
+        )
+        bottom_line = boundary_line_at_state(
+            boundaries[BoundaryRole.BOTTOM],
+            position_px=(
+                state.top_at_lane_reference_px + canonical_height
+            ),
+            enclosing_support_slope=slope,
+        )
+        top_expansion = max(
+            top_expansion,
+            _line_outward_expansion_px(
+                top_line,
+                BoundaryRole.TOP,
+                requested,
+            ),
+        )
+        bottom_expansion = max(
+            bottom_expansion,
+            _line_outward_expansion_px(
+                bottom_line,
+                BoundaryRole.BOTTOM,
+                requested,
+            ),
+        )
+    return EnclosingSupportApertureRisk(
+        canonical_height_px=canonical_height,
+        maximum_center_shift_px=center_shift,
+        top_expansion_px=top_expansion,
+        bottom_expansion_px=bottom_expansion,
+        feasible_state_count=len(states),
     )
 
 
@@ -741,6 +869,11 @@ def output_footprint_from_template_placement(
             projection,
         )
     )
+    enclosing_support_aperture_risk = _enclosing_support_aperture_risk(
+        placement,
+        frame,
+        projection,
+    )
     return OutputFootprint(
         geometry_id=run_local_id(
             "template-output-footprint",
@@ -754,6 +887,9 @@ def output_footprint_from_template_placement(
         boundary_protections=protections,
         maximum_same_state_cross_alignment_padding_px=(
             maximum_same_state_cross_alignment_padding_px
+        ),
+        enclosing_support_aperture_risk=(
+            enclosing_support_aperture_risk
         ),
         saturation_facts=saturation,
         sampling_authority_box=authority,
@@ -804,9 +940,22 @@ def template_direct_use_budget_assessment(
         output.envelope.boundary_use
         == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
     )
+    support_risk = output.enclosing_support_aperture_risk
+    if support_output != (support_risk is not None):
+        raise ValueError("output lost its enclosing-aperture risk")
+    expansion_px = {
+        role: (
+            support_risk.top_expansion_px
+            if support_risk is not None and role == BoundaryRole.TOP
+            else support_risk.bottom_expansion_px
+            if support_risk is not None and role == BoundaryRole.BOTTOM
+            else protections[role].joint_expansion_px
+        )
+        for role in _ROLES
+    }
     expansion_mm = {
         role: states[role].worst_case_mm(
-            protections[role].joint_expansion_px
+            expansion_px[role]
         )
         for role in _ROLES
     }
@@ -820,7 +969,7 @@ def template_direct_use_budget_assessment(
     edge_assessments = tuple(
         DirectUseBudgetEdgeAssessment(
             role=role,
-            expansion_px=protections[role].joint_expansion_px,
+            expansion_px=expansion_px[role],
             expansion_mm=expansion_mm[role],
             limit_mm=limit_mm[role],
             limit_applies=True,
