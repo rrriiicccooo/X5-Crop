@@ -11,15 +11,18 @@ from .measurement_model import PhotoBoundaryMeasurementSet
 from .model import BoundaryRole, PHOTO_BOUNDARY_MEASUREMENT_SPEC
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_contact import ContactEdgeObservation
+from .template_overlap import OverlapEdgePairObservation
 from .template_model import (
     AdjacencyRelation,
     ContactRelation,
     FrameWidthInferenceFailureKind,
     LatticeParameterFitBasis,
+    OverlapRelation,
     SequenceFit,
     SequenceRoleBinding,
     TemplateSearchReceipt,
     TemplateSpec,
+    adjacency_topology_required_bindings,
     most_constrained_lattice_parameter_fit_basis,
     ordered_template_roles,
 )
@@ -31,6 +34,7 @@ from .template_phase_candidates import (
     _facts,
     _fit_seed,
     _holder_limits,
+    _overlap_phase_seeds,
     _positive,
     _prefixes,
     project_candidate_to_authorized_direct_roles,
@@ -92,13 +96,19 @@ def _intervals_overlap(left: FiniteInterval, right: FiniteInterval) -> bool:
     )
 
 
-def _contact_topology_signature(
+def _topology_signature(
     fit: SequenceFit,
-) -> tuple[tuple[int, ObservationId], ...]:
+) -> tuple[tuple[str, int, ObservationId], ...]:
     return tuple(
-        (relation.relation_ordinal, relation.contact_observation_id)
+        (
+            relation.kind.value,
+            relation.relation_ordinal,
+            relation.contact_observation_id
+            if isinstance(relation, ContactRelation)
+            else relation.overlap_observation_id,
+        )
         for relation in fit.adjacency_relations
-        if isinstance(relation, ContactRelation)
+        if isinstance(relation, (ContactRelation, OverlapRelation))
     )
 
 
@@ -394,6 +404,9 @@ def fit_template_phase(
     phase_authority_px: FiniteInterval | None = None,
     adjacency_relations: Sequence[AdjacencyRelation] = (),
     contact_edge_observations: Sequence[ContactEdgeObservation] = (),
+    overlap_edge_pair_observations: Sequence[
+        OverlapEdgePairObservation
+    ] = (),
     sequence_measurement_sets: Sequence[PhotoBoundaryMeasurementSet] = (),
     calibrated_nominal_grid_prior: CalibratedNominalGridPrior | None = None,
     max_observations: int = 512,
@@ -431,6 +444,12 @@ def fit_template_phase(
         for item in contact_edges
     ):
         raise TypeError("phase contact observations must be typed")
+    overlap_pairs = tuple(overlap_edge_pair_observations)
+    if any(
+        not isinstance(item, OverlapEdgePairObservation)
+        for item in overlap_pairs
+    ):
+        raise TypeError("phase overlap observations must be typed")
     base = TemplateSearchReceipt(
         observation_count=len(facts),
         role_count=len(roles),
@@ -508,8 +527,27 @@ def fit_template_phase(
         tuple[float, float, tuple[AdjacencyRelation, ...]],
         _PhaseSeed | None,
     ] = {}
+    topology_required_bindings = adjacency_topology_required_bindings(
+        relations
+    )
 
     def register_seed(seed: _PhaseSeed) -> None:
+        if topology_required_bindings:
+            try:
+                seed = replace(
+                    seed,
+                    required_bindings=tuple(
+                        sorted(
+                            {
+                                *seed.required_bindings,
+                                *topology_required_bindings,
+                            },
+                            key=lambda item: (item[0], str(item[1])),
+                        )
+                    ),
+                )
+            except ValueError:
+                return
         key = (seed.phase_px, seed.pitch_px, seed.adjacency_relations)
         if key not in seed_values:
             seed_values[key] = seed
@@ -542,7 +580,10 @@ def fit_template_phase(
     existing_contact = any(
         isinstance(item, ContactRelation) for item in relations
     )
-    ordinary_topology = not existing_contact
+    existing_overlap = any(
+        isinstance(item, OverlapRelation) for item in relations
+    )
+    ordinary_topology = not (existing_contact or existing_overlap)
     if ordinary_topology:
         for seed in _separator_phase_seeds(
                 phase_separator_bands,
@@ -557,6 +598,17 @@ def fit_template_phase(
     if not relations or existing_contact:
         for seed in _contact_phase_seeds(
             contact_edges,
+            direct,
+            roles,
+            template,
+            width=width,
+            pitch=pitch_authority,
+            base_relations=relations,
+        ):
+            register_seed(seed)
+    if not relations or existing_overlap:
+        for seed in _overlap_phase_seeds(
+            overlap_pairs,
             direct,
             roles,
             template,
@@ -1111,25 +1163,25 @@ def fit_template_phase(
         failure_kind = None
     else:
         status = PhaseFitStatus.AMBIGUOUS
-        contact_topology_ambiguous = (
+        topology_ambiguous = (
             runner is not None
-            and _contact_topology_signature(best.fit)
-            != _contact_topology_signature(runner.fit)
+            and _topology_signature(best.fit)
+            != _topology_signature(runner.fit)
             and bool(
-                _contact_topology_signature(best.fit)
-                or _contact_topology_signature(runner.fit)
+                _topology_signature(best.fit)
+                or _topology_signature(runner.fit)
             )
         )
         reason = (
-            "multiple physically legal contact topologies remain"
-            if contact_topology_ambiguous
+            "multiple physically legal adjacency topologies remain"
+            if topology_ambiguous
             else "higher-support direct evidence contradicts the selected fixed template"
             if contradictory_runner is not None
             else "runner-up is not clearly separated from the best template"
         )
         failure_kind = (
             PhaseFailureKind.ADJACENCY_TOPOLOGY_AMBIGUOUS
-            if contact_topology_ambiguous
+            if topology_ambiguous
             else PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS
         )
     return PhaseFitResult(
@@ -1362,6 +1414,7 @@ def _attach_selected_candidate_authorities(
             phase_input.observations,
             phase_input.separator_bands,
             coverage,
+            phase_input.overlap_edge_pair_observations,
         )
     )
     outer_authority = (
@@ -1528,15 +1581,6 @@ def _apply_final_lattice_contract(
     continuity = result.adjacency_continuity_observations
     outer_authority = result.outer_frame_observation_authority
     inferred = tuple(item for item in coverage if item.normal_inference_required)
-    topology_counterevidence = next(
-        (
-            item
-            for item in continuity
-            if item.kind
-            == AdjacencyContinuityKind.NORMAL_SEPARATOR_COUNTEREVIDENCE
-        ),
-        None,
-    )
     continuity_unresolved = next(
         (
             item
@@ -1545,28 +1589,18 @@ def _apply_final_lattice_contract(
         ),
         None,
     )
-    if result.status == PhaseFitStatus.RESOLVED and (
-        topology_counterevidence is not None
-        or continuity_unresolved is not None
+    if (
+        result.status == PhaseFitStatus.RESOLVED
+        and continuity_unresolved is not None
     ):
-        blocker = (
-            topology_counterevidence
-            if topology_counterevidence is not None
-            else continuity_unresolved
-        )
-        assert blocker is not None
         return replace(
             result,
             status=PhaseFitStatus.UNRESOLVED,
             ambiguity_reason=(
-                blocker.reason
-                or "an adjacency contradicts an ordinary separator"
+                continuity_unresolved.reason
+                or "adjacency continuity is unresolved"
             ),
-            failure_kind=(
-                PhaseFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED
-                if topology_counterevidence is not None
-                else PhaseFailureKind.ADJACENCY_CONTINUITY_UNRESOLVED
-            ),
+            failure_kind=PhaseFailureKind.ADJACENCY_CONTINUITY_UNRESOLVED,
             winner_basis=None,
         )
     if (
@@ -1718,6 +1752,9 @@ def fit_template_phase_candidate_with_adjacency_relations(
         holder_span_px=holder_span_px,
         phase_authority_px=phase_authority_px,
         contact_edge_observations=phase_input.contact_edge_observations,
+        overlap_edge_pair_observations=(
+            phase_input.overlap_edge_pair_observations
+        ),
         sequence_measurement_sets=phase_input.sequence_measurement_sets,
         calibrated_nominal_grid_prior=(
             phase_input.calibrated_nominal_grid_prior
@@ -1759,6 +1796,7 @@ def fit_template_phase_candidate_with_adjacency_relations(
         ),
         separator_bands,
         initial_coverage,
+        phase_input.overlap_edge_pair_observations,
     )
 
     analysis = derive_adjacency_relations(
@@ -1827,6 +1865,9 @@ def fit_template_phase_candidate_with_adjacency_relations(
         phase_authority_px=phase_authority_px,
         adjacency_relations=analysis.relations,
         contact_edge_observations=phase_input.contact_edge_observations,
+        overlap_edge_pair_observations=(
+            phase_input.overlap_edge_pair_observations
+        ),
         sequence_measurement_sets=phase_input.sequence_measurement_sets,
         calibrated_nominal_grid_prior=(
             phase_input.calibrated_nominal_grid_prior

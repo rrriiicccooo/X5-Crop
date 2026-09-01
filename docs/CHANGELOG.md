@@ -8,6 +8,11 @@
 
 V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行 detector 只保存在 Git history。
 
+发布验收现在明确分为两层：检测能力要求当前 development nominal 全部安全 `approved_auto` 且全部角色
+`unsafe_approved_auto = 0`，challenge 的安全 auto 或安全 review 都合格；工程能力另行要求正式性能、
+TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 sealed cohort，以及黄金未覆盖 `xpan`、
+`120-645`、`135-dual`，都只作为未见/真实样片覆盖事实披露，不阻断首版发布，也不改变统一 Runtime 合同。
+
 ### 产品行为
 
 - 用户提供 format，并确认匹配片夹的默认 count 或显式 count；count 包含中间空白曝光格。Runtime 不猜
@@ -30,19 +35,27 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   TIFF 读取，不建立 enhanced detector、第二 geometry 或 score。
 - Selected placement 现在由 `AdjacencyContinuityObservation` 为每个 adjacency 建立唯一 typed ledger。
   唯一正序 separator band 可以授权实测 local advance；完整 corridor 但无反证只保留正常 Grid，不能
-  冒充直接 separator；material unavailable、band/角色冲突、跨零 gap 与非正 gap 分别保留独立状态。
+  冒充直接 separator；material unavailable、band/角色冲突、跨零 gap、未登记反序 edge pair 与 coverage
+  不完整分别保留独立状态。
   普通 adjacency 的歧义和拓扑反证通过专用 Gate reason 安全 review。该映射只复用已登记事实，不新增
   TIFF 读取、低梯度 detector 或 winner-specific query。
-- `AdjacencyRelation` 现在显式区分 `SeparatorRelation` 与 `ContactRelation`。Candidate-independent
+- `AdjacencyRelation` 现在显式区分 `SeparatorRelation`、`ContactRelation` 与 `OverlapRelation`。Candidate-independent
   `ContactEdgeObservation` 只接受具有独立坐标权限、未被正 separator material 拥有且没有另一条重叠
   authoritative identity 的物理边；phase solver 把同一 edge 原子绑定为前一 Frame END 与后一 Frame
   START，并以 `delta = W - pitch` 进入原有 O(count) prefix。走廊不完整、多个 physical identity 或多种
-  ordinal 映射保持 typed review；两条独立反序边仍是尚未闭合的 overlap，不能冒充 contact。Contact
-  相邻 Frame 不参加 source W 独立支撑，避免共享线自证 W。
-- 已证明 Contact 的输出只在前一 Frame END 与后一 Frame START 增加一份同状态 sequence base bleed 作为
+  ordinal 映射保持 typed review；反序边不能冒充 Contact。
+  Candidate-independent `OverlapEdgePairObservation` 只登记空间相邻、角色相反、physical identity 独立且
+  具有直接坐标权限的反序 END/START，不读取新像素或携带 ordinal。Phase solver 在有限合法 adjacency 中
+  绑定同一 pair；完整 coverage、无 separator 竞争且严格负 signed gap 才形成 `OverlapRelation`，并以
+  `delta = W - pitch + signed_gap` 进入同一 prefix。Contact/Overlap 相邻 Frame 不参加 source W 独立支撑。
+- 已证明 Contact/Overlap 的输出只在前一 Frame END 与后一 Frame START 增加一份同状态 sequence base bleed 作为
   `topology_protection`，并继续消耗原有每侧 5% 总预算；其它边不变，预算或 containment 不成立时 review。
+  Overlap 只允许 relation 对应的两个物理 Frame polygon 重叠；其它重叠仍为 `fixed_template_mismatch`。短轴
+  evidence 在 overlap 中点分区，避免共享区域重复计票，输出 polygon 不被修改。
   Report/Debug 分开保存 relation identity、基础 bleed、topology protection、uncertainty 与 residual。
-  Report revision 更新为 `x5crop_v5_template_report_35`，不保留旧 schema 兼容路径。
+  Report revision 更新为 `x5crop_v5_template_report_36`，不保留旧 schema 兼容路径。
+  110 个 development task 的完整机制验收完成且无分析错误：19 个安全 auto、91 个安全 review、
+  `unsafe_approved_auto = 0`；14 个 challenge 当前均安全 review，没有用异常拓扑换取错误放行。
 - 直接观察到的 start/end 在最终 placement 中保留 native coordinate 与完整 interval；Grid 只补齐缺失
   角色。同一连续 placement 的互补 endpoint evidence 合并为联合可行状态，不伪造 runner。唯一 placement
   中至少两张完整直接 Frame 可闭合 source W；当每个缺失 Frame 仍有一侧直接边缘时，同一份相关 W 可补

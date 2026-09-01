@@ -20,6 +20,7 @@ from .template_adjacency_topology import (
 from .template_model import (
     AdjacencyRelation,
     ContactRelation,
+    OverlapRelation,
     SeparatorRelationKind,
     SeparatorRelation,
     SequenceFit,
@@ -137,10 +138,15 @@ def derive_adjacency_relations(
     ):
         raise ValueError("adjacency continuity ledger is incomplete")
     facts: list[AdjacencyGapFact] = []
-    contacts_by_ordinal = {
+    topologies_by_ordinal = {
         item.relation_ordinal: item
         for item in fit.adjacency_relations
-        if isinstance(item, ContactRelation)
+        if isinstance(item, (ContactRelation, OverlapRelation))
+    }
+    overlap_observations_by_ordinal = {
+        item.relation_ordinal: item
+        for item in continuity_observations
+        if item.kind == AdjacencyContinuityKind.OVERLAP
     }
     for observation in continuity_observations:
         if observation.kind == AdjacencyContinuityKind.UNRESOLVED:
@@ -157,26 +163,10 @@ def derive_adjacency_relations(
                     or "adjacency continuity is unresolved"
                 ),
             )
-        if observation.kind == (
-            AdjacencyContinuityKind.NORMAL_SEPARATOR_COUNTEREVIDENCE
-        ):
-            return AdjacencyRelationAnalysis(
-                ResidualPattern.UNRESOLVED,
-                (),
-                tuple(facts),
-                evaluated,
-                failure_kind=(
-                    AdjacencyRelationFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED
-                ),
-                unresolved_reason=(
-                    "direct adjacency contradicts an ordinary positive "
-                    "separator; contact or overlap is not yet authorized"
-                ),
-            )
         if observation.kind == AdjacencyContinuityKind.CONTACT:
-            contact = contacts_by_ordinal.get(observation.relation_ordinal)
+            contact = topologies_by_ordinal.get(observation.relation_ordinal)
             if (
-                contact is None
+                not isinstance(contact, ContactRelation)
                 or observation.contact_observation_id
                 != contact.contact_observation_id
                 or observation.end_observation_id
@@ -191,6 +181,41 @@ def derive_adjacency_relations(
                     gap_interval_px=FiniteInterval.exact(0.0),
                     canonical_gap_px=0.0,
                     observation_ids=(contact.shared_edge_observation_id,),
+                    separator_band_id=None,
+                )
+            )
+            continue
+        if observation.kind == AdjacencyContinuityKind.OVERLAP:
+            gap = observation.signed_gap_interval_px
+            end_id = observation.end_observation_id
+            next_start_id = observation.next_start_observation_id
+            overlap_id = observation.overlap_observation_id
+            if (
+                gap is None
+                or gap.maximum >= 0.0
+                or end_id is None
+                or next_start_id is None
+                or end_id == next_start_id
+                or overlap_id is None
+            ):
+                raise ValueError("overlap continuity fact is incomplete")
+            selected = topologies_by_ordinal.get(
+                observation.relation_ordinal
+            )
+            if selected is not None and (
+                not isinstance(selected, OverlapRelation)
+                or selected.overlap_observation_id != overlap_id
+                or selected.end_edge_observation_id != end_id
+                or selected.next_start_edge_observation_id != next_start_id
+                or selected.signed_gap_interval_px != gap
+            ):
+                raise ValueError("overlap continuity changed selected topology")
+            facts.append(
+                AdjacencyGapFact(
+                    relation_ordinal=observation.relation_ordinal,
+                    gap_interval_px=gap,
+                    canonical_gap_px=gap.center,
+                    observation_ids=(end_id, next_start_id),
                     separator_band_id=None,
                 )
             )
@@ -224,7 +249,7 @@ def derive_adjacency_relations(
     separator_anomalies = tuple(
         fact
         for fact in ordered_facts
-        if fact.relation_ordinal not in contacts_by_ordinal
+        if fact.relation_ordinal not in topologies_by_ordinal
         if (
             fact.gap_interval_px.maximum < gap_prior.minimum
             or gap_prior.maximum < fact.gap_interval_px.minimum
@@ -233,7 +258,7 @@ def derive_adjacency_relations(
     anomaly_ordinals = tuple(
         sorted(
             {
-                *contacts_by_ordinal,
+                *topologies_by_ordinal,
                 *(item.relation_ordinal for item in separator_anomalies),
             }
         )
@@ -251,13 +276,50 @@ def derive_adjacency_relations(
     }
     relations: list[AdjacencyRelation] = []
     for ordinal in range(1, max(anomaly_ordinals) + 1):
-        contact = contacts_by_ordinal.get(ordinal)
-        if contact is not None:
-            relations.append(contact)
+        topology = topologies_by_ordinal.get(ordinal)
+        if topology is not None:
+            relations.append(topology)
             continue
         anomaly = anomalies_by_ordinal.get(ordinal)
         if anomaly is None:
             relations.append(_nominal_relation(ordinal))
+            continue
+        if (
+            anomaly.gap_interval_px.maximum < 0.0
+            and anomaly.separator_band_id is None
+        ):
+            width = fit.pitch_fit.frame_width_px
+            pitch = fit.pitch_fit.pitch_interval_px
+            delta = FiniteInterval(
+                anomaly.gap_interval_px.minimum
+                + width.minimum
+                - pitch.maximum,
+                anomaly.gap_interval_px.maximum
+                + width.maximum
+                - pitch.minimum,
+            )
+            canonical_delta = (
+                anomaly.canonical_gap_px
+                + fit.pitch_fit.canonical_frame_width_px
+                - fit.pitch_fit.canonical_pitch_px
+            )
+            relations.append(
+                OverlapRelation(
+                    relation_ordinal=ordinal,
+                    overlap_observation_id=(
+                        overlap_observations_by_ordinal[
+                            ordinal
+                        ].overlap_observation_id
+                    ),
+                    end_edge_observation_id=anomaly.observation_ids[0],
+                    next_start_edge_observation_id=anomaly.observation_ids[1],
+                    signed_gap_interval_px=anomaly.gap_interval_px,
+                    canonical_signed_gap_px=anomaly.canonical_gap_px,
+                    delta_interval_px=delta,
+                    canonical_delta_px=canonical_delta,
+                    supporting_observation_ids=anomaly.observation_ids,
+                )
+            )
             continue
         delta = _difference(anomaly.gap_interval_px, gap_prior)
         canonical_delta = anomaly.canonical_gap_px - gap_prior.center

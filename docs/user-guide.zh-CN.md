@@ -22,6 +22,10 @@ X5 Crop 用已知 format 的设计尺寸先验建立该 source 的有界物理�
 默认完整格数：135=6、half=12、XPan=3、120-645=4、120-66=3；120-67 在普通片夹为 3、短片夹为 2；
 135-dual 共 12。
 
+V5 对所有 format 使用同一物理与安全合同。当前 development gold 尚无 `xpan`、`120-645`、
+`135-dual` 的真实黄金样片，因此这些 format 是“Runtime 已实现、真实样片尚未验证”，不等同于已完成
+准确度覆盖，也不会因此启用特殊禁用或宽松规则。
+
 程序不会从文件名、画面、片夹容量或空白格猜 format 与真实照片数，也不会删除、合并或重排空 slot。
 V5 没有 full/partial mode。
 
@@ -54,7 +58,8 @@ top/bottom、增加独立证据或用名义比例作零误差换算；比例校�
 Frame 只累加一次该处实测差值。多个已证明的间隔变化仍以一次有界传播处理；任一间隔存在多种解释、
 缺少必要 authority、存在多个同样合法答案或未知必需 Frame 时保持 `needs_review`。
 Contact 与 overlap 是 challenge，不是预定终态：标准 detector 与 Gate 能唯一证明安全时可以自动批准，
-证据不足时安全 review 同样正确；V5 不为它们启用第二套 detector 或特殊 bleed。
+证据不足时安全 review 同样正确。已证明关系只在相邻的 END/START 增加 topology protection，并继续计入
+同一份逐侧 5% 总预算；它不能证明 topology。V5 不为它们启用第二套 detector 或独立 bleed 预算。
 
 选定 placement 后，程序才判断是否铺满片夹：只检查 outer 外侧能否再容纳一个 W，不回头搜索或居中。
 135-dual 两条 lane 都必须满足完整性。

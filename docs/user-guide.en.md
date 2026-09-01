@@ -23,6 +23,10 @@ Format is always required. Count may be omitted or explicit:
 Default complete counts are 135=6, half=12, XPan=3, 120-645=4, and 120-66=3. 120-67 uses 3 on an ordinary holder
 and 2 on the short holder. 135-dual uses 12 total.
 
+V5 applies the same physical and safety contract to every format. Current development gold has no real gold source for
+`xpan`, `120-645`, or `135-dual`, so these formats are implemented by the Runtime but do not yet have real-sample
+accuracy coverage. They receive neither a special disable rule nor a looser acceptance rule.
+
 The program never infers format or real photo count from filenames, picture content, holder capacity, or blank slots.
 It does not remove, merge, or reorder blank slots. V5 has no full/partial mode.
 
@@ -59,7 +63,9 @@ gap; later Frames apply that measured delta once. Multiple proven gap changes st
 gap, missing authority, multiple equally legal answers, or an unknown required Frame remains `needs_review`. Contact and
 overlap are challenge cases, not predetermined outcomes: the standard detector and Gate may
 approve them when safety is uniquely proven, while safe review remains correct when evidence is insufficient. V5 does
-not enable a second detector or special bleed for them.
+not enable a second detector or a separate bleed budget for them. A proven relation adds topology protection only to
+the participating END/START boundaries, still inside the same per-side five-percent budget; that protection cannot
+prove the topology.
 
 Holder fill is assessed only after placement by asking whether another W fits beyond either outer. It never searches
 for or centers a placement. Both lanes of 135-dual must be complete.

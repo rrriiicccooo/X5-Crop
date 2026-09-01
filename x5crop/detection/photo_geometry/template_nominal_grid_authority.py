@@ -13,7 +13,12 @@ from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInte
 from ...formats import APERTURE_COMPATIBILITY_SPEC, FormatSpec, FramePhysicalSpec
 from .physical_identity import physical_fact_id
 from .model import BoundaryRole
-from .template_model import AdjacencyRelation, ContactRelation, TemplateSpec
+from .template_model import (
+    AdjacencyRelation,
+    ContactRelation,
+    OverlapRelation,
+    TemplateSpec,
+)
 from .template_nominal_grid_model import (
     CalibratedNominalGridAuthority,
     CalibratedNominalGridEvidence,
@@ -364,14 +369,23 @@ def solve_calibrated_nominal_grid_envelope(
     rows.append(non_negative_gap)
     limits.append(0.0)
     for relation_index, relation in enumerate(relations):
-        if not isinstance(relation, ContactRelation):
+        if not isinstance(relation, (ContactRelation, OverlapRelation)):
             continue
-        equality = np.zeros(variable_count, dtype=np.float64)
-        equality[1] = -1.0
-        equality[2] = 1.0
-        equality[3 + relation_index] = 1.0
-        rows.extend((equality, -equality))
-        limits.extend((0.0, 0.0))
+        signed_gap = (
+            FiniteInterval.exact(0.0)
+            if isinstance(relation, ContactRelation)
+            else relation.signed_gap_interval_px
+        )
+        expression = np.zeros(variable_count, dtype=np.float64)
+        expression[1] = -1.0
+        expression[2] = 1.0
+        expression[3 + relation_index] = 1.0
+        _append_interval_constraints(
+            rows,
+            limits,
+            _LinearExpression(expression, 0.0),
+            signed_gap,
+        )
     for constraint in role_constraints:
         _append_interval_constraints(
             rows,

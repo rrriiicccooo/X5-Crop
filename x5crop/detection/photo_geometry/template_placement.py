@@ -20,6 +20,7 @@ from .output_model import FrameBoundaryGeometry, OutputBoundaryUse
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import CrossFit
 from .template_model import (
+    OverlapRelation,
     SequenceFit,
     SequenceRoleLineEvidence,
     TemplateSpec,
@@ -353,6 +354,58 @@ def resolved_sequence_support_domains_px(
             for ordinal in range(template.count)
         )
     )
+
+
+def resolved_cross_support_domains_px(
+    sequence: SequenceFit,
+) -> tuple[FiniteInterval, ...]:
+    """Partition explicit overlap into disjoint short-axis support domains.
+
+    Output geometry keeps both physical Frame domains.  Cross-axis evidence,
+    however, must not count one trace in their shared area as two independent
+    Frame regions.  A proven overlap is therefore split at its midpoint only
+    for support accounting.  Any unmodeled or geometrically inconsistent
+    overlap remains a fixed-template mismatch.
+    """
+
+    domains = list(resolved_sequence_support_domains_px(sequence))
+    overlaps = {
+        relation.relation_ordinal: relation
+        for relation in sequence.adjacency_relations
+        if isinstance(relation, OverlapRelation)
+    }
+    for ordinal, (left, right) in enumerate(
+        zip(domains, domains[1:]),
+        start=1,
+    ):
+        overlap_minimum = max(left.minimum, right.minimum)
+        overlap_maximum = min(left.maximum, right.maximum)
+        overlap_px = max(0.0, overlap_maximum - overlap_minimum)
+        relation = overlaps.get(ordinal)
+        if (overlap_px > _EPSILON) != (relation is not None):
+            raise ValueError(
+                "realized Frame overlap lacks one explicit OverlapRelation"
+            )
+        if relation is None:
+            continue
+        if abs(overlap_px + relation.canonical_signed_gap_px) > _EPSILON:
+            raise ValueError(
+                "realized Frame overlap contradicts its signed gap"
+            )
+        split = (overlap_minimum + overlap_maximum) / 2.0
+        if sequence.template.direction > 0:
+            domains[ordinal - 1] = FiniteInterval(left.minimum, split)
+            domains[ordinal] = FiniteInterval(split, right.maximum)
+        else:
+            domains[ordinal - 1] = FiniteInterval(split, left.maximum)
+            domains[ordinal] = FiniteInterval(right.minimum, split)
+    ordered = tuple(sorted(domains, key=lambda item: item.minimum))
+    if any(
+        left.maximum > right.minimum + _EPSILON
+        for left, right in zip(ordered, ordered[1:])
+    ):
+        raise ValueError("cross support domains retain an unmodeled overlap")
+    return ordered
 
 
 def _cross_boundaries(

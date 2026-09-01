@@ -611,7 +611,74 @@ class ContactRelation:
         return True
 
 
-AdjacencyRelation = SeparatorRelation | ContactRelation
+class OverlapRelationKind(str, Enum):
+    """Explicit discriminator for the overlap branch of the sum type."""
+
+    OVERLAP = "overlap"
+
+
+@dataclass(frozen=True)
+class OverlapRelation:
+    """One proven reversed END/START pair between adjacent Frames.
+
+    ``signed_gap_interval_px`` is strictly negative in template direction.
+    ``delta`` is not an independent degree of freedom: every feasible state
+    enforces ``delta - W + pitch`` inside that directly measured interval.
+    """
+
+    relation_ordinal: int
+    overlap_observation_id: ObservationId
+    end_edge_observation_id: ObservationId
+    next_start_edge_observation_id: ObservationId
+    signed_gap_interval_px: FiniteInterval
+    canonical_signed_gap_px: float
+    delta_interval_px: FiniteInterval
+    canonical_delta_px: float
+    supporting_observation_ids: tuple[ObservationId, ...]
+    kind: OverlapRelationKind = field(
+        init=False,
+        default=OverlapRelationKind.OVERLAP,
+    )
+
+    def __post_init__(self) -> None:
+        if (
+            self.relation_ordinal <= 0
+            or self.kind != OverlapRelationKind.OVERLAP
+            or not isinstance(self.overlap_observation_id, ObservationId)
+            or not isinstance(self.end_edge_observation_id, ObservationId)
+            or not isinstance(
+                self.next_start_edge_observation_id,
+                ObservationId,
+            )
+            or self.end_edge_observation_id
+            == self.next_start_edge_observation_id
+            or self.signed_gap_interval_px.maximum >= 0.0
+            or not self.signed_gap_interval_px.contains(
+                self.canonical_signed_gap_px,
+                epsilon=1.0e-9,
+            )
+            or not self.delta_interval_px.contains(
+                self.canonical_delta_px,
+                epsilon=1.0e-9,
+            )
+            or self.supporting_observation_ids
+            != (
+                self.end_edge_observation_id,
+                self.next_start_edge_observation_id,
+            )
+        ):
+            raise ValueError("overlap relation is invalid")
+
+    @property
+    def observation_ids(self) -> tuple[ObservationId, ...]:
+        return self.supporting_observation_ids
+
+    @property
+    def is_anomaly(self) -> bool:
+        return True
+
+
+AdjacencyRelation = SeparatorRelation | ContactRelation | OverlapRelation
 
 
 def adjacency_prefix_coefficients(
@@ -620,40 +687,135 @@ def adjacency_prefix_coefficients(
 ) -> tuple[int, int, float]:
     """Return ``W``, pitch and fixed-delta coefficients for one slot.
 
-    A contact contributes ``W - pitch`` exactly once to the suffix.  Positive
-    separator adjustments remain fixed typed deltas.  This is the canonical
-    algebra shared by phase fitting and rank accounting.
+    Contact contributes ``W - pitch`` exactly once.  Overlap contributes the
+    same correlated term plus its directly measured negative signed gap.
+    Positive separator adjustments remain fixed typed deltas.  This is the
+    canonical algebra shared by phase fitting and rank accounting.
     """
 
     if slot_index < 0:
         raise ValueError("adjacency prefix slot must be non-negative")
     applicable = relations[: min(slot_index, len(relations))]
-    contact_count = sum(
-        isinstance(item, ContactRelation) for item in applicable
+    topology_count = sum(
+        isinstance(item, (ContactRelation, OverlapRelation))
+        for item in applicable
     )
     fixed_delta = sum(
         item.canonical_delta_px
-        for item in applicable
         if isinstance(item, SeparatorRelation)
+        else item.canonical_signed_gap_px
+        if isinstance(item, OverlapRelation)
+        else 0.0
+        for item in applicable
     )
-    return contact_count, slot_index - contact_count, fixed_delta
+    return topology_count, slot_index - topology_count, fixed_delta
 
 
-def realize_contact_relations(
+def realize_topology_relations(
     relations: tuple[AdjacencyRelation, ...],
     *,
     frame_width_px: float,
     pitch_px: float,
 ) -> tuple[AdjacencyRelation, ...]:
-    """Bind every contact's diagnostic delta to the same fitted W/pitch."""
+    """Bind topology diagnostic deltas to the same fitted W and pitch."""
 
-    delta = frame_width_px - pitch_px
+    contact_delta = frame_width_px - pitch_px
     return tuple(
-        replace(item, canonical_delta_px=delta)
+        replace(item, canonical_delta_px=contact_delta)
         if isinstance(item, ContactRelation)
+        else replace(
+            item,
+            canonical_delta_px=(
+                contact_delta + item.canonical_signed_gap_px
+            ),
+        )
+        if isinstance(item, OverlapRelation)
         else item
         for item in relations
     )
+
+
+def adjacency_topology_required_bindings(
+    relations: tuple[AdjacencyRelation, ...],
+) -> tuple[tuple[int, ObservationId], ...]:
+    """Return the direct role atoms required by every topology relation."""
+
+    return tuple(
+        binding
+        for relation in relations
+        if isinstance(relation, (ContactRelation, OverlapRelation))
+        for binding in (
+            (
+                2 * relation.relation_ordinal - 1,
+                relation.shared_edge_observation_id
+                if isinstance(relation, ContactRelation)
+                else relation.end_edge_observation_id,
+            ),
+            (
+                2 * relation.relation_ordinal,
+                relation.shared_edge_observation_id
+                if isinstance(relation, ContactRelation)
+                else relation.next_start_edge_observation_id,
+            ),
+        )
+    )
+
+
+def realize_topology_relations_at_role_positions(
+    relations: tuple[AdjacencyRelation, ...],
+    *,
+    model_role_positions_px: tuple[float, ...],
+    direction: int,
+    frame_width_px: float,
+    pitch_px: float,
+) -> tuple[AdjacencyRelation, ...]:
+    """Bind topology canonical values to one realized continuous state."""
+
+    if direction not in {-1, 1}:
+        raise ValueError("topology realization direction is invalid")
+    realized: list[AdjacencyRelation] = []
+    for relation in relations:
+        if not isinstance(relation, (ContactRelation, OverlapRelation)):
+            realized.append(relation)
+            continue
+        end_index = 2 * relation.relation_ordinal - 1
+        start_index = 2 * relation.relation_ordinal
+        if start_index >= len(model_role_positions_px):
+            raise ValueError("topology relation leaves its role ledger")
+        signed_gap = direction * (
+            model_role_positions_px[start_index]
+            - model_role_positions_px[end_index]
+        )
+        if isinstance(relation, ContactRelation):
+            if abs(signed_gap) > 1.0e-7:
+                raise ValueError("contact realization lost its shared coordinate")
+            realized.append(
+                replace(
+                    relation,
+                    canonical_delta_px=frame_width_px - pitch_px,
+                )
+            )
+            continue
+        canonical_delta = frame_width_px - pitch_px + signed_gap
+        if (
+            not relation.signed_gap_interval_px.contains(
+                signed_gap,
+                epsilon=1.0e-7,
+            )
+            or not relation.delta_interval_px.contains(
+                canonical_delta,
+                epsilon=1.0e-7,
+            )
+        ):
+            raise ValueError("overlap realization left its measured interval")
+        realized.append(
+            replace(
+                relation,
+                canonical_signed_gap_px=signed_gap,
+                canonical_delta_px=canonical_delta,
+            )
+        )
+    return tuple(realized)
 
 
 @dataclass(frozen=True)
@@ -998,6 +1160,13 @@ class SequenceFit:
             for item in self.adjacency_relations
         ):
             raise ValueError("one physical edge cannot prove two contacts")
+        overlap_ids = tuple(
+            item.overlap_observation_id
+            for item in self.adjacency_relations
+            if isinstance(item, OverlapRelation)
+        )
+        if len(set(overlap_ids)) != len(overlap_ids):
+            raise ValueError("one overlap observation cannot prove two relations")
         for identity, role_indices in roles_by_observation.items():
             if len(role_indices) == 1:
                 continue
@@ -1040,24 +1209,53 @@ class SequenceFit:
         ):
             raise ValueError("sequence frame order contradicts fixed width")
         for relation in self.adjacency_relations:
-            if not isinstance(relation, ContactRelation):
-                continue
             end_index = 2 * relation.relation_ordinal - 1
             start_index = 2 * relation.relation_ordinal
             end_binding = self.role_bindings[end_index]
             start_binding = self.role_bindings[start_index]
             end = self.model_role_positions_px[end_index]
             next_start = self.model_role_positions_px[start_index]
+            if isinstance(relation, ContactRelation):
+                if (
+                    end_binding is None
+                    or start_binding is None
+                    or end_binding.observation_id
+                    != relation.shared_edge_observation_id
+                    or start_binding.observation_id
+                    != relation.shared_edge_observation_id
+                    or abs(end - next_start) > 1.0e-7
+                ):
+                    raise ValueError(
+                        "contact relation does not share one coordinate"
+                    )
+                continue
+            if not isinstance(relation, OverlapRelation):
+                continue
+            signed_gap = direction * (next_start - end)
+            expected_delta = (
+                self.pitch_fit.canonical_frame_width_px
+                - self.pitch_fit.canonical_pitch_px
+                + signed_gap
+            )
             if (
                 end_binding is None
                 or start_binding is None
                 or end_binding.observation_id
-                != relation.shared_edge_observation_id
+                != relation.end_edge_observation_id
                 or start_binding.observation_id
-                != relation.shared_edge_observation_id
-                or abs(end - next_start) > 1.0e-7
+                != relation.next_start_edge_observation_id
+                or end_binding.evidence_group_id
+                == start_binding.evidence_group_id
+                or not relation.signed_gap_interval_px.contains(
+                    signed_gap,
+                    epsilon=1.0e-7,
+                )
+                or abs(signed_gap - relation.canonical_signed_gap_px) > 1.0e-7
+                or abs(expected_delta - relation.canonical_delta_px) > 1.0e-7
             ):
-                raise ValueError("contact relation does not share one coordinate")
+                raise ValueError(
+                    "overlap relation lost its independent reversed edges"
+                )
         if any(
             direction * (right - left) < -1.0e-7
             for left, right in zip(starts, starts[1:])

@@ -61,6 +61,9 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                 "contact_edge_observations": typed_read_model(
                     lane.prepared.phase_input.contact_edge_observations
                 ),
+                "overlap_edge_pair_observations": typed_read_model(
+                    lane.prepared.phase_input.overlap_edge_pair_observations
+                ),
                 "aperture_aspect_ratio_authority": typed_read_model(
                     lane.prepared.cross_competition
                     .aperture_aspect_ratio_authority

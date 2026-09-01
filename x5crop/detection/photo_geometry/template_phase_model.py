@@ -12,6 +12,7 @@ from .measurement_model import PhotoBoundaryMeasurementSet
 from .template_adjacency_coverage import AdjacencyObservationCoverage
 from .template_adjacency_topology import AdjacencyContinuityObservation
 from .template_contact import ContactEdgeObservation
+from .template_overlap import OverlapEdgePairObservation
 from .template_direct_role_authority import DirectRoleBindingAuthority
 from .template_outer_frame_authority import OuterFrameObservationAuthority
 from .template_model import (
@@ -151,6 +152,10 @@ class TemplatePhaseInput:
     phase_authority_px: FiniteInterval | None
     calibrated_nominal_grid_prior: CalibratedNominalGridPrior
     contact_edge_observations: tuple[ContactEdgeObservation, ...] = ()
+    overlap_edge_pair_observations: tuple[
+        OverlapEdgePairObservation,
+        ...,
+    ] = ()
     sequence_measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...] = ()
     global_lattice_evidence: GlobalLatticeAuthorityEvidence = field(
         default_factory=GlobalLatticeAuthorityEvidence
@@ -195,6 +200,11 @@ class TemplatePhaseInput:
             for item in self.contact_edge_observations
         ):
             raise TypeError("phase input contact-edge ledger is invalid")
+        if any(
+            not isinstance(item, OverlapEdgePairObservation)
+            for item in self.overlap_edge_pair_observations
+        ):
+            raise TypeError("phase input overlap-edge ledger is invalid")
         query_ids = tuple(
             item.query.query_id for item in self.sequence_measurement_sets
         )
@@ -221,6 +231,10 @@ class TemplatePhaseInput:
         contact_ids = tuple(
             item.observation_id for item in self.contact_edge_observations
         )
+        overlap_ids = tuple(
+            item.observation_id
+            for item in self.overlap_edge_pair_observations
+        )
         band_ids = tuple(item.observation_id for item in self.separator_bands)
         registered_ids = set(identities).union(band_ids)
         evidence_ids = {
@@ -236,11 +250,21 @@ class TemplatePhaseInput:
             raise ValueError("phase input observation identities are not unique")
         if len(set(contact_ids)) != len(contact_ids):
             raise ValueError("phase input contact identities are not unique")
+        if len(set(overlap_ids)) != len(overlap_ids):
+            raise ValueError("phase input overlap identities are not unique")
+        if len(overlap_ids) > max(0, len(identities) - 1):
+            raise ValueError("phase input overlap ledger exceeds its linear bound")
         if not {
             item.shared_edge_observation_id
             for item in self.contact_edge_observations
         }.issubset(set(identities)):
             raise ValueError("contact edge leaves the registered observation ledger")
+        if not {
+            identity
+            for item in self.overlap_edge_pair_observations
+            for identity in item.supporting_observation_ids
+        }.issubset(set(identities)):
+            raise ValueError("overlap pair leaves the registered observation ledger")
         if len(set(band_ids)) != len(band_ids):
             raise ValueError("phase input separator identities are not unique")
         if not evidence_ids.issubset(registered_ids):
@@ -318,6 +342,7 @@ class PhaseCandidateProjectionOutcome(str, Enum):
     PROJECTED = "projected"
     CALIBRATED_NOMINAL_GRID = "calibrated_nominal_grid"
     DIRECT_ROLE_CONTRADICTION = "direct_role_contradiction"
+    TOPOLOGY_BINDING_UNAVAILABLE = "topology_binding_unavailable"
     CALIBRATED_NOMINAL_GRID_UNAVAILABLE = (
         "calibrated_nominal_grid_unavailable"
     )
@@ -412,6 +437,8 @@ class PhaseCandidateAuthorityProjection:
                     .CALIBRATED_NOMINAL_GRID_UNAVAILABLE,
                     PhaseCandidateProjectionOutcome
                     .CALIBRATED_NOMINAL_GRID_CONFLICT,
+                    PhaseCandidateProjectionOutcome
+                    .TOPOLOGY_BINDING_UNAVAILABLE,
                     PhaseCandidateProjectionOutcome.REFIT_UNAVAILABLE,
                 }
             ),

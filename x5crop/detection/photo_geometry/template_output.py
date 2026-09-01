@@ -18,7 +18,7 @@ from .template_feasible_geometry import (
     FeasiblePlacementProjection,
     JointFrameState,
 )
-from .template_model import ContactRelation
+from .template_model import ContactRelation, OverlapRelation
 from .model import (
     AuthoritySide,
     BoundaryRole,
@@ -438,15 +438,15 @@ def _state_bleed_px(
     }
 
 
-def _contact_relations_by_role(
+def _topology_relations_by_role(
     placement: FormatPlacement,
     frame: TemplateFrame,
-) -> dict[BoundaryRole, ContactRelation]:
-    """Map only the two boundaries owned by a proven adjacent contact."""
+) -> dict[BoundaryRole, ContactRelation | OverlapRelation]:
+    """Map only boundaries owned by proven contact or overlap topology."""
 
-    values: dict[BoundaryRole, ContactRelation] = {}
+    values: dict[BoundaryRole, ContactRelation | OverlapRelation] = {}
     for relation in placement.sequence_fit.adjacency_relations:
-        if not isinstance(relation, ContactRelation):
+        if not isinstance(relation, (ContactRelation, OverlapRelation)):
             continue
         role = (
             BoundaryRole.END
@@ -459,7 +459,7 @@ def _contact_relations_by_role(
             continue
         if role in values:
             raise ValueError(
-                "one output boundary cannot belong to multiple contacts"
+                "one output boundary cannot belong to multiple topologies"
             )
         values[role] = relation
     return values
@@ -473,7 +473,7 @@ def _state_topology_protection_px(
     dict[BoundaryRole, float],
     dict[BoundaryRole, ObservationId | None],
 ]:
-    """Use one extra base sequence bleed only on proven contact sides."""
+    """Use one extra base bleed only on proven contact/overlap sides."""
 
     sequence_scale = (
         abs(state.sequence_end_px - state.sequence_start_px)
@@ -482,14 +482,18 @@ def _state_topology_protection_px(
     sequence = OUTPUT_PROTECTION_SPEC.sequence_bleed_mm(
         placement.frame_spec.frame_width_mm
     ) * sequence_scale
-    relations = _contact_relations_by_role(placement, frame)
+    relations = _topology_relations_by_role(placement, frame)
     protections = {role: 0.0 for role in _ROLES}
     relation_ids: dict[BoundaryRole, ObservationId | None] = {
         role: None for role in _ROLES
     }
     for role, relation in relations.items():
         protections[role] = sequence
-        relation_ids[role] = relation.contact_observation_id
+        relation_ids[role] = (
+            relation.contact_observation_id
+            if isinstance(relation, ContactRelation)
+            else relation.overlap_observation_id
+        )
     return protections, relation_ids
 
 

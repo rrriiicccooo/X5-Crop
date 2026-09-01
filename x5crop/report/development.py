@@ -117,6 +117,9 @@ def development_report_facts(
                     "contact_edge_observations": typed_read_model(
                         lane.prepared.phase_input.contact_edge_observations
                     ),
+                    "overlap_edge_pair_observations": typed_read_model(
+                        lane.prepared.phase_input.overlap_edge_pair_observations
+                    ),
                     "side_transition_regions": typed_read_model(
                         lane.prepared.side_regions
                     ),

@@ -272,8 +272,8 @@ def alignment_summary(detection: FinalDetection) -> str:
             for kind in (
                 "separator_material",
                 "contact",
+                "overlap",
                 "no_counterevidence_observed",
-                "normal_separator_counterevidence",
                 "separator_material_unresolved",
                 "unresolved",
                 "coverage_incomplete",
@@ -281,6 +281,10 @@ def alignment_summary(detection: FinalDetection) -> str:
         }
         selected_contacts = sum(
             relation.kind.value == "contact"
+            for relation in diagnostic.adjacency_relations
+        )
+        selected_overlaps = sum(
+            relation.kind.value == "overlap"
             for relation in diagnostic.adjacency_relations
         )
         direct = diagnostic.direct_role_binding_authority
@@ -392,8 +396,8 @@ def alignment_summary(detection: FinalDetection) -> str:
             f"{complete_coverage}/{len(inferred_coverage)} · CONT "
             f"S{continuity_counts['separator_material']} "
             f"C{continuity_counts['contact']} "
+            f"O{continuity_counts['overlap']} "
             f"N{continuity_counts['no_counterevidence_observed']} "
-            f"X{continuity_counts['normal_separator_counterevidence']} "
             f"M{continuity_counts['separator_material_unresolved']} "
             f"U{continuity_counts['unresolved']} "
             f"I{continuity_counts['coverage_incomplete']} · DIRECT "
@@ -408,6 +412,8 @@ def alignment_summary(detection: FinalDetection) -> str:
             f" C{separator_counts['light'][2]} · CONTACT "
             f"{selected_contacts}/"
             f"{len(lane.prepared.phase_input.contact_edge_observations)} · "
+            f"OVERLAP {selected_overlaps}/"
+            f"{len(lane.prepared.phase_input.overlap_edge_pair_observations)} · "
             f"JOINT "
             f"B{joint_authority} S{joint_standalone}/{joint_total} "
             f"A{joint_ambiguous} "

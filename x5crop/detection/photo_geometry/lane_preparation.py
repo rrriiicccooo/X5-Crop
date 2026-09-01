@@ -67,6 +67,8 @@ from .template_cross import (
 )
 from .template_cross_model import CrossRoleBinding, TemplateCrossInput
 from .template_contact import observe_contact_edges
+from .template_overlap import observe_overlap_edge_pairs
+from .template_model import template_role_refinement_radius_px
 from .template_phase import (
     account_prior_phase_fit,
     finalize_template_phase_candidate,
@@ -85,7 +87,7 @@ from .template_pitch import (
     calibrate_template_source_pitch,
     close_separator_phase_hypothesis,
 )
-from .template_placement import resolved_sequence_support_domains_px
+from .template_placement import resolved_cross_support_domains_px
 from .source_geometry import SourceScanGeometry
 from .transition_tracking import (
     track_broad_material_transition_regions,
@@ -731,6 +733,15 @@ def prepare_template_lane(
         separator_bands,
         sequence_measurement_sets,
     )
+    overlap_edge_pair_observations = observe_overlap_edge_pairs(
+        placement_sequence_edges,
+        separator_bands,
+        sequence_measurement_sets,
+        direction=template.direction,
+        maximum_overlap_px=template_role_refinement_radius_px(
+            template.pitch_px.maximum
+        ),
+    )
     phase_input = TemplatePhaseInput(
         observations=placement_sequence_edges,
         separator_bands=separator_bands,
@@ -742,6 +753,7 @@ def prepare_template_lane(
             measurement_plan.calibrated_nominal_grid_prior
         ),
         contact_edge_observations=contact_edge_observations,
+        overlap_edge_pair_observations=overlap_edge_pair_observations,
         sequence_measurement_sets=sequence_measurement_sets,
         global_lattice_evidence=GlobalLatticeAuthorityEvidence(
             phase_observation_ids=phase_authority_observation_ids,
@@ -823,27 +835,18 @@ def prepare_template_lane(
     )
     longitudinal_support_domains_px = ()
     if phase.status == PhaseFitStatus.RESOLVED and phase.best is not None:
-        domains = tuple(
-            sorted(
-                resolved_sequence_support_domains_px(phase.best),
-                key=lambda item: item.minimum,
+        try:
+            longitudinal_support_domains_px = (
+                resolved_cross_support_domains_px(phase.best)
             )
-        )
-        if any(
-            left.maximum > right.minimum
-            for left, right in zip(domains, domains[1:])
-        ):
+        except ValueError as error:
             phase = replace(
                 phase,
                 status=PhaseFitStatus.UNRESOLVED,
-                ambiguity_reason=(
-                    "realized frame domains overlap after direct binding"
-                ),
+                ambiguity_reason=str(error),
                 failure_kind=PhaseFailureKind.FIXED_TEMPLATE_MISMATCH,
                 winner_basis=None,
             )
-        else:
-            longitudinal_support_domains_px = domains
     cross = register_cross_evidence(
         profile=cross_profile,
         top_measurement=precision_measurement_sets[0],

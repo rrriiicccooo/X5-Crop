@@ -73,7 +73,8 @@ Frame 校准：只接受 `slot_kind=image` 且 START、END、共享 top/bottom �
 自然排除 `source_truncated`、`human_width_estimate`、残缺曝光与空 slot；先对每个 source 取中位尺寸，
 再按名义轴长分组计算相对名义值的绝对偏差 q95，以最小总 guard 拟合混合式，最后分别向外量化到
 0.05 mm 与 0.001 ratio。全部合格 source 都参与统计，超出 q95 guard 的 source 进入 review 诊断，不变成
-format 或样片例外。该 development 校准仍须由未来 sealed 数据验证。
+format 或样片例外。该 development 校准尚未经过 sealed 数据验证，因此不能宣称未见来源泛化；缺少
+sealed cohort 本身不阻断首版发布。
 
 设计 W/H 是跨相机的有界搜索先验，不是每台相机共享的绝对片门尺寸。唯一 placement 闭合后，同一
 source 的直接 START/END 可以收紧共同 W，唯一直接 aperture top/bottom pair 可以收紧共同 H。Direct
@@ -499,7 +500,7 @@ source W 校准/相关推断由 `template_frame_width.py` 拥有，固定 placem
 | supported | 0–2 | complete | 任意 | 无 | `global_lattice_authority_unavailable` |
 | supported | 3 | incomplete | 任意 | 无 | `adjacency_observation_coverage_incomplete` |
 | supported | 3 | complete | 首或尾整张无绑定 | 无 | `outer_frame_observation_authority_unavailable` |
-| supported | 3 | complete | 任意 | 有 | 直接 wide/narrow 或唯一 Contact relation 优先；overlap/conflict 保持 unresolved |
+| supported | 3 | complete | 任意 | 有 | 直接 wide/narrow、唯一 Contact/Overlap relation 优先；冲突保持 unresolved |
 
 `AdjacencyObservationCoverage` 逐关系保存 `relation_ordinal`、`required_interval`、参与覆盖的 query ID、
 逐 trace 的离散 ownership 并集与 coordinate count，以及 `complete | incomplete`。相邻 interval 只要
@@ -526,25 +527,27 @@ winner，也不授予 phase、ordinal 或 placement 权限。
 `normal`、`measured_advances` 或 `unresolved`；它不搜索、不选择、不改变 placement。
 
 当前每个 adjacency 由唯一 `AdjacencyRelation` sum type 表达；production 已启用
-`SeparatorRelation` 与 `ContactRelation`，`OverlapRelation` 尚未启用：
+`SeparatorRelation`、`ContactRelation` 与 `OverlapRelation`：
 
 - 直接、ordinal 唯一的 END → material → START 可产生 wide/narrow advance；
 - 该差值从下一格开始累加一次，后续仍共享同一个 source pitch；
 - 多处实测变化可以同时存在，但关系总数固定为 `count - 1`，整次传播为 O(count)；
 - `ContactRelation` 只能由同一条具有独立坐标权限的 physical edge 唯一绑定前一 Frame 的 END 与后一
   Frame 的 START；它保存共享 edge identity，并以 `delta = W - pitch` 进入同一次 prefix 传播；
+- `OverlapRelation` 只能由两条独立、角色相反且顺序反转的 authoritative edge 唯一绑定；它保存严格为负
+  的 signed-gap interval，并以 `delta = W - pitch + signed_gap` 进入同一次 prefix 传播；
 - 任一 adjacency 的 band、角色、physical edge 或 ordinal 存在多个解释时，整条 placement 保持
   `adjacency_relation_unresolved`；不能由相邻宽度、bleed 或模板先验猜测；
-- 两条独立角色边反序仍属于尚未闭合的 overlap，保持 `adjacency_topology_unresolved`。
+- 未登记的反序边、跨零 gap、coverage 不完整或 separator material 竞争不能取得 Overlap 权限。
 
 黄金物理诊断表明 source pitch 通常稳定，而实际 separator 宽度可在同一 source 内变化；因此 pitch 是
 共同 lattice authority，separator 宽度只拥有其已直接证明的局部 advance，不能反向改写全局 W 或 pitch。
 
 Contact 与 overlap 始终属于 challenge。Challenge 是运行前的评测角色，不是终态：标准 detector 与
-Gate 能唯一证明安全时可以 `approved_auto`，证据不足时 `needs_review` 同样合格。当前 Contact 已能在
-同一模型中被证明；overlap 仍保持 unresolved，不以普通 Grid、基础 bleed 或强制批准替代证明。
+Gate 能唯一证明安全时可以 `approved_auto`，证据不足时 `needs_review` 同样合格。Contact 与 Overlap
+都只在同一模型中由完整证据闭合，不以普通 Grid、基础 bleed 或强制批准替代证明。
 
-### 7.1 Adjacency continuity、Contact 与尚未启用的 Overlap
+### 7.1 Adjacency continuity、Contact 与 Overlap
 
 `photo_geometry/template_adjacency_topology.py` 是逐 adjacency material fact 的唯一 owner。像素 query、
 trace 与 coordinate coverage 在 placement 前候选无关地登记和执行；`AdjacencyContinuityObservation`
@@ -555,10 +558,11 @@ trace 与 coordinate coverage 在 placement 前候选无关地登记和执行；
 |---|---|
 | 唯一 END → separator material → START，方向正确且正 gap | `separator_material`；可以授权一份实测 local advance |
 | 同一 authoritative physical edge 唯一绑定 END 与下一张 START，走廊完整且没有 separator 竞争 | `contact`；授权一份 `ContactRelation`，signed gap 精确为 0 |
+| 两条已登记、独立且角色相反的 authoritative edge 满足 `START(next) < END(current)`，走廊完整且没有 separator 竞争 | `overlap`；授权一份 `OverlapRelation` 和严格为负的 signed-gap interval |
 | 合法走廊完整覆盖，且没有直接反证 | `no_counterevidence_observed`；允许既有 Grid 保持 `local_delta=0`，但不冒充直接 separator |
 | 已登记 material 在不同高度区域不能一致闭合 | `separator_material_unresolved`；本 owner 不否定已经有权限的有序直接边，但不能授予 material/local-advance 权限 |
 | 多个或互相冲突的 band、band 角色冲突，或 signed-gap interval 跨过 0 | `adjacency_continuity_unresolved`；Gate 阻断普通 adjacency |
-| 两条直接角色的 signed gap 整体不大于 0 | `normal_separator_counterevidence`；以 `adjacency_topology_unresolved` 阻断普通 separator |
+| 两条反序直接角色没有对应的 candidate-independent overlap observation | `overlap_observation_unavailable`；不能由 selected geometry 临时创造 topology |
 | 合法走廊未被完整登记和执行 | `coverage_incomplete`；继续由逐 adjacency coverage 合同阻断推断 |
 
 材料不可用与材料反证不可混淆：前者只表示这份 material observation 没有 authority；后者表示当前普通
@@ -573,9 +577,16 @@ START/END 角色，且不属于任何正 separator band。同一位置若还有�
 `adjacency_topology_ambiguous`。被选中的 Contact 仍须通过逐 adjacency coverage、direct-role、source
 containment 与完整输出预算；完整测量 receipt 不能代替该 adjacency 的走廊覆盖。
 
+`photo_geometry/template_overlap.py` 是 candidate-independent 反序边对的唯一 owner。它同样不读取像素：
+只在既有 edge ledger 中连接空间相邻、角色相反、各自具有 source-wide 或 aggregate-union 坐标权限、
+不属于正 separator material 且 physical identity 互不重叠的 END/START。提议不携带 ordinal；phase solver
+只把同一对 edge 投影到有限合法 adjacency，selected continuity 再核对完整走廊、原 signed-gap interval 与
+material 冲突。两条边来自同一 identity 时属于 Contact；内容连续或 selected geometry 自身不能创造
+Overlap observation。
+
 宽缓/低梯度 material 已在同一 registered baseline owner 内以多尺度 tone、uniformity、texture 与跨高度
-一致性形成 typed observation。Contact 只复用这些既有事实，不用 tone、texture 或 content continuity
-单独证明共享边；后续 Overlap 也不得建立 enhanced-image 平行 detector。
+一致性形成 typed observation。Contact/Overlap 只复用这些既有事实，不用 tone、texture 或 content
+continuity 单独证明 topology，也不建立 enhanced-image 平行 detector。
 
 异常 topology 继续使用第 7 节唯一 placement 模型，不建立“发布版式 detector”或第二套 Grid。当前
 sum type 为：
@@ -584,7 +595,7 @@ sum type 为：
 AdjacencyRelation
 ├── SeparatorRelation(normal | wide | narrow)
 ├── ContactRelation
-└── OverlapRelation（尚未启用）
+└── OverlapRelation
 ```
 
 三种关系都保存一个有界 `delta_interval`，并继续由同一次 O(count) `local_prefix` 传播：
@@ -595,27 +606,27 @@ delta = signed_gap - nominal_gap
 ```
 
 正的 `signed_gap` 属于 separator，零表示 contact，负值表示 overlap。`SeparatorRelation` 保存正 gap 与
-material identity；`ContactRelation` 保存 END/START 共用的唯一 physical edge identity；未来
-`OverlapRelation` 必须保存两条独立、角色相反且顺序反转的 edge 与 overlap interval。同一 contact 共用线
+material identity；`ContactRelation` 保存 END/START 共用的唯一 physical edge identity；
+`OverlapRelation` 保存两条独立、角色相反且顺序反转的 edge 与 overlap interval。同一 contact 共用线
 只能计作一份 rank support。
 
-Contact 必须由同一 physical edge 唯一绑定 END 与下一张 START；未来 overlap 必须由两条独立角色 edge
+Contact 必须由同一 physical edge 唯一绑定 END 与下一张 START；Overlap 必须由两条独立角色 edge
 及 `START(next) < END(current)` 的有界 interval 证明。内容连续只能否定普通 separator，不能单独证明
-contact 或 overlap；存在多组合法解释时保持 `adjacency_topology_ambiguous`。当前没有
-`OverlapRelation`，任何 realized Frame domain overlap 继续产生 `fixed_template_mismatch`；未来只有唯一
-relation 与 overlap interval 相容时该处重叠才可合法，其它 adjacency 的意外重叠仍是 topology
-contradiction。
+contact 或 overlap；存在多组合法解释时保持 `adjacency_topology_ambiguous`。只有唯一
+`OverlapRelation` 与 realized overlap interval 相容时该处 Frame domain 重叠才合法；其它 adjacency 的
+意外重叠仍产生 `fixed_template_mismatch`。物理 output polygon 保留重叠；仅 short-axis evidence 的支持域
+在 overlap 中点分区，防止同一 trace 被当成两份独立 Frame 支撑。
 
 现有 source W authority 已允许每个至少拥有一条直接 START/END 的 Frame 用同一相关 W 推导另一侧；
-多张 Frame 的推导共享一份相关状态，不能当成多条独立证据。Contact 两侧 Frame 不参加 source W 的独立
-完整 Frame 支撑，避免共享线反向自证 W。W 不得凭空生成两侧都未观察到的 Frame、决定 topology、覆盖
-direct native coordinate，或把 contact 共用线重复计票。无权 `LOCAL_REFINEMENT` 仍按第 6 节的
+多张 Frame 的推导共享一份相关状态，不能当成多条独立证据。Contact/Overlap 两侧 Frame 不参加 source W
+的独立完整 Frame 支撑，避免 topology edge 反向自证 W。W 不得凭空生成两侧都未观察到的 Frame、决定
+topology、覆盖 direct native coordinate，或把 contact 共用线重复计票。无权 `LOCAL_REFINEMENT` 仍按第 6 节的
 validation-only 合同让位。
 
-剩余能力继续按独立小机制形成检查点：下一项是 Overlap；完全未观察 Frame 的校准 Grid 风险权限和带
-拒绝选项的概率选择仍只保留设计边界，须等独立 calibration 与 sealed representative 数据具备后再进入
-runtime。每项都必须完整交付 type、owner、Gate、Debug、正反例、真实样片、性能和黄金安全验收；尚未
-闭合的能力不授予自动批准权限，也不建立占位 runtime。
+剩余能力继续按独立小机制形成检查点：完全未观察 Frame 的校准 Grid 风险权限和带拒绝选项的概率选择
+仍只保留设计边界，须等独立 calibration 与 sealed representative 数据具备后再进入 runtime。每项都必须
+完整交付 type、owner、Gate、Debug、正反例、真实样片、性能和黄金安全验收；尚未闭合的能力不授予自动
+批准权限，也不建立占位 runtime。
 
 ### 7.2 Calibrated nominal Grid authority
 
@@ -890,16 +901,16 @@ cross：0.25 mm
 `APERTURE_PAIR` 四边的完整 expansion（联合不确定性 + 直线 residual + bleed）各自不得超过对应
 format 尺寸的 5%。四边不能借额度；刚好达到上限通过。
 
-已证明的 Contact 只在参与该关系的两侧增加显式 `topology_protection`：前一 Frame 的 END 朝后一格、
+已证明的 Contact/Overlap 只在参与该关系的两侧增加显式 `topology_protection`：前一 Frame 的 END 朝后一格、
 后一 Frame 的 START 朝前一格，其它边仍使用基础 bleed。当前 protection 等于一份同状态的 sequence
-base bleed；它不是新的预算，也不能选择或证明 topology。未来 Overlap 也必须沿用同一合同。每侧完整
+base bleed；它不是新的预算，也不能选择或证明 topology。每侧完整
 可用保护上限仍为：
 
 ```text
 max(0, 5% W - joint uncertainty - line residual - base sequence bleed)
 ```
 
-因此 Contact 可以产生彼此重叠的两个安全 OutputFootprint，但每侧完整 expansion 仍不得超过 5% W。
+因此 Contact/Overlap 可以产生彼此重叠的两个安全 OutputFootprint，但每侧完整 expansion 仍不得超过 5% W。
 source containment、content veto 或剩余预算不能闭合时进入 review；不确定 topology 也不能先按普通
 切分再靠扩大 bleed 自动批准。Debug 与 report 分别保存基础 bleed、topology protection、relation ID、
 uncertainty 与 residual。
@@ -976,10 +987,12 @@ complete/selected placement 后重复建立同义 Gate fact。它不读取 deske
 
 `approved_auto` 是产品风险决定，不是“运行时已经知道真实黄金边界”的数学证明。Runtime 只能根据校准
 先验、registered evidence、硬物理合同、剩余不确定性与 OOD 判断风险是否低到可直接使用；真实内容边界
-只在开发验收中可知。开发目标因此是 development 与独立 sealed 验证持续保持
-`unsafe_approved_auto = 0`，并在此前提下提高 nominal 自动覆盖，而不是用无限外扩换取一个不存在的
-绝对保证。未来出现一次真实危险自动裁切时，该 source 经人工 reference 确认后永久进入 development
-regression，并补充新的 sealed source；不能只修当前图片或把它改成 challenge。
+只在开发验收中可知。首版检测目标因此是当前 development nominal 全部安全 `approved_auto`，全部角色
+持续保持 `unsafe_approved_auto = 0`；未来建立 sealed cohort 后适用相同安全标准。不能用无限外扩换取
+一个不存在的绝对保证。未来出现一次真实危险自动裁切时，必须保存原 TIFF、format、count 与 source
+SHA，由人工建立 reference 后永久进入 development incident regression，再用通用机制修复；不能只修
+当前图片、建立样片规则或把它改成 challenge。Calibration、sealed 与新格式样片随真实使用持续补充，
+不作为单次 incident 修复的前置条件。
 
 普通 report 只保存输入、holder/count authority、最终选择、OutputFootprint、预算、根因、输出文件
 和必要 TIFF 事实。Saturation 只记录越界 `authority_side`；每项预算只按 output `geometry_id` 关联，
@@ -1083,23 +1096,24 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/cross_height_transition_measurement.py`、`broad_material_transition_measurement.py` | 同一 registered baseline 上的三区域局部弱信号与双尺度宽缓 material 测量 |
 | `photo_geometry/aggregate_edge_support.py` | aggregate edge 的唯一解析、相关证据去重，以及完整三区域 separator pair 向 placement 的唯一投影权限 |
 | `photo_geometry/template_contact.py` | candidate-independent `ContactEdgeObservation`：从既有 authoritative edge ledger 证明唯一共享 physical edge，不读取像素或选择 ordinal |
+| `photo_geometry/template_overlap.py` | candidate-independent `OverlapEdgePairObservation`：从既有 authoritative edge ledger 登记唯一反序 END/START pair，不读取像素或选择 ordinal |
 | `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source W/H extent、scan-scale authority 与不增加 direct provenance 的相关 interval 收紧 |
 | `photo_geometry/template_frame_width.py` | selected-only `SourceFrameWidthAuthority`、source W 校准、无权局部 refinement 让位与相关单侧角色推断；不得参与离散候选选择或重编译 template |
 | `photo_geometry/template_aspect_ratio_model.py`、`template_aspect_ratio.py` | 校准 W/H 比例的 typed authority、相关 H 推断、direct H 对账与预算失败 |
-| `photo_geometry/template_phase_model.py`、`template_phase_candidates.py`、`template_model.py` | Sequence coordinate/evidence identity、role binding、`AdjacencyRelation` sum type、Contact 的同边双角色约束、projection outcome/type、同一离散 identity 的有界投影重拟合，以及 physical/source W 下的有界 native-edge rebind |
-| `photo_geometry/template_phase.py`、`template_pitch.py`、`template_residual.py` | phase/ordinal 求解、连续 placement identity、Contact/Separator 离散竞争、selected-only source-W rebind 调度、source pitch 与逐 adjacency delta |
+| `photo_geometry/template_phase_model.py`、`template_phase_candidates.py`、`template_model.py` | Sequence coordinate/evidence identity、role binding、`AdjacencyRelation` sum type、Contact 同边双角色与 Overlap 独立反序双角色约束、projection outcome/type、同一离散 identity 的有界投影重拟合，以及 physical/source W 下的有界 native-edge rebind |
+| `photo_geometry/template_phase.py`、`template_pitch.py`、`template_residual.py` | phase/ordinal 求解、连续 placement identity、Contact/Overlap/Separator 离散竞争、selected-only source-W rebind 调度、source pitch 与逐 adjacency delta |
 | `photo_geometry/template_direct_role_authority.py` | 每个 bounded phase candidate 与最终已选 START/END 的 native-coordinate 权限证明及共享 evidence ledger |
 | `photo_geometry/template_lattice_authority.py` | `(phase, W, pitch)` 直接约束矩阵与独立闭合证明 |
 | `photo_geometry/template_adjacency_coverage.py` | selected adjacency 合法走廊到既有 query/trace/coordinate 的覆盖证明 |
-| `photo_geometry/template_adjacency_topology.py` | selected adjacency 的 continuity ledger、共享边 Contact 验证与 typed topology failure；不读取像素或重新选择 placement |
+| `photo_geometry/template_adjacency_topology.py` | selected adjacency 的 continuity ledger、Contact/Overlap 验证与 typed topology failure；不读取像素或重新选择 placement |
 | `photo_geometry/template_outer_frame_authority.py` | 带 Grid 推断时首尾输出 Frame 的直接长轴角色证明 |
 | `photo_geometry/template_alignment_diagnostic.py` | theoretical-vs-observed residual 的只读诊断 |
 | `photo_geometry/interval_math.py`、`template_cross*.py`、`template_cross_support.py` | 共享 interval 运算、source H 校准、局部 top/bottom 方向闭合、typed producer bound 与 enclosing support |
-| `photo_geometry/template_placement.py`、`template_selection.py` | source-axis frame 的一次 compose 与离散 winner/runner |
+| `photo_geometry/template_placement.py`、`template_selection.py` | source-axis frame 的一次 compose、显式 overlap 的 cross-support 去重与离散 winner/runner |
 | `photo_geometry/template_holder_fill.py` | selected PhotoGroupOuter 与 W-only fill assessment |
 | `photo_geometry/content_*.py` | 最终 post-bleed polygon 上的二维 negative veto |
 | `photo_geometry/template_feasible_geometry.py` | selected placement 的低维联合可行集合 |
-| `photo_geometry/template_output.py`、`output_model.py` | JointPlacementEnvelope、基础 bleed、Contact 两侧 topology protection、OutputFootprint 与同一 5% budget |
+| `photo_geometry/template_output.py`、`output_model.py` | JointPlacementEnvelope、基础 bleed、Contact/Overlap 两侧 topology protection、OutputFootprint 与同一 5% budget |
 | `photo_geometry/template_runtime_model.py`、`template_gate.py`、`detector.py` | current-only handoff、CandidateGate facts 与顶层编排 |
 | `x5crop/detection/output_deskew.py` | approved-only 6–24 trace、role-free、candidate-independent 的可选输出角度 observation |
 | `x5crop/detection/decision/`、`final/` | 最终决定、Decision 后 deskew assessment 与 approved geometry exposure |
@@ -1191,9 +1205,12 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
 - Development 验证分开报告四个维度：任何角色均须为 0 的 `unsafe_approved_auto`、不产生正式输出的
   candidate geometry conformance、nominal 自动覆盖，以及 challenge capability。决定分布、candidate
   偏差、自动覆盖与安全准确性不得合并为单一“准确率”。
-- 发布能力底线是 development nominal 与未来 sealed nominal 全部安全 `approved_auto`，全部角色
-  `unsafe_approved_auto = 0`；不得把失败 nominal 改成 challenge、放宽黄金合同或隐藏 runner 来达标。
-  Challenge 的安全 auto 是能力发现，安全 review 仍合格，但不能替代 nominal 覆盖。
+- 检测能力发布底线是当前 development nominal 全部安全 `approved_auto`，全部角色
+  `unsafe_approved_auto = 0`；challenge 的安全 auto 是能力发现，安全 review 同样合格，但不能替代
+  nominal 覆盖。未来建立 sealed cohort 后，其 nominal 也必须全部安全自动通过。不得把失败 nominal 改成
+  challenge、放宽黄金合同或隐藏 runner 来达标。
+- 工程发布底线独立检查正式 24-source mean `<= 5s`、TIFF/metadata、安装、Apple Silicon macOS、Intel
+  macOS、Windows x64 三目标、打包以及 Hook/CI。检测能力与工程能力不得合并成一个模糊的“发布通过”。
 - 受跟踪的 `development_diagnostic` cohort 只证明不崩溃、工作量有界、报告闭合和 TIFF 工程合同，
   不证明几何正确或未见来源泛化。
 - 黄金 reference 只有一个 source-SHA-bound 权威集合；人工确认只授予 reference，不自动决定 evaluation
@@ -1206,11 +1223,11 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   同 SHA 的全部 count task 同分区。日常开发命令不得读取或输出 sealed 的逐样片结果，只能在里程碑生成
   aggregate receipt。显式打开 sealed source 调试后，该 source 永久转入 development，并补充新的 sealed
   source。分区共享同一 reference authority，不建立 v1/v2 或其它平行校准池。当前尚无 sealed cohort，
-  因而不能作未见 X5 扫描的泛化或发布准确性声明。
+  因而不能作未见 X5 扫描的泛化或发布准确性声明；这一事实须在发布说明中披露，但不阻断首版发布。
 - 生产中发现的危险自动裁切不是新的 validation partition。该 source 完成人工 reference 后永久加入
   `development_gold`，作为 incident regression 参与此后每次机制验证；同类修复必须是通用物理能力，
-  不能读取 incident identity 或建立 whitelist。为保持未见验收的代表性，每吸收一项 sealed/production
-  incident，都应补充新的预先冻结 sealed source。
+  不能读取 incident identity 或建立 whitelist。新的 sealed source 应随真实使用持续补充，但不要求每个
+  production incident 在修复前同步取得一张 sealed source。
 - 概率选择层还需要独立 calibration source，且必须在查看 scorer 输出前冻结；calibration 与 sealed
   不能互相替代。只有 feature/model/threshold、风险预算、OOD 合同和候选生成 commit 全部冻结后，才能
   运行 sealed aggregate acceptance。任何改动都使两类 receipt 同时失效；sealed 失败不得用于逐样片
@@ -1228,7 +1245,7 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   有效成像边界的最内侧可接受基准，基本可作为 source aperture 的真实尺寸观测；因此它可以校准物理
   分布、format prior 和 source-level extent owner。它仍不是跨相机绝对固定常量：holder-normalized mm
   只是在名义片夹尺度上的估计，明显偏离 catalog 时必须先检查真实相机个体差异、扫描比例和 measurement
-  uncertainty，不能自动判为标注错误，也不能由开发集直接晋升黄金或绕过 sealed acceptance。
+  uncertainty，不能自动判为标注错误，也不能由开发集直接晋升为未见验证证据。
 - 24-source performance 只证明其绑定 commit、依赖和机器上的完整路径时间与资源；5 秒均值是
   blocking Gate，3 秒均值只是 non-blocking challenge。
 - Platform 聚合必须同时收到同一 commit 的 Apple Silicon macOS、Intel macOS 与 Windows x64
@@ -1238,5 +1255,7 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   与 fractional pitch，cosmetic deskew 的可用/跳过及横竖旋转符号，轻微直线 residual、缺边、
   多处直接 wide/narrow gap、contact/overlap 的安全 auto 与安全 review、同源 count 变体、强内部假边、填充
   状态、dual lane、联合安全预算和 source-wide 事务。
-- 全部 release receipt 和 sealed acceptance aggregate receipt 必须绑定同一最终 commit；否则 V5 不创建
-  RC、tag、Release 或公开 ZIP。
+- Development gold、性能、依赖、TIFF/metadata、安装、三目标平台、打包和 Hook/CI 的 release receipt
+  必须绑定同一最终 commit；否则 V5 不创建 RC、tag、Release 或公开 ZIP。若已有 sealed cohort，其
+  aggregate receipt 也必须绑定同一 commit。当前黄金未覆盖 `xpan`、`120-645`、`135-dual` 不阻断发布，
+  但发布说明必须明确“尚无真实样片覆盖”，Runtime 不得为此建立禁用、白名单或宽松规则。

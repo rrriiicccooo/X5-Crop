@@ -2,9 +2,9 @@
 
 The registered measurement and the fixed-template placement already exist
 before this module runs.  This owner maps those facts once per adjacency and
-answers only whether the ordinary positive-separator interpretation remains
-supported, contradicted, or unavailable.  Contact and overlap selection are
-deliberately outside this stage.
+classifies positive separator, shared-edge contact, independent reversed-edge
+overlap, fully observed normal absence, or an explicit unresolved state.  It
+never searches pixels or chooses an ordinal.
 """
 
 from __future__ import annotations
@@ -20,8 +20,8 @@ from .template_adjacency_coverage import (
     AdjacencyCoverageState,
     AdjacencyObservationCoverage,
 )
-from .template_model import SequenceFit
-from .template_model import ContactRelation
+from .template_model import ContactRelation, OverlapRelation, SequenceFit
+from .template_overlap import OverlapEdgePairObservation
 
 
 _NUMERIC_EPSILON_PX = 1.0e-7
@@ -32,8 +32,8 @@ class AdjacencyContinuityKind(str, Enum):
 
     SEPARATOR_MATERIAL = "separator_material"
     CONTACT = "contact"
+    OVERLAP = "overlap"
     NO_COUNTEREVIDENCE_OBSERVED = "no_counterevidence_observed"
-    NORMAL_SEPARATOR_COUNTEREVIDENCE = "normal_separator_counterevidence"
     SEPARATOR_MATERIAL_UNRESOLVED = "separator_material_unresolved"
     UNRESOLVED = "unresolved"
     COVERAGE_INCOMPLETE = "coverage_incomplete"
@@ -44,8 +44,8 @@ class AdjacencyContinuityBasis(str, Enum):
 
     POSITIVE_SEPARATOR_BAND = "positive_separator_band"
     SHARED_PHYSICAL_EDGE = "shared_physical_edge"
+    INDEPENDENT_REVERSED_EDGES = "independent_reversed_edges"
     COMPLETE_REGISTERED_CORRIDOR = "complete_registered_corridor"
-    REVERSED_DIRECT_EDGES = "reversed_direct_edges"
 
 
 class AdjacencyContinuityFailureKind(str, Enum):
@@ -55,6 +55,7 @@ class AdjacencyContinuityFailureKind(str, Enum):
     SEPARATOR_MATERIAL_UNRESOLVED = "separator_material_unresolved"
     SEPARATOR_ROLE_CONFLICT = "separator_role_conflict"
     SIGNED_GAP_CROSSES_ZERO = "signed_gap_crosses_zero"
+    OVERLAP_OBSERVATION_UNAVAILABLE = "overlap_observation_unavailable"
     REGISTERED_COVERAGE_INCOMPLETE = "registered_coverage_incomplete"
 
 
@@ -73,6 +74,7 @@ class AdjacencyContinuityObservation:
     next_start_observation_id: ObservationId | None
     separator_band_observation_ids: tuple[ObservationId, ...]
     contact_observation_id: ObservationId | None
+    overlap_observation_id: ObservationId | None
     signed_gap_interval_px: FiniteInterval | None
     failure_kind: AdjacencyContinuityFailureKind | None
     reason: str | None
@@ -81,12 +83,9 @@ class AdjacencyContinuityObservation:
         supported = self.kind in {
             AdjacencyContinuityKind.SEPARATOR_MATERIAL,
             AdjacencyContinuityKind.CONTACT,
+            AdjacencyContinuityKind.OVERLAP,
             AdjacencyContinuityKind.NO_COUNTEREVIDENCE_OBSERVED,
         }
-        contradicted = (
-            self.kind
-            == AdjacencyContinuityKind.NORMAL_SEPARATOR_COUNTEREVIDENCE
-        )
         failed = self.kind in {
             AdjacencyContinuityKind.SEPARATOR_MATERIAL_UNRESOLVED,
             AdjacencyContinuityKind.UNRESOLVED,
@@ -107,7 +106,7 @@ class AdjacencyContinuityObservation:
             or tuple(sorted(set(self.separator_band_observation_ids)))
             != self.separator_band_observation_ids
             or supported != (self.state == EvidenceState.SUPPORTED)
-            or contradicted != (self.state == EvidenceState.CONTRADICTED)
+            or self.state == EvidenceState.CONTRADICTED
             or failed != (self.state == EvidenceState.UNAVAILABLE)
             or failed
             != (
@@ -129,6 +128,7 @@ class AdjacencyContinuityObservation:
                 AdjacencyContinuityFailureKind.MULTIPLE_SEPARATOR_BANDS,
                 AdjacencyContinuityFailureKind.SEPARATOR_ROLE_CONFLICT,
                 AdjacencyContinuityFailureKind.SIGNED_GAP_CROSSES_ZERO,
+                AdjacencyContinuityFailureKind.OVERLAP_OBSERVATION_UNAVAILABLE,
             },
             AdjacencyContinuityKind.COVERAGE_INCOMPLETE: {
                 AdjacencyContinuityFailureKind.REGISTERED_COVERAGE_INCOMPLETE,
@@ -158,6 +158,20 @@ class AdjacencyContinuityObservation:
                 or not isinstance(self.contact_observation_id, ObservationId)
             ):
                 raise ValueError("contact continuity fact is incomplete")
+        elif self.kind == AdjacencyContinuityKind.OVERLAP:
+            if (
+                self.basis
+                != AdjacencyContinuityBasis.INDEPENDENT_REVERSED_EDGES
+                or not direct_pair
+                or self.end_observation_id
+                == self.next_start_observation_id
+                or self.separator_band_observation_ids
+                or self.signed_gap_interval_px is None
+                or self.signed_gap_interval_px.maximum
+                >= -_NUMERIC_EPSILON_PX
+                or not isinstance(self.overlap_observation_id, ObservationId)
+            ):
+                raise ValueError("overlap continuity fact is incomplete")
         elif self.kind == (
             AdjacencyContinuityKind.NO_COUNTEREVIDENCE_OBSERVED
         ):
@@ -167,17 +181,6 @@ class AdjacencyContinuityObservation:
                 or self.separator_band_observation_ids
             ):
                 raise ValueError("neutral continuity fact is invalid")
-        elif contradicted:
-            if (
-                self.basis
-                != AdjacencyContinuityBasis.REVERSED_DIRECT_EDGES
-                or not direct_pair
-                or self.separator_band_observation_ids
-                or self.signed_gap_interval_px is None
-                or self.signed_gap_interval_px.maximum
-                > _NUMERIC_EPSILON_PX
-            ):
-                raise ValueError("normal-separator counterevidence is invalid")
         elif self.basis is not None:
             raise ValueError("unresolved continuity cannot claim a basis")
         if (
@@ -186,14 +189,17 @@ class AdjacencyContinuityObservation:
         ):
             raise ValueError("non-contact continuity retained contact evidence")
         if (
+            self.kind != AdjacencyContinuityKind.OVERLAP
+            and self.overlap_observation_id is not None
+        ):
+            raise ValueError("non-overlap continuity retained overlap evidence")
+        if (
             self.kind
             == AdjacencyContinuityKind.SEPARATOR_MATERIAL_UNRESOLVED
             and (
                 not direct_pair
                 or not self.separator_band_observation_ids
                 or self.signed_gap_interval_px is None
-                or self.signed_gap_interval_px.minimum
-                <= _NUMERIC_EPSILON_PX
             )
         ):
             raise ValueError("unresolved material provenance is invalid")
@@ -284,6 +290,7 @@ def observe_adjacency_continuity(
     sequence_edges: tuple[BoundaryEdgeObservation, ...],
     separator_bands: tuple[SeparatorBandObservation, ...],
     coverage: tuple[AdjacencyObservationCoverage, ...],
+    overlap_edge_pairs: tuple[OverlapEdgePairObservation, ...] = (),
 ) -> tuple[AdjacencyContinuityObservation, ...]:
     """Map one selected fit to ordinary-adjacency facts in O(count)."""
 
@@ -300,6 +307,15 @@ def observe_adjacency_continuity(
         separator_bands,
         set(by_id),
     )
+    overlap_pairs_by_edges = {
+        (
+            item.end_edge_observation_id,
+            item.next_start_edge_observation_id,
+        ): item
+        for item in overlap_edge_pairs
+    }
+    if len(overlap_pairs_by_edges) != len(overlap_edge_pairs):
+        raise ValueError("overlap edge-pair identities must be unique")
     values: list[AdjacencyContinuityObservation] = []
     relations_by_ordinal = {
         item.relation_ordinal: item for item in fit.adjacency_relations
@@ -352,6 +368,7 @@ def observe_adjacency_continuity(
         )
         relation = relations_by_ordinal.get(item.relation_ordinal)
         contact = relation if isinstance(relation, ContactRelation) else None
+        overlap = relation if isinstance(relation, OverlapRelation) else None
 
         def observation(
             *,
@@ -360,6 +377,7 @@ def observe_adjacency_continuity(
             basis: AdjacencyContinuityBasis | None = None,
             separator_band_observation_ids: tuple[ObservationId, ...] = (),
             contact_observation_id: ObservationId | None = None,
+            overlap_observation_id: ObservationId | None = None,
             signed_gap_interval_px: FiniteInterval | None = None,
             failure_kind: AdjacencyContinuityFailureKind | None = None,
             reason: str | None = None,
@@ -384,6 +402,7 @@ def observe_adjacency_continuity(
                 next_start_observation_id=next_start_id,
                 separator_band_observation_ids=separator_band_observation_ids,
                 contact_observation_id=contact_observation_id,
+                overlap_observation_id=overlap_observation_id,
                 signed_gap_interval_px=signed_gap_interval_px,
                 failure_kind=failure_kind,
                 reason=reason,
@@ -440,6 +459,69 @@ def observe_adjacency_continuity(
             )
             continue
 
+        if overlap is not None:
+            if (
+                end_id != overlap.end_edge_observation_id
+                or next_start_id
+                != overlap.next_start_edge_observation_id
+                or direct_signed_gap is None
+                or direct_signed_gap
+                != overlap.signed_gap_interval_px
+            ):
+                raise ValueError(
+                    "selected overlap lost its reversed-edge binding"
+                )
+            if item.state != AdjacencyCoverageState.COMPLETE:
+                values.append(
+                    observation(
+                        state=EvidenceState.UNAVAILABLE,
+                        kind=AdjacencyContinuityKind.COVERAGE_INCOMPLETE,
+                        signed_gap_interval_px=direct_signed_gap,
+                        failure_kind=(
+                            AdjacencyContinuityFailureKind
+                            .REGISTERED_COVERAGE_INCOMPLETE
+                        ),
+                        reason=(
+                            "registered queries do not cover the complete "
+                            "overlap corridor"
+                        ),
+                    )
+                )
+                continue
+            if exact_bands:
+                values.append(
+                    observation(
+                        state=EvidenceState.UNAVAILABLE,
+                        kind=AdjacencyContinuityKind.UNRESOLVED,
+                        failure_kind=(
+                            AdjacencyContinuityFailureKind
+                            .SEPARATOR_ROLE_CONFLICT
+                        ),
+                        reason=(
+                            "separator material competes with the "
+                            "reversed-edge overlap interpretation"
+                        ),
+                        separator_band_observation_ids=exact_band_ids,
+                        signed_gap_interval_px=direct_signed_gap,
+                    )
+                )
+                continue
+            values.append(
+                observation(
+                    state=EvidenceState.SUPPORTED,
+                    kind=AdjacencyContinuityKind.OVERLAP,
+                    basis=(
+                        AdjacencyContinuityBasis
+                        .INDEPENDENT_REVERSED_EDGES
+                    ),
+                    overlap_observation_id=(
+                        overlap.overlap_observation_id
+                    ),
+                    signed_gap_interval_px=direct_signed_gap,
+                )
+            )
+            continue
+
         if len(supported_bands) > 1 or (
             supported_bands and material_conflicts
         ):
@@ -460,39 +542,6 @@ def observe_adjacency_continuity(
                 )
             )
             continue
-        if not supported_bands and direct_signed_gap is not None:
-            if direct_signed_gap.maximum <= _NUMERIC_EPSILON_PX:
-                values.append(
-                    observation(
-                        state=EvidenceState.CONTRADICTED,
-                        kind=(
-                            AdjacencyContinuityKind
-                            .NORMAL_SEPARATOR_COUNTEREVIDENCE
-                        ),
-                        basis=(
-                            AdjacencyContinuityBasis.REVERSED_DIRECT_EDGES
-                        ),
-                        signed_gap_interval_px=direct_signed_gap,
-                    )
-                )
-                continue
-            if direct_signed_gap.minimum <= _NUMERIC_EPSILON_PX:
-                values.append(
-                    observation(
-                        state=EvidenceState.UNAVAILABLE,
-                        kind=AdjacencyContinuityKind.UNRESOLVED,
-                        signed_gap_interval_px=direct_signed_gap,
-                        failure_kind=(
-                            AdjacencyContinuityFailureKind
-                            .SIGNED_GAP_CROSSES_ZERO
-                        ),
-                        reason=(
-                            "direct adjacency gap spans both ordinary and "
-                            "non-ordinary topology"
-                        ),
-                    )
-                )
-                continue
         if material_conflicts:
             values.append(
                 observation(
@@ -516,6 +565,76 @@ def observe_adjacency_continuity(
                 )
             )
             continue
+        if not supported_bands and direct_signed_gap is not None:
+            if direct_signed_gap.maximum < -_NUMERIC_EPSILON_PX:
+                if item.state != AdjacencyCoverageState.COMPLETE:
+                    values.append(
+                        observation(
+                            state=EvidenceState.UNAVAILABLE,
+                            kind=AdjacencyContinuityKind.COVERAGE_INCOMPLETE,
+                            signed_gap_interval_px=direct_signed_gap,
+                            failure_kind=(
+                                AdjacencyContinuityFailureKind
+                                .REGISTERED_COVERAGE_INCOMPLETE
+                            ),
+                            reason=(
+                                "registered queries do not cover the complete "
+                                "reversed-edge corridor"
+                            ),
+                        )
+                    )
+                    continue
+                pair = overlap_pairs_by_edges.get((end_id, next_start_id))
+                if (
+                    pair is None
+                    or pair.signed_gap_interval_px != direct_signed_gap
+                ):
+                    values.append(
+                        observation(
+                            state=EvidenceState.UNAVAILABLE,
+                            kind=AdjacencyContinuityKind.UNRESOLVED,
+                            signed_gap_interval_px=direct_signed_gap,
+                            failure_kind=(
+                                AdjacencyContinuityFailureKind
+                                .OVERLAP_OBSERVATION_UNAVAILABLE
+                            ),
+                            reason=(
+                                "reversed direct edges lack one registered "
+                                "candidate-independent overlap observation"
+                            ),
+                        )
+                    )
+                    continue
+                values.append(
+                    observation(
+                        state=EvidenceState.SUPPORTED,
+                        kind=AdjacencyContinuityKind.OVERLAP,
+                        basis=(
+                            AdjacencyContinuityBasis
+                            .INDEPENDENT_REVERSED_EDGES
+                        ),
+                        overlap_observation_id=pair.observation_id,
+                        signed_gap_interval_px=direct_signed_gap,
+                    )
+                )
+                continue
+            if direct_signed_gap.minimum <= _NUMERIC_EPSILON_PX:
+                values.append(
+                    observation(
+                        state=EvidenceState.UNAVAILABLE,
+                        kind=AdjacencyContinuityKind.UNRESOLVED,
+                        signed_gap_interval_px=direct_signed_gap,
+                        failure_kind=(
+                            AdjacencyContinuityFailureKind
+                            .SIGNED_GAP_CROSSES_ZERO
+                        ),
+                        reason=(
+                            "direct adjacency gap spans both ordinary and "
+                            "non-ordinary topology"
+                        ),
+                    )
+                )
+                continue
         if supported_bands:
             assert end_id is not None and next_start_id is not None
             band = supported_bands[0]

@@ -31,12 +31,17 @@ from x5crop.detection.photo_geometry.observation_types import (
 from x5crop.detection.photo_geometry.template_model import (
     FrameWidthInferenceFailureKind,
     LatticeParameterFitBasis,
+    OverlapRelation,
     SeparatorRelationKind,
     SeparatorRelation,
     PhaseLatticeAuthority,
     SequenceBindingUse,
     TemplateSearchReceipt,
     TemplateSpec,
+    template_role_refinement_radius_px,
+)
+from x5crop.detection.photo_geometry.template_overlap import (
+    observe_overlap_edge_pairs,
 )
 from x5crop.detection.photo_geometry.template_direct_role_authority import (
     DirectRoleAuthorityBasis,
@@ -95,21 +100,30 @@ from x5crop.domain import (
 
 
 def _continuity_for_residual(fit, observations, bands):
+    measurement = phase_sequence_measurement(
+        "residual",
+        FiniteInterval(0.0, 1000.0),
+    )
     coverage = assess_adjacency_observation_coverage(
         fit,
-        (
-            phase_sequence_measurement(
-                "residual",
-                FiniteInterval(0.0, 1000.0),
-            ),
-        ),
+        (measurement,),
         directly_observed_ordinals=(),
+    )
+    overlap_pairs = observe_overlap_edge_pairs(
+        tuple(observations),
+        tuple(bands),
+        (measurement,),
+        direction=fit.template.direction,
+        maximum_overlap_px=template_role_refinement_radius_px(
+            fit.template.pitch_px.maximum
+        ),
     )
     return observe_adjacency_continuity(
         fit,
         tuple(observations),
         tuple(bands),
         coverage,
+        overlap_pairs,
     )
 
 
@@ -3834,7 +3848,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertIsNone(analysis.unresolved_reason)
         self.assertEqual(analysis.evaluated_adjacency_count, 2)
 
-    def test_direct_contact_or_overlap_without_band_stays_review_only(self) -> None:
+    def test_reversed_direct_edges_form_one_bounded_overlap_relation(self) -> None:
         regular = tuple(
             edge(f"edge:contact:{index}", coordinate)
             for index, coordinate in enumerate(
@@ -3851,9 +3865,10 @@ class TemplatePhaseContractTest(unittest.TestCase):
             _continuity_for_residual(fit, tuple(overlap), ()),
         )
 
-        self.assertEqual(analysis.pattern, ResidualPattern.UNRESOLVED)
-        self.assertEqual(analysis.relations, ())
-        self.assertIn("ordinary positive separator", analysis.unresolved_reason or "")
+        self.assertEqual(analysis.pattern, ResidualPattern.MEASURED_ADVANCES)
+        self.assertEqual(len(analysis.relations), 1)
+        self.assertIsInstance(analysis.relations[0], OverlapRelation)
+        self.assertIsNone(analysis.unresolved_reason)
 
     def test_repeated_direct_gap_facts_are_all_applied_before_output_bleed(self) -> None:
         regular = tuple(

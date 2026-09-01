@@ -127,12 +127,18 @@ def leave_one_anchor_out_phase_stability(
             for item in phase_input.contact_edge_observations
             if item.shared_edge_observation_id in reduced_ids
         )
+        reduced_overlap_pairs = tuple(
+            item
+            for item in phase_input.overlap_edge_pair_observations
+            if set(item.supporting_observation_ids).issubset(reduced_ids)
+        )
         refit = fit_template_phase_with_adjacency_relations(
             replace(
                 phase_input,
                 observations=reduced,
                 separator_bands=reduced_bands,
                 contact_edge_observations=reduced_contact_edges,
+                overlap_edge_pair_observations=reduced_overlap_pairs,
                 # The final search authority may itself have been estimated
                 # from the removed atom.  Reusing it would make the
                 # leave-one-out check circular.

@@ -23,10 +23,12 @@ from .model import (
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .separator_material import normal_separator_material_bands
 from .template_contact import ContactEdgeObservation
+from .template_overlap import OverlapEdgePairObservation
 from .template_model import (
     AdjacencyRelation,
     ContactRelation,
     LatticeParameterFitBasis,
+    OverlapRelation,
     PhaseLatticeFit,
     PitchFit,
     SeparatorRelation,
@@ -37,10 +39,12 @@ from .template_model import (
     SequenceRoleLineEvidence,
     TemplateRole,
     TemplateSpec,
+    adjacency_topology_required_bindings,
     adjacency_prefix_coefficients,
     most_constrained_lattice_parameter_fit_basis,
     phase_lattice_fit_from_absolute,
-    realize_contact_relations,
+    realize_topology_relations,
+    realize_topology_relations_at_role_positions,
     template_role_refinement_radius_px,
 )
 from .template_nominal_grid_authority import (
@@ -332,6 +336,170 @@ def _contact_phase_seeds(
                 required_bindings=(
                     (end_role_index, anchor.observation_id),
                     (start_role_index, anchor.observation_id),
+                ),
+                adjacency_relations=realized,
+            )
+        )
+    return tuple(
+        sorted(
+            seeds,
+            key=lambda item: (
+                item.phase_px,
+                item.pitch_px,
+                tuple(map(repr, item.adjacency_relations)),
+            ),
+        )
+    )
+
+
+def _overlap_phase_seeds(
+    overlap_pairs: Sequence[OverlapEdgePairObservation],
+    direct: tuple[_AnchorFact, ...],
+    roles: tuple[TemplateRole, ...],
+    template: TemplateSpec,
+    *,
+    width: FiniteInterval,
+    pitch: FiniteInterval,
+    base_relations: tuple[AdjacencyRelation, ...],
+) -> tuple[_PhaseSeed, ...]:
+    """Project every registered reversed pair onto each legal adjacency."""
+
+    by_id = {item.observation_id: item for item in direct}
+    existing = tuple(
+        item for item in base_relations if isinstance(item, OverlapRelation)
+    )
+    observations_by_id = {
+        item.observation_id: item for item in overlap_pairs
+    }
+    if existing:
+        required_bindings: list[tuple[int, ObservationId]] = []
+        phase_anchor: tuple[OverlapRelation, _AnchorFact] | None = None
+        for relation in existing:
+            observation = observations_by_id.get(
+                relation.overlap_observation_id
+            )
+            if (
+                observation is None
+                or observation.end_edge_observation_id
+                != relation.end_edge_observation_id
+                or observation.next_start_edge_observation_id
+                != relation.next_start_edge_observation_id
+                or observation.signed_gap_interval_px
+                != relation.signed_gap_interval_px
+            ):
+                raise ValueError(
+                    "overlap relation left its registered observation"
+                )
+            end = by_id.get(observation.end_edge_observation_id)
+            next_start = by_id.get(
+                observation.next_start_edge_observation_id
+            )
+            if end is None or next_start is None:
+                return ()
+            end_role_index = 2 * relation.relation_ordinal - 1
+            start_role_index = 2 * relation.relation_ordinal
+            required_bindings.extend(
+                (
+                    (end_role_index, end.observation_id),
+                    (start_role_index, next_start.observation_id),
+                )
+            )
+            if phase_anchor is None:
+                phase_anchor = (relation, end)
+        assert phase_anchor is not None
+        relation, end = phase_anchor
+        prefixes = _prefixes(base_relations, template.count)
+        end_role = roles[2 * relation.relation_ordinal - 1]
+        relative = (
+            end_role.slot_index * pitch.center
+            + prefixes[end_role.slot_index]
+            + width.center
+        )
+        phase = end.coordinate_px - template.direction * relative
+        return (
+            _PhaseSeed(
+                phase_px=round(phase, 9),
+                pitch_px=round(pitch.center, 9),
+                required_bindings=tuple(required_bindings),
+                adjacency_relations=base_relations,
+            ),
+        )
+
+    hypotheses = tuple(
+        (observation, ordinal)
+        for observation in overlap_pairs
+        for ordinal in range(1, template.count)
+    )
+
+    seeds: set[_PhaseSeed] = set()
+    for observation, ordinal in hypotheses:
+        end = by_id.get(observation.end_edge_observation_id)
+        next_start = by_id.get(observation.next_start_edge_observation_id)
+        if end is None or next_start is None:
+            continue
+        relations = list(base_relations)
+        while len(relations) < ordinal:
+            relation_ordinal = len(relations) + 1
+            relations.append(
+                SeparatorRelation(
+                    relation_ordinal=relation_ordinal,
+                    kind=SeparatorRelationKind.NOMINAL,
+                    delta_interval_px=FiniteInterval.exact(0.0),
+                    canonical_delta_px=0.0,
+                )
+            )
+        current = relations[ordinal - 1]
+        if (
+            isinstance(current, SeparatorRelation)
+            and current.kind != SeparatorRelationKind.NOMINAL
+        ) or isinstance(current, ContactRelation):
+            continue
+        signed_gap = observation.signed_gap_interval_px
+        delta_interval = FiniteInterval(
+            signed_gap.minimum + width.minimum - pitch.maximum,
+            signed_gap.maximum + width.maximum - pitch.minimum,
+        )
+        overlap = OverlapRelation(
+            relation_ordinal=ordinal,
+            overlap_observation_id=observation.observation_id,
+            end_edge_observation_id=observation.end_edge_observation_id,
+            next_start_edge_observation_id=(
+                observation.next_start_edge_observation_id
+            ),
+            signed_gap_interval_px=signed_gap,
+            canonical_signed_gap_px=(
+                observation.canonical_signed_gap_px
+            ),
+            delta_interval_px=delta_interval,
+            canonical_delta_px=(
+                width.center
+                - pitch.center
+                + observation.canonical_signed_gap_px
+            ),
+            supporting_observation_ids=(
+                observation.end_edge_observation_id,
+                observation.next_start_edge_observation_id,
+            ),
+        )
+        relations[ordinal - 1] = overlap
+        realized = tuple(relations)
+        prefixes = _prefixes(realized, template.count)
+        end_role_index = 2 * ordinal - 1
+        start_role_index = 2 * ordinal
+        end_role = roles[end_role_index]
+        relative = (
+            end_role.slot_index * pitch.center
+            + prefixes[end_role.slot_index]
+            + width.center
+        )
+        phase = end.coordinate_px - template.direction * relative
+        seeds.add(
+            _PhaseSeed(
+                phase_px=round(phase, 9),
+                pitch_px=round(pitch.center, 9),
+                required_bindings=(
+                    (end_role_index, end.observation_id),
+                    (start_role_index, next_start.observation_id),
                 ),
                 adjacency_relations=realized,
             )
@@ -1719,7 +1887,7 @@ def _fit_seed(
     phase = seed.phase_px
     fit_basis = LatticeParameterFitBasis.TEMPLATE_INTERVAL_CENTER
     relations = seed.adjacency_relations or relations
-    relations = realize_contact_relations(
+    relations = realize_topology_relations(
         relations,
         frame_width_px=width,
         pitch_px=pitch,
@@ -1780,7 +1948,7 @@ def _fit_seed(
             break
         matches = updated_matches
         phase, width, pitch = updated_phase, updated_width, updated_pitch
-        relations = realize_contact_relations(
+        relations = realize_topology_relations(
             relations,
             frame_width_px=width,
             pitch_px=pitch,
@@ -1822,7 +1990,7 @@ def _fit_seed(
             retained_basis,
         )
         matches = retained
-        relations = realize_contact_relations(
+        relations = realize_topology_relations(
             relations,
             frame_width_px=width,
             pitch_px=pitch,
@@ -1955,6 +2123,13 @@ def _fit_seed(
     )
     if lattice_fit is None:
         return None
+    relations = realize_topology_relations_at_role_positions(
+        relations,
+        model_role_positions_px=canonical_positions,
+        direction=template.direction,
+        frame_width_px=width,
+        pitch_px=pitch,
+    )
     fit = SequenceFit(
         template=template,
         phase_lattice_fit=lattice_fit,
@@ -2073,6 +2248,13 @@ def _fit_calibrated_nominal_grid_candidate(
             support_by_location.get(location, 0.0),
             anchor.support_fraction,
         )
+    relations = realize_topology_relations_at_role_positions(
+        relations,
+        model_role_positions_px=envelope.role_positions_px,
+        direction=template.direction,
+        frame_width_px=envelope.canonical_frame_width_px,
+        pitch_px=envelope.canonical_pitch_px,
+    )
     fit = SequenceFit(
         template=template,
         phase_lattice_fit=PhaseLatticeFit(
@@ -2166,6 +2348,31 @@ def project_candidate_to_authorized_direct_roles(
     retained_facts = tuple(
         item for item in authority.facts if item.state == EvidenceState.SUPPORTED
     )
+    supported_bindings = {
+        (item.role_index, item.observation_id) for item in retained_facts
+    }
+    missing_topology_bindings = tuple(
+        binding
+        for binding in adjacency_topology_required_bindings(relations)
+        if binding not in supported_bindings
+    )
+    if missing_topology_bindings:
+        return None, PhaseCandidateAuthorityProjection(
+            input_direct_role_authority=authority,
+            outcome=(
+                PhaseCandidateProjectionOutcome.TOPOLOGY_BINDING_UNAVAILABLE
+            ),
+            basis=None,
+            projected_out_bindings=projected_out,
+            retained_direct_constraint_rank=retained_rank,
+            reason=(
+                "topology relation requires unavailable direct role bindings: "
+                + ", ".join(
+                    f"role {role_index}={observation_id}"
+                    for role_index, observation_id in missing_topology_bindings
+                )
+            ),
+        )
     required_bindings = tuple(
         (item.role_index, item.observation_id) for item in retained_facts
     )

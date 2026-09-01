@@ -52,8 +52,12 @@ from x5crop.detection.photo_geometry.template_output import (
 from x5crop.detection.photo_geometry.template_feasible_geometry import (
     project_selected_placement,
 )
+from x5crop.detection.photo_geometry.template_placement import (
+    resolved_cross_support_domains_px,
+)
 from x5crop.detection.photo_geometry.template_model import (
     ContactRelation,
+    OverlapRelation,
     SequenceRoleLineEvidence,
 )
 from x5crop.detection.source_core import (
@@ -147,6 +151,63 @@ def _contact_placement(
                 delta_interval_px=FiniteInterval.exact(-20.0),
                 canonical_delta_px=-20.0,
                 supporting_observation_ids=(shared_id,),
+            ),
+        ),
+    )
+    return _compose(
+        template,
+        sequence,
+        _cross(template, direction=_direction()),
+    )
+
+
+def _overlap_placement():
+    template = _template(2)
+    sequence = _sequence(template)
+    end_id = ObservationId("sequence:1")
+    start_id = ObservationId("sequence:2")
+    end_binding = sequence.role_bindings[1]
+    start_binding = sequence.role_bindings[2]
+    final_binding = sequence.role_bindings[3]
+    assert end_binding is not None
+    assert start_binding is not None
+    assert final_binding is not None
+    start_binding = replace(
+        start_binding,
+        canonical_position_px=195.0,
+        fit_position_interval_px=FiniteInterval.exact(195.0),
+        full_position_interval_px=FiniteInterval.exact(195.0),
+    )
+    final_binding = replace(
+        final_binding,
+        canonical_position_px=295.0,
+        fit_position_interval_px=FiniteInterval.exact(295.0),
+        full_position_interval_px=FiniteInterval.exact(295.0),
+    )
+    positions = (100.0, 200.0, 195.0, 295.0)
+    intervals = tuple(FiniteInterval.exact(value) for value in positions)
+    sequence = replace(
+        sequence,
+        model_role_positions_px=positions,
+        model_role_intervals_px=intervals,
+        model_full_role_intervals_px=intervals,
+        role_bindings=(
+            sequence.role_bindings[0],
+            end_binding,
+            start_binding,
+            final_binding,
+        ),
+        adjacency_relations=(
+            OverlapRelation(
+                relation_ordinal=1,
+                overlap_observation_id=ObservationId("overlap:test"),
+                end_edge_observation_id=end_id,
+                next_start_edge_observation_id=start_id,
+                signed_gap_interval_px=FiniteInterval.exact(-5.0),
+                canonical_signed_gap_px=-5.0,
+                delta_interval_px=FiniteInterval.exact(-25.0),
+                canonical_delta_px=-25.0,
+                supporting_observation_ids=(end_id, start_id),
             ),
         ),
     )
@@ -357,6 +418,68 @@ def _selected_output_gate_fact(output, assessment):
 
 
 class TemplateOutputContractTest(unittest.TestCase):
+    def test_cross_support_partitions_only_an_explicit_overlap(self) -> None:
+        placement = _overlap_placement()
+
+        self.assertEqual(
+            resolved_cross_support_domains_px(placement.sequence_fit),
+            (
+                FiniteInterval(100.0, 197.5),
+                FiniteInterval(197.5, 295.0),
+            ),
+        )
+        unmodeled = replace(
+            placement.sequence_fit,
+            adjacency_relations=(),
+        )
+        with self.assertRaisesRegex(
+            ValueError,
+            "explicit OverlapRelation",
+        ):
+            resolved_cross_support_domains_px(unmodeled)
+
+    def test_overlap_protection_applies_only_to_the_two_reversed_sides(
+        self,
+    ) -> None:
+        placement = _overlap_placement()
+        projection = project_selected_placement(placement)
+        outputs = tuple(
+            output_footprint_from_template_placement(
+                placement,
+                projection,
+                lane=_lane(),
+                lane_ordinal=ordinal,
+                layout="horizontal",
+            )
+            for ordinal in (1, 2)
+        )
+        protections = {
+            (output.envelope.lane_ordinal, item.role): item
+            for output in outputs
+            for item in output.boundary_protections
+        }
+        relation_id = ObservationId("overlap:test")
+
+        for key in (
+            (1, BoundaryRole.END),
+            (2, BoundaryRole.START),
+        ):
+            fact = protections[key]
+            self.assertEqual(fact.topology_relation_id, relation_id)
+            self.assertAlmostEqual(
+                fact.topology_protection_px,
+                fact.base_bleed_px,
+            )
+            self.assertGreater(fact.topology_protection_px, 0.0)
+        for key, fact in protections.items():
+            if key in {
+                (1, BoundaryRole.END),
+                (2, BoundaryRole.START),
+            }:
+                continue
+            self.assertIsNone(fact.topology_relation_id)
+            self.assertEqual(fact.topology_protection_px, 0.0)
+
     def test_contact_protection_applies_only_to_the_two_shared_sides(
         self,
     ) -> None:

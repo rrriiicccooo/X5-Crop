@@ -680,6 +680,7 @@ def _validate_adjacency_continuity(value: object) -> None:
             "next_start_observation_id",
             "separator_band_observation_ids",
             "contact_observation_id",
+            "overlap_observation_id",
             "signed_gap_interval_px",
             "failure_kind",
             "reason",
@@ -693,6 +694,7 @@ def _validate_adjacency_continuity(value: object) -> None:
         start_id = observation["next_start_observation_id"]
         separator_band_ids = observation["separator_band_observation_ids"]
         contact_id = observation["contact_observation_id"]
+        overlap_id = observation["overlap_observation_id"]
         signed_gap = observation["signed_gap_interval_px"]
         failure_kind = observation["failure_kind"]
         reason = observation["reason"]
@@ -706,8 +708,8 @@ def _validate_adjacency_continuity(value: object) -> None:
             not in {
                 "separator_material",
                 "contact",
+                "overlap",
                 "no_counterevidence_observed",
-                "normal_separator_counterevidence",
                 "separator_material_unresolved",
                 "unresolved",
                 "coverage_incomplete",
@@ -717,8 +719,8 @@ def _validate_adjacency_continuity(value: object) -> None:
                 None,
                 "positive_separator_band",
                 "shared_physical_edge",
+                "independent_reversed_edges",
                 "complete_registered_corridor",
-                "reversed_direct_edges",
             }
             or not _valid_interval(observation["required_interval_px"])
             or not _valid_ids(observation["covering_query_ids"])
@@ -733,6 +735,8 @@ def _validate_adjacency_continuity(value: object) -> None:
             or separator_band_ids != sorted(separator_band_ids)
             or contact_id is not None
             and (not isinstance(contact_id, str) or not contact_id)
+            or overlap_id is not None
+            and (not isinstance(overlap_id, str) or not overlap_id)
             or signed_gap is not None
             and not _valid_interval(signed_gap)
             or failure_kind
@@ -742,6 +746,7 @@ def _validate_adjacency_continuity(value: object) -> None:
                 "separator_material_unresolved",
                 "separator_role_conflict",
                 "signed_gap_crosses_zero",
+                "overlap_observation_unavailable",
                 "registered_coverage_incomplete",
             }
             or reason is not None
@@ -760,12 +765,12 @@ def _validate_adjacency_continuity(value: object) -> None:
                 in {
                     "separator_material",
                     "contact",
+                    "overlap",
                     "no_counterevidence_observed",
                 }
             )
             != (state == "supported")
-            or (kind == "normal_separator_counterevidence")
-            != (state == "contradicted")
+            or state == "contradicted"
             or failed != (state == "unavailable")
             or failed != (failure_kind is not None and reason is not None)
             or (not failed) != (failure_kind is None and reason is None)
@@ -779,6 +784,7 @@ def _validate_adjacency_continuity(value: object) -> None:
                 "multiple_separator_bands",
                 "separator_role_conflict",
                 "signed_gap_crosses_zero",
+                "overlap_observation_unavailable",
             },
             "coverage_incomplete": {
                 "registered_coverage_incomplete",
@@ -806,30 +812,33 @@ def _validate_adjacency_continuity(value: object) -> None:
                 or contact_id is None
             ):
                 raise ValueError("contact continuity fact is incomplete")
+        elif kind == "overlap":
+            if (
+                basis != "independent_reversed_edges"
+                or not direct_pair
+                or end_id == start_id
+                or separator_band_ids
+                or signed_gap is None
+                or float(signed_gap["maximum"]) >= -1.0e-7
+                or overlap_id is None
+            ):
+                raise ValueError("overlap continuity fact is incomplete")
         elif kind == "no_counterevidence_observed":
             if (
                 basis != "complete_registered_corridor"
                 or separator_band_ids
             ):
                 raise ValueError("neutral continuity fact is invalid")
-        elif kind == "normal_separator_counterevidence":
-            if (
-                basis != "reversed_direct_edges"
-                or not direct_pair
-                or separator_band_ids
-                or signed_gap is None
-                or float(signed_gap["maximum"]) > 1.0e-7
-            ):
-                raise ValueError("normal-separator counterevidence is invalid")
         elif basis is not None:
             raise ValueError("unresolved continuity cannot claim a basis")
         if kind != "contact" and contact_id is not None:
             raise ValueError("non-contact continuity retained contact evidence")
+        if kind != "overlap" and overlap_id is not None:
+            raise ValueError("non-overlap continuity retained overlap evidence")
         if kind == "separator_material_unresolved" and (
             not direct_pair
             or not separator_band_ids
             or signed_gap is None
-            or float(signed_gap["minimum"]) <= 1.0e-7
         ):
             raise ValueError("unresolved material provenance is invalid")
         if failure_kind == "multiple_separator_bands" and (
@@ -850,6 +859,13 @@ def _validate_adjacency_continuity(value: object) -> None:
             or float(signed_gap["maximum"]) <= 1.0e-7
         ):
             raise ValueError("cross-zero gap provenance is invalid")
+        if failure_kind == "overlap_observation_unavailable" and (
+            not direct_pair
+            or separator_band_ids
+            or signed_gap is None
+            or float(signed_gap["maximum"]) >= -1.0e-7
+        ):
+            raise ValueError("unregistered overlap provenance is invalid")
         if (
             failure_kind == "registered_coverage_incomplete"
             and separator_band_ids
@@ -859,13 +875,15 @@ def _validate_adjacency_continuity(value: object) -> None:
         raise ValueError("adjacency continuity ordinals are invalid")
 
 
-def _validate_adjacency_relations(value: object) -> dict[str, int]:
-    """Validate the serialized adjacency sum type and return contacts."""
+def _validate_adjacency_relations(
+    value: object,
+) -> dict[str, tuple[str, int]]:
+    """Validate the serialized adjacency sum type and return topologies."""
 
     if not isinstance(value, list):
         raise ValueError("adjacency relation summary is invalid")
     ordinals: list[int] = []
-    contacts: dict[str, int] = {}
+    topologies: dict[str, tuple[str, int]] = {}
     separator_fields = {
         "relation_ordinal",
         "kind",
@@ -878,6 +896,18 @@ def _validate_adjacency_relations(value: object) -> dict[str, int]:
         "contact_observation_id",
         "physical_edge_id",
         "shared_edge_observation_id",
+        "delta_interval_px",
+        "canonical_delta_px",
+        "supporting_observation_ids",
+        "kind",
+    }
+    overlap_fields = {
+        "relation_ordinal",
+        "overlap_observation_id",
+        "end_edge_observation_id",
+        "next_start_edge_observation_id",
+        "signed_gap_interval_px",
+        "canonical_signed_gap_px",
         "delta_interval_px",
         "canonical_delta_px",
         "supporting_observation_ids",
@@ -918,28 +948,53 @@ def _validate_adjacency_relations(value: object) -> dict[str, int]:
             ):
                 raise ValueError("separator relation is invalid")
             continue
-        if fields != contact_fields or relation["kind"] != "contact":
+        if fields == contact_fields and relation["kind"] == "contact":
+            contact_id = relation["contact_observation_id"]
+            physical_id = relation["physical_edge_id"]
+            shared_id = relation["shared_edge_observation_id"]
+            supporting_ids = relation["supporting_observation_ids"]
+            if (
+                any(
+                    not isinstance(identity, str) or not identity
+                    for identity in (contact_id, physical_id, shared_id)
+                )
+                or physical_id != shared_id
+                or not _valid_ids(supporting_ids, allow_empty=False)
+                or supporting_ids != list(dict.fromkeys(supporting_ids))
+                or physical_id not in supporting_ids
+                or contact_id in topologies
+            ):
+                raise ValueError("contact relation is invalid")
+            topologies[contact_id] = ("contact", ordinal)
+            continue
+        if fields != overlap_fields or relation["kind"] != "overlap":
             raise ValueError("adjacency relation sum type is invalid")
-        contact_id = relation["contact_observation_id"]
-        physical_id = relation["physical_edge_id"]
-        shared_id = relation["shared_edge_observation_id"]
+        overlap_id = relation["overlap_observation_id"]
+        end_id = relation["end_edge_observation_id"]
+        start_id = relation["next_start_edge_observation_id"]
+        signed_gap = relation["signed_gap_interval_px"]
+        canonical_signed_gap = relation["canonical_signed_gap_px"]
         supporting_ids = relation["supporting_observation_ids"]
         if (
             any(
                 not isinstance(identity, str) or not identity
-                for identity in (contact_id, physical_id, shared_id)
+                for identity in (overlap_id, end_id, start_id)
             )
-            or physical_id != shared_id
-            or not _valid_ids(supporting_ids, allow_empty=False)
-            or supporting_ids != list(dict.fromkeys(supporting_ids))
-            or physical_id not in supporting_ids
-            or contact_id in contacts
+            or end_id == start_id
+            or overlap_id in topologies
+            or not _valid_interval(signed_gap)
+            or float(signed_gap["maximum"]) >= 0.0
+            or not _finite_number(canonical_signed_gap)
+            or not float(signed_gap["minimum"])
+            <= float(canonical_signed_gap)
+            <= float(signed_gap["maximum"])
+            or supporting_ids != [end_id, start_id]
         ):
-            raise ValueError("contact relation is invalid")
-        contacts[contact_id] = ordinal
+            raise ValueError("overlap relation is invalid")
+        topologies[overlap_id] = ("overlap", ordinal)
     if ordinals != list(range(1, len(ordinals) + 1)):
         raise ValueError("adjacency relation ordinals are invalid")
-    return contacts
+    return topologies
 
 
 def _validate_contact_edge_observations(value: object) -> dict[str, str]:
@@ -984,6 +1039,64 @@ def _validate_contact_edge_observations(value: object) -> dict[str, str]:
         ):
             raise ValueError("contact-edge observation is invalid")
         observations[identity] = shared_id
+    return observations
+
+
+def _validate_overlap_edge_pair_observations(
+    value: object,
+) -> dict[str, tuple[str, str]]:
+    """Validate ordinal-free overlap proposals without granting placement."""
+
+    if not isinstance(value, list):
+        raise ValueError("overlap edge-pair observation summary is invalid")
+    observations: dict[str, tuple[str, str]] = {}
+    fields = {
+        "observation_id",
+        "end_edge_observation_id",
+        "next_start_edge_observation_id",
+        "signed_gap_interval_px",
+        "canonical_signed_gap_px",
+        "end_authority_bases",
+        "next_start_authority_bases",
+    }
+    for observation in value:
+        if not isinstance(observation, dict) or set(observation) != fields:
+            raise ValueError("overlap edge-pair observation is invalid")
+        identity = observation["observation_id"]
+        end_id = observation["end_edge_observation_id"]
+        start_id = observation["next_start_edge_observation_id"]
+        signed_gap = observation["signed_gap_interval_px"]
+        canonical = observation["canonical_signed_gap_px"]
+        bases = (
+            observation["end_authority_bases"],
+            observation["next_start_authority_bases"],
+        )
+        if (
+            any(
+                not isinstance(item, str) or not item
+                for item in (identity, end_id, start_id)
+            )
+            or identity in observations
+            or end_id == start_id
+            or not _valid_interval(signed_gap)
+            or float(signed_gap["maximum"]) >= -1.0e-7
+            or not _finite_number(canonical)
+            or not float(signed_gap["minimum"])
+            <= float(canonical)
+            <= float(signed_gap["maximum"])
+            or any(
+                not isinstance(items, list)
+                or not items
+                or items != list(dict.fromkeys(items))
+                or any(
+                    item not in {"source_wide_edge", "aggregate_union"}
+                    for item in items
+                )
+                for items in bases
+            )
+        ):
+            raise ValueError("overlap edge-pair observation is invalid")
+        observations[identity] = (end_id, start_id)
     return observations
 
 
@@ -1734,6 +1847,11 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         contact_edge_observations = _validate_contact_edge_observations(
             lane.get("contact_edge_observations")
         )
+        overlap_edge_pair_observations = (
+            _validate_overlap_edge_pair_observations(
+                lane.get("overlap_edge_pair_observations")
+            )
+        )
         coarse = lane.get("coarse_strip_support")
         _validate_aperture_aspect_ratio_authority(
             lane.get("aperture_aspect_ratio_authority")
@@ -1817,9 +1935,19 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         _validate_adjacency_continuity(
             alignment["adjacency_continuity_observations"]
         )
-        contact_relations = _validate_adjacency_relations(
+        topology_relations = _validate_adjacency_relations(
             alignment["adjacency_relations"]
         )
+        contact_relations = {
+            identity: ordinal
+            for identity, (kind, ordinal) in topology_relations.items()
+            if kind == "contact"
+        }
+        overlap_relations = {
+            identity: ordinal
+            for identity, (kind, ordinal) in topology_relations.items()
+            if kind == "overlap"
+        }
         if not set(contact_relations).issubset(contact_edge_observations):
             raise ValueError(
                 "contact relation leaves the registered contact observations"
@@ -1833,6 +1961,24 @@ def _validate_geometry(record: dict[str, Any]) -> None:
                 raise ValueError(
                     "contact relation changed its registered physical edge"
                 )
+        if not set(overlap_relations).issubset(
+            overlap_edge_pair_observations
+        ):
+            raise ValueError(
+                "overlap relation leaves the registered overlap observations"
+            )
+        for relation in alignment["adjacency_relations"]:
+            if relation["kind"] != "overlap":
+                continue
+            if overlap_edge_pair_observations[
+                relation["overlap_observation_id"]
+            ] != (
+                relation["end_edge_observation_id"],
+                relation["next_start_edge_observation_id"],
+            ):
+                raise ValueError(
+                    "overlap relation changed its registered reversed edges"
+                )
         if [
             item["relation_ordinal"]
             for item in alignment["adjacency_observation_coverage"]
@@ -1842,16 +1988,30 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         ]:
             raise ValueError("adjacency coverage and continuity disagree")
         continuity_contacts = {
-            item["contact_observation_id"]: item["relation_ordinal"]
+            item["contact_observation_id"]: (
+                "contact",
+                item["relation_ordinal"],
+            )
             for item in alignment["adjacency_continuity_observations"]
             if item["kind"] == "contact"
         }
+        continuity_overlaps = {
+            item["overlap_observation_id"]: (
+                "overlap",
+                item["relation_ordinal"],
+            )
+            for item in alignment["adjacency_continuity_observations"]
+            if item["kind"] == "overlap"
+        }
         if any(
-            contact_relations.get(identity) != ordinal
-            for identity, ordinal in continuity_contacts.items()
+            topology_relations.get(identity) != topology
+            for identity, topology in {
+                **continuity_contacts,
+                **continuity_overlaps,
+            }.items()
         ):
             raise ValueError(
-                "contact continuity leaves the selected adjacency relation"
+                "topology continuity leaves the selected adjacency relation"
             )
         _validate_direct_role_binding_authority(
             alignment["direct_role_binding_authority"]
@@ -2097,6 +2257,7 @@ def _validate_phase_candidate_projection(
         "projected",
         "calibrated_nominal_grid",
         "direct_role_contradiction",
+        "topology_binding_unavailable",
         "calibrated_nominal_grid_unavailable",
         "calibrated_nominal_grid_conflict",
         "nominal_grid_phase_anchor_unavailable",
@@ -2117,6 +2278,7 @@ def _validate_phase_candidate_projection(
             "calibrated_nominal_grid",
             "calibrated_nominal_grid_unavailable",
             "calibrated_nominal_grid_conflict",
+            "topology_binding_unavailable",
             "refit_unavailable",
         },
         "contradicted": outcome == "direct_role_contradiction",

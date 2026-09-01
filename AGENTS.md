@@ -207,16 +207,19 @@ platform | platform-check | platform-package | pre-push
   危险输出；nominal 的目标是安全自动批准；challenge 的安全 `approved_auto` 与安全 `needs_review` 都是
   合格结果，前者单独记录为能力发现。不得新增样片规则、whitelist、格式 denylist 或根据当前输出自动
   晋升黄金。
-  发布底线要求 development nominal 与未来 sealed nominal 全部安全 `approved_auto`，且全部角色
-  `unsafe_approved_auto = 0`；不得把失败 nominal 改成 challenge、隐藏 runner 或放宽安全合同来达标。
+  检测能力发布底线要求当前 development nominal 全部安全 `approved_auto`，且全部角色
+  `unsafe_approved_auto = 0`；challenge 的安全 `approved_auto` 与安全 `needs_review` 都合格。未来建立
+  sealed cohort 后，其 nominal 也必须全部安全自动通过。不得把失败 nominal 改成 challenge、隐藏 runner
+  或放宽安全合同来达标。
   对 count 小于 format 最大完整格数的单片带，若人工确认的照片组在 source 长轴两侧都至少留有一个
   固定 W，且首张 START 与末张 END 不是两条都直接可见，则属于
   `two_sided_floating_partial_sequence` challenge；该事实只能从冻结前的 source 几何推导，不能读取
   detector 输出或 post-selection holder fill。
 - 当前 `development_gold.jsonl` 只包含已查看的开发黄金。未来新增 source 在查看任何 detector 结果前，
   必须按 source SHA 固定为 development 或 sealed acceptance；同 SHA 的全部 count task 必须同分区。
-  生产中发现的危险自动裁切经人工 reference 确认后永久加入 development gold 作为 incident regression，
-  同时补充新的 sealed source；不建立新的平行黄金池、样片特例或 whitelist。
+  生产中发现的危险自动裁切经人工 reference 确认后永久加入 development gold 作为 incident regression；
+  在真实使用中持续补充新的 sealed source，但不把补齐 sealed 设为单次 incident 修复的前置条件，也不建立
+  新的平行黄金池、样片特例或 whitelist。
   日常开发命令不得读取或输出 sealed 的逐样片结果。显式打开 sealed source 调试后，该 source 永久转为
   development，并补充新的 sealed source。两个分区共享同一人工 reference 权限，不建立平行校准池。
 - 同 SHA 的合法 count 变体按共享物理 `boundary_pair` 映射真实 Frame。不同 count 可以改变 ambiguity 和
@@ -245,8 +248,10 @@ platform | platform-check | platform-package | pre-push
   当前 `HEAD` 读取同一字节写入临时包；不得因此把文件恢复到本地工作区或掩盖其它缺失发布源。
 - `tools/release/manifest.py` 是发布内容唯一 owner。用户包不包含 modular source、tests、tools、
   fixtures、内部文档、开发依赖或生成输出。
-- 构建命令为 `python3 -m tools.release.build --version <version>`。只有 development gold、sealed
-  acceptance aggregate receipt、性能、依赖、TIFF、中文路径、文件系统恢复，以及 Apple Silicon
-  macOS、Intel macOS、Windows x64 三目标
-  实机 receipt 全部绑定同一 release commit 后，才可创建 RC、tag、GitHub Release 或公开 ZIP；
-  未提供独立卷时 exFAT 必须保持显式 best-effort 未验证。
+- 构建命令为 `python3 -m tools.release.build --version <version>`。只有 development gold、性能、依赖、
+  TIFF/metadata、中文路径、文件系统恢复、安装/打包、Hook/CI，以及 Apple Silicon macOS、Intel macOS、
+  Windows x64 三目标实机验证全部绑定同一 release commit 后，才可创建 RC、tag、GitHub Release 或公开
+  ZIP。若已有 sealed cohort，其 aggregate receipt 也必须绑定同一 commit；当前没有 sealed cohort 不阻断
+  首版发布，但必须披露尚未完成未见样片验证。现有黄金未覆盖的 `xpan`、`120-645`、`135-dual` 同样不
+  阻断发布；Runtime 保持统一合同，发布说明只能写“尚无真实样片覆盖”，不得宣称已经验证。未提供独立卷时
+  exFAT 必须保持显式 best-effort 未验证。

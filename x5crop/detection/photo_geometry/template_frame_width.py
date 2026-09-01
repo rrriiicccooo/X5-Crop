@@ -18,6 +18,7 @@ from .template_model import (
     ContactRelation,
     FrameWidthInferenceAssessment,
     FrameWidthInferenceFailureKind,
+    OverlapRelation,
     SequenceBindingUse,
     SequenceFit,
 )
@@ -37,11 +38,11 @@ _INDEPENDENT_WIDTH_ROLE_BASES = frozenset(
 )
 
 
-def _contact_frame_ordinals(fit: SequenceFit) -> frozenset[int]:
+def _topology_frame_ordinals(fit: SequenceFit) -> frozenset[int]:
     return frozenset(
         ordinal
         for relation in fit.adjacency_relations
-        if isinstance(relation, ContactRelation)
+        if isinstance(relation, (ContactRelation, OverlapRelation))
         for ordinal in (
             relation.relation_ordinal,
             relation.relation_ordinal + 1,
@@ -240,7 +241,7 @@ def calibrate_source_frame_width(
     spans: list[
         tuple[int, FiniteInterval, tuple[ObservationId, ObservationId]]
     ] = []
-    contact_frames = _contact_frame_ordinals(fit)
+    topology_frames = _topology_frame_ordinals(fit)
     for frame_index, (start, end) in enumerate(
         zip(
             fit.role_bindings[0::2],
@@ -250,7 +251,7 @@ def calibrate_source_frame_width(
     ):
         start_index = 2 * frame_index
         end_index = start_index + 1
-        if frame_index + 1 in contact_frames:
+        if frame_index + 1 in topology_frames:
             continue
         start_fact = facts.get(start_index)
         end_fact = facts.get(end_index)
@@ -443,7 +444,7 @@ def _supporting_frame_ordinals(
     authority_ids: tuple[ObservationId, ...],
 ) -> tuple[int, ...]:
     registered = set(authority_ids)
-    contact_frames = _contact_frame_ordinals(fit)
+    topology_frames = _topology_frame_ordinals(fit)
     ordinals: list[int] = []
     pairs = zip(
         fit.role_bindings[0::2],
@@ -452,7 +453,7 @@ def _supporting_frame_ordinals(
     )
     for frame_ordinal, (start, end) in enumerate(pairs, start=1):
         if (
-            frame_ordinal in contact_frames
+            frame_ordinal in topology_frames
             or start is None
             or end is None
             or start.evidence_group_id == end.evidence_group_id
@@ -527,11 +528,11 @@ def _yield_local_roles_to_correlated_width(
     width_ids = set(frame_width_observation_ids)
     strong_frames: list[int] = []
     strong_observations: set[ObservationId] = set()
-    contact_frames = _contact_frame_ordinals(fit)
+    topology_frames = _topology_frame_ordinals(fit)
     for slot_index in range(fit.template.count):
         start_index = 2 * slot_index
         end_index = start_index + 1
-        if slot_index + 1 in contact_frames:
+        if slot_index + 1 in topology_frames:
             continue
         start = fit.role_bindings[start_index]
         end = fit.role_bindings[end_index]
