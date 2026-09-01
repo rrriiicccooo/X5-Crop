@@ -162,7 +162,8 @@ python3 X5_Crop.py /path/to/scans --format 120-66 --count 2
 - `runtime_error`：该输入失败，其它输入继续。
 
 Debug Analysis 显示模板、实际观察、winner/runner、画幅比例原始/保护区间及推导 H、最终 footprint、
-预算与首个阻断原因，并标明
+逐边 measurement/bleed/residual 预算与首个阻断原因；共享 support 的同一状态斜率不会在 footprint 与
+residual 中重复计数。页面并标明
 `DESKEW APPLIED`、`ROTATION NOT NEEDED` 或 typed `DESKEW SKIPPED`。它只读取同次检测事实，不会
 重新求解。
 

@@ -95,7 +95,7 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   `independent_complete_frames | direct_lattice_closure`。后者从保留的 rank-3 direct-role 系统有界投影相关
   W，不作为新 observation 回写 Global lattice，不重复增加 rank，也不参与离散选择。比例层改为显式消费
   同一 typed authority，不再用 observation 数量重新猜 W 的来源；W→H 仍为 rank 0 相关推断。
-- Report revision 更新为 `x5crop_v5_template_report_43`，不保留旧 schema 兼容路径。Report/Debug 与
+- Report revision 更新为 `x5crop_v5_template_report_44`，不保留旧 schema 兼容路径。Report/Debug 与
   development gold 分别显示 global lattice、source W、frame inference 的 state、basis 与 typed failure。
   当前 110 个 development task 的完整机制验收无分析错误：16 个安全 auto、94 个安全 review、
   `unsafe_approved_auto = 0`；14 个 challenge 均安全 review。50 个 task 闭合 source W，其中 39 个来自完整
@@ -108,6 +108,10 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   line 形成 `direct_lattice_counterevidence`，不能删除反证后再用该 W 推断角色。Auto 仍为 16、candidate
   仍为 71 unavailable / 21 safe / 18 unsafe，危险自动批准保持 0。Selected late projection 为 20/26，
   selected Grid solve 为 16；不新增像素读取、detector、candidate、fallback 或 score。
+- Enclosing support 的 shared slope 现在只由 `JointFrameState` 传播一次。逐 Frame residual 改为比较实测
+  trace 与同一状态直线，超出实测域时只增加 observed direction 相对该状态 slope 的差值；不再把已经进入
+  footprint 的绝对斜率重复计入 local protection。最小斜线反例、100 项相关合同测试与完整 110-task 黄金
+  验证通过；auto/candidate 分布不变，危险自动批准仍为 0，说明真实超预算继续 Review，而重复预算已移除。
 - 对 96 个 nominal 的同源机制对照显示：v4.2.8 有 80 个 auto，但其中 70 个是黄金危险自动裁切；只有
   11 个 v4 geometry 安全。v4 安全而 V5 Review 的 9 个 task 是下一步能力迁移样本，当前分别落在
   aspect/cross、fixed-template、direct-role、Grid conflict、continuity、phase ambiguity 与 output budget

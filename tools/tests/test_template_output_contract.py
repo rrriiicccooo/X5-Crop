@@ -310,6 +310,14 @@ def _enclosing_support_placement(
             for trace in support_traces
         ),
     )
+    top = replace(
+        top,
+        trace_position_intervals_px=support.top_trace_intervals_px,
+    )
+    bottom = replace(
+        bottom,
+        trace_position_intervals_px=support.bottom_trace_intervals_px,
+    )
     cross = CrossFit(
         template_id=template.template_id,
         lane_reference_trace_px=150.0,
@@ -563,6 +571,31 @@ class TemplateOutputContractTest(unittest.TestCase):
                 and abs(float(state.enclosing_support_slope) - 0.002) < 1.0e-10
                 for state in projection.frame_states[1]
             )
+        )
+
+    def test_enclosing_support_counts_its_same_state_slope_once(self) -> None:
+        placement = _enclosing_support_placement(
+            frame_count=3,
+            support_slope=0.02,
+        )
+        output = output_footprint_from_template_placement(
+            placement,
+            project_selected_placement(placement),
+            lane=_lane(),
+            lane_ordinal=3,
+            layout="horizontal",
+        )
+        protections = {
+            item.role: item for item in output.boundary_protections
+        }
+
+        self.assertAlmostEqual(
+            protections[BoundaryRole.TOP].local_boundary_residual_px,
+            1.0,
+        )
+        self.assertAlmostEqual(
+            protections[BoundaryRole.BOTTOM].local_boundary_residual_px,
+            1.0,
         )
 
     def test_enclosing_support_retains_observed_direction_beyond_trace_span(

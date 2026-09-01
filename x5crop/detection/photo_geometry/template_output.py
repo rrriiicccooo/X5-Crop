@@ -295,18 +295,9 @@ def _state_cross_outward_departure_px(
         if role == BoundaryRole.TOP
         else frame.bottom.reference_trace_px
     )
-    binding_shift = binding.projected_shift_px(
-        source_trace_px=placement.cross_fit.lane_reference_trace_px,
-        target_trace_px=target_trace_px,
-    )
-    binding_shift = 0.0 if binding_shift is None else binding_shift
-    source_position = min(
-        max(
-            state_source_position,
-            binding.full_interval_px.minimum + binding_shift,
-        ),
-        binding.full_interval_px.maximum + binding_shift,
-    )
+    state_slope = state.enclosing_support_slope
+    if state_slope is None:
+        raise ValueError("enclosing support state lost its shared slope")
     raw_departure = 0.0
     covered_traces: list[float] = []
     trace_coordinates = (
@@ -322,10 +313,13 @@ def _state_cross_outward_departure_px(
         trace_px = float(trace)
         if not support.contains(trace_px):
             continue
+        state_position_at_trace = state_source_position + state_slope * (
+            trace_px - target_trace_px
+        )
         departure = (
-            source_position - interval.minimum
+            state_position_at_trace - interval.minimum
             if role == BoundaryRole.TOP
-            else interval.maximum - source_position
+            else interval.maximum - state_position_at_trace
         )
         raw_departure = max(raw_departure, departure)
         covered_traces.append(trace_px)
@@ -352,8 +346,12 @@ def _state_cross_outward_departure_px(
             endpoint - target_trace_px
             for endpoint in (support.minimum, support.maximum)
         )
+    # The selected support line already carries one feasible shared slope.
+    # Only the observed direction's departure from that same state remains as
+    # extrapolation protection.  Adding the absolute slope here would count it
+    # once in the joint footprint and again as a local residual.
     shifts = tuple(
-        math.tan(math.radians(angle)) * delta
+        (math.tan(math.radians(angle)) - state_slope) * delta
         for angle in (
             direction_uncertainty.minimum,
             direction_uncertainty.maximum,

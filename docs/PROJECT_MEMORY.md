@@ -49,6 +49,9 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   protection 共用原有每侧 5% 预算；输出 polygon 不被事后修补。
 - Coarse short-axis sharp/broad material 共用一次 registered measurement。唯一、跨高度一致且满足固定 H
   的 enclosing pair 可以取得权限；多解或不相容保持 typed review，不按 score 选解。
+- Enclosing support 的 shared slope 只由 `JointFrameState` 传播一次；local residual 比较实测 trace 与同一
+  状态直线，域外只传播 observed direction 相对该 slope 的差。绝对斜率不能在联合 footprint 与 residual
+  中重复计数；现有 `BoundaryProtectionFact`、预算 Gate 与 Debug 是唯一 owner 和可见表达。
 - Selected lattice 在 local relation/source-W 阶段追加 late binding 后，由同一 projection owner 重新核对。
   校准 Grid 与 direct-rank 使用同一 bounded projection；无坐标权限弱线只有在完整区间与对应 role 包络
   相交时才降为 validation provenance，不相交分别产生 `calibrated_nominal_grid_conflict` 或
@@ -58,7 +61,7 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   同一个两侧 direct aperture，或两侧 enclosing support 经 fixed H 闭合出的 aperture 内时，才保留 native
   coordinate。单侧/无唯一域为 unavailable，域坍缩或 trace 越域为 conflict；该证明不新增像素读取、候选
   或 rank，content veto 与 5% 预算继续独立生效。
-- 当前 Report revision 为 `x5crop_v5_template_report_43`；Debug/报告显式保存 calibration identity、anchor、
+- 当前 Report revision 为 `x5crop_v5_template_report_44`；Debug/报告显式保存 calibration identity、anchor、
   inferred adjacency、完全未观察 Frame、联合参数依据、measured relation、projection outcome、typed
   failure、source-W/frame-inference basis、partial-height aperture domain 与工作量。Debug 列出精确 anchor
   role、逐 adjacency local delta、direct correction、coverage/counterevidence 与最终联合 envelope。完整
@@ -74,7 +77,9 @@ Frame-width inference 为 22 supported / 42 unavailable / 46 not applicable；�
 Partial-height aperture
 domain 影响 7 个旧权限阻断：S091 新增安全 auto；S030/S045 得到安全 candidate 但仍因预算 Review；
 S008/S028 的 candidate 不安全并被预算阻断；S010/S049 被 content veto 阻断。完整黄金 diagnostic mean 为
-3.997 秒，只作开发归因。24-source 正式完整用户路径 mean 约 4 秒，5 秒 Gate 通过，3 秒非阻断目标
+3.978 秒，只作开发归因。当前安全但预算 Review 的 nominal candidate 为 S030/S045/S058/S109；同状态
+support residual 修正后它们仍有真实逐侧或 alignment 超限，不能靠删除保护获得 auto。24-source 正式完整
+用户路径 mean 约 4 秒，5 秒 Gate 通过，3 秒非阻断目标
 尚未达到；正式数值只由绑定当前干净 commit 的 performance receipt 证明。
 
 对 96 个 nominal 的同源 v4.2.8/V5 对照中，发布版 80 个 auto 里有 70 个黄金危险自动裁切；发布版仅
@@ -99,6 +104,9 @@ continuity，S028/S038 为 output budget，S032 为 phase ambiguity。
   传播不确定性。概率 scorer 当前不进入 Runtime。
 - 内容是否连续穿过理论间隔的 continuity 仍不完整；source truncation 与片夹遮挡也缺少统一
   clipped-boundary geometry。宽缓单根长轴 material 仍可能是构图线，不能单独创造 phase。
+- 四个 nominal 已有黄金安全 candidate，但 enclosing support 的真实逐侧或同状态 alignment expansion 仍
+  超过 5%；后续应提高 shared top/bottom 的直接定位精度，或建立有校准依据的 aperture owner，不能放宽
+  预算、删除 residual 或把 support 静默改成 aperture。
 
 ## 精确下一步
 

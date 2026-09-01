@@ -175,7 +175,8 @@ Each input has exactly one terminal state:
 - `runtime_error`: this input failed while other inputs continue.
 
 Debug Analysis shows the template, observations, winner/runner, raw and guarded aspect-ratio intervals, inferred H,
-the final footprint, budget, and first blocking reason,
+the final footprint, per-edge measurement/bleed/residual budget, and first blocking reason. A shared support slope is
+counted once in its joint state rather than again as a residual. It also shows
 plus `DESKEW APPLIED`, `ROTATION NOT NEEDED`, or a typed `DESKEW SKIPPED`. It reads the same detection facts and
 never solves geometry again.
 

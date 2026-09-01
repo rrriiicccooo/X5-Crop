@@ -1051,6 +1051,12 @@ uncertainty 与 residual。
 之和不超过 `5%H`。Support 的位置不确定性已经进入逐侧完整 expansion，不能再次算入 alignment padding；
 也不能把两个不同可行状态的 top/bottom 极值相加。Start/end 使用正常 sequence bleed 和各自 5% 预算。
 
+Support 的共享斜率属于同一个 `JointFrameState`，已经进入该状态的 boundary line 与联合 footprint。
+局部 residual 只保留实测 trace 相对这条同状态直线的 outward departure；超出实测 trace 域时，也只传播
+`observed_direction - state_slope` 的方向差。不得把绝对斜率再作为 residual 加一次，或用目标 trace 的
+水平位置与其它 trace 直接比较。`BoundaryProtectionFact.local_boundary_residual_px` 与
+`maximum_same_state_cross_alignment_padding_px` 是这项合同的唯一报告与 Debug 表达。
+
 | enclosing support 状态 | 结果 |
 |---|---|
 | span `<= 1.1H`，四边逐侧预算成立，同一状态 alignment padding `<= 5%H` | `supported` |
