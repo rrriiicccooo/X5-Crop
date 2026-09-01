@@ -299,6 +299,7 @@ class PhaseFailureKind(str, Enum):
     CALIBRATED_NOMINAL_GRID_CONFLICT = (
         "calibrated_nominal_grid_conflict"
     )
+    DIRECT_LATTICE_CONFLICT = "direct_lattice_conflict"
     NOMINAL_GRID_PHASE_ANCHOR_UNAVAILABLE = (
         "nominal_grid_phase_anchor_unavailable"
     )
@@ -350,6 +351,7 @@ class PhaseCandidateProjectionOutcome(str, Enum):
     CALIBRATED_NOMINAL_GRID_CONFLICT = (
         "calibrated_nominal_grid_conflict"
     )
+    DIRECT_LATTICE_CONFLICT = "direct_lattice_conflict"
     NOMINAL_GRID_PHASE_ANCHOR_UNAVAILABLE = (
         "nominal_grid_phase_anchor_unavailable"
     )

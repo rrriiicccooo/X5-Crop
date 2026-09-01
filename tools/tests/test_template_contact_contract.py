@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import unittest
 
 from tools.tests.template_test_support import (
@@ -8,13 +9,17 @@ from tools.tests.template_test_support import (
     phase_sequence_measurement,
     phase_template,
 )
-from x5crop.domain import FiniteInterval, ObservationId
+from x5crop.domain import EvidenceState, FiniteInterval, ObservationId
 from x5crop.detection.photo_geometry.template_contact import (
+    ContactEdgeAuthorityBasis,
+    ContactEdgeObservation,
     observe_contact_edges,
 )
+from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.template_model import ContactRelation
 from x5crop.detection.photo_geometry.template_phase import fit_template_phase
 from x5crop.detection.photo_geometry.template_phase_model import (
+    PhaseCandidateProjectionOutcome,
     PhaseFailureKind,
     PhaseFitStatus,
 )
@@ -170,6 +175,63 @@ class TemplateContactContractTest(unittest.TestCase):
         self.assertEqual(
             result.failure_kind,
             PhaseFailureKind.ADJACENCY_TOPOLOGY_AMBIGUOUS,
+        )
+
+    def test_contact_cannot_project_out_its_required_shared_edge(self) -> None:
+        shared = replace(
+            phase_edge("weak-shared", 110.0),
+            trace_coordinates_px=(10, 20),
+            support_fraction=2.0 / 3.0,
+            continuous_support_fraction=2.0 / 3.0,
+        )
+        observations = (
+            phase_edge("contact-frame-1:start", 10.0),
+            shared,
+            phase_edge("contact-frame-2:end", 210.0),
+        )
+        measurement = phase_sequence_measurement(
+            "weak-contact-window",
+            FiniteInterval(0.0, 220.0),
+        )
+        relation = ContactRelation(
+            relation_ordinal=1,
+            contact_observation_id=ObservationId("weak-contact-relation"),
+            physical_edge_id=shared.observation_id,
+            shared_edge_observation_id=shared.observation_id,
+            delta_interval_px=FiniteInterval.exact(-20.0),
+            canonical_delta_px=-20.0,
+            supporting_observation_ids=(shared.observation_id,),
+        )
+        contact = ContactEdgeObservation(
+            observation_id=relation.contact_observation_id,
+            physical_edge_id=shared.observation_id,
+            shared_edge_observation_id=shared.observation_id,
+            authority_bases=(ContactEdgeAuthorityBasis.SOURCE_WIDE_EDGE,),
+            qualified_anchor_roles=(BoundaryRole.START, BoundaryRole.END),
+        )
+
+        result = fit_template_phase(
+            observations,
+            phase_template(2),
+            adjacency_relations=(relation,),
+            contact_edge_observations=(contact,),
+            sequence_measurement_sets=(measurement,),
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE,
+        )
+        projection = result.best_phase_candidate_authority_projection
+        assert projection is not None
+        self.assertEqual(
+            projection.outcome,
+            PhaseCandidateProjectionOutcome.TOPOLOGY_BINDING_UNAVAILABLE,
+        )
+        self.assertEqual(
+            projection.input_direct_role_authority.state,
+            EvidenceState.UNAVAILABLE,
         )
 
 

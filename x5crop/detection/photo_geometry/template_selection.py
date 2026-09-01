@@ -82,6 +82,9 @@ def select_lane_template_placement(
             PhaseFailureKind.CALIBRATED_NOMINAL_GRID_CONFLICT: (
                 GateGap.CALIBRATED_NOMINAL_GRID_CONFLICT
             ),
+            PhaseFailureKind.DIRECT_LATTICE_CONFLICT: (
+                GateGap.DIRECT_LATTICE_CONFLICT
+            ),
             PhaseFailureKind.NOMINAL_GRID_PHASE_ANCHOR_UNAVAILABLE: (
                 GateGap.NOMINAL_GRID_PHASE_ANCHOR_UNAVAILABLE
             ),

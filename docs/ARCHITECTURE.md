@@ -423,10 +423,13 @@ gap；任何越过 authority ceiling、改变 ordinal/template/relation evidence
 同一连续 placement 的互补直接证据仍可合并，非等价 projected/unchanged placement 仍保留 runner。
 原弱线只保存在 projection provenance；它不能继续拥有 phase、收窄 W、提高 constraint rank 或消失于
 Debug。投影出去的弱线仍是 counterevidence：它的完整位置区间必须与投影后同一 role 的完整模型包络
-相交；不相交时产生 `calibrated_nominal_grid_conflict`，不能以“没有坐标权限”为由静默删除。反过来，
-已经获得坐标权限的 `LOCAL_REFINEMENT` 在 direct-rank 重拟合后仍须保留 native binding 和完整区间，
-不能因它不增加 global rank 而消失。Local relation 或 source-W pass 较晚追加 binding 时，selected Grid
-仍由同一个 `PhaseCandidateAuthorityProjection` owner 再评估一次；不新增查询、候选或 detector。若所有
+相交；不相交时，校准 Grid 路径产生 `calibrated_nominal_grid_conflict`，direct-rank 路径产生
+`direct_lattice_conflict`，不能以“没有坐标权限”为由静默删除。反过来，已经获得坐标权限的
+`LOCAL_REFINEMENT` 在 direct-rank 重拟合后仍须保留 native binding 和完整区间，不能因它不增加 global
+rank 而消失。Local relation 或 source-W pass 较晚追加 binding 时，selected lattice 仍由同一个
+`PhaseCandidateAuthorityProjection` owner 再评估一次；direct-rank 路径先让独立 source W 尝试闭合
+opposite，只有该权限仍不可用时才投影晚期弱线，不提前删除可能获得 source-W 权限的 native edge。整个
+过程不新增查询、候选或 detector。若所有
 解释都终止，最佳原 candidate 只作为诊断几何保留，并以 projection outcome 说明首个缺口，不得退回
 residual、support 或 Grid 强选。
 
@@ -439,6 +442,7 @@ residual、support 或 Grid 强选。
 | 上述路径没有 absolute anchor | `nominal_grid_phase_anchor_unavailable` | 终止；format/count 不能自行决定 Grid 在 TIFF 中的位置 |
 | 上述路径没有当前 format 的合格 calibration | `calibrated_nominal_grid_unavailable` | 终止；不从其它 format 外推 |
 | 已授权直接坐标与校准 W/pitch/scale 联合包络不相交，或投影弱线的完整区间与对应 Grid role 包络不相交 | `calibrated_nominal_grid_conflict` | 终止并保留直接/validation 反证；不得扩大 prior、拉回 native coordinate 或静默丢线 |
+| direct-rank lattice 投影后的 role 包络与退出的弱线完整区间不相交 | `direct_lattice_conflict` | 终止并保留 validation 反证；不得以 direct rank 为由静默丢线 |
 | 存在 separator material 或同角色直接反证 | `direct_role_contradiction` | 终止且反证保留；不得作为噪声删除 |
 | 有界重拟合不存在，或会改变 template/ordinal/relation evidence/role mapping/phase authority ceiling | `refit_unavailable | discrete_identity_changed` | 终止并报告 typed failure |
 | 两个非等价 eligible candidate 均成立 | `unchanged | direct_separator_refit | projected | calibrated_nominal_grid` 各自保留 | 继续硬物理比较；不能明确分离时 `discrete_phase_ambiguous` |

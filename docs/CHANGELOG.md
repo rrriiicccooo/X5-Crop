@@ -83,16 +83,25 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   关系以联合可行状态传播到 output，最终仍由 source containment、content veto 和每侧 5% 最坏包络决定
   auto/review。无 anchor、coverage 不完整、直接反证、校准包络冲突或预算超限分别保留自己的 typed
   failure；没有 fallback、第二 Grid、样片特例或零不确定性 nominal 值。
-- Selected Grid 在 local relation 或 source-W 阶段追加 late binding 后，会由同一
+- Selected lattice 在 local relation 或 source-W 阶段追加 late binding 后，会由同一
   `PhaseCandidateAuthorityProjection` 再执行一次有界权限投影。无坐标权限的弱线只有在完整位置区间与
-  对应 Grid role 的完整包络相交时才能降为 validation provenance；不相交产生
-  `calibrated_nominal_grid_conflict`。仍有权限的 `LOCAL_REFINEMENT` 在 direct-rank 重拟合后保留 native
-  binding，不能因不增加 global rank 而丢失。Report/Debug 保存 selected projection、投影 role、Grid solve
-  与 typed conflict；不新增 TIFF query、候选、detector 或 fallback。
-- Report revision 更新为 `x5crop_v5_template_report_41`，不保留旧 schema 兼容路径。当前 110 个
+  对应 lattice role 的完整包络相交时才能降为 validation provenance；校准 Grid 与 direct-rank 路径分别以
+  `calibrated_nominal_grid_conflict`、`direct_lattice_conflict` 保留不相交反证。Direct-rank selected fit
+  先让独立 source W 尝试闭合 opposite，权限仍不足时才投影晚期弱线；仍有权限的
+  `LOCAL_REFINEMENT` 保留 native binding，不能因不增加 global rank 而丢失。Report/Debug 保存 selected
+  projection、投影 role、lattice basis、Grid solve 与 typed conflict；不新增 TIFF query、候选、detector
+  或 fallback。
+- Report revision 更新为 `x5crop_v5_template_report_42`，不保留旧 schema 兼容路径。当前 110 个
   development task 的完整机制验收无分析错误：16 个安全 auto、94 个安全 review、
   `unsafe_approved_auto = 0`；14 个 challenge 均安全 review。Review candidate 的黄金偏差只作机制诊断，
   不再把未输出候选误写成 challenge 终态失败；approved output 仍必须完整通过黄金几何。
+- Direct-rank selected fit 的晚期 `LOCAL_REFINEMENT` 不再因投影 owner 只接受 calibrated Grid 而被笼统
+  阻断。独立 source W 先获得闭合机会；仍无坐标权限时，原 candidate 在同一 template、ordinal、relation
+  identity 和完整硬区间内重新投影。退出弱线继续作为 counterevidence，topology 必需 binding 不得退出，
+  `direct_lattice_conflict` 单独表达与 direct-rank 包络不相交。完整黄金中 S012、S076、S077、S090、S108
+  迁移到更下游的真实 typed root；auto 仍为 16、candidate 仍为 71 unavailable / 21 safe / 18 unsafe，
+  危险自动批准保持 0。Selected late projection 从 14/17 增至 19/22，Grid solve 仍为 13；不新增像素读取、
+  detector、candidate、fallback 或 score。
 - 对 96 个 nominal 的同源机制对照显示：v4.2.8 有 80 个 auto，但其中 70 个是黄金危险自动裁切；只有
   11 个 v4 geometry 安全。v4 安全而 V5 Review 的 9 个 task 是下一步能力迁移样本，当前分别落在
   aspect/cross、fixed-template、direct-role、Grid conflict、continuity、phase ambiguity 与 output budget

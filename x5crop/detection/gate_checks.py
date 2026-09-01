@@ -31,6 +31,7 @@ class GateGap(str, Enum):
     CALIBRATED_NOMINAL_GRID_CONFLICT = (
         "calibrated_nominal_grid_conflict"
     )
+    DIRECT_LATTICE_CONFLICT = "direct_lattice_conflict"
     NOMINAL_GRID_PHASE_ANCHOR_UNAVAILABLE = (
         "nominal_grid_phase_anchor_unavailable"
     )
@@ -208,6 +209,11 @@ def failure_fact(
             RecoveryAction.OPEN_DEBUG_ANALYSIS,
         ),
         GateGap.CALIBRATED_NOMINAL_GRID_CONFLICT: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.SOURCE_PHYSICAL_COMPATIBILITY,
+            RecoveryAction.REVIEW_PLACEMENT,
+        ),
+        GateGap.DIRECT_LATTICE_CONFLICT: (
             FailureRecovery.UNRECOVERABLE,
             MinimumMissingFact.SOURCE_PHYSICAL_COMPATIBILITY,
             RecoveryAction.REVIEW_PLACEMENT,

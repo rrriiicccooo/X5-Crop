@@ -2418,12 +2418,12 @@ def _fit_calibrated_nominal_grid_candidate(
     return _BoundFit(fit, candidate.residual_compatible)
 
 
-def _validation_only_grid_conflicts(
+def _projected_role_counterevidence_conflicts(
     projected: _BoundFit,
     candidate: _BoundFit,
     removed_facts: tuple[DirectRoleAuthorityFact, ...],
 ) -> tuple[DirectRoleAuthorityFact, ...]:
-    """Return weak native lines that contradict the projected Grid envelope."""
+    """Return projected-out native lines outside the selected lattice envelope."""
 
     conflicts: list[DirectRoleAuthorityFact] = []
     for fact in removed_facts:
@@ -2705,7 +2705,7 @@ def project_candidate_to_authorized_direct_roles(
                     "calibrated nominal Grid"
                 ),
             )
-        validation_conflicts = _validation_only_grid_conflicts(
+        validation_conflicts = _projected_role_counterevidence_conflicts(
             nominal,
             candidate,
             removed_facts,
@@ -2834,6 +2834,26 @@ def project_candidate_to_authorized_direct_roles(
             reason=(
                 "authorized refit changed the bounded discrete mapping: "
                 + ", ".join(discrete_identity_changes)
+            ),
+        )
+    validation_conflicts = _projected_role_counterevidence_conflicts(
+        projected,
+        candidate,
+        removed_facts,
+    )
+    if validation_conflicts:
+        return None, PhaseCandidateAuthorityProjection(
+            input_direct_role_authority=authority,
+            outcome=PhaseCandidateProjectionOutcome.DIRECT_LATTICE_CONFLICT,
+            basis=None,
+            projected_out_bindings=projected_out,
+            retained_direct_constraint_rank=retained_rank,
+            reason=(
+                "validation-only direct coordinates conflict with the "
+                "bounded direct-rank lattice at role indices: "
+                + ", ".join(
+                    str(item.role_index) for item in validation_conflicts
+                )
             ),
         )
     projected = replace(

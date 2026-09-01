@@ -554,6 +554,11 @@ class TemplateSelectionContractTest(unittest.TestCase):
                 MinimumMissingFact.SOURCE_PHYSICAL_COMPATIBILITY,
             ),
             (
+                PhaseFailureKind.DIRECT_LATTICE_CONFLICT,
+                GateGap.DIRECT_LATTICE_CONFLICT,
+                MinimumMissingFact.SOURCE_PHYSICAL_COMPATIBILITY,
+            ),
+            (
                 PhaseFailureKind.ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE,
                 GateGap.ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE,
                 MinimumMissingFact.ADJACENCY_OBSERVATION_COVERAGE,

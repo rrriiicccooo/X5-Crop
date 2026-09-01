@@ -116,6 +116,9 @@ def _projection_failure_kind(
         PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID_CONFLICT: (
             PhaseFailureKind.CALIBRATED_NOMINAL_GRID_CONFLICT
         ),
+        PhaseCandidateProjectionOutcome.DIRECT_LATTICE_CONFLICT: (
+            PhaseFailureKind.DIRECT_LATTICE_CONFLICT
+        ),
         PhaseCandidateProjectionOutcome.REFIT_UNAVAILABLE: (
             PhaseFailureKind.FIXED_TEMPLATE_MISMATCH
         ),
@@ -1439,28 +1442,34 @@ def _with_local_role_refinement(
     return replace(result, best=refinement.fit, receipt=receipt)
 
 
-def _project_selected_grid_local_refinements(
+def _project_selected_late_local_refinements(
     result: PhaseFitResult,
     phase_input: TemplatePhaseInput,
     *,
     source_frame_width_authority: SourceFrameWidthAuthority | None = None,
+    allow_direct_rank: bool = False,
 ) -> PhaseFitResult:
-    """Yield unsupported late local bindings back to the selected Grid.
+    """Yield unsupported late local bindings back to the selected lattice.
 
     Candidate projection runs before local relation analysis.  Local
     refinement must remain free to bind registered lines while topology is
     being derived, but a short line that still lacks coordinate authority
     after that analysis cannot become output geometry merely because it was
     added later.  Reuse the same bounded projection owner on the selected
-    discrete identity; the line remains typed projection provenance and the
-    calibrated Grid keeps its full interval.
+    discrete identity whether its remaining coordinates close a direct-rank
+    lattice or require the calibrated Grid.  The line remains typed projection
+    provenance and counterevidence; it cannot acquire authority from the time
+    at which it was attached.
     """
 
     if (
         result.status != PhaseFitStatus.RESOLVED
         or result.best is None
         or not phase_input.sequence_measurement_sets
-        or result.best.calibrated_nominal_grid_fit_state is None
+        or (
+            result.best.calibrated_nominal_grid_fit_state is None
+            and not allow_direct_rank
+        )
     ):
         return result
     authority = assess_direct_role_binding_authority(
@@ -2099,7 +2108,7 @@ def fit_template_phase_candidate_with_adjacency_relations(
                 ),
             ),
         )
-        measured = _project_selected_grid_local_refinements(
+        measured = _project_selected_late_local_refinements(
             measured,
             phase_input,
         )
@@ -2150,7 +2159,7 @@ def fit_template_phase_candidate_with_adjacency_relations(
             analysis.evaluated_adjacency_count
         ),
     )
-    adjusted = _project_selected_grid_local_refinements(
+    adjusted = _project_selected_late_local_refinements(
         adjusted,
         phase_input,
     )
@@ -2177,13 +2186,28 @@ def finalize_template_phase_candidate(
         raise TypeError("phase finalization requires a candidate competition")
     if candidate.result.template != phase_input.template:
         raise ValueError("phase candidate and final input use different templates")
-    result = _project_selected_grid_local_refinements(
+    result = _apply_final_lattice_contract(
+        candidate.result,
+        phase_input,
+        directly_observed_ordinals=(
+            candidate.directly_observed_adjacency_ordinals
+        ),
+        source_frame_width_authority=source_frame_width_authority,
+    )
+    if (
+        result.status != PhaseFitStatus.UNRESOLVED
+        or result.failure_kind
+        != PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE
+    ):
+        return result
+    projected = _project_selected_late_local_refinements(
         candidate.result,
         phase_input,
         source_frame_width_authority=source_frame_width_authority,
+        allow_direct_rank=True,
     )
     return _apply_final_lattice_contract(
-        result,
+        projected,
         phase_input,
         directly_observed_ordinals=(
             candidate.directly_observed_adjacency_ordinals

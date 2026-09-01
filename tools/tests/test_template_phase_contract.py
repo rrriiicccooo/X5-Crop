@@ -2380,6 +2380,114 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         self.assertIn("role indices: 2", conflict.ambiguity_reason or "")
 
+    def test_direct_rank_lattice_keeps_late_short_edge_validation_only(
+        self,
+    ) -> None:
+        spec = replace(
+            template(3),
+            frame_width_px=PositiveInterval(98.0, 102.0),
+        )
+        direction = FiniteInterval.exact(0.0)
+
+        def local(
+            identity: str,
+            coordinate: float,
+            role: BoundaryRole,
+            *,
+            source_wide: bool = False,
+        ) -> BoundaryEdgeObservation:
+            traces = (0, 10, 20) if source_wide else (10, 20)
+            support = 1.0 if source_wide else 2.0 / 3.0
+            return replace(
+                edge(identity, coordinate),
+                qualified_anchor_roles=(role,),
+                polarity=1 if role == BoundaryRole.START else -1,
+                trace_coordinates_px=traces,
+                support_fraction=support,
+                continuous_support_fraction=support,
+                fit_residual_px=0.0 if source_wide else 20.0,
+                canonical_direction_degrees=0.0,
+                fit_direction_interval_degrees=direction,
+                full_direction_interval_degrees=direction,
+                full_position_interval_px=FiniteInterval(
+                    coordinate - (0.2 if source_wide else 1.2),
+                    coordinate + (0.2 if source_wide else 1.2),
+                ),
+            )
+
+        direct_edges = tuple(
+            local(identity, coordinate, role, source_wide=True)
+            for identity, coordinate, role in (
+                ("late-direct:start:1", 100.0, BoundaryRole.START),
+                ("late-direct:end:1", 200.0, BoundaryRole.END),
+                ("late-direct:start:2", 220.0, BoundaryRole.START),
+                ("late-direct:end:2", 320.0, BoundaryRole.END),
+                ("late-direct:start:3", 340.0, BoundaryRole.START),
+            )
+        )
+        weak_end = local(
+            "late-direct:weak:end:3",
+            441.0,
+            BoundaryRole.END,
+        )
+
+        result = fit_template_phase_with_adjacency_relations(
+            TemplatePhaseInput(
+                observations=(*direct_edges, weak_end),
+                separator_bands=(),
+                template=spec,
+                calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(
+                    spec
+                ),
+                scale_px_per_mm=PositiveInterval.exact(100.0),
+                holder_span_px=FiniteInterval(0.0, 480.0),
+                phase_authority_px=FiniteInterval.exact(100.0),
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "late-selected-direct-projection",
+                        FiniteInterval(0.0, 480.0),
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            PhaseFailureKind.FRAME_WIDTH_INFERENCE_UNAVAILABLE,
+        )
+        projection = result.best_phase_candidate_authority_projection
+        assert projection is not None and result.best is not None
+        self.assertEqual(
+            projection.outcome,
+            PhaseCandidateProjectionOutcome.PROJECTED,
+        )
+        self.assertEqual(projection.retained_direct_constraint_rank, 3)
+        self.assertEqual(
+            tuple(
+                (item.role_index, item.observation_id)
+                for item in projection.projected_out_bindings
+            ),
+            ((5, weak_end.observation_id),),
+        )
+        self.assertIsNone(result.best.role_bindings[5])
+        self.assertEqual(
+            result.receipt.selected_direct_role_projection_evaluation_count,
+            1,
+        )
+        self.assertEqual(
+            result.receipt.selected_direct_role_projection_binding_count,
+            1,
+        )
+        self.assertEqual(result.receipt.selected_nominal_grid_solve_count, 0)
+        counterevidence = replace(
+            projection,
+            outcome=PhaseCandidateProjectionOutcome.DIRECT_LATTICE_CONFLICT,
+            basis=None,
+            reason="validation-only line left the direct lattice envelope",
+        )
+        self.assertFalse(counterevidence.eligible)
+
     def test_rank_three_fit_uses_nearest_joint_physical_solution(self) -> None:
         matrix = np.asarray(
             [
