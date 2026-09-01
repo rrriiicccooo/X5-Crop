@@ -10,6 +10,10 @@ from x5crop.detection.photo_geometry.coarse_strip_support import (
     CoarseStripSupportReceipt,
     CoarseSupportAuthority,
 )
+from x5crop.detection.photo_geometry.coarse_enclosing_model import (
+    CoarseEnclosingResolution,
+    CoarseEnclosingResolutionFailureKind,
+)
 from x5crop.detection.photo_geometry.measurement_model import (
     PhotoBoundaryCoverageReceipt,
     PhotoBoundaryMeasurementQuery,
@@ -171,6 +175,14 @@ def prepared_template_lane() -> PreparedTemplateLane:
             ),
             None,
             None,
+            CoarseEnclosingResolution(
+                state=EvidenceState.UNAVAILABLE,
+                candidates=(),
+                selected_candidate=None,
+                failure_kind=(
+                    CoarseEnclosingResolutionFailureKind.PAIR_UNAVAILABLE
+                ),
+            ),
             CoarseStripSupportReceipt(2, 2, 2, 2, 8, 2, 2),
         ),
         anchor_domain=SequenceAnchorDiscoveryDomain(

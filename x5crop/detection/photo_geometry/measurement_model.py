@@ -292,7 +292,7 @@ class CrossHeightTransitionRegionObservation:
 
 @dataclass(frozen=True)
 class BroadMaterialTransitionRegionObservation:
-    """One source-height region supporting a broad material boundary.
+    """One registered spatial region supporting a broad material boundary.
 
     The observation is produced from the same registered sequence traces as
     local transitions.  Its polarity comes from a two-scale signed tone
@@ -487,12 +487,18 @@ class PhotoBoundaryMeasurementSet:
             or self.broad_material_transitions
         ):
             raise ValueError("incomplete measurement cannot expose transitions")
-        if (
-            (self.cross_height_transitions or self.broad_material_transitions)
-            and self.query.purpose != QueryPurpose.SEQUENCE_ANCHOR_WINDOW
+        if self.cross_height_transitions and self.query.purpose != (
+            QueryPurpose.SEQUENCE_ANCHOR_WINDOW
         ):
             raise ValueError(
-                "aggregate transitions require a sequence window"
+                "cross-height transitions require a sequence window"
+            )
+        if self.broad_material_transitions and self.query.purpose not in {
+            QueryPurpose.COARSE_STRIP_SHORT,
+            QueryPurpose.SEQUENCE_ANCHOR_WINDOW,
+        }:
+            raise ValueError(
+                "broad material regions require a registered spatial query"
             )
         identities = tuple(
             item.transition_id

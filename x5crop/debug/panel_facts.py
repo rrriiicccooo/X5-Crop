@@ -598,6 +598,25 @@ def axis_authority_summaries(
         lane.prepared.coarse_support.enclosing_support is not None
         for lane in lanes
     )
+    enclosing_resolution = "/".join(
+        sorted(
+            {
+                (
+                    resolution.selected_candidate.measurement_basis.value
+                    .upper()
+                    if resolution.selected_candidate is not None
+                    else (
+                        f"{resolution.state.value.upper()}:"
+                        f"{resolution.failure_kind.value.upper()}"
+                    )
+                )
+                for lane in lanes
+                for resolution in (
+                    lane.prepared.coarse_support.enclosing_resolution,
+                )
+            }
+        )
+    )
     phase_status = "/".join(
         sorted(
             {
@@ -735,6 +754,7 @@ def axis_authority_summaries(
         return (
             f"CROSS FIT · {cross_status} · COARSE {coarse_short} · "
             f"COARSE ORIENTATION {direction} · ENCLOSING {enclosing} · "
+            f"EVIDENCE {enclosing_resolution} · "
             f"RUNNER {cross_runners}{cross_failure_suffix}",
             f"SEQUENCE FIT · {phase_status} · COARSE {coarse_long} · "
             f"RUNNER {phase_runners}{lattice_fit_suffix}",
@@ -769,7 +789,8 @@ def axis_authority_summaries(
     )
     return (
         f"CROSS FIT · {cross_status} · COARSE {coarse_short} · "
-        f"COARSE ORIENTATION {direction} · ENCLOSING {enclosing} → "
+        f"COARSE ORIENTATION {direction} · ENCLOSING {enclosing} "
+        f"{enclosing_resolution} → "
         + "/".join(
             sorted(
                 {

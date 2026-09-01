@@ -1,4 +1,4 @@
-"""Candidate-independent broad material changes joined across source height."""
+"""Candidate-independent broad material changes in registered spatial regions."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import numpy as np
 from .cross_height_transition_measurement import (
     aligned_trace_slice,
     common_trace_coordinates,
-    cross_height_region_trace_ordinals,
+    spatial_region_trace_ordinals,
 )
 from .interval_math import common
 from .measurement_model import (
@@ -151,19 +151,41 @@ def measure_broad_material_transition_regions(
     query: PhotoBoundaryMeasurementQuery,
     premeasured: tuple[TraceMeasurement, ...],
     spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+    *,
+    trace_ordinals: tuple[int, ...] | None = None,
 ) -> tuple[tuple[BroadMaterialTransitionRegionObservation, ...], int]:
-    """Require the same two-scale material state in all height regions."""
+    """Measure two-scale material state in three registered spatial regions."""
 
-    if query.purpose != QueryPurpose.SEQUENCE_ANCHOR_WINDOW:
+    if query.purpose not in {
+        QueryPurpose.COARSE_STRIP_SHORT,
+        QueryPurpose.SEQUENCE_ANCHOR_WINDOW,
+    }:
         return (), 0
     if len(premeasured) != len(query.trace_positions_px):
         raise ValueError("broad material aggregate requires complete traces")
-    regions = cross_height_region_trace_ordinals(query.trace_positions_px)
+    active_ordinals = (
+        tuple(range(len(query.trace_positions_px)))
+        if trace_ordinals is None
+        else trace_ordinals
+    )
+    if (
+        not active_ordinals
+        or tuple(sorted(set(active_ordinals))) != active_ordinals
+        or active_ordinals[0] < 0
+        or active_ordinals[-1] >= len(query.trace_positions_px)
+    ):
+        raise ValueError("broad material trace view is invalid")
+    regions = spatial_region_trace_ordinals(
+        tuple(query.trace_positions_px[index] for index in active_ordinals)
+    )
     if not regions:
         return (), 0
     observations: list[BroadMaterialTransitionRegionObservation] = []
     peak_temporary_bytes = 0
-    for region_index, ordinals in enumerate(regions):
+    for region_index, local_ordinals in enumerate(regions):
+        ordinals = tuple(
+            active_ordinals[index] for index in local_ordinals
+        )
         aggregate, polarities, backgrounds, temporary = _aggregate_region(
             tuple(premeasured[index] for index in ordinals)
         )

@@ -32,7 +32,7 @@ CROSS_HEIGHT_AGGREGATION_REVISION = (
 )
 
 
-def cross_height_region_trace_ordinals(
+def spatial_region_trace_ordinals(
     trace_positions_px: tuple[int, ...],
 ) -> tuple[tuple[int, ...], ...]:
     """Partition one fixed trace lattice into the canonical three regions."""
@@ -190,7 +190,7 @@ def measure_cross_height_transition_regions(
         return (), 0
     if len(premeasured) != len(query.trace_positions_px):
         raise ValueError("cross-height aggregate requires complete trace input")
-    regions = cross_height_region_trace_ordinals(query.trace_positions_px)
+    regions = spatial_region_trace_ordinals(query.trace_positions_px)
     if not regions:
         return (), 0
     observations: list[CrossHeightTransitionRegionObservation] = []

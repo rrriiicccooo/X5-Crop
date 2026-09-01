@@ -276,8 +276,8 @@ texture 上界时才为 `supported`；否则明确为 `tone_unresolved` 或 `mat
 
 ### 6.3 跨高度 aggregate 与宽缓 material boundary
 
-同一个已登记 `SEQUENCE_BASELINE` 只生成一次全长灰度测量，`SEQUENCE_ANCHOR_WINDOW` 只切出已经登记的
-坐标与 transition ownership。它固定分成三个高度区域，并产生两种互不冒充的 typed aggregate：
+`SEQUENCE_BASELINE` 只生成一次全长灰度测量，`SEQUENCE_ANCHOR_WINDOW` 只切出已经登记的坐标与
+transition ownership。它固定分成三个高度区域，并产生两种互不冒充的 typed aggregate：
 
 - `CROSS_HEIGHT_AGGREGATE` 在原有局部 signed gradient、tone 与 texture 上联合弱信号；
 - `BROAD_MATERIAL_AGGREGATE` 同时使用 `0.25 mm` 与 `0.50 mm` 两个物理尺度的 signed tone、两侧
@@ -309,6 +309,23 @@ separator pair 投影的唯一 owner：
 direction 不是反证，但两份明确且不相交的 direction interval 必须保留为不同解释。Development report 与
 Debug 分别显示 local aggregate、broad material、resolution、pair、typed failure 和工作量；Debug 不重新
 测量或求解。
+
+短轴 coarse owner 使用另一份固定、候选无关的 `COARSE_STRIP_SHORT` 查询：sharp channel 使用 5 条固定
+trace，broad channel 使用 9 条固定 trace（每个长轴区域 3 条），两组坐标先合并为一个 registered union，
+原 TIFF 只读取一次；之后两个 channel 只消费各自固定 view。这里的 broad 只建立 role-free
+`ENCLOSING_SUPPORT_PAIR`，不能建立长轴 START/END、phase 或 ordinal。完整合同为：
+
+| coarse short 事实 | resolution 与权限 |
+|---|---|
+| sharp 或 broad 单独形成唯一完整 pair | `supported`；该 pair 可以进入第 8.2 节 |
+| broad 两侧均为正确 outward background、polarity 一致、各有 3 个独立长轴区域、source-spanning、方向相容且 `H < span <= 1.1H` | broad pair 取得直接像素坐标权限 |
+| sharp 与 broad 的位置、方向和 span 区间等价 | 保留 sharp native coordinate；broad 作为相关 validation，不重复计票 |
+| sharp 与 broad 都完整但不等价 | `non_equivalent_pair_candidates`；typed contradiction，不按 score 选择 |
+| 只有一侧、区域/连续性不足、source 边界不可观察、极性或 background side 冲突、span 不相容 | `pair_unavailable`；不授予 enclosing authority |
+
+选中的 pair 仍须通过唯一 cross placement、source containment、content veto 和逐侧 5% 输出预算。任何
+long-axis broad standalone edge 都只保留为 observation；它可能是照片内部构图线，不能单独取得 outer 或
+phase authority。
 
 ### 6.4 Cross observation
 
@@ -755,10 +772,13 @@ source-spanning side 与有界 H 推导 opposite。多个局部 closure 不能�
 
 ### 8.2 `ENCLOSING_SUPPORT_PAIR`
 
-当 aperture 未唯一成立时，可以使用一对直接外侧支撑作为完整输出 top/bottom，但必须同时满足：
+当 aperture 未唯一成立时，可以使用一对直接外侧支撑作为完整输出 top/bottom。Pair 的 observation basis
+可以是 sharp transition，也可以是第 6.3 节闭合的 broad material；两种 basis 使用同一输出权限和预算，
+但不能把多种非等价解释按强弱评分。它必须同时满足：
 
-- 两侧共享直接 trace 和相容的局部方向；
+- 两侧共享相容的 registered spatial support 和局部方向；
 - 两侧均 source-spanning，或覆盖 3 个独立支持区域和 `min(3, count)` 个长轴 frame domain；
+- broad basis 额外要求两侧 outward background、共同 polarity 和唯一 pair；
 - 直接 span 完整包含 canonical fixed H；
 - `H < support_span <= 1.1H`；
 - 完整位于 lane/source authority；
@@ -1089,7 +1109,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `x5crop/formats/` | format 设计 W/H、统一混合 W/H compatibility、分格式 raw aspect calibration、gap 搜索中心、holder count 与输出保护常量 |
 | `x5crop/configuration/`、`x5crop/runtime/` | format/count/deskew mode 输入、matched-holder resolution 与 source workflow |
 | `x5crop/detection/source_core.py`、`evidence/scan_canvas.py` | source/lane 与 matched-holder authority |
-| `photo_geometry/coarse_strip_support.py`、`coarse_enclosing_model.py`、`coarse_enclosing_support.py` | 两个 role-free aggregate query、粗片带 interval、source-wide 双侧 track 与 receipt |
+| `photo_geometry/coarse_strip_support.py`、`coarse_enclosing_model.py`、`coarse_enclosing_support.py` | role-free coarse query、sharp/broad 固定 trace view、粗片带 interval、source-wide 双侧 track、pair resolution 与 receipt |
 | `photo_geometry/template_measurement_plan*.py` | pixel-free 模板、有限 query intents、停止与工作上界 |
 | `photo_geometry/corridors.py` | 候选无关 top/bottom 与完整 `W/pitch` sequence 查询走廊 |
 | `photo_geometry/registered_*.py`、`observations.py`、`separator_*.py` | 一次性 measurement、role-free edge 与 material band |

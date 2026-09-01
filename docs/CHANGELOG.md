@@ -33,6 +33,12 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   unavailable/contradiction。任一 edge 已属于 supported canonical separator 时，宽缓 pair 不能用另一侧
   重新解释该 edge；同一物理 pair 也不重复计票。该能力不扩大 query、halo、
   TIFF 读取，不建立 enhanced detector、第二 geometry 或 score。
+- Coarse short-axis observation 现在把 5 条 sharp trace 与 9 条 broad material trace 合并为一个
+  registered union 并只读取一次。Sharp 或 broad 都可建立 role-free enclosing pair；broad 必须具有正确
+  outward background、共同 polarity、三区域 source-spanning 支持、相容方向和 `H < span <= 1.1H`。
+  两者等价时保留 sharp native coordinate，broad 只作相关 validation；不等价时产生 typed contradiction，
+  不按分数选解。单侧、源边界不可观察、支持不足或 span 不相容都不授予权限；长轴 broad standalone edge
+  仍只作 observation。Resolution basis/failure 进入 Development report、gold analysis 与 Debug。
 - Selected placement 现在由 `AdjacencyContinuityObservation` 为每个 adjacency 建立唯一 typed ledger。
   唯一正序 separator band 可以授权实测 local advance；完整 corridor 但无反证只保留正常 Grid，不能
   冒充直接 separator；material unavailable、band/角色冲突、跨零 gap、未登记反序 edge pair 与 coverage
@@ -53,7 +59,7 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   Overlap 只允许 relation 对应的两个物理 Frame polygon 重叠；其它重叠仍为 `fixed_template_mismatch`。短轴
   evidence 在 overlap 中点分区，避免共享区域重复计票，输出 polygon 不被修改。
   Report/Debug 分开保存 relation identity、基础 bleed、topology protection、uncertainty 与 residual。
-  Report revision 更新为 `x5crop_v5_template_report_36`，不保留旧 schema 兼容路径。
+  Report revision 更新为 `x5crop_v5_template_report_37`，不保留旧 schema 兼容路径。
   110 个 development task 的完整机制验收完成且无分析错误：19 个安全 auto、91 个安全 review、
   `unsafe_approved_auto = 0`；14 个 challenge 当前均安全 review，没有用异常拓扑换取错误放行。
 - 直接观察到的 start/end 在最终 placement 中保留 native coordinate 与完整 interval；Grid 只补齐缺失
@@ -235,15 +241,16 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
 - `tools/verify` 是 Hook、CI 与本地验证的唯一入口。Diagnostic 只证明工程合同；gold accuracy、性能与
   platform receipt 分层记录，不互相冒充。
 - 正式性能 Gate 为 24-source 完整用户路径 mean 不超过 5 秒；3 秒只是不阻断的 challenge。
-- Contact 检查点的完整 development gold 为 110/110 完成、分析错误 0、
+- Broad enclosing 检查点的完整 development gold 为 110/110 完成、分析错误 0、
   `unsafe_approved_auto = 0`；安全 auto 为基础 nominal 17/66、较难 nominal 2/30、challenge 0/14。
-  Candidate 为 87 个不可用、20 个安全、3 个不安全；全部不安全 candidate 均保持 review，自动批准集合
-  与上一检查点一致。S041/S050 能表达唯一共享边 Contact；S014 的重叠独立 identity 保持竞争，S009/S056
-  的反序边没有被误判成 Contact。该阶段没有放宽 Grid、Gate、5% 预算或黄金合同。
+  Candidate 为 86 个不可用、21 个安全、3 个不安全；全部不安全 candidate 均保持 review，自动批准集合
+  与 Overlap 检查点一致。S024 取得 broad cross authority 但仍因 phase 多解 review；S058 从无 candidate
+  改善为安全 review candidate。14 个 challenge 均安全 review。该阶段没有放宽 Grid、Gate、5% 预算或
+  黄金合同。
 - 24-source 正式性能只由绑定最终干净 commit 的 receipt 判定；5 秒 mean 仍是 blocking Gate，3 秒仍是
-  non-blocking 目标。Contact 检查点通过 5 秒 Gate，尚未达到 3 秒 challenge。当前 review 表达真实的
-  phase/cross、Grid/W、topology 与预算证明缺口，不以调窄 guard、静默隐藏 saturation、恢复精确 W→H
-  或改变样片角色掩盖。
+  non-blocking 目标。Broad enclosing 检查点通过 5 秒 Gate，尚未达到 3 秒 challenge。当前 review 表达
+  真实的 phase/cross、Grid/W、topology 与预算证明缺口，不以调窄 guard、静默隐藏 saturation、恢复精确
+  W→H 或改变样片角色掩盖。
 - Apple Silicon macOS、Intel macOS 与 Windows x64 必须在同一最终 commit 取得实机 receipt。Accuracy、
   性能与平台证据未全部绑定该 commit 前，不创建 RC、tag、Release 或公开 ZIP。
 - 发布包由唯一 manifest 构建，不包含 modular source、tests、tools、内部文档或开发输出。

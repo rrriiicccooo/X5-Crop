@@ -51,6 +51,12 @@ Within one registered window, weak gradient, tone, and texture signals are also 
 own a crop coordinate only when three independent height regions agree and uniquely reinforce the same direct edge.
 Unbound or multiply explained joint lines remain Debug evidence and cannot create another placement.
 
+The shared top and bottom of the whole strip are also observed as both sharp transitions and broad material changes.
+A broad pair can become outer support only when both sides have the correct outward background, one polarity, continuous
+support across three longitudinal regions, compatible direction, and a span that fully encloses fixed H. When sharp and
+broad observations are equivalent, the sharp native coordinates remain canonical. A disagreement, a single side, or
+multiple explanations keeps the whole source in review; signal strength does not choose a winner.
+
 Direct top and bottom evidence need not occur on the same sampling trace. They may close one complementary direct pair
 when each side has at least two independent support regions, their union covers the longitudinal domain of every output
 Frame, and direction and fixed H agree. Shared support is still reported as zero. Incomplete coverage, a template-inferred

@@ -187,6 +187,14 @@ class GoldAnalysisContractTest(unittest.TestCase):
             "source_placement_state": "supported",
             "phase_status": "resolved",
             "phase_failure_kind": None,
+            "coarse_enclosing_resolution_state": "supported",
+            "coarse_enclosing_resolution_failure_kind": None,
+            "coarse_enclosing_candidate_measurement_bases": [
+                "sharp_transition"
+            ],
+            "coarse_enclosing_selected_measurement_basis": (
+                "sharp_transition"
+            ),
             "lattice_parameter_fit_basis": "bounded_direct_least_squares",
             "calibrated_nominal_grid_evidence_state": None,
             "calibrated_nominal_grid_evidence_failure_kind": None,

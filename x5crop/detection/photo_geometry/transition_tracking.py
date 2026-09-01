@@ -22,9 +22,7 @@ from .model import (
     independent_spatial_support_count,
 )
 from .measurement_model import PhotoBoundaryMeasurementSet
-from .cross_height_transition_measurement import (
-    cross_height_region_trace_ordinals,
-)
+from .cross_height_transition_measurement import spatial_region_trace_ordinals
 from .line_observations import (
     SideTransitionRegion,
     TransitionRegionMeasurementBasis,
@@ -206,7 +204,7 @@ def _track_transition_regions(
         if len(trace_lattices) != 1:
             return ()
         lattice = next(iter(trace_lattices))
-        regions = cross_height_region_trace_ordinals(lattice)
+        regions = spatial_region_trace_ordinals(lattice)
         if not regions:
             return ()
         source_traces = tuple(

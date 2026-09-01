@@ -10,26 +10,37 @@ from __future__ import annotations
 
 from dataclasses import replace
 import math
+from typing import Mapping
 
 import numpy as np
 from scipy.optimize import linprog
 
-from ...domain import FiniteInterval, PositiveInterval
+from ...domain import (
+    EvidenceState,
+    FiniteInterval,
+    ObservationId,
+    PositiveInterval,
+)
 from ...formats import OUTPUT_PROTECTION_SPEC
 from .measurement_model import (
-    PhotoBoundaryMeasurementField,
+    BroadMaterialTransitionRegionObservation,
+    MaterialBackgroundSide,
     PhotoBoundaryMeasurementQuery,
+    PhotoBoundaryMeasurementSet,
     PhotoBoundaryTransition,
 )
 from .measurement_points import TransitionPoint
 from .coarse_enclosing_model import (
+    CoarseEnclosingCandidateFact,
+    CoarseEnclosingMeasurementBasis,
+    CoarseEnclosingResolution,
+    CoarseEnclosingResolutionFailureKind,
     CoarseEnclosingSupport,
     CoarseEnclosingTrack,
     CoarseSharedDirection,
     CoarseSupportSide,
 )
 from .model import (
-    BoundaryAxis,
     PHOTO_BOUNDARY_MEASUREMENT_SPEC,
     QueryPurpose,
     SPATIAL_SUPPORT_REGION_COUNT,
@@ -38,23 +49,12 @@ from .model import (
 from .physical_identity import physical_observation_id
 from .registered_transition_measurement import (
     MeasuredTransitionPeak,
-    measure_trace,
+    TraceMeasurement,
     measured_transition_peaks,
 )
 from .robust_line_fit import fit_transition_line, physical_slope_interval
 from .trace_support import source_spanning_continuous_trace_support
-
-
-def _profile(
-    field: PhotoBoundaryMeasurementField,
-    query: PhotoBoundaryMeasurementQuery,
-    trace: int,
-) -> np.ndarray:
-    return (
-        field.source_gray[trace, :]
-        if query.boundary_axis == BoundaryAxis.X
-        else field.source_gray[:, trace]
-    )
+from .transition_tracking import track_broad_material_transition_regions
 
 
 def _distance(interval: FiniteInterval, target: float) -> float:
@@ -119,25 +119,82 @@ def _transition(
     )
 
 
+def _broad_region_transition(
+    query: PhotoBoundaryMeasurementQuery,
+    *,
+    observation: BroadMaterialTransitionRegionObservation,
+) -> PhotoBoundaryTransition:
+    """Adapt one typed material change without inventing gradient support."""
+
+    return PhotoBoundaryTransition(
+        transition_id=observation.transition_id,
+        query_id=query.query_id,
+        trace_ordinal=observation.trace_ordinal,
+        trace_coordinate_px=observation.trace_coordinate_px,
+        canonical_coordinate_px=observation.canonical_coordinate_px,
+        localization_interval_px=observation.localization_interval_px,
+        physical_position_interval_px=(
+            observation.physical_position_interval_px
+        ),
+        gradient_z=0.0,
+        tone_z=observation.material_contrast_z,
+        texture_z=0.0,
+        left_tone_mean=observation.left_tone_mean,
+        right_tone_mean=observation.right_tone_mean,
+        left_texture_mean=observation.left_texture_mean,
+        right_texture_mean=observation.right_texture_mean,
+        polarity=observation.polarity,
+        peak_width_px=observation.peak_width_px,
+        prominence=observation.prominence,
+        local_noise=observation.local_noise,
+    )
+
+
 def _fit_track(
     query: PhotoBoundaryMeasurementQuery,
     *,
     side: CoarseSupportSide,
+    measurement_basis: CoarseEnclosingMeasurementBasis,
     transitions: tuple[PhotoBoundaryTransition, ...],
     reference_trace_px: float,
+    support_traces_by_transition_id: Mapping[
+        ObservationId,
+        tuple[int, ...],
+    ]
+    | None = None,
 ) -> CoarseEnclosingTrack | None:
+    def support_traces_for(
+        values: tuple[PhotoBoundaryTransition, ...],
+    ) -> tuple[int, ...]:
+        if support_traces_by_transition_id is None:
+            return tuple(
+                sorted({item.trace_coordinate_px for item in values})
+            )
+        return tuple(
+            sorted(
+                {
+                    trace
+                    for item in values
+                    for trace in support_traces_by_transition_id[
+                        item.transition_id
+                    ]
+                }
+            )
+        )
+
     queried_traces = query.trace_positions_px
     traces = tuple(item.trace_coordinate_px for item in transitions)
+    support_traces = support_traces_for(transitions)
     if (
         len(transitions) < SPATIAL_SUPPORT_REGION_COUNT
         or independent_spatial_support_count(
             query.trace_positions_px,
-            traces,
+            support_traces,
         )
         < SPATIAL_SUPPORT_REGION_COUNT
         or not source_spanning_continuous_trace_support(
             query.trace_positions_px,
-            traces,
+            support_traces,
             spec=PHOTO_BOUNDARY_MEASUREMENT_SPEC,
         )
     ):
@@ -194,13 +251,30 @@ def _fit_track(
         if bool(keep)
     )
     traces = tuple(int(point.trace) for point in retained)
+    support_traces = support_traces_for(
+        tuple(point.transition for point in retained)
+    )
     if (
         len(retained) < SPATIAL_SUPPORT_REGION_COUNT
-        or independent_spatial_support_count(queried_traces, traces)
+        or (
+            measurement_basis
+            == CoarseEnclosingMeasurementBasis.BROAD_MATERIAL
+            and len(
+                {
+                    point.transition.polarity
+                    for point in retained
+                }
+            )
+            != 1
+        )
+        or independent_spatial_support_count(
+            queried_traces,
+            support_traces,
+        )
         < SPATIAL_SUPPORT_REGION_COUNT
         or not source_spanning_continuous_trace_support(
             queried_traces,
-            traces,
+            support_traces,
             spec=PHOTO_BOUNDARY_MEASUREMENT_SPEC,
         )
     ):
@@ -271,11 +345,13 @@ def _fit_track(
     identity = physical_observation_id(
         "coarse-enclosing-track",
         query.query_id,
+        measurement_basis.value,
         side.value,
         *(str(point.transition.transition_id) for point in retained),
     )
     return CoarseEnclosingTrack(
         side=side,
+        measurement_basis=measurement_basis,
         observation_id=identity,
         reference_trace_px=reference_trace_px,
         canonical_position_px=canonical_position,
@@ -288,6 +364,7 @@ def _fit_track(
             canonical_position + full_error,
         ),
         trace_coordinates_px=tuple(sorted(traces)),
+        support_trace_coordinates_px=support_traces,
         canonical_direction_degrees=canonical_angle,
         fit_direction_interval_degrees=fit_angle,
         full_direction_interval_degrees=full_angle,
@@ -572,101 +649,42 @@ def _shared_tracks(
     return minimum_shared, maximum_shared
 
 
-def observe_coarse_short_axis_tracks(
-    field: PhotoBoundaryMeasurementField,
+def _compile_coarse_enclosing_pair(
     query: PhotoBoundaryMeasurementQuery,
     *,
-    aggregate_interval_px: FiniteInterval | None,
+    measurement_basis: CoarseEnclosingMeasurementBasis,
+    minimum_transitions: tuple[PhotoBoundaryTransition, ...],
+    maximum_transitions: tuple[PhotoBoundaryTransition, ...],
     expected_height_px: PositiveInterval | FiniteInterval,
     reference_trace_px: float,
+    support_traces_by_transition_id: Mapping[
+        ObservationId,
+        tuple[int, ...],
+    ]
+    | None = None,
 ) -> tuple[CoarseSharedDirection | None, CoarseEnclosingSupport | None]:
-    """Return one shared direction and an optional enclosing output pair."""
+    """Compile one role-free pair from already-unique physical tracks."""
 
-    if query.purpose != QueryPurpose.COARSE_STRIP_SHORT:
-        raise ValueError("enclosing support requires the coarse-short query")
-    if aggregate_interval_px is None:
-        return None, None
     height = FiniteInterval(
         expected_height_px.minimum,
         expected_height_px.maximum,
     )
     canonical_height = height.center
-    endpoint_margin = (
-        (
-            OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio
-            - 1.0
-        )
-        * height.maximum
-        + query.measurement_halo_px
-    )
-    minimum_values: list[PhotoBoundaryTransition] = []
-    maximum_values: list[PhotoBoundaryTransition] = []
-    for ordinal, trace in enumerate(query.trace_positions_px):
-        measured = measure_trace(
-            _profile(field, query, trace),
-            query.search_intervals_px[ordinal],
-            query.boundary_axis_scale_px_per_mm.maximum,
-            PHOTO_BOUNDARY_MEASUREMENT_SPEC,
-        )
-        peaks = measured_transition_peaks(
-            measured,
-            PHOTO_BOUNDARY_MEASUREMENT_SPEC,
-            split_gradient_reversals=True,
-        )
-        minimum = _unique_nearest(
-            peaks,
-            aggregate_interval_px.minimum,
-            endpoint_margin,
-        )
-        maximum = _unique_nearest(
-            peaks,
-            aggregate_interval_px.maximum,
-            endpoint_margin,
-        )
-        if minimum is None or maximum is None or minimum is maximum:
-            continue
-        span = FiniteInterval(
-            maximum.physical_position_interval.minimum
-            - minimum.physical_position_interval.maximum,
-            maximum.physical_position_interval.maximum
-            - minimum.physical_position_interval.minimum,
-        )
-        if (
-            span.maximum < height.minimum
-            or span.minimum
-            > OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio
-            * height.maximum
-        ):
-            continue
-        minimum_values.append(
-            _transition(
-                query,
-                trace_ordinal=ordinal,
-                trace=trace,
-                peak=minimum,
-                side=CoarseSupportSide.MINIMUM,
-            )
-        )
-        maximum_values.append(
-            _transition(
-                query,
-                trace_ordinal=ordinal,
-                trace=trace,
-                peak=maximum,
-                side=CoarseSupportSide.MAXIMUM,
-            )
-        )
     minimum_track = _fit_track(
         query,
         side=CoarseSupportSide.MINIMUM,
-        transitions=tuple(minimum_values),
+        measurement_basis=measurement_basis,
+        transitions=minimum_transitions,
         reference_trace_px=reference_trace_px,
+        support_traces_by_transition_id=support_traces_by_transition_id,
     )
     maximum_track = _fit_track(
         query,
         side=CoarseSupportSide.MAXIMUM,
-        transitions=tuple(maximum_values),
+        measurement_basis=measurement_basis,
+        transitions=maximum_transitions,
         reference_trace_px=reference_trace_px,
+        support_traces_by_transition_id=support_traces_by_transition_id,
     )
     if minimum_track is None or maximum_track is None:
         return None, None
@@ -674,6 +692,13 @@ def observe_coarse_short_axis_tracks(
         sorted(
             set(minimum_track.trace_coordinates_px).intersection(
                 maximum_track.trace_coordinates_px
+            )
+        )
+    )
+    common_support_traces = tuple(
+        sorted(
+            set(minimum_track.support_trace_coordinates_px).intersection(
+                maximum_track.support_trace_coordinates_px
             )
         )
     )
@@ -685,28 +710,28 @@ def observe_coarse_short_axis_tracks(
         < SPATIAL_SUPPORT_REGION_COUNT
         or not source_spanning_continuous_trace_support(
             query.trace_positions_px,
-            common_traces,
+            common_support_traces,
             spec=PHOTO_BOUNDARY_MEASUREMENT_SPEC,
         )
     ):
         return None, None
     common = set(common_traces)
-    minimum_values = [
+    minimum_values = tuple(
         item
-        for item in minimum_values
+        for item in minimum_transitions
         if item.trace_coordinate_px in common
-    ]
-    maximum_values = [
+    )
+    maximum_values = tuple(
         item
-        for item in maximum_values
+        for item in maximum_transitions
         if item.trace_coordinate_px in common
-    ]
+    )
     shared = _shared_tracks(
         query,
         minimum_track=minimum_track,
         maximum_track=maximum_track,
-        minimum_transitions=tuple(minimum_values),
-        maximum_transitions=tuple(maximum_values),
+        minimum_transitions=minimum_values,
+        maximum_transitions=maximum_values,
         reference_trace_px=reference_trace_px,
     )
     if shared is None:
@@ -715,6 +740,7 @@ def observe_coarse_short_axis_tracks(
     direction = CoarseSharedDirection(
         direction_id=(
             "coarse-shared-direction:"
+            f"{measurement_basis.value}:"
             f"{minimum_track.observation_id}:"
             f"{maximum_track.observation_id}"
         ),
@@ -756,5 +782,381 @@ def observe_coarse_short_axis_tracks(
             maximum_track,
             span,
             len(query.trace_positions_px),
+        ),
+    )
+
+
+def _observe_sharp_coarse_short_axis(
+    query: PhotoBoundaryMeasurementQuery,
+    trace_measurements: tuple[TraceMeasurement, ...],
+    *,
+    sharp_trace_ordinals: tuple[int, ...],
+    aggregate_interval_px: FiniteInterval,
+    expected_height_px: PositiveInterval | FiniteInterval,
+    reference_trace_px: float,
+) -> tuple[CoarseSharedDirection | None, CoarseEnclosingSupport | None]:
+    """Compile sharp native transitions from the complete sparse lattice."""
+
+    if len(trace_measurements) != len(query.trace_positions_px):
+        raise ValueError("coarse enclosing trace measurement is incomplete")
+    if (
+        not sharp_trace_ordinals
+        or tuple(sorted(set(sharp_trace_ordinals)))
+        != sharp_trace_ordinals
+        or sharp_trace_ordinals[0] < 0
+        or sharp_trace_ordinals[-1] >= len(query.trace_positions_px)
+    ):
+        raise ValueError("coarse sharp trace view is invalid")
+    sharp_query = replace(
+        query,
+        trace_positions_px=tuple(
+            query.trace_positions_px[index]
+            for index in sharp_trace_ordinals
+        ),
+        search_intervals_px=tuple(
+            query.search_intervals_px[index]
+            for index in sharp_trace_ordinals
+        ),
+        transition_ownership_intervals_px=tuple(
+            query.transition_ownership_intervals_px[index]
+            for index in sharp_trace_ordinals
+        ),
+    )
+    sharp_measurements = tuple(
+        trace_measurements[index] for index in sharp_trace_ordinals
+    )
+    height = FiniteInterval(
+        expected_height_px.minimum,
+        expected_height_px.maximum,
+    )
+    endpoint_margin = (
+        (
+            OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio
+            - 1.0
+        )
+        * height.maximum
+        + query.measurement_halo_px
+    )
+    minimum_values: list[PhotoBoundaryTransition] = []
+    maximum_values: list[PhotoBoundaryTransition] = []
+    for ordinal, (trace, measured) in enumerate(
+        zip(
+            sharp_query.trace_positions_px,
+            sharp_measurements,
+            strict=True,
+        )
+    ):
+        peaks = measured_transition_peaks(
+            measured,
+            PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+            split_gradient_reversals=True,
+        )
+        minimum = _unique_nearest(
+            peaks,
+            aggregate_interval_px.minimum,
+            endpoint_margin,
+        )
+        maximum = _unique_nearest(
+            peaks,
+            aggregate_interval_px.maximum,
+            endpoint_margin,
+        )
+        if minimum is None or maximum is None or minimum is maximum:
+            continue
+        span = FiniteInterval(
+            maximum.physical_position_interval.minimum
+            - minimum.physical_position_interval.maximum,
+            maximum.physical_position_interval.maximum
+            - minimum.physical_position_interval.minimum,
+        )
+        if (
+            span.maximum < height.minimum
+            or span.minimum
+            > OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio
+            * height.maximum
+        ):
+            continue
+        minimum_values.append(
+            _transition(
+                sharp_query,
+                trace_ordinal=ordinal,
+                trace=trace,
+                peak=minimum,
+                side=CoarseSupportSide.MINIMUM,
+            )
+        )
+        maximum_values.append(
+            _transition(
+                sharp_query,
+                trace_ordinal=ordinal,
+                trace=trace,
+                peak=maximum,
+                side=CoarseSupportSide.MAXIMUM,
+            )
+        )
+    return _compile_coarse_enclosing_pair(
+        sharp_query,
+        measurement_basis=(
+            CoarseEnclosingMeasurementBasis.SHARP_TRANSITION
+        ),
+        minimum_transitions=tuple(minimum_values),
+        maximum_transitions=tuple(maximum_values),
+        expected_height_px=expected_height_px,
+        reference_trace_px=reference_trace_px,
+    )
+
+
+def _observe_broad_coarse_short_axis(
+    measurement_set: PhotoBoundaryMeasurementSet,
+    *,
+    aggregate_interval_px: FiniteInterval,
+    expected_height_px: PositiveInterval | FiniteInterval,
+    reference_trace_px: float,
+) -> tuple[CoarseSharedDirection | None, CoarseEnclosingSupport | None]:
+    """Compile one unique outward-facing source-wide material pair."""
+
+    query = measurement_set.query
+    height = FiniteInterval(
+        expected_height_px.minimum,
+        expected_height_px.maximum,
+    )
+    endpoint_margin = (
+        (
+            OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio
+            - 1.0
+        )
+        * height.maximum
+        + query.measurement_halo_px
+    )
+    observations = {
+        item.transition_id: item
+        for item in measurement_set.broad_material_transitions
+    }
+    tracked = track_broad_material_transition_regions(
+        (measurement_set,),
+        reference_trace_px=reference_trace_px,
+        boundary_axis_scale_px_per_mm=(
+            query.boundary_axis_scale_px_per_mm
+        ),
+    )
+
+    def candidates(
+        *,
+        target: float,
+        background_side: MaterialBackgroundSide,
+    ) -> tuple[
+        tuple[
+            tuple[PhotoBoundaryTransition, ...],
+            Mapping[ObservationId, tuple[int, ...]],
+        ],
+        ...,
+    ]:
+        values = []
+        for region in tracked:
+            if _distance(region.position_interval_px, target) > endpoint_margin:
+                continue
+            selected = tuple(
+                sorted(
+                    (observations[item] for item in region.transition_ids),
+                    key=lambda item: (
+                        item.trace_coordinate_px,
+                        str(item.transition_id),
+                    ),
+                )
+            )
+            if (
+                len(selected) != SPATIAL_SUPPORT_REGION_COUNT
+                or any(
+                    item.background_side != background_side
+                    for item in selected
+                )
+                or len({item.polarity for item in selected}) != 1
+            ):
+                continue
+            transitions = tuple(
+                _broad_region_transition(query, observation=item)
+                for item in selected
+            )
+            support = {
+                item.transition_id: item.contributing_trace_coordinates_px
+                for item in selected
+            }
+            values.append((transitions, support))
+        return tuple(values)
+
+    minimum_candidates = candidates(
+        target=aggregate_interval_px.minimum,
+        background_side=MaterialBackgroundSide.LEFT,
+    )
+    maximum_candidates = candidates(
+        target=aggregate_interval_px.maximum,
+        background_side=MaterialBackgroundSide.RIGHT,
+    )
+    if len(minimum_candidates) != 1 or len(maximum_candidates) != 1:
+        return None, None
+    minimum_values, minimum_support = minimum_candidates[0]
+    maximum_values, maximum_support = maximum_candidates[0]
+    return _compile_coarse_enclosing_pair(
+        query,
+        measurement_basis=CoarseEnclosingMeasurementBasis.BROAD_MATERIAL,
+        minimum_transitions=minimum_values,
+        maximum_transitions=maximum_values,
+        expected_height_px=expected_height_px,
+        reference_trace_px=reference_trace_px,
+        support_traces_by_transition_id={
+            **minimum_support,
+            **maximum_support,
+        },
+    )
+
+
+def _candidate_fact(
+    support: CoarseEnclosingSupport,
+) -> CoarseEnclosingCandidateFact:
+    return CoarseEnclosingCandidateFact(
+        measurement_basis=support.minimum_track.measurement_basis,
+        minimum_track_observation_id=(
+            support.minimum_track.observation_id
+        ),
+        maximum_track_observation_id=(
+            support.maximum_track.observation_id
+        ),
+    )
+
+
+def _equivalent_support_pairs(
+    left: CoarseEnclosingSupport,
+    right: CoarseEnclosingSupport,
+) -> bool:
+    """Return whether two channels measured the same physical support pair."""
+
+    return all(
+        _intersection(first, second) is not None
+        for first, second in (
+            (
+                left.minimum_track.full_position_interval_px,
+                right.minimum_track.full_position_interval_px,
+            ),
+            (
+                left.maximum_track.full_position_interval_px,
+                right.maximum_track.full_position_interval_px,
+            ),
+            (
+                left.minimum_track.full_direction_interval_degrees,
+                right.minimum_track.full_direction_interval_degrees,
+            ),
+            (
+                left.maximum_track.full_direction_interval_degrees,
+                right.maximum_track.full_direction_interval_degrees,
+            ),
+            (left.observed_span_px, right.observed_span_px),
+        )
+    )
+
+
+def observe_coarse_short_axis_tracks(
+    measurement_set: PhotoBoundaryMeasurementSet,
+    *,
+    trace_measurements: tuple[TraceMeasurement, ...],
+    sharp_trace_ordinals: tuple[int, ...],
+    aggregate_interval_px: FiniteInterval | None,
+    expected_height_px: PositiveInterval | FiniteInterval,
+    reference_trace_px: float,
+) -> tuple[
+    CoarseSharedDirection | None,
+    CoarseEnclosingSupport | None,
+    CoarseEnclosingResolution,
+]:
+    """Resolve one role-free sharp/broad enclosing pair without scoring."""
+
+    query = measurement_set.query
+    if query.purpose != QueryPurpose.COARSE_STRIP_SHORT:
+        raise ValueError("enclosing support requires the coarse-short query")
+    if aggregate_interval_px is None:
+        return (
+            None,
+            None,
+            CoarseEnclosingResolution(
+                state=EvidenceState.UNAVAILABLE,
+                candidates=(),
+                selected_candidate=None,
+                failure_kind=(
+                    CoarseEnclosingResolutionFailureKind
+                    .AGGREGATE_SUPPORT_UNAVAILABLE
+                ),
+            ),
+        )
+    sharp_direction, sharp_support = _observe_sharp_coarse_short_axis(
+        query,
+        trace_measurements,
+        sharp_trace_ordinals=sharp_trace_ordinals,
+        aggregate_interval_px=aggregate_interval_px,
+        expected_height_px=expected_height_px,
+        reference_trace_px=reference_trace_px,
+    )
+    broad_direction, broad_support = _observe_broad_coarse_short_axis(
+        measurement_set,
+        aggregate_interval_px=aggregate_interval_px,
+        expected_height_px=expected_height_px,
+        reference_trace_px=reference_trace_px,
+    )
+    supports = tuple(
+        value
+        for value in (broad_support, sharp_support)
+        if value is not None
+    )
+    candidates = tuple(
+        sorted(
+            (_candidate_fact(value) for value in supports),
+            key=lambda item: item.measurement_basis.value,
+        )
+    )
+    if not supports:
+        return (
+            sharp_direction,
+            None,
+            CoarseEnclosingResolution(
+                state=EvidenceState.UNAVAILABLE,
+                candidates=(),
+                selected_candidate=None,
+                failure_kind=(
+                    CoarseEnclosingResolutionFailureKind.PAIR_UNAVAILABLE
+                ),
+            ),
+        )
+    if (
+        sharp_support is not None
+        and broad_support is not None
+        and not _equivalent_support_pairs(sharp_support, broad_support)
+    ):
+        return (
+            None,
+            None,
+            CoarseEnclosingResolution(
+                state=EvidenceState.CONTRADICTED,
+                candidates=candidates,
+                selected_candidate=None,
+                failure_kind=(
+                    CoarseEnclosingResolutionFailureKind
+                    .NON_EQUIVALENT_PAIR_CANDIDATES
+                ),
+            ),
+        )
+    selected_support = (
+        sharp_support if sharp_support is not None else broad_support
+    )
+    selected_direction = (
+        sharp_direction if sharp_support is not None else broad_direction
+    )
+    assert selected_support is not None
+    selected_fact = _candidate_fact(selected_support)
+    return (
+        selected_direction,
+        selected_support,
+        CoarseEnclosingResolution(
+            state=EvidenceState.SUPPORTED,
+            candidates=candidates,
+            selected_candidate=selected_fact,
+            failure_kind=None,
         ),
     )

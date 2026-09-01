@@ -47,8 +47,8 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v9"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v10"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v10"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v11"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
 SOURCE_TIMEOUT_SECONDS = 600
@@ -986,6 +986,9 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
             "calibrated_nominal_grid_authority"
         ]
         phase_receipt = phase_competition["receipt"]
+        enclosing_resolution = development_lanes[0]["search"][
+            "coarse_strip_support"
+        ]["enclosing_resolution"]
     development_contract_passed = development_contract_failure is None
     unsafe_approved_auto = (
         status == "approved_auto" and not development_contract_passed
@@ -1020,6 +1023,21 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         "phase_status": production_lanes[0]["phase_status"],
         "phase_failure_kind": development_lanes[0]["phase_competition"].get(
             "failure_kind"
+        ),
+        "coarse_enclosing_resolution_state": enclosing_resolution["state"],
+        "coarse_enclosing_resolution_failure_kind": enclosing_resolution[
+            "failure_kind"
+        ],
+        "coarse_enclosing_candidate_measurement_bases": [
+            candidate["measurement_basis"]
+            for candidate in enclosing_resolution["candidates"]
+        ],
+        "coarse_enclosing_selected_measurement_basis": (
+            None
+            if enclosing_resolution["selected_candidate"] is None
+            else enclosing_resolution["selected_candidate"][
+                "measurement_basis"
+            ]
         ),
         "lattice_parameter_fit_basis": (
             None
@@ -2115,6 +2133,31 @@ def _summary(
             records,
             "phase_failure_kind",
         ),
+        "coarse_enclosing_resolution_state_counts": _counter(
+            records,
+            "coarse_enclosing_resolution_state",
+        ),
+        "coarse_enclosing_resolution_failure_kind_counts": _counter(
+            records,
+            "coarse_enclosing_resolution_failure_kind",
+        ),
+        "coarse_enclosing_selected_measurement_basis_counts": _counter(
+            records,
+            "coarse_enclosing_selected_measurement_basis",
+        ),
+        "coarse_enclosing_candidate_measurement_basis_counts": dict(
+            sorted(
+                Counter(
+                    "+".join(
+                        record[
+                            "coarse_enclosing_candidate_measurement_bases"
+                        ]
+                    )
+                    or "none"
+                    for record in records
+                ).items()
+            )
+        ),
         "lattice_parameter_fit_basis_counts": _counter(
             records,
             "lattice_parameter_fit_basis",
@@ -2302,6 +2345,10 @@ def run_gold_analysis(
                 "source_placement_state": None,
                 "phase_status": None,
                 "phase_failure_kind": None,
+                "coarse_enclosing_resolution_state": None,
+                "coarse_enclosing_resolution_failure_kind": None,
+                "coarse_enclosing_candidate_measurement_bases": [],
+                "coarse_enclosing_selected_measurement_basis": None,
                 "lattice_parameter_fit_basis": None,
                 "calibrated_nominal_grid_evidence_state": None,
                 "calibrated_nominal_grid_evidence_failure_kind": None,

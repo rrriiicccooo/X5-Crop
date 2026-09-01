@@ -112,6 +112,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertIn("CROSS FIT ·", cross)
         self.assertIn("COARSE ORIENTATION ", cross)
         self.assertIn("ENCLOSING ", cross)
+        self.assertIn("EVIDENCE UNAVAILABLE:PAIR_UNAVAILABLE", cross)
         self.assertIn("SEQUENCE FIT ·", sequence)
         self.assertIn(
             "PARAM BOUNDED_DIRECT_LEAST_SQUARES",

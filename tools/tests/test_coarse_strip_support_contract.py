@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import replace
 from pathlib import Path
 import unittest
 
@@ -9,12 +10,25 @@ import numpy as np
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.evidence.scan_canvas import observe_scan_canvas
 from x5crop.detection.photo_geometry.coarse_strip_support import (
+    _coarse_short_trace_lattices,
+    _sparse_positions,
     CoarseAxisSupport,
     CoarseStripSupport,
     CoarseStripSupportReceipt,
     CoarseSupportAuthority,
     observe_coarse_strip_support,
     registered_coarse_support_queries,
+)
+from x5crop.detection.photo_geometry.coarse_enclosing_model import (
+    CoarseEnclosingMeasurementBasis,
+    CoarseEnclosingResolution,
+    CoarseEnclosingResolutionFailureKind,
+)
+from x5crop.detection.photo_geometry.coarse_enclosing_support import (
+    observe_coarse_short_axis_tracks,
+)
+from x5crop.detection.photo_geometry.broad_material_transition_measurement import (
+    measure_broad_material_transition_regions,
 )
 from x5crop.detection.photo_geometry.corridors import (
     build_sequence_anchor_discovery_domain,
@@ -24,7 +38,20 @@ from x5crop.detection.photo_geometry.lane_preparation import (
     _enclosing_support_for_canonical_height,
     _shared_direction_from_coarse,
 )
-from x5crop.detection.photo_geometry.model import BoundaryAxis, QueryPurpose
+from x5crop.detection.photo_geometry.measurement_model import (
+    PhotoBoundaryCoverageReceipt,
+    PhotoBoundaryMeasurementQuery,
+    PhotoBoundaryMeasurementSet,
+)
+from x5crop.detection.photo_geometry.model import (
+    BoundaryAxis,
+    PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+    QueryPurpose,
+)
+from x5crop.detection.photo_geometry.registered_transition_measurement import (
+    TraceMeasurement,
+    measure_trace,
+)
 from x5crop.detection.photo_geometry.registered_measurement import (
     make_photo_boundary_measurement_field,
 )
@@ -38,7 +65,18 @@ from x5crop.detection.source_core import (
     SourceLaneEvidence,
     SourceStripValidationDomain,
 )
-from x5crop.domain import Box, FiniteInterval, ObservationId
+from x5crop.domain import Box, EvidenceState, FiniteInterval, ObservationId
+
+
+def _unavailable_enclosing_resolution() -> CoarseEnclosingResolution:
+    return CoarseEnclosingResolution(
+        state=EvidenceState.UNAVAILABLE,
+        candidates=(),
+        selected_candidate=None,
+        failure_kind=(
+            CoarseEnclosingResolutionFailureKind.PAIR_UNAVAILABLE
+        ),
+    )
 
 
 def _lane(
@@ -100,6 +138,94 @@ class CoarseStripSupportContractTest(unittest.TestCase):
         )
         return support
 
+    @staticmethod
+    def _short_trace_measurement(
+        query: PhotoBoundaryMeasurementQuery,
+        *,
+        minimum: int,
+        maximum: int,
+        outside: int = 255,
+        inside: int = 80,
+        sharp: bool,
+    ) -> TraceMeasurement:
+        values = np.full(322, outside, dtype=np.uint8)
+        values[minimum:maximum] = inside
+        measured = measure_trace(
+            values,
+            query.search_intervals_px[0],
+            query.boundary_axis_scale_px_per_mm.maximum,
+            PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+            include_broad_material=True,
+        )
+        if sharp:
+            return measured
+        zeros = np.zeros_like(measured.gradient_z)
+        return replace(
+            measured,
+            gradient_z=zeros,
+            tone_z=zeros.copy(),
+            texture_z=zeros.copy(),
+            signed_gradient=zeros.copy(),
+        )
+
+    @classmethod
+    def _short_trace_lattice(
+        cls,
+        query: PhotoBoundaryMeasurementQuery,
+        middle: TraceMeasurement,
+    ) -> tuple[TraceMeasurement, ...]:
+        blank = cls._short_trace_measurement(
+            query,
+            minimum=0,
+            maximum=322,
+            outside=255,
+            inside=255,
+            sharp=False,
+        )
+        return (
+            blank,
+            *(middle for _ in range(len(query.trace_positions_px) - 2)),
+            blank,
+        )
+
+    @staticmethod
+    def _short_measurement_set(
+        query: PhotoBoundaryMeasurementQuery,
+        trace_measurements: tuple[TraceMeasurement, ...],
+        *,
+        broad_trace_ordinals: tuple[int, ...],
+    ) -> PhotoBoundaryMeasurementSet:
+        broad_regions, temporary_bytes = (
+            measure_broad_material_transition_regions(
+                query,
+                trace_measurements,
+                trace_ordinals=broad_trace_ordinals,
+            )
+        )
+        coordinate_count = sum(
+            int(interval.maximum - interval.minimum) + 1
+            for interval in query.search_intervals_px
+        )
+        coverage = PhotoBoundaryCoverageReceipt(
+            query_id=query.query_id,
+            registered_trace_count=len(query.trace_positions_px),
+            completed_trace_count=len(query.trace_positions_px),
+            registered_coordinate_count=coordinate_count,
+            completed_coordinate_count=coordinate_count,
+            pixel_query_count=coordinate_count,
+            streaming_block_count=1,
+            peak_temporary_bytes=temporary_bytes,
+            complete=True,
+        )
+        return PhotoBoundaryMeasurementSet(
+            query=query,
+            state=EvidenceState.SUPPORTED,
+            transitions=(),
+            cross_height_transitions=(),
+            coverage=coverage,
+            broad_material_transitions=broad_regions,
+        )
+
     def test_blank_pixels_keep_one_conservative_path(self) -> None:
         lane, plan = _lane()
         field = make_photo_boundary_measurement_field(
@@ -129,6 +255,39 @@ class CoarseStripSupportContractTest(unittest.TestCase):
         )
         self.assertEqual(support.long_axis.interval_px, FiniteInterval(0.0, 2319.0))
         self.assertEqual(support.short_axis.interval_px, FiniteInterval(0.0, 321.0))
+        self.assertEqual(
+            support.enclosing_resolution.failure_kind,
+            CoarseEnclosingResolutionFailureKind.AGGREGATE_SUPPORT_UNAVAILABLE,
+        )
+
+    def test_short_query_registers_one_union_with_fixed_channel_views(self) -> None:
+        lane, plan = _lane()
+        query = registered_coarse_support_queries(
+            lane,
+            layout="horizontal",
+            measurement_plan=plan,
+        )[1]
+        source_positions = plan.projected_queries.cross_trace_positions_px
+        registered, sharp_ordinals, broad_ordinals = (
+            _coarse_short_trace_lattices(source_positions)
+        )
+
+        self.assertEqual(query.trace_positions_px, registered)
+        self.assertEqual(
+            tuple(registered[index] for index in sharp_ordinals),
+            _sparse_positions(source_positions, maximum=5),
+        )
+        self.assertEqual(
+            tuple(registered[index] for index in broad_ordinals),
+            _sparse_positions(source_positions, maximum=9),
+        )
+        self.assertEqual(
+            set(registered),
+            {
+                *_sparse_positions(source_positions, maximum=5),
+                *_sparse_positions(source_positions, maximum=9),
+            },
+        )
 
     def test_vertical_queries_map_canonical_axes_once(self) -> None:
         lane, plan = _lane(
@@ -167,6 +326,7 @@ class CoarseStripSupportContractTest(unittest.TestCase):
             ),
             None,
             None,
+            _unavailable_enclosing_resolution(),
             CoarseStripSupportReceipt(2, 2, 2, 2, 1, 2, 2),
         )
 
@@ -218,6 +378,7 @@ class CoarseStripSupportContractTest(unittest.TestCase):
             ),
             None,
             None,
+            _unavailable_enclosing_resolution(),
             CoarseStripSupportReceipt(2, 2, 2, 2, 1, 2, 2),
         )
 
@@ -283,6 +444,7 @@ class CoarseStripSupportContractTest(unittest.TestCase):
             ),
             None,
             None,
+            _unavailable_enclosing_resolution(),
             CoarseStripSupportReceipt(2, 2, 2, 2, 1, 2, 2),
         )
 
@@ -363,6 +525,165 @@ class CoarseStripSupportContractTest(unittest.TestCase):
         self.assertEqual(
             support.enclosing_support.minimum_track.trace_coordinates_px,
             support.enclosing_support.maximum_track.trace_coordinates_px,
+        )
+        self.assertEqual(
+            tuple(
+                item.measurement_basis
+                for item in support.enclosing_resolution.candidates
+            ),
+            (
+                CoarseEnclosingMeasurementBasis.BROAD_MATERIAL,
+                CoarseEnclosingMeasurementBasis.SHARP_TRANSITION,
+            ),
+        )
+        assert support.enclosing_resolution.selected_candidate is not None
+        self.assertEqual(
+            support.enclosing_resolution.selected_candidate.measurement_basis,
+            CoarseEnclosingMeasurementBasis.SHARP_TRANSITION,
+        )
+
+    def test_unique_broad_material_pair_can_supply_enclosing_support(self) -> None:
+        lane, plan = _lane()
+        query = registered_coarse_support_queries(
+            lane,
+            layout="horizontal",
+            measurement_plan=plan,
+        )[1]
+        broad_only = self._short_trace_measurement(
+            query,
+            minimum=35,
+            maximum=291,
+            sharp=False,
+        )
+        _registered, sharp_ordinals, broad_ordinals = (
+            _coarse_short_trace_lattices(
+                plan.projected_queries.cross_trace_positions_px
+            )
+        )
+
+        lattice = self._short_trace_lattice(query, broad_only)
+        direction, support, resolution = observe_coarse_short_axis_tracks(
+            self._short_measurement_set(
+                query,
+                lattice,
+                broad_trace_ordinals=broad_ordinals,
+            ),
+            trace_measurements=lattice,
+            sharp_trace_ordinals=sharp_ordinals,
+            aggregate_interval_px=FiniteInterval(30.5, 294.5),
+            expected_height_px=plan.template_spec.frame_height_px,
+            reference_trace_px=1159.5,
+        )
+
+        self.assertIsNotNone(direction)
+        self.assertIsNotNone(support)
+        assert support is not None
+        self.assertEqual(
+            support.minimum_track.measurement_basis,
+            CoarseEnclosingMeasurementBasis.BROAD_MATERIAL,
+        )
+        self.assertEqual(resolution.state, EvidenceState.SUPPORTED)
+        self.assertEqual(len(resolution.candidates), 1)
+
+    def test_non_equivalent_sharp_and_broad_pairs_are_contradicted(self) -> None:
+        lane, plan = _lane()
+        query = registered_coarse_support_queries(
+            lane,
+            layout="horizontal",
+            measurement_plan=plan,
+        )[1]
+        sharp = self._short_trace_measurement(
+            query,
+            minimum=35,
+            maximum=291,
+            sharp=True,
+        )
+        shifted_broad = self._short_trace_measurement(
+            query,
+            minimum=45,
+            maximum=301,
+            sharp=False,
+        )
+        _registered, sharp_ordinals, broad_ordinals = (
+            _coarse_short_trace_lattices(
+                plan.projected_queries.cross_trace_positions_px
+            )
+        )
+        sharp_lattice = self._short_trace_lattice(query, sharp)
+        broad_lattice = self._short_trace_lattice(query, shifted_broad)
+
+        direction, support, resolution = observe_coarse_short_axis_tracks(
+            self._short_measurement_set(
+                query,
+                broad_lattice,
+                broad_trace_ordinals=broad_ordinals,
+            ),
+            trace_measurements=sharp_lattice,
+            sharp_trace_ordinals=sharp_ordinals,
+            aggregate_interval_px=FiniteInterval(30.5, 294.5),
+            expected_height_px=plan.template_spec.frame_height_px,
+            reference_trace_px=1159.5,
+        )
+
+        self.assertIsNone(direction)
+        self.assertIsNone(support)
+        self.assertEqual(resolution.state, EvidenceState.CONTRADICTED)
+        self.assertEqual(
+            resolution.failure_kind,
+            CoarseEnclosingResolutionFailureKind.NON_EQUIVALENT_PAIR_CANDIDATES,
+        )
+        self.assertEqual(len(resolution.candidates), 2)
+
+    def test_mixed_broad_material_polarity_cannot_authorize_a_track(self) -> None:
+        lane, plan = _lane()
+        query = registered_coarse_support_queries(
+            lane,
+            layout="horizontal",
+            measurement_plan=plan,
+        )[1]
+        dark = self._short_trace_measurement(
+            query,
+            minimum=35,
+            maximum=291,
+            sharp=False,
+        )
+        light = self._short_trace_measurement(
+            query,
+            minimum=35,
+            maximum=291,
+            outside=0,
+            inside=175,
+            sharp=False,
+        )
+        _registered, sharp_ordinals, broad_ordinals = (
+            _coarse_short_trace_lattices(
+                plan.projected_queries.cross_trace_positions_px
+            )
+        )
+        lattice_values = [dark for _ in query.trace_positions_px]
+        for index in broad_ordinals[3:6]:
+            lattice_values[index] = light
+        lattice = tuple(lattice_values)
+
+        direction, support, resolution = observe_coarse_short_axis_tracks(
+            self._short_measurement_set(
+                query,
+                lattice,
+                broad_trace_ordinals=broad_ordinals,
+            ),
+            trace_measurements=lattice,
+            sharp_trace_ordinals=sharp_ordinals,
+            aggregate_interval_px=FiniteInterval(30.5, 294.5),
+            expected_height_px=plan.template_spec.frame_height_px,
+            reference_trace_px=1159.5,
+        )
+
+        self.assertIsNone(direction)
+        self.assertIsNone(support)
+        self.assertEqual(resolution.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(
+            resolution.failure_kind,
+            CoarseEnclosingResolutionFailureKind.PAIR_UNAVAILABLE,
         )
 
     def test_isolated_trace_outlier_cannot_move_the_source_wide_track(self) -> None:

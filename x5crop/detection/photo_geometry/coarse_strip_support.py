@@ -24,8 +24,12 @@ from ...domain import (
 from ...formats import OUTPUT_PROTECTION_SPEC
 from ..source_core import SourceLaneEvidence
 from .axis_layout import axis_interval, source_axes
+from .broad_material_transition_measurement import (
+    measure_broad_material_transition_regions,
+)
 from .corridors import source_lane_box
 from .coarse_enclosing_model import (
+    CoarseEnclosingResolution,
     CoarseEnclosingSupport,
     CoarseSharedDirection,
 )
@@ -40,11 +44,19 @@ from .measurement_model import (
 )
 from .model import BoundaryAxis, PHOTO_BOUNDARY_MEASUREMENT_SPEC, QueryPurpose
 from .registered_transition_measurement import (
+    TraceMeasurement,
     measure_trace,
     measured_transition_peaks,
 )
 from .physical_identity import physical_observation_id
 from .template_measurement_plan_model import TemplateMeasurementPlan
+
+
+COARSE_STRIP_SUPPORT_REVISION = (
+    "x5crop_coarse_strip_support_spatial_material_v2"
+)
+COARSE_SHARP_TRACE_COUNT = 5
+COARSE_BROAD_REGION_TRACE_COUNT = 3 * 3
 
 
 class CoarseSupportAuthority(str, Enum):
@@ -117,6 +129,7 @@ class CoarseStripSupport:
     short_axis: CoarseAxisSupport
     shared_direction: CoarseSharedDirection | None
     enclosing_support: CoarseEnclosingSupport | None
+    enclosing_resolution: CoarseEnclosingResolution
     receipt: CoarseStripSupportReceipt
 
     def __post_init__(self) -> None:
@@ -138,9 +151,19 @@ class CoarseStripSupport:
                     CoarseEnclosingSupport,
                 )
             )
+            or not isinstance(
+                self.enclosing_resolution,
+                CoarseEnclosingResolution,
+            )
             or not isinstance(self.receipt, CoarseStripSupportReceipt)
         ):
             raise ValueError("coarse strip support is invalid")
+        if (
+            self.enclosing_resolution.state == EvidenceState.SUPPORTED
+        ) != (self.enclosing_support is not None):
+            raise ValueError(
+                "coarse enclosing support disagrees with its resolution"
+            )
 
 
 def _sparse_positions(values: tuple[int, ...], maximum: int = 5) -> tuple[int, ...]:
@@ -153,6 +176,30 @@ def _sparse_positions(values: tuple[int, ...], maximum: int = 5) -> tuple[int, .
         for index in range(maximum)
     }
     return tuple(values[index] for index in sorted(indices))
+
+
+def _coarse_short_trace_lattices(
+    values: tuple[int, ...],
+) -> tuple[tuple[int, ...], tuple[int, ...], tuple[int, ...]]:
+    """Return one registered union and the two fixed channel views."""
+
+    sharp_positions = _sparse_positions(
+        values,
+        maximum=COARSE_SHARP_TRACE_COUNT,
+    )
+    broad_positions = _sparse_positions(
+        values,
+        maximum=COARSE_BROAD_REGION_TRACE_COUNT,
+    )
+    registered = tuple(sorted({*sharp_positions, *broad_positions}))
+    ordinal_by_position = {
+        position: ordinal for ordinal, position in enumerate(registered)
+    }
+    return (
+        registered,
+        tuple(ordinal_by_position[value] for value in sharp_positions),
+        tuple(ordinal_by_position[value] for value in broad_positions),
+    )
 
 
 def _query(
@@ -208,11 +255,18 @@ def registered_coarse_support_queries(
     source_box = source_lane_box(lane, layout)
     projected = measurement_plan.projected_queries
     long_traces = _sparse_positions(projected.sequence_trace_positions_px)
-    short_traces = _sparse_positions(projected.cross_trace_positions_px)
+    short_traces, _sharp_ordinals, _broad_ordinals = (
+        _coarse_short_trace_lattices(
+            projected.cross_trace_positions_px,
+        )
+    )
     identity = measurement_plan.plan_identity
     return (
         _query(
-            query_id=f"query:{identity}:coarse-long",
+            query_id=(
+                f"query:{COARSE_STRIP_SUPPORT_REVISION}:"
+                f"{identity}:coarse-long"
+            ),
             registration_index=0,
             lane_id=lane.domain.lane_id,
             purpose=QueryPurpose.COARSE_STRIP_LONG,
@@ -224,7 +278,10 @@ def registered_coarse_support_queries(
             trace_scale=scales.height_axis_px_per_mm,
         ),
         _query(
-            query_id=f"query:{identity}:coarse-short",
+            query_id=(
+                f"query:{COARSE_STRIP_SUPPORT_REVISION}:"
+                f"{identity}:coarse-short"
+            ),
             registration_index=1,
             lane_id=lane.domain.lane_id,
             purpose=QueryPurpose.COARSE_STRIP_SHORT,
@@ -241,11 +298,21 @@ def registered_coarse_support_queries(
 def _aggregate_query_profile(
     field: PhotoBoundaryMeasurementField,
     query: PhotoBoundaryMeasurementQuery,
-) -> tuple[np.ndarray, int]:
+    *,
+    aggregate_trace_ordinals: tuple[int, ...] | None = None,
+) -> tuple[np.ndarray, np.ndarray, int]:
     """Collapse one registered lattice into one role-free median profile."""
 
     if len(set(query.search_intervals_px)) != 1:
         raise ValueError("coarse aggregate requires one common search interval")
+    if aggregate_trace_ordinals is not None and (
+        not aggregate_trace_ordinals
+        or tuple(sorted(set(aggregate_trace_ordinals)))
+        != aggregate_trace_ordinals
+        or aggregate_trace_ordinals[0] < 0
+        or aggregate_trace_ordinals[-1] >= len(query.trace_positions_px)
+    ):
+        raise ValueError("coarse aggregate trace ordinals are invalid")
     samples = np.stack(
         tuple(
             field.source_gray[trace, :]
@@ -255,17 +322,30 @@ def _aggregate_query_profile(
         ),
         axis=0,
     )
-    profile = np.median(samples, axis=0).astype(np.uint8)
-    return profile, int(samples.nbytes + profile.nbytes)
+    selected = (
+        samples
+        if aggregate_trace_ordinals is None
+        else samples[np.asarray(aggregate_trace_ordinals, dtype=np.intp)]
+    )
+    if selected.size == 0:
+        raise ValueError("coarse aggregate requires at least one trace")
+    profile = np.median(selected, axis=0).astype(np.uint8)
+    return profile, samples, int(samples.nbytes + profile.nbytes)
 
 
 def _aggregate_measurement_set(
     field: PhotoBoundaryMeasurementField,
     query: PhotoBoundaryMeasurementQuery,
-) -> tuple[PhotoBoundaryMeasurementSet, np.ndarray, int]:
+    *,
+    aggregate_trace_ordinals: tuple[int, ...] | None = None,
+) -> tuple[PhotoBoundaryMeasurementSet, np.ndarray, np.ndarray, int]:
     """Read each coarse coordinate once; coarse queries do not emit edges."""
 
-    profile, temporary_bytes = _aggregate_query_profile(field, query)
+    profile, samples, temporary_bytes = _aggregate_query_profile(
+        field,
+        query,
+        aggregate_trace_ordinals=aggregate_trace_ordinals,
+    )
     coordinate_count = sum(
         int(interval.maximum - interval.minimum) + 1
         for interval in query.search_intervals_px
@@ -298,7 +378,36 @@ def _aggregate_measurement_set(
             coverage=coverage,
         ),
         profile,
+        samples,
         temporary_bytes,
+    )
+
+
+def _measure_coarse_short_trace_lattice(
+    samples: np.ndarray,
+    query: PhotoBoundaryMeasurementQuery,
+) -> tuple[tuple[TraceMeasurement, ...], int]:
+    """Measure each registered coarse-short trace once for both channels."""
+
+    if (
+        query.purpose != QueryPurpose.COARSE_STRIP_SHORT
+        or samples.ndim != 2
+        or samples.shape[0] != len(query.trace_positions_px)
+    ):
+        raise ValueError("coarse short trace lattice is invalid")
+    measured = tuple(
+        measure_trace(
+            samples[ordinal],
+            query.search_intervals_px[ordinal],
+            query.boundary_axis_scale_px_per_mm.maximum,
+            PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+            include_broad_material=True,
+        )
+        for ordinal in range(len(query.trace_positions_px))
+    )
+    return measured, int(
+        samples.nbytes
+        + max((item.temporary_bytes for item in measured), default=0)
     )
 
 
@@ -379,12 +488,11 @@ def _aggregate_long_hull(
 
 
 def _aggregate_short_hull(
-    field: PhotoBoundaryMeasurementField,
     measurement: PhotoBoundaryMeasurementSet,
     *,
     expected_height_px: FiniteInterval,
-    profile: np.ndarray | None = None,
-    aggregate_temporary: int = 0,
+    profile: np.ndarray,
+    aggregate_temporary: int,
 ) -> tuple[FiniteInterval | None, tuple[ObservationId, ...], int, int]:
     """Find one bounded whole-strip support without materializing pairs.
 
@@ -392,10 +500,6 @@ def _aggregate_short_hull(
     TOP/BOTTOM role, cross placement, or output boundary.
     """
 
-    if profile is None:
-        profile, aggregate_temporary = _aggregate_query_profile(
-            field, measurement.query
-        )
     query = measurement.query
     measured = measure_trace(
         profile,
@@ -530,11 +634,41 @@ def observe_coarse_strip_support(
         layout=layout,
         measurement_plan=measurement_plan,
     )
-    long_measurement, long_profile, long_temporary = (
+    (
+        registered_short_traces,
+        sharp_trace_ordinals,
+        broad_trace_ordinals,
+    ) = _coarse_short_trace_lattices(
+        measurement_plan.projected_queries.cross_trace_positions_px,
+    )
+    if queries[1].trace_positions_px != registered_short_traces:
+        raise ValueError("coarse short trace registration changed after planning")
+    long_measurement, long_profile, _long_samples, long_temporary = (
         _aggregate_measurement_set(field, queries[0])
     )
-    short_measurement, short_profile, short_temporary = (
-        _aggregate_measurement_set(field, queries[1])
+    short_measurement, short_profile, short_samples, short_temporary = (
+        _aggregate_measurement_set(
+            field,
+            queries[1],
+            aggregate_trace_ordinals=sharp_trace_ordinals,
+        )
+    )
+    short_trace_measurements, short_trace_temporary = (
+        _measure_coarse_short_trace_lattice(
+            short_samples,
+            short_measurement.query,
+        )
+    )
+    broad_regions, broad_temporary = (
+        measure_broad_material_transition_regions(
+            short_measurement.query,
+            short_trace_measurements,
+            trace_ordinals=broad_trace_ordinals,
+        )
+    )
+    short_measurement = replace(
+        short_measurement,
+        broad_material_transitions=broad_regions,
     )
     measurements = (long_measurement, short_measurement)
     work = lane.domain.work_box
@@ -544,14 +678,13 @@ def observe_coarse_strip_support(
     assert scales is not None
     direct_long, long_ids, long_lookups, long_analysis_temporary = (
         _aggregate_long_hull(
-        long_profile,
-        measurements[0].query,
-        frame_width_px=measurement_plan.template_spec.frame_width_px,
+            long_profile,
+            measurements[0].query,
+            frame_width_px=measurement_plan.template_spec.frame_width_px,
         )
     )
     direct_short, short_ids, aggregate_temporary, endpoint_lookups = (
         _aggregate_short_hull(
-            field,
             measurements[1],
             expected_height_px=measurement_plan.template_spec.frame_height_px,
             profile=short_profile,
@@ -573,14 +706,23 @@ def observe_coarse_strip_support(
             measurements[1],
             coverage=replace(
                 measurements[1].coverage,
-                peak_temporary_bytes=aggregate_temporary,
+                peak_temporary_bytes=max(
+                    aggregate_temporary,
+                    short_trace_temporary,
+                    broad_temporary,
+                ),
             ),
         ),
     )
     template = measurement_plan.template_spec
-    shared_direction, enclosing_support = observe_coarse_short_axis_tracks(
-        field,
-        measurements[1].query,
+    (
+        shared_direction,
+        enclosing_support,
+        enclosing_resolution,
+    ) = observe_coarse_short_axis_tracks(
+        measurements[1],
+        trace_measurements=short_trace_measurements,
+        sharp_trace_ordinals=sharp_trace_ordinals,
         aggregate_interval_px=direct_short,
         expected_height_px=template.frame_height_px,
         reference_trace_px=long_authority.center,
@@ -622,6 +764,8 @@ def observe_coarse_strip_support(
             long_temporary,
             long_analysis_temporary,
             aggregate_temporary,
+            short_trace_temporary,
+            broad_temporary,
             *(item.peak_temporary_bytes for item in coverage),
         ),
         aggregate_profile_count=2,
@@ -634,6 +778,7 @@ def observe_coarse_strip_support(
             short_support,
             shared_direction,
             enclosing_support,
+            enclosing_resolution,
             receipt,
         ),
         measurements,

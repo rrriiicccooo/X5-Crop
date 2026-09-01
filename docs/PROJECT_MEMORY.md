@@ -30,7 +30,12 @@
   不参加 source W 独立支撑。
 - 已证明 Contact/Overlap 只保护前一 Frame END 与后一 Frame START，额外保护与基础 bleed、uncertainty、
   residual 共用原有每侧 5% 预算。只有 relation 对应的 Frame 可以重叠，cross evidence 在重叠中点分区；
-  输出 polygon 不被修改。Report revision 为 `x5crop_v5_template_report_36`。
+  输出 polygon 不被修改。
+- Coarse short-axis measurement 把 5 条 sharp trace 与 9 条 broad material trace 合并为一个 registered
+  union 并只读取一次。Sharp/broad 都可闭合 role-free enclosing pair；broad 还必须满足 outward
+  background、共同 polarity、三区域 source-spanning、方向和 `H < span <= 1.1H`。等价时保留 sharp
+  native coordinate，不等价时 typed contradiction，不按 score 选解。Report revision 为
+  `x5crop_v5_template_report_37`。
 - Calibrated Grid 重拟合曾暴露 relation 的 canonical signed gap 仍绑定旧 seed 中心的问题。现已由最终联合
   连续状态统一实现 relation，并用 `topology_binding_unavailable` 阻止必要 direct binding 被投影丢失；
   S008、S051、S054 均恢复为正常完成且安全 review，没有用异常捕获掩盖根因。
@@ -38,11 +43,12 @@
   诊断 proposal，真实 Frame 4/5 尚未闭合 relation，因此本阶段没有 challenge 自动通过能力发现。
 
 完整 development gold 已完成 110/110，分析错误 0，`unsafe_approved_auto = 0`。安全 auto 为基础 nominal
-17/66、较难 nominal 2/30、challenge 0/14；candidate 为 87 个不可用、20 个安全、3 个不安全，3 个不安全
-candidate 全部保持 review。与 Contact 检查点相比，自动批准集合和 candidate 安全分类不变。
+17/66、较难 nominal 2/30、challenge 0/14；candidate 为 86 个不可用、21 个安全、3 个不安全，3 个不安全
+candidate 全部保持 review。与 Overlap 检查点相比，自动批准集合不变；S024 取得 broad cross authority 但
+仍因 phase 多解 review，S058 从无 candidate 改善为安全 review candidate。14 个 challenge 均安全 review。
 
-Overlap 的 24-source 正式性能已通过 mean `<= 5s` Gate；3 秒 non-blocking challenge 尚未达到。Receipt
-只对其中记录的 clean commit、依赖与机器有效；development diagnostic 的 4.43 秒均值不属于性能 Gate。
+Broad enclosing 检查点的 24-source 正式性能已通过 mean `<= 5s` Gate；3 秒 non-blocking challenge 尚未
+达到。Receipt 只对其中记录的 clean commit、依赖与机器有效；development diagnostic 不属于性能 Gate。
 
 ## 证据边界与开放风险
 
@@ -54,16 +60,17 @@ Overlap 的 24-source 正式性能已通过 mean `<= 5s` Gate；3 秒 non-blocki
   `nominal_grid_phase_anchor_unavailable` 3、`adjacency_continuity_unresolved` 2 与其它独立 typed failure。
 - 完全不可见 Frame 不能靠继续加强 edge detector 全部解决。未取得独立 calibration/OOD/abstention 权限
   前，不能让 Grid 或 source W 创造像素事实。概率 scorer 当前不进入 Runtime。
-- 宽缓 outer/cross 边界目前主要是诊断 evidence；内容是否连续穿过理论间隔的 continuity 仍不完整；
-  source truncation 与片夹遮挡也缺少统一 clipped-boundary geometry。这三类能力可能同时影响 nominal 的
-  phase、长轴和短轴 authority，但必须分别按小机制闭环实现。
+- 宽缓 material 现在只对唯一、完整的短轴 enclosing pair 取得正式权限；单根长轴 broad edge 仍可能是
+  构图线，不能创造 phase。内容是否连续穿过理论间隔的 continuity 仍不完整；source truncation 与片夹
+  遮挡也缺少统一 clipped-boundary geometry。这些能力必须分别按小机制闭环实现。
 
 ## 精确下一步
 
-1. 完成 Overlap 检查点的 clean-commit 性能 receipt、正常 Hook/推送与 GitHub Verify。
-2. 以完整黄金 typed root failure 重新排序 nominal 工作；优先让唯一、跨高度一致的宽缓 outer/cross
-   material edge 取得正式 phase/outer/cross authority，不用 score 选择多解。
-3. 再补完整 adjacency continuity，以及 source boundary clipping、部分可见线段和片夹遮挡的通用几何；
-   continuity 只能否定普通 separator 或加强反证，不能单独证明 contact/overlap 或移动裁切框。
+1. 以完整黄金 typed root failure 为依据，把更完整的 adjacency material continuity 作为下一个小机制：
+   它可以否定普通 separator、加强 normal/contact/overlap 反证，但不能单独移动边界或证明 topology。
+2. 再补 source boundary clipping、部分可见线段和片夹遮挡的通用几何；TIFF 截断只能限制可观察线段，
+   片夹边也不能冒充完整 aperture。
+3. 随后继续处理 nominal 的弱边缘、局部片距变化与完全不可见 Frame；缺少独立风险权限时不得用 Grid
+   或 score 强行自动批准。
 4. 随真实使用逐步补充 calibration、sealed 和缺失 format 样片。出现危险自动裁切时保存原 TIFF、format、
    count 与 SHA，人工建立权威 baseline，加入 incident regression，并只用通用机制永久修复。

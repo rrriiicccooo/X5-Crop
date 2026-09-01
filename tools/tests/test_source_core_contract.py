@@ -28,6 +28,10 @@ from x5crop.detection.photo_geometry.coarse_strip_support import (
     CoarseStripSupportReceipt,
     CoarseSupportAuthority,
 )
+from x5crop.detection.photo_geometry.coarse_enclosing_model import (
+    CoarseEnclosingResolution,
+    CoarseEnclosingResolutionFailureKind,
+)
 from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
 from x5crop.detection.photo_geometry.template_measurement_plan import (
     compile_template_measurement_plan,
@@ -45,6 +49,7 @@ from x5crop.detection.source_core import (
 )
 from x5crop.domain import (
     Box,
+    EvidenceState,
     FiniteInterval,
     PositiveInterval,
 )
@@ -539,6 +544,14 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
                 ),
                 None,
                 None,
+                CoarseEnclosingResolution(
+                    state=EvidenceState.UNAVAILABLE,
+                    candidates=(),
+                    selected_candidate=None,
+                    failure_kind=(
+                        CoarseEnclosingResolutionFailureKind.PAIR_UNAVAILABLE
+                    ),
+                ),
                 CoarseStripSupportReceipt(2, 0, 0, 0, 0, 2, 0),
             ),
         )
