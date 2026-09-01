@@ -170,10 +170,7 @@ def development_report_facts(
                     None
                     if lane.prepared.phase_competition.best is None
                     else "adjacency_relations"
-                    if any(
-                        relation.is_anomaly
-                        for relation in lane.prepared.phase_competition.best.adjacency_relations
-                    )
+                    if lane.prepared.phase_competition.best.adjacency_relations
                     else "normal"
                 ),
                 "phase_stability": typed_read_model(

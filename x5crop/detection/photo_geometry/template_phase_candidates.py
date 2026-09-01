@@ -39,12 +39,13 @@ from .template_model import (
     SequenceRoleLineEvidence,
     TemplateRole,
     TemplateSpec,
-    adjacency_topology_required_bindings,
+    adjacency_relation_evidence_identity,
+    adjacency_relation_required_bindings,
     adjacency_prefix_coefficients,
     most_constrained_lattice_parameter_fit_basis,
     phase_lattice_fit_from_absolute,
-    realize_topology_relations,
-    realize_topology_relations_at_role_positions,
+    realize_adjacency_relations,
+    realize_adjacency_relations_at_role_positions,
     template_role_refinement_radius_px,
 )
 from .template_nominal_grid_authority import (
@@ -1878,6 +1879,9 @@ def _fit_seed(
     pitch_authority: FiniteInterval,
     phase_authority: FiniteInterval | None,
     fit_residual_limit_px: float | None,
+    phase_anchor_authority_ceiling: (
+        frozenset[tuple[int, ObservationId]] | None
+    ) = None,
 ) -> _BoundFit | None:
     width = (
         template.frame_width_px.minimum
@@ -1887,8 +1891,10 @@ def _fit_seed(
     phase = seed.phase_px
     fit_basis = LatticeParameterFitBasis.TEMPLATE_INTERVAL_CENTER
     relations = seed.adjacency_relations or relations
-    relations = realize_topology_relations(
+    relations = realize_adjacency_relations(
         relations,
+        frame_width_interval_px=template.frame_width_px,
+        pitch_interval_px=pitch_authority,
         frame_width_px=width,
         pitch_px=pitch,
     )
@@ -1921,6 +1927,13 @@ def _fit_seed(
             required_bindings=seed.required_bindings,
             adjacency_relations=relations,
         )
+        if phase_anchor_authority_ceiling is not None:
+            updated_matches = tuple(
+                (role, anchor)
+                for role, anchor in updated_matches
+                if (role.role_index, anchor.observation_id)
+                in phase_anchor_authority_ceiling
+            )
         if not updated_matches or not retains_seed_identity(updated_matches):
             return None
         updated = _linear_fit(
@@ -1948,8 +1961,10 @@ def _fit_seed(
             break
         matches = updated_matches
         phase, width, pitch = updated_phase, updated_width, updated_pitch
-        relations = realize_topology_relations(
+        relations = realize_adjacency_relations(
             relations,
+            frame_width_interval_px=template.frame_width_px,
+            pitch_interval_px=pitch_authority,
             frame_width_px=width,
             pitch_px=pitch,
         )
@@ -1990,8 +2005,10 @@ def _fit_seed(
             retained_basis,
         )
         matches = retained
-        relations = realize_topology_relations(
+        relations = realize_adjacency_relations(
             relations,
+            frame_width_interval_px=template.frame_width_px,
+            pitch_interval_px=pitch_authority,
             frame_width_px=width,
             pitch_px=pitch,
         )
@@ -2012,6 +2029,60 @@ def _fit_seed(
         for role in roles
     )
     by_role = {role.role_index: anchor for role, anchor in matches}
+    direct_by_id = {anchor.observation_id: anchor for anchor in direct}
+    local_relation_by_role: dict[int, _AnchorFact] = {}
+    global_role_by_observation = {
+        anchor.observation_id: role.role_index for role, anchor in matches
+    }
+    for relation in relations:
+        if not (
+            isinstance(relation, SeparatorRelation)
+            and relation.kind != SeparatorRelationKind.NOMINAL
+        ):
+            continue
+        required = (
+            (
+                2 * relation.relation_ordinal - 1,
+                relation.end_edge_observation_id,
+            ),
+            (
+                2 * relation.relation_ordinal,
+                relation.next_start_edge_observation_id,
+            ),
+        )
+        for role_index, observation_id in required:
+            assert observation_id is not None
+            global_anchor = by_role.get(role_index)
+            if global_anchor is not None:
+                if global_anchor.observation_id != observation_id:
+                    return None
+                continue
+            anchor = direct_by_id.get(observation_id)
+            role = roles[role_index]
+            if (
+                anchor is None
+                or observation_id in global_role_by_observation
+                or anchor.role_index is not None
+                and anchor.role_index != role_index
+                or anchor.qualified_anchor_roles
+                and role.role not in anchor.qualified_anchor_roles
+                or abs(
+                    anchor.coordinate_px
+                    - canonical_positions[role_index]
+                )
+                > template_role_refinement_radius_px(pitch)
+            ):
+                return None
+            current = local_relation_by_role.get(role_index)
+            if current is not None and current.observation_id != observation_id:
+                return None
+            if any(
+                item.observation_id == observation_id
+                and other_role != role_index
+                for other_role, item in local_relation_by_role.items()
+            ):
+                return None
+            local_relation_by_role[role_index] = anchor
     residuals = tuple(
         abs(anchor.coordinate_px - canonical_positions[role.role_index])
         for role, anchor in matches
@@ -2056,6 +2127,10 @@ def _fit_seed(
     role_bindings: list[SequenceRoleBinding | None] = []
     for role, canonical in zip(roles, canonical_positions, strict=True):
         observed = by_role.get(role.role_index)
+        binding_use = SequenceBindingUse.PHASE_ANCHOR
+        if observed is None:
+            observed = local_relation_by_role.get(role.role_index)
+            binding_use = SequenceBindingUse.LOCAL_REFINEMENT
         if observed is None:
             inferred_interval = _inferred_role_interval(
                 role,
@@ -2089,7 +2164,7 @@ def _fit_seed(
             )
             role_bindings.append(
                 SequenceRoleBinding(
-                    use=SequenceBindingUse.PHASE_ANCHOR,
+                    use=binding_use,
                     observation_id=observed.observation_id,
                     evidence_group_id=observed.evidence_group_id,
                     canonical_position_px=observed.coordinate_px,
@@ -2098,12 +2173,15 @@ def _fit_seed(
                     line_evidence=observed.line_evidence,
                 )
             )
-    direct_ids = tuple(
+    bound_direct_ids = tuple(
         dict.fromkeys(
             binding.observation_id
             for binding in role_bindings
             if binding is not None
         )
+    )
+    phase_direct_ids = tuple(
+        dict.fromkeys(anchor.observation_id for _role, anchor in matches)
     )
     support_groups: dict[int, list[tuple[TemplateRole, _AnchorFact]]] = {}
     for role, anchor in matches:
@@ -2123,7 +2201,7 @@ def _fit_seed(
     )
     if lattice_fit is None:
         return None
-    relations = realize_topology_relations_at_role_positions(
+    relations = realize_adjacency_relations_at_role_positions(
         relations,
         model_role_positions_px=canonical_positions,
         direction=template.direction,
@@ -2139,7 +2217,7 @@ def _fit_seed(
             pitch_interval_px=measured_pitch,
             canonical_frame_width_px=width,
             canonical_pitch_px=pitch,
-            observation_ids=direct_ids,
+            observation_ids=phase_direct_ids,
         ),
         lattice_parameter_fit_basis=fit_basis,
         model_role_positions_px=canonical_positions,
@@ -2147,7 +2225,10 @@ def _fit_seed(
         model_full_role_intervals_px=tuple(role_full_intervals),
         role_bindings=tuple(role_bindings),
         adjacency_relations=relations,
-        contradicted_observation_count=max(0, len(direct) - len(direct_ids)),
+        contradicted_observation_count=max(
+            0,
+            len(direct) - len(bound_direct_ids),
+        ),
         residual_sum_px=residual_sum,
         phase_support_coverage=phase_support_coverage,
     )
@@ -2181,6 +2262,15 @@ def _fit_calibrated_nominal_grid_candidate(
     direct_by_id = {item.observation_id: item for item in direct}
     if not retained_ids or any(identity not in direct_by_id for identity in retained_ids):
         return None
+    phase_facts = tuple(
+        item
+        for item in retained_facts
+        if candidate.fit.role_bindings[item.role_index] is not None
+        and candidate.fit.role_bindings[item.role_index].use
+        == SequenceBindingUse.PHASE_ANCHOR
+    )
+    if not phase_facts:
+        return None
     constraints = tuple(
         NominalGridRoleConstraint(
             role_index=item.role_index,
@@ -2188,7 +2278,7 @@ def _fit_calibrated_nominal_grid_candidate(
             coordinate_px=direct_by_id[item.observation_id].coordinate_px,
             full_interval_px=direct_by_id[item.observation_id].full_interval_px,
         )
-        for item in retained_facts
+        for item in phase_facts
     )
     try:
         envelope, fit_state = solve_calibrated_nominal_grid_envelope(
@@ -2233,28 +2323,51 @@ def _fit_calibrated_nominal_grid_candidate(
         role_intervals.append(role_interval)
         role_full_intervals.append(full_interval)
 
-    direct_ids = tuple(
+    bound_direct_ids = tuple(
         dict.fromkeys(
             binding.observation_id
             for binding in role_bindings
             if binding is not None
         )
     )
+    phase_direct_ids = tuple(
+        dict.fromkeys(
+            binding.observation_id
+            for binding in role_bindings
+            if binding is not None
+            and binding.use == SequenceBindingUse.PHASE_ANCHOR
+        )
+    )
     support_by_location: dict[int, float] = {}
     for fact in retained_facts:
+        binding = role_bindings[fact.role_index]
+        if (
+            binding is None
+            or binding.use != SequenceBindingUse.PHASE_ANCHOR
+        ):
+            continue
         anchor = direct_by_id[fact.observation_id]
         location = (fact.role_index + 1) // 2
         support_by_location[location] = max(
             support_by_location.get(location, 0.0),
             anchor.support_fraction,
         )
-    relations = realize_topology_relations_at_role_positions(
+    relations = realize_adjacency_relations_at_role_positions(
         relations,
         model_role_positions_px=envelope.role_positions_px,
         direction=template.direction,
         frame_width_px=envelope.canonical_frame_width_px,
         pitch_px=envelope.canonical_pitch_px,
     )
+    if not (
+        0.0 <= envelope.canonical_cycle_phase_px
+        < envelope.canonical_pitch_px
+    ):
+        # A canonical point on the half-open cycle boundary belongs to the
+        # adjacent integer slot.  Changing that offset would change the fixed
+        # discrete identity, so this candidate is unavailable rather than
+        # silently renormalized.
+        return None
     fit = SequenceFit(
         template=template,
         phase_lattice_fit=PhaseLatticeFit(
@@ -2276,7 +2389,7 @@ def _fit_calibrated_nominal_grid_candidate(
             canonical_frame_width_px=envelope.canonical_frame_width_px,
             canonical_pitch_px=envelope.canonical_pitch_px,
             scale_px_per_mm=envelope.scale_interval_px_per_mm,
-            observation_ids=direct_ids,
+            observation_ids=phase_direct_ids,
         ),
         lattice_parameter_fit_basis=(
             LatticeParameterFitBasis.CALIBRATED_NOMINAL_GRID
@@ -2287,7 +2400,10 @@ def _fit_calibrated_nominal_grid_candidate(
         model_full_role_intervals_px=tuple(role_full_intervals),
         role_bindings=tuple(role_bindings),
         adjacency_relations=relations,
-        contradicted_observation_count=max(0, len(direct) - len(direct_ids)),
+        contradicted_observation_count=max(
+            0,
+            len(direct) - len(bound_direct_ids),
+        ),
         residual_sum_px=sum(
             abs(binding.canonical_position_px - canonical)
             for binding, canonical in zip(
@@ -2314,6 +2430,9 @@ def project_candidate_to_authorized_direct_roles(
     phase_authority: FiniteInterval | None,
     fit_residual_limit_px: float | None,
     calibrated_nominal_grid_prior: CalibratedNominalGridPrior | None,
+    phase_anchor_authority_ceiling: (
+        frozenset[tuple[int, ObservationId]] | None
+    ) = None,
 ) -> tuple[_BoundFit | None, PhaseCandidateAuthorityProjection]:
     """Remove only unavailable coordinates, then refit one fixed mapping."""
 
@@ -2348,12 +2467,19 @@ def project_candidate_to_authorized_direct_roles(
     retained_facts = tuple(
         item for item in authority.facts if item.state == EvidenceState.SUPPORTED
     )
+    retained_phase_facts = tuple(
+        item
+        for item in retained_facts
+        if candidate.fit.role_bindings[item.role_index] is not None
+        and candidate.fit.role_bindings[item.role_index].use
+        == SequenceBindingUse.PHASE_ANCHOR
+    )
     supported_bindings = {
         (item.role_index, item.observation_id) for item in retained_facts
     }
     missing_topology_bindings = tuple(
         binding
-        for binding in adjacency_topology_required_bindings(relations)
+        for binding in adjacency_relation_required_bindings(relations)
         if binding not in supported_bindings
     )
     if missing_topology_bindings:
@@ -2373,8 +2499,31 @@ def project_candidate_to_authorized_direct_roles(
                 )
             ),
         )
+    nonseparator_required_bindings = adjacency_relation_required_bindings(
+        tuple(
+            relation
+            for relation in relations
+            if not isinstance(relation, SeparatorRelation)
+        )
+    )
+    separator_required_bindings = adjacency_relation_required_bindings(
+        tuple(
+            relation
+            for relation in relations
+            if isinstance(relation, SeparatorRelation)
+        )
+    )
     required_bindings = tuple(
-        (item.role_index, item.observation_id) for item in retained_facts
+        sorted(
+            {
+                *(
+                    (item.role_index, item.observation_id)
+                    for item in retained_phase_facts
+                ),
+                *nonseparator_required_bindings,
+            },
+            key=lambda item: (item[0], str(item[1])),
+        )
     )
     retained_ids = {item.observation_id for item in retained_facts}
     direct_by_id = {item.observation_id: item for item in direct}
@@ -2399,6 +2548,7 @@ def project_candidate_to_authorized_direct_roles(
         authority.state == EvidenceState.SUPPORTED
         and retained_rank == 3
         and not complete_frame_unobserved
+        and relations == candidate.fit.adjacency_relations
     ):
         return candidate, PhaseCandidateAuthorityProjection(
             input_direct_role_authority=authority,
@@ -2409,7 +2559,7 @@ def project_candidate_to_authorized_direct_roles(
             reason=None,
         )
     if retained_rank < 3 or complete_frame_unobserved:
-        if not retained_facts:
+        if not retained_phase_facts:
             return None, PhaseCandidateAuthorityProjection(
                 input_direct_role_authority=authority,
                 outcome=(
@@ -2494,6 +2644,7 @@ def project_candidate_to_authorized_direct_roles(
         pitch_authority,
         phase_authority,
         fit_residual_limit_px,
+        phase_anchor_authority_ceiling,
     )
     if projected is None:
         return None, PhaseCandidateAuthorityProjection(
@@ -2509,14 +2660,50 @@ def project_candidate_to_authorized_direct_roles(
         for index, binding in enumerate(projected.fit.role_bindings)
         if binding is not None
     }
-    if (
-        projected.fit.phase_lattice_fit.integer_slot_offset
-        != candidate.fit.phase_lattice_fit.integer_slot_offset
-        or projected.fit.template != candidate.fit.template
-        or projected.fit.adjacency_relations
-        != candidate.fit.adjacency_relations
-        or projected_bindings != dict(required_bindings)
-    ):
+    expected_bindings = dict(
+        {
+            *required_bindings,
+            *separator_required_bindings,
+        }
+    )
+    separator_local_bindings_are_scoped = all(
+        projected.fit.role_bindings[role_index] is not None
+        and (
+            (role_index, observation_id) in required_bindings
+            or projected.fit.role_bindings[role_index].use
+            == SequenceBindingUse.LOCAL_REFINEMENT
+        )
+        for role_index, observation_id in separator_required_bindings
+    )
+    relation_identity_changed = (
+        tuple(
+            adjacency_relation_evidence_identity(item)
+            for item in projected.fit.adjacency_relations
+        )
+        != tuple(
+            adjacency_relation_evidence_identity(item)
+            for item in relations
+        )
+    )
+    discrete_identity_changes = tuple(
+        label
+        for changed, label in (
+            (
+                projected.fit.phase_lattice_fit.integer_slot_offset
+                != candidate.fit.phase_lattice_fit.integer_slot_offset,
+                "integer_slot_offset",
+            ),
+            (projected.fit.template != candidate.fit.template, "template"),
+            (relation_identity_changed, "relation_evidence"),
+            (projected_bindings != expected_bindings, "role_bindings"),
+            (
+                not separator_local_bindings_are_scoped,
+                "separator_local_scope",
+            ),
+        )
+        if changed
+    )
+    if discrete_identity_changes:
         return None, PhaseCandidateAuthorityProjection(
             input_direct_role_authority=authority,
             outcome=(
@@ -2525,7 +2712,10 @@ def project_candidate_to_authorized_direct_roles(
             basis=None,
             projected_out_bindings=projected_out,
             retained_direct_constraint_rank=retained_rank,
-            reason="authorized refit changed the bounded discrete mapping",
+            reason=(
+                "authorized refit changed the bounded discrete mapping: "
+                + ", ".join(discrete_identity_changes)
+            ),
         )
     projected = replace(
         projected,
@@ -2539,8 +2729,16 @@ def project_candidate_to_authorized_direct_roles(
     )
     return projected, PhaseCandidateAuthorityProjection(
         input_direct_role_authority=authority,
-        outcome=PhaseCandidateProjectionOutcome.PROJECTED,
-        basis=PhaseCandidateProjectionBasis.DIRECT_RANK_THREE,
+        outcome=(
+            PhaseCandidateProjectionOutcome.PROJECTED
+            if projected_out
+            else PhaseCandidateProjectionOutcome.DIRECT_SEPARATOR_REFIT
+        ),
+        basis=(
+            PhaseCandidateProjectionBasis.DIRECT_RANK_THREE
+            if projected_out
+            else PhaseCandidateProjectionBasis.DIRECT_SEPARATOR_GAP
+        ),
         projected_out_bindings=projected_out,
         retained_direct_constraint_rank=retained_rank,
         reason=None,

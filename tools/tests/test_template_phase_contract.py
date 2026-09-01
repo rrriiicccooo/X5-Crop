@@ -1618,6 +1618,15 @@ class TemplatePhaseContractTest(unittest.TestCase):
             .input_direct_role_authority.state,
             EvidenceState.SUPPORTED,
         )
+        rejected = replace(
+            result.best_phase_candidate_authority_projection,
+            outcome=(
+                PhaseCandidateProjectionOutcome.DISCRETE_IDENTITY_CHANGED
+            ),
+            basis=None,
+            reason="authorized refit changed the bounded discrete mapping",
+        )
+        self.assertFalse(rejected.eligible)
 
     def test_independent_source_width_rejects_impossible_material_alternative(
         self,
@@ -3142,10 +3151,18 @@ class TemplatePhaseContractTest(unittest.TestCase):
             kind=SeparatorRelationKind.WIDE,
             delta_interval_px=FiniteInterval(18.0, 22.0),
             canonical_delta_px=20.0,
-            observation_ids=(ObservationId("gap:interval"),),
+            separator_band_observation_id=ObservationId("gap:interval"),
+            end_edge_observation_id=ObservationId("end:1"),
+            next_start_edge_observation_id=ObservationId("start:2"),
+            signed_gap_interval_px=FiniteInterval(38.0, 42.0),
+            canonical_signed_gap_px=40.0,
         )
         result = fit_template_phase(
-            (edge("start", 10.0), edge("end", 110.0)),
+            (
+                edge("start:1", 10.0),
+                edge("end:1", 110.0),
+                edge("start:2", 150.0),
+            ),
             template(3),
             adjacency_relations=(relation,),
         )
@@ -3541,7 +3558,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             fit.contradicted_observation_count,
         )
 
-    def test_local_anomaly_prefix_is_transmitted_once_per_competing_fit(
+    def test_direct_separator_identity_transmits_prefix_once(
         self,
     ) -> None:
         relation = SeparatorRelation(
@@ -3549,7 +3566,11 @@ class TemplatePhaseContractTest(unittest.TestCase):
             kind=SeparatorRelationKind.WIDE,
             delta_interval_px=FiniteInterval.exact(20.0),
             canonical_delta_px=20.0,
-            observation_ids=(ObservationId("gap:1"),),
+            separator_band_observation_id=ObservationId("gap:1"),
+            end_edge_observation_id=ObservationId("edge:1"),
+            next_start_edge_observation_id=ObservationId("edge:2"),
+            signed_gap_interval_px=FiniteInterval.exact(40.0),
+            canonical_signed_gap_px=40.0,
         )
         observations = tuple(
             edge(f"edge:{index}", coordinate)
@@ -3560,19 +3581,20 @@ class TemplatePhaseContractTest(unittest.TestCase):
             template(3),
             adjacency_relations=(relation,),
         )
-        self.assertEqual(result.status, PhaseFitStatus.AMBIGUOUS)
-        assert result.best is not None and result.runner_up is not None
-        for fit in (result.best, result.runner_up):
-            phase = fit.phase_lattice_fit.canonical_absolute_phase_px
-            pitch = fit.pitch_fit.canonical_pitch_px
-            self.assertAlmostEqual(
-                fit.model_role_intervals_px[4].center,
-                phase + 2.0 * pitch + 20.0,
-            )
-            self.assertAlmostEqual(
-                fit.model_role_intervals_px[5].center,
-                phase + 2.0 * pitch + 120.0,
-            )
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        self.assertEqual(result.winner_basis, PhaseWinnerBasis.ONLY_PHYSICAL_FIT)
+        self.assertIsNone(result.runner_up)
+        assert result.best is not None
+        phase = result.best.phase_lattice_fit.canonical_absolute_phase_px
+        pitch = result.best.pitch_fit.canonical_pitch_px
+        self.assertAlmostEqual(
+            result.best.model_role_intervals_px[4].center,
+            phase + 2.0 * pitch + 20.0,
+        )
+        self.assertAlmostEqual(
+            result.best.model_role_intervals_px[5].center,
+            phase + 2.0 * pitch + 120.0,
+        )
 
     def test_direct_separator_authorizes_one_bounded_local_refit(self) -> None:
         observations = tuple(
@@ -3630,6 +3652,73 @@ class TemplatePhaseContractTest(unittest.TestCase):
             2,
         )
         self.assertEqual(result.receipt.fit_pass_count, 2)
+
+    def test_direct_separator_refit_cannot_add_phase_authority(self) -> None:
+        observations = tuple(
+            edge(f"fixed-refit:{index}", coordinate)
+            for index, coordinate in enumerate(
+                (10.0, 110.0, 130.0, 230.0, 253.0, 365.0)
+            )
+        )
+        spec = template(3)
+        measurement_sets = (
+            phase_sequence_measurement(
+                "fixed-separator-refit",
+                FiniteInterval(0.0, 400.0),
+            ),
+        )
+        normal = fit_template_phase(
+            observations,
+            spec,
+            sequence_measurement_sets=measurement_sets,
+        )
+        self.assertEqual(normal.status, PhaseFitStatus.RESOLVED)
+        assert normal.best is not None
+        fixed = tuple(
+            (role_index, binding.observation_id)
+            for role_index, binding in enumerate(normal.best.role_bindings)
+            if binding is not None
+            and binding.use == SequenceBindingUse.PHASE_ANCHOR
+        )
+        relation = SeparatorRelation(
+            relation_ordinal=2,
+            kind=SeparatorRelationKind.WIDE,
+            delta_interval_px=FiniteInterval.exact(3.0),
+            canonical_delta_px=3.0,
+            separator_band_observation_id=ObservationId("fixed-refit:band"),
+            end_edge_observation_id=observations[3].observation_id,
+            next_start_edge_observation_id=observations[4].observation_id,
+            signed_gap_interval_px=FiniteInterval.exact(23.0),
+            canonical_signed_gap_px=23.0,
+        )
+        adjusted = fit_template_phase(
+            observations,
+            spec,
+            adjacency_relations=(
+                SeparatorRelation(
+                    relation_ordinal=1,
+                    kind=SeparatorRelationKind.NOMINAL,
+                    delta_interval_px=FiniteInterval.exact(0.0),
+                    canonical_delta_px=0.0,
+                ),
+                relation,
+            ),
+            sequence_measurement_sets=measurement_sets,
+            phase_anchor_authority_ceiling=fixed,
+        )
+
+        self.assertEqual(adjusted.status, PhaseFitStatus.RESOLVED)
+        assert adjusted.best is not None
+        self.assertTrue(
+            set(
+                (role_index, binding.observation_id)
+                for role_index, binding
+                in enumerate(adjusted.best.role_bindings)
+                if binding is not None
+                and binding.use == SequenceBindingUse.PHASE_ANCHOR
+            ).issubset(set(fixed)),
+        )
+        self.assertIsNone(adjusted.best.role_bindings[5])
 
     def test_direct_narrow_separator_uses_the_same_single_suffix_relation(self) -> None:
         observations = tuple(
@@ -3809,7 +3898,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             observations[2].full_position_interval_px.minimum,
         )
 
-    def test_two_direct_gap_anomalies_bind_two_measured_advances(self) -> None:
+    def test_two_direct_gap_anomalies_bind_two_measured_relations(self) -> None:
         nominal_edges = tuple(
             edge(f"edge:{index}", coordinate)
             for index, coordinate in enumerate(
@@ -3838,7 +3927,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         self.assertEqual(
             analysis.pattern,
-            ResidualPattern.MEASURED_ADVANCES,
+            ResidualPattern.MEASURED_RELATIONS,
         )
         self.assertEqual(analysis.anomaly_ordinals, (1, 2))
         self.assertEqual(
@@ -3847,6 +3936,42 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         self.assertIsNone(analysis.unresolved_reason)
         self.assertEqual(analysis.evaluated_adjacency_count, 2)
+
+    def test_direct_normal_gap_replaces_pitch_only_for_an_inferred_suffix(
+        self,
+    ) -> None:
+        spec = template(3)
+        fit = placement_sequence(spec, missing=(4, 5))
+        observations = tuple(
+            edge(f"sequence:{index}", coordinate)
+            for index, coordinate in enumerate(
+                (100.0, 200.0, 220.0, 320.0, 340.0, 440.0)
+            )
+        )
+        bands = (
+            separator(
+                "separator:normal-measured",
+                observations[1],
+                observations[2],
+                FiniteInterval(19.8, 20.2),
+            ),
+        )
+
+        analysis = derive_adjacency_relations(
+            fit,
+            _continuity_for_residual(fit, observations, bands),
+        )
+
+        self.assertEqual(analysis.pattern, ResidualPattern.MEASURED_RELATIONS)
+        self.assertEqual(analysis.anomaly_ordinals, ())
+        self.assertEqual(len(analysis.relations), 1)
+        relation = analysis.relations[0]
+        self.assertIsInstance(relation, SeparatorRelation)
+        assert isinstance(relation, SeparatorRelation)
+        self.assertEqual(relation.kind, SeparatorRelationKind.NORMAL)
+        self.assertTrue(relation.is_measured)
+        self.assertFalse(relation.is_anomaly)
+        self.assertEqual(relation.canonical_signed_gap_px, 20.0)
 
     def test_reversed_direct_edges_form_one_bounded_overlap_relation(self) -> None:
         regular = tuple(
@@ -3865,7 +3990,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             _continuity_for_residual(fit, tuple(overlap), ()),
         )
 
-        self.assertEqual(analysis.pattern, ResidualPattern.MEASURED_ADVANCES)
+        self.assertEqual(analysis.pattern, ResidualPattern.MEASURED_RELATIONS)
         self.assertEqual(len(analysis.relations), 1)
         self.assertIsInstance(analysis.relations[0], OverlapRelation)
         self.assertIsNone(analysis.unresolved_reason)
@@ -3894,7 +4019,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         self.assertEqual(
             analysis.pattern,
-            ResidualPattern.MEASURED_ADVANCES,
+            ResidualPattern.MEASURED_RELATIONS,
         )
         self.assertEqual(len(analysis.relations), 3)
         self.assertTrue(all(item.is_anomaly for item in analysis.relations))
@@ -3950,8 +4075,13 @@ class TemplatePhaseContractTest(unittest.TestCase):
             role_count=2,
             slot_count=1,
         )
+        replace(receipt, fit_pass_count=6).validate_bounds(
+            observation_count=2,
+            role_count=2,
+            slot_count=1,
+        )
         with self.assertRaisesRegex(ValueError, "fit pass bound"):
-            replace(receipt, fit_pass_count=6).validate_bounds(
+            replace(receipt, fit_pass_count=7).validate_bounds(
                 observation_count=2,
                 role_count=2,
                 slot_count=1,

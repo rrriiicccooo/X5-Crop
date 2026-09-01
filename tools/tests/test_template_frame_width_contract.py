@@ -17,6 +17,7 @@ from x5crop.detection.photo_geometry.template_frame_width import (
     apply_correlated_frame_width_inference,
     apply_selected_source_frame_width,
     calibrate_source_frame_width,
+    SourceFrameWidthAuthority,
     SourceFrameWidthAuthorityFailureKind,
 )
 from x5crop.detection.photo_geometry.model import BoundaryRole
@@ -35,7 +36,9 @@ from x5crop.detection.photo_geometry.template_adjacency_topology import (
 )
 from x5crop.detection.photo_geometry.template_model import (
     FrameWidthInferenceFailureKind,
+    SeparatorRelation,
     SequenceBindingUse,
+    measured_separator_relation_kind,
 )
 from x5crop.detection.photo_geometry.template_lattice_authority import (
     assess_global_lattice_authority,
@@ -326,6 +329,95 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
         self.assertGreaterEqual(
             selected.best.pitch_fit.frame_width_px.maximum,
             selected.best.pitch_fit.canonical_frame_width_px,
+        )
+
+    def test_source_width_rebinds_measured_delta_without_moving_edges(
+        self,
+    ) -> None:
+        observations = (
+            phase_edge("frame-1-start", 40.0),
+            phase_edge("frame-1-end", 140.0),
+            phase_edge("frame-2-start", 160.0),
+            phase_edge("frame-2-end", 260.0),
+            phase_edge("frame-3-start", 280.0),
+            phase_edge("frame-3-end", 380.0),
+        )
+        phase = fit_template_phase(observations, phase_template(3))
+        assert phase.best is not None
+        fit = replace(
+            phase.best,
+            pitch_fit=replace(
+                phase.best.pitch_fit,
+                frame_width_px=PositiveInterval(99.0, 101.0),
+            ),
+        )
+        end_binding = fit.role_bindings[1]
+        start_binding = fit.role_bindings[2]
+        assert end_binding is not None and start_binding is not None
+        signed_gap = fit.template.direction * (
+            fit.model_role_positions_px[2]
+            - fit.model_role_positions_px[1]
+        )
+        delta = (
+            fit.pitch_fit.canonical_frame_width_px
+            - fit.pitch_fit.canonical_pitch_px
+            + signed_gap
+        )
+        relation = SeparatorRelation(
+            relation_ordinal=1,
+            kind=measured_separator_relation_kind(delta),
+            delta_interval_px=FiniteInterval(delta - 2.0, delta + 2.0),
+            canonical_delta_px=delta,
+            separator_band_observation_id=ObservationId("separator-band:1"),
+            end_edge_observation_id=end_binding.observation_id,
+            next_start_edge_observation_id=start_binding.observation_id,
+            signed_gap_interval_px=FiniteInterval.exact(signed_gap),
+            canonical_signed_gap_px=signed_gap,
+        )
+        fit = replace(fit, adjacency_relations=(relation,))
+        phase = replace(phase, best=fit)
+        selected_width = fit.pitch_fit.canonical_frame_width_px + 1.0
+        authority = SourceFrameWidthAuthority(
+            authority_id="source-width:test",
+            state=EvidenceState.SUPPORTED,
+            selected_integer_slot_offset=(
+                fit.phase_lattice_fit.integer_slot_offset
+            ),
+            selected_role_observation_ids=fit.binding_observation_ids,
+            supporting_frame_ordinals=(1, 3),
+            width_px=FiniteInterval(
+                fit.pitch_fit.frame_width_px.minimum,
+                fit.pitch_fit.frame_width_px.maximum,
+            ),
+            canonical_width_px=selected_width,
+            observation_ids=tuple(
+                sorted(
+                    (
+                        observations[0].observation_id,
+                        observations[1].observation_id,
+                        observations[4].observation_id,
+                        observations[5].observation_id,
+                    ),
+                    key=str,
+                )
+            ),
+            failure_kind=None,
+            reason=None,
+        )
+
+        selected = apply_selected_source_frame_width(phase, authority)
+
+        assert selected.best is not None
+        self.assertEqual(
+            selected.best.model_role_positions_px,
+            fit.model_role_positions_px,
+        )
+        (selected_relation,) = selected.best.adjacency_relations
+        self.assertAlmostEqual(
+            selected_relation.canonical_delta_px,
+            selected_width
+            - fit.pitch_fit.canonical_pitch_px
+            + signed_gap,
         )
 
     def test_contact_adjacent_frames_do_not_calibrate_source_width(

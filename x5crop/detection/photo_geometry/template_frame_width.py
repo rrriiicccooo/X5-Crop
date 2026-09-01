@@ -21,6 +21,7 @@ from .template_model import (
     OverlapRelation,
     SequenceBindingUse,
     SequenceFit,
+    realize_adjacency_relations,
 )
 from .template_phase_model import (
     PhaseFailureKind,
@@ -428,13 +429,22 @@ def apply_selected_source_frame_width(
     canonical = authority.canonical_width_px
     if not selected_width.contains(canonical, epsilon=1.0e-9):
         raise ValueError("selected source W canonical state leaves the fit interval")
+    selected_pitch_fit = replace(
+        fit.pitch_fit,
+        frame_width_px=selected_width,
+        canonical_frame_width_px=canonical,
+    )
+    selected_relations = realize_adjacency_relations(
+        fit.adjacency_relations,
+        frame_width_interval_px=selected_width,
+        pitch_interval_px=fit.pitch_fit.pitch_interval_px,
+        frame_width_px=canonical,
+        pitch_px=fit.pitch_fit.canonical_pitch_px,
+    )
     selected = replace(
         fit,
-        pitch_fit=replace(
-            fit.pitch_fit,
-            frame_width_px=selected_width,
-            canonical_frame_width_px=canonical,
-        ),
+        pitch_fit=selected_pitch_fit,
+        adjacency_relations=selected_relations,
     )
     return replace(phase, best=selected)
 

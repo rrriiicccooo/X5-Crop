@@ -287,6 +287,13 @@ def alignment_summary(detection: FinalDetection) -> str:
             relation.kind.value == "overlap"
             for relation in diagnostic.adjacency_relations
         )
+        selected_separator_relations = {
+            kind: sum(
+                relation.kind.value == kind
+                for relation in diagnostic.adjacency_relations
+            )
+            for kind in ("normal", "wide", "narrow")
+        }
         direct = diagnostic.direct_role_binding_authority
         direct_supported = (
             0
@@ -409,7 +416,10 @@ def alignment_summary(detection: FinalDetection) -> str:
             f"D {separator_counts['dark'][0]}/{separator_counts['dark'][1]}"
             f" C{separator_counts['dark'][2]} "
             f"L {separator_counts['light'][0]}/{separator_counts['light'][1]}"
-            f" C{separator_counts['light'][2]} · CONTACT "
+            f" C{separator_counts['light'][2]} · GAP REL "
+            f"M{selected_separator_relations['normal']} "
+            f"W{selected_separator_relations['wide']} "
+            f"N{selected_separator_relations['narrow']} · CONTACT "
             f"{selected_contacts}/"
             f"{len(lane.prepared.phase_input.contact_edge_observations)} · "
             f"OVERLAP {selected_overlaps}/"

@@ -339,6 +339,7 @@ class PhaseCandidateProjectionOutcome(str, Enum):
     """How direct-role authority changed one bounded phase candidate."""
 
     UNCHANGED = "unchanged"
+    DIRECT_SEPARATOR_REFIT = "direct_separator_refit"
     PROJECTED = "projected"
     CALIBRATED_NOMINAL_GRID = "calibrated_nominal_grid"
     DIRECT_ROLE_CONTRADICTION = "direct_role_contradiction"
@@ -360,6 +361,7 @@ class PhaseCandidateProjectionBasis(str, Enum):
     """Authority used after removing unavailable direct coordinates."""
 
     DIRECT_BINDINGS = "direct_bindings"
+    DIRECT_SEPARATOR_GAP = "direct_separator_gap"
     DIRECT_RANK_THREE = "direct_rank_three"
     CALIBRATED_NOMINAL_GRID = "calibrated_nominal_grid"
 
@@ -408,6 +410,9 @@ class PhaseCandidateAuthorityProjection:
             PhaseCandidateProjectionOutcome.UNCHANGED: (
                 PhaseCandidateProjectionBasis.DIRECT_BINDINGS
             ),
+            PhaseCandidateProjectionOutcome.DIRECT_SEPARATOR_REFIT: (
+                PhaseCandidateProjectionBasis.DIRECT_SEPARATOR_GAP
+            ),
             PhaseCandidateProjectionOutcome.PROJECTED: (
                 PhaseCandidateProjectionBasis.DIRECT_RANK_THREE
             ),
@@ -417,6 +422,7 @@ class PhaseCandidateAuthorityProjection:
         }
         failed = self.outcome not in {
             PhaseCandidateProjectionOutcome.UNCHANGED,
+            PhaseCandidateProjectionOutcome.DIRECT_SEPARATOR_REFIT,
             PhaseCandidateProjectionOutcome.PROJECTED,
             PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID,
         }
@@ -432,14 +438,19 @@ class PhaseCandidateAuthorityProjection:
                 self.outcome
                 in {
                     PhaseCandidateProjectionOutcome.UNCHANGED,
+                    PhaseCandidateProjectionOutcome.DIRECT_SEPARATOR_REFIT,
                     PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID,
                     PhaseCandidateProjectionOutcome
                     .CALIBRATED_NOMINAL_GRID_UNAVAILABLE,
                     PhaseCandidateProjectionOutcome
                     .CALIBRATED_NOMINAL_GRID_CONFLICT,
                     PhaseCandidateProjectionOutcome
+                    .NOMINAL_GRID_PHASE_ANCHOR_UNAVAILABLE,
+                    PhaseCandidateProjectionOutcome
                     .TOPOLOGY_BINDING_UNAVAILABLE,
                     PhaseCandidateProjectionOutcome.REFIT_UNAVAILABLE,
+                    PhaseCandidateProjectionOutcome
+                    .DISCRETE_IDENTITY_CHANGED,
                 }
             ),
             EvidenceState.CONTRADICTED: (
@@ -485,6 +496,7 @@ class PhaseCandidateAuthorityProjection:
     def eligible(self) -> bool:
         return self.outcome in {
             PhaseCandidateProjectionOutcome.UNCHANGED,
+            PhaseCandidateProjectionOutcome.DIRECT_SEPARATOR_REFIT,
             PhaseCandidateProjectionOutcome.PROJECTED,
             PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID,
         }

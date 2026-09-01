@@ -433,6 +433,21 @@ def _valid_interval(value: object) -> bool:
     )
 
 
+def _interval_contains(
+    interval: object,
+    value: object,
+    *,
+    epsilon: float = 1.0e-9,
+) -> bool:
+    return (
+        _valid_interval(interval)
+        and _finite_number(value)
+        and float(interval["minimum"]) - epsilon
+        <= float(value)
+        <= float(interval["maximum"]) + epsilon
+    )
+
+
 def _validate_aperture_aspect_ratio_authority(value: object) -> None:
     if not isinstance(value, dict) or set(value) != _APERTURE_ASPECT_RATIO_FIELDS:
         raise ValueError("aperture aspect-ratio authority is incomplete")
@@ -889,7 +904,11 @@ def _validate_adjacency_relations(
         "kind",
         "delta_interval_px",
         "canonical_delta_px",
-        "observation_ids",
+        "separator_band_observation_id",
+        "end_edge_observation_id",
+        "next_start_edge_observation_id",
+        "signed_gap_interval_px",
+        "canonical_signed_gap_px",
     }
     contact_fields = {
         "relation_ordinal",
@@ -924,26 +943,50 @@ def _validate_adjacency_relations(
             not isinstance(ordinal, int)
             or ordinal <= 0
             or not _valid_interval(interval)
-            or not _finite_number(canonical)
-            or not float(interval["minimum"])
-            <= float(canonical)
-            <= float(interval["maximum"])
+            or not _interval_contains(interval, canonical)
         ):
             raise ValueError("adjacency relation geometry is invalid")
         ordinals.append(ordinal)
         if fields == separator_fields:
             kind = relation["kind"]
-            ids = relation["observation_ids"]
+            direct_ids = (
+                relation["separator_band_observation_id"],
+                relation["end_edge_observation_id"],
+                relation["next_start_edge_observation_id"],
+            )
+            signed_gap = relation["signed_gap_interval_px"]
+            canonical_signed_gap = relation["canonical_signed_gap_px"]
             if (
-                kind not in {"nominal", "wide", "narrow"}
-                or not _valid_ids(ids, allow_empty=True)
-                or ids != list(dict.fromkeys(ids))
-                or kind != "nominal" and not ids
+                kind not in {"nominal", "normal", "wide", "narrow"}
                 or (kind == "nominal")
                 != (
                     interval == {"minimum": 0.0, "maximum": 0.0}
                     and float(canonical) == 0.0
-                    and not ids
+                    and all(identity is None for identity in direct_ids)
+                    and signed_gap is None
+                    and canonical_signed_gap is None
+                )
+                or (
+                    kind != "nominal"
+                    and (
+                        any(
+                            not isinstance(identity, str) or not identity
+                            for identity in direct_ids
+                        )
+                        or len(set(direct_ids)) != len(direct_ids)
+                        or not _valid_interval(signed_gap)
+                        or float(signed_gap["minimum"]) <= 0.0
+                        or not _interval_contains(
+                            signed_gap,
+                            canonical_signed_gap,
+                        )
+                        or (
+                            kind == "normal"
+                            and abs(float(canonical)) > 1.0e-9
+                        )
+                        or (kind == "wide" and float(canonical) <= 0.0)
+                        or (kind == "narrow" and float(canonical) >= 0.0)
+                    )
                 )
             ):
                 raise ValueError("separator relation is invalid")
@@ -984,10 +1027,7 @@ def _validate_adjacency_relations(
             or overlap_id in topologies
             or not _valid_interval(signed_gap)
             or float(signed_gap["maximum"]) >= 0.0
-            or not _finite_number(canonical_signed_gap)
-            or not float(signed_gap["minimum"])
-            <= float(canonical_signed_gap)
-            <= float(signed_gap["maximum"])
+            or not _interval_contains(signed_gap, canonical_signed_gap)
             or supporting_ids != [end_id, start_id]
         ):
             raise ValueError("overlap relation is invalid")
@@ -1910,11 +1950,11 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             or not isinstance(alignment, dict)
             or set(alignment) != _TEMPLATE_ALIGNMENT_FIELDS
             or alignment["pattern"]
-            not in {"normal", "measured_advances", "unresolved"}
+            not in {"normal", "measured_relations", "unresolved"}
             or alignment["path"]
             != {
                 "normal": "normal",
-                "measured_advances": "adjacency_relations",
+                "measured_relations": "adjacency_relations",
                 "unresolved": None,
             }[alignment["pattern"]]
             or (alignment["pattern"] == "unresolved")
@@ -2254,6 +2294,7 @@ def _validate_phase_candidate_projection(
     reason = value["reason"]
     outcomes = {
         "unchanged",
+        "direct_separator_refit",
         "projected",
         "calibrated_nominal_grid",
         "direct_role_contradiction",
@@ -2267,6 +2308,7 @@ def _validate_phase_candidate_projection(
     basis = value["basis"]
     expected_basis = {
         "unchanged": "direct_bindings",
+        "direct_separator_refit": "direct_separator_gap",
         "projected": "direct_rank_three",
         "calibrated_nominal_grid": "calibrated_nominal_grid",
     }.get(outcome)
@@ -2275,11 +2317,14 @@ def _validate_phase_candidate_projection(
         "supported": outcome
         in {
             "unchanged",
+            "direct_separator_refit",
             "calibrated_nominal_grid",
             "calibrated_nominal_grid_unavailable",
             "calibrated_nominal_grid_conflict",
+            "nominal_grid_phase_anchor_unavailable",
             "topology_binding_unavailable",
             "refit_unavailable",
+            "discrete_identity_changed",
         },
         "contradicted": outcome == "direct_role_contradiction",
         "unavailable": outcome
@@ -2292,7 +2337,13 @@ def _validate_phase_candidate_projection(
         or isinstance(rank, bool)
         or not 0 <= rank <= 3
         or (
-            outcome in {"unchanged", "projected", "calibrated_nominal_grid"}
+            outcome
+            in {
+                "unchanged",
+                "direct_separator_refit",
+                "projected",
+                "calibrated_nominal_grid",
+            }
         )
         != (reason is None)
         or reason is not None
@@ -2311,7 +2362,11 @@ def _validate_phase_candidate_projection(
     bindings = fit.get("role_bindings")
     if not isinstance(bindings, list):
         raise ValueError("phase-candidate binding ledger is invalid")
-    if outcome in {"projected", "calibrated_nominal_grid"}:
+    if outcome in {
+        "direct_separator_refit",
+        "projected",
+        "calibrated_nominal_grid",
+    }:
         for role_index, observation_id in projected_pairs:
             if (
                 not isinstance(role_index, int)
@@ -2328,7 +2383,8 @@ def _validate_phase_candidate_projection(
                 not isinstance(role_index, int)
                 or not 0 <= role_index < len(bindings)
                 or not isinstance(bindings[role_index], dict)
-                or bindings[role_index].get("use") != "phase_anchor"
+                or bindings[role_index].get("use")
+                not in {"phase_anchor", "local_refinement"}
                 or bindings[role_index].get("observation_id")
                 != fact["observation_id"]
             ):

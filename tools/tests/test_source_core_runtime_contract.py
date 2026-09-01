@@ -21,7 +21,9 @@ from x5crop.detection.decision.vocabulary import (
 )
 from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 from tools.regression.report_validation import (
+    _validate_adjacency_relations,
     _validate_direct_role_binding_authority,
+    _validate_phase_candidate_projection,
     validate_current_report_record,
 )
 from x5crop.run_config import RunConfig
@@ -62,6 +64,37 @@ def _rgb16(pixels: np.ndarray) -> np.ndarray:
 
 
 class SourceCoordinateRuntimeContractTest(unittest.TestCase):
+    def test_report_accepts_numeric_epsilon_in_measured_separator(self) -> None:
+        relations = [
+            {
+                "relation_ordinal": 1,
+                "kind": "nominal",
+                "delta_interval_px": {"minimum": 0.0, "maximum": 0.0},
+                "canonical_delta_px": 0.0,
+                "separator_band_observation_id": None,
+                "end_edge_observation_id": None,
+                "next_start_edge_observation_id": None,
+                "signed_gap_interval_px": None,
+                "canonical_signed_gap_px": None,
+            },
+            {
+                "relation_ordinal": 2,
+                "kind": "wide",
+                "delta_interval_px": {"minimum": 0.0, "maximum": 2.0},
+                "canonical_delta_px": 1.0,
+                "separator_band_observation_id": "separator-band:1",
+                "end_edge_observation_id": "boundary-edge:1",
+                "next_start_edge_observation_id": "boundary-edge:2",
+                "signed_gap_interval_px": {
+                    "minimum": 10.0,
+                    "maximum": 11.0,
+                },
+                "canonical_signed_gap_px": 10.0 - 5.0e-10,
+            },
+        ]
+
+        self.assertEqual(_validate_adjacency_relations(relations), {})
+
     def _process_pixels(
         self,
         root: Path,
@@ -220,6 +253,44 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             "direct-role authority fact is invalid",
         ):
             _validate_direct_role_binding_authority(authority)
+
+    def test_direct_separator_projection_retains_local_native_binding(self) -> None:
+        authority = {
+            "state": "supported",
+            "facts": [
+                {
+                    "role_index": 0,
+                    "lane_ordinal": 1,
+                    "role": "start",
+                    "observation_id": "boundary-edge:1",
+                    "evidence_group_id": "separator-component:1",
+                    "independent_support_region_count": 3,
+                    "bases": ["source_wide_edge"],
+                    "blocking_material_conflict_ids": [],
+                    "state": "supported",
+                }
+            ],
+            "unsupported_role_indices": [],
+            "reason": None,
+        }
+        projection = {
+            "input_direct_role_authority": authority,
+            "outcome": "direct_separator_refit",
+            "basis": "direct_separator_gap",
+            "projected_out_bindings": [],
+            "retained_direct_constraint_rank": 0,
+            "reason": None,
+        }
+        fit = {
+            "role_bindings": [
+                {
+                    "use": "local_refinement",
+                    "observation_id": "boundary-edge:1",
+                }
+            ]
+        }
+
+        _validate_phase_candidate_projection(projection, fit)
 
     def test_scan_canvas_contradiction_is_review_not_runtime_error(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

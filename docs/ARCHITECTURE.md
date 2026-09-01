@@ -381,8 +381,16 @@ Production phase competition 在离散比较前，对每个去重后的 bounded 
 `DirectRoleBindingAuthority` 和 `PhaseCandidateAuthorityProjection`。`contradicted` 表示直接物理反证，
 始终终止该解释；`unavailable` 只表示某个被绑定像素线没有 native-coordinate 权限，因此先把这些 binding
 投影出去，再判断剩余直接坐标能否独立承担同一个离散解释。投影只允许使用原 candidate 已经绑定且获得
-权限的坐标，按原 template、ordinal、local topology 和完整硬区间精确重拟合；不能新增 observation、
-改变离散 identity、生成新 Frame 或读取像素。
+权限的坐标，按原 template、ordinal、relation evidence 和完整硬区间精确重拟合；不能改变离散 identity、
+生成新 Frame 或读取像素。
+
+唯一映射到当前 ordinal 的直接 separator 可以在这一步追加两侧 native endpoint，并产生
+`direct_separator_refit`。重拟合前已经属于 `PHASE_ANCHOR` 的 endpoint 保持原权限；新追加的 endpoint
+只能成为 `LOCAL_REFINEMENT`。原 phase anchor 与显式
+Contact/Overlap 必要绑定共同形成 `phase_anchor_authority_ceiling`；separator local refinement 不得新增
+全局 phase anchor、constraint rank 或无关 role binding。它只让同一候选的局部几何服从已经登记的直接
+gap；任何越过 authority ceiling、改变 ordinal/template/relation evidence 或丢失原 phase anchor 的结果都以
+`fixed_template_mismatch` 终止。
 
 投影后的 candidate 重新按 coordinate identity canonicalize，再与全部其它 eligible candidate 对称竞争。
 同一连续 placement 的互补直接证据仍可合并，非等价 projected/unchanged placement 仍保留 runner。
@@ -393,17 +401,22 @@ Debug。若所有解释都终止，最佳原 candidate 只作为诊断几何保�
 | bounded candidate 事实 | projection outcome | 离散竞争结果 |
 |---|---|---|
 | 全部直接 binding 均获授权 | `unchanged` | 原 candidate 进入竞争 |
+| 原全局 binding 保持不变；唯一 direct separator 为当前 adjacency 提供两侧 native endpoint | `direct_separator_refit` | 原 anchor 保持原权限，新 endpoint 只作 local refinement；保留原 phase authority 后进入竞争 |
 | 仅有 `unavailable` binding；投影后每张 Frame 至少保留一侧直接坐标，且相关 evidence-group 去重后的 `(phase,W,pitch)` rank 为 3 | `projected` | 只以保留坐标重拟合同一离散 identity，再进入竞争 |
 | 投影会使某张 Frame 的 START/END 都没有直接坐标 | `complete_frame_unobserved` | 当前 direct-evidence 路径终止；不让该弱线创造整张 Frame |
 | 保留坐标 rank 为 0–2 | `retained_rank_insufficient` | 终止；不能让已删除的弱线或 Grid 反向补 rank |
 | 存在 separator material 或同角色直接反证 | `direct_role_contradiction` | 终止且反证保留；不得作为噪声删除 |
-| 有界重拟合不存在，或会改变 template/ordinal/local topology/role mapping | `refit_unavailable | discrete_identity_changed` | 终止并报告 typed failure |
-| 两个非等价 eligible candidate 均成立 | `unchanged | projected` 各自保留 | 继续硬物理比较；不能明确分离时 `discrete_phase_ambiguous` |
+| 有界重拟合不存在，或会改变 template/ordinal/relation evidence/role mapping/phase authority ceiling | `refit_unavailable | discrete_identity_changed` | 终止并报告 typed failure |
+| 两个非等价 eligible candidate 均成立 | `unchanged | direct_separator_refit | projected` 各自保留 | 继续硬物理比较；不能明确分离时 `discrete_phase_ambiguous` |
 
 Constraint rank 只由 `template_lattice_authority.py` 计算。相同 `evidence_group_id` 的多个坐标只贡献一行；
 若同组绑定多个 role，按最低 role index 选择该组的 canonical rank row，其余 native coordinates 仍完整保留，
-不能因 rank 去重而合并坐标或隐藏 runner。整个 projection 只消费已登记 evidence，候选数、角色数与重拟合
-次数均受原 template 上界约束，不增加 TIFF 读取或第二 detector。
+不能因 rank 去重而合并坐标或隐藏 runner。Measured separator endpoint 不进入 global rank；其 immutable
+evidence identity 只包含 relation family、ordinal、直接 observation ID 与 signed-gap interval，不包含随共享
+W/pitch 重算的 derived delta/kind。整个 projection 只消费已登记 evidence，候选数、角色数与重拟合次数均受
+原 template 上界约束，不增加 TIFF 读取或第二 detector。当前完整路径最多 6 次 fit pass，覆盖 provisional、
+source pitch、base relation、direct separator refit 与 selected source-W refinement；超界产生
+`producer_bound_exceeded`，不能截断或静默跳过。
 
 | 直接约束状态 | 连续参数结果 | 离散选择结果 |
 |---|---|---|
@@ -541,12 +554,14 @@ winner，也不授予 phase、ordinal 或 placement 权限。
 
 模板放置后，`template_alignment_diagnostic` 只读比较 theoretical role 与 bound observation，并报告
 直接角色权限、全局 constraint rank、逐 adjacency coverage、外侧 Frame observation authority、
-`normal`、`measured_advances` 或 `unresolved`；它不搜索、不选择、不改变 placement。
+`normal`、`measured_relations` 或 `unresolved`；它不搜索、不选择、不改变 placement。
 
 当前每个 adjacency 由唯一 `AdjacencyRelation` sum type 表达；production 已启用
 `SeparatorRelation`、`ContactRelation` 与 `OverlapRelation`：
 
-- 直接、ordinal 唯一的 END → material → START 可产生 wide/narrow advance；
+- 直接、ordinal 唯一的 END → material → START 始终保存 direct gap fact；当 gap 异常或它会约束任一
+  未观察 suffix role 时形成 measured separator relation。与默认值相容的关系仍以 `normal` 保存，不降格为
+  未观察 Grid；全部相关 role 已直接绑定时保留 native fact，不重复增加零作用 relation；
 - 该差值从下一格开始累加一次，后续仍共享同一个 source pitch；
 - 多处实测变化可以同时存在，但关系总数固定为 `count - 1`，整次传播为 O(count)；
 - `ContactRelation` 只能由同一条具有独立坐标权限的 physical edge 唯一绑定前一 Frame 的 END 与后一
@@ -573,7 +588,7 @@ trace 与 coordinate coverage 在 placement 前候选无关地登记和执行；
 
 | 已登记事实 | Continuity 结果与权限 |
 |---|---|
-| 唯一 END → separator material → START，方向正确且正 gap | `separator_material`；可以授权一份实测 local advance |
+| 唯一 END → separator material → START，方向正确且正 gap | `separator_material`；保存 direct gap；需要约束 suffix 时形成 measured `SeparatorRelation`，新 endpoint 只作 local refinement |
 | 同一 authoritative physical edge 唯一绑定 END 与下一张 START，走廊完整且没有 separator 竞争 | `contact`；授权一份 `ContactRelation`，signed gap 精确为 0 |
 | 两条已登记、独立且角色相反的 authoritative edge 满足 `START(next) < END(current)`，走廊完整且没有 separator 竞争 | `overlap`；授权一份 `OverlapRelation` 和严格为负的 signed-gap interval |
 | 合法走廊完整覆盖，且没有直接反证 | `no_counterevidence_observed`；允许既有 Grid 保持 `local_delta=0`，但不冒充直接 separator |
@@ -583,9 +598,10 @@ trace 与 coordinate coverage 在 placement 前候选无关地登记和执行；
 | 合法走廊未被完整登记和执行 | `coverage_incomplete`；继续由逐 adjacency coverage 合同阻断推断 |
 
 材料不可用与材料反证不可混淆：前者只表示这份 material observation 没有 authority；后者表示当前普通
-separator 解释与直接坐标冲突。`template_residual.py` 只接受 `separator_material` 产生 local advance；
-`no_counterevidence_observed` 只维持正常 Grid，不能调整 native boundary。Ledger、依据、覆盖 query、直接
-角色、signed-gap interval 与 typed failure 全部进入 report/Debug；当前 report 不保留旧 schema 兼容路径。
+separator 解释与直接坐标冲突。`template_residual.py` 只接受 `separator_material` 产生 measured relation；
+`no_counterevidence_observed` 只维持 unobserved nominal Grid，不能调整 native boundary。Ledger、依据、
+覆盖 query、直接角色、signed-gap interval、projection outcome 与 typed failure 全部进入 report/Debug；
+当前 report 不保留旧 schema 兼容路径。
 
 `photo_geometry/template_contact.py` 是 candidate-independent 共享边观察的唯一 owner。它只读取已经登记的
 long-axis edge ledger，不读取像素：edge 必须具有 source-wide 或 aggregate-union 坐标权限、允许
@@ -610,7 +626,9 @@ sum type 为：
 
 ```text
 AdjacencyRelation
-├── SeparatorRelation(normal | wide | narrow)
+├── SeparatorRelation
+│   ├── nominal（未观察，delta = 0）
+│   └── measured(normal | wide | narrow)
 ├── ContactRelation
 └── OverlapRelation
 ```
@@ -619,11 +637,15 @@ AdjacencyRelation
 
 ```text
 signed_gap = next.START - current.END
-delta = signed_gap - nominal_gap
+signed_gap = source_pitch - W + delta
+delta = signed_gap - (source_pitch - W)
 ```
 
-正的 `signed_gap` 属于 separator，零表示 contact，负值表示 overlap。`SeparatorRelation` 保存正 gap 与
-material identity；`ContactRelation` 保存 END/START 共用的唯一 physical edge identity；
+正的 `signed_gap` 属于 separator，零表示 contact，负值表示 overlap。Measured `SeparatorRelation` 保存
+直接 gap interval、两侧 observation identity 与 material identity；共享 W/pitch 改变时只重算其相关
+`delta_interval`、canonical gap 和 derived `normal|wide|narrow`，不能改写直接证据或把 native endpoint 拉回
+Grid。Unobserved `nominal` relation 才表示 `local_delta = 0`。`ContactRelation` 保存 END/START 共用的唯一
+physical edge identity；
 `OverlapRelation` 保存两条独立、角色相反且顺序反转的 edge 与 overlap interval。同一 contact 共用线
 只能计作一份 rank support。
 
@@ -1035,7 +1057,7 @@ Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决
 - `partial_height_separator_pair` 角色数、direct aperture domain 条件与对应 typed Gate；
 - selected-only source W authority 的 selected signature、支持 Frame、W interval、typed failure，及相关
   推导角色、validation-only 局部角色与 observation provenance；
-- 每个 bound role 的 residual 和 normal/measured-advances/unresolved pattern；
+- 每个 bound role 的 residual 和 normal/measured-relations/unresolved pattern；
 - direct 与 inferred 边界；
 - best、runner 及真正不同之处；
 - `APERTURE_PAIR` 或 `ENCLOSING_SUPPORT_PAIR`；
@@ -1120,8 +1142,9 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source W/H extent、scan-scale authority 与不增加 direct provenance 的相关 interval 收紧 |
 | `photo_geometry/template_frame_width.py` | selected-only `SourceFrameWidthAuthority`、source W 校准、无权局部 refinement 让位与相关单侧角色推断；不得参与离散候选选择或重编译 template |
 | `photo_geometry/template_aspect_ratio_model.py`、`template_aspect_ratio.py` | 校准 W/H 比例的 typed authority、相关 H 推断、direct H 对账与预算失败 |
-| `photo_geometry/template_phase_model.py`、`template_phase_candidates.py`、`template_model.py` | Sequence coordinate/evidence identity、role binding、`AdjacencyRelation` sum type、Contact 同边双角色与 Overlap 独立反序双角色约束、projection outcome/type、同一离散 identity 的有界投影重拟合，以及 physical/source W 下的有界 native-edge rebind |
-| `photo_geometry/template_phase.py`、`template_pitch.py`、`template_residual.py` | phase/ordinal 求解、连续 placement identity、Contact/Overlap/Separator 离散竞争、selected-only source-W rebind 调度、source pitch 与逐 adjacency delta |
+| `photo_geometry/template_model.py` | Sequence coordinate/evidence identity、`AdjacencyRelation` sum type、measured separator 的直接 gap identity 与相关 delta realization，以及统一 O(count) prefix |
+| `photo_geometry/template_phase_model.py`、`template_phase_candidates.py` | role binding、projection outcome/type、phase-authority ceiling、同一离散 identity 的有界投影重拟合，以及 physical/source W 下的有界 native-edge rebind |
+| `photo_geometry/template_phase.py`、`template_pitch.py`、`template_residual.py` | phase/ordinal 求解、连续 placement identity、candidate-bound direct separator relation、Contact/Overlap/Separator 离散竞争、selected-only source-W rebind 调度与 source pitch |
 | `photo_geometry/template_direct_role_authority.py` | 每个 bounded phase candidate 与最终已选 START/END 的 native-coordinate 权限证明及共享 evidence ledger |
 | `photo_geometry/template_lattice_authority.py` | `(phase, W, pitch)` 直接约束矩阵与独立闭合证明 |
 | `photo_geometry/template_adjacency_coverage.py` | selected adjacency 合法走廊到既有 query/trace/coordinate 的覆盖证明 |

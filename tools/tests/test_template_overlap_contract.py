@@ -12,8 +12,8 @@ from x5crop.domain import FiniteInterval, ObservationId
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.template_model import (
     OverlapRelation,
-    adjacency_topology_required_bindings,
-    realize_topology_relations_at_role_positions,
+    adjacency_relation_required_bindings,
+    realize_adjacency_relations_at_role_positions,
 )
 from x5crop.detection.photo_geometry.template_overlap import (
     observe_overlap_edge_pairs,
@@ -53,7 +53,7 @@ class TemplateOverlapContractTest(unittest.TestCase):
             ),
         )
 
-        (realized,) = realize_topology_relations_at_role_positions(
+        (realized,) = realize_adjacency_relations_at_role_positions(
             (relation,),
             model_role_positions_px=(0.0, 100.0, 94.0, 194.0),
             direction=1,
@@ -64,7 +64,7 @@ class TemplateOverlapContractTest(unittest.TestCase):
         self.assertEqual(realized.canonical_signed_gap_px, -6.0)
         self.assertEqual(realized.canonical_delta_px, -26.0)
         self.assertEqual(
-            adjacency_topology_required_bindings((realized,)),
+            adjacency_relation_required_bindings((realized,)),
             (
                 (1, ObservationId("edge:end")),
                 (2, ObservationId("edge:start")),

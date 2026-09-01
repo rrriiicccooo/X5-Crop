@@ -40,8 +40,11 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   不按分数选解。单侧、源边界不可观察、支持不足或 span 不相容都不授予权限；长轴 broad standalone edge
   仍只作 observation。Resolution basis/failure 进入 Development report、gold analysis 与 Debug。
 - Selected placement 现在由 `AdjacencyContinuityObservation` 为每个 adjacency 建立唯一 typed ledger。
-  唯一正序 separator band 可以授权实测 local advance；完整 corridor 但无反证只保留正常 Grid，不能
-  冒充直接 separator；material unavailable、band/角色冲突、跨零 gap、未登记反序 edge pair 与 coverage
+  唯一正序 separator band 始终保存 direct gap；gap 异常或需要约束未观察 suffix role 时形成 measured
+  `SeparatorRelation`，保存两侧 native observation 与直接 signed-gap interval。共享 W/pitch 改变时只重算
+  相关 `delta = signed_gap - (pitch - W)` 和 derived `normal|wide|narrow`，不能把真实 gap 拉回默认值。
+  完整 corridor 但无反证只保留 unobserved nominal Grid，
+  不能冒充直接 separator；material unavailable、band/角色冲突、跨零 gap、未登记反序 edge pair 与 coverage
   不完整分别保留独立状态。
   普通 adjacency 的歧义和拓扑反证通过专用 Gate reason 安全 review。该映射只复用已登记事实，不新增
   TIFF 读取、低梯度 detector 或 winner-specific query。
@@ -59,9 +62,17 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   Overlap 只允许 relation 对应的两个物理 Frame polygon 重叠；其它重叠仍为 `fixed_template_mismatch`。短轴
   evidence 在 overlap 中点分区，避免共享区域重复计票，输出 polygon 不被修改。
   Report/Debug 分开保存 relation identity、基础 bleed、topology protection、uncertainty 与 residual。
-  Report revision 更新为 `x5crop_v5_template_report_37`，不保留旧 schema 兼容路径。
-  110 个 development task 的完整机制验收完成且无分析错误：19 个安全 auto、91 个安全 review、
-  `unsafe_approved_auto = 0`；14 个 challenge 当前均安全 review，没有用异常拓扑换取错误放行。
+- Direct separator refit 只能让同一 adjacency 的 native endpoint 调整局部关系；原 phase anchor 保持原
+  权限，新追加 endpoint 只能作为 `LOCAL_REFINEMENT`。重拟合前的全局 phase binding 与 Contact/Overlap
+  必要角色冻结为 `phase_anchor_authority_ceiling`；新增
+  separator endpoint 不能创造 phase authority、constraint rank 或无关 role binding。Projection 以
+  `direct_separator_refit/direct_separator_gap` 保存依据，并核对 immutable relation evidence identity；越过
+  ceiling 或改变 template/ordinal/evidence/role mapping 时 typed review。完整路径仍为 O(count)、不新增
+  TIFF query，fit pass 上界为 6。
+- Report revision 更新为 `x5crop_v5_template_report_38`，不保留旧 schema 兼容路径。当前 110 个
+  development task 的完整机制验收无分析错误：15 个安全 auto、95 个安全 review、
+  `unsafe_approved_auto = 0`；14 个 challenge 均安全 review。新增证明揭示的 authority 缺口保持 review，
+  没有为恢复上一检查点覆盖而放宽 Gate。
 - 直接观察到的 start/end 在最终 placement 中保留 native coordinate 与完整 interval；Grid 只补齐缺失
   角色。同一连续 placement 的互补 endpoint evidence 合并为联合可行状态，不伪造 runner。唯一 placement
   中至少两张完整直接 Frame 可闭合 source W；当每个缺失 Frame 仍有一侧直接边缘时，同一份相关 W 可补
@@ -157,8 +168,8 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   aperture side 的 W/H 比例推导。
 - 任一 slot 不安全时整张 source `needs_review`，不做 slot salvage。Contact 与 overlap 始终属于
   challenge，但 challenge 不预设终态：标准 detector/Gate 可产生安全自动批准，证据不足时安全 review
-  同样合格。Contact 已进入同一 adjacency/placement；overlap 仍未启用。后续 relation 仍必须让受影响
-  边界的 topology protection 消耗既有 5% 总预算，不建立第二套 detector 或独立特殊 bleed 预算。
+  同样合格。Contact 与 Overlap 均进入同一 adjacency/placement；受影响边界的 topology protection 消耗
+  既有 5% 总预算，不建立第二套 detector 或独立特殊 bleed 预算。
 - Placement 保持 source-axis；局部直线 slope 只扩大安全包络。Deskew 是批准后的可选整理，不参与
   placement、Gate 或黄金准确性；证据不足或超限时保持原始倾斜。
 - 安全层只处理唯一 selected placement 的联合可行状态。Aperture 每侧共用 5% 外扩预算；直接 enclosing
@@ -174,8 +185,8 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
 - Debug Analysis 只可视化同次检测事实：理论模板、观察、winner/runner、最终 footprint、预算和首个
   阻断原因；报告同时保存全局未知量 constraint rank、逐 adjacency query/trace/coordinate coverage 与
   直接角色/外侧 Frame observation authority，以及 dark/light material、逐区域状态和冲突。Debug 不重新
-  求解，也不把 review candidate 伪装为正式输出。当前 report revision 为
-  `x5crop_v5_template_report_35`，并显式区分直接角色的 coordinate `observation_id` 与相关
+  求解，也不把 review candidate 伪装为正式输出。当前 schema 显式区分直接角色的 coordinate
+  `observation_id` 与相关
   `evidence_group_id`，同时报告 phase candidate 的输入权限、projection outcome、保留 rank、投影 binding、
   calibrated nominal prior/evidence/selected authority、phase anchor、推断 adjacency、未观察 Frame、
   nominal solve/local-prefix 工作量、连续 lattice 参数依据、三层 source footprint、typed
@@ -241,14 +252,14 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
 - `tools/verify` 是 Hook、CI 与本地验证的唯一入口。Diagnostic 只证明工程合同；gold accuracy、性能与
   platform receipt 分层记录，不互相冒充。
 - 正式性能 Gate 为 24-source 完整用户路径 mean 不超过 5 秒；3 秒只是不阻断的 challenge。
-- Broad enclosing 检查点的完整 development gold 为 110/110 完成、分析错误 0、
-  `unsafe_approved_auto = 0`；安全 auto 为基础 nominal 17/66、较难 nominal 2/30、challenge 0/14。
-  Candidate 为 86 个不可用、21 个安全、3 个不安全；全部不安全 candidate 均保持 review，自动批准集合
-  与 Overlap 检查点一致。S024 取得 broad cross authority 但仍因 phase 多解 review；S058 从无 candidate
-  改善为安全 review candidate。14 个 challenge 均安全 review。该阶段没有放宽 Grid、Gate、5% 预算或
-  黄金合同。
+- Direct measured separator relation 检查点的完整 development gold 为 110/110 完成、分析错误 0、
+  `unsafe_approved_auto = 0`；安全 auto 为基础 nominal 13/66、较难 nominal 2/30、challenge 0/14。
+  Candidate 为 90 个不可用、17 个安全、3 个不安全；全部不安全 candidate 均保持 review，14 个 challenge
+  均安全 review。相较上一检查点减少的 nominal 自动批准来自新揭示的 phase/direct-role 证明缺口，不以
+  样片规则、分类变化或 Gate 放宽恢复。
 - 24-source 正式性能只由绑定最终干净 commit 的 receipt 判定；5 秒 mean 仍是 blocking Gate，3 秒仍是
-  non-blocking 目标。Broad enclosing 检查点通过 5 秒 Gate，尚未达到 3 秒 challenge。当前 review 表达
+  non-blocking 目标。当前 direct measured separator relation 检查点已通过 5 秒 Gate，尚未达到 3 秒
+  challenge；最终 receipt 必须绑定包含本结论的干净提交。当前 review 表达
   真实的 phase/cross、Grid/W、topology 与预算证明缺口，不以调窄 guard、静默隐藏 saturation、恢复精确
   W→H 或改变样片角色掩盖。
 - Apple Silicon macOS、Intel macOS 与 Windows x64 必须在同一最终 commit 取得实机 receipt。Accuracy、

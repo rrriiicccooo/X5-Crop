@@ -12,26 +12,31 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from ...domain import FiniteInterval, ObservationId
+from ...domain import EvidenceState, FiniteInterval, ObservationId
 from .template_adjacency_topology import (
     AdjacencyContinuityKind,
     AdjacencyContinuityObservation,
 )
+from .template_direct_role_authority import DirectRoleBindingAuthority
 from .template_model import (
     AdjacencyRelation,
     ContactRelation,
     OverlapRelation,
     SeparatorRelationKind,
     SeparatorRelation,
+    SequenceBindingUse,
     SequenceFit,
+    measured_separator_relation_kind,
 )
+from .observation_types import SeparatorBandObservation
+from .separator_material import normal_separator_material_bands
 
 
 class ResidualPattern(str, Enum):
     """The physical shape left after fitting the normal global template."""
 
     NORMAL = "normal"
-    MEASURED_ADVANCES = "measured_advances"
+    MEASURED_RELATIONS = "measured_relations"
     UNRESOLVED = "unresolved"
 
 
@@ -100,19 +105,12 @@ class AdjacencyRelationAnalysis:
             raise ValueError("residual failure reason disagrees with its pattern")
         if unresolved and self.relations:
             raise ValueError("unresolved residual topology cannot authorize relations")
-        if self.pattern == ResidualPattern.MEASURED_ADVANCES and not self.relations:
-            raise ValueError("measured-advance pattern requires direct relations")
+        if self.pattern == ResidualPattern.MEASURED_RELATIONS and not self.relations:
+            raise ValueError("measured-relation pattern requires direct relations")
         if self.pattern == ResidualPattern.NORMAL and (
             self.relations or self.anomaly_ordinals
         ):
             raise ValueError("normal residual topology cannot carry an anomaly")
-
-
-def _difference(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval:
-    return FiniteInterval(
-        left.minimum - right.maximum,
-        left.maximum - right.minimum,
-    )
 
 
 def _nominal_relation(ordinal: int) -> SeparatorRelation:
@@ -121,6 +119,139 @@ def _nominal_relation(ordinal: int) -> SeparatorRelation:
         kind=SeparatorRelationKind.NOMINAL,
         delta_interval_px=FiniteInterval.exact(0.0),
         canonical_delta_px=0.0,
+    )
+
+
+def _measured_separator_relation(
+    fact: AdjacencyGapFact,
+    *,
+    width_interval_px: FiniteInterval,
+    canonical_width_px: float,
+    pitch_interval_px: FiniteInterval,
+    canonical_pitch_px: float,
+) -> SeparatorRelation:
+    if fact.separator_band_id is None or len(fact.observation_ids) != 2:
+        raise ValueError("measured separator relation lacks direct atoms")
+    delta = FiniteInterval(
+        fact.gap_interval_px.minimum
+        + width_interval_px.minimum
+        - pitch_interval_px.maximum,
+        fact.gap_interval_px.maximum
+        + width_interval_px.maximum
+        - pitch_interval_px.minimum,
+    )
+    canonical_delta = (
+        fact.canonical_gap_px
+        + canonical_width_px
+        - canonical_pitch_px
+    )
+    return SeparatorRelation(
+        relation_ordinal=fact.relation_ordinal,
+        kind=measured_separator_relation_kind(canonical_delta),
+        delta_interval_px=delta,
+        canonical_delta_px=canonical_delta,
+        separator_band_observation_id=fact.separator_band_id,
+        end_edge_observation_id=fact.observation_ids[0],
+        next_start_edge_observation_id=fact.observation_ids[1],
+        signed_gap_interval_px=fact.gap_interval_px,
+        canonical_signed_gap_px=fact.canonical_gap_px,
+    )
+
+
+def _relation_changes_unobserved_suffix(
+    fit: SequenceFit,
+    relation: SeparatorRelation,
+) -> bool:
+    """Keep a normal direct gap only when it constrains inferred roles."""
+
+    return relation.is_anomaly or any(
+        binding is None
+        for binding in fit.role_bindings[2 * relation.relation_ordinal :]
+    )
+
+
+def derive_candidate_separator_relations(
+    fit: SequenceFit,
+    authority: DirectRoleBindingAuthority,
+    separator_bands: tuple[SeparatorBandObservation, ...],
+    pitch_authority_px: FiniteInterval,
+) -> tuple[AdjacencyRelation, ...]:
+    """Attach unique authorized separator gaps before a Grid refit.
+
+    The input fit supplies only a fixed ordinal mapping.  Each relation still
+    comes from one already-registered material band and two directly
+    authorized native edges.  Missing or competing bands add no relation and
+    therefore cannot make a candidate prove its own mapping.
+    """
+
+    if (
+        fit.adjacency_relations
+        or authority.state == EvidenceState.CONTRADICTED
+    ):
+        return fit.adjacency_relations
+    supported = {
+        (item.role_index, item.observation_id)
+        for item in authority.facts
+        if item.state == EvidenceState.SUPPORTED
+    }
+    bands_by_pair: dict[
+        tuple[ObservationId, ObservationId],
+        list[SeparatorBandObservation],
+    ] = {}
+    for band in normal_separator_material_bands(
+        separator_bands,
+        maximum_material_gap_px=fit.template.gap_prior_px.maximum,
+    ):
+        bands_by_pair.setdefault(
+            (
+                band.left_edge_observation_id,
+                band.right_edge_observation_id,
+            ),
+            [],
+        ).append(band)
+
+    measured: dict[int, SeparatorRelation] = {}
+    for ordinal in range(1, fit.template.count):
+        end_index = 2 * ordinal - 1
+        start_index = 2 * ordinal
+        end = fit.role_bindings[end_index]
+        start = fit.role_bindings[start_index]
+        if (
+            end is None
+            or start is None
+            or end.use != SequenceBindingUse.PHASE_ANCHOR
+            or start.use != SequenceBindingUse.PHASE_ANCHOR
+            or (end_index, end.observation_id) not in supported
+            or (start_index, start.observation_id) not in supported
+        ):
+            continue
+        matches = bands_by_pair.get(
+            (end.observation_id, start.observation_id),
+            (),
+        )
+        if len(matches) != 1:
+            continue
+        band = matches[0]
+        relation = _measured_separator_relation(
+            AdjacencyGapFact(
+                relation_ordinal=ordinal,
+                gap_interval_px=band.gap_interval_px,
+                canonical_gap_px=band.gap_interval_px.center,
+                observation_ids=(end.observation_id, start.observation_id),
+                separator_band_id=band.observation_id,
+            ),
+            width_interval_px=fit.template.frame_width_px,
+            canonical_width_px=fit.pitch_fit.canonical_frame_width_px,
+            pitch_interval_px=pitch_authority_px,
+            canonical_pitch_px=fit.pitch_fit.canonical_pitch_px,
+        )
+        if _relation_changes_unobserved_suffix(fit, relation):
+            measured[ordinal] = relation
+    if not measured:
+        return ()
+    return tuple(
+        measured.get(ordinal, _nominal_relation(ordinal))
+        for ordinal in range(1, max(measured) + 1)
     )
 
 
@@ -245,25 +376,39 @@ def derive_adjacency_relations(
         )
 
     ordered_facts = tuple(facts)
-    gap_prior = fit.template.gap_prior_px
-    separator_anomalies = tuple(
+    measured_separators = tuple(
+        (fact, relation)
+        for fact in ordered_facts
+        if fact.relation_ordinal not in topologies_by_ordinal
+        if fact.separator_band_id is not None
+        for relation in (
+            _measured_separator_relation(
+                fact,
+                width_interval_px=fit.pitch_fit.frame_width_px,
+                canonical_width_px=fit.pitch_fit.canonical_frame_width_px,
+                pitch_interval_px=fit.pitch_fit.pitch_interval_px,
+                canonical_pitch_px=fit.pitch_fit.canonical_pitch_px,
+            ),
+        )
+        if _relation_changes_unobserved_suffix(fit, relation)
+    )
+    measured_overlaps = tuple(
         fact
         for fact in ordered_facts
         if fact.relation_ordinal not in topologies_by_ordinal
-        if (
-            fact.gap_interval_px.maximum < gap_prior.minimum
-            or gap_prior.maximum < fact.gap_interval_px.minimum
-        )
+        if fact.separator_band_id is None
+        if fact.gap_interval_px.maximum < 0.0
     )
-    anomaly_ordinals = tuple(
+    relation_ordinals = tuple(
         sorted(
             {
                 *topologies_by_ordinal,
-                *(item.relation_ordinal for item in separator_anomalies),
+                *(fact.relation_ordinal for fact, _relation in measured_separators),
+                *(item.relation_ordinal for item in measured_overlaps),
             }
         )
     )
-    if not anomaly_ordinals:
+    if not relation_ordinals:
         return AdjacencyRelationAnalysis(
             ResidualPattern.NORMAL,
             (),
@@ -271,37 +416,30 @@ def derive_adjacency_relations(
             evaluated,
         )
 
-    anomalies_by_ordinal = {
-        item.relation_ordinal: item for item in separator_anomalies
+    measured_by_ordinal = {
+        fact.relation_ordinal: relation
+        for fact, relation in measured_separators
+    }
+    overlaps_by_ordinal = {
+        item.relation_ordinal: item for item in measured_overlaps
     }
     relations: list[AdjacencyRelation] = []
-    for ordinal in range(1, max(anomaly_ordinals) + 1):
+    for ordinal in range(1, max(relation_ordinals) + 1):
         topology = topologies_by_ordinal.get(ordinal)
         if topology is not None:
             relations.append(topology)
             continue
-        anomaly = anomalies_by_ordinal.get(ordinal)
-        if anomaly is None:
-            relations.append(_nominal_relation(ordinal))
-            continue
-        if (
-            anomaly.gap_interval_px.maximum < 0.0
-            and anomaly.separator_band_id is None
-        ):
+        overlap = overlaps_by_ordinal.get(ordinal)
+        if overlap is not None:
             width = fit.pitch_fit.frame_width_px
             pitch = fit.pitch_fit.pitch_interval_px
             delta = FiniteInterval(
-                anomaly.gap_interval_px.minimum
+                overlap.gap_interval_px.minimum
                 + width.minimum
                 - pitch.maximum,
-                anomaly.gap_interval_px.maximum
+                overlap.gap_interval_px.maximum
                 + width.maximum
                 - pitch.minimum,
-            )
-            canonical_delta = (
-                anomaly.canonical_gap_px
-                + fit.pitch_fit.canonical_frame_width_px
-                - fit.pitch_fit.canonical_pitch_px
             )
             relations.append(
                 OverlapRelation(
@@ -311,47 +449,34 @@ def derive_adjacency_relations(
                             ordinal
                         ].overlap_observation_id
                     ),
-                    end_edge_observation_id=anomaly.observation_ids[0],
-                    next_start_edge_observation_id=anomaly.observation_ids[1],
-                    signed_gap_interval_px=anomaly.gap_interval_px,
-                    canonical_signed_gap_px=anomaly.canonical_gap_px,
+                    end_edge_observation_id=overlap.observation_ids[0],
+                    next_start_edge_observation_id=overlap.observation_ids[1],
+                    signed_gap_interval_px=overlap.gap_interval_px,
+                    canonical_signed_gap_px=overlap.canonical_gap_px,
                     delta_interval_px=delta,
-                    canonical_delta_px=canonical_delta,
-                    supporting_observation_ids=anomaly.observation_ids,
+                    canonical_delta_px=(
+                        fit.pitch_fit.canonical_frame_width_px
+                        - fit.pitch_fit.canonical_pitch_px
+                        + overlap.canonical_gap_px
+                    ),
+                    supporting_observation_ids=overlap.observation_ids,
                 )
             )
             continue
-        delta = _difference(anomaly.gap_interval_px, gap_prior)
-        canonical_delta = anomaly.canonical_gap_px - gap_prior.center
-        if delta.contains(0.0):
+        measured_relation = measured_by_ordinal.get(ordinal)
+        if measured_relation is None:
             relations.append(_nominal_relation(ordinal))
             continue
-        kind = (
-            SeparatorRelationKind.WIDE
-            if canonical_delta > 0.0
-            else SeparatorRelationKind.NARROW
-        )
-        relation_ids = (
-            anomaly.separator_band_id,
-            *anomaly.observation_ids,
-        )
-        relations.append(
-            SeparatorRelation(
-                relation_ordinal=ordinal,
-                kind=kind,
-                delta_interval_px=delta,
-                canonical_delta_px=canonical_delta,
-                observation_ids=tuple(
-                    identity
-                    for identity in relation_ids
-                    if identity is not None
-                ),
-            )
-        )
+        relations.append(measured_relation)
+    resolved_relations = tuple(relations)
     return AdjacencyRelationAnalysis(
-        ResidualPattern.MEASURED_ADVANCES,
-        tuple(relations),
+        ResidualPattern.MEASURED_RELATIONS,
+        resolved_relations,
         ordered_facts,
         evaluated,
-        anomaly_ordinals=anomaly_ordinals,
+        anomaly_ordinals=tuple(
+            relation.relation_ordinal
+            for relation in resolved_relations
+            if relation.is_anomaly
+        ),
     )

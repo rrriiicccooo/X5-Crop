@@ -115,7 +115,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertIn("EVIDENCE UNAVAILABLE:PAIR_UNAVAILABLE", cross)
         self.assertIn("SEQUENCE FIT ·", sequence)
         self.assertIn(
-            "PARAM BOUNDED_DIRECT_LEAST_SQUARES",
+            "PARAM CALIBRATED_NOMINAL_GRID",
             sequence,
         )
         self.assertIn("SOURCE FIT ·", source)

@@ -141,8 +141,8 @@ class TemplateAlignmentDiagnostic:
             )
             or (self.pattern == ResidualPattern.NORMAL and self.adjacency_relations)
             or (
-                self.pattern == ResidualPattern.MEASURED_ADVANCES
-                and not any(item.is_anomaly for item in self.adjacency_relations)
+                self.pattern == ResidualPattern.MEASURED_RELATIONS
+                and not self.adjacency_relations
             )
             or (self.pattern == ResidualPattern.UNRESOLVED)
             != (self.unresolved_reason is not None)
@@ -298,10 +298,8 @@ def template_alignment_diagnostic(
     if phase.status != PhaseFitStatus.RESOLVED:
         pattern = ResidualPattern.UNRESOLVED
         reason = phase.ambiguity_reason or phase.status.value
-    elif fit is not None and any(
-        relation.is_anomaly for relation in fit.adjacency_relations
-    ):
-        pattern = ResidualPattern.MEASURED_ADVANCES
+    elif fit is not None and fit.adjacency_relations:
+        pattern = ResidualPattern.MEASURED_RELATIONS
         reason = None
     else:
         pattern = ResidualPattern.NORMAL

@@ -276,7 +276,7 @@ class TemplateAdjacencyTopologyContractTests(unittest.TestCase):
             observation.signed_gap_interval_px,
             FiniteInterval.exact(0.0),
         )
-        self.assertEqual(analysis.pattern, ResidualPattern.MEASURED_ADVANCES)
+        self.assertEqual(analysis.pattern, ResidualPattern.MEASURED_RELATIONS)
         self.assertEqual(analysis.relations, fit.adjacency_relations)
 
     def test_contact_requires_complete_registered_corridor(self) -> None:
@@ -418,7 +418,7 @@ class TemplateAdjacencyTopologyContractTests(unittest.TestCase):
             observation.basis,
             AdjacencyContinuityBasis.INDEPENDENT_REVERSED_EDGES,
         )
-        self.assertEqual(analysis.pattern, ResidualPattern.MEASURED_ADVANCES)
+        self.assertEqual(analysis.pattern, ResidualPattern.MEASURED_RELATIONS)
         self.assertIsInstance(analysis.relations[0], OverlapRelation)
         relation = analysis.relations[0]
         assert isinstance(relation, OverlapRelation)

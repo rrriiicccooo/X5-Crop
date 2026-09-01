@@ -17,6 +17,8 @@ from .template_model import (
     AdjacencyRelation,
     ContactRelation,
     OverlapRelation,
+    SeparatorRelation,
+    SeparatorRelationKind,
     TemplateSpec,
 )
 from .template_nominal_grid_model import (
@@ -369,13 +371,21 @@ def solve_calibrated_nominal_grid_envelope(
     rows.append(non_negative_gap)
     limits.append(0.0)
     for relation_index, relation in enumerate(relations):
-        if not isinstance(relation, (ContactRelation, OverlapRelation)):
+        measured_separator = (
+            isinstance(relation, SeparatorRelation)
+            and relation.kind != SeparatorRelationKind.NOMINAL
+        )
+        if (
+            not isinstance(relation, (ContactRelation, OverlapRelation))
+            and not measured_separator
+        ):
             continue
         signed_gap = (
             FiniteInterval.exact(0.0)
             if isinstance(relation, ContactRelation)
             else relation.signed_gap_interval_px
         )
+        assert signed_gap is not None
         expression = np.zeros(variable_count, dtype=np.float64)
         expression[1] = -1.0
         expression[2] = 1.0

@@ -152,29 +152,69 @@ class TemplateAlignmentDiagnosticContractTest(unittest.TestCase):
             for name, coordinate in (
                 ("start:1", 40.0),
                 ("end:1", 140.0),
-                ("start:2", 160.0),
-                ("end:2", 260.0),
+                ("start:2", 170.0),
+                ("end:2", 270.0),
             )
         )
-        phase = fit_template_phase(observations, template(2))
-        assert phase.best is not None
         relation = SeparatorRelation(
             relation_ordinal=1,
             kind=SeparatorRelationKind.WIDE,
             delta_interval_px=FiniteInterval.exact(10.0),
             canonical_delta_px=10.0,
-            observation_ids=(ObservationId("start:2"), ObservationId("end:1")),
+            separator_band_observation_id=ObservationId("separator:1"),
+            end_edge_observation_id=ObservationId("end:1"),
+            next_start_edge_observation_id=ObservationId("start:2"),
+            signed_gap_interval_px=FiniteInterval.exact(30.0),
+            canonical_signed_gap_px=30.0,
         )
-        phase = replace(
-            phase,
-            best=replace(phase.best, adjacency_relations=(relation,)),
+        phase = fit_template_phase(
+            observations,
+            template(2),
+            adjacency_relations=(relation,),
         )
+        assert phase.best is not None
         diagnostic = template_alignment_diagnostic(phase, observations)
         self.assertEqual(
             diagnostic.pattern,
-            ResidualPattern.MEASURED_ADVANCES,
+            ResidualPattern.MEASURED_RELATIONS,
         )
         self.assertEqual(diagnostic.adjacency_relations, (relation,))
+
+    def test_direct_normal_separator_is_still_a_measured_relation(self) -> None:
+        observations = tuple(
+            edge(name, coordinate)
+            for name, coordinate in (
+                ("start:1", 40.0),
+                ("end:1", 140.0),
+                ("start:2", 160.0),
+                ("end:2", 260.0),
+            )
+        )
+        relation = SeparatorRelation(
+            relation_ordinal=1,
+            kind=SeparatorRelationKind.NORMAL,
+            delta_interval_px=FiniteInterval.exact(0.0),
+            canonical_delta_px=0.0,
+            separator_band_observation_id=ObservationId("separator:normal"),
+            end_edge_observation_id=ObservationId("end:1"),
+            next_start_edge_observation_id=ObservationId("start:2"),
+            signed_gap_interval_px=FiniteInterval.exact(20.0),
+            canonical_signed_gap_px=20.0,
+        )
+        phase = fit_template_phase(
+            observations,
+            template(2),
+            adjacency_relations=(relation,),
+        )
+
+        diagnostic = template_alignment_diagnostic(phase, observations)
+
+        self.assertEqual(
+            diagnostic.pattern,
+            ResidualPattern.MEASURED_RELATIONS,
+        )
+        self.assertEqual(diagnostic.adjacency_relations, (relation,))
+        self.assertFalse(diagnostic.adjacency_relations[0].is_anomaly)
 
     def test_unresolved_fit_preserves_the_minimum_reason(self) -> None:
         observations = (edge("only", 40.0),)

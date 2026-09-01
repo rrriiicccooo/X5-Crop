@@ -18,11 +18,13 @@ from .template_model import (
     FrameWidthInferenceFailureKind,
     LatticeParameterFitBasis,
     OverlapRelation,
+    SeparatorRelation,
+    SequenceBindingUse,
     SequenceFit,
     SequenceRoleBinding,
     TemplateSearchReceipt,
     TemplateSpec,
-    adjacency_topology_required_bindings,
+    adjacency_relation_required_bindings,
     most_constrained_lattice_parameter_fit_basis,
     ordered_template_roles,
 )
@@ -409,6 +411,9 @@ def fit_template_phase(
     ] = (),
     sequence_measurement_sets: Sequence[PhotoBoundaryMeasurementSet] = (),
     calibrated_nominal_grid_prior: CalibratedNominalGridPrior | None = None,
+    phase_anchor_authority_ceiling: (
+        tuple[tuple[int, ObservationId], ...] | None
+    ) = None,
     max_observations: int = 512,
 ) -> PhaseFitResult:
     """Fit `{phase, W, pitch}` without building a chain product."""
@@ -437,6 +442,20 @@ def fit_template_phase(
         maximum_material_gap_px=template.gap_prior_px.maximum,
     )
     roles = ordered_template_roles(template.count)
+    if phase_anchor_authority_ceiling is not None:
+        if (
+            phase_anchor_authority_ceiling
+            != tuple(sorted(set(phase_anchor_authority_ceiling)))
+            or any(
+                not 0 <= role_index < len(roles)
+                or not isinstance(observation_id, ObservationId)
+                for role_index, observation_id
+                in phase_anchor_authority_ceiling
+            )
+            or len({item[0] for item in phase_anchor_authority_ceiling})
+            != len(phase_anchor_authority_ceiling)
+        ):
+            raise ValueError("phase-anchor authority ceiling is invalid")
     relations = _relations(adjacency_relations, template.count)
     contact_edges = tuple(contact_edge_observations)
     if any(
@@ -527,12 +546,26 @@ def fit_template_phase(
         tuple[float, float, tuple[AdjacencyRelation, ...]],
         _PhaseSeed | None,
     ] = {}
-    topology_required_bindings = adjacency_topology_required_bindings(
-        relations
+    nonseparator_required_bindings = adjacency_relation_required_bindings(
+        tuple(
+            relation
+            for relation in relations
+            if not isinstance(relation, SeparatorRelation)
+        )
+    )
+    effective_phase_anchor_authority_ceiling = (
+        None
+        if phase_anchor_authority_ceiling is None
+        else frozenset(
+            {
+                *phase_anchor_authority_ceiling,
+                *nonseparator_required_bindings,
+            }
+        )
     )
 
     def register_seed(seed: _PhaseSeed) -> None:
-        if topology_required_bindings:
+        if nonseparator_required_bindings:
             try:
                 seed = replace(
                     seed,
@@ -540,7 +573,7 @@ def fit_template_phase(
                         sorted(
                             {
                                 *seed.required_bindings,
-                                *topology_required_bindings,
+                                *nonseparator_required_bindings,
                             },
                             key=lambda item: (item[0], str(item[1])),
                         )
@@ -779,6 +812,7 @@ def fit_template_phase(
                 pitch_authority,
                 phase_authority_px,
                 fit_residual_limit_px,
+                effective_phase_anchor_authority_ceiling,
             )
             for seed in sorted(
                 seeds,
@@ -842,32 +876,63 @@ def fit_template_phase(
         if candidates and measurement_sets
         else ()
     )
+    from .template_residual import derive_candidate_separator_relations
+
+    def project_record(
+        index: int,
+        candidate: _BoundFit,
+    ) -> tuple[
+        _BoundFit,
+        _BoundFit | None,
+        PhaseCandidateAuthorityProjection,
+    ]:
+        candidate_relations = derive_candidate_separator_relations(
+            candidate.fit,
+            candidate_authorities[index],
+            tuple(phase_separator_bands),
+            pitch_authority,
+        )
+        projected, projection = project_candidate_to_authorized_direct_roles(
+            candidate,
+            candidate_authorities[index],
+            direct,
+            separator_pairs,
+            roles,
+            template,
+            candidate_relations,
+            pitch_authority,
+            phase_authority_px,
+            fit_residual_limit_px,
+            calibrated_nominal_grid_prior,
+            effective_phase_anchor_authority_ceiling,
+        )
+        return candidate, projected, projection
+
     projection_records: tuple[
         tuple[_BoundFit, _BoundFit | None, PhaseCandidateAuthorityProjection],
         ...,
     ] = (
         tuple(
-            (
-                candidate,
-                *project_candidate_to_authorized_direct_roles(
-                    candidate,
-                    candidate_authorities[index],
-                    direct,
-                    separator_pairs,
-                    roles,
-                    template,
-                    candidate.fit.adjacency_relations,
-                    pitch_authority,
-                    phase_authority_px,
-                    fit_residual_limit_px,
-                    calibrated_nominal_grid_prior,
-                ),
-            )
+            project_record(index, candidate)
             for index, candidate in enumerate(candidates)
         )
         if candidate_authorities
         else ()
     )
+
+    def respects_phase_anchor_authority_ceiling(
+        candidate: _BoundFit,
+    ) -> bool:
+        if effective_phase_anchor_authority_ceiling is None:
+            return True
+        return all(
+            (role_index, binding.observation_id)
+            in effective_phase_anchor_authority_ceiling
+            for role_index, binding in enumerate(candidate.fit.role_bindings)
+            if binding is not None
+            and binding.use == SequenceBindingUse.PHASE_ANCHOR
+        )
+
     eligible_records: tuple[
         tuple[_BoundFit, PhaseCandidateAuthorityProjection | None], ...
     ] = (
@@ -875,14 +940,24 @@ def fit_template_phase(
             (projected, projection)
             for _input, projected, projection in projection_records
             if projected is not None
+            and respects_phase_anchor_authority_ceiling(projected)
         )
         if measurement_sets
-        else tuple((candidate, None) for candidate in candidates)
+        else tuple(
+            (candidate, None)
+            for candidate in candidates
+            if respects_phase_anchor_authority_ceiling(candidate)
+        )
     )
     terminal_records = tuple(
         (input_candidate, projection)
         for input_candidate, projected, projection in projection_records
         if projected is None
+    )
+    phase_anchor_authority_exceeded = any(
+        projected is not None
+        and not respects_phase_anchor_authority_ceiling(projected)
+        for _input, projected, _projection in projection_records
     )
 
     def record_rank(
@@ -896,6 +971,8 @@ def fit_template_phase(
                 if projection is None
                 or projection.basis
                 == PhaseCandidateProjectionBasis.DIRECT_BINDINGS
+                or projection.basis
+                == PhaseCandidateProjectionBasis.DIRECT_SEPARATOR_GAP
                 else 2
                 if projection.basis
                 == PhaseCandidateProjectionBasis.DIRECT_RANK_THREE
@@ -967,7 +1044,11 @@ def fit_template_phase(
         role_binding_count=len(seeds) * len(roles),
         adjacency_relation_evaluation_count=len(relations),
         local_refinement_lookup_count=0,
-        local_refinement_binding_count=0,
+        local_refinement_binding_count=(
+            0
+            if best is None
+            else len(best.fit.local_refinement_observation_ids)
+        ),
         phase_hypothesis_count=len(seeds),
         phase_offset_lookup_count=len(seeds),
         direct_observation_count=len(direct),
@@ -987,7 +1068,11 @@ def fit_template_phase(
             projection_records
         ),
         candidate_direct_role_projection_success_count=sum(
-            projection.outcome == PhaseCandidateProjectionOutcome.PROJECTED
+            projection.outcome
+            in {
+                PhaseCandidateProjectionOutcome.PROJECTED,
+                PhaseCandidateProjectionOutcome.DIRECT_SEPARATOR_REFIT,
+            }
             for _input, _projected, projection in projection_records
         ),
         candidate_direct_role_projection_binding_count=sum(
@@ -1012,6 +1097,17 @@ def fit_template_phase(
     )
     receipt.validate_bounds()
     if best is None:
+        if phase_anchor_authority_exceeded:
+            return PhaseFitResult(
+                template,
+                None,
+                None,
+                PhaseFitStatus.UNRESOLVED,
+                "direct separator refit exceeded pre-refit phase-anchor authority",
+                receipt,
+                direct_ids,
+                PhaseFailureKind.FIXED_TEMPLATE_MISMATCH,
+            )
         raw_compatible = tuple(
             sorted(
                 (
@@ -1871,6 +1967,12 @@ def fit_template_phase_candidate_with_adjacency_relations(
         sequence_measurement_sets=phase_input.sequence_measurement_sets,
         calibrated_nominal_grid_prior=(
             phase_input.calibrated_nominal_grid_prior
+        ),
+        phase_anchor_authority_ceiling=tuple(
+            (role_index, binding.observation_id)
+            for role_index, binding in enumerate(normal.best.role_bindings)
+            if binding is not None
+            and binding.use == SequenceBindingUse.PHASE_ANCHOR
         ),
         max_observations=max_observations,
     )

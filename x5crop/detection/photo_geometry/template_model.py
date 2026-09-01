@@ -16,7 +16,7 @@ from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInte
 from .template_nominal_grid_model import CalibratedNominalGridFitState
 
 
-MAX_TEMPLATE_FIT_PASSES = 5
+MAX_TEMPLATE_FIT_PASSES = 6
 TEMPLATE_ROLE_REFINEMENT_RADIUS_RATIO = 0.11
 MIN_TEMPLATE_ROLE_REFINEMENT_RADIUS_PX = 3.0
 GENERIC_SEPARATOR_GAP_MINIMUM_FRAME_RATIO = 0.02
@@ -226,8 +226,25 @@ class SeparatorRelationKind(str, Enum):
     """A positive-material separator's departure from nominal pitch."""
 
     NOMINAL = "nominal"
+    NORMAL = "normal"
     WIDE = "wide"
     NARROW = "narrow"
+
+
+def measured_separator_relation_kind(
+    canonical_delta_px: float,
+) -> SeparatorRelationKind:
+    """Classify one direct separator against the realized nominal Grid."""
+
+    if not math.isfinite(canonical_delta_px):
+        raise ValueError("separator adjustment must be finite")
+    if abs(canonical_delta_px) <= 1.0e-9:
+        return SeparatorRelationKind.NORMAL
+    return (
+        SeparatorRelationKind.WIDE
+        if canonical_delta_px > 0.0
+        else SeparatorRelationKind.NARROW
+    )
 
 
 @dataclass(frozen=True, order=True)
@@ -505,17 +522,25 @@ class FrameWidthInferenceAssessment:
 
 @dataclass(frozen=True)
 class SeparatorRelation:
-    """One positive-separator adjacency's prefix adjustment.
+    """One positive-separator adjacency in the shared sequence model.
 
-    ``delta_interval_px`` is an adjustment, not a second free frame width.  A
-    relation at ordinal ``i`` affects slot ``i + 1`` and every later slot once.
+    A measured relation retains the native positive END -> START gap.  Its
+    prefix delta is correlated with the shared ``W`` and ``pitch`` through
+    ``signed_gap = pitch - W + delta``; it is never a second free frame width.
+    A nominal relation carries no direct measurement and keeps ``delta = 0``.
+    A relation at ordinal ``i`` affects slot ``i + 1`` and every later slot
+    exactly once.
     """
 
     relation_ordinal: int
     kind: SeparatorRelationKind
     delta_interval_px: FiniteInterval
     canonical_delta_px: float
-    observation_ids: tuple[ObservationId, ...] = ()
+    separator_band_observation_id: ObservationId | None = None
+    end_edge_observation_id: ObservationId | None = None
+    next_start_edge_observation_id: ObservationId | None = None
+    signed_gap_interval_px: FiniteInterval | None = None
+    canonical_signed_gap_px: float | None = None
 
     def __post_init__(self) -> None:
         if self.relation_ordinal <= 0:
@@ -526,26 +551,65 @@ class SeparatorRelation:
             raise ValueError(
                 "adjacency relation canonical delta is outside interval"
             )
-        if len(set(self.observation_ids)) != len(self.observation_ids):
-            raise ValueError("adjacency relation observations must be unique")
-        if any(not isinstance(item, ObservationId) for item in self.observation_ids):
-            raise TypeError(
-                "adjacency relation observations must be typed identities"
-            )
+        direct_ids = (
+            self.separator_band_observation_id,
+            self.end_edge_observation_id,
+            self.next_start_edge_observation_id,
+        )
         if self.kind == SeparatorRelationKind.NOMINAL and (
             self.delta_interval_px != FiniteInterval.exact(0.0)
             or self.canonical_delta_px != 0.0
+            or any(item is not None for item in direct_ids)
+            or self.signed_gap_interval_px is not None
+            or self.canonical_signed_gap_px is not None
         ):
             raise ValueError(
                 "nominal adjacency relation must have zero adjustment"
             )
-        if self.kind != SeparatorRelationKind.NOMINAL and not self.observation_ids:
-            raise ValueError(
-                "non-nominal adjacency relation needs direct evidence"
-            )
+        if self.kind != SeparatorRelationKind.NOMINAL:
+            if (
+                any(not isinstance(item, ObservationId) for item in direct_ids)
+                or len(set(direct_ids)) != len(direct_ids)
+                or self.signed_gap_interval_px is None
+                or self.signed_gap_interval_px.minimum <= 0.0
+                or self.canonical_signed_gap_px is None
+                or not self.signed_gap_interval_px.contains(
+                    self.canonical_signed_gap_px,
+                    epsilon=1.0e-9,
+                )
+            ):
+                raise ValueError(
+                    "measured separator relation needs one positive direct gap"
+                )
+            if self.kind != measured_separator_relation_kind(
+                self.canonical_delta_px
+            ):
+                raise ValueError(
+                    "measured separator kind disagrees with its adjustment"
+                )
+
+    @property
+    def observation_ids(self) -> tuple[ObservationId, ...]:
+        if self.kind == SeparatorRelationKind.NOMINAL:
+            return ()
+        assert self.separator_band_observation_id is not None
+        assert self.end_edge_observation_id is not None
+        assert self.next_start_edge_observation_id is not None
+        return (
+            self.separator_band_observation_id,
+            self.end_edge_observation_id,
+            self.next_start_edge_observation_id,
+        )
 
     @property
     def is_anomaly(self) -> bool:
+        return self.kind in {
+            SeparatorRelationKind.WIDE,
+            SeparatorRelationKind.NARROW,
+        }
+
+    @property
+    def is_measured(self) -> bool:
         return self.kind != SeparatorRelationKind.NOMINAL
 
 
@@ -681,69 +745,156 @@ class OverlapRelation:
 AdjacencyRelation = SeparatorRelation | ContactRelation | OverlapRelation
 
 
+def adjacency_relation_evidence_identity(
+    relation: AdjacencyRelation,
+) -> tuple[object, ...]:
+    """Return the direct physical fact preserved across correlated refits."""
+
+    if isinstance(relation, SeparatorRelation):
+        return (
+            "separator_nominal" if not relation.is_measured else "separator",
+            relation.relation_ordinal,
+            relation.observation_ids,
+            relation.signed_gap_interval_px,
+        )
+    if isinstance(relation, ContactRelation):
+        return (
+            "contact",
+            relation.relation_ordinal,
+            relation.contact_observation_id,
+            relation.physical_edge_id,
+            relation.shared_edge_observation_id,
+            relation.supporting_observation_ids,
+        )
+    return (
+        "overlap",
+        relation.relation_ordinal,
+        relation.overlap_observation_id,
+        relation.end_edge_observation_id,
+        relation.next_start_edge_observation_id,
+        relation.signed_gap_interval_px,
+        relation.supporting_observation_ids,
+    )
+
+
 def adjacency_prefix_coefficients(
     relations: tuple[AdjacencyRelation, ...],
     slot_index: int,
 ) -> tuple[int, int, float]:
-    """Return ``W``, pitch and fixed-delta coefficients for one slot.
+    """Return ``W``, pitch and measured-gap coefficients for one slot.
 
-    Contact contributes ``W - pitch`` exactly once.  Overlap contributes the
-    same correlated term plus its directly measured negative signed gap.
-    Positive separator adjustments remain fixed typed deltas.  This is the
-    canonical algebra shared by phase fitting and rank accounting.
+    Every directly measured adjacency contributes ``W - pitch`` exactly once,
+    plus its measured signed gap.  Nominal unobserved adjacency contributes
+    the ordinary pitch term.  This is the canonical algebra shared by phase
+    fitting and rank accounting.
     """
 
     if slot_index < 0:
         raise ValueError("adjacency prefix slot must be non-negative")
     applicable = relations[: min(slot_index, len(relations))]
-    topology_count = sum(
+    measured_count = sum(
         isinstance(item, (ContactRelation, OverlapRelation))
+        or (
+            isinstance(item, SeparatorRelation)
+            and item.kind != SeparatorRelationKind.NOMINAL
+        )
         for item in applicable
     )
     fixed_delta = sum(
-        item.canonical_delta_px
+        item.canonical_signed_gap_px
         if isinstance(item, SeparatorRelation)
+        and item.kind != SeparatorRelationKind.NOMINAL
         else item.canonical_signed_gap_px
         if isinstance(item, OverlapRelation)
         else 0.0
         for item in applicable
     )
-    return topology_count, slot_index - topology_count, fixed_delta
+    return measured_count, slot_index - measured_count, fixed_delta
 
 
-def realize_topology_relations(
+def realize_adjacency_relations(
     relations: tuple[AdjacencyRelation, ...],
     *,
+    frame_width_interval_px: FiniteInterval,
+    pitch_interval_px: FiniteInterval,
     frame_width_px: float,
     pitch_px: float,
 ) -> tuple[AdjacencyRelation, ...]:
-    """Bind topology diagnostic deltas to the same fitted W and pitch."""
+    """Bind every measured delta to one shared W/pitch authority and state."""
 
     contact_delta = frame_width_px - pitch_px
-    return tuple(
-        replace(item, canonical_delta_px=contact_delta)
-        if isinstance(item, ContactRelation)
-        else replace(
-            item,
-            canonical_delta_px=(
-                contact_delta + item.canonical_signed_gap_px
-            ),
-        )
-        if isinstance(item, OverlapRelation)
-        else item
-        for item in relations
+    contact_interval = FiniteInterval(
+        frame_width_interval_px.minimum - pitch_interval_px.maximum,
+        frame_width_interval_px.maximum - pitch_interval_px.minimum,
     )
+    realized: list[AdjacencyRelation] = []
+    for relation in relations:
+        if isinstance(relation, ContactRelation):
+            realized.append(
+                replace(
+                    relation,
+                    delta_interval_px=contact_interval,
+                    canonical_delta_px=contact_delta,
+                )
+            )
+            continue
+        if isinstance(relation, SeparatorRelation) and relation.is_measured:
+            assert relation.canonical_signed_gap_px is not None
+            assert relation.signed_gap_interval_px is not None
+            delta = contact_delta + relation.canonical_signed_gap_px
+            delta_interval = FiniteInterval(
+                relation.signed_gap_interval_px.minimum
+                + frame_width_interval_px.minimum
+                - pitch_interval_px.maximum,
+                relation.signed_gap_interval_px.maximum
+                + frame_width_interval_px.maximum
+                - pitch_interval_px.minimum,
+            )
+            realized.append(
+                replace(
+                    relation,
+                    kind=measured_separator_relation_kind(delta),
+                    delta_interval_px=delta_interval,
+                    canonical_delta_px=delta,
+                )
+            )
+            continue
+        if isinstance(relation, OverlapRelation):
+            delta_interval = FiniteInterval(
+                relation.signed_gap_interval_px.minimum
+                + frame_width_interval_px.minimum
+                - pitch_interval_px.maximum,
+                relation.signed_gap_interval_px.maximum
+                + frame_width_interval_px.maximum
+                - pitch_interval_px.minimum,
+            )
+            realized.append(
+                replace(
+                    relation,
+                    delta_interval_px=delta_interval,
+                    canonical_delta_px=(
+                        contact_delta + relation.canonical_signed_gap_px
+                    ),
+                )
+            )
+            continue
+        realized.append(relation)
+    return tuple(realized)
 
 
-def adjacency_topology_required_bindings(
+def adjacency_relation_required_bindings(
     relations: tuple[AdjacencyRelation, ...],
 ) -> tuple[tuple[int, ObservationId], ...]:
-    """Return the direct role atoms required by every topology relation."""
+    """Return direct role atoms required by every measured relation."""
 
     return tuple(
         binding
         for relation in relations
         if isinstance(relation, (ContactRelation, OverlapRelation))
+        or (
+            isinstance(relation, SeparatorRelation)
+            and relation.kind != SeparatorRelationKind.NOMINAL
+        )
         for binding in (
             (
                 2 * relation.relation_ordinal - 1,
@@ -761,7 +912,7 @@ def adjacency_topology_required_bindings(
     )
 
 
-def realize_topology_relations_at_role_positions(
+def realize_adjacency_relations_at_role_positions(
     relations: tuple[AdjacencyRelation, ...],
     *,
     model_role_positions_px: tuple[float, ...],
@@ -769,13 +920,20 @@ def realize_topology_relations_at_role_positions(
     frame_width_px: float,
     pitch_px: float,
 ) -> tuple[AdjacencyRelation, ...]:
-    """Bind topology canonical values to one realized continuous state."""
+    """Bind measured adjacency values to one realized continuous state."""
 
     if direction not in {-1, 1}:
         raise ValueError("topology realization direction is invalid")
     realized: list[AdjacencyRelation] = []
     for relation in relations:
-        if not isinstance(relation, (ContactRelation, OverlapRelation)):
+        measured_separator = (
+            isinstance(relation, SeparatorRelation)
+            and relation.kind != SeparatorRelationKind.NOMINAL
+        )
+        if (
+            not isinstance(relation, (ContactRelation, OverlapRelation))
+            and not measured_separator
+        ):
             realized.append(relation)
             continue
         end_index = 2 * relation.relation_ordinal - 1
@@ -797,6 +955,7 @@ def realize_topology_relations_at_role_positions(
             )
             continue
         canonical_delta = frame_width_px - pitch_px + signed_gap
+        assert relation.signed_gap_interval_px is not None
         if (
             not relation.signed_gap_interval_px.contains(
                 signed_gap,
@@ -807,14 +966,25 @@ def realize_topology_relations_at_role_positions(
                 epsilon=1.0e-7,
             )
         ):
-            raise ValueError("overlap realization left its measured interval")
-        realized.append(
-            replace(
-                relation,
-                canonical_signed_gap_px=signed_gap,
-                canonical_delta_px=canonical_delta,
+            raise ValueError("adjacency realization left its measured interval")
+        if measured_separator:
+            assert isinstance(relation, SeparatorRelation)
+            realized.append(
+                replace(
+                    relation,
+                    kind=measured_separator_relation_kind(canonical_delta),
+                    canonical_signed_gap_px=signed_gap,
+                    canonical_delta_px=canonical_delta,
+                )
             )
-        )
+        else:
+            realized.append(
+                replace(
+                    relation,
+                    canonical_signed_gap_px=signed_gap,
+                    canonical_delta_px=canonical_delta,
+                )
+            )
     return tuple(realized)
 
 
@@ -1229,7 +1399,11 @@ class SequenceFit:
                         "contact relation does not share one coordinate"
                     )
                 continue
-            if not isinstance(relation, OverlapRelation):
+            measured_separator = (
+                isinstance(relation, SeparatorRelation)
+                and relation.kind != SeparatorRelationKind.NOMINAL
+            )
+            if not isinstance(relation, OverlapRelation) and not measured_separator:
                 continue
             signed_gap = direction * (next_start - end)
             expected_delta = (
@@ -1237,15 +1411,20 @@ class SequenceFit:
                 - self.pitch_fit.canonical_pitch_px
                 + signed_gap
             )
+            expected_end_id = relation.end_edge_observation_id
+            expected_start_id = relation.next_start_edge_observation_id
+            assert relation.signed_gap_interval_px is not None
+            assert relation.canonical_signed_gap_px is not None
             if (
                 end_binding is None
                 or start_binding is None
                 or end_binding.observation_id
-                != relation.end_edge_observation_id
+                != expected_end_id
                 or start_binding.observation_id
-                != relation.next_start_edge_observation_id
+                != expected_start_id
                 or end_binding.evidence_group_id
                 == start_binding.evidence_group_id
+                and isinstance(relation, OverlapRelation)
                 or not relation.signed_gap_interval_px.contains(
                     signed_gap,
                     epsilon=1.0e-7,
@@ -1254,7 +1433,7 @@ class SequenceFit:
                 or abs(expected_delta - relation.canonical_delta_px) > 1.0e-7
             ):
                 raise ValueError(
-                    "overlap relation lost its independent reversed edges"
+                    "measured adjacency lost its direct edge geometry"
                 )
         if any(
             direction * (right - left) < -1.0e-7
@@ -1376,10 +1555,10 @@ class TemplateSearchReceipt:
 
         Phase lookup and role binding are each at most ``H * R``.  Local
         relations are per adjacency (``count - 1``) per declared numeric fit
-        pass, never per candidate chain.  Five passes cover provisional fit,
-        physical rebind, one bounded adjacency refit, source-pitch rebind,
-        and its bounded adjacency refit. The method fails explicitly;
-        callers must not truncate.
+        pass, never per candidate chain.  Six passes cover provisional fit,
+        source-pitch hypothesis and physical rebind, one bounded adjacency
+        refit, and one selected source-W native-role refinement.  The method
+        fails explicitly; callers must not truncate.
         """
 
         h = self.observation_count if observation_count is None else observation_count

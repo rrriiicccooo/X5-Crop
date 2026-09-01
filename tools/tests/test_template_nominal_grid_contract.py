@@ -98,7 +98,11 @@ class TemplateNominalGridContractTest(unittest.TestCase):
             kind=SeparatorRelationKind.WIDE,
             delta_interval_px=FiniteInterval.exact(5.0),
             canonical_delta_px=5.0,
-            observation_ids=(ObservationId("separator:1"),),
+            separator_band_observation_id=ObservationId("separator:1"),
+            end_edge_observation_id=ObservationId("end:1"),
+            next_start_edge_observation_id=ObservationId("start:2"),
+            signed_gap_interval_px=FiniteInterval.exact(25.0),
+            canonical_signed_gap_px=25.0,
         )
 
         envelope, _state = solve_calibrated_nominal_grid_envelope(
@@ -122,6 +126,47 @@ class TemplateNominalGridContractTest(unittest.TestCase):
             envelope.role_positions_px,
             (40.0, 140.0, 165.0, 265.0, 285.0, 385.0),
         )
+
+    def test_direct_separator_gap_conflict_has_no_joint_grid_state(self) -> None:
+        template = phase_template(2)
+        relation = SeparatorRelation(
+            relation_ordinal=1,
+            kind=SeparatorRelationKind.WIDE,
+            delta_interval_px=FiniteInterval.exact(5.0),
+            canonical_delta_px=5.0,
+            separator_band_observation_id=ObservationId("separator:conflict"),
+            end_edge_observation_id=ObservationId("end:1"),
+            next_start_edge_observation_id=ObservationId("start:2"),
+            signed_gap_interval_px=FiniteInterval.exact(25.0),
+            canonical_signed_gap_px=25.0,
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "calibrated nominal Grid has no joint feasible state",
+        ):
+            solve_calibrated_nominal_grid_envelope(
+                prior=calibrated_nominal_grid_prior(template),
+                template=template,
+                integer_slot_offset=0,
+                role_constraints=(
+                    NominalGridRoleConstraint(
+                        role_index=1,
+                        observation_id=ObservationId("end:1"),
+                        coordinate_px=140.0,
+                        full_interval_px=FiniteInterval.exact(140.0),
+                    ),
+                    NominalGridRoleConstraint(
+                        role_index=2,
+                        observation_id=ObservationId("start:2"),
+                        coordinate_px=160.0,
+                        full_interval_px=FiniteInterval.exact(160.0),
+                    ),
+                ),
+                relations=(relation,),
+                phase_authority_px=None,
+                retained_direct_constraint_rank=2,
+            )
 
     def test_contact_is_the_exact_w_minus_pitch_grid_relation(self) -> None:
         template = phase_template(2)

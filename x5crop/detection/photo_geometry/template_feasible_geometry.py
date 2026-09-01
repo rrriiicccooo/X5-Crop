@@ -12,7 +12,12 @@ from ...domain import FiniteInterval
 from ...run_local_identity import run_local_id
 from .model import BoundaryRole, PositionSource
 from .output_model import OutputBoundaryUse
-from .template_model import ContactRelation, OverlapRelation
+from .template_model import (
+    ContactRelation,
+    OverlapRelation,
+    SeparatorRelation,
+    SeparatorRelationKind,
+)
 from .template_placement import FormatPlacement
 
 
@@ -371,13 +376,21 @@ def _sequence_system(
     gap[2] = 1.0
     topology_constraints: list[tuple[_LinearExpression, FiniteInterval]] = []
     for relation_index, relation in enumerate(relations):
-        if not isinstance(relation, (ContactRelation, OverlapRelation)):
+        measured_separator = (
+            isinstance(relation, SeparatorRelation)
+            and relation.kind != SeparatorRelationKind.NOMINAL
+        )
+        if (
+            not isinstance(relation, (ContactRelation, OverlapRelation))
+            and not measured_separator
+        ):
             continue
         signed_gap = (
             FiniteInterval.exact(0.0)
             if isinstance(relation, ContactRelation)
             else relation.signed_gap_interval_px
         )
+        assert signed_gap is not None
         expression = np.zeros(variable_count, dtype=np.float64)
         expression[1] = -1.0
         expression[2] = 1.0
