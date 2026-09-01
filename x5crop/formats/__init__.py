@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from types import MappingProxyType
 
 from ..utils import require_positive
@@ -219,6 +220,85 @@ class NominalPitchCalibrationSpec:
             str(self.minimum_measurements_per_source),
             self.outward_rounding_mm.hex(),
         )
+
+
+@dataclass(frozen=True, order=True)
+class EnclosingSupportApertureCalibrationSpec:
+    """Gold-calibrated aperture-center offset inside enclosing supports.
+
+    The offset is ``aperture_center - support_midpoint`` divided by the
+    canonical aperture H.  This is a correlated rank-zero prior: it narrows
+    the remaining aperture center only after one unique enclosing pair has
+    been selected, and never turns support lines into direct aperture edges.
+    """
+
+    calibration_id: str
+    development_gold_cohort_sha256: str
+    eligibility_revision: str
+    minimum_center_offset_ratio: float
+    maximum_center_offset_ratio: float
+    development_source_count: int
+    development_task_count: int
+    outward_rounding_ratio: float
+
+    def __post_init__(self) -> None:
+        values = (
+            self.minimum_center_offset_ratio,
+            self.maximum_center_offset_ratio,
+            self.outward_rounding_ratio,
+        )
+        if (
+            not self.calibration_id
+            or len(self.development_gold_cohort_sha256) != 64
+            or any(
+                character not in "0123456789abcdef"
+                for character in self.development_gold_cohort_sha256
+            )
+            or not self.eligibility_revision
+            or any(not math.isfinite(value) for value in values)
+            or self.minimum_center_offset_ratio
+            > self.maximum_center_offset_ratio
+            or self.development_source_count < 3
+            or self.development_task_count < self.development_source_count
+            or not 0.0 < self.outward_rounding_ratio < 1.0
+        ):
+            raise ValueError(
+                "enclosing-support aperture calibration is invalid"
+            )
+
+    @property
+    def identity_fields(self) -> tuple[str, ...]:
+        return (
+            self.calibration_id,
+            self.development_gold_cohort_sha256,
+            self.eligibility_revision,
+            self.minimum_center_offset_ratio.hex(),
+            self.maximum_center_offset_ratio.hex(),
+            str(self.development_source_count),
+            str(self.development_task_count),
+            self.outward_rounding_ratio.hex(),
+        )
+
+
+ENCLOSING_SUPPORT_APERTURE_CALIBRATION_SPEC = (
+    EnclosingSupportApertureCalibrationSpec(
+        calibration_id=(
+            "x5crop_enclosing_support_aperture_center:development_gold_"
+            "selected_unique_pair_hull_outward_0p001ratio_v1"
+        ),
+        development_gold_cohort_sha256=(
+            DEVELOPMENT_GOLD_CALIBRATION_COHORT_SHA256
+        ),
+        eligibility_revision=(
+            "x5crop_selected_unique_enclosing_support_gold_aperture_center_v1"
+        ),
+        minimum_center_offset_ratio=-0.009,
+        maximum_center_offset_ratio=0.007,
+        development_source_count=19,
+        development_task_count=19,
+        outward_rounding_ratio=0.001,
+    )
+)
 
 
 @dataclass(frozen=True, order=True)

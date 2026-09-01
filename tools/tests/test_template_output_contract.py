@@ -17,8 +17,13 @@ from x5crop.domain import (
     ObservationId,
     PositiveInterval,
 )
-from x5crop.formats import OUTPUT_PROTECTION_SPEC
+from x5crop.formats import (
+    DEVELOPMENT_GOLD_CALIBRATION_COHORT_SHA256,
+    EnclosingSupportApertureCalibrationSpec,
+    OUTPUT_PROTECTION_SPEC,
+)
 from x5crop.formats.scan_canvas import ScanCanvasPhysicalSpec
+from x5crop.detection.gate_checks import GateGap
 from x5crop.detection.evidence.scan_canvas import (
     CanvasAxisScaleIntervals,
     ScanCanvasEvidence,
@@ -51,6 +56,10 @@ from x5crop.detection.photo_geometry.template_output import (
 )
 from x5crop.detection.photo_geometry.template_feasible_geometry import (
     project_selected_placement,
+)
+from x5crop.detection.photo_geometry.template_enclosing_support_aperture import (
+    derive_enclosing_support_aperture_authority,
+    unavailable_enclosing_support_aperture_authority,
 )
 from x5crop.detection.photo_geometry.template_placement import (
     resolved_cross_support_domains_px,
@@ -387,7 +396,17 @@ def _lane(lane_id: str = "lane:test") -> SourceLaneEvidence:
     )
 
 
-def _selected_output_gate_fact(output, assessment):
+def _selected_output_gate_fact(
+    output,
+    assessment,
+    *,
+    code="selected_output_footprint",
+):
+    aperture_state = (
+        EvidenceState.NOT_APPLICABLE
+        if output.enclosing_support_aperture_risk is None
+        else output.enclosing_support_aperture_risk.aperture_authority_state
+    )
     reconstruction = SimpleNamespace(
         prepared=SimpleNamespace(
             measurement_work=SimpleNamespace(
@@ -411,6 +430,14 @@ def _selected_output_gate_fact(output, assessment):
                 output_geometry_ids=(),
             )
         ),
+        enclosing_support_aperture_authority=SimpleNamespace(
+            state=aperture_state,
+            failure_detail=(
+                "calibrated center contradicts direct support"
+                if aperture_state == EvidenceState.CONTRADICTED
+                else None
+            ),
+        ),
         direct_use_budget_assessments=(assessment,),
         holder_fill_assessment=SimpleNamespace(state=HolderFillState.FILLED),
         content_veto_facts=(),
@@ -422,7 +449,7 @@ def _selected_output_gate_fact(output, assessment):
             state=EvidenceState.SUPPORTED,
             failure=None,
         ),
-    )["selected_output_footprint"]
+    )[code]
 
 
 class TemplateOutputContractTest(unittest.TestCase):
@@ -710,6 +737,14 @@ class TemplateOutputContractTest(unittest.TestCase):
             support_span_px=248.0,
             support_position_uncertainty_px=2.0,
         )
+        placement = replace(
+            placement,
+            enclosing_support_aperture_authority=(
+                unavailable_enclosing_support_aperture_authority(
+                    placement.cross_fit
+                )
+            ),
+        )
         output = output_footprint_from_template_placement(
             placement,
             project_selected_placement(placement),
@@ -739,6 +774,85 @@ class TemplateOutputContractTest(unittest.TestCase):
             assessment.maximum_same_state_cross_alignment_padding_within_limit
         )
         self.assertEqual(assessment.state, EvidenceState.CONTRADICTED)
+
+    def test_calibrated_aperture_center_narrows_only_the_risk_envelope(
+        self,
+    ) -> None:
+        placement = _enclosing_support_placement(
+            support_span_px=248.0,
+            support_position_uncertainty_px=2.0,
+        )
+        output = output_footprint_from_template_placement(
+            placement,
+            project_selected_placement(placement),
+            lane=_lane(),
+            lane_ordinal=1,
+            layout="horizontal",
+        )
+
+        risk = output.enclosing_support_aperture_risk
+        assert risk is not None
+        self.assertEqual(risk.aperture_authority_state, EvidenceState.SUPPORTED)
+        self.assertEqual(
+            risk.center_offset_interval_px,
+            FiniteInterval(-2.0, 1.68),
+        )
+        self.assertEqual(risk.maximum_center_shift_px, 2.0)
+        self.assertLess(risk.top_expansion_px, 13.0)
+        self.assertLess(risk.bottom_expansion_px, 13.0)
+        self.assertEqual(
+            template_direct_use_budget_assessment(placement, output).state,
+            EvidenceState.SUPPORTED,
+        )
+
+    def test_non_enclosing_output_has_no_center_authority(self) -> None:
+        self.assertEqual(
+            _placement().enclosing_support_aperture_authority.state,
+            EvidenceState.NOT_APPLICABLE,
+        )
+
+    def test_calibrated_center_conflict_is_typed_before_budget(self) -> None:
+        placement = _enclosing_support_placement(support_span_px=242.0)
+        conflicting_calibration = EnclosingSupportApertureCalibrationSpec(
+            calibration_id="unit-enclosing-center-conflict",
+            development_gold_cohort_sha256=(
+                DEVELOPMENT_GOLD_CALIBRATION_COHORT_SHA256
+            ),
+            eligibility_revision="unit-conflict-v1",
+            minimum_center_offset_ratio=0.01,
+            maximum_center_offset_ratio=0.02,
+            development_source_count=3,
+            development_task_count=3,
+            outward_rounding_ratio=0.001,
+        )
+        authority = derive_enclosing_support_aperture_authority(
+            placement.cross_fit,
+            calibration=conflicting_calibration,
+        )
+        self.assertEqual(authority.state, EvidenceState.CONTRADICTED)
+        placement = replace(
+            placement,
+            enclosing_support_aperture_authority=authority,
+        )
+        output = output_footprint_from_template_placement(
+            placement,
+            project_selected_placement(placement),
+            lane=_lane(),
+            lane_ordinal=1,
+            layout="horizontal",
+        )
+        assessment = template_direct_use_budget_assessment(placement, output)
+
+        gate = _selected_output_gate_fact(
+            output,
+            assessment,
+            code="enclosing_support_aperture_consistency",
+        )
+        self.assertEqual(gate.state, EvidenceState.CONTRADICTED)
+        self.assertEqual(
+            gate.gap,
+            GateGap.ENCLOSING_SUPPORT_APERTURE_CONFLICT,
+        )
 
     def test_same_state_cross_alignment_padding_has_one_joint_limit(self) -> None:
         placement = _enclosing_support_placement(

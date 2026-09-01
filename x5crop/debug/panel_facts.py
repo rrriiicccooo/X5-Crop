@@ -619,18 +619,20 @@ def selected_output_safety_summary(detection: FinalDetection) -> str:
     topology_side_count = sum(
         item.topology_relation_id is not None for item in protections
     )
-    enclosing_center_risk = max(
-        (
-            float(output.enclosing_support_aperture_risk.maximum_center_shift_px)
-            for output in outputs
-            if output.enclosing_support_aperture_risk is not None
-        ),
-        default=0.0,
+    enclosing_risks = tuple(
+        output.enclosing_support_aperture_risk
+        for output in outputs
+        if output.enclosing_support_aperture_risk is not None
     )
     enclosing_risk = (
         ""
-        if enclosing_center_risk == 0.0
-        else f" · ENC CENTER ±{enclosing_center_risk:.1f}px"
+        if not enclosing_risks
+        else (
+            " · ENC CENTER "
+            f"[{min(item.center_offset_interval_px.minimum for item in enclosing_risks):+.1f},"
+            f"{max(item.center_offset_interval_px.maximum for item in enclosing_risks):+.1f}]px "
+            f"{enclosing_risks[0].aperture_authority_state.value.upper()}"
+        )
     )
     maximum = "N/A" if not ratios else f"{100.0 * max(ratios):.1f}%"
     source_saturations = tuple(

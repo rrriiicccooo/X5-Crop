@@ -93,10 +93,13 @@ borrow budget from one another. A directly observed continuous outer-support pai
 top/bottom when it fully encloses fixed H and its total height is no greater than `1.1H`; this direct pair does not
 depend on W/H ratio inference. That mode adds no 0.25 mm cross bleed, while per-side and joint alignment padding remain
 inside their 5% budgets. The joint term uses line-alignment padding from one feasible state only; support-position
-uncertainty remains in the per-side budgets and incompatible top/bottom extrema are never added. A true TIFF edge
-explicitly bounds sampling to source pixels that actually exist; the report says
-whether bleed alone or joint protection reached that edge, while the complete unbounded request still owns the 5%
-budget. Crossing an internal dual-lane boundary or any other authority still enters review, and no bounding is silent.
+uncertainty remains in the per-side budgets and incompatible top/bottom extrema are never added. After one unique support
+pair is selected, a gold-calibrated aperture-centre offset interval with full uncertainty may narrow the worst-case risk;
+it does not turn support into a photo boundary. Missing calibration retains the complete physically possible centre
+range. A conflict with direct support or expansion beyond 5% keeps the source in review. A true TIFF edge explicitly
+bounds sampling to source pixels that actually exist; the report says whether bleed alone or joint protection reached
+that edge, while the complete unbounded request still owns the 5% budget. Crossing an internal dual-lane boundary or any
+other authority still enters review, and no bounding is silent.
 
 Two-dimensional content is a conservative veto on the final post-bleed polygon. Picture structure inside bleed may be
 retained; reliable content crossing the final crop boundary blocks automatic output. Dust, aliasing, and tiny corner

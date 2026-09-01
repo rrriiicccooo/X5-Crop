@@ -50,6 +50,9 @@ from .template_direct_role_aperture_domain import (
     DirectRoleApertureDomainAuthority,
 )
 from .template_evidence import EvidenceUseFact
+from .template_enclosing_support_aperture import (
+    EnclosingSupportApertureAuthority,
+)
 from .template_frame_width import SourceFrameWidthAuthority
 from .template_holder_fill import HolderFillAssessment
 from .template_model import SourceFrameWidthAuthorityBasis, TemplateSpec
@@ -643,6 +646,9 @@ class TemplateLaneReconstruction:
     selected_placement: FormatPlacement | None
     output_footprints: tuple[OutputFootprint, ...]
     calibrated_nominal_grid_authority: CalibratedNominalGridAuthority
+    enclosing_support_aperture_authority: (
+        EnclosingSupportApertureAuthority
+    )
     direct_use_budget_assessments: tuple[DirectUseBudgetAssessment, ...]
     holder_fill_assessment: HolderFillAssessment | None
     content_veto_facts: tuple[ContentVetoFact, ...]
@@ -660,10 +666,32 @@ class TemplateLaneReconstruction:
             CalibratedNominalGridAuthority,
         ):
             raise TypeError("template reconstruction nominal Grid authority is invalid")
+        if not isinstance(
+            self.enclosing_support_aperture_authority,
+            EnclosingSupportApertureAuthority,
+        ):
+            raise TypeError(
+                "template reconstruction enclosing-support authority is invalid"
+            )
         if (self.selected_placement is None) != (selected_id is None):
             raise ValueError("selected placement and competition state disagree")
         if self.selected_placement is not None and self.selected_placement.placement_id != selected_id:
             raise ValueError("selected placement is not competition winner")
+        if self.selected_placement is None:
+            if (
+                self.enclosing_support_aperture_authority.state
+                != EvidenceState.NOT_APPLICABLE
+            ):
+                raise ValueError(
+                    "unselected lane cannot expose support aperture authority"
+                )
+        elif (
+            self.enclosing_support_aperture_authority
+            != self.selected_placement.enclosing_support_aperture_authority
+        ):
+            raise ValueError(
+                "selected placement changed support aperture authority"
+            )
         if (self.holder_fill_assessment is None) != (self.selected_placement is None):
             raise ValueError("holder fill must describe exactly the selected placement")
         if self.holder_fill_assessment is not None and (

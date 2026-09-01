@@ -203,6 +203,9 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                 "calibrated_nominal_grid_authority": typed_read_model(
                     lane.calibrated_nominal_grid_authority
                 ),
+                "enclosing_support_aperture_authority": typed_read_model(
+                    lane.enclosing_support_aperture_authority
+                ),
                 "direct_use_budget_assessments": typed_read_model(
                     lane.direct_use_budget_assessments
                 ),

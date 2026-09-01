@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from ...domain import Box, EvidenceState, ObservationId
+from ...domain import Box, EvidenceState, FiniteInterval, ObservationId
 from ...formats import OUTPUT_PROTECTION_SPEC
 from ...geometry.convex import (
     ConvexPolygon,
@@ -217,14 +217,7 @@ def _enclosing_support_aperture_risk(
     frame: TemplateFrame,
     projection: FeasiblePlacementProjection,
 ) -> EnclosingSupportApertureRisk | None:
-    """Bound output against every canonical-H position inside one support.
-
-    The support lines themselves are observed, but the aperture center is not.
-    For each retained support state, the top aperture can lie as far inward as
-    ``bottom - H`` and the bottom aperture as far inward as ``top + H``.  The
-    requested output and the adverse aperture position are evaluated in the
-    same state so unrelated extrema are never added.
-    """
+    """Bound output against every authorized same-state aperture center."""
 
     if (
         placement.cross_fit.boundary_use
@@ -236,10 +229,17 @@ def _enclosing_support_aperture_risk(
         placement.cross_fit.bottom_canonical_px
         - placement.cross_fit.top_canonical_px
     )
+    authority = placement.enclosing_support_aperture_authority
+    calibrated_offset = (
+        authority.effective_center_offset_px
+        if authority.state == EvidenceState.SUPPORTED
+        else None
+    )
     boundaries = _canonical_boundaries(frame)
     top_expansion = 0.0
     bottom_expansion = 0.0
-    center_shift = 0.0
+    offset_minimum = math.inf
+    offset_maximum = -math.inf
     for state in states:
         span = (
             state.bottom_at_lane_reference_px
@@ -247,9 +247,17 @@ def _enclosing_support_aperture_risk(
         )
         if span < canonical_height - 1.0e-8:
             raise ValueError("enclosing support state does not contain H")
-        center_shift = max(
-            center_shift,
-            0.5 * max(0.0, span - canonical_height),
+        slack = 0.5 * max(0.0, span - canonical_height)
+        offset = calibrated_offset or FiniteInterval(-slack, slack)
+        if offset.minimum < -slack - 1.0e-8 or offset.maximum > slack + 1.0e-8:
+            raise ValueError(
+                "calibrated aperture center leaves enclosing support state"
+            )
+        offset_minimum = min(offset_minimum, offset.minimum)
+        offset_maximum = max(offset_maximum, offset.maximum)
+        support_midpoint = 0.5 * (
+            state.top_at_lane_reference_px
+            + state.bottom_at_lane_reference_px
         )
         requested = _state_footprint(
             placement,
@@ -264,14 +272,18 @@ def _enclosing_support_aperture_risk(
         top_line = boundary_line_at_state(
             boundaries[BoundaryRole.TOP],
             position_px=(
-                state.bottom_at_lane_reference_px - canonical_height
+                support_midpoint
+                + offset.maximum
+                - 0.5 * canonical_height
             ),
             enclosing_support_slope=slope,
         )
         bottom_line = boundary_line_at_state(
             boundaries[BoundaryRole.BOTTOM],
             position_px=(
-                state.top_at_lane_reference_px + canonical_height
+                support_midpoint
+                + offset.minimum
+                + 0.5 * canonical_height
             ),
             enclosing_support_slope=slope,
         )
@@ -291,9 +303,16 @@ def _enclosing_support_aperture_risk(
                 requested,
             ),
         )
+    center_offset = FiniteInterval(offset_minimum, offset_maximum)
     return EnclosingSupportApertureRisk(
+        aperture_authority_id=authority.authority_id,
+        aperture_authority_state=authority.state,
         canonical_height_px=canonical_height,
-        maximum_center_shift_px=center_shift,
+        center_offset_interval_px=center_offset,
+        maximum_center_shift_px=max(
+            abs(center_offset.minimum),
+            abs(center_offset.maximum),
+        ),
         top_expansion_px=top_expansion,
         bottom_expansion_px=bottom_expansion,
         feasible_state_count=len(states),

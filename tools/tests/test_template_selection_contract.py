@@ -201,9 +201,13 @@ class TemplateSelectionContractTest(unittest.TestCase):
                 "calibrated_nominal_grid_authority": (
                     "selected_output_footprint",
                 ),
+                "enclosing_support_aperture_consistency": (
+                    "selected_output_footprint",
+                ),
                 "direct_use_budget": (
                     "selected_output_footprint",
                     "calibrated_nominal_grid_authority",
+                    "enclosing_support_aperture_consistency",
                 ),
             },
         )

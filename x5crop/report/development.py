@@ -213,6 +213,9 @@ def development_report_facts(
                     ),
                 },
                 "content_veto_facts": typed_read_model(lane.content_veto_facts),
+                "enclosing_support_aperture_authority": typed_read_model(
+                    lane.enclosing_support_aperture_authority
+                ),
                 "holder_fill_assessment": typed_read_model(
                     lane.holder_fill_assessment
                 ),

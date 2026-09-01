@@ -21,6 +21,9 @@ from .output_model import OutputFootprint, OutputSlotIdentity
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import CrossFitStatus
 from .template_feasible_geometry import project_selected_placement
+from .template_enclosing_support_aperture import (
+    not_applicable_enclosing_support_aperture_authority,
+)
 from .template_gate import (
     build_template_gate,
     supported,
@@ -179,6 +182,7 @@ def _empty_result(
         "calibrated_nominal_grid_authority": unavailable(
             GateGap.CALIBRATED_NOMINAL_GRID_AUTHORITY_UNAVAILABLE
         ),
+        "enclosing_support_aperture_consistency": supported(),
         "direct_use_budget": unavailable(GateGap.DIRECT_USE_BUDGET_UNAVAILABLE),
     }
     return PhotoGeometryDetectionResult(None, (), selection, (), facts)
@@ -342,6 +346,11 @@ def reconstruct_photo_geometry(
                 item.geometry_id for item in output_footprints
             ),
         )
+        enclosing_support_aperture_authority = (
+            not_applicable_enclosing_support_aperture_authority()
+            if selected is None
+            else selected.enclosing_support_aperture_authority
+        )
         holder_fill = (
             None
             if selected is None
@@ -368,6 +377,9 @@ def reconstruct_photo_geometry(
                 selected_placement=selected,
                 output_footprints=output_footprints,
                 calibrated_nominal_grid_authority=nominal_grid_authority,
+                enclosing_support_aperture_authority=(
+                    enclosing_support_aperture_authority
+                ),
                 direct_use_budget_assessments=budgets,
                 holder_fill_assessment=holder_fill,
                 content_veto_facts=(

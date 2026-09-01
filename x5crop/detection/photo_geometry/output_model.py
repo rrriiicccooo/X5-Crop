@@ -288,17 +288,19 @@ class BoundaryProtectionFact:
 
 @dataclass(frozen=True)
 class EnclosingSupportApertureRisk:
-    """Worst same-state output distance from any enclosed aperture center.
+    """Worst same-state output distance from the authorized aperture center.
 
-    An enclosing pair proves that the aperture is inside two material
-    supports, but it does not prove that the aperture is centered between
-    them.  ``top_expansion_px`` and ``bottom_expansion_px`` therefore measure
-    the requested output against the most adverse canonical-H placement still
-    contained by each feasible support state.  They are safety distances, not
-    mutations of the output polygon.
+    A supported calibrated authority narrows the aperture-center offset from
+    the support midpoint.  If that authority is unavailable or contradicted,
+    the risk conservatively retains every canonical-H position physically
+    contained by the support.  These are safety distances, not output
+    mutations.
     """
 
+    aperture_authority_id: str
+    aperture_authority_state: EvidenceState
     canonical_height_px: float
+    center_offset_interval_px: FiniteInterval
     maximum_center_shift_px: float
     top_expansion_px: float
     bottom_expansion_px: float
@@ -312,7 +314,10 @@ class EnclosingSupportApertureRisk:
             self.bottom_expansion_px,
         )
         if (
-            any(not math.isfinite(value) for value in values)
+            not self.aperture_authority_id
+            or not isinstance(self.aperture_authority_state, EvidenceState)
+            or not isinstance(self.center_offset_interval_px, FiniteInterval)
+            or any(not math.isfinite(value) for value in values)
             or self.canonical_height_px <= 0.0
             or self.maximum_center_shift_px < 0.0
             or self.top_expansion_px < 0.0
@@ -320,6 +325,14 @@ class EnclosingSupportApertureRisk:
             or self.feasible_state_count <= 0
         ):
             raise ValueError("enclosing-support aperture risk is invalid")
+        expected_shift = max(
+            abs(self.center_offset_interval_px.minimum),
+            abs(self.center_offset_interval_px.maximum),
+        )
+        if abs(self.maximum_center_shift_px - expected_shift) > 1.0e-8:
+            raise ValueError(
+                "enclosing-support center shift disagrees with its interval"
+            )
 
 
 @dataclass(frozen=True)

@@ -1078,13 +1078,24 @@ uncertainty 与 residual。
 之和不超过 `5%H`。Support 的位置不确定性已经进入逐侧完整 expansion，不能再次算入 alignment padding；
 也不能把两个不同可行状态的 top/bottom 极值相加。Start/end 使用正常 sequence bleed 和各自 5% 预算。
 
-Enclosing support 只证明真实 aperture 位于两条 support 之间，不证明 fixed `H` 的 aperture 在其中居中。
-因此每个 `JointFrameState` 还必须同时评估该状态的 requested footprint 与其中最不利的合法 aperture：top
-边界可以位于 `bottom_support - H`，bottom 边界可以位于 `top_support + H`。Typed
-`EnclosingSupportApertureRisk` 保存 canonical `H`、最大中心平移、top/bottom 最坏 expansion 与可行状态数；
-这两项逐侧 expansion 取代 support line 自身距离参与 cross 预算，但不修改 output polygon。Requested
-footprint 与最不利 aperture 必须来自同一状态，既不能把互斥状态的极值相加，也不能假设未知中心恰好位于
-最有利位置。
+Enclosing support 本身只证明真实 aperture 位于两条 support 之间，不能证明 fixed `H` 的 aperture 居中。
+唯一 pair 已被选定后，`EnclosingSupportApertureAuthority` 可以用黄金集校准的相关先验收窄剩余中心偏移：
+
+```text
+center_offset_ratio = (gold_aperture_center - support_midpoint) / H
+```
+
+当前 calibration 只纳入 19 个 selected unique pair、且黄金 top/bottom 均为 `directly_visible` 的 source；
+同源 count 先取中位数，再对 source hull 以 `0.001H` 向外量化，得到 `[-0.009H, +0.007H]`。该 authority
+为 rank 0 correlated inference：不把 support 变成 direct aperture、不增加 constraint rank、不参与 pair 或
+placement 选择，也不修改 output polygon。每个 `JointFrameState` 将该区间与当前 support 可容纳的物理中心
+区间求交；无交集产生 typed `enclosing_support_aperture_center_conflict`。Calibration 不可用时仍保留原有
+完整物理区间，不能静默假设居中。
+
+`EnclosingSupportApertureRisk` 保存 calibration identity/state、实际中心偏移区间、canonical `H`、最大中心
+平移、top/bottom 最坏 expansion 与可行状态数。Requested footprint 与最不利 aperture 必须来自同一状态；
+既不能把互斥状态的极值相加，也不能挑选最有利中心。两项逐侧 expansion 取代 support line 自身距离参与
+cross 预算，但不改变正式采样 geometry。
 
 Support 的共享斜率属于同一个 `JointFrameState`，已经进入该状态的 boundary line 与联合 footprint。
 局部 residual 只保留实测 trace 相对这条同状态直线的 outward departure；超出实测 trace 域时，也只传播
@@ -1092,9 +1103,11 @@ Support 的共享斜率属于同一个 `JointFrameState`，已经进入该状态
 水平位置与其它 trace 直接比较。`BoundaryProtectionFact.local_boundary_residual_px` 与
 `maximum_same_state_cross_alignment_padding_px` 是这项合同的唯一报告与 Debug 表达。
 
-| enclosing support 状态 | 结果 |
+| enclosing support / aperture-center 状态 | 结果 |
 |---|---|
-| span `<= 1.1H`，未知 aperture 中心的逐侧最坏 expansion 与其它两边预算均成立，同一状态 alignment padding `<= 5%H` | `supported` |
+| unique support + calibration 与物理 containment 有交集，逐侧最坏 expansion 与其它预算均成立 | `supported` |
+| calibration 不可用，但完整物理中心区间的最坏 expansion 仍成立 | `supported`，保留 `unavailable` provenance |
+| calibration 与直接 support 的物理中心区间无交集 | `enclosing_support_aperture_center_conflict` |
 | 任一边完整 expansion 超过自己的 5% | `direct_use_budget_exceeded` |
 | support span 超过 `1.1H` | `direct_use_budget_exceeded` |
 | 每侧各自成立，但同一状态 alignment padding 合计超过 `5%H` | `direct_use_budget_exceeded` |
@@ -1154,6 +1167,7 @@ complete/selected placement 后重复建立同义 Gate fact。它不读取 deske
 - `aperture_aspect_ratio_physical_prior_conflict`
 - `aperture_aspect_ratio_direct_conflict`
 - `aperture_aspect_ratio_budget_exhausted`
+- `enclosing_support_aperture_center_conflict`
 - `direct_use_budget_exceeded`
 - `source_lane_authority_unavailable`
 
@@ -1198,7 +1212,8 @@ Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决
 - aspect calibration identity、`R_raw/R_guarded`、`gW/gH`、W 与推导 H interval、cross 消费状态、
   输出预算和 typed failure；
 - selected-only OutputFootprint，以分帧颜色半透明填充最终 required polygon，不另画白色虚线框，
-  并显示四边 bleed/联合 expansion/预算；enclosing support 另显示未知 aperture 中心平移与同状态逐侧风险；
+  并显示四边 bleed/联合 expansion/预算；enclosing support 另显示 calibration state、有效中心偏移区间与
+  同状态逐侧风险；
 - `DESKEW APPLIED`、`ROTATION NOT NEEDED` 或 typed `DESKEW SKIPPED`；
 - 第一个 blocking Gate gap，或全部事实已支持。
 
@@ -1263,7 +1278,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 
 | 路径 | 唯一职责 |
 |---|---|
-| `x5crop/formats/` | format 设计 W/H、统一混合 W/H compatibility、分格式 raw aspect calibration、gap 搜索中心、holder count 与输出保护常量 |
+| `x5crop/formats/` | format 设计 W/H、统一混合 W/H compatibility、分格式 raw aspect calibration、enclosing-support aperture-center calibration、gap 搜索中心、holder count 与输出保护常量 |
 | `x5crop/configuration/`、`x5crop/runtime/` | format/count/deskew mode 输入、matched-holder resolution 与 source workflow |
 | `x5crop/detection/source_core.py`、`evidence/scan_canvas.py` | source/lane 与 matched-holder authority |
 | `photo_geometry/coarse_strip_support.py`、`coarse_enclosing_model.py`、`coarse_enclosing_support.py` | role-free coarse query、sharp/broad 固定 trace view、粗片带 interval、source-wide 双侧 track、pair resolution 与 receipt |
@@ -1288,6 +1303,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/template_outer_frame_authority.py` | 带 Grid 推断时首尾输出 Frame 的直接长轴角色证明 |
 | `photo_geometry/template_alignment_diagnostic.py` | theoretical-vs-observed residual 的只读诊断 |
 | `photo_geometry/interval_math.py`、`template_cross*.py`、`template_cross_support.py` | 共享 interval 运算、source H 校准、局部 top/bottom 方向闭合、typed producer bound 与 enclosing support |
+| `photo_geometry/template_enclosing_support_aperture.py` | selected unique enclosing support 内的黄金校准 aperture-center authority、物理 containment 交集与 typed conflict；rank 0，不选 geometry |
 | `photo_geometry/template_placement.py`、`template_selection.py` | source-axis frame 的一次 compose、显式 overlap 的 cross-support 去重与离散 winner/runner |
 | `photo_geometry/template_holder_fill.py` | selected PhotoGroupOuter 与 W-only fill assessment |
 | `photo_geometry/content_*.py` | 最终 post-bleed polygon 上的二维 negative veto |

@@ -21,6 +21,9 @@ from x5crop.detection.photo_geometry.template_model import (
     PhaseLatticeAuthority,
     TemplateSpec,
 )
+from x5crop.detection.photo_geometry.template_enclosing_support_aperture import (
+    not_applicable_enclosing_support_aperture_authority,
+)
 from x5crop.detection.photo_geometry.template_nominal_grid_authority import (
     assess_calibrated_nominal_grid_authority,
 )
@@ -59,6 +62,9 @@ def _unresolved_result() -> PhotoGeometryDetectionResult:
                 placement_id=None,
                 output_geometry_ids=(),
             )
+        ),
+        enclosing_support_aperture_authority=(
+            not_applicable_enclosing_support_aperture_authority()
         ),
         direct_use_budget_assessments=(),
         holder_fill_assessment=None,
@@ -180,6 +186,9 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
                     reason="direct counterevidence rejects the nominal Grid",
                 )
             ),
+            enclosing_support_aperture_authority=(
+                not_applicable_enclosing_support_aperture_authority()
+            ),
             direct_use_budget_assessments=(),
             holder_fill_assessment=None,
             content_veto_facts=(),
@@ -214,6 +223,9 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
                         placement_id=None,
                         output_geometry_ids=(),
                     )
+                ),
+                enclosing_support_aperture_authority=(
+                    not_applicable_enclosing_support_aperture_authority()
                 ),
                 direct_use_budget_assessments=(),
                 holder_fill_assessment=None,

@@ -19,6 +19,7 @@ CANDIDATE_GATE_CHECK_CODES = (
     "source_lane_authority",
     "selected_output_footprint",
     "calibrated_nominal_grid_authority",
+    "enclosing_support_aperture_consistency",
     "direct_use_budget",
 )
 

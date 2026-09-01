@@ -164,6 +164,32 @@ def build_template_gate(
         )
         else supported()
     )
+    support_aperture_authorities = tuple(
+        lane.enclosing_support_aperture_authority
+        for lane in reconstructions
+    )
+    support_aperture_conflict = next(
+        (
+            item
+            for item in support_aperture_authorities
+            if item.state == EvidenceState.CONTRADICTED
+        ),
+        None,
+    )
+    support_aperture_fact = (
+        contradicted(
+            GateGap.ENCLOSING_SUPPORT_APERTURE_CONFLICT,
+            failure_fact(
+                GateGap.ENCLOSING_SUPPORT_APERTURE_CONFLICT,
+                detail=(
+                    support_aperture_conflict.failure_detail
+                    or GateGap.ENCLOSING_SUPPORT_APERTURE_CONFLICT.value
+                ),
+            ),
+        )
+        if support_aperture_conflict is not None
+        else supported()
+    )
     selection_failure = source_selection.failure
     selection_gap = (
         selection_failure.gap
@@ -225,6 +251,9 @@ def build_template_gate(
             else unavailable(GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE)
         ),
         "calibrated_nominal_grid_authority": nominal_grid_fact,
+        "enclosing_support_aperture_consistency": (
+            support_aperture_fact
+        ),
         "direct_use_budget": budget_fact,
     }
     return facts

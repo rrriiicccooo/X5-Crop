@@ -67,6 +67,9 @@ class GateGap(str, Enum):
     APERTURE_ASPECT_RATIO_BUDGET_EXHAUSTED = (
         "aperture_aspect_ratio_budget_exhausted"
     )
+    ENCLOSING_SUPPORT_APERTURE_CONFLICT = (
+        "enclosing_support_aperture_center_conflict"
+    )
     SHARED_AUTHORITY_UNAVAILABLE = "shared_authority_unavailable"
     CONTENT_VETO_REJECTED = "content_veto_rejected"
     ADJACENCY_RELATION_UNRESOLVED = "adjacency_relation_unresolved"
@@ -105,6 +108,9 @@ class MinimumMissingFact(str, Enum):
     PITCH_CLOSURE = "pitch_closure"
     CROSS_POSITION = "cross_position"
     APERTURE_ASPECT_RATIO_AUTHORITY = "aperture_aspect_ratio_authority"
+    ENCLOSING_SUPPORT_APERTURE_CENTER = (
+        "enclosing_support_aperture_center"
+    )
     REGISTERED_QUERY_COVERAGE = "registered_query_coverage"
     ADJACENCY_RELATION = "adjacency_relation"
     ADJACENCY_CONTINUITY = "adjacency_continuity"
@@ -293,6 +299,11 @@ def failure_fact(
             MinimumMissingFact.DIRECT_USE_PRECISION,
             RecoveryAction.REVIEW_PLACEMENT,
         ),
+        GateGap.ENCLOSING_SUPPORT_APERTURE_CONFLICT: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.ENCLOSING_SUPPORT_APERTURE_CENTER,
+            RecoveryAction.REVIEW_PLACEMENT,
+        ),
         GateGap.SHARED_AUTHORITY_UNAVAILABLE: (
             FailureRecovery.UNRECOVERABLE,
             MinimumMissingFact.SOURCE_PHYSICAL_COMPATIBILITY,
@@ -393,9 +404,13 @@ GATE_CHECK_DEPENDENCIES: dict[str, tuple[str, ...]] = {
     "calibrated_nominal_grid_authority": (
         "selected_output_footprint",
     ),
+    "enclosing_support_aperture_consistency": (
+        "selected_output_footprint",
+    ),
     "direct_use_budget": (
         "selected_output_footprint",
         "calibrated_nominal_grid_authority",
+        "enclosing_support_aperture_consistency",
     ),
 }
 

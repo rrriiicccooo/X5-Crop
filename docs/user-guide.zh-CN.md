@@ -84,9 +84,11 @@ top/bottom = 0.25 mm
 若直接观察到一对连续 outer support 完整包住固定 H，且总高度不超过 `1.1H`，它可以替代不可用的
 aperture top/bottom；这对直接支撑不依赖 W/H 比例推导。此时不再添加 0.25 mm cross bleed，但逐侧与
 同一可行状态的联合对齐 padding 仍分别受 5% 预算保护；support 位置不确定性只计入逐侧预算，不会在
-联合项中重复计算，也不会相加不同状态的两侧极值。真实 TIFF 外缘会显式限定到实际存在的源像素，并在报告中区分是
-bleed 还是联合保护触及边界；完整未限定 footprint 仍负责 5% 预算。双 lane 内部边界或其它 authority
-越界继续进入 review，任何限定都不会静默发生。
+联合项中重复计算，也不会相加不同状态的两侧极值。唯一 support pair 已选定后，程序可用黄金集校准且
+保留不确定性的 aperture-center 偏移区间收窄最坏风险；它不会把 support 冒充照片边界。Calibration
+不可用时仍检查完整物理中心区间，与直接 support 冲突或完整 expansion 超过 5% 时进入 review。真实 TIFF
+外缘会显式限定到实际存在的源像素，并在报告中区分是 bleed 还是联合保护触及边界；完整未限定
+footprint 仍负责 5% 预算。双 lane 内部边界或其它 authority 越界继续进入 review，任何限定都不会静默发生。
 
 二维内容只在最终 post-bleed polygon 上作保守否决：bleed 内的画面可以保留；可靠内容越过最终裁切边
 会阻止自动输出。尘点、别名和极小角点接触不会单独移动边界或选择另一个 placement。

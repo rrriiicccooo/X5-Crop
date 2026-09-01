@@ -137,6 +137,16 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   19 unsafe。S007/S026/S040/S110 从迟到的 `fixed_template_mismatch` 前移为准确的 topology root；S045/S109
   先前的 candidate 对黄金虽安全，但完整 W 状态未闭合，因此保守 Review。Development diagnostic mean 为
   3.894 秒；不新增 TIFF query、detector、candidate、score 或样片规则。
+- Selected unique enclosing support 现在由唯一 `EnclosingSupportApertureAuthority` 收窄剩余 aperture 中心
+  偏移。Calibration 使用 19 个黄金 top/bottom 均直接可见的 source，以同源中位数、source hull 和
+  `0.001H` 向外量化得到 `[-0.009H, +0.007H]`；它是 rank 0 相关推断，不选择 geometry、不把 support
+  冒充 direct aperture，也不修改 output polygon。Calibration 不可用时保留完整物理中心包络；与直接
+  support 无交集时产生 typed `enclosing_support_aperture_center_conflict`。Report revision 更新为
+  `x5crop_v5_template_report_47`。完整 110-task 黄金无分析错误且 `unsafe_approved_auto = 0`；S059 从安全
+  Review 转为安全 auto，合计 16 auto / 94 Review，nominal 为 16 / 80，14 个 challenge 仍全部安全 Review。
+  Candidate 分布仍为 72 unavailable / 19 safe / 19 unsafe；S030/S058 的真实预算缺口和 S012 的危险
+  candidate 均未被掩盖。Development diagnostic mean 为 3.899 秒，不冒充正式 performance receipt；不新增
+  TIFF query、detector、candidate、score 或样片规则。
 - 对 96 个 nominal 的同源机制对照显示：v4.2.8 有 80 个 auto，但其中 70 个是黄金危险自动裁切；只有
   11 个 v4 geometry 安全。v4 安全而 V5 Review 的 9 个 task 是下一步能力迁移样本，当前分别落在
   aspect/cross、fixed-template/topology、content veto、Grid conflict、phase ambiguity 与 output budget

@@ -29,6 +29,7 @@ from x5crop.detection.source_core import SourceStripValidationDomain
 from x5crop.domain import Box
 from x5crop.formats import (
     APERTURE_COMPATIBILITY_SPEC,
+    ENCLOSING_SUPPORT_APERTURE_CALIBRATION_SPEC,
     format_spec,
 )
 from x5crop.formats.scan_canvas import scan_canvas_specs_for_format
@@ -47,8 +48,8 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v12"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v13"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v13"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v14"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
 SOURCE_TIMEOUT_SECONDS = 600
@@ -825,6 +826,66 @@ def cross_boundary_diagnostics(
     return tuple(results)
 
 
+def enclosing_support_aperture_center_observation(
+    geometry: dict[str, Any],
+    lane: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Recompute one eligible gold aperture-center offset observation."""
+
+    selected = _selected_placement(lane)
+    if selected is None:
+        return None
+    cross = selected["cross_fit"]
+    if cross["boundary_use"] != "enclosing_support_pair":
+        return None
+    support = cross["enclosing_support_pair"]
+    if not isinstance(support, dict):
+        raise ValueError("selected enclosing output lost its support pair")
+    shared = geometry["shared_edges"]
+    if (
+        len(shared) != 2
+        or any(line["review_basis"] != "directly_visible" for line in shared)
+    ):
+        return None
+    reference_trace = float(support["reference_trace_px"])
+    gold_top = line_axis_position(
+        geometry,
+        shared[0],
+        axis="cross",
+        reference_trace_px=reference_trace,
+    )
+    gold_bottom = line_axis_position(
+        geometry,
+        shared[1],
+        axis="cross",
+        reference_trace_px=reference_trace,
+    )
+    canonical_height = (
+        float(cross["bottom_canonical_px"])
+        - float(cross["top_canonical_px"])
+    )
+    if gold_bottom <= gold_top or canonical_height <= 0.0:
+        raise ValueError("gold aperture-center calibration geometry is invalid")
+    support_midpoint = 0.5 * (
+        float(support["top_canonical_px"])
+        + float(support["bottom_canonical_px"])
+    )
+    gold_center = 0.5 * (gold_top + gold_bottom)
+    return {
+        "eligibility_revision": (
+            ENCLOSING_SUPPORT_APERTURE_CALIBRATION_SPEC
+            .eligibility_revision
+        ),
+        "reference_trace_px": reference_trace,
+        "support_midpoint_px": support_midpoint,
+        "gold_aperture_center_px": gold_center,
+        "canonical_height_px": canonical_height,
+        "center_offset_ratio": (
+            (gold_center - support_midpoint) / canonical_height
+        ),
+    }
+
+
 def _command(record: dict[str, Any], output: Path) -> list[str]:
     return [
         sys.executable,
@@ -990,6 +1051,15 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         nominal_authority = production_lanes[0][
             "calibrated_nominal_grid_authority"
         ]
+        enclosing_support_aperture_authority = production_lanes[0][
+            "enclosing_support_aperture_authority"
+        ]
+        enclosing_support_aperture_center = (
+            enclosing_support_aperture_center_observation(
+                record["confirmed_geometry"],
+                development_lanes[0],
+            )
+        )
         phase_receipt = phase_competition["receipt"]
         enclosing_resolution = development_lanes[0]["search"][
             "coarse_strip_support"
@@ -1087,6 +1157,15 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         "calibrated_nominal_grid_authority_failure_kind": nominal_authority[
             "failure_kind"
         ],
+        "enclosing_support_aperture_authority_state": (
+            enclosing_support_aperture_authority["state"]
+        ),
+        "enclosing_support_aperture_authority_failure_kind": (
+            enclosing_support_aperture_authority["failure_kind"]
+        ),
+        "enclosing_support_aperture_center_observation": (
+            enclosing_support_aperture_center
+        ),
         "candidate_nominal_grid_solve_count": phase_receipt[
             "candidate_nominal_grid_solve_count"
         ],
@@ -1269,14 +1348,14 @@ def _unique_nominal_pitch_diagnostics(
 
 
 def _round_outward(value: float, quantum: float) -> float:
-    if min(value, quantum) <= 0.0:
-        raise ValueError("calibration rounding requires positive values")
+    if not math.isfinite(value) or not math.isfinite(quantum) or quantum <= 0.0:
+        raise ValueError("calibration rounding requires a finite value and quantum")
     return math.ceil((value - 1.0e-12) / quantum) * quantum
 
 
 def _round_outward_lower(value: float, quantum: float) -> float:
-    if min(value, quantum) <= 0.0:
-        raise ValueError("calibration rounding requires positive values")
+    if not math.isfinite(value) or not math.isfinite(quantum) or quantum <= 0.0:
+        raise ValueError("calibration rounding requires a finite value and quantum")
     return math.floor((value + 1.0e-12) / quantum) * quantum
 
 
@@ -1866,6 +1945,133 @@ def _physical_format_summary(
     }
 
 
+def _enclosing_support_aperture_center_calibration(
+    records: Sequence[dict[str, Any]],
+    *,
+    cohort_sha256: str | None,
+) -> dict[str, Any]:
+    configured = ENCLOSING_SUPPORT_APERTURE_CALIBRATION_SPEC
+    eligible = tuple(
+        record
+        for record in records
+        if record["enclosing_support_aperture_center_observation"] is not None
+    )
+    by_source: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for record in eligible:
+        by_source[str(record["source_sha256"])].append(record)
+    sources = []
+    for source_sha256, members in sorted(by_source.items()):
+        ratios = tuple(
+            float(
+                member["enclosing_support_aperture_center_observation"][
+                    "center_offset_ratio"
+                ]
+            )
+            for member in members
+        )
+        sources.append(
+            {
+                "source_sha256": source_sha256,
+                "sample_ids": sorted(
+                    str(member["sample_id"]) for member in members
+                ),
+                "format_ids": sorted(
+                    {str(member["format_id"]) for member in members}
+                ),
+                "center_offset_ratio": statistics.median(ratios),
+            }
+        )
+    raw_minimum = (
+        None
+        if not sources
+        else min(float(item["center_offset_ratio"]) for item in sources)
+    )
+    raw_maximum = (
+        None
+        if not sources
+        else max(float(item["center_offset_ratio"]) for item in sources)
+    )
+    expected_minimum = (
+        None
+        if raw_minimum is None
+        else _round_outward_lower(
+            raw_minimum,
+            configured.outward_rounding_ratio,
+        )
+    )
+    expected_maximum = (
+        None
+        if raw_maximum is None
+        else _round_outward(
+            raw_maximum,
+            configured.outward_rounding_ratio,
+        )
+    )
+    matches = (
+        cohort_sha256 == configured.development_gold_cohort_sha256
+        and len(sources) == configured.development_source_count
+        and len(eligible) == configured.development_task_count
+        and all(
+            member["enclosing_support_aperture_center_observation"][
+                "eligibility_revision"
+            ]
+            == configured.eligibility_revision
+            for member in eligible
+        )
+        and math.isclose(
+            float(expected_minimum),
+            configured.minimum_center_offset_ratio,
+        )
+        and math.isclose(
+            float(expected_maximum),
+            configured.maximum_center_offset_ratio,
+        )
+    )
+    return {
+        "method": (
+            "selected unique enclosing-support pair; directly visible gold "
+            "top/bottom; source median center offset divided by canonical H; "
+            "source hull; outward quantization"
+        ),
+        "eligibility_revision": configured.eligibility_revision,
+        "outward_rounding_ratio": configured.outward_rounding_ratio,
+        "eligible_source_count": len(sources),
+        "eligible_task_count": len(eligible),
+        "format_source_counts": dict(
+            sorted(
+                Counter(
+                    format_id
+                    for source in sources
+                    for format_id in source["format_ids"]
+                ).items()
+            )
+        ),
+        "source_center_offset_ratio": _distribution(
+            float(item["center_offset_ratio"]) for item in sources
+        ),
+        "derived_raw_interval": {
+            "minimum": raw_minimum,
+            "maximum": raw_maximum,
+        },
+        "derived_outward_interval": {
+            "minimum": expected_minimum,
+            "maximum": expected_maximum,
+        },
+        "registered_calibration_id": configured.calibration_id,
+        "registered_cohort_sha256": (
+            configured.development_gold_cohort_sha256
+        ),
+        "actual_cohort_sha256": cohort_sha256,
+        "registered_interval": {
+            "minimum": configured.minimum_center_offset_ratio,
+            "maximum": configured.maximum_center_offset_ratio,
+        },
+        "registered_source_count": configured.development_source_count,
+        "registered_task_count": configured.development_task_count,
+        "configured_matches_calibration": matches,
+    }
+
+
 def _physical_prior_validation(
     records: Sequence[dict[str, Any]],
     *,
@@ -1902,6 +2108,12 @@ def _physical_prior_validation(
         ),
         "aperture_compatibility_calibration": (
             _aperture_compatibility_calibration(diagnostics)
+        ),
+        "enclosing_support_aperture_center_calibration": (
+            _enclosing_support_aperture_center_calibration(
+                records,
+                cohort_sha256=cohort_sha256,
+            )
         ),
         "formats": {
             format_id: _physical_format_summary(
@@ -2253,6 +2465,16 @@ def _summary(
             records,
             "calibrated_nominal_grid_authority_failure_kind",
         ),
+        "enclosing_support_aperture_authority_state_counts": _counter(
+            records,
+            "enclosing_support_aperture_authority_state",
+        ),
+        "enclosing_support_aperture_authority_failure_kind_counts": (
+            _counter(
+                records,
+                "enclosing_support_aperture_authority_failure_kind",
+            )
+        ),
         "candidate_nominal_grid_solve_count": sum(
             int(record["candidate_nominal_grid_solve_count"])
             for record in records
@@ -2453,6 +2675,9 @@ def run_gold_analysis(
                 "calibrated_nominal_grid_evidence_failure_kind": None,
                 "calibrated_nominal_grid_authority_state": None,
                 "calibrated_nominal_grid_authority_failure_kind": None,
+                "enclosing_support_aperture_authority_state": None,
+                "enclosing_support_aperture_authority_failure_kind": None,
+                "enclosing_support_aperture_center_observation": None,
                 "candidate_nominal_grid_solve_count": 0,
                 "candidate_nominal_grid_solve_success_count": 0,
                 "selected_direct_role_projection_evaluation_count": 0,

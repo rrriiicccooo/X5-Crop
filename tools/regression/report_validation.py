@@ -131,6 +131,24 @@ _SOURCE_FRAME_WIDTH_FAILURE_KINDS = {
     "source_width_closure_unavailable",
     "physical_width_conflict",
 }
+_ENCLOSING_SUPPORT_APERTURE_AUTHORITY_FIELDS = {
+    "authority_id",
+    "state",
+    "calibration_id",
+    "calibration_cohort_sha256",
+    "eligibility_revision",
+    "support_observation_ids",
+    "support_span_px",
+    "canonical_height_px",
+    "calibrated_center_offset_ratio",
+    "calibrated_center_offset_px",
+    "physical_center_offset_px",
+    "effective_center_offset_px",
+    "failure_kind",
+    "failure_detail",
+    "correlated_inference",
+    "independent_constraint_rank",
+}
 
 _NOMINAL_GRID_EVIDENCE_FIELDS = {
     "evidence_id",
@@ -454,6 +472,112 @@ def _valid_interval(value: object) -> bool:
         and _finite_number(value["maximum"])
         and float(value["minimum"]) <= float(value["maximum"])
     )
+
+
+def _validate_enclosing_support_aperture_authority(
+    value: object,
+) -> None:
+    if (
+        not isinstance(value, dict)
+        or set(value) != _ENCLOSING_SUPPORT_APERTURE_AUTHORITY_FIELDS
+        or not isinstance(value["authority_id"], str)
+        or not value["authority_id"]
+        or value["state"]
+        not in {"supported", "not_applicable", "unavailable", "contradicted"}
+        or not isinstance(value["support_observation_ids"], list)
+        or len(set(value["support_observation_ids"]))
+        != len(value["support_observation_ids"])
+        or value["correlated_inference"] is not True
+        or value["independent_constraint_rank"] != 0
+    ):
+        raise ValueError("enclosing-support aperture authority is invalid")
+    optional = (
+        "calibration_id",
+        "calibration_cohort_sha256",
+        "eligibility_revision",
+        "support_span_px",
+        "canonical_height_px",
+        "calibrated_center_offset_ratio",
+        "calibrated_center_offset_px",
+        "physical_center_offset_px",
+        "effective_center_offset_px",
+    )
+    if value["state"] == "not_applicable":
+        if (
+            any(value[key] is not None for key in optional)
+            or value["support_observation_ids"]
+            or value["failure_kind"] is not None
+            or value["failure_detail"] is not None
+        ):
+            raise ValueError(
+                "non-enclosing output carries aperture authority"
+            )
+        return
+    support_span = value["support_span_px"]
+    height = value["canonical_height_px"]
+    if (
+        len(value["support_observation_ids"]) < 2
+        or not _valid_interval(support_span)
+        or not _finite_number(height)
+        or float(height) <= 0.0
+        or float(support_span["minimum"]) <= float(height)
+        or not _valid_interval(value["physical_center_offset_px"])
+    ):
+        raise ValueError("enclosing-support physical authority is invalid")
+    if value["state"] == "unavailable":
+        if (
+            any(
+                value[key] is not None
+                for key in (
+                    "calibration_id",
+                    "calibration_cohort_sha256",
+                    "eligibility_revision",
+                    "calibrated_center_offset_ratio",
+                    "calibrated_center_offset_px",
+                    "effective_center_offset_px",
+                )
+            )
+            or value["failure_kind"]
+            != "enclosing_support_aperture_calibration_unavailable"
+            or not isinstance(value["failure_detail"], str)
+            or not value["failure_detail"]
+        ):
+            raise ValueError(
+                "unavailable enclosing-support calibration is invalid"
+            )
+        return
+    if (
+        not isinstance(value["calibration_id"], str)
+        or not value["calibration_id"]
+        or not isinstance(value["calibration_cohort_sha256"], str)
+        or len(value["calibration_cohort_sha256"]) != 64
+        or not isinstance(value["eligibility_revision"], str)
+        or not value["eligibility_revision"]
+        or not _valid_interval(value["calibrated_center_offset_ratio"])
+        or not _valid_interval(value["calibrated_center_offset_px"])
+    ):
+        raise ValueError(
+            "enclosing-support aperture calibration provenance is invalid"
+        )
+    if value["state"] == "supported":
+        if (
+            not _valid_interval(value["effective_center_offset_px"])
+            or value["failure_kind"] is not None
+            or value["failure_detail"] is not None
+        ):
+            raise ValueError(
+                "supported enclosing-support aperture authority is invalid"
+            )
+    elif (
+        value["effective_center_offset_px"] is not None
+        or value["failure_kind"]
+        != "enclosing_support_aperture_center_conflict"
+        or not isinstance(value["failure_detail"], str)
+        or not value["failure_detail"]
+    ):
+        raise ValueError(
+            "contradicted enclosing-support aperture authority is invalid"
+        )
 
 
 def _interval_contains(
@@ -1817,7 +1941,10 @@ def validate_output_footprint_authority(output: dict[str, Any]) -> None:
         raise ValueError("boundary protection facts are invalid")
     support_output = boundary_use == "enclosing_support_pair"
     risk_fields = {
+        "aperture_authority_id",
+        "aperture_authority_state",
         "canonical_height_px",
+        "center_offset_interval_px",
         "maximum_center_shift_px",
         "top_expansion_px",
         "bottom_expansion_px",
@@ -1838,10 +1965,32 @@ def validate_output_footprint_authority(output: dict[str, Any]) -> None:
             )
             or not _finite_number(aperture_risk["canonical_height_px"])
             or float(aperture_risk["canonical_height_px"]) <= 0.0
+            or not isinstance(aperture_risk["aperture_authority_id"], str)
+            or not aperture_risk["aperture_authority_id"]
+            or aperture_risk["aperture_authority_state"]
+            not in {"supported", "unavailable", "contradicted"}
+            or not _valid_interval(
+                aperture_risk["center_offset_interval_px"]
+            )
             or not isinstance(aperture_risk["feasible_state_count"], int)
             or aperture_risk["feasible_state_count"] <= 0
         ):
             raise ValueError("enclosing-support aperture risk is invalid")
+        center_interval = aperture_risk["center_offset_interval_px"]
+        expected_shift = max(
+            abs(float(center_interval["minimum"])),
+            abs(float(center_interval["maximum"])),
+        )
+        if (
+            abs(
+                float(aperture_risk["maximum_center_shift_px"])
+                - expected_shift
+            )
+            > 1.0e-8
+        ):
+            raise ValueError(
+                "enclosing-support aperture center risk is inconsistent"
+            )
     elif aperture_risk is not None:
         raise ValueError("aperture output carries enclosing-support risk")
     if (
@@ -2223,6 +2372,10 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         coarse = lane.get("coarse_strip_support")
         aspect_ratio = lane.get("aperture_aspect_ratio_authority")
         _validate_aperture_aspect_ratio_authority(aspect_ratio)
+        enclosing_aperture = lane.get(
+            "enclosing_support_aperture_authority"
+        )
+        _validate_enclosing_support_aperture_authority(enclosing_aperture)
         source_width = lane.get("source_frame_width_authority")
         _validate_source_frame_width_authority(source_width)
         source_width_topology = lane.get(
@@ -2249,6 +2402,29 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             raise ValueError(
                 "aspect ratio and canonical source W authority disagree"
             )
+        support_output = (
+            lane.get("selected_cross_boundary_use")
+            == "enclosing_support_pair"
+        )
+        if support_output == (
+            enclosing_aperture["state"] == "not_applicable"
+        ):
+            raise ValueError(
+                "selected cross and enclosing aperture authority disagree"
+            )
+        for output in outputs:
+            aperture_risk = output.get(
+                "enclosing_support_aperture_risk"
+            )
+            if aperture_risk is not None and (
+                aperture_risk["aperture_authority_id"]
+                != enclosing_aperture["authority_id"]
+                or aperture_risk["aperture_authority_state"]
+                != enclosing_aperture["state"]
+            ):
+                raise ValueError(
+                    "output changed enclosing-support aperture authority"
+                )
         _validate_direct_role_aperture_domain_authority(
             lane.get("direct_role_aperture_domain_authority")
         )

@@ -13,9 +13,11 @@ from tools.regression.gold_analysis import (
     ANALYSIS_RECORD_SCHEMA,
     _analysis_identity,
     _axis_guard_calibration,
+    _enclosing_support_aperture_center_calibration,
     _fit_mixed_axis_guard,
     _nominal_pitch_calibration,
     _round_outward,
+    _round_outward_lower,
     _source_variation_summary,
     _summary,
     line_axis_position,
@@ -24,7 +26,10 @@ from tools.regression.gold_analysis import (
     sequence_boundary_diagnostics,
     validate_gold_analysis_artifacts,
 )
-from x5crop.formats import format_spec
+from x5crop.formats import (
+    ENCLOSING_SUPPORT_APERTURE_CALIBRATION_SPEC,
+    format_spec,
+)
 
 
 class GoldAnalysisContractTest(unittest.TestCase):
@@ -210,6 +215,9 @@ class GoldAnalysisContractTest(unittest.TestCase):
             "calibrated_nominal_grid_evidence_failure_kind": None,
             "calibrated_nominal_grid_authority_state": "not_applicable",
             "calibrated_nominal_grid_authority_failure_kind": None,
+            "enclosing_support_aperture_authority_state": "not_applicable",
+            "enclosing_support_aperture_authority_failure_kind": None,
+            "enclosing_support_aperture_center_observation": None,
             "candidate_nominal_grid_solve_count": 0,
             "candidate_nominal_grid_solve_success_count": 0,
             "selected_direct_role_projection_evaluation_count": 0,
@@ -424,6 +432,47 @@ class GoldAnalysisContractTest(unittest.TestCase):
         self.assertEqual(
             calibration["derived_outward_interval_mm"],
             {"minimum": 37.65, "maximum": 38.2},
+        )
+        self.assertTrue(calibration["configured_matches_calibration"])
+
+    def test_enclosing_support_center_calibration_is_source_bound(
+        self,
+    ) -> None:
+        configured = ENCLOSING_SUPPORT_APERTURE_CALIBRATION_SPEC
+        ratios = [-0.008894822743034225, 0.006143972364182875] + [
+            0.0
+        ] * 17
+        records = tuple(
+            {
+                "sample_id": f"S{index:03d}",
+                "source_sha256": f"{index:064x}",
+                "format_id": "135",
+                "enclosing_support_aperture_center_observation": {
+                    "eligibility_revision": configured.eligibility_revision,
+                    "center_offset_ratio": ratio,
+                },
+            }
+            for index, ratio in enumerate(ratios, start=1)
+        )
+
+        calibration = _enclosing_support_aperture_center_calibration(
+            records,
+            cohort_sha256=configured.development_gold_cohort_sha256,
+        )
+
+        self.assertAlmostEqual(
+            _round_outward_lower(ratios[0], 0.001),
+            -0.009,
+        )
+        self.assertEqual(calibration["eligible_source_count"], 19)
+        self.assertEqual(calibration["eligible_task_count"], 19)
+        self.assertAlmostEqual(
+            calibration["derived_outward_interval"]["minimum"],
+            -0.009,
+        )
+        self.assertAlmostEqual(
+            calibration["derived_outward_interval"]["maximum"],
+            0.007,
         )
         self.assertTrue(calibration["configured_matches_calibration"])
 

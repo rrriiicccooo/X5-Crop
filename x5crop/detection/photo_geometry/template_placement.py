@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 
-from ...domain import FiniteInterval, ObservationId
+from ...domain import EvidenceState, FiniteInterval, ObservationId
 from ...formats import FramePhysicalSpec
 from ...geometry.convex import ConvexPolygon, signed_area
 from ...run_local_identity import run_local_id
@@ -19,6 +19,10 @@ from .model import BoundaryAxis, BoundaryRole, PositionSource
 from .output_model import FrameBoundaryGeometry, OutputBoundaryUse
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import CrossFit
+from .template_enclosing_support_aperture import (
+    EnclosingSupportApertureAuthority,
+    derive_enclosing_support_aperture_authority,
+)
 from .template_model import (
     OverlapRelation,
     SequenceFit,
@@ -138,6 +142,9 @@ class FormatPlacement:
     height_axis: BoundaryAxis
     width_authority_px: FiniteInterval
     height_authority_px: FiniteInterval
+    enclosing_support_aperture_authority: (
+        EnclosingSupportApertureAuthority
+    )
     frames: tuple[TemplateFrame, ...]
 
     def __post_init__(self) -> None:
@@ -158,6 +165,24 @@ class FormatPlacement:
             self.height_authority_px, FiniteInterval
         ):
             raise TypeError("format placement lane authority must be intervals")
+        if not isinstance(
+            self.enclosing_support_aperture_authority,
+            EnclosingSupportApertureAuthority,
+        ):
+            raise TypeError(
+                "format placement enclosing-support authority is invalid"
+            )
+        support_output = (
+            self.cross_fit.boundary_use
+            == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
+        )
+        if support_output == (
+            self.enclosing_support_aperture_authority.state
+            == EvidenceState.NOT_APPLICABLE
+        ):
+            raise ValueError(
+                "format placement support and aperture authority disagree"
+            )
         for frame in self.frames:
             for boundary in (frame.top, frame.bottom, frame.start, frame.end):
                 if boundary.line.source_axis_long != self.width_axis:
@@ -794,6 +819,9 @@ def compose_format_placement(
         height_axis=height_axis,
         width_authority_px=width_authority_px,
         height_authority_px=height_authority_px,
+        enclosing_support_aperture_authority=(
+            derive_enclosing_support_aperture_authority(cross_fit)
+        ),
         frames=tuple(frames),
     )
 

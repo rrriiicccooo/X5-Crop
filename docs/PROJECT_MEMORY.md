@@ -62,9 +62,12 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   补出精确反序绑定，当前 candidate 以 typed contradiction 淘汰；只有已保留且权限合格的 runner 可晋升，
   非法 role/edge 不得重新绑定。仍获权限的 local refinement 保持原离散 identity。该过程最多评估两个
   selected fit，不增加查询、候选或 score。
-- Enclosing support 只证明 aperture 位于两条 support 之间，不证明 fixed `H` 居中。
-  `EnclosingSupportApertureRisk` 对每个联合可行状态分别计算最不利 aperture 中心与 top/bottom 逐侧
-  expansion，并消费原有 5% 预算；它不修改 output polygon，也不混合互斥状态。
+- Enclosing support 本身只证明 aperture 位于两条 support 之间。Selected unique pair 之后，唯一
+  `EnclosingSupportApertureAuthority` 用 19 个黄金 source 的直接 top/bottom 校准剩余中心偏移；同源中位数、
+  source hull 与 `0.001H` 向外量化得到 `[-0.009H, +0.007H]`。它是 rank 0 相关推断，不选择 geometry、
+  不把 support 变成 direct aperture，也不修改 output polygon。Calibration 不可用时继续评估完整物理
+  中心区间；与直接 containment 无交集时 typed Review。`EnclosingSupportApertureRisk` 仍按同一联合状态
+  消费原有 5% 预算。
 - Selected lattice 在 local relation/source-W 阶段追加 late binding 后，由同一 projection owner 重新核对。
   校准 Grid 与 direct-rank 使用同一 bounded projection；无坐标权限弱线只有在完整区间与对应 role 包络
   相交时才降为 validation provenance，不相交分别产生 `calibrated_nominal_grid_conflict` 或
@@ -74,15 +77,15 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   同一个两侧 direct aperture，或两侧 enclosing support 经 fixed H 闭合出的 aperture 内时，才保留 native
   coordinate。单侧/无唯一域为 unavailable，域坍缩或 trace 越域为 conflict；该证明不新增像素读取、候选
   或 rank，content veto 与 5% 预算继续独立生效。
-- 当前 Report revision 为 `x5crop_v5_template_report_46`；Debug/报告显式保存 calibration identity、anchor、
+- 当前 Report revision 为 `x5crop_v5_template_report_47`；Debug/报告显式保存 calibration identity、anchor、
   inferred adjacency、完全未观察 Frame、联合参数依据、measured relation、projection outcome、typed
   failure、source-W/frame-inference basis、W topology facts、partial-height aperture domain 与工作量。Debug
   列出精确 anchor role、逐 adjacency local delta、direct correction、coverage/counterevidence、candidate
-  elimination、未知 aperture 中心风险与最终联合 envelope。完整路径最多 6 次 fit pass，不增加 TIFF
-  query、第二 detector 或旧 schema 兼容层。
+  elimination、enclosing-support center authority/有效偏移区间与最终联合 envelope。完整路径最多 6 次
+  fit pass，不增加 TIFF query、第二 detector 或旧 schema 兼容层。
 
 完整 development gold 已完成 110/110，分析错误 0，`unsafe_approved_auto = 0`。安全 auto 为基础 nominal
-14/66、较难 nominal 1/30、challenge 0/14；95 个 task 安全 review。Candidate 为 72 个不可用、19 个安全、
+14/66、较难 nominal 2/30、challenge 0/14；94 个 task 安全 review。Candidate 为 72 个不可用、19 个安全、
 19 个不安全；全部不安全 candidate 均保持 review，14 个 challenge 的安全 Review 均合格。Source W 为
 51 supported / 55 unavailable / 4 contradicted；其中 40 个由完整 Frame、11 个由 direct lattice 闭合。
 Frame-width inference 为 24 supported / 41 unavailable / 45 not applicable；唯一
@@ -91,8 +94,9 @@ Frame-width inference 为 24 supported / 41 unavailable / 45 not applicable；�
 Partial-height aperture
 domain 影响 7 个旧权限阻断：S091 新增安全 auto；S030/S045 曾得到安全 candidate；
 S008/S028 的 candidate 不安全并被预算阻断；S010/S049 被 content veto 阻断。完整黄金 diagnostic mean 为
-3.894 秒，只作开发归因。当前安全但 Review 的 nominal candidate 为 S030/S058/S059；S045/S109 先前的
-candidate 对黄金虽安全，但完整 source-W 状态同时容许未证明 overlap，已前移为 topology Review。S012 的
+3.899 秒，只作开发归因。当前安全但 Review 的 nominal candidate 为 S030/S058；S059 经校准 center authority
+新增为安全 auto。S045/S109 先前的 candidate 对黄金虽安全，但完整 source-W 状态同时容许未证明 overlap，
+已前移为 topology Review。S012 的
 candidate 会越过黄金 cross-low 预算，仍由 `direct_use_budget_exceeded` 安全阻断。S007/S026/S040/S110
 从迟到的 `fixed_template_mismatch` 前移为 `adjacency_topology_unresolved`；S010/S045/S108/S109 也在下游
 消费 W 前暴露同一缺口。本阶段没有生成绑定最终 commit 的正式 performance receipt；正式 5 秒 Gate 只在
@@ -107,22 +111,22 @@ output budget，S032 为 phase ambiguity。
 
 - 106-source/110-task development gold 用于发现机制、调试和 incident regression，不估计未来生产错误率。
   独立 calibration/sealed 是未来概率选择与未见来源声明的前提，但不再是首版发布前置条件。
-- 当前 96 个 nominal 仍有 81 个 review。主要 phase root failure 为
+- 当前 96 个 nominal 仍有 80 个 review。主要 phase root failure 为
   `discrete_phase_ambiguous` 13、`fixed_template_mismatch` 10、`adjacency_topology_unresolved` 8、
   `calibrated_nominal_grid_conflict` 5、`source_frame_width_conflict` 4、
   `nominal_grid_phase_anchor_unavailable` 3、`direct_phase_anchor_unavailable` 2、
   `direct_role_binding_authority_unavailable` 2、`frame_width_inference_unavailable` 1、
   `separator_material_conflict` 1 与
-  `adjacency_observation_coverage_incomplete` 1；另有 46 个 nominal 已通过 phase，其中只有 15 个最终安全
-  auto。S012 与 S059 说明 phase 通过不等于输出风险已闭合。
+  `adjacency_observation_coverage_incomplete` 1；另有 46 个 nominal 已通过 phase，其中只有 16 个最终安全
+  auto。S012、S030 与 S058 说明 phase 通过不等于输出风险已闭合。
 - 完全不可见 Frame 已可由校准 Grid 生成，但这不是像素事实，也不直接授权 auto。候选仍须通过完整
   containment、content veto 与最坏预算；后续应改善 anchor、local correction 与直接 evidence，而非收窄
   传播不确定性。概率 scorer 当前不进入 Runtime。
 - 内容是否连续穿过理论间隔的 continuity 仍不完整；source truncation 与片夹遮挡也缺少统一
   clipped-boundary geometry。宽缓单根长轴 material 仍可能是构图线，不能单独创造 phase。
-- 三个 nominal 已有黄金安全 candidate，但 enclosing support 的真实逐侧、同状态 alignment 或未知
-  aperture 中心 expansion 仍未闭合；后续应提高 shared top/bottom 的直接定位精度，或建立有校准依据的
-  aperture-center owner，不能放宽预算、删除 residual 或把 support 静默改成 aperture。
+- 19 个 selected unique enclosing-support source 的 aperture-center calibration 已闭合并可由黄金分析复算。
+  S030/S058 仍因真实逐侧 residual/完整预算 Review，S012 的 candidate 仍会切入黄金边界；后续应提高
+  shared top/bottom 的观察与拟合精度，不能扩大 center calibration、删除 residual 或用 bleed 掩盖缺口。
 
 ## 精确下一步
 
@@ -132,7 +136,7 @@ output budget，S032 为 phase ambiguity。
    状态或把未知 overlap 伪装成 `OverlapRelation`。S045/S109 的黄金安全候选也不能绕过完整 interval 证明。
 2. 对 4 个 `source_frame_width_conflict` 只按 source physical W 与 direct lattice 的真实冲突继续诊断；不得
    扩大 W prior 或回退旧“两张 Frame 才算 W”的权限。S077 的 registered counterevidence 也必须保留。
-3. 随后按真实 root 继续离散 ambiguity、剩余 direct-role、aperture-center 与 clipped-boundary geometry；
+3. 随后按真实 root 继续离散 ambiguity、剩余 direct-role 与 clipped-boundary geometry；
    每次只闭合一个通用机制，不恢复旧终判或放宽预算。随真实使用逐步补充 calibration、sealed 和缺失
    format 样片。出现危险自动裁切时保存原 TIFF、format、
    count 与 SHA，人工建立权威 baseline，加入 incident regression，并只用通用机制永久修复。
