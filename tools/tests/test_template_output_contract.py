@@ -818,6 +818,7 @@ class TemplateOutputContractTest(unittest.TestCase):
             development_gold_cohort_sha256=(
                 DEVELOPMENT_GOLD_CALIBRATION_COHORT_SHA256
             ),
+            development_observation_set_sha256="0" * 64,
             eligibility_revision="unit-conflict-v1",
             minimum_center_offset_ratio=0.01,
             maximum_center_offset_ratio=0.02,

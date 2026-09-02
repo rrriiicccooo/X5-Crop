@@ -200,7 +200,9 @@ platform | platform-check | platform-package | pre-push
   为诊断已经出现的失败，才额外手工运行；最终以正常 Hook 结果为准。
 - 日常算法开发使用 `tools.regression.gold_analysis --gate report`，即使发现危险 auto 也必须完整写出诊断
   receipt；`tools/verify accuracy` 与 `gold_analysis --gate release` 是 release detection gate，不能用作迫使
-  中间版本提前 Review 的开发前置条件。
+  中间版本提前 Review 的开发前置条件。`tools/verify accuracy` 薄调用同一完整黄金分析，并同时要求全部
+  detector/comparator source 与 HEAD 一致，以及全部 runtime calibration 的 cohort、eligibility、精确
+  observation set 与登记数值可复算一致。
 - Performance 不属于日常 commit 或 push Gate。只在准备发布时运行，并绑定最终 release commit；
   tree 变化后旧 receipt 立即失效。
 - `Test/` 不受 Git 跟踪，目录布局不是 runtime authority；工具以 cohort 中的相对路径、source SHA、

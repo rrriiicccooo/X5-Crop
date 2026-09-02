@@ -156,6 +156,7 @@ _ENCLOSING_SUPPORT_APERTURE_AUTHORITY_FIELDS = {
     "state",
     "calibration_id",
     "calibration_cohort_sha256",
+    "calibration_observation_set_sha256",
     "eligibility_revision",
     "support_observation_ids",
     "support_span_px",
@@ -514,6 +515,7 @@ def _validate_enclosing_support_aperture_authority(
     optional = (
         "calibration_id",
         "calibration_cohort_sha256",
+        "calibration_observation_set_sha256",
         "eligibility_revision",
         "support_span_px",
         "canonical_height_px",
@@ -551,6 +553,7 @@ def _validate_enclosing_support_aperture_authority(
                 for key in (
                     "calibration_id",
                     "calibration_cohort_sha256",
+                    "calibration_observation_set_sha256",
                     "eligibility_revision",
                     "calibrated_center_offset_ratio",
                     "calibrated_center_offset_px",
@@ -571,6 +574,18 @@ def _validate_enclosing_support_aperture_authority(
         or not value["calibration_id"]
         or not isinstance(value["calibration_cohort_sha256"], str)
         or len(value["calibration_cohort_sha256"]) != 64
+        or any(
+            character not in "0123456789abcdef"
+            for character in value["calibration_cohort_sha256"]
+        )
+        or not isinstance(
+            value["calibration_observation_set_sha256"], str
+        )
+        or len(value["calibration_observation_set_sha256"]) != 64
+        or any(
+            character not in "0123456789abcdef"
+            for character in value["calibration_observation_set_sha256"]
+        )
         or not isinstance(value["eligibility_revision"], str)
         or not value["eligibility_revision"]
         or not _valid_interval(value["calibrated_center_offset_ratio"])

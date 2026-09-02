@@ -234,6 +234,7 @@ class EnclosingSupportApertureCalibrationSpec:
 
     calibration_id: str
     development_gold_cohort_sha256: str
+    development_observation_set_sha256: str
     eligibility_revision: str
     minimum_center_offset_ratio: float
     maximum_center_offset_ratio: float
@@ -254,6 +255,11 @@ class EnclosingSupportApertureCalibrationSpec:
                 character not in "0123456789abcdef"
                 for character in self.development_gold_cohort_sha256
             )
+            or len(self.development_observation_set_sha256) != 64
+            or any(
+                character not in "0123456789abcdef"
+                for character in self.development_observation_set_sha256
+            )
             or not self.eligibility_revision
             or any(not math.isfinite(value) for value in values)
             or self.minimum_center_offset_ratio
@@ -271,6 +277,7 @@ class EnclosingSupportApertureCalibrationSpec:
         return (
             self.calibration_id,
             self.development_gold_cohort_sha256,
+            self.development_observation_set_sha256,
             self.eligibility_revision,
             self.minimum_center_offset_ratio.hex(),
             self.maximum_center_offset_ratio.hex(),
@@ -284,18 +291,21 @@ ENCLOSING_SUPPORT_APERTURE_CALIBRATION_SPEC = (
     EnclosingSupportApertureCalibrationSpec(
         calibration_id=(
             "x5crop_enclosing_support_aperture_center:development_gold_"
-            "selected_unique_pair_hull_outward_0p001ratio_v1"
+            "selected_unique_pair_hull_outward_0p001ratio_v2"
         ),
         development_gold_cohort_sha256=(
             DEVELOPMENT_GOLD_CALIBRATION_COHORT_SHA256
+        ),
+        development_observation_set_sha256=(
+            "d64f536a15739f2c2e5b51554fd3ccc37e64b1052305a9a1427408a2ff8d2659"
         ),
         eligibility_revision=(
             "x5crop_selected_unique_enclosing_support_gold_aperture_center_v1"
         ),
         minimum_center_offset_ratio=-0.009,
         maximum_center_offset_ratio=0.007,
-        development_source_count=21,
-        development_task_count=21,
+        development_source_count=20,
+        development_task_count=20,
         outward_rounding_ratio=0.001,
     )
 )

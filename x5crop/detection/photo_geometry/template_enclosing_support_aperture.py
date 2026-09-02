@@ -39,6 +39,7 @@ class EnclosingSupportApertureAuthority:
     state: EvidenceState
     calibration_id: str | None
     calibration_cohort_sha256: str | None
+    calibration_observation_set_sha256: str | None
     eligibility_revision: str | None
     support_observation_ids: tuple[ObservationId, ...]
     support_span_px: FiniteInterval | None
@@ -69,6 +70,7 @@ class EnclosingSupportApertureAuthority:
         optional_values = (
             self.calibration_id,
             self.calibration_cohort_sha256,
+            self.calibration_observation_set_sha256,
             self.eligibility_revision,
             self.support_span_px,
             self.canonical_height_px,
@@ -107,6 +109,7 @@ class EnclosingSupportApertureAuthority:
                     for value in (
                         self.calibration_id,
                         self.calibration_cohort_sha256,
+                        self.calibration_observation_set_sha256,
                         self.eligibility_revision,
                         self.calibrated_center_offset_ratio,
                         self.calibrated_center_offset_px,
@@ -124,6 +127,7 @@ class EnclosingSupportApertureAuthority:
         calibrated = (
             self.calibration_id,
             self.calibration_cohort_sha256,
+            self.calibration_observation_set_sha256,
             self.eligibility_revision,
             self.calibrated_center_offset_ratio,
             self.calibrated_center_offset_px,
@@ -133,11 +137,17 @@ class EnclosingSupportApertureAuthority:
                 "enclosing-support calibration provenance is incomplete"
             )
         assert self.calibration_cohort_sha256 is not None
+        assert self.calibration_observation_set_sha256 is not None
         if (
             len(self.calibration_cohort_sha256) != 64
             or any(
                 character not in "0123456789abcdef"
                 for character in self.calibration_cohort_sha256
+            )
+            or len(self.calibration_observation_set_sha256) != 64
+            or any(
+                character not in "0123456789abcdef"
+                for character in self.calibration_observation_set_sha256
             )
         ):
             raise ValueError("enclosing-support calibration digest is invalid")
@@ -187,6 +197,7 @@ def not_applicable_enclosing_support_aperture_authority(
         state=EvidenceState.NOT_APPLICABLE,
         calibration_id=None,
         calibration_cohort_sha256=None,
+        calibration_observation_set_sha256=None,
         eligibility_revision=None,
         support_observation_ids=(),
         support_span_px=None,
@@ -224,6 +235,7 @@ def unavailable_enclosing_support_aperture_authority(
         state=EvidenceState.UNAVAILABLE,
         calibration_id=None,
         calibration_cohort_sha256=None,
+        calibration_observation_set_sha256=None,
         eligibility_revision=None,
         support_observation_ids=observations,
         support_span_px=support.observed_span_px,
@@ -285,6 +297,9 @@ def derive_enclosing_support_aperture_authority(
         calibration_id=calibration.calibration_id,
         calibration_cohort_sha256=(
             calibration.development_gold_cohort_sha256
+        ),
+        calibration_observation_set_sha256=(
+            calibration.development_observation_set_sha256
         ),
         eligibility_revision=calibration.eligibility_revision,
         support_observation_ids=observations,

@@ -1101,8 +1101,10 @@ Enclosing support 本身只证明真实 aperture 位于两条 support 之间，�
 center_offset_ratio = (gold_aperture_center - support_midpoint) / H
 ```
 
-当前 calibration 只纳入 21 个 selected unique pair、且黄金 top/bottom 均为 `directly_visible` 的 source；
-同源 count 先取中位数，再对 source hull 以 `0.001H` 向外量化，得到 `[-0.009H, +0.007H]`。该 authority
+当前 calibration 只纳入 20 个 selected unique pair、且黄金 top/bottom 均为 `directly_visible` 的 source；
+同源 count 先取中位数，再对 source hull 以 `0.001H` 向外量化，得到 `[-0.009H, +0.007H]`。Calibration
+同时绑定 development cohort SHA、eligibility revision 和精确 observation-set SHA；source 数量相同但成员、
+观测值或 detector 权限变化时同样视为 calibration drift。该 authority
 为 rank 0 correlated inference：不把 support 变成 direct aperture、不增加 constraint rank、不参与 pair 或
 placement 选择，也不修改 output polygon。每个 `JointFrameState` 将该区间与当前 support 可容纳的物理中心
 区间求交；无交集产生 typed `enclosing_support_aperture_center_conflict`。Calibration 不可用时仍保留原有
@@ -1343,7 +1345,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/template_outer_frame_authority.py` | 带 Grid 推断时首尾输出 Frame 的直接长轴角色证明 |
 | `photo_geometry/template_alignment_diagnostic.py` | theoretical-vs-observed residual 的只读诊断 |
 | `photo_geometry/interval_math.py`、`template_cross*.py`、`template_cross_support.py` | 共享 interval 运算、source H 校准、局部 top/bottom 方向闭合、typed producer bound 与 enclosing support |
-| `photo_geometry/template_enclosing_support_aperture.py` | selected unique enclosing support 内的黄金校准 aperture-center authority、物理 containment 交集与 typed conflict；rank 0，不选 geometry |
+| `photo_geometry/template_enclosing_support_aperture.py` | selected unique enclosing support 内的黄金校准 aperture-center authority、精确 observation-set provenance、物理 containment 交集与 typed conflict；rank 0，不选 geometry |
 | `photo_geometry/template_placement.py`、`template_selection.py` | source-axis frame 的一次 compose、显式 overlap 的 cross-support 去重，以及 proposal 之后的离散 eligibility/winner/runner |
 | `photo_geometry/template_holder_fill.py` | selected PhotoGroupOuter 与 W-only fill assessment |
 | `photo_geometry/content_*.py` | 最终 post-bleed polygon 上的二维 negative veto |
@@ -1478,9 +1480,11 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   写回人工基线。分析结果绑定 HEAD、detector source manifest、comparator source manifest 与 development
   gold SHA，并分别记录两组路径是否与 HEAD 一致。默认 `--gate report` 只要求诊断完整，始终报告 proposal、
   candidate、危险 auto 与 root failure；即使发现危险 auto 也保留成功退出，便于开发修复。`--gate release`
-  只接受完整 development gold，并硬性要求 nominal 全部安全 `approved_auto`、全部角色
-  `unsafe_approved_auto = 0`；`tools/verify accuracy` 执行同一 release-only 决策与 approved geometry 门槛。
-  任何已知错误 auto 都使 release detection gate 失败。
+  只接受完整 development gold、detector/comparator source manifest 与 HEAD 一致，并硬性要求 nominal
+  全部安全 `approved_auto`、全部角色
+  `unsafe_approved_auto = 0`，以及全部 runtime calibration 的 cohort、eligibility、observation set 与登记数值
+  可复算一致；`tools/verify accuracy` 薄调用同一个 release analysis owner。任何已知错误 auto 或 calibration
+  drift 都使 release detection gate 失败。
 - 同一分析按 source SHA 去重验证 runtime 物理先验，并分别统计同源与跨 source 的 W/H、separator gap、
   pitch，以及 scan-canvas/profile 和 top/bottom corridor。黄金红线是人工确认、尽量贴近该 source 真实
   有效成像边界的最内侧可接受基准，基本可作为 source aperture 的真实尺寸观测；因此它可以校准物理

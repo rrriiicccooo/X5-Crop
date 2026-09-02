@@ -88,18 +88,24 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   同一个两侧 direct aperture，或两侧 enclosing support 经 fixed H 闭合出的 aperture 内时，才保留 native
   coordinate。单侧/无唯一域为 unavailable，域坍缩或 trace 越域为 conflict；该证明不新增像素读取、候选
   或 rank，content veto 与 5% 预算继续独立生效。
-- 当前 Report revision 为 `x5crop_v5_template_report_50`；普通报告与 Debug 显式分开 proposal、eligibility、
+- 当前 Report revision 为 `x5crop_v5_template_report_51`；普通报告与 Debug 显式分开 proposal、eligibility、
   selected output 和决定，并继续保存 calibration identity、anchor、inferred adjacency、完全未观察 Frame、
   联合参数依据、measured relation、projection outcome、typed failure、source-W/frame-inference basis、全部
   retained W constraint/observation、W topology facts、partial-height aperture domain 与工作量。完整路径最多
   6 次 fit pass，不增加 TIFF query、第二 detector 或旧 schema 兼容层。
+- Enclosing-support aperture-center v2 calibration 使用 20 个当前仍具唯一 selected support pair、且黄金
+  top/bottom 均为 `directly_visible` 的 source，并同时绑定 cohort、eligibility 与精确 observation-set SHA。
+  S109 在 canonical W 扩大后成为 cross 多解，不再冒充 calibration observation；release analysis 会阻断
+  source manifest 不等于 HEAD，以及成员、观测值、数量或登记数值的任何漂移。区间仍为
+  `[-0.009H, +0.007H]`，crop geometry 未改变。
 
 完整 development gold diagnostic 已完成 110/110，分析错误 0。现有主模型生成 85 个 proposal，25 个
 尚未生成；proposal 为 25 safe / 60 unsafe / 25 unavailable。Eligibility 层保留 39 个 candidate，形成
 19 safe / 20 unsafe / 71 unavailable：其中 6 个安全 proposal 与 40 个不安全 proposal 被保留为 Review。
 Runtime stage 为 16 approved auto、23 eligible candidate Review、46 proposal-generated/eligibility-withheld、
 25 proposal unavailable。当前恰好仍是 16 个安全 auto、94 个 Review、危险 auto 0，但 release detection
-gate 未达标；不能把这个中间结果称为发布通过。Development-detail mean 为 4.313 秒，只作开发归因；
+gate 未达标；不能把这个中间结果称为发布通过。绑定 proposal 检查点的 development-detail mean 为
+4.430 秒，只作开发归因；
 相同检测源码最近一次 clean-checkpoint 24-source 正式性能 mean 为 3.536 秒，通过 5 秒 Gate，3 秒目标仍为
 非阻断 challenge，该旧性能 receipt 不替代未来 release commit 的复验。
 
@@ -133,7 +139,8 @@ output budget，S032 为 phase ambiguity。
   传播不确定性。概率 scorer 当前不进入 Runtime。
 - 内容是否连续穿过理论间隔的 continuity 仍不完整；source truncation 与片夹遮挡也缺少统一
   clipped-boundary geometry。宽缓单根长轴 material 仍可能是构图线，不能单独创造 phase。
-- 21 个 selected unique enclosing-support source 的 aperture-center calibration 已闭合并可由黄金分析复算。
+- 20 个 selected unique enclosing-support source 的 aperture-center calibration 已闭合并由精确 observation
+  set digest 复算一致。
   S030/S058 仍因真实逐侧 residual/完整预算 Review，S012 的 candidate 仍会切入黄金边界；后续应提高
   shared top/bottom 的观察与拟合精度，不能扩大 center calibration、删除 residual 或用 bleed 掩盖缺口。
 

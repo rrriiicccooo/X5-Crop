@@ -82,7 +82,7 @@ case "${1:-}" in
         run_full
         ;;
     accuracy)
-        "$PYTHON" -m tools.regression.accuracy
+        "$PYTHON" -m tools.regression.gold_analysis --gate release
         ;;
     diagnostic)
         shift

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
 import io
 import json
 from pathlib import Path
@@ -342,6 +343,7 @@ class GoldAnalysisContractTest(unittest.TestCase):
 
         self.assertEqual(summary["unsafe_approved_auto_count"], 1)
         self.assertTrue(summary["development_diagnostic_complete"])
+        self.assertFalse(summary["release_analysis_identity_ready"])
         self.assertFalse(summary["release_detection_gate_ready"])
         self.assertEqual(
             summary["unsafe_approved_auto_diagnostics"][0]["sample_id"],
@@ -411,6 +413,25 @@ class GoldAnalysisContractTest(unittest.TestCase):
             ]["measurement_count"],
             1,
         )
+
+    def test_release_readiness_requires_current_calibration_provenance(
+        self,
+    ) -> None:
+        record = self._analysis_record(
+            "safe-auto",
+            source_sha256="d" * 64,
+            role="nominal",
+            decision="approved_auto",
+            candidate="safe",
+            unsafe_auto=False,
+            physical_frame_id="B1|B2",
+        )
+
+        summary = _summary((record,), {"fixture": True})
+
+        self.assertFalse(summary["physical_prior_calibration_ready"])
+        self.assertTrue(summary["physical_prior_calibration_failures"])
+        self.assertFalse(summary["release_detection_gate_ready"])
 
     def test_physical_summary_separates_within_and_between_source_variation(
         self,
@@ -527,12 +548,13 @@ class GoldAnalysisContractTest(unittest.TestCase):
         configured = ENCLOSING_SUPPORT_APERTURE_CALIBRATION_SPEC
         ratios = [-0.008894822743034225, 0.006143972364182875] + [
             0.0
-        ] * 19
+        ] * 18
         records = tuple(
             {
                 "sample_id": f"S{index:03d}",
                 "source_sha256": f"{index:064x}",
                 "format_id": "135",
+                "count": 6,
                 "enclosing_support_aperture_center_observation": {
                     "eligibility_revision": configured.eligibility_revision,
                     "center_offset_ratio": ratio,
@@ -541,17 +563,38 @@ class GoldAnalysisContractTest(unittest.TestCase):
             for index, ratio in enumerate(ratios, start=1)
         )
 
-        calibration = _enclosing_support_aperture_center_calibration(
+        unregistered = _enclosing_support_aperture_center_calibration(
             records,
             cohort_sha256=configured.development_gold_cohort_sha256,
         )
+        current = replace(
+            configured,
+            development_observation_set_sha256=unregistered[
+                "actual_observation_set_sha256"
+            ],
+            development_source_count=20,
+            development_task_count=20,
+        )
+        with patch(
+            "tools.regression.gold_analysis."
+            "ENCLOSING_SUPPORT_APERTURE_CALIBRATION_SPEC",
+            current,
+        ):
+            calibration = _enclosing_support_aperture_center_calibration(
+                records,
+                cohort_sha256=current.development_gold_cohort_sha256,
+            )
 
         self.assertAlmostEqual(
             _round_outward_lower(ratios[0], 0.001),
             -0.009,
         )
-        self.assertEqual(calibration["eligible_source_count"], 21)
-        self.assertEqual(calibration["eligible_task_count"], 21)
+        self.assertEqual(calibration["eligible_source_count"], 20)
+        self.assertEqual(calibration["eligible_task_count"], 20)
+        self.assertEqual(
+            calibration["actual_observation_set_sha256"],
+            calibration["registered_observation_set_sha256"],
+        )
         self.assertAlmostEqual(
             calibration["derived_outward_interval"]["minimum"],
             -0.009,
@@ -630,6 +673,26 @@ class GoldAnalysisContractTest(unittest.TestCase):
                 ]
             )
         self.assertEqual(result, 1)
+
+    def test_release_gate_can_use_a_temporary_receipt_directory(self) -> None:
+        output = io.StringIO()
+        summary = {
+            "analysis_error_count": 0,
+            "release_detection_gate_ready": True,
+        }
+        with (
+            patch(
+                "tools.regression.gold_analysis.run_gold_analysis",
+                return_value=summary,
+            ) as run,
+            redirect_stdout(output),
+        ):
+            result = gold_analysis_main(["--gate", "release"])
+
+        self.assertEqual(result, 0)
+        receipt_root = run.call_args.args[0]
+        self.assertIsInstance(receipt_root, Path)
+        self.assertFalse(receipt_root.exists())
 
     def test_report_mode_keeps_an_unready_development_result_observable(
         self,

@@ -35,6 +35,15 @@ unavailable。当前仍是 16 个安全 auto、94 个 Review、危险 auto 0，r
 development-detail mean 为 4.313 秒，只作开发归因。该分层没有新增 TIFF query、detector、candidate、
 score、fallback 或正式输出。
 
+完整验收同时发现并消除了 enclosing-support aperture-center calibration 的 provenance 漂移：canonical W
+扩大后，S109 的 cross 从唯一解变为多解，合格 calibration source 因而从 21 变为 20，但旧登记只比较
+cohort SHA 与数量。当前 v2 calibration 绑定精确 observation-set SHA，runtime authority 与 Report 同时携带
+该 digest；release gold analysis 会阻断 cohort、eligibility、成员、观测值或登记数值任一漂移，development
+report 仍只负责如实暴露；detector/comparator source manifest 不等于 HEAD 时也不能形成 release receipt。
+`tools/verify accuracy` 现在薄调用同一 release analysis owner。Report revision
+更新为 `x5crop_v5_template_report_51`，不保留 v1 calibration 或旧 schema 兼容路径；数值区间仍为
+`[-0.009H, +0.007H]`，没有改变 crop geometry。
+
 ### 产品行为
 
 - 用户提供 format，并确认匹配片夹的默认 count 或显式 count；count 包含中间空白曝光格。Runtime 不猜

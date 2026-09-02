@@ -51,7 +51,7 @@ from .report_validation import validate_current_report_record
 
 
 ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v14"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v15"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v16"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
 SOURCE_TIMEOUT_SECONDS = 600
@@ -2023,26 +2023,52 @@ def _enclosing_support_aperture_center_calibration(
         by_source[str(record["source_sha256"])].append(record)
     sources = []
     for source_sha256, members in sorted(by_source.items()):
-        ratios = tuple(
-            float(
-                member["enclosing_support_aperture_center_observation"][
-                    "center_offset_ratio"
-                ]
+        task_observations = tuple(
+            sorted(
+                (
+                    {
+                        "sample_id": str(member["sample_id"]),
+                        "format_id": str(member["format_id"]),
+                        "count": int(member["count"]),
+                        "center_offset_ratio": float(
+                            member[
+                                "enclosing_support_aperture_center_observation"
+                            ]["center_offset_ratio"]
+                        ),
+                    }
+                    for member in members
+                ),
+                key=lambda item: (
+                    item["sample_id"],
+                    item["format_id"],
+                    item["count"],
+                ),
             )
-            for member in members
         )
         sources.append(
             {
                 "source_sha256": source_sha256,
-                "sample_ids": sorted(
-                    str(member["sample_id"]) for member in members
-                ),
+                "sample_ids": [
+                    str(item["sample_id"]) for item in task_observations
+                ],
                 "format_ids": sorted(
-                    {str(member["format_id"]) for member in members}
+                    {str(item["format_id"]) for item in task_observations}
                 ),
-                "center_offset_ratio": statistics.median(ratios),
+                "task_observations": task_observations,
+                "center_offset_ratio": statistics.median(
+                    float(item["center_offset_ratio"])
+                    for item in task_observations
+                ),
             }
         )
+    observation_set_sha256 = hashlib.sha256(
+        json.dumps(
+            sources,
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
     raw_minimum = (
         None
         if not sources
@@ -2071,6 +2097,8 @@ def _enclosing_support_aperture_center_calibration(
     )
     matches = (
         cohort_sha256 == configured.development_gold_cohort_sha256
+        and observation_set_sha256
+        == configured.development_observation_set_sha256
         and len(sources) == configured.development_source_count
         and len(eligible) == configured.development_task_count
         and all(
@@ -2124,6 +2152,10 @@ def _enclosing_support_aperture_center_calibration(
             configured.development_gold_cohort_sha256
         ),
         "actual_cohort_sha256": cohort_sha256,
+        "registered_observation_set_sha256": (
+            configured.development_observation_set_sha256
+        ),
+        "actual_observation_set_sha256": observation_set_sha256,
         "registered_interval": {
             "minimum": configured.minimum_center_offset_ratio,
             "maximum": configured.maximum_center_offset_ratio,
@@ -2187,6 +2219,36 @@ def _physical_prior_validation(
             for format_id, items in sorted(by_format.items())
         },
     }
+
+
+def _physical_prior_calibration_failures(
+    validation: dict[str, Any],
+) -> tuple[str, ...]:
+    """Return exact calibration facts that block a release receipt."""
+
+    failures: list[str] = []
+    if int(validation["analysis_error_source_count"]) != 0:
+        failures.append("analysis_error_source_count")
+    blocking_flags = {
+        "configured_counts_match",
+        "configured_matches_calibration",
+        "registered_matches_derived",
+    }
+
+    def visit(value: object, path: tuple[str, ...]) -> None:
+        if isinstance(value, dict):
+            for key, item in sorted(value.items()):
+                child = (*path, str(key))
+                if key in blocking_flags and item is not True:
+                    failures.append(".".join(child))
+                else:
+                    visit(item, child)
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                visit(item, (*path, str(index)))
+
+    visit(validation, ())
+    return tuple(sorted(set(failures)))
 
 
 def _release_detection_gate_failure_category(
@@ -2461,6 +2523,17 @@ def _summary(
         for record in completed
         if record["unsafe_approved_auto"]
     ]
+    physical_prior_validation = _physical_prior_validation(
+        records,
+        cohort_sha256=identity.get("development_gold_cohort_sha256"),
+    )
+    physical_prior_calibration_failures = (
+        _physical_prior_calibration_failures(physical_prior_validation)
+    )
+    release_analysis_identity_ready = (
+        identity.get("detector_paths_match_head") is True
+        and identity.get("comparator_paths_match_head") is True
+    )
     return {
         "summary_schema": ANALYSIS_SUMMARY_SCHEMA,
         "validation_role": "development_gold_diagnostic",
@@ -2487,8 +2560,11 @@ def _summary(
             record["unsafe_approved_auto"] for record in records
         ),
         "unsafe_approved_auto_diagnostics": unsafe_auto_diagnostics,
+        "release_analysis_identity_ready": release_analysis_identity_ready,
         "release_detection_gate_ready": (
             analysis_error_count == 0
+            and release_analysis_identity_ready
+            and not physical_prior_calibration_failures
             and not any(record["unsafe_approved_auto"] for record in records)
             and not any(
                 record["cohort_role"] == "nominal"
@@ -2541,10 +2617,13 @@ def _summary(
             item["candidate_safety_mismatch"] for item in variants
         ),
         "count_variant_diagnostics": variants,
-        "physical_prior_validation": _physical_prior_validation(
-            records,
-            cohort_sha256=identity.get("development_gold_cohort_sha256"),
+        "physical_prior_calibration_ready": (
+            not physical_prior_calibration_failures
         ),
+        "physical_prior_calibration_failures": list(
+            physical_prior_calibration_failures
+        ),
+        "physical_prior_validation": physical_prior_validation,
         "decision_status_counts": _counter(records, "decision_status"),
         "phase_failure_kind_counts": _counter(
             records,
@@ -2900,7 +2979,11 @@ def run_gold_analysis(
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
-    parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument(
+        "--output-root",
+        type=Path,
+        help="retain analysis artifacts; otherwise use a temporary directory",
+    )
     parser.add_argument(
         "--sample-id",
         action="append",
@@ -2924,11 +3007,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
-    try:
-        summary = run_gold_analysis(
-            args.output_root.expanduser().resolve(),
+
+    def execute(output_root: Path) -> dict[str, Any]:
+        return run_gold_analysis(
+            output_root,
             sample_ids=args.sample_ids,
         )
+
+    try:
+        if args.output_root is None:
+            with TemporaryDirectory(
+                prefix="x5crop-development-gold-analysis-"
+            ) as temporary:
+                summary = execute(Path(temporary).resolve())
+        else:
+            summary = execute(args.output_root.expanduser().resolve())
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         print(f"development gold analysis: FAIL: {error}", file=sys.stderr)
         return 1
