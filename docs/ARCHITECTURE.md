@@ -1200,17 +1200,23 @@ format/count 有效且固定模板已编译
 或自动批准，不应反向删除已经形成的 proposal；坐标非法、format/count 无效或根本无法形成完整 footprint
 时才保留 typed proposal unavailable。
 
-长轴 phase 同样遵守这项分层。`template_phase.py` 中的 `PhaseRetainedProposalBasis` 只记录一份已经完整
-定位、随后被 local evidence 否决 eligibility 的 pre-local phase；它可以来自 direct lattice 或 calibrated
-nominal Grid。保留动作不得清除原 `PhaseFailureKind`、改回 `RESOLVED`、建立 winner authority，或把该
-phase 计入 constraint rank。若短轴也能形成完整几何，`detector.py` 可据此组合 source proposal；若短轴
-仍不可用，则只保留轴级 Debug 事实，完整 source proposal 继续 typed unavailable。
+长轴 phase 同样遵守这项分层。`template_phase.py` 中的 `PhaseRetainedProposalBasis` 只记录一份有 absolute
+anchor、已形成全部 role 坐标，但尚无 eligibility 的完整 phase proposal。它可以是随后被 local evidence
+否决的 pre-local direct/calibrated-Grid fit，也可以是全部有界 fit 都超过 direct residual compatibility
+合同时保留的 direct/calibrated-Grid fit。后一种路径只在既有 bounded competition 中确定一份可显示方案
+并保留一个离散 runner；它不增加候选、查询或评分层，原 `fixed_template_mismatch` 就是直接反证。
+保留动作不得清除原 `PhaseFailureKind`、改回 `RESOLVED`、建立 winner authority，或把该 phase 计入
+constraint rank。若短轴也能形成完整几何，`detector.py` 可据此组合 source proposal；若短轴仍不可用，
+则只保留轴级 Debug 事实，完整 source proposal 继续 typed unavailable。Normal report 与 Debug 同时显示
+retained basis、原 failure 和 runner；`template_alignment.path` 统一为 `retained_phase_proposal`。
 
 | pre-local phase | local / adjacency 结果 | cross | proposal 与资格 |
 |---|---|---|---|
 | 完整且唯一定位 | 仍 resolved | 任意 | 正常路径，不登记 retained basis |
 | 完整且唯一定位 | typed unresolved / conflict | resolved | 保留完整 source proposal；candidate 不可用，进入 Review |
 | 完整且唯一定位 | typed unresolved / conflict | unavailable | 只保留 phase proposal；source proposal 不可用 |
+| 有 direct absolute anchor 的完整 bounded fit | 全部超过 residual compatibility；`fixed_template_mismatch` | resolved | 保留一份 proposal 与一个 runner；candidate 不可用 |
+| 有 direct absolute anchor 的完整 bounded fit | 全部超过 residual compatibility；`fixed_template_mismatch` | unavailable | 只保留 phase proposal；source proposal 不可用 |
 | 未形成完整定位 | 任意 | 任意 | 不得虚构 retained proposal |
 | producer bound exceeded | 任意 | 任意 | 不得保留或截断 proposal |
 

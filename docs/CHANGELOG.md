@@ -95,6 +95,22 @@ eligibility-withheld、5 proposal unavailable；本次观测仍为 0 个危险 a
 改动必须归零的前置条件。Release detection gate 尚未达标。Development-detail mean 为 3.958 秒，只作开发
 归因，不替代正式性能 Gate。
 
+长轴 solver 现在也区分“全部完整 fit 都有 residual 反证”和“没有任何完整几何”。只要 bounded competition
+已由 direct absolute anchor 形成全部 role 坐标，即使所有 fit 都超过 direct residual compatibility，
+`template_phase.py` 仍保留一份诊断 proposal 和一个离散 runner，并分别记录
+`direct_lattice_with_residual_counterevidence | calibrated_nominal_grid_with_residual_counterevidence`。
+原 `fixed_template_mismatch`、`UNRESOLVED` 和 eligibility 阻断不变；该路径不新增 TIFF query、候选、score、
+rank 或正式输出。Normal report 与 Debug 的统一路径为 `retained_phase_proposal`，Report revision 更新为
+`x5crop_v5_template_report_55`，不保留旧 schema 或旧路径别名。
+
+完整 110-task development report 无分析错误：proposal 从 105 增至 106，unavailable 从 5 降至 4；
+proposal 为 26 safe / 80 unsafe / 4 unavailable，candidate 保持 19 safe / 21 unsafe / 70 unavailable。
+S102 新增的完整 proposal 被黄金判为不安全，主要暴露短轴向内越线、后半段长轴错位和多处逐侧预算超限；
+它仍是 candidate unavailable 与 `needs_review`。S106 已保留长轴 fit，但短轴仍无完整几何，因此 source
+proposal 继续 unavailable。Runtime stage 为 16 approved auto、24 eligible candidate Review、66
+proposal-generated / eligibility-withheld、4 proposal unavailable；本次观测仍为 0 个危险 auto，release
+detection gate 尚未达标。Development-detail mean 为 3.938 秒，只作开发归因，不替代正式性能 Gate。
+
 ### 产品行为
 
 - 用户提供 format，并确认匹配片夹的默认 count 或显式 count；count 包含中间空白曝光格。Runtime 不猜

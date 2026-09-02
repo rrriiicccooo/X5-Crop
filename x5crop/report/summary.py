@@ -12,7 +12,7 @@ from .read_models import typed_read_model
 
 def template_alignment_path(phase: object, alignment: object) -> str | None:
     if phase.retained_proposal_basis is not None:
-        return "retained_pre_local_phase_proposal"
+        return "retained_phase_proposal"
     if phase.best is None or alignment.pattern.value == "unresolved":
         return None
     if any(relation.is_anomaly for relation in phase.best.adjacency_relations):

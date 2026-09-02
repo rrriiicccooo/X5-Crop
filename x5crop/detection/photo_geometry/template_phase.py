@@ -1201,6 +1201,81 @@ def fit_template_phase(
                 best_phase_candidate_authority_projection=best_projection,
                 runner_phase_candidate_authority_projection=runner_projection,
             )
+        # A bounded, anchored fit remains useful as a pre-Gate proposal even
+        # when every complete interpretation carries direct residual
+        # counterevidence.  Keep the strongest deterministic fit and one
+        # discrete runner for diagnosis; the unresolved status and typed
+        # mismatch continue to withhold candidate and auto authority.
+        residual_counterevidence_records = tuple(
+            sorted(
+                (*canonical_records, *terminal_records),
+                key=record_rank,
+                reverse=True,
+            )
+        )
+        if residual_counterevidence_records:
+            diagnostic_best, best_projection = (
+                residual_counterevidence_records[0]
+            )
+            diagnostic_runner_record = next(
+                (
+                    record
+                    for record in residual_counterevidence_records[1:]
+                    if not _same_continuous_placement(
+                        diagnostic_best.fit,
+                        record[0].fit,
+                    )
+                ),
+                None,
+            )
+            diagnostic_runner = (
+                None
+                if diagnostic_runner_record is None
+                else diagnostic_runner_record[0]
+            )
+            runner_projection = (
+                None
+                if diagnostic_runner_record is None
+                else diagnostic_runner_record[1]
+            )
+            calibrated = (
+                diagnostic_best.fit.calibrated_nominal_grid_fit_state
+                is not None
+            )
+            return PhaseFitResult(
+                template=template,
+                best=diagnostic_best.fit,
+                runner_up=(
+                    None
+                    if diagnostic_runner is None
+                    else diagnostic_runner.fit
+                ),
+                status=PhaseFitStatus.UNRESOLVED,
+                ambiguity_reason=(
+                    "all complete anchored phase fits exceed the direct "
+                    "residual compatibility contract"
+                ),
+                receipt=replace(
+                    receipt,
+                    inferred_role_count=len(
+                        diagnostic_best.fit.unbound_role_indices
+                    ),
+                ),
+                registered_direct_observation_ids=direct_ids,
+                failure_kind=PhaseFailureKind.FIXED_TEMPLATE_MISMATCH,
+                winner_basis=None,
+                retained_proposal_basis=(
+                    PhaseRetainedProposalBasis
+                    .CALIBRATED_NOMINAL_GRID_WITH_RESIDUAL_COUNTEREVIDENCE
+                    if calibrated
+                    else PhaseRetainedProposalBasis
+                    .DIRECT_LATTICE_WITH_RESIDUAL_COUNTEREVIDENCE
+                ),
+                best_phase_candidate_authority_projection=best_projection,
+                runner_phase_candidate_authority_projection=(
+                    runner_projection
+                ),
+            )
         return PhaseFitResult(
             template,
             None,

@@ -2856,6 +2856,41 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertIsNone(not_retained.best)
         self.assertIsNone(not_retained.retained_proposal_basis)
 
+    def test_residual_counterevidence_retains_bounded_phase_proposal(
+        self,
+    ) -> None:
+        spec = template(1)
+        observations = (edge("residual-proposal-anchor", 40.0),)
+        baseline = fit_template_phase(observations, spec)
+        assert baseline.best is not None
+
+        with patch(
+            "x5crop.detection.photo_geometry.template_phase._fit_seed",
+            return_value=_BoundFit(baseline.best, False),
+        ):
+            retained = fit_template_phase(observations, spec)
+
+        self.assertEqual(retained.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(
+            retained.failure_kind,
+            PhaseFailureKind.FIXED_TEMPLATE_MISMATCH,
+        )
+        self.assertIs(retained.best, baseline.best)
+        self.assertIsNone(retained.winner_basis)
+        self.assertEqual(
+            retained.retained_proposal_basis,
+            PhaseRetainedProposalBasis
+            .DIRECT_LATTICE_WITH_RESIDUAL_COUNTEREVIDENCE,
+        )
+        self.assertIn(
+            "residual compatibility contract",
+            retained.ambiguity_reason or "",
+        )
+
+        unanchored = fit_template_phase((), spec)
+        self.assertIsNone(unanchored.best)
+        self.assertIsNone(unanchored.retained_proposal_basis)
+
     def test_direct_phase_authority_preserves_calibrated_placement(self) -> None:
         observations = (
             edge("prior-start", 40.0),

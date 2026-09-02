@@ -379,6 +379,12 @@ class PhaseRetainedProposalBasis(str, Enum):
     DIRECT_LATTICE_BEFORE_LOCAL_COUNTEREVIDENCE = (
         "direct_lattice_before_local_counterevidence"
     )
+    CALIBRATED_NOMINAL_GRID_WITH_RESIDUAL_COUNTEREVIDENCE = (
+        "calibrated_nominal_grid_with_residual_counterevidence"
+    )
+    DIRECT_LATTICE_WITH_RESIDUAL_COUNTEREVIDENCE = (
+        "direct_lattice_with_residual_counterevidence"
+    )
 
 
 class SourceFrameWidthTopologyFailureKind(str, Enum):
@@ -698,6 +704,12 @@ class PhaseFitResult:
                 self.best is not None
                 and self.best.calibrated_nominal_grid_fit_state is not None
             )
+            calibrated_bases = {
+                PhaseRetainedProposalBasis
+                .CALIBRATED_NOMINAL_GRID_BEFORE_LOCAL_COUNTEREVIDENCE,
+                PhaseRetainedProposalBasis
+                .CALIBRATED_NOMINAL_GRID_WITH_RESIDUAL_COUNTEREVIDENCE,
+            }
             if (
                 not isinstance(
                     self.retained_proposal_basis,
@@ -706,11 +718,7 @@ class PhaseFitResult:
                 or self.status == PhaseFitStatus.RESOLVED
                 or self.best is None
                 or calibrated
-                != (
-                    self.retained_proposal_basis
-                    == PhaseRetainedProposalBasis
-                    .CALIBRATED_NOMINAL_GRID_BEFORE_LOCAL_COUNTEREVIDENCE
-                )
+                != (self.retained_proposal_basis in calibrated_bases)
             ):
                 raise ValueError("retained phase proposal basis is invalid")
         if (

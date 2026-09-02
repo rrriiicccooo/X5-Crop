@@ -2725,7 +2725,7 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             not in {"normal", "measured_relations", "unresolved"}
             or alignment["path"]
             != (
-                "retained_pre_local_phase_proposal"
+                "retained_phase_proposal"
                 if phase_retained_proposal_basis is not None
                 else {
                     "normal": "normal",
@@ -3246,16 +3246,18 @@ def _validate_phase_competition(value: object) -> None:
             isinstance(best, dict)
             and best.get("calibrated_nominal_grid_fit_state") is not None
         )
+        calibrated_bases = {
+            PhaseRetainedProposalBasis
+            .CALIBRATED_NOMINAL_GRID_BEFORE_LOCAL_COUNTEREVIDENCE.value,
+            PhaseRetainedProposalBasis
+            .CALIBRATED_NOMINAL_GRID_WITH_RESIDUAL_COUNTEREVIDENCE.value,
+        }
         if (
             retained_proposal_basis not in _PHASE_RETAINED_PROPOSAL_BASES
             or best is None
             or value["status"] == PhaseFitStatus.RESOLVED.value
             or calibrated
-            != (
-                retained_proposal_basis
-                == PhaseRetainedProposalBasis
-                .CALIBRATED_NOMINAL_GRID_BEFORE_LOCAL_COUNTEREVIDENCE.value
-            )
+            != (retained_proposal_basis in calibrated_bases)
         ):
             raise ValueError("development retained phase proposal is invalid")
     if (
