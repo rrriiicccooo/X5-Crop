@@ -50,15 +50,10 @@ def _placement_geometry_by_identity(
 def primary_geometry_by_identity(
     detection: FinalDetection,
 ) -> tuple[tuple[int, TemplateFrame], ...]:
-    """Return one lane-local winner, or its best candidate when withheld."""
+    """Return the canonical pre-Gate proposal for each source lane."""
 
     placement_ids = tuple(
-        lane.placement_competition.selected_placement_id
-        or (
-            lane.placement_competition.placements[0].placement_id
-            if lane.placement_competition.placements
-            else ""
-        )
+        lane.placement_proposal.placement_id or ""
         for lane in detection.candidate.geometry.lane_reconstructions
     )
     return _placement_geometry_by_identity(
@@ -121,6 +116,9 @@ def selection_summary(detection: FinalDetection) -> str:
         for item in lanes
     )
     vetoes = sum(len(item.content_veto_facts) for item in lanes)
+    proposed = sum(
+        item.placement_proposal.state.value == "generated" for item in lanes
+    )
     selected = sum(item.selected_placement is not None for item in lanes)
     bounded = any(item.work.bound_exceeded for item in lanes)
     return (
@@ -128,7 +126,8 @@ def selection_summary(detection: FinalDetection) -> str:
         f"ELIM {eliminated_candidates} · "
         f"PROJECT {projection_evaluations}/{projection_successes} · "
         f"DROP {projected_bindings} · "
-        f"PLACEMENTS {placements} · SELECTED {selected} · "
+        f"PLACEMENTS {placements} · PROPOSAL {proposed}/{len(lanes)} · "
+        f"SELECTED {selected} · "
         f"VETO {vetoes} · BOUND {'EXCEEDED' if bounded else 'OK'}"
     )
 
@@ -211,7 +210,9 @@ def competition_summary(detection: FinalDetection) -> str:
             differences.add("CROSS")
         if not competition.placements:
             continue
-        primary_id = competition.selected_placement_id or competition.placements[0].placement_id
+        primary_id = lane.placement_proposal.placement_id
+        if primary_id is None:
+            continue
         primary = next(
             item for item in competition.placements if item.placement_id == primary_id
         )
@@ -244,7 +245,7 @@ def competition_summary(detection: FinalDetection) -> str:
         subject = "WINNER BASIS"
     else:
         basis = "NO UNIQUE SAFE SOURCE PLACEMENT"
-        subject = "BEST CANDIDATE ONLY"
+        subject = "PRE-GATE PROPOSAL ONLY"
     runner = "NONE" if not differences else "/".join(sorted(differences))
     authority = (
         "UNAVAILABLE"

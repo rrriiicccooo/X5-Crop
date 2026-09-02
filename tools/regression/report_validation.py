@@ -37,6 +37,26 @@ CURRENT_REPORT_SECTIONS = (
 )
 
 _AUTHORITY_SIDES = ("left", "top", "right", "bottom")
+_FAILURE_FIELDS = {
+    "gap",
+    "recovery",
+    "minimum_missing_fact",
+    "recommended_action",
+    "detail",
+}
+_PLACEMENT_PROPOSAL_FIELDS = {
+    "lane_id",
+    "state",
+    "placement_id",
+    "output_footprints",
+    "failure",
+}
+_SOURCE_PROPOSAL_FIELDS = {
+    "lane_ids",
+    "placement_ids",
+    "state",
+    "failure",
+}
 _DIRECT_USE_BUDGET_FIELDS = {
     "geometry_id",
     "boundary_use",
@@ -2119,6 +2139,84 @@ def validate_output_footprint_authority(output: dict[str, Any]) -> None:
         raise ValueError("required source footprint violates saturation contract")
 
 
+def _valid_failure(value: object) -> bool:
+    return (
+        isinstance(value, dict)
+        and set(value) == _FAILURE_FIELDS
+        and all(isinstance(value.get(key), str) and value.get(key) for key in value)
+    )
+
+
+def _validate_placement_proposal(
+    value: object,
+    *,
+    lane_id: str,
+) -> list[dict[str, Any]]:
+    if (
+        not isinstance(value, dict)
+        or set(value) != _PLACEMENT_PROPOSAL_FIELDS
+        or value["lane_id"] != lane_id
+        or value["state"] not in {"generated", "unavailable"}
+        or not isinstance(value["output_footprints"], list)
+        or value["placement_id"] is not None
+        and (
+            not isinstance(value["placement_id"], str)
+            or not value["placement_id"]
+        )
+    ):
+        raise ValueError("placement proposal summary is invalid")
+    outputs = value["output_footprints"]
+    generated = value["state"] == "generated"
+    if generated != bool(value["placement_id"] and outputs) or (
+        generated and value["failure"] is not None
+    ) or (not generated and (outputs or not _valid_failure(value["failure"]))):
+        raise ValueError("placement proposal state is inconsistent")
+    for output in outputs:
+        validate_output_footprint_authority(output)
+        envelope = output.get("envelope", {})
+        if (
+            envelope.get("lane_id") != lane_id
+            or envelope.get("placement_id") != value["placement_id"]
+        ):
+            raise ValueError("proposal output identity is inconsistent")
+    if generated and tuple(
+        output["envelope"]["lane_ordinal"] for output in outputs
+    ) != tuple(range(1, len(outputs) + 1)):
+        raise ValueError("proposal outputs do not cover contiguous lane slots")
+    return outputs
+
+
+def _validate_source_proposal(value: object) -> dict[str, Any]:
+    if (
+        not isinstance(value, dict)
+        or set(value) != _SOURCE_PROPOSAL_FIELDS
+        or value["state"] not in {"generated", "unavailable"}
+        or not isinstance(value["lane_ids"], list)
+        or len(set(value["lane_ids"])) != len(value["lane_ids"])
+        or any(not isinstance(item, str) or not item for item in value["lane_ids"])
+        or not isinstance(value["placement_ids"], list)
+        or len(value["placement_ids"]) != len(value["lane_ids"])
+        or any(
+            item is not None and (not isinstance(item, str) or not item)
+            for item in value["placement_ids"]
+        )
+    ):
+        raise ValueError("source proposal summary is invalid")
+    generated = value["state"] == "generated"
+    if (
+        generated
+        and (
+            not value["lane_ids"]
+            or not all(value["placement_ids"])
+            or value["failure"] is not None
+        )
+    ) or (
+        not generated and not _valid_failure(value["failure"])
+    ):
+        raise ValueError("source proposal state is inconsistent")
+    return value
+
+
 def _validate_transform(value: object) -> bool:
     if not isinstance(value, dict) or set(value) != {
         "matrix",
@@ -2355,6 +2453,42 @@ def _validate_finalization(record: dict[str, Any]) -> None:
 
 def _validate_geometry(record: dict[str, Any]) -> None:
     geometry = record["photo_geometry"]
+    source_proposal = _validate_source_proposal(
+        geometry.get("source_placement_proposal")
+    )
+    source_selection = geometry.get("source_placement_selection")
+    if (
+        not isinstance(source_selection, dict)
+        or set(source_selection)
+        != {
+            "state",
+            "failure",
+            "selected_placement_ids",
+            "runner_up_placement_ids",
+        }
+        or source_selection["state"] not in {"supported", "unavailable"}
+        or not isinstance(source_selection["selected_placement_ids"], list)
+        or not isinstance(source_selection["runner_up_placement_ids"], list)
+        or len(source_selection["selected_placement_ids"])
+        != len(source_selection["runner_up_placement_ids"])
+    ):
+        raise ValueError("source placement selection is invalid")
+    source_selected = source_selection["state"] == "supported"
+    if (
+        source_selected
+        and (
+            not source_selection["selected_placement_ids"]
+            or not all(source_selection["selected_placement_ids"])
+            or source_selection["failure"] is not None
+        )
+    ) or (
+        not source_selected
+        and (
+            any(source_selection["selected_placement_ids"])
+            or not _valid_failure(source_selection["failure"])
+        )
+    ):
+        raise ValueError("source placement selection state is inconsistent")
     resolved = geometry.get("resolved_slot_count")
     holder = geometry.get("matched_holder")
     if resolved is not None and (
@@ -2370,7 +2504,24 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         not in {"matched_holder_default_count", "user_explicit_count"}
     ):
         raise ValueError("matched holder and resolved count disagree")
+    lane_ids: list[str] = []
+    lane_proposal_ids: list[str | None] = []
+    lane_selected_ids: list[str | None] = []
     for lane in geometry["lanes"]:
+        lane_id = lane.get("lane_id")
+        if not isinstance(lane_id, str) or not lane_id:
+            raise ValueError("source lane identity is invalid")
+        proposal_outputs = _validate_placement_proposal(
+            lane.get("placement_proposal"),
+            lane_id=lane_id,
+        )
+        proposal = lane["placement_proposal"]
+        lane_ids.append(lane_id)
+        lane_proposal_ids.append(
+            proposal["placement_id"]
+            if proposal["state"] == "generated"
+            else None
+        )
         outputs = lane["output_footprints"]
         budgets = lane["direct_use_budget_assessments"]
         outputs_by_id = {item["geometry_id"]: item for item in outputs}
@@ -2808,10 +2959,30 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         selected = lane["selected_placement_id"]
         if (selected is None) != (not outputs):
             raise ValueError("selected template output is incomplete")
+        if selected is not None and (
+            proposal["state"] != "generated"
+            or proposal["placement_id"] != selected
+            or proposal_outputs != outputs
+        ):
+            raise ValueError("selected output does not reuse the proposal")
+        lane_selected_ids.append(selected)
         if not isinstance(lane.get("peak_temporary_bytes"), int) or lane[
             "peak_temporary_bytes"
         ] < 0:
             raise ValueError("template peak-memory fact is invalid")
+    if (
+        source_proposal["lane_ids"] != lane_ids
+        or source_proposal["placement_ids"] != lane_proposal_ids
+        or source_selection["selected_placement_ids"] != lane_selected_ids
+        or len(source_selection["runner_up_placement_ids"]) != len(lane_ids)
+        or source_selected
+        and (
+            source_proposal["state"] != "generated"
+            or source_proposal["placement_ids"]
+            != source_selection["selected_placement_ids"]
+        )
+    ):
+        raise ValueError("proposal, eligibility, and source selection disagree")
 
 
 def _validate_phase_candidate_projection(
@@ -3107,9 +3278,16 @@ def _validate_development(record: dict[str, Any]) -> None:
     if detail != "development" or not isinstance(development, dict):
         raise ValueError("development report detail is unavailable")
     lanes = development.get("lanes")
-    if not isinstance(lanes, list):
+    production_geometry = record["photo_geometry"]
+    production_lanes = production_geometry["lanes"]
+    if (
+        not isinstance(lanes, list)
+        or len(lanes) != len(production_lanes)
+        or development.get("source_placement_proposal")
+        != production_geometry.get("source_placement_proposal")
+    ):
         raise ValueError("development lane facts are unavailable")
-    for lane in lanes:
+    for lane, production_lane in zip(lanes, production_lanes, strict=True):
         placement = lane.get("placement_competition")
         work = lane.get("work")
         winner = lane.get("winner_basis")
@@ -3130,6 +3308,8 @@ def _validate_development(record: dict[str, Any]) -> None:
                 "aperture_aspect_ratio_authority"
             )
             or not isinstance(lane.get("template_alignment"), dict)
+            or lane.get("placement_proposal")
+            != production_lane.get("placement_proposal")
             or not isinstance(winner, dict)
             or set(winner)
             != {

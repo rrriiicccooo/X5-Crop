@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from enum import Enum
 from types import MappingProxyType
 
 from ...domain import EvidenceState, FiniteInterval
@@ -613,6 +614,95 @@ class TemplatePlacementCompetition:
             raise ValueError("unsupported placement requires a typed failure")
 
 
+class TemplateProposalState(str, Enum):
+    """Whether one complete pre-Gate crop proposal was materialized."""
+
+    GENERATED = "generated"
+    UNAVAILABLE = "unavailable"
+
+
+@dataclass(frozen=True)
+class TemplatePlacementProposal:
+    """One lane's primary placement and complete pre-Gate output geometry."""
+
+    lane_id: str
+    state: TemplateProposalState
+    placement_id: str | None
+    output_footprints: tuple[OutputFootprint, ...]
+    failure: DetectionFailureFact | None
+
+    def __post_init__(self) -> None:
+        if not self.lane_id or not isinstance(self.state, TemplateProposalState):
+            raise ValueError("template proposal identity or state is invalid")
+        generated = self.state == TemplateProposalState.GENERATED
+        complete = (
+            isinstance(self.placement_id, str)
+            and bool(self.placement_id)
+            and bool(self.output_footprints)
+        )
+        if generated != complete:
+            raise ValueError("template proposal state and geometry disagree")
+        if generated:
+            if self.failure is not None:
+                raise ValueError("generated template proposal has no failure")
+            ordinals = tuple(
+                item.envelope.lane_ordinal for item in self.output_footprints
+            )
+            if (
+                ordinals != tuple(range(1, len(ordinals) + 1))
+                or len({item.geometry_id for item in self.output_footprints})
+                != len(self.output_footprints)
+                or any(
+                    item.envelope.lane_id != self.lane_id
+                    or item.envelope.placement_id != self.placement_id
+                    for item in self.output_footprints
+                )
+            ):
+                raise ValueError("generated template proposal geometry is invalid")
+        elif self.output_footprints or not isinstance(
+            self.failure, DetectionFailureFact
+        ):
+            raise ValueError("unavailable template proposal requires one failure")
+
+
+@dataclass(frozen=True)
+class TemplateSourceProposal:
+    """Source-level completeness of all lane-local pre-Gate proposals."""
+
+    lane_ids: tuple[str, ...]
+    placement_ids: tuple[str | None, ...]
+    state: TemplateProposalState
+    failure: DetectionFailureFact | None
+
+    def __post_init__(self) -> None:
+        if not self.lane_ids:
+            if (
+                self.placement_ids
+                or self.state != TemplateProposalState.UNAVAILABLE
+                or not isinstance(self.failure, DetectionFailureFact)
+            ):
+                raise ValueError("empty source proposal can only be unavailable")
+            return
+        if (
+            len(set(self.lane_ids)) != len(self.lane_ids)
+            or len(self.placement_ids) != len(self.lane_ids)
+            or not isinstance(self.state, TemplateProposalState)
+        ):
+            raise ValueError("source proposal identity or state is invalid")
+        generated = self.state == TemplateProposalState.GENERATED
+        complete = all(
+            isinstance(value, str) and bool(value)
+            for value in self.placement_ids
+        )
+        if generated and not complete:
+            raise ValueError("generated source proposal lacks lane placements")
+        if generated:
+            if self.failure is not None:
+                raise ValueError("generated source proposal has no failure")
+        elif not isinstance(self.failure, DetectionFailureFact):
+            raise ValueError("unavailable source proposal requires one failure")
+
+
 @dataclass(frozen=True)
 class TemplatePlacementWorkReceipt:
     """Bounded work for one lane's placement assessment."""
@@ -638,11 +728,12 @@ class TemplatePlacementWorkReceipt:
 
 @dataclass(frozen=True)
 class TemplateLaneReconstruction:
-    """One lane's bounded placement competition and selected-only outputs."""
+    """One lane's proposal, eligibility competition, and selected-only outputs."""
 
     lane_id: str
     prepared: PreparedTemplateLane
     placement_competition: TemplatePlacementCompetition
+    placement_proposal: TemplatePlacementProposal
     selected_placement: FormatPlacement | None
     output_footprints: tuple[OutputFootprint, ...]
     calibrated_nominal_grid_authority: CalibratedNominalGridAuthority
@@ -660,6 +751,25 @@ class TemplateLaneReconstruction:
         placements = self.placement_competition.placements
         if any(item.lane_id != self.lane_id for item in placements):
             raise ValueError("placement competition crosses lane authority")
+        proposal = self.placement_proposal
+        if proposal.lane_id != self.lane_id:
+            raise ValueError("placement proposal crosses lane authority")
+        placement_ids = {item.placement_id for item in placements}
+        if proposal.placement_id not in ({None} | placement_ids):
+            raise ValueError("placement proposal is outside its competition")
+        if proposal.state == TemplateProposalState.GENERATED:
+            proposed = next(
+                item
+                for item in placements
+                if item.placement_id == proposal.placement_id
+            )
+            if len(proposal.output_footprints) != proposed.output_slot_count:
+                raise ValueError("placement proposal does not cover every slot")
+            if any(
+                item.envelope.lane_id != self.lane_id
+                for item in proposal.output_footprints
+            ):
+                raise ValueError("proposal footprint crosses lane authority")
         selected_id = self.placement_competition.selected_placement_id
         if not isinstance(
             self.calibrated_nominal_grid_authority,
@@ -677,6 +787,12 @@ class TemplateLaneReconstruction:
             raise ValueError("selected placement and competition state disagree")
         if self.selected_placement is not None and self.selected_placement.placement_id != selected_id:
             raise ValueError("selected placement is not competition winner")
+        if self.selected_placement is not None and (
+            proposal.state != TemplateProposalState.GENERATED
+            or proposal.placement_id != selected_id
+            or proposal.output_footprints != self.output_footprints
+        ):
+            raise ValueError("selected placement must reuse the primary proposal")
         if self.selected_placement is None:
             if (
                 self.enclosing_support_aperture_authority.state
@@ -793,10 +909,11 @@ class TemplateSourceSelection:
 
 @dataclass(frozen=True)
 class PhotoGeometryDetectionResult:
-    """Pipeline-facing result with selected-only output properties."""
+    """Pipeline result separating proposal, eligibility, and selected output."""
 
     resolved_output_slots: ResolvedOutputSlots | None
     lane_reconstructions: tuple[TemplateLaneReconstruction, ...]
+    source_placement_proposal: TemplateSourceProposal
     source_placement_selection: TemplateSourceSelection
     output_slot_identities: tuple[OutputSlotIdentity, ...]
     assessment_facts: Mapping[str, TypedAssessment]
@@ -819,6 +936,17 @@ class PhotoGeometryDetectionResult:
             raise ValueError("unresolved output slots cannot have identities")
         if self.source_placement_selection.lane_ids != lane_ids:
             raise ValueError("source selection lane order disagrees with result")
+        proposal = self.source_placement_proposal
+        if proposal.lane_ids != lane_ids:
+            raise ValueError("source proposal lane order disagrees with result")
+        proposal_ids = tuple(
+            item.placement_proposal.placement_id
+            if item.placement_proposal.state == TemplateProposalState.GENERATED
+            else None
+            for item in self.lane_reconstructions
+        )
+        if proposal.placement_ids != proposal_ids:
+            raise ValueError("source proposal disagrees with lane proposals")
         selected_ids = tuple(
             None
             if item.selected_placement is None
@@ -842,6 +970,12 @@ class PhotoGeometryDetectionResult:
                 for item in self.lane_reconstructions
             ):
                 raise ValueError("selected lanes disagree with shared source authority")
+            if (
+                proposal.state != TemplateProposalState.GENERATED
+                or proposal.placement_ids
+                != self.source_placement_selection.selected_placement_ids
+            ):
+                raise ValueError("selected source must reuse the generated proposal")
         if self.source_placement_selection.state != EvidenceState.SUPPORTED and any(
             item.output_footprints or item.direct_use_budget_assessments or item.selected_placement is not None
             for item in self.lane_reconstructions

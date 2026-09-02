@@ -89,6 +89,9 @@ def development_report_facts(
         "source_placement_selection": typed_read_model(
             geometry.source_placement_selection
         ),
+        "source_placement_proposal": typed_read_model(
+            geometry.source_placement_proposal
+        ),
         "root_gate": {
             "candidate": typed_read_model(detection.candidate.gate),
             "decision": typed_read_model(detection.decision),
@@ -189,6 +192,9 @@ def development_report_facts(
                 ),
                 "placement_competition": typed_read_model(
                     lane.placement_competition
+                ),
+                "placement_proposal": typed_read_model(
+                    lane.placement_proposal
                 ),
                 "winner_basis": {
                     "state": lane.placement_competition.state.value,

@@ -637,7 +637,7 @@ def long_axis_panel(
         draw_label_chip(
             draw,
             (media_left + 132, footer_y),
-            "WINNER START / END" if supported else "BEST CANDIDATE",
+            "WINNER START / END" if supported else "PRE-GATE PROPOSAL",
             style.selected_boundary_color, style, filled=False,
         )
     if runner or runner_fit:

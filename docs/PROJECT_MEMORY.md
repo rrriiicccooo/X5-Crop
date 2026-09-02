@@ -6,9 +6,10 @@
 
 ## 当前目标
 
-优先让当前 96 个 development nominal 全部安全 `approved_auto`，同时让 110 个 development task 的
-`unsafe_approved_auto` 始终为 0。Challenge 不预设终态：安全 auto 是能力发现，安全 review 同样合格。
-不得改样片角色、隐藏 runner、放宽黄金合同或用更大 bleed 换覆盖。
+优先让当前 96 个 development nominal 全部安全 `approved_auto`。Release commit 必须让 110 个
+development task 的 `unsafe_approved_auto = 0`；中间开发允许黄金集暴露危险 auto，但必须逐项保存样片、
+错误边界与根因，并明确不能发布或正式交付。Challenge 不预设终态：安全 auto 是能力发现，安全 review
+同样合格。不得改样片角色、隐藏 runner、放宽黄金合同或用更大 bleed 换覆盖。
 
 V5 是 v4.2.8 已有效检测能力在 current-only 物理与安全架构中的重建和增强，不是另一个从零设计的
 裁切器。删除旧机制前必须先确认它为何在真实像素上有效，把有效部分迁入唯一 observation、anchor、
@@ -27,6 +28,10 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
 
 ## 当前检查点
 
+- Runtime 已严格分开完整 pre-Gate proposal、candidate eligibility 与 `approved_auto | needs_review`。
+  `TemplatePlacementProposal` / `TemplateSourceProposal` 是 proposal 的唯一 owner；资格不足不再删除已经形成的
+  方案，正式 TIFF 仍只来自 approved output。Development gold 分别比较 proposal、candidate 与正式 auto；
+  `--gate report` 保留危险 auto 诊断，`--gate release` 与 `tools/verify accuracy` 才执行发布检测门槛。
 - Grid 是唯一 placement 主生成模型；format 提供黄金集校准且有界的 `W/H/pitch`，至少一个 absolute
   anchor 将它放入 TIFF。Direct rank 3 是更强的完全直接闭合路径，不是唯一许可；逐 adjacency coverage
   完整且无反证时，Grid 可以生成两侧都未直接观察的 Frame。直接 observation 保留 native coordinate
@@ -83,30 +88,25 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   同一个两侧 direct aperture，或两侧 enclosing support 经 fixed H 闭合出的 aperture 内时，才保留 native
   coordinate。单侧/无唯一域为 unavailable，域坍缩或 trace 越域为 conflict；该证明不新增像素读取、候选
   或 rank，content veto 与 5% 预算继续独立生效。
-- 当前 Report revision 为 `x5crop_v5_template_report_49`；Debug/报告显式保存 calibration identity、anchor、
-  inferred adjacency、完全未观察 Frame、联合参数依据、measured relation、projection outcome、typed
-  failure、source-W/frame-inference basis、全部 retained W constraint/observation、W topology facts、
-  partial-height aperture domain 与工作量。Debug
-  列出精确 anchor role、逐 adjacency local delta、direct correction、coverage/counterevidence、candidate
-  elimination、enclosing-support center authority/有效偏移区间与最终联合 envelope。完整路径最多 6 次
-  fit pass，不增加 TIFF query、第二 detector 或旧 schema 兼容层。
+- 当前 Report revision 为 `x5crop_v5_template_report_50`；普通报告与 Debug 显式分开 proposal、eligibility、
+  selected output 和决定，并继续保存 calibration identity、anchor、inferred adjacency、完全未观察 Frame、
+  联合参数依据、measured relation、projection outcome、typed failure、source-W/frame-inference basis、全部
+  retained W constraint/observation、W topology facts、partial-height aperture domain 与工作量。完整路径最多
+  6 次 fit pass，不增加 TIFF query、第二 detector 或旧 schema 兼容层。
 
-完整 development gold 已完成 110/110，分析错误 0，`unsafe_approved_auto = 0`。安全 auto 为基础 nominal
-14/66、较难 nominal 2/30、challenge 0/14；94 个 task 安全 review。Candidate 为 71 个不可用、19 个安全、
-20 个不安全；全部不安全 candidate 均保持 review，14 个 challenge 的安全 Review 均合格。Source W 为
-51 supported / 55 unavailable / 4 contradicted；其中 18 个由完整 Frame、11 个由 direct lattice、22 个由
-两组 direct constraint reconciliation 闭合。Frame-width inference 为 24 supported / 41 unavailable /
-45 not applicable；6 个使用完整 Frame basis、18 个使用 reconciliation。唯一
-`direct_lattice_counterevidence` 是 S077。S076/S090 明确为 `physical_width_conflict`。Late-binding projection
-共执行 18 次、投影 23 个无权限 binding、完成 15 次有界 Grid solve。S108 已从
-`adjacency_topology_unresolved` 进入下游 aperture/budget；S109 则因全部 retained constraint 传播后的 W
-让 relation 5 signed-gap interval 跨零，撤回旧任意三行 basis 产生的安全 candidate，准确保留 topology
-Review。当前 development-detail mean 为 4.020 秒，只作开发归因；相同检测源码的 clean-checkpoint
-24-source 正式性能工具 mean 为 3.536 秒，通过 5 秒 Gate，3 秒目标仍为非阻断 challenge。当前安全但
-Review 的 nominal candidate 为
-S030/S058；S044 是一个安全 Review challenge candidate。S045 的 candidate 不安全并继续被 5%/budget
-Gate 阻断。S012 的 candidate 会越过黄金
-cross-low 预算，同样保持安全 Review。该开发检查点不替代未来 release commit 的正式性能复验。
+完整 development gold diagnostic 已完成 110/110，分析错误 0。现有主模型生成 85 个 proposal，25 个
+尚未生成；proposal 为 25 safe / 60 unsafe / 25 unavailable。Eligibility 层保留 39 个 candidate，形成
+19 safe / 20 unsafe / 71 unavailable：其中 6 个安全 proposal 与 40 个不安全 proposal 被保留为 Review。
+Runtime stage 为 16 approved auto、23 eligible candidate Review、46 proposal-generated/eligibility-withheld、
+25 proposal unavailable。当前恰好仍是 16 个安全 auto、94 个 Review、危险 auto 0，但 release detection
+gate 未达标；不能把这个中间结果称为发布通过。Development-detail mean 为 4.313 秒，只作开发归因；
+相同检测源码最近一次 clean-checkpoint 24-source 正式性能 mean 为 3.536 秒，通过 5 秒 Gate，3 秒目标仍为
+非阻断 challenge，该旧性能 receipt 不替代未来 release commit 的复验。
+
+Source W 仍为 51 supported / 55 unavailable / 4 contradicted；其中 18 个由完整 Frame、11 个由 direct
+lattice、22 个由两组 direct constraint reconciliation 闭合。Frame-width inference 为 24 supported /
+41 unavailable / 45 not applicable；唯一 `direct_lattice_counterevidence` 是 S077。Late-binding projection
+共执行 18 次、投影 23 个无权限 binding、完成 15 次有界 Grid solve。
 
 对 96 个 nominal 的同源 v4.2.8/V5 对照中，发布版 80 个 auto 里有 70 个黄金危险自动裁切；发布版仅
 11 个 geometry 安全。当前 V5 已让其中 S022、S025 安全 auto；其余 9 个仍按真实 typed root 安全 Review：
@@ -117,6 +117,9 @@ output budget，S032 为 phase ambiguity。
 
 - 106-source/110-task development gold 用于发现机制、调试和 incident regression，不估计未来生产错误率。
   独立 calibration/sealed 是未来概率选择与未见来源声明的前提，但不再是首版发布前置条件。
+- 当前 25 个 proposal unavailable 才是真正的生成缺口；另有 46 个 proposal 已完整形成但 eligibility
+  withheld。后者包含 6 个黄金安全 proposal（S014/S048/S079/S083/S088/S094）和 40 个不安全 proposal；
+  安全并不自动证明当前阻断多余，不安全也不能因 Review 而隐藏，必须分别追到通用权限或几何根因。
 - 当前 96 个 nominal 仍有 80 个 review。主要 phase root failure 为
   `discrete_phase_ambiguous` 13、`fixed_template_mismatch` 10、`adjacency_topology_unresolved` 6、
   `calibrated_nominal_grid_conflict` 5、`source_frame_width_conflict` 4、
@@ -136,14 +139,12 @@ output budget，S032 为 phase ambiguity。
 
 ## 精确下一步
 
-1. 对 S007/S010/S026/S040/S109/S110 这 6 个 `adjacency_topology_unresolved` 做下一轮单机制归因：区分
-   native role 绑定错误、缺少直接 local relation、真实 Contact/Overlap 与 source-W interval 本身尚未
-   闭合。S026 的 boundary-edge:28 当前绑定为
-   F2 END，却也位于下一 Frame 的 separator side；应先修唯一 role/relation owner，不能收窄 W、挑有利
-   状态或把未知 overlap 伪装成 `OverlapRelation`。
-2. 对 4 个 `source_frame_width_conflict` 只按 source physical W 与 direct lattice 的真实冲突继续诊断；不得
-   扩大 W prior 或回退旧“两张 Frame 才算 W”的权限。S077 的 registered counterevidence 也必须保留。
-3. 随后按真实 root 继续离散 ambiguity、剩余 direct-role 与 clipped-boundary geometry；
-   每次只闭合一个通用机制，不恢复旧终判或放宽预算。随真实使用逐步补充 calibration、sealed 和缺失
-   format 样片。出现危险自动裁切时保存原 TIFF、format、
-   count 与 SHA，人工建立权威 baseline，加入 incident regression，并只用通用机制永久修复。
+1. 先让所有合法 format/count 尽量形成完整 proposal。对 25 个 unavailable 按 typed root 逐类修生成能力：
+   `phase_template_mismatch` 9、aspect budget 5、anchor 2、Grid conflict 2，其余各 1；不能把缺失权限伪装成
+   approved，也不能用样片特例生成。
+2. 在 85 个已生成 proposal 上优先修 60 个黄金不安全几何的通用 detector、anchor、local relation、cross
+   或 output 根因；黄金只作离线比较，不能进入 Runtime。随后审计 6 个安全但 eligibility withheld 的方案，
+   只移除真正放错层级或重复的阻断，保留真实 counterevidence。
+3. Proposal 几何稳定后再收紧 eligibility 与 DecisionGate，使 96 个 nominal 全部安全 auto；开发期间任何
+   危险 auto 都完整列出并继续修复，release commit 才硬性归零。每次只闭合一个通用机制，不恢复旧终判、
+   放宽预算或建立兼容路径；真实 incident 经人工确认后永久进入回归集。

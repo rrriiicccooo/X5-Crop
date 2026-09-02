@@ -5,7 +5,7 @@ import unittest
 
 from x5crop.domain import FiniteInterval, ObservationId, PositiveInterval
 from x5crop.detection.photo_geometry.template_feasible_geometry import (
-    project_selected_placement,
+    project_format_placement,
 )
 from x5crop.detection.photo_geometry.template_model import (
     LatticeParameterFitBasis,
@@ -90,7 +90,7 @@ class TemplateFeasibleGeometryContractTest(unittest.TestCase):
             sequence,
             _cross(template, direction=_direction()),
         )
-        projection = project_selected_placement(placement)
+        projection = project_format_placement(placement)
         self.assertEqual(
             self._sequence_interval(projection, 1, 0),
             FiniteInterval.exact(220.0),
@@ -128,7 +128,7 @@ class TemplateFeasibleGeometryContractTest(unittest.TestCase):
             _cross(template, direction=_direction()),
         )
 
-        projection = project_selected_placement(placement)
+        projection = project_format_placement(placement)
 
         self.assertEqual(
             self._sequence_interval(projection, 0, 0),
@@ -189,7 +189,7 @@ class TemplateFeasibleGeometryContractTest(unittest.TestCase):
             _cross(template, direction=_direction()),
         )
 
-        projection = project_selected_placement(placement)
+        projection = project_format_placement(placement)
 
         for state in projection.frame_states[1]:
             scale = (state.sequence_start_px - 100.0) / 60.0
@@ -217,7 +217,7 @@ class TemplateFeasibleGeometryContractTest(unittest.TestCase):
             bottom_full_interval_px=FiniteInterval(245.0, 250.0),
         )
         placement = _compose(template, _sequence(template), cross)
-        projection = project_selected_placement(placement)
+        projection = project_format_placement(placement)
         self.assertEqual(
             self._cross_interval(projection, 0),
             FiniteInterval(5.0, 10.0),
@@ -254,8 +254,8 @@ class TemplateFeasibleGeometryContractTest(unittest.TestCase):
                 bottom_full_interval_px=FiniteInterval(248.0, 252.0),
             ),
         )
-        broad_projection = project_selected_placement(broad)
-        narrow_projection = project_selected_placement(narrow)
+        broad_projection = project_format_placement(broad)
+        narrow_projection = project_format_placement(narrow)
         self.assertGreaterEqual(
             self._cross_interval(narrow_projection, 0).minimum,
             self._cross_interval(broad_projection, 0).minimum,

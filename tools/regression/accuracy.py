@@ -301,10 +301,12 @@ def _production_command(
     return command
 
 
-def validate_gold_task_result(
+def validate_release_gold_task_result(
     record: dict[str, object],
     report: dict[str, object],
 ) -> str:
+    """Enforce the release-only gold decision and approved geometry gate."""
+
     status = str(report["decision"]["status"])
     role = str(record["cohort_role"])
     if role == "nominal" and status != "approved_auto":
@@ -358,7 +360,7 @@ def _run_task(record: dict[str, object]) -> str:
             or identity["mtime_ns"] != before.st_mtime_ns
         ):
             raise ValueError("source stat identity changed across accuracy task")
-        return validate_gold_task_result(record, report)
+        return validate_release_gold_task_result(record, report)
 
 
 def run_accuracy(records: Iterable[dict[str, object]]) -> tuple[int, int]:
@@ -378,7 +380,7 @@ def run_accuracy(records: Iterable[dict[str, object]]) -> tuple[int, int]:
         print(f"{identity}: {status}")
     if failures:
         raise ValueError(
-            f"development gold contract failed {len(failures)} task(s):\n"
+            f"release detection gate failed {len(failures)} task(s):\n"
             + "\n".join(failures)
         )
     return passed, approved
@@ -391,10 +393,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         records = validate_gold_source_identities()
         passed, approved = run_accuracy(records)
     except ValueError as error:
-        print(f"development gold contract: FAIL: {error}", file=sys.stderr)
+        print(f"release detection gate: FAIL: {error}", file=sys.stderr)
         return 1
     print(
-        f"development gold contract: {passed}/{len(records)} accepted; "
+        f"release detection gate: {passed}/{len(records)} accepted; "
         f"approved={approved}"
     )
     return 0

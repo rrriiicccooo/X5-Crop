@@ -778,17 +778,18 @@ validation-only 合同让位。
 
 ### 7.2 Calibrated nominal Grid authority
 
-`CalibratedNominalGridAuthority` 是 direct rank-3 之外的显式闭合路径。默认 Grid 始终是同一个带校准
-不确定性的 primary generative model；authority 只证明它可以形成 selected placement 并进入统一安全评估，
-不直接授予 `approved_auto`，也不建立第二套 placement：
+`CalibratedNominalGridAuthority` 是 direct rank-3 之外的显式闭合路径。Format/count 编译时即建立同一个带
+校准不确定性的默认 Grid；它是 primary generative model，不是 detector 失败后的 fallback。Grid 的存在、
+完整 proposal、candidate eligibility 与最终决定属于四个不同事实：authority 只决定 proposal 能否成为
+eligible candidate，不直接授予 `approved_auto`，也不建立第二套 placement：
 
 ```text
 format-specific calibrated W/H/pitch intervals
 + 至少一个获得坐标权限的 direct absolute phase anchor
 + 每个使用 local_delta=0 的 adjacency 完整覆盖其合法不确定性走廊
 + 没有 wide/narrow/contact/overlap/conflict 等直接反证
-→ Grid 可以生成完整默认 placement，包括 START/END 都未直接观察的 Frame
-→ selected placement 的全部相关可行状态进入 source containment、content veto 与 5% 预算
+→ Grid 可以生成完整默认 proposal，包括 START/END 都未直接观察的 Frame
+→ eligible placement 的全部相关可行状态进入 source containment、content veto 与 5% 预算
 → 只有最坏安全包络仍合格才可 approved_auto
 ```
 
@@ -797,7 +798,11 @@ START/END、outer 或其它获得坐标权限的 anchor。Pitch、W 与 source s
 uncertainty 按离 anchor 的 slot 距离传播，不能按每格独立选择有利值；H 由短轴直接 authority 或有界
 format ratio 路径闭合，并在同一 selected output 中联合受检验。直接 START/END、top/bottom 保留 native
 coordinate 并收紧默认模型；直接 separator 的实际宽度继续只产生一次 local advance，不能被 nominal gap
-拉回。Direct rank 3 仍是更强的完全直接闭合路径，但不是 Grid 生成缺失角色的唯一许可。
+拉回。Direct rank 3 仍是更强的完全直接闭合路径，但不是 Grid 生成缺失角色的唯一许可。当前
+`template_runtime_model.py` 中的 `TemplatePlacementProposal` / `TemplateSourceProposal` 唯一拥有完整
+pre-Gate proposal；`TemplatePlacementCompetition` / `TemplateSourceSelection` 只拥有 eligibility 与选择；
+`DecisionGate` 独占 `approved_auto | needs_review`。Proposal 可以在后两层不支持时保留，绝不能冒充
+selected output 或正式 TIFF。
 
 逐 adjacency coverage 必须覆盖当前 placement 的完整合法走廊；“所有 query 都执行完成”或“没有检测到
 edge”不是 normal adjacency 的充分证明。直接角色反证和已证明 local relation 优先于 Grid，coverage
@@ -811,7 +816,7 @@ adjacency coverage、typed counterevidence 和最坏输出包络处理，不能�
 
 | calibration / anchor | adjacency coverage | 直接反证或局部异常 | 联合输出结果 | 终态 |
 |---|---|---|---|---|
-| supported / supported | complete | 无 | 尚未评估 | Grid placement 进入统一安全评估；允许完全未观察 Frame |
+| supported / supported | complete | 无 | 尚未评估 | Grid proposal 进入统一安全评估；允许完全未观察 Frame |
 | supported / unavailable | 任意 | 任意 | 任意 | `nominal_grid_phase_anchor_unavailable` → Review |
 | supported / supported | incomplete | 无 | 任意 | `adjacency_observation_coverage_incomplete` → Review |
 | supported / supported | complete | wide/narrow/contact/overlap | 与 relation 相容 | 直接 relation 修正 Grid；不能保持普通 `local_delta=0` |
@@ -1159,6 +1164,21 @@ Decision 后 finalization 才执行并评估 lightweight deskew。`needs_review`
 
 ## 11. Gate、report 与 Debug Analysis
 
+Runtime 先生成 proposal，再判断 eligibility，最后才作产品决定：
+
+```text
+format/count 有效且固定模板已编译
+→ TemplatePlacementProposal：完整 pre-Gate 裁切方案，或 typed unavailable
+→ TemplatePlacementCompetition / TemplateSourceSelection：硬事实下的 eligibility 与 runner
+→ CandidateGate / DecisionGate：approved_auto 或 needs_review
+```
+
+`proposal_generated` 只表示系统已经提出可比较的完整几何；它可以不安全，也不保证 eligible。
+`candidate_eligible` 表示该方案没有被当前硬物理与权限合同淘汰；它仍不等于自动批准。只有
+`approved_auto` 才能进入 finalization 并写正式 TIFF。证据不足、runner 或预算未闭合通常只能阻止 eligibility
+或自动批准，不应反向删除已经形成的 proposal；坐标非法、format/count 无效或根本无法形成完整 footprint
+时才保留 typed proposal unavailable。
+
 `CandidateGate` 只汇总 typed facts：输入 authority、measurement completeness、producer bounds、
 adjacency relation、获准的 selected placement、content、holder fill、source-space 联合 footprint 和 budget；
 未来概率层若启用，还包括其 versioned selection assessment 与 abstention facts。Phase、
@@ -1184,20 +1204,26 @@ complete/selected placement 后重复建立同义 Gate fact。它不读取 deske
 
 `approved_auto` 是产品风险决定，不是“运行时已经知道真实黄金边界”的数学证明。Runtime 只能根据校准
 先验、registered evidence、硬物理合同、剩余不确定性与 OOD 判断风险是否低到可直接使用；真实内容边界
-只在开发验收中可知。首版检测目标因此是当前 development nominal 全部安全 `approved_auto`，全部角色
-持续保持 `unsafe_approved_auto = 0`；未来建立 sealed cohort 后适用相同安全标准。不能用无限外扩换取
-一个不存在的绝对保证。未来出现一次真实危险自动裁切时，必须保存原 TIFF、format、count 与 source
-SHA，由人工建立 reference 后永久进入 development incident regression，再用通用机制修复；不能只修
+只在开发验收中可知。开发黄金的作用正是暴露当前决定中的危险自动批准：中间开发提交允许暂时出现
+`unsafe_approved_auto > 0`，但必须逐项记录样片、错误边界与通用根因，并明确不能发布或正式交付；不得
+为了维持表面上的零错误而让 proposal 生成层提前全部 Review。首版 release commit 的硬门槛仍是当前
+development nominal 全部安全 `approved_auto`、全部角色 `unsafe_approved_auto = 0`；未来建立 sealed cohort
+后适用相同标准。不能用无限外扩换取一个不存在的绝对保证。未来出现一次真实危险自动裁切时，必须保存
+原 TIFF、format、count 与 source SHA，由人工建立 reference 后永久进入 development incident regression，
+再用通用机制修复；不能只修
 当前图片、建立样片规则或把它改成 challenge。Calibration、sealed 与新格式样片随真实使用持续补充，
 不作为单次 incident 修复的前置条件。
 
-普通 report 只保存输入、holder/count authority、最终选择、OutputFootprint、预算、根因、输出文件
-和必要 TIFF 事实。Saturation 只记录越界 `authority_side`；每项预算只按 output `geometry_id` 关联，
-不保留不可达的多 placement 或 named-gap 容器。Report 只保存最终 `deskew_assessment`：是否应用、
+普通 report 保存输入、holder/count authority、一份 canonical pre-Gate proposal 或 typed unavailable、最终
+选择、approved-only OutputFootprint、预算、根因、输出文件和必要 TIFF 事实。Proposal footprint 是开发与
+Review 诊断几何，不是 approved sampling geometry，也不写正式照片；report 不保留其它不可达 placement。
+Saturation 只记录越界 `authority_side`；每项预算只按 output `geometry_id` 关联，不保留 named-gap 容器。
+Report 只保存最终 `deskew_assessment`：是否应用、
 观测角、实际旋转或 typed skip reason，不重复保存旁路 observation。
 Holder/count/output-slot identity 只在 `photo_geometry` 保存一次；finalization 复用每个
 `OutputFootprint` 内的 sampling authority 和 `deskew_assessment` 内的唯一 source transform，不再建立
-逐 slot 同义 tuple。`needs_review` 不暴露 approved sampling geometry 或 final boxes。每个阻止事实
+逐 slot 同义 tuple。`needs_review` 可以暴露明确标注的 pre-Gate proposal，但不暴露 approved sampling
+geometry 或 final boxes。每个阻止事实
 同时给出最小缺失事实、恢复类别和建议操作。完整 observations、alignment residual、winner/runner、
 direct/inferred ledger、content veto 和工作量只属于显式 Debug Analysis 或 verifier。外部 report
 validator 位于 `tools/regression/`，不进入用户 standalone。
@@ -1217,6 +1243,8 @@ Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决
   `NOT USED | supported | unavailable | contradicted`、受影响 relation 与 signed-gap interval；
 - nominal Grid calibration、精确 absolute anchor role、每个 adjacency 的 coverage/counterevidence、
   measured local delta、direct correction 与最终联合 envelope；
+- pre-Gate proposal 的 state、placement identity 与完整 footprint，并与 eligibility、selected output 和
+  DecisionGate 终态明确分层；
 - 每个 bound role 的 residual 和 normal/measured-relations/unresolved pattern；
 - direct 与 inferred 边界；
 - best、runner 及真正不同之处；
@@ -1316,12 +1344,13 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/template_alignment_diagnostic.py` | theoretical-vs-observed residual 的只读诊断 |
 | `photo_geometry/interval_math.py`、`template_cross*.py`、`template_cross_support.py` | 共享 interval 运算、source H 校准、局部 top/bottom 方向闭合、typed producer bound 与 enclosing support |
 | `photo_geometry/template_enclosing_support_aperture.py` | selected unique enclosing support 内的黄金校准 aperture-center authority、物理 containment 交集与 typed conflict；rank 0，不选 geometry |
-| `photo_geometry/template_placement.py`、`template_selection.py` | source-axis frame 的一次 compose、显式 overlap 的 cross-support 去重与离散 winner/runner |
+| `photo_geometry/template_placement.py`、`template_selection.py` | source-axis frame 的一次 compose、显式 overlap 的 cross-support 去重，以及 proposal 之后的离散 eligibility/winner/runner |
 | `photo_geometry/template_holder_fill.py` | selected PhotoGroupOuter 与 W-only fill assessment |
 | `photo_geometry/content_*.py` | 最终 post-bleed polygon 上的二维 negative veto |
-| `photo_geometry/template_feasible_geometry.py` | selected placement 的低维联合可行集合 |
+| `photo_geometry/template_feasible_geometry.py` | 任一已 compose placement 的低维联合可行集合与 footprint projection；不决定 eligibility |
 | `photo_geometry/template_output.py`、`output_model.py` | JointPlacementEnvelope、基础 bleed、Contact/Overlap 两侧 topology protection、enclosing-support aperture-center risk、OutputFootprint 与同一 5% budget |
-| `photo_geometry/template_runtime_model.py`、`template_gate.py`、`detector.py` | current-only handoff、CandidateGate facts 与顶层编排 |
+| `photo_geometry/template_runtime_model.py`、`detector.py` | `TemplatePlacementProposal` / `TemplateSourceProposal`、eligibility/selection handoff 与顶层编排；proposal 不授权正式输出 |
+| `photo_geometry/template_gate.py` | selected-only CandidateGate facts；不生成、选择或删除 proposal |
 | `x5crop/detection/output_deskew.py` | approved-only 6–24 trace、role-free、candidate-independent 的可选输出角度 observation |
 | `x5crop/detection/decision/`、`final/` | 最终决定、Decision 后 deskew assessment 与 approved geometry exposure |
 | `x5crop/report/` | compact production report 与 development facts 的生成 |
@@ -1358,9 +1387,9 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   基准，基本可视为该 source 的 aperture 尺寸；它仍不是实验室级绝对测量，也不限定 detector 只能产生
   一个逐像素相同的答案。
 - 黄金比较是方向性的：`approved_auto` 的正式 post-bleed `required_source_footprint` 必须完整包含确认
-  polygon，边、角点或亚像素位置不得向其内侧越界；任一违例都是危险自动批准并硬阻断。Development
-  contract 还用同一规则检查 selected candidate，以定位 detector 机制；Review candidate 的偏差不产生
-  正式输出，因此只属于 candidate 几何诊断，不能称为用户层危险批准。几何 epsilon 只吸收浮点计算
+  polygon，边、角点或亚像素位置不得向其内侧越界；任一违例都是危险自动批准。Development diagnostic
+  还用同一规则分别检查 pre-Gate proposal 与 eligible candidate，以定位生成、资格和决定三个阶段的根因；
+  Review proposal/candidate 的偏差不产生正式输出，因此不能称为用户层危险批准。几何 epsilon 只吸收浮点计算
   误差。具有向外预算权限的每一侧，其总 expansion 不得超过对应确认 W/H span 的 5% 加命名的 sampling
   allowance，uncertainty、residual 与 bleed 均消耗该预算。这不是零像素误差或对称接近度要求。
 - 逐线 `review_basis` 分别决定向内包含与向外 5% 预算能否产生阻断 accuracy verdict：
@@ -1407,11 +1436,13 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   角色不能在观察失败后修改，也不能成为样片 whitelist。
   标注器按该合同逐 task 派生并展示角色，不提供人工切换；同一 source 的任一 task 为 challenge 时，
   source 队列归入 challenge，同时保留各 count task 的独立角色与原因。
-  不存在 selected candidate 的 Review 记录为 candidate `not_available`，不伪造几何 verdict；cosmetic
-  deskew 精度不阻断黄金，affine polygon envelope 与 TIFF 安全合同仍阻断。
-- Development 验证分开报告四个维度：任何角色均须为 0 的 `unsafe_approved_auto`、不产生正式输出的
-  candidate geometry conformance、nominal 自动覆盖，以及 challenge capability。决定分布、candidate
-  偏差、自动覆盖与安全准确性不得合并为单一“准确率”。
+  不存在 eligible candidate 的 Review 记录为 candidate `not_available`；已经形成的 proposal 仍独立比较，
+  只有真正未生成完整 footprint 时才记录 proposal `not_available`，不得伪造几何 verdict。Cosmetic deskew
+  精度不阻断黄金，affine polygon envelope 与 TIFF 安全合同仍阻断。
+- Development 验证分开报告五个维度：proposal 覆盖与 pre-Gate 几何、candidate eligibility 与几何、
+  `unsafe_approved_auto`、nominal 自动覆盖，以及 challenge capability。决定分布、proposal/candidate 偏差、
+  自动覆盖与安全准确性不得合并为单一“准确率”。开发诊断允许暂时出现危险 auto，但必须完整列出样片、
+  错误边界和根因，并把结果明确标为未达到 release detection gate；不得隐藏、改角色或提前删除 proposal。
 - 检测能力发布底线是当前 development nominal 全部安全 `approved_auto`，全部角色
   `unsafe_approved_auto = 0`；challenge 的安全 auto 是能力发现，安全 review 同样合格，但不能替代
   nominal 覆盖。未来建立 sealed cohort 后，其 nominal 也必须全部安全自动通过。不得把失败 nominal 改成
@@ -1445,8 +1476,11 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   分桶，其它 nominal 进入较难分桶，challenge 保持原角色。该 2% 只是优化顺序，不是 runtime 阈值、
   5% 安全预算或样片白名单。“机器是否看见”必须由每次运行的 observation/binding 事实重新生成，不能
   写回人工基线。分析结果绑定 HEAD、detector source manifest、comparator source manifest 与 development
-  gold SHA，并分别记录两组路径是否与 HEAD 一致。`--gate zero-unsafe-auto` 只在完整 development gold 上
-  阻断危险自动批准；完整 development contract 仍独立检查 candidate conformance 与 nominal 目标。
+  gold SHA，并分别记录两组路径是否与 HEAD 一致。默认 `--gate report` 只要求诊断完整，始终报告 proposal、
+  candidate、危险 auto 与 root failure；即使发现危险 auto 也保留成功退出，便于开发修复。`--gate release`
+  只接受完整 development gold，并硬性要求 nominal 全部安全 `approved_auto`、全部角色
+  `unsafe_approved_auto = 0`；`tools/verify accuracy` 执行同一 release-only 决策与 approved geometry 门槛。
+  任何已知错误 auto 都使 release detection gate 失败。
 - 同一分析按 source SHA 去重验证 runtime 物理先验，并分别统计同源与跨 source 的 W/H、separator gap、
   pitch，以及 scan-canvas/profile 和 top/bottom corridor。黄金红线是人工确认、尽量贴近该 source 真实
   有效成像边界的最内侧可接受基准，基本可作为 source aperture 的真实尺寸观测；因此它可以校准物理

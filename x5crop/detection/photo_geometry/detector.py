@@ -20,7 +20,7 @@ from .measurement_model import PhotoBoundaryMeasurementField
 from .output_model import OutputFootprint, OutputSlotIdentity
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import CrossFitStatus
-from .template_feasible_geometry import project_selected_placement
+from .template_feasible_geometry import project_format_placement
 from .template_enclosing_support_aperture import (
     not_applicable_enclosing_support_aperture_authority,
 )
@@ -48,7 +48,10 @@ from .template_runtime_model import (
     PreparedTemplateLane,
     TemplateLaneReconstruction,
     TemplatePlacementCompetition,
+    TemplatePlacementProposal,
     TemplatePlacementWorkReceipt,
+    TemplateProposalState,
+    TemplateSourceProposal,
     TemplateSourceSelection,
 )
 from .template_selection import (
@@ -153,8 +156,12 @@ def _empty_result(
     lanes_available: bool,
     output_slot_gap: GateGap = GateGap.OUTPUT_SLOT_COUNT_UNAVAILABLE,
 ) -> PhotoGeometryDetectionResult:
+    proposal_failure = failure_fact(output_slot_gap)
+    proposal = TemplateSourceProposal(
+        (), (), TemplateProposalState.UNAVAILABLE, proposal_failure
+    )
     selection = TemplateSourceSelection(
-        (), (), None, EvidenceState.UNAVAILABLE, failure_fact(output_slot_gap)
+        (), (), None, EvidenceState.UNAVAILABLE, proposal_failure
     )
     facts = {
         "scan_canvas_authority": (
@@ -185,7 +192,7 @@ def _empty_result(
         "enclosing_support_aperture_consistency": supported(),
         "direct_use_budget": unavailable(GateGap.DIRECT_USE_BUDGET_UNAVAILABLE),
     }
-    return PhotoGeometryDetectionResult(None, (), selection, (), facts)
+    return PhotoGeometryDetectionResult(None, (), proposal, selection, (), facts)
 
 
 def reconstruct_photo_geometry(
@@ -239,7 +246,7 @@ def reconstruct_photo_geometry(
             FormatPlacement | None,
             ContentVetoAssessment | None,
             TemplatePlacementCompetition,
-            tuple[OutputFootprint, ...],
+            TemplatePlacementProposal,
         ]
     ] = []
     for lane, content in zip(
@@ -253,9 +260,10 @@ def reconstruct_photo_geometry(
             source_geometry=geometry,
         )
         best_outputs = ()
+        proposal_failure = None
         if best is not None:
             try:
-                projection = project_selected_placement(best)
+                projection = project_format_placement(best)
                 best_outputs = tuple(
                     output_footprint_from_template_placement(
                         best,
@@ -266,8 +274,12 @@ def reconstruct_photo_geometry(
                     )
                     for ordinal in range(1, best.output_slot_count + 1)
                 )
-            except ValueError:
+            except ValueError as error:
                 best_outputs = ()
+                proposal_failure = failure_fact(
+                    GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE,
+                    detail=str(error),
+                )
         content_assessment = (
             None
             if (
@@ -290,9 +302,58 @@ def reconstruct_photo_geometry(
             cross=lane.cross_competition,
             content_assessment=content_assessment,
         )
-        provisional.append(
-            (best, runner, content_assessment, competition, best_outputs)
+        proposal = TemplatePlacementProposal(
+            lane_id=lane.lane.domain.lane_id,
+            state=(
+                TemplateProposalState.GENERATED
+                if best is not None
+                and len(best_outputs) == best.output_slot_count
+                else TemplateProposalState.UNAVAILABLE
+            ),
+            placement_id=None if best is None else best.placement_id,
+            output_footprints=best_outputs,
+            failure=(
+                None
+                if best is not None
+                and len(best_outputs) == best.output_slot_count
+                else proposal_failure
+                or competition.failure
+                or failure_fact(GateGap.COMPLETE_PLACEMENT_UNAVAILABLE)
+            ),
         )
+        provisional.append(
+            (best, runner, content_assessment, competition, proposal)
+        )
+
+    lane_proposals = tuple(item[4] for item in provisional)
+    source_proposal_failure = next(
+        (
+            item.failure
+            for item in lane_proposals
+            if item.state != TemplateProposalState.GENERATED
+        ),
+        None,
+    )
+    source_proposal = TemplateSourceProposal(
+        lane_ids=lane_ids,
+        placement_ids=tuple(
+            item.placement_id
+            if item.state == TemplateProposalState.GENERATED
+            else None
+            for item in lane_proposals
+        ),
+        state=(
+            TemplateProposalState.GENERATED
+            if source_proposal_failure is None and shared_geometry is not None
+            else TemplateProposalState.UNAVAILABLE
+        ),
+        failure=(
+            None
+            if source_proposal_failure is None and shared_geometry is not None
+            else source_proposal_failure
+            or failure_fact(GateGap.SHARED_AUTHORITY_UNAVAILABLE)
+        ),
+    )
 
     source_selection = select_template_source(
         tuple(item[3] for item in provisional),
@@ -329,7 +390,7 @@ def reconstruct_photo_geometry(
         )
         output_footprints = ()
         if selected is not None:
-            output_footprints = values[4]
+            output_footprints = values[4].output_footprints
         budgets = tuple(
             template_direct_use_budget_assessment(
                 selected, output
@@ -374,6 +435,7 @@ def reconstruct_photo_geometry(
                 lane_id=lane.lane.domain.lane_id,
                 prepared=lane,
                 placement_competition=competition,
+                placement_proposal=values[4],
                 selected_placement=selected,
                 output_footprints=output_footprints,
                 calibrated_nominal_grid_authority=nominal_grid_authority,
@@ -408,6 +470,7 @@ def reconstruct_photo_geometry(
     return PhotoGeometryDetectionResult(
         resolved_output_slots=resolved,
         lane_reconstructions=reconstructed,
+        source_placement_proposal=source_proposal,
         source_placement_selection=source_selection,
         output_slot_identities=_output_identities(
             lanes, resolved.lane_output_slot_counts

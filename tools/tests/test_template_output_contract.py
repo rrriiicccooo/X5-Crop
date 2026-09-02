@@ -55,7 +55,7 @@ from x5crop.detection.photo_geometry.template_output import (
     template_direct_use_budget_assessment,
 )
 from x5crop.detection.photo_geometry.template_feasible_geometry import (
-    project_selected_placement,
+    project_format_placement,
 )
 from x5crop.detection.photo_geometry.template_enclosing_support_aperture import (
     derive_enclosing_support_aperture_authority,
@@ -477,7 +477,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         self,
     ) -> None:
         placement = _overlap_placement()
-        projection = project_selected_placement(placement)
+        projection = project_format_placement(placement)
         outputs = tuple(
             output_footprint_from_template_placement(
                 placement,
@@ -519,7 +519,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         self,
     ) -> None:
         placement = _contact_placement()
-        projection = project_selected_placement(placement)
+        projection = project_format_placement(placement)
         outputs = tuple(
             output_footprint_from_template_placement(
                 placement,
@@ -563,7 +563,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         placement = _contact_placement(
             shared_direction_uncertainty_degrees=10.0,
         )
-        projection = project_selected_placement(placement)
+        projection = project_format_placement(placement)
         output = output_footprint_from_template_placement(
             placement,
             projection,
@@ -586,7 +586,7 @@ class TemplateOutputContractTest(unittest.TestCase):
             frame_count=2,
             support_slope=0.002,
         )
-        projection = project_selected_placement(placement)
+        projection = project_format_placement(placement)
         frame = placement.frames[1]
         expected_top = 27.0 + 0.002 * (
             frame.top.reference_trace_px - 150.0
@@ -607,7 +607,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=_lane(),
             lane_ordinal=3,
             layout="horizontal",
@@ -634,7 +634,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=_lane(),
             lane_ordinal=3,
             layout="horizontal",
@@ -656,7 +656,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         placement = _enclosing_support_placement()
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
@@ -692,7 +692,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         placement = _enclosing_support_placement(support_span_px=264.0)
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
@@ -717,7 +717,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=_lane(),
             lane_ordinal=2,
             layout="horizontal",
@@ -747,7 +747,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
@@ -784,7 +784,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
@@ -836,7 +836,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
@@ -862,7 +862,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=_lane(),
             lane_ordinal=3,
             layout="horizontal",
@@ -882,7 +882,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         placement = _placement()
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
@@ -917,7 +917,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=lane,
             lane_ordinal=1,
             layout="horizontal",
@@ -970,7 +970,7 @@ class TemplateOutputContractTest(unittest.TestCase):
 
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=lane,
             lane_ordinal=1,
             layout="horizontal",
@@ -1015,7 +1015,7 @@ class TemplateOutputContractTest(unittest.TestCase):
 
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=lane,
             lane_ordinal=1,
             layout="horizontal",
@@ -1054,7 +1054,7 @@ class TemplateOutputContractTest(unittest.TestCase):
 
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=lane,
             lane_ordinal=1,
             layout="horizontal",
@@ -1084,7 +1084,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         placement = _placement()
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
@@ -1104,7 +1104,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         placement = replace(placement, cross_fit=cross)
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
@@ -1170,7 +1170,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
@@ -1235,7 +1235,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         frame = placement.frames[2]
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=_lane(),
             lane_ordinal=3,
             layout="horizontal",
@@ -1276,7 +1276,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
@@ -1418,7 +1418,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         placement = _compose(template, _sequence(template), cross)
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
@@ -1454,7 +1454,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
@@ -1476,7 +1476,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
@@ -1520,7 +1520,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=_lane(),
             lane_ordinal=2,
             layout="horizontal",
@@ -1557,7 +1557,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=_lane(),
             lane_ordinal=3,
             layout="horizontal",
@@ -1595,7 +1595,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
@@ -1613,14 +1613,14 @@ class TemplateOutputContractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             output_footprint_from_template_placement(
                 placement,
-                project_selected_placement(placement),
+                project_format_placement(placement),
                 lane=_lane("lane:other"),
                 lane_ordinal=1,
                 layout="horizontal",
             )
         output = output_footprint_from_template_placement(
             placement,
-            project_selected_placement(placement),
+            project_format_placement(placement),
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
@@ -1640,7 +1640,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             output_footprint_from_template_placement(
                 placement,
-                project_selected_placement(placement),
+                project_format_placement(placement),
                 lane=_lane(),
                 lane_ordinal=0,
                 layout="horizontal",

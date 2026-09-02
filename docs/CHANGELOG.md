@@ -19,6 +19,22 @@ local correction、risk feature、veto、protection 或 selection 的唯一 owne
 TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 sealed cohort，以及黄金未覆盖 `xpan`、
 `120-645`、`135-dual`，都只作为未见/真实样片覆盖事实披露，不阻断首版发布，也不改变统一 Runtime 合同。
 
+Proposal、eligibility 与产品决定现已成为三层独立事实。`TemplatePlacementProposal` /
+`TemplateSourceProposal` 保存一份完整 pre-Gate proposal 或 typed unavailable；资格层只能决定它能否成为
+selected candidate，`DecisionGate` 仍独占 `approved_auto | needs_review`，正式 TIFF 仍只来自前者。
+Normal report 与 Debug 可显示 Review proposal，但它不会冒充 approved sampling geometry。Report revision
+更新为 `x5crop_v5_template_report_50`，不保留旧 schema 或旧 projection helper。
+
+Development gold 现在分别比较 proposal、candidate 和 approved output；`--gate report` 即使发现危险 auto
+也完整写出样片、错误边界与 root failure 并成功结束，`--gate release` 才要求 nominal 全部安全 auto 且
+全部角色危险 auto 为 0。完整 110-task diagnostic 无分析错误：85 个 proposal 已生成、25 个尚不可用；
+proposal 为 25 safe / 60 unsafe / 25 unavailable，candidate 为 19 safe / 20 unsafe / 71 unavailable。
+其中 6 个安全 proposal 与 40 个不安全 proposal 被 eligibility 层保留为 Review；Runtime stage 分布为
+16 approved auto、23 eligible candidate Review、46 proposal-generated/eligibility-withheld、25 proposal
+unavailable。当前仍是 16 个安全 auto、94 个 Review、危险 auto 0，release detection gate 未达标；
+development-detail mean 为 4.313 秒，只作开发归因。该分层没有新增 TIFF query、detector、candidate、
+score、fallback 或正式输出。
+
 ### 产品行为
 
 - 用户提供 format，并确认匹配片夹的默认 count 或显式 count；count 包含中间空白曝光格。Runtime 不猜

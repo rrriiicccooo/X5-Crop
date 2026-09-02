@@ -546,6 +546,9 @@ class DebugAnalysisContractTest(unittest.TestCase):
             lane_reconstructions=(
                 SimpleNamespace(
                     placement_competition=competition,
+                    placement_proposal=SimpleNamespace(
+                        placement_id="winner"
+                    ),
                     prepared=SimpleNamespace(
                         phase_competition=SimpleNamespace(
                             best=SimpleNamespace(

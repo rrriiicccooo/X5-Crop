@@ -38,18 +38,20 @@ from .accuracy import (
     DEVELOPMENT_GOLD_COHORT_PATH,
     PROJECT_ROOT,
     validate_gold_source_identities,
-    validate_gold_task_result,
+    validate_release_gold_task_result,
 )
 from .file_identity import sha256_file
 from .gold_geometry import (
     gold_frame_diagnostics,
+    gold_proposal_frame_diagnostics,
+    validate_proposal_coverage,
     validate_selected_candidate_coverage,
 )
 from .report_validation import validate_current_report_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v13"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v14"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v14"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v15"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
 SOURCE_TIMEOUT_SECONDS = 600
@@ -929,7 +931,7 @@ def _challenge_capability_outcome(
     *,
     cohort_role: str,
     decision_status: str,
-    development_contract_passed: bool,
+    release_detection_gate_passed: bool,
     candidate_geometry_conformance: str,
 ) -> str | None:
     if cohort_role != "challenge":
@@ -937,7 +939,7 @@ def _challenge_capability_outcome(
     if decision_status == "approved_auto":
         return (
             "safe_approved_auto"
-            if development_contract_passed
+            if release_detection_gate_passed
             else "unsafe_approved_auto"
         )
     return {
@@ -945,6 +947,25 @@ def _challenge_capability_outcome(
         "unsafe": "needs_review_with_unsafe_candidate",
         "not_available": "needs_review_without_candidate",
     }[candidate_geometry_conformance]
+
+
+def _runtime_pipeline_outcome(
+    *,
+    proposal_generation_state: str,
+    source_placement_state: str,
+    decision_status: str,
+) -> str:
+    """Locate the first runtime stage that withheld formal output."""
+
+    if proposal_generation_state != "generated":
+        return "proposal_unavailable"
+    if source_placement_state != "supported":
+        return "proposal_generated_eligibility_withheld"
+    if decision_status == "needs_review":
+        return "eligible_candidate_needs_review"
+    if decision_status == "approved_auto":
+        return "approved_auto"
+    raise ValueError("runtime pipeline outcome has an invalid decision status")
 
 
 def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
@@ -993,12 +1014,25 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         ):
             raise ValueError("source stat identity changed across gold analysis")
 
-        development_contract_failure = None
+        release_detection_gate_failure = None
         try:
-            status = validate_gold_task_result(record, report)
+            status = validate_release_gold_task_result(record, report)
         except ValueError as error:
             status = str(report["decision"]["status"])
-            development_contract_failure = str(error)
+            release_detection_gate_failure = str(error)
+        proposal_geometry_failure = None
+        try:
+            proposal_available = validate_proposal_coverage(record, report)
+        except ValueError as error:
+            proposal_available = True
+            proposal_geometry_failure = str(error)
+        proposal_geometry_conformance = (
+            "unsafe"
+            if proposal_geometry_failure is not None
+            else "safe"
+            if proposal_available
+            else "not_available"
+        )
         candidate_geometry_failure = None
         try:
             candidate_available = validate_selected_candidate_coverage(
@@ -1038,6 +1072,10 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
             record,
             gold_frame_diagnostics(record, report),
         )
+        proposal_frame_diagnostics = _frame_diagnostics_with_physical_identity(
+            record,
+            gold_proposal_frame_diagnostics(record, report),
+        )
         phase_competition = development_lanes[0]["phase_competition"]
         phase_best = phase_competition["best"]
         global_lattice = phase_competition["global_lattice_authority"]
@@ -1064,10 +1102,13 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         enclosing_resolution = development_lanes[0]["search"][
             "coarse_strip_support"
         ]["enclosing_resolution"]
-    development_contract_passed = development_contract_failure is None
+    release_detection_gate_passed = release_detection_gate_failure is None
     unsafe_approved_auto = (
-        status == "approved_auto" and not development_contract_passed
+        status == "approved_auto" and not release_detection_gate_passed
     )
+    proposal_generation_state = report["photo_geometry"][
+        "source_placement_proposal"
+    ]["state"]
     return {
         "record_schema": ANALYSIS_RECORD_SCHEMA,
         "sample_id": record["sample_id"],
@@ -1078,21 +1119,39 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         "optimization_stage": optimization_stage_index(record),
         "decision_status": status,
         "final_review_reasons": list(report["decision"]["final_review_reasons"]),
-        "development_contract_passed": development_contract_passed,
-        "development_contract_failure": development_contract_failure,
+        "release_detection_gate_passed": release_detection_gate_passed,
+        "release_detection_gate_failure": release_detection_gate_failure,
+        "proposal_generation_state": proposal_generation_state,
+        "proposal_generation_failure_gap": (
+            None
+            if report["photo_geometry"]["source_placement_proposal"][
+                "failure"
+            ]
+            is None
+            else report["photo_geometry"]["source_placement_proposal"][
+                "failure"
+            ]["gap"]
+        ),
+        "proposal_geometry_conformance": proposal_geometry_conformance,
+        "proposal_geometry_failure": proposal_geometry_failure,
         "candidate_geometry_conformance": candidate_geometry_conformance,
         "candidate_geometry_failure": candidate_geometry_failure,
         "unsafe_approved_auto": unsafe_approved_auto,
         "nominal_auto_goal_passed": (
             record["cohort_role"] == "nominal"
             and status == "approved_auto"
-            and development_contract_passed
+            and release_detection_gate_passed
         ),
         "challenge_capability_outcome": _challenge_capability_outcome(
             cohort_role=str(record["cohort_role"]),
             decision_status=status,
-            development_contract_passed=development_contract_passed,
+            release_detection_gate_passed=release_detection_gate_passed,
             candidate_geometry_conformance=candidate_geometry_conformance,
+        ),
+        "runtime_pipeline_outcome": _runtime_pipeline_outcome(
+            proposal_generation_state=proposal_generation_state,
+            source_placement_state=placement_state,
+            decision_status=status,
         ),
         "source_placement_state": placement_state,
         "phase_status": production_lanes[0]["phase_status"],
@@ -1204,6 +1263,9 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         ],
         "duration_seconds": duration,
         "boundary_diagnostics": list(boundaries),
+        "frame_proposal_geometry_diagnostics": list(
+            proposal_frame_diagnostics
+        ),
         "frame_candidate_geometry_diagnostics": list(frame_diagnostics),
         "physical_prior_diagnostic": physical_prior,
     }
@@ -2127,10 +2189,10 @@ def _physical_prior_validation(
     }
 
 
-def _development_contract_failure_category(
+def _release_detection_gate_failure_category(
     record: dict[str, Any],
 ) -> str | None:
-    failure = record["development_contract_failure"]
+    failure = record["release_detection_gate_failure"]
     if failure is None:
         return None
     if "nominal task is needs_review" in failure:
@@ -2236,6 +2298,7 @@ def _count_variant_diagnostics(
         if len(members) < 2:
             continue
         frame_states: dict[str, dict[str, str]] = defaultdict(dict)
+        proposal_frame_states: dict[str, dict[str, str]] = defaultdict(dict)
         for member in members:
             for frame in member["frame_candidate_geometry_diagnostics"]:
                 unsafe = bool(
@@ -2245,12 +2308,28 @@ def _count_variant_diagnostics(
                 frame_states[str(frame["physical_frame_id"])][
                     str(member["sample_id"])
                 ] = "unsafe" if unsafe else "safe"
+            for frame in member["frame_proposal_geometry_diagnostics"]:
+                unsafe = bool(
+                    frame["inward_failure_sides"]
+                    or frame["outward_budget_failure_sides"]
+                )
+                proposal_frame_states[str(frame["physical_frame_id"])][
+                    str(member["sample_id"])
+                ] = "unsafe" if unsafe else "safe"
         mismatches = [
             {
                 "physical_frame_id": identity,
                 "task_states": dict(sorted(states.items())),
             }
             for identity, states in sorted(frame_states.items())
+            if len(states) > 1 and set(states.values()) == {"safe", "unsafe"}
+        ]
+        proposal_mismatches = [
+            {
+                "physical_frame_id": identity,
+                "task_states": dict(sorted(states.items())),
+            }
+            for identity, states in sorted(proposal_frame_states.items())
             if len(states) > 1 and set(states.values()) == {"safe", "unsafe"}
         ]
         diagnostics.append(
@@ -2262,6 +2341,9 @@ def _count_variant_diagnostics(
                         "count": member["count"],
                         "cohort_role": member["cohort_role"],
                         "decision_status": member["decision_status"],
+                        "proposal_geometry_conformance": member[
+                            "proposal_geometry_conformance"
+                        ],
                         "candidate_geometry_conformance": member[
                             "candidate_geometry_conformance"
                         ],
@@ -2275,6 +2357,15 @@ def _count_variant_diagnostics(
                     )
                 ],
                 "shared_frame_safety_mismatches": mismatches,
+                "shared_frame_proposal_safety_mismatches": proposal_mismatches,
+                "proposal_safety_mismatch": bool(proposal_mismatches),
+                "proposal_availability_mismatch": len(
+                    {
+                        member["proposal_geometry_conformance"]
+                        for member in members
+                    }
+                )
+                > 1,
                 "candidate_safety_mismatch": bool(mismatches),
                 "candidate_availability_mismatch": len(
                     {
@@ -2313,7 +2404,7 @@ def _summary(
         category
         for record in records
         if (
-            category := _development_contract_failure_category(record)
+            category := _release_detection_gate_failure_category(record)
         )
         is not None
     )
@@ -2324,6 +2415,14 @@ def _summary(
         for record in completed
         if record["challenge_capability_outcome"] is not None
     )
+    proposal_states = Counter(
+        str(record["proposal_geometry_conformance"])
+        for record in completed
+    )
+    proposal_generation_states = Counter(
+        str(record["proposal_generation_state"])
+        for record in completed
+    )
     candidate_states = Counter(
         str(record["candidate_geometry_conformance"])
         for record in completed
@@ -2333,6 +2432,35 @@ def _summary(
         for record in completed
         if record["decision_status"] == "needs_review"
     )
+    proposal_candidate_matrix: dict[str, Counter[str]] = defaultdict(Counter)
+    for record in completed:
+        proposal_candidate_matrix[
+            str(record["proposal_geometry_conformance"])
+        ][str(record["candidate_geometry_conformance"])] += 1
+    unsafe_auto_diagnostics = [
+        {
+            "sample_id": record["sample_id"],
+            "source_sha256": record["source_sha256"],
+            "format_id": record["format_id"],
+            "count": record["count"],
+            "cohort_role": record["cohort_role"],
+            "release_detection_gate_failure": record[
+                "release_detection_gate_failure"
+            ],
+            "candidate_geometry_failure": record[
+                "candidate_geometry_failure"
+            ],
+            "runtime_root_failure_gap": record["placement_failure_gap"],
+            "unsafe_frame_diagnostics": [
+                frame
+                for frame in record["frame_candidate_geometry_diagnostics"]
+                if frame["inward_failure_sides"]
+                or frame["outward_budget_failure_sides"]
+            ],
+        }
+        for record in completed
+        if record["unsafe_approved_auto"]
+    ]
     return {
         "summary_schema": ANALYSIS_SUMMARY_SCHEMA,
         "validation_role": "development_gold_diagnostic",
@@ -2340,13 +2468,14 @@ def _summary(
         "task_count": len(records),
         "analysis_completed_count": len(records) - analysis_error_count,
         "analysis_error_count": analysis_error_count,
-        "development_contract_passed_count": sum(
-            record["development_contract_passed"] for record in records
+        "development_diagnostic_complete": analysis_error_count == 0,
+        "release_detection_gate_passed_count": sum(
+            record["release_detection_gate_passed"] for record in records
         ),
-        "development_contract_failure_count": sum(
-            not record["development_contract_passed"] for record in records
+        "release_detection_gate_failure_count": sum(
+            not record["release_detection_gate_passed"] for record in records
         ),
-        "development_contract_failure_category_counts": dict(
+        "release_detection_gate_failure_category_counts": dict(
             sorted(failure_categories.items())
         ),
         "safe_approved_auto_count": sum(
@@ -2356,6 +2485,36 @@ def _summary(
         ),
         "unsafe_approved_auto_count": sum(
             record["unsafe_approved_auto"] for record in records
+        ),
+        "unsafe_approved_auto_diagnostics": unsafe_auto_diagnostics,
+        "release_detection_gate_ready": (
+            analysis_error_count == 0
+            and not any(record["unsafe_approved_auto"] for record in records)
+            and not any(
+                record["cohort_role"] == "nominal"
+                and not record["nominal_auto_goal_passed"]
+                for record in records
+            )
+        ),
+        "proposal_generation_state_counts": dict(
+            sorted(proposal_generation_states.items())
+        ),
+        "proposal_generation_failure_gap_counts": _counter(
+            records,
+            "proposal_generation_failure_gap",
+        ),
+        "proposal_geometry_conformance_counts": dict(
+            sorted(proposal_states.items())
+        ),
+        "proposal_candidate_conformance_matrix": {
+            proposal_state: dict(sorted(candidate_states.items()))
+            for proposal_state, candidate_states in sorted(
+                proposal_candidate_matrix.items()
+            )
+        },
+        "runtime_pipeline_outcome_counts": _counter(
+            records,
+            "runtime_pipeline_outcome",
         ),
         "candidate_geometry_conformance_counts": dict(
             sorted(candidate_states.items())
@@ -2375,6 +2534,9 @@ def _summary(
             sorted(challenge_outcomes.items())
         ),
         "count_variant_source_count": len(variants),
+        "count_variant_proposal_safety_mismatch_count": sum(
+            item["proposal_safety_mismatch"] for item in variants
+        ),
         "count_variant_candidate_safety_mismatch_count": sum(
             item["candidate_safety_mismatch"] for item in variants
         ),
@@ -2519,8 +2681,8 @@ def _summary(
         "stages": {
             stage: {
                 "task_count": len(items),
-                "development_contract_passed_count": sum(
-                    item["development_contract_passed"] for item in items
+                "release_detection_gate_passed_count": sum(
+                    item["release_detection_gate_passed"] for item in items
                 ),
                 "safe_approved_auto_count": sum(
                     item["decision_status"] == "approved_auto"
@@ -2535,6 +2697,14 @@ def _summary(
                 ),
                 "unsafe_approved_auto_count": sum(
                     item["unsafe_approved_auto"] for item in items
+                ),
+                "proposal_geometry_conformance_counts": dict(
+                    sorted(
+                        Counter(
+                            str(item["proposal_geometry_conformance"])
+                            for item in items
+                        ).items()
+                    )
                 ),
                 "candidate_geometry_conformance_counts": dict(
                     sorted(
@@ -2646,15 +2816,20 @@ def run_gold_analysis(
                 "optimization_stage": optimization_stage_index(record),
                 "decision_status": None,
                 "final_review_reasons": [],
-                "development_contract_passed": False,
-                "development_contract_failure": (
+                "release_detection_gate_passed": False,
+                "release_detection_gate_failure": (
                     f"{type(error).__name__}: {error}"
                 ),
+                "proposal_generation_state": None,
+                "proposal_generation_failure_gap": None,
+                "proposal_geometry_conformance": "not_available",
+                "proposal_geometry_failure": None,
                 "candidate_geometry_conformance": "not_available",
                 "candidate_geometry_failure": None,
                 "unsafe_approved_auto": False,
                 "nominal_auto_goal_passed": False,
                 "challenge_capability_outcome": None,
+                "runtime_pipeline_outcome": "analysis_error",
                 "source_placement_state": None,
                 "phase_status": None,
                 "phase_failure_kind": None,
@@ -2691,16 +2866,19 @@ def run_gold_analysis(
                 "selected_cross_boundary_use": None,
                 "duration_seconds": 0.0,
                 "boundary_diagnostics": [],
+                "frame_proposal_geometry_diagnostics": [],
                 "frame_candidate_geometry_diagnostics": [],
                 "physical_prior_diagnostic": physical_prior,
             }
         records.append(result)
         print(
             f"  {result['decision_status'] or 'analysis_error'} · "
+            "proposal="
+            f"{result['proposal_geometry_conformance']} · "
             "candidate="
             f"{result['candidate_geometry_conformance']} · "
-            "development_contract="
-            f"{'pass' if result['development_contract_passed'] else 'fail'} · "
+            "release_gate="
+            f"{'pass' if result['release_detection_gate_passed'] else 'fail'} · "
             f"{result['optimization_stage']['stage']}",
             flush=True,
         )
@@ -2731,17 +2909,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--gate",
-        choices=("report", "zero-unsafe-auto"),
+        choices=("report", "release"),
         default="report",
         help=(
-            "report only, or fail unless the complete development gold has "
-            "zero unsafe automatic approvals"
+            "report development observations, or enforce the complete "
+            "release detection gate"
         ),
     )
     args = parser.parse_args(argv)
-    if args.gate == "zero-unsafe-auto" and args.sample_ids is not None:
+    if args.gate == "release" and args.sample_ids is not None:
         print(
-            "development gold analysis: FAIL: the safety gate requires the "
+            "development gold analysis: FAIL: the release gate requires the "
             "complete cohort",
             file=sys.stderr,
         )
@@ -2757,10 +2935,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     if summary["analysis_error_count"] != 0:
         return 1
-    if (
-        args.gate == "zero-unsafe-auto"
-        and summary["unsafe_approved_auto_count"] != 0
-    ):
+    if args.gate == "release" and not summary["release_detection_gate_ready"]:
         return 1
     return 0
 

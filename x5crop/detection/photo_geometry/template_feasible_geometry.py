@@ -671,13 +671,13 @@ def _support_cross_states(
     )
 
 
-def project_selected_placement(
+def project_format_placement(
     placement: FormatPlacement,
 ) -> FeasiblePlacementProjection:
     """Project one placement into bounded same-state frame geometry."""
 
     if not isinstance(placement, FormatPlacement):
-        raise TypeError("joint projection requires a selected placement")
+        raise TypeError("joint projection requires a format placement")
     sequence_system, roles = _sequence_system(placement)
     support_system = (
         _support_system(placement)

@@ -19,7 +19,7 @@ from tools.regression.accuracy import (
     validate_count_variant_references,
     validate_gold_evaluation_role,
     validate_gold_source_identities,
-    validate_gold_task_result,
+    validate_release_gold_task_result,
 )
 from tools.regression.gold_cohort import build_gold_cohort_records
 from tools.regression.diagnostic_cohort import DIAGNOSTIC_COHORT_PATH
@@ -27,6 +27,7 @@ from tools.regression.gold_geometry import (
     gold_frame_diagnostics,
     ordered_gold_mapping,
     validate_approved_geometry,
+    validate_proposal_coverage,
     validate_selected_candidate_coverage,
 )
 
@@ -326,7 +327,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         output = [[10.0, 0.0], [560.0, 0.0], [560.0, 560.0], [10.0, 560.0]]
 
         self.assertEqual(
-            validate_gold_task_result(_basis_aware_record(), _approved_report(output)),
+            validate_release_gold_task_result(_basis_aware_record(), _approved_report(output)),
             "approved_auto",
         )
 
@@ -343,7 +344,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         self.assertNotIn("observations", report["photo_geometry"])
 
         self.assertEqual(
-            validate_gold_task_result(
+            validate_release_gold_task_result(
                 _basis_aware_record(start_basis="directly_visible"),
                 report,
             ),
@@ -354,7 +355,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         output = [[560.0, 0.0], [560.0, 560.0], [10.0, 560.0], [10.0, 0.0]]
 
         self.assertEqual(
-            validate_gold_task_result(_basis_aware_record(), _approved_report(output)),
+            validate_release_gold_task_result(_basis_aware_record(), _approved_report(output)),
             "approved_auto",
         )
 
@@ -367,7 +368,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         ]
 
         self.assertEqual(
-            validate_gold_task_result(_basis_aware_record(), _approved_report(output)),
+            validate_release_gold_task_result(_basis_aware_record(), _approved_report(output)),
             "approved_auto",
         )
 
@@ -378,7 +379,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
             ValueError,
             "approved output crosses user-confirmed inward baseline",
         ):
-            validate_gold_task_result(
+            validate_release_gold_task_result(
                 _basis_aware_record(start_basis="visible_content_limit"),
                 _approved_report(output),
             )
@@ -392,7 +393,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         ]
 
         self.assertEqual(
-            validate_gold_task_result(
+            validate_release_gold_task_result(
                 _basis_aware_record(start_basis="visible_content_limit"),
                 _approved_report(output),
             ),
@@ -406,7 +407,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
             ValueError,
             "approved output crosses user-confirmed inward baseline",
         ):
-            validate_gold_task_result(_basis_aware_record(), _approved_report(output))
+            validate_release_gold_task_result(_basis_aware_record(), _approved_report(output))
 
     def test_visible_end_budget_remains_blocking_when_start_is_estimated(
         self,
@@ -417,7 +418,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
             ValueError,
             "exceeds acceptance-baseline direct-use budget",
         ):
-            validate_gold_task_result(_basis_aware_record(), _approved_report(output))
+            validate_release_gold_task_result(_basis_aware_record(), _approved_report(output))
 
     def test_source_truncated_budget_uses_physical_line_axes(self) -> None:
         clipped_gold = [
@@ -445,7 +446,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
             ValueError,
             "exceeds acceptance-baseline direct-use budget",
         ):
-            validate_gold_task_result(record, _approved_report(output))
+            validate_release_gold_task_result(record, _approved_report(output))
 
     def test_challenge_review_keeps_candidate_accuracy_diagnostic_only(
         self,
@@ -479,7 +480,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         }
 
         self.assertEqual(
-            validate_gold_task_result(record, report),
+            validate_release_gold_task_result(record, report),
             "needs_review",
         )
         with self.assertRaisesRegex(
@@ -494,7 +495,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
 
         self.assertEqual(
-            validate_gold_task_result(record, _approved_report(gold)),
+            validate_release_gold_task_result(record, _approved_report(gold)),
             "approved_auto",
         )
 
@@ -547,6 +548,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         }
         report = {
             "photo_geometry": {
+                "source_placement_proposal": {"state": "generated"},
                 "lanes": [
                     {
                         "output_footprints": [
@@ -578,6 +580,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         record = _basis_aware_record(start_basis="directly_visible")
         report = {
             "photo_geometry": {
+                "source_placement_proposal": {"state": "generated"},
                 "lanes": [
                     {
                         "output_footprints": [
@@ -616,6 +619,89 @@ class GoldAccuracyContractTest(unittest.TestCase):
         }
 
         self.assertFalse(validate_selected_candidate_coverage(record, report))
+
+    def test_review_proposal_is_checked_before_candidate_eligibility(self) -> None:
+        gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
+        record = {
+            "sample_id": "proposal-review",
+            "format_id": "120-66",
+            "confirmed_geometry": _directional_geometry(gold),
+        }
+        report = {
+            "photo_geometry": {
+                "source_placement_proposal": {"state": "generated"},
+                "lanes": [
+                    {
+                        "placement_proposal": {
+                            "output_footprints": [_output(gold)]
+                        },
+                        "output_footprints": [],
+                    }
+                ]
+            }
+        }
+
+        self.assertTrue(validate_proposal_coverage(record, report))
+        self.assertFalse(validate_selected_candidate_coverage(record, report))
+
+    def test_unsafe_review_proposal_remains_visible_to_gold(self) -> None:
+        gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
+        record = {
+            "sample_id": "proposal-cut",
+            "format_id": "120-66",
+            "confirmed_geometry": _directional_geometry(gold),
+        }
+        report = {
+            "photo_geometry": {
+                "source_placement_proposal": {"state": "generated"},
+                "lanes": [
+                    {
+                        "placement_proposal": {
+                            "output_footprints": [
+                                _output(
+                                    [
+                                        [0.0, 0.0],
+                                        [560.0, 0.0],
+                                        [560.0, 559.0],
+                                        [0.0, 559.0],
+                                    ]
+                                )
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "proposal crosses user-confirmed inward baseline",
+        ):
+            validate_proposal_coverage(record, report)
+
+    def test_source_incomplete_lane_proposals_do_not_form_gold_geometry(
+        self,
+    ) -> None:
+        gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
+        record = {
+            "sample_id": "source-proposal-unavailable",
+            "format_id": "120-66",
+            "confirmed_geometry": _directional_geometry(gold),
+        }
+        report = {
+            "photo_geometry": {
+                "source_placement_proposal": {"state": "unavailable"},
+                "lanes": [
+                    {
+                        "placement_proposal": {
+                            "output_footprints": [_output(gold)]
+                        }
+                    }
+                ],
+            }
+        }
+
+        self.assertFalse(validate_proposal_coverage(record, report))
 
     def test_subpixel_corner_inset_crosses_the_inward_baseline(self) -> None:
         gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]

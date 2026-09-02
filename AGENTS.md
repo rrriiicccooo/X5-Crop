@@ -129,6 +129,10 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
   的完全直接闭合路径，不是唯一许可；校准 prior、至少一个 absolute anchor、逐 adjacency 完整 coverage
   与无反证成立时，Grid 可以生成两侧都未直接观察的 Frame，但必须把完整相关包络交给 containment、
   content veto 与每侧 5% 预算决定 auto/review。
+- Runtime 尽量为每个合法 format/count 保留一份完整 pre-Gate proposal；proposal 可以不安全，也不等于
+  eligible candidate 或 `approved_auto`。权限、runner、counterevidence 与 Gate 只能阻止 eligibility 或正式
+  输出，不能反向删除已经形成的 proposal。只有 `approved_auto` 写正式 TIFF；坐标非法、无法形成完整
+  footprint 等真实生成缺口使用 typed proposal unavailable。
 - Format 画幅比例是强物理先验，但不能作为零不确定性的 W→H 等式。跨轴推断必须由黄金集校准的
   format-specific ratio interval、typed authority 和完整相关 uncertainty 单独拥有；它不冒充 direct H、
   不增加独立 constraint rank，并继续受 5% 预算、反证和 sealed acceptance 约束。
@@ -163,8 +167,8 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
 - Producer 必须 fixed-template-first 且工作量有界；不恢复完整链 materialization/cache、通用 DP、
   top-K、候选笛卡尔积、逐帧尺寸、selected-placement 临时 query 或无界全图 evidence。
 - 新增自由度必须说明它减少的物理未知量、唯一 owner、启用与禁止条件、工作上界、反例、Debug、
-  Gate 失败表达，并证明 development gold 不回归；sealed acceptance 不得因开发而打开。不能完成这些
-  合同的能力不进入 production。
+  Gate 失败表达，并完整报告 development gold 的 proposal、安全性、自动决定与根因迁移；sealed acceptance
+  不得因开发而打开。不能完成这些合同的能力不进入 production。
 - 连续几何保留到最终 sampling；不得逐格取整并累计坐标误差。不同 placement 保持竞争，同一
   placement 的连续误差才进入联合安全范围。
 - 性能优化只能复用 candidate-independent 计算或完全相同的状态。除非用户明确批准行为变化，优化
@@ -194,6 +198,9 @@ platform | platform-check | platform-package | pre-push
   不得使用 `--no-verify`。
 - Commit 或 push 前不手工重复运行即将由对应 Hook 覆盖的同一验证。只有 Hook 未覆盖的专项检查，或
   为诊断已经出现的失败，才额外手工运行；最终以正常 Hook 结果为准。
+- 日常算法开发使用 `tools.regression.gold_analysis --gate report`，即使发现危险 auto 也必须完整写出诊断
+  receipt；`tools/verify accuracy` 与 `gold_analysis --gate release` 是 release detection gate，不能用作迫使
+  中间版本提前 Review 的开发前置条件。
 - Performance 不属于日常 commit 或 push Gate。只在准备发布时运行，并绑定最终 release commit；
   tree 变化后旧 receipt 立即失效。
 - `Test/` 不受 Git 跟踪，目录布局不是 runtime authority；工具以 cohort 中的相对路径、source SHA、
@@ -209,11 +216,13 @@ platform | platform-check | platform-package | pre-push
   可调试的 development corpus，不证明未见 X5 扫描的泛化。每个 task 运行一次并携带明确 count；不保留
   auto 重复任务。重置或尚无当前确认时，development gold 必须明确失败为
   `calibration is incomplete`，不得回退旧基线。
-- Development gold 必须分开报告：`unsafe_approved_auto`、Review candidate 几何、nominal 自动覆盖和
-  challenge 能力。任一角色的危险自动批准必须为 0；Review candidate 的偏差是机制诊断，不是用户层
-  危险输出；nominal 的目标是安全自动批准；challenge 的安全 `approved_auto` 与安全 `needs_review` 都是
-  合格结果，前者单独记录为能力发现。不得新增样片规则、whitelist、格式 denylist 或根据当前输出自动
-  晋升黄金。
+- Development gold 必须分开报告：完整 pre-Gate proposal 覆盖及黄金安全性、candidate eligibility、
+  `unsafe_approved_auto`、nominal 自动覆盖和 challenge 能力。开发中的 `unsafe_approved_auto > 0` 是必须
+  暴露和修复的事实，不使诊断命令失败，也不得迫使 proposal 生成层提前放弃方案；报告必须逐项保存
+  sample、错误边界和根因，并明确该提交尚未达到发布检测门槛。已知危险 auto 只能存在于未发布开发版本和
+  临时测试输出，不能被描述为验证通过或用于正式交付。Review proposal/candidate 的偏差不是用户层危险
+  输出；challenge 的安全 `approved_auto` 与安全 `needs_review` 都是合格结果，前者单独记录为能力发现。
+  不得新增样片规则、whitelist、格式 denylist 或根据当前输出自动晋升黄金。
   检测能力发布底线要求当前 development nominal 全部安全 `approved_auto`，且全部角色
   `unsafe_approved_auto = 0`；challenge 的安全 `approved_auto` 与安全 `needs_review` 都合格。未来建立
   sealed cohort 后，其 nominal 也必须全部安全自动通过。不得把失败 nominal 改成 challenge、隐藏 runner

@@ -151,11 +151,26 @@ class GoldAnalysisContractTest(unittest.TestCase):
         candidate: str,
         unsafe_auto: bool,
         physical_frame_id: str,
+        proposal: str | None = None,
     ) -> dict[str, object]:
+        proposal = candidate if proposal is None else proposal
         contract_passed = not unsafe_auto and not (
             role == "nominal" and decision == "needs_review"
         )
         frame_unsafe = candidate == "unsafe"
+        proposal_frame_unsafe = proposal == "unsafe"
+        source_placement_state = (
+            "unavailable" if candidate == "not_available" else "supported"
+        )
+        runtime_pipeline_outcome = (
+            "proposal_unavailable"
+            if proposal == "not_available"
+            else "proposal_generated_eligibility_withheld"
+            if source_placement_state != "supported"
+            else "eligible_candidate_needs_review"
+            if decision == "needs_review"
+            else "approved_auto"
+        )
         return {
             "record_schema": ANALYSIS_RECORD_SCHEMA,
             "sample_id": sample_id,
@@ -172,9 +187,21 @@ class GoldAnalysisContractTest(unittest.TestCase):
             },
             "decision_status": decision,
             "final_review_reasons": [],
-            "development_contract_passed": contract_passed,
-            "development_contract_failure": (
+            "release_detection_gate_passed": contract_passed,
+            "release_detection_gate_failure": (
                 None if contract_passed else "synthetic contract failure"
+            ),
+            "proposal_generation_state": (
+                "unavailable" if proposal == "not_available" else "generated"
+            ),
+            "proposal_generation_failure_gap": (
+                "complete_placement_unavailable"
+                if proposal == "not_available"
+                else None
+            ),
+            "proposal_geometry_conformance": proposal,
+            "proposal_geometry_failure": (
+                "synthetic proposal failure" if proposal_frame_unsafe else None
             ),
             "candidate_geometry_conformance": candidate,
             "candidate_geometry_failure": (
@@ -189,7 +216,8 @@ class GoldAnalysisContractTest(unittest.TestCase):
                 if role == "challenge" and decision == "needs_review"
                 else None
             ),
-            "source_placement_state": "supported",
+            "runtime_pipeline_outcome": runtime_pipeline_outcome,
+            "source_placement_state": source_placement_state,
             "phase_status": "resolved",
             "phase_failure_kind": None,
             "global_lattice_authority_state": "supported",
@@ -231,6 +259,16 @@ class GoldAnalysisContractTest(unittest.TestCase):
             "selected_cross_boundary_use": "aperture_pair",
             "duration_seconds": 1.0,
             "boundary_diagnostics": [],
+            "frame_proposal_geometry_diagnostics": [
+                {
+                    "frame_index": 1,
+                    "physical_frame_id": physical_frame_id,
+                    "inward_failure_sides": (
+                        ["sequence_start"] if proposal_frame_unsafe else []
+                    ),
+                    "outward_budget_failure_sides": [],
+                }
+            ] if proposal != "not_available" else [],
             "frame_candidate_geometry_diagnostics": [
                 {
                     "frame_index": 1,
@@ -240,7 +278,7 @@ class GoldAnalysisContractTest(unittest.TestCase):
                     ),
                     "outward_budget_failure_sides": [],
                 }
-            ],
+            ] if candidate != "not_available" else [],
             "physical_prior_diagnostic": {
                 "source_sha256": source_sha256,
                 "format_id": "135",
@@ -303,15 +341,63 @@ class GoldAnalysisContractTest(unittest.TestCase):
         summary = _summary(records, {"fixture": True})
 
         self.assertEqual(summary["unsafe_approved_auto_count"], 1)
+        self.assertTrue(summary["development_diagnostic_complete"])
+        self.assertFalse(summary["release_detection_gate_ready"])
+        self.assertEqual(
+            summary["unsafe_approved_auto_diagnostics"][0]["sample_id"],
+            "auto",
+        )
+        self.assertEqual(
+            summary["unsafe_approved_auto_diagnostics"][0][
+                "unsafe_frame_diagnostics"
+            ][0]["inward_failure_sides"],
+            ["sequence_start"],
+        )
         self.assertEqual(summary["safe_approved_auto_count"], 0)
+        self.assertEqual(
+            summary["proposal_geometry_conformance_counts"],
+            {"safe": 1, "unsafe": 1},
+        )
         self.assertEqual(
             summary["review_candidate_conformance_counts"],
             {"safe": 1},
         )
         self.assertEqual(
+            summary["proposal_candidate_conformance_matrix"],
+            {"safe": {"safe": 1}, "unsafe": {"unsafe": 1}},
+        )
+        self.assertEqual(
             summary["count_variant_candidate_safety_mismatch_count"],
             1,
         )
+
+    def test_summary_exposes_a_safe_proposal_withheld_by_eligibility(self) -> None:
+        record = self._analysis_record(
+            "withheld",
+            source_sha256="c" * 64,
+            role="nominal",
+            decision="needs_review",
+            proposal="safe",
+            candidate="not_available",
+            unsafe_auto=False,
+            physical_frame_id="B1|B2",
+        )
+
+        summary = _summary((record,), {"fixture": True})
+
+        self.assertEqual(
+            summary["runtime_pipeline_outcome_counts"],
+            {"proposal_generated_eligibility_withheld": 1},
+        )
+        self.assertEqual(
+            summary["proposal_candidate_conformance_matrix"],
+            {"safe": {"not_available": 1}},
+        )
+        self.assertEqual(
+            summary["proposal_generation_failure_gap_counts"],
+            {"None": 1},
+        )
+        self.assertEqual(summary["unsafe_approved_auto_diagnostics"], [])
         self.assertEqual(summary["physical_prior_validation"]["source_count"], 1)
         self.assertEqual(
             summary["physical_prior_validation"]["formats"]["135"][
@@ -506,7 +592,7 @@ class GoldAnalysisContractTest(unittest.TestCase):
                 summary,
             )
 
-    def test_zero_unsafe_auto_gate_requires_the_complete_cohort(self) -> None:
+    def test_release_gate_requires_the_complete_cohort(self) -> None:
         error = io.StringIO()
         with redirect_stderr(error):
             result = gold_analysis_main(
@@ -516,15 +602,18 @@ class GoldAnalysisContractTest(unittest.TestCase):
                     "--sample-id",
                     "S001",
                     "--gate",
-                    "zero-unsafe-auto",
+                    "release",
                 ]
             )
         self.assertEqual(result, 2)
         self.assertIn("complete cohort", error.getvalue())
 
-    def test_zero_unsafe_auto_gate_blocks_dangerous_output(self) -> None:
+    def test_release_gate_blocks_an_unready_development_result(self) -> None:
         output = io.StringIO()
-        summary = {"analysis_error_count": 0, "unsafe_approved_auto_count": 1}
+        summary = {
+            "analysis_error_count": 0,
+            "release_detection_gate_ready": False,
+        }
         with (
             patch(
                 "tools.regression.gold_analysis.run_gold_analysis",
@@ -537,10 +626,36 @@ class GoldAnalysisContractTest(unittest.TestCase):
                     "--output-root",
                     "/unused",
                     "--gate",
-                    "zero-unsafe-auto",
+                    "release",
                 ]
             )
         self.assertEqual(result, 1)
+
+    def test_report_mode_keeps_an_unready_development_result_observable(
+        self,
+    ) -> None:
+        output = io.StringIO()
+        summary = {
+            "analysis_error_count": 0,
+            "release_detection_gate_ready": False,
+            "unsafe_approved_auto_count": 3,
+        }
+        with (
+            patch(
+                "tools.regression.gold_analysis.run_gold_analysis",
+                return_value=summary,
+            ),
+            redirect_stdout(output),
+        ):
+            result = gold_analysis_main(
+                [
+                    "--output-root",
+                    "/unused",
+                    "--gate",
+                    "report",
+                ]
+            )
+        self.assertEqual(result, 0)
 
 
 if __name__ == "__main__":

@@ -26,6 +26,7 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
     geometry = detection.candidate.geometry
     holder = core.matched_holder
     selected_profile_id = None if holder is None else holder.profile.profile_id
+    proposal = geometry.source_placement_proposal
     selection = geometry.source_placement_selection
     alignments = {
         lane.lane_id: template_alignment_diagnostic(
@@ -42,6 +43,7 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
         "resolved_output_slots": typed_read_model(detection.resolved_output_slots),
         "output_slot_count": detection.output_slot_count,
         "slot_identities": typed_read_model(detection.output_slot_identities),
+        "source_placement_proposal": typed_read_model(proposal),
         "source_placement_selection": {
             "state": selection.state.value,
             "failure": typed_read_model(selection.failure),
@@ -105,6 +107,9 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                 "placement_state": lane.placement_competition.state.value,
                 "placement_failure": typed_read_model(
                     lane.placement_competition.failure
+                ),
+                "placement_proposal": typed_read_model(
+                    lane.placement_proposal
                 ),
                 "direct_role_aperture_domain_authority": typed_read_model(
                     lane.placement_competition

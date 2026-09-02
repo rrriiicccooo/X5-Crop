@@ -645,17 +645,36 @@ def validate_selected_candidate_coverage(
     return True
 
 
-def gold_frame_diagnostics(
+def validate_proposal_coverage(
     record: dict[str, object],
     report: dict[str, object],
-) -> tuple[dict[str, object], ...]:
-    """Explain the selected candidate with the exact directional gold rules."""
+) -> bool:
+    """Check the complete pre-Gate proposal independently of eligibility."""
 
-    outputs = tuple(
+    outputs = _source_proposal_outputs(report)
+    if not outputs:
+        return False
+    _validate_directional_geometry(record, outputs, subject="proposal")
+    return True
+
+
+def _source_proposal_outputs(
+    report: dict[str, object],
+) -> tuple[dict[str, object], ...]:
+    geometry = report["photo_geometry"]
+    if geometry["source_placement_proposal"]["state"] != "generated":
+        return ()
+    return tuple(
         output
-        for lane in report["photo_geometry"]["lanes"]
-        for output in lane["output_footprints"]
+        for lane in geometry["lanes"]
+        for output in lane["placement_proposal"]["output_footprints"]
     )
+
+
+def _gold_frame_diagnostics(
+    record: dict[str, object],
+    outputs: Sequence[dict[str, object]],
+) -> tuple[dict[str, object], ...]:
     gold = record["confirmed_geometry"]
     frames = gold["frames"]
     slots = gold["slots"]
@@ -701,6 +720,30 @@ def gold_frame_diagnostics(
             }
         )
     return tuple(diagnostics)
+
+
+def gold_frame_diagnostics(
+    record: dict[str, object],
+    report: dict[str, object],
+) -> tuple[dict[str, object], ...]:
+    """Explain the selected candidate with the exact directional gold rules."""
+
+    outputs = tuple(
+        output
+        for lane in report["photo_geometry"]["lanes"]
+        for output in lane["output_footprints"]
+    )
+    return _gold_frame_diagnostics(record, outputs)
+
+
+def gold_proposal_frame_diagnostics(
+    record: dict[str, object],
+    report: dict[str, object],
+) -> tuple[dict[str, object], ...]:
+    """Explain the pre-Gate proposal with the directional gold rules."""
+
+    outputs = _source_proposal_outputs(report)
+    return _gold_frame_diagnostics(record, outputs)
 
 
 def validate_approved_geometry(
