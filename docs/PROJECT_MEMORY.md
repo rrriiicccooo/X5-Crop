@@ -105,7 +105,7 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
 Runtime stage 为 16 approved auto、23 eligible candidate Review、46 proposal-generated/eligibility-withheld、
 25 proposal unavailable。当前恰好仍是 16 个安全 auto、94 个 Review、危险 auto 0，但 release detection
 gate 未达标；不能把这个中间结果称为发布通过。绑定 proposal 检查点的 development-detail mean 为
-4.430 秒，只作开发归因；
+4.172 秒，只作开发归因；
 相同检测源码最近一次 clean-checkpoint 24-source 正式性能 mean 为 3.536 秒，通过 5 秒 Gate，3 秒目标仍为
 非阻断 challenge，该旧性能 receipt 不替代未来 release commit 的复验。
 

@@ -32,8 +32,8 @@ proposal 为 25 safe / 60 unsafe / 25 unavailable，candidate 为 19 safe / 20 u
 其中 6 个安全 proposal 与 40 个不安全 proposal 被 eligibility 层保留为 Review；Runtime stage 分布为
 16 approved auto、23 eligible candidate Review、46 proposal-generated/eligibility-withheld、25 proposal
 unavailable。当前仍是 16 个安全 auto、94 个 Review、危险 auto 0，release detection gate 未达标；
-development-detail mean 为 4.313 秒，只作开发归因。该分层没有新增 TIFF query、detector、candidate、
-score、fallback 或正式输出。
+绑定提交 `ad04f95f` 的 development-detail mean 为 4.172 秒，只作开发归因。该分层没有新增 TIFF query、
+detector、candidate、score、fallback 或正式输出。
 
 完整验收同时发现并消除了 enclosing-support aperture-center calibration 的 provenance 漂移：canonical W
 扩大后，S109 的 cross 从唯一解变为多解，合格 calibration source 因而从 21 变为 20，但旧登记只比较
