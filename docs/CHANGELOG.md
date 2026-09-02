@@ -158,6 +158,21 @@ Review、70 proposal-generated / eligibility-withheld，正式输出行为未改
 只是开发事实；release detection gate 未达标。干净提交上的 development-detail mean 为 3.956 秒，只作
 开发归因，不替代正式性能 Gate。
 
+Cross 多解现在也保留一份物理顺序明确的 Review proposal。`template_cross.py` 在多个 fixed-H-compatible
+registered direct pair 都没有最终 authority 时，先用物理最外侧 admissible TOP 锚定低侧，再按校准 H
+偏差、方向相容性与稳定 observation identity 保留 proposal 和 runner；两侧仍使用 native coordinate。
+更内侧的短局部线继续作为反证，不能仅凭偶然平行移动整条片带。原 `non_equivalent_fits`、`UNRESOLVED`、
+candidate 阻断和 runner 都不改变；该路径只作有界候选选择，不新增 TIFF query、detector、rank、score 或
+正式输出权限。`CrossRetainedProposalBasis.OUTERMOST_ADMISSIBLE_REGISTERED_ROLE_PAIR` 是唯一 provenance，
+Report revision 更新为 `x5crop_v5_template_report_59`，不保留旧枚举或 schema 兼容路径。
+
+14 个真实同机制 task 未出现 safe→unsafe proposal 回归；S002 不再从短轴向内越过黄金基线，剩余错误迁移
+为 Frame 1 的 `cross_high` 与 `sequence_end` 外扩超出逐侧 5% 预算，S032 也减少一侧短轴向内错误。完整
+110-task development gold 无分析错误，分布仍为 27 safe / 83 unsafe proposal、19 safe / 21 unsafe / 70
+unavailable candidate，以及 16 safe auto / 94 Review；当前观测危险 auto 为 0，但这不是开发提交门槛，
+release detection gate 仍未达标。Development-detail mean 为 3.961 秒，只作开发归因，不替代正式性能
+Gate。
+
 ### 产品行为
 
 - 用户提供 format，并确认匹配片夹的默认 count 或显式 count；count 包含中间空白曝光格。Runtime 不猜

@@ -103,6 +103,9 @@ class CrossHeightInferenceBasis(str, Enum):
 class CrossRetainedProposalBasis(str, Enum):
     """Why an unresolved cross fit still carries one complete proposal."""
 
+    OUTERMOST_ADMISSIBLE_REGISTERED_ROLE_PAIR = (
+        "outermost_admissible_registered_role_pair"
+    )
     CALIBRATED_HEIGHT_FROM_OUTERMOST_REGISTERED_ROLE = (
         "calibrated_height_from_outermost_registered_role"
     )
@@ -1003,14 +1006,25 @@ class CrossFitCompetition:
         if self.status == CrossFitStatus.BOUND_EXCEEDED and self.best is not None:
             raise ValueError("bound-exceeded cross competition cannot select a fit")
         if self.retained_proposal_basis is not None:
-            if (
-                not isinstance(
-                    self.retained_proposal_basis,
-                    CrossRetainedProposalBasis,
-                )
-                or self.status != CrossFitStatus.UNRESOLVED
-                or self.best is None
-                or not self.best.single_side_inferred
+            pair_basis = (
+                self.retained_proposal_basis
+                == CrossRetainedProposalBasis
+                .OUTERMOST_ADMISSIBLE_REGISTERED_ROLE_PAIR
+            )
+            if not isinstance(
+                self.retained_proposal_basis,
+                CrossRetainedProposalBasis,
+            ) or self.status != CrossFitStatus.UNRESOLVED or self.best is None:
+                raise ValueError("retained cross proposal basis is invalid")
+            if pair_basis != self.best.direct_pair:
+                raise ValueError("retained cross proposal basis is invalid")
+            if pair_basis and (
+                self.best.single_side_inferred
+                or self.best.height_inference_basis is not None
+            ):
+                raise ValueError("retained cross proposal basis is invalid")
+            if not pair_basis and (
+                not self.best.single_side_inferred
                 or self.best.height_inference_basis is None
             ):
                 raise ValueError("retained cross proposal basis is invalid")

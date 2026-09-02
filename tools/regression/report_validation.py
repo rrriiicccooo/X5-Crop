@@ -2705,7 +2705,14 @@ def _validate_geometry(record: dict[str, Any]) -> None:
                 cross_retained_proposal_basis
                 not in _CROSS_RETAINED_PROPOSAL_BASES
                 or cross_status != CrossFitStatus.UNRESOLVED.value
-                or cross_height_inference_basis is None
+                or (
+                    cross_height_inference_basis is None
+                )
+                != (
+                    cross_retained_proposal_basis
+                    == CrossRetainedProposalBasis
+                    .OUTERMOST_ADMISSIBLE_REGISTERED_ROLE_PAIR.value
+                )
             )
         ):
             raise ValueError("phase or cross inference status is invalid")
@@ -3455,13 +3462,28 @@ def _validate_development(record: dict[str, Any]) -> None:
             "retained_proposal_basis"
         )
         retained_cross_fit = cross_competition.get("best")
+        retained_cross_is_pair = (
+            retained_cross
+            == CrossRetainedProposalBasis
+            .OUTERMOST_ADMISSIBLE_REGISTERED_ROLE_PAIR.value
+        )
         if retained_cross is not None and (
             retained_cross not in _CROSS_RETAINED_PROPOSAL_BASES
             or cross_competition.get("status")
             != CrossFitStatus.UNRESOLVED.value
             or not isinstance(retained_cross_fit, dict)
-            or retained_cross_fit.get("single_side_inferred") is not True
-            or retained_cross_fit.get("height_inference_basis") is None
+            or (
+                retained_cross_fit.get("direct_pair") is True
+            )
+            != retained_cross_is_pair
+            or (
+                retained_cross_fit.get("single_side_inferred") is False
+            )
+            != retained_cross_is_pair
+            or (
+                retained_cross_fit.get("height_inference_basis") is None
+            )
+            != retained_cross_is_pair
         ):
             raise ValueError("development retained cross proposal is invalid")
         _validate_direct_role_aperture_domain_authority(

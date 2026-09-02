@@ -1238,22 +1238,30 @@ retained basis、原 failure 和 runner；`template_alignment.path` 统一为 `r
 | producer bound exceeded | 任意 | 任意 | 不得保留或截断 proposal |
 
 短轴 Cross 也必须区分“没有自动使用权限”和“没有可比较几何”。`template_cross.py` 是唯一保留
-Cross proposal owner；当正常 Cross competition 没有形成 fit，且 source 已有校准 H 时，可以从 registered
-direct TOP/BOTTOM 保留至多两个 fixed-H proposal。优先使用 role-authorized、带有界方向的物理最外侧角色；
-若没有任何这类角色，也可使用覆盖至少三个独立高度区域、方向有界但背景侧证据不足的 direct role
-hypothesis。后者只表示机器在预登记角色走廊中稳定看见一条物理线，不取得 aperture role authority。
-若没有 shared strip direction，只使用该 observation 自己的完整方向区间，不得由模板虚构方向。完全相同
-的几何去重，整个 Cross competition 仍最多保留两个 fit，并继续受原 `evaluated_fit_bound` 约束。
+Cross proposal owner。多个不具最终权限的 direct pair 仍可保留至多一个 proposal 和一个 runner：只在
+已经通过固定 H、角色和方向相容检查的 registered pair 中，先取物理最外侧的 TOP 作为低侧锚点，再按
+校准 H 偏差、方向相容性与稳定 observation identity 排序同一锚点的 BOTTOM；两侧都保留 native
+coordinate。该顺序只生成 Review proposal，不是 score、winner 或 Cross authority；更内侧短局部线继续
+作为 runner/counterevidence，不能仅凭偶然平行移动整条片带。
+
+没有 admissible direct pair、但 source 已有校准 H 时，可以从 registered direct TOP/BOTTOM 保留至多两个
+single-side fixed-H proposal。优先使用 role-authorized、带有界方向的物理最外侧角色；若没有任何这类
+角色，也可使用覆盖至少三个独立高度区域、方向有界但背景侧证据不足的 direct role hypothesis。后者只
+表示机器在预登记角色走廊中稳定看见一条物理线，不取得 aperture role authority。若没有 shared strip
+direction，只使用该 observation 自己的完整方向区间，不得由模板虚构方向。完全相同的几何去重，整个
+Cross competition 仍最多保留两个 fit，并继续受原 `evaluated_fit_bound` 约束。
 
 `CrossRetainedProposalBasis` 分别记录
+`outermost_admissible_registered_role_pair`、
 `calibrated_height_from_outermost_registered_role` 与
-`calibrated_height_from_registered_role_hypothesis`。两者只说明完整几何如何被保留；都不把局部线升级为
+`calibrated_height_from_registered_role_hypothesis`。三者只说明完整几何如何被保留；都不把局部线升级为
 Cross authority，不增加 constraint rank，不创建 winner，也不改变原 `CrossFailureKind`。Production summary
-与 Debug 必须同时显示 retained basis 和原失败；placement eligibility 仍要求 Cross `RESOLVED`，因此这类
-proposal 只能进入黄金比较与 Review，不能成为 candidate 或正式输出。
+与 Debug 必须同时显示 retained basis、best/runner 和原失败；placement eligibility 仍要求 Cross
+`RESOLVED`，因此这类 proposal 只能进入黄金比较与 Review，不能成为 candidate 或正式输出。
 
 | registered Cross 事实 | retained proposal | 原 Cross 结果 |
 |---|---|---|
+| 多个 fixed-H-compatible、role-authorized direct pair，但没有唯一 authority | 最外侧 admissible TOP 锚定；同锚点先按校准 H、再按方向相容性保留 proposal 与 runner | `non_equivalent_fits` 与 `UNRESOLVED` 不变 |
 | role-authorized direct role + shared direction，或该 role 自身有完整方向 | 最外侧 TOP/BOTTOM 各至多一个 | `UNRESOLVED` 与原 typed failure 不变 |
 | 没有 role-authorized anchor；direct role hypothesis 覆盖至少三个独立高度区域，且有 shared direction 或自身完整方向 | 最外侧 TOP/BOTTOM hypothesis 各至多一个 | `direct_role_authority_unavailable` 与 `UNRESOLVED` 不变 |
 | role hypothesis 只有一至两个独立高度区域，或没有任何有界方向 | 不保留 | 原 typed failure 不变 |

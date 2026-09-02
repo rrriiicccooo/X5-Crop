@@ -37,12 +37,11 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   后者在全部 bounded fit 都超过直接残差合同时保留一份诊断 proposal 和一个离散 runner。原 typed failure、
   unresolved 状态与 winner 权限保持不变。Cross 可用时可组合完整 source proposal，Cross 不可用时只显示
   轴级事实；两种情况都不取得 candidate 或 auto 权限。
-- 普通 Cross competition 没有取得 authority 时，`CrossRetainedProposalBasis` 可从 role-authorized、方向有界的
-  最外侧 registered direct TOP/BOTTOM 保留 fixed-H proposal；若没有这类 anchor，也可从覆盖至少三个独立
-  高度区域、方向有界的 direct role hypothesis 保留 Review-only 几何。后者继续报告
-  `direct_role_authority_unavailable`，不冒充 aperture role。原 `UNRESOLVED`、runner 与工作量上限不变；
-  局部两区域、无方向、固定 H 冲突、严格外侧反证或 producer bound 仍不保留。两种路径合计至多两个 fit，
-  都不增加 candidate、rank、查询或正式输出。
+- 普通 Cross competition 没有取得 authority 时，`CrossRetainedProposalBasis` 仍可保留 Review-only 几何。
+  多个合法 direct pair 先由物理最外侧 TOP 锚定，再按校准 H、方向相容性和稳定 identity 保留 proposal 与
+  runner；两侧保持 native coordinate。没有 pair 时，才从 role-authorized 最外侧单边或覆盖至少三个独立
+  高度区域的有界 direct-role hypothesis 结合校准 H 补 opposite。原 `UNRESOLVED`、typed failure、runner
+  与工作量上限不变；任何路径都不增加 candidate、rank、查询、score 或正式输出权限。
 - Grid 是唯一 placement 主生成模型；format 提供黄金集校准且有界的 `W/H/pitch`，至少一个 absolute
   anchor 将它放入 TIFF。Direct rank 3 是更强的完全直接闭合路径，不是唯一许可；逐 adjacency coverage
   完整且无反证时，Grid 可以生成两侧都未直接观察的 Frame。直接 observation 保留 native coordinate
@@ -113,7 +112,7 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
 - Cross registered-run 上限按物理角色独立拥有：TOP 与 BOTTOM 各自最多 512 条，一侧不能占用另一侧
   配额；任一侧超界仍 typed Review。Report/Debug 同时显示两侧实际计数和每角色上限，canonical fitted
   observation 与 pair 上限保持独立。S002 的 TOP 393 / BOTTOM 185 因而不再被两侧合计 578 假性终止。
-- 当前 Report revision 为 `x5crop_v5_template_report_58`；普通报告与 Debug 显式分开 proposal、eligibility、
+- 当前 Report revision 为 `x5crop_v5_template_report_59`；普通报告与 Debug 显式分开 proposal、eligibility、
   selected output 和决定，并继续保存 calibration identity、anchor、inferred adjacency、完全未观察 Frame、
   联合参数依据、measured relation、projection outcome、typed failure、cross-H/source-W/frame-inference basis、全部
   retained W constraint/observation、W topology facts、partial-height aperture domain 与工作量。完整路径最多
@@ -125,16 +124,15 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   `[-0.009H, +0.007H]`，crop geometry 未改变。
 
 完整 development gold diagnostic 已完成 110/110，分析错误 0。现有主模型为全部 110 个 task 生成完整
-proposal，分布为 27 safe / 83 unsafe；S002 新增的不安全 Review proposal 中，Frame 4–6 `cross_high`
-向内越过黄金线，Frame 1 的 `cross_high` 与 `sequence_end` 超过逐侧 5% 外扩预算，真实 root 已迁移为
+proposal，分布为 27 safe / 83 unsafe。S002 的 retained Cross pair 已不再向内越过黄金上下边界；其剩余
+不安全事实是 Frame 1 的 `cross_high` 与 `sequence_end` 外扩超出逐侧 5% 预算，typed root 仍为
 `discrete_phase_ambiguous`、`non_equivalent_fits` 与 `phase_placement_ambiguous`。Eligibility 层仍保留
 40 个 candidate，形成 19 safe / 21 unsafe / 70 unavailable：8 个安全 proposal 与 62 个不安全 proposal
 被保留为 Review。Runtime stage 为 16 approved auto、24 eligible candidate Review、70 proposal-generated /
 eligibility-withheld。当前仍是 16 个安全 auto、94 个 Review、危险 auto 0，但 release detection gate 未
 达标；开发 report 即使出现危险 auto 也必须完整列出，不能把中间结果称为发布通过。
-当前 clean-checkpoint detector manifest `d6ce37708374f512e259b5b81637a9266870a0e9ac70950d181b1723997be892`
-与 comparator 均匹配 `HEAD`，development-detail mean 为 3.956 秒，只作开发归因；
-相同检测源码最近一次 clean-checkpoint 24-source 正式性能 mean 为 3.536 秒，通过 5 秒 Gate，3 秒目标仍为
+本次 development-detail mean 为 3.961 秒，只作开发归因，不是正式性能 receipt；
+最近一次 clean-checkpoint 24-source 正式性能 mean 为 3.536 秒，通过 5 秒 Gate，3 秒目标仍为
 非阻断 challenge，该旧性能 receipt 不替代未来 release commit 的复验。
 
 黄金 line/polygon 的原 TIFF 坐标现在由唯一 comparator owner 使用冻结的 `raw_to_canonical` affine 恰好
@@ -179,9 +177,9 @@ output budget，S032 为 phase ambiguity。
 
 ## 精确下一步
 
-1. 全部 110 个合法黄金 task 已能生成完整 proposal。下一步先修 S002 新暴露的 Cross 多解与短轴错误：
-   保留 phase/cross runner，追查为什么当前 proposal 在 Frame 4–6 的 `cross_high` 向内、Frame 1 又同时
-   超过 `cross_high` / `sequence_end` 外扩预算；不能按黄金选 runner、收窄 H 或扩大 5% 预算。
+1. 全部 110 个合法黄金 task 已能生成完整 proposal。下一步保持 S002 的 phase/cross runner，沿
+   `discrete_phase_ambiguous` 与 local relation 追查 Frame 1 `sequence_end` 外扩超预算；短轴只剩同一 Frame
+   的 `cross_high` 外扩预算，不再把局部 Cross runner 提升成 winner，也不能收窄 H 或扩大 5% 预算。
 2. 对其它已暴露的 Cross proposal 分开修根因：S033/S068/S069 的 `cross_high` 预算超限回到 Cross anchor、
    calibrated H 与方向 owner；S082/S108 的长轴向内越线回到 phase/local relation。随后继续处理此前
    calibrated-H proposal：S011/S020/S037/S097 的长轴向内越线优先回到
