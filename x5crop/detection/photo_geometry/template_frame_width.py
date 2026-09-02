@@ -160,6 +160,14 @@ class SourceFrameWidthAuthority:
                         and len(self.supporting_constraint_ids) == 3
                         and len(self.observation_ids) == 3
                     )
+                    or (
+                        self.basis
+                        == SourceFrameWidthAuthorityBasis
+                        .RECONCILED_DIRECT_CONSTRAINTS
+                        and len(self.supporting_frame_ordinals) >= 2
+                        and len(self.supporting_constraint_ids) == 3
+                        and len(self.observation_ids) >= 4
+                    )
                 )
                 and self.failure_kind is None
                 and self.reason is None
@@ -451,46 +459,89 @@ def calibrate_source_frame_width(
                 (start.observation_id, end.observation_id),
             )
         )
-    if len(spans) >= 2:
-        basis = SourceFrameWidthAuthorityBasis.INDEPENDENT_COMPLETE_FRAMES
-        supporting_frame_ordinals = tuple(item[0] for item in spans)
-        observed = FiniteInterval(
+    complete_frame_projection = (
+        FiniteInterval(
             min(item[1].minimum for item in spans),
             max(item[1].maximum for item in spans),
         )
-        identities = tuple(
-            sorted(
-                {
-                    identity
-                    for _ordinal, _interval, pair in spans
-                    for identity in pair
-                },
-                key=str,
-            )
+        if len(spans) >= 2
+        else None
+    )
+    complete_frame_identities = tuple(
+        sorted(
+            {
+                identity
+                for _ordinal, _interval, pair in spans
+                for identity in pair
+            },
+            key=str,
         )
-        constraint_ids: tuple[str, ...] = ()
-    else:
-        try:
-            lattice_projection = _direct_lattice_width_projection(phase)
-        except ValueError:
+    )
+    try:
+        lattice_projection = _direct_lattice_width_projection(phase)
+    except ValueError:
+        if complete_frame_projection is None:
             return source_geometry, _failed_source_width_authority(
                 phase,
                 EvidenceState.CONTRADICTED,
                 SourceFrameWidthAuthorityFailureKind.PHYSICAL_WIDTH_CONFLICT,
                 "retained direct lattice W contradicts its fitted physical state",
             )
-        if lattice_projection is None:
+        # A residual-compatible overdetermined direct system can have no
+        # single exact rank-three projection.  It therefore contributes no
+        # second W constraint; the independent complete-Frame authority
+        # remains valid and retains its full conservative hull.
+        lattice_projection = None
+    if complete_frame_projection is not None and lattice_projection is not None:
+        lattice_width, lattice_identities, constraint_ids = lattice_projection
+        minimum = max(
+            complete_frame_projection.minimum,
+            lattice_width.minimum,
+        )
+        maximum = min(
+            complete_frame_projection.maximum,
+            lattice_width.maximum,
+        )
+        if maximum < minimum:
             return source_geometry, _failed_source_width_authority(
                 phase,
-                EvidenceState.UNAVAILABLE,
-                SourceFrameWidthAuthorityFailureKind
-                .SOURCE_WIDTH_CLOSURE_UNAVAILABLE,
-                "source W requires either two independent complete Frames "
-                "or one retained rank-three direct lattice",
+                EvidenceState.CONTRADICTED,
+                SourceFrameWidthAuthorityFailureKind.PHYSICAL_WIDTH_CONFLICT,
+                "complete-Frame and direct-lattice W constraints do not intersect",
             )
+        basis = (
+            SourceFrameWidthAuthorityBasis.RECONCILED_DIRECT_CONSTRAINTS
+        )
+        supporting_frame_ordinals = tuple(item[0] for item in spans)
+        observed = FiniteInterval(minimum, maximum)
+        identities = tuple(
+            sorted(
+                {
+                    *complete_frame_identities,
+                    *lattice_identities,
+                },
+                key=str,
+            )
+        )
+    elif complete_frame_projection is not None:
+        basis = SourceFrameWidthAuthorityBasis.INDEPENDENT_COMPLETE_FRAMES
+        supporting_frame_ordinals = tuple(item[0] for item in spans)
+        observed = complete_frame_projection
+        identities = complete_frame_identities
+        constraint_ids = ()
+    elif lattice_projection is not None:
         basis = SourceFrameWidthAuthorityBasis.DIRECT_LATTICE_CLOSURE
         supporting_frame_ordinals = ()
         observed, identities, constraint_ids = lattice_projection
+    else:
+        return source_geometry, _failed_source_width_authority(
+            phase,
+            EvidenceState.UNAVAILABLE,
+            SourceFrameWidthAuthorityFailureKind
+            .SOURCE_WIDTH_CLOSURE_UNAVAILABLE,
+            "source W requires either two independent complete Frames "
+            "or one retained rank-three direct lattice",
+        )
     try:
         width_state = source_geometry.width_state.intersect_observed_extent(
             observed,
@@ -966,7 +1017,6 @@ def _yield_local_roles_to_correlated_width(
     }
     width_ids = set(source_frame_width_authority.observation_ids)
     strong_frames: list[int] = []
-    strong_observations: set[ObservationId] = set()
     topology_frames = _topology_frame_ordinals(fit)
     for slot_index in range(fit.template.count):
         start_index = 2 * slot_index
@@ -992,15 +1042,16 @@ def _yield_local_roles_to_correlated_width(
         ):
             continue
         strong_frames.append(slot_index + 1)
-        strong_observations.update(
-            (start.observation_id, end.observation_id)
-        )
     independent_complete_frames = (
         source_frame_width_authority.basis
-        == SourceFrameWidthAuthorityBasis.INDEPENDENT_COMPLETE_FRAMES
+        in {
+            SourceFrameWidthAuthorityBasis.INDEPENDENT_COMPLETE_FRAMES,
+            SourceFrameWidthAuthorityBasis.RECONCILED_DIRECT_CONSTRAINTS,
+        }
         and len(strong_frames) >= 2
         and len(width_ids) >= 4
-        and width_ids.issubset(strong_observations)
+        and set(source_frame_width_authority.supporting_frame_ordinals)
+        .issubset(strong_frames)
     )
     direct_lattice = (
         source_frame_width_authority.basis
@@ -1066,11 +1117,7 @@ def _yield_local_roles_to_correlated_width(
         ),
         tuple(validation_only_indices),
         tuple(validation_ids),
-        (
-            tuple(strong_frames)
-            if independent_complete_frames
-            else source_frame_width_authority.supporting_frame_ordinals
-        ),
+        source_frame_width_authority.supporting_frame_ordinals,
     )
 
 
@@ -1185,7 +1232,10 @@ def apply_correlated_frame_width_inference(
         or source_frame_width_authority is None
         or (
             source_frame_width_authority.basis
-            == SourceFrameWidthAuthorityBasis.INDEPENDENT_COMPLETE_FRAMES
+            in {
+                SourceFrameWidthAuthorityBasis.INDEPENDENT_COMPLETE_FRAMES,
+                SourceFrameWidthAuthorityBasis.RECONCILED_DIRECT_CONSTRAINTS,
+            }
             and len(supporting_ordinals) < 2
         )
     ):

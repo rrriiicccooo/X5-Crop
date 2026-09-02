@@ -294,8 +294,8 @@ ENCLOSING_SUPPORT_APERTURE_CALIBRATION_SPEC = (
         ),
         minimum_center_offset_ratio=-0.009,
         maximum_center_offset_ratio=0.007,
-        development_source_count=19,
-        development_task_count=19,
+        development_source_count=21,
+        development_task_count=21,
         outward_rounding_ratio=0.001,
     )
 )

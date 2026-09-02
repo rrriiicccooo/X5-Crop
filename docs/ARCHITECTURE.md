@@ -479,7 +479,7 @@ source pitch、base relation、direct separator refit 与 selected source-W refi
   refinement 必须使用 format 编译的完整物理 W interval，不能用正在受检验的 fitted Grid W 过滤自己的
   反证；source-wide 与跨高度联合 edge 优先尝试唯一闭合，不能唯一时仍保留全部注册观察参与冲突判断。
   随后对 selected candidate 评估直接角色权限、pre-W lattice rank 与逐 adjacency coverage；pre-W joint
-  rank 至少为 2、所有必要 coverage 完整且没有直接反证时，唯一 `SourceFrameWidthAuthority` 可以由两种
+  rank 至少为 2、所有必要 coverage 完整且没有直接反证时，唯一 `SourceFrameWidthAuthority` 可以由两类
   基础闭合：至少两张具有独立直接双边的完整 Frame 形成 `independent_complete_frames`；或保留下来的三个
   独立 direct-role 坐标已使 `(phase,W,pitch)` 满秩时，把同一线性系统对 W 的有界投影记录为
   `direct_lattice_closure`。后者只是一份相关 W，不是第四条证据，不回写
@@ -487,11 +487,16 @@ source pitch、base relation、direct separator refit 与 selected source-W refi
   native coordinate interval；若其前缀已有 measured gap，先扣除同一直接 signed-gap interval，再投影 W。
   Contact/Overlap 不进入这条普通 source-W 闭合路径。
 
-  两种 basis 都只收紧 selected fit 的连续 W，并在最终阶段重新评估 opposite inference 与 Gate；不得重编译
+  两类基础都只收紧 selected fit 的连续 W，并在最终阶段重新评估 opposite inference 与 Gate；不得重编译
   template、搜索 phase、删除 runner、改变 ordinal 或参与先前的离散选择。Authority identity 固定绑定
   template、integer offset、全部 phase-anchor role 与实际拥有 W 的 role；无关晚期 refinement 可以变化，
   W-owning role 或 phase anchor 变化则 authority 失效。完整 Frame basis 中所有物理相容 Frame 以完整
   uncertainty 进入一个保守 hull；direct-lattice basis 保留选定 rank-3 constraint IDs 与恰好三份 observation。
+  当同一 selected placement 同时拥有这两组合法 W 约束时，canonical owner 必须取二者交集并发布
+  `reconciled_direct_constraints`；observation identity 与 constraint ID 都完整保留，但不把同一 direct system
+  再登记为新的 Frame-width rank。交集为空产生 `physical_width_conflict`，不得选择有利的一组。若一个
+  residual-compatible 的过定 direct system 没有与 selected physical W 相交的精确 rank-3 投影，它不形成
+  第二份 W 约束，完整 Frame hull 仍按自己的 basis 保守生效。
   若每个仍缺角色的 Frame 都至少有一侧直接边缘，同一相关 W 可以推导多条 opposite，但这些推导不增加
   独立证据。若 direct-lattice W 的建立伴随某条 registered local boundary 被投影退出，该线是直接反证，
   不能再用同一 W 授权缺失角色；产生 `direct_lattice_counterevidence`。一个仅由两高度局部 support 形成、
@@ -512,6 +517,8 @@ source pitch、base relation、direct separator refit 与 selected source-W refi
 | 离散 placement 仍有 runner、pre-W rank < 2、必要 adjacency coverage 不完整或存在直接反证 | `SourceFrameWidthAuthority` 保存对应 typed failure；source geometry 与候选均不改变 |
 | 唯一 placement、pre-W rank = 2、必要 coverage 完整、无反证，且至少两张独立完整 Frame | 建立 `independent_complete_frames` source W；它可以补最后一个 rank，但不能参与先前的离散候选选择 |
 | 保留的三个独立 direct-role constraint 已达到 rank 3，必要 coverage 完整且无反证 | 建立 `direct_lattice_closure` source W；只消费同一系统已经闭合的相关 W，不再登记 Frame-width rank |
+| 上述两组 W 约束同时可用且区间相交 | 建立 `reconciled_direct_constraints`，只发布交集；保留完整 Frame ordinal、rank-3 constraint 与 observation provenance，不增加 rank |
+| 上述两组 W 约束同时可用但区间不相交 | `physical_width_conflict` → `source_frame_width_conflict`；不得挑选任一组 |
 | Rank-3 direct system 与 source 物理 W 区间不相交 | `physical_width_conflict` → `source_frame_width_conflict`；直接反证优先 |
 | 没有缺失角色 | 不需要 W 推断，全部直接 native coordinate 保持不变 |
 | 任一 source-W basis 已闭合，且每个缺失 Frame 仍有一侧直接边缘 | `supported`；同一相关 W 补齐全部 opposite，不增加 rank |
@@ -522,7 +529,7 @@ source pitch、base relation、direct separator refit 与 selected source-W refi
 | 无权 `LOCAL_REFINEMENT`，opposite 已授权，W 不依赖该线，且 W 走廊中只有该线相容 | 该角色成为 `validation_only`；完整相关 W 推导坐标，记录 role index 与 validation observation ID |
 | 弱线参与 W、opposite 未授权、W 走廊多解，或该线承担 `PHASE_ANCHOR` | 不让位；原 `direct_role_binding_authority_unavailable` 保持 |
 | 任一 Frame 的 START/END 都未观察，且上述 source-W native-pair rebind 未唯一成立 | `complete_frame_unobserved` → `frame_width_inference_unavailable` |
-| 两种 source-W basis 均不能闭合 | `source_width_closure_unavailable`；缺失 opposite 时继续为 `common_width_authority_unavailable` |
+| 两类 source-W 基础均不能闭合 | `source_width_closure_unavailable`；缺失 opposite 时继续为 `common_width_authority_unavailable` |
 
 `SourceFrameWidthAuthority` 只回答 W 是否已独立闭合；它不自动证明由 W 推导的 opposite 与相邻 Frame
 仍保持普通 topology。`SourceFrameWidthTopologyAssessment` 在 correlated-W inference 已实际取得角色权限后，
@@ -1085,7 +1092,7 @@ Enclosing support 本身只证明真实 aperture 位于两条 support 之间，�
 center_offset_ratio = (gold_aperture_center - support_midpoint) / H
 ```
 
-当前 calibration 只纳入 19 个 selected unique pair、且黄金 top/bottom 均为 `directly_visible` 的 source；
+当前 calibration 只纳入 21 个 selected unique pair、且黄金 top/bottom 均为 `directly_visible` 的 source；
 同源 count 先取中位数，再对 source hull 以 `0.001H` 向外量化，得到 `[-0.009H, +0.007H]`。该 authority
 为 rank 0 correlated inference：不把 support 变成 direct aperture、不增加 constraint rank、不参与 pair 或
 placement 选择，也不修改 output polygon。每个 `JointFrameState` 将该区间与当前 support 可容纳的物理中心

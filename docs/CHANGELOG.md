@@ -92,9 +92,16 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   projection、投影 role、lattice basis、Grid solve 与 typed conflict；不新增 TIFF query、候选、detector
   或 fallback。
 - `SourceFrameWidthAuthority` 成为 source W 的唯一消费 owner，并显式区分
-  `independent_complete_frames | direct_lattice_closure`。后者从保留的 rank-3 direct-role 系统有界投影相关
-  W，不作为新 observation 回写 Global lattice，不重复增加 rank，也不参与离散选择。比例层改为显式消费
-  同一 typed authority，不再用 observation 数量重新猜 W 的来源；W→H 仍为 rank 0 相关推断。
+  `independent_complete_frames | direct_lattice_closure | reconciled_direct_constraints`。前两组硬约束在同一
+  selected placement 中同时可用时只发布区间交集，交集为空产生 `physical_width_conflict`，不得按通过结果
+  挑选一组；第三种 basis 完整保留 Frame ordinal、rank-3 constraint 和 observation provenance，但不把
+  同一 direct system 再登记为新 rank。比例层显式消费同一 typed authority，W→H 仍为 rank 0 相关推断。
+  Report revision 更新为 `x5crop_v5_template_report_48`，不保留旧 schema 兼容路径。完整 110-task 黄金分析
+  错误为 0，16 个安全 auto、94 个 Review、`unsafe_approved_auto = 0`；22 个 task 使用 reconciliation，
+  `adjacency_topology_unresolved` 从 8 降到 6。Candidate 从 72 unavailable / 19 safe / 19 unsafe 迁移为
+  70 / 20 / 20：S109 新增安全 Review candidate，S045 的不安全 candidate 仍被 5%/budget Gate 阻断。
+  Development-detail mean 为 3.977 秒，不冒充正式 release performance receipt；不新增 TIFF query、
+  detector、candidate search、score、fallback 或样片规则。
 - Report revision 更新为 `x5crop_v5_template_report_44`，不保留旧 schema 兼容路径。Report/Debug 与
   development gold 分别显示 global lattice、source W、frame inference 的 state、basis 与 typed failure。
   当前 110 个 development task 的完整机制验收无分析错误：16 个安全 auto、94 个安全 review、

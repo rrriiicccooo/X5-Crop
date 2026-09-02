@@ -32,9 +32,11 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   完整且无反证时，Grid 可以生成两侧都未直接观察的 Frame。直接 observation 保留 native coordinate
   并形成 local relation；完整相关包络仍由 containment、content veto 与每侧 5% 预算决定 auto/review。
 - `SourceFrameWidthAuthority` 是 source W 的唯一 owner：`independent_complete_frames` 消费至少两张完整
-  直接 Frame，`direct_lattice_closure` 消费保留的 rank-3 direct-role constraint 并对同一系统投影相关 W。
-  后者不回写 Frame-width observation、不增加 rank、不参与离散选择；比例层显式消费同一 authority，
-  W→H 仍为 rank 0 相关推断。若建立 W 时投影退出的 local line 仍构成反证，缺失角色保持
+  直接 Frame，`direct_lattice_closure` 消费保留的 rank-3 direct-role constraint 并对同一系统投影相关 W；
+  两组同时可用时，`reconciled_direct_constraints` 只发布二者交集。交集为空产生
+  `physical_width_conflict`，不得挑选有利的一组；reconciliation 保留全部 Frame/constraint/observation
+  provenance，但不回写 Frame-width observation、不增加 rank、不参与离散选择。比例层显式消费同一
+  authority，W→H 仍为 rank 0 相关推断。若建立 W 时投影退出的 local line 仍构成反证，缺失角色保持
   `direct_lattice_counterevidence` review，不能删除反证后自证。
 - `SourceFrameWidthTopologyAssessment` 独立回答“已获权限的 correlated-W inference 是否在全部 W 状态下
   保持既有普通 adjacency”。它只检查最终确实由 W 拥有的角色；跨零或全负 signed-gap interval 分别保存
@@ -63,7 +65,7 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   非法 role/edge 不得重新绑定。仍获权限的 local refinement 保持原离散 identity。该过程最多评估两个
   selected fit，不增加查询、候选或 score。
 - Enclosing support 本身只证明 aperture 位于两条 support 之间。Selected unique pair 之后，唯一
-  `EnclosingSupportApertureAuthority` 用 19 个黄金 source 的直接 top/bottom 校准剩余中心偏移；同源中位数、
+  `EnclosingSupportApertureAuthority` 用 21 个黄金 source 的直接 top/bottom 校准剩余中心偏移；同源中位数、
   source hull 与 `0.001H` 向外量化得到 `[-0.009H, +0.007H]`。它是 rank 0 相关推断，不选择 geometry、
   不把 support 变成 direct aperture，也不修改 output polygon。Calibration 不可用时继续评估完整物理
   中心区间；与直接 containment 无交集时 typed Review。`EnclosingSupportApertureRisk` 仍按同一联合状态
@@ -77,7 +79,7 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   同一个两侧 direct aperture，或两侧 enclosing support 经 fixed H 闭合出的 aperture 内时，才保留 native
   coordinate。单侧/无唯一域为 unavailable，域坍缩或 trace 越域为 conflict；该证明不新增像素读取、候选
   或 rank，content veto 与 5% 预算继续独立生效。
-- 当前 Report revision 为 `x5crop_v5_template_report_47`；Debug/报告显式保存 calibration identity、anchor、
+- 当前 Report revision 为 `x5crop_v5_template_report_48`；Debug/报告显式保存 calibration identity、anchor、
   inferred adjacency、完全未观察 Frame、联合参数依据、measured relation、projection outcome、typed
   failure、source-W/frame-inference basis、W topology facts、partial-height aperture domain 与工作量。Debug
   列出精确 anchor role、逐 adjacency local delta、direct correction、coverage/counterevidence、candidate
@@ -85,22 +87,17 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   fit pass，不增加 TIFF query、第二 detector 或旧 schema 兼容层。
 
 完整 development gold 已完成 110/110，分析错误 0，`unsafe_approved_auto = 0`。安全 auto 为基础 nominal
-14/66、较难 nominal 2/30、challenge 0/14；94 个 task 安全 review。Candidate 为 72 个不可用、19 个安全、
-19 个不安全；全部不安全 candidate 均保持 review，14 个 challenge 的安全 Review 均合格。Source W 为
-51 supported / 55 unavailable / 4 contradicted；其中 40 个由完整 Frame、11 个由 direct lattice 闭合。
-Frame-width inference 为 24 supported / 41 unavailable / 45 not applicable；唯一
+14/66、较难 nominal 2/30、challenge 0/14；94 个 task 安全 review。Candidate 为 70 个不可用、20 个安全、
+20 个不安全；全部不安全 candidate 均保持 review，14 个 challenge 的安全 Review 均合格。Source W 为
+51 supported / 55 unavailable / 4 contradicted；其中 18 个由完整 Frame、11 个由 direct lattice、22 个由
+两组 direct constraint reconciliation 闭合。Frame-width inference 为 24 supported / 41 unavailable /
+45 not applicable；6 个使用完整 Frame basis、18 个使用 reconciliation。唯一
 `direct_lattice_counterevidence` 是 S077。S076/S090 明确为 `physical_width_conflict`。Late-binding projection
-共执行 20 次、投影 25 个无权限 binding、完成 16 次有界 Grid solve。
-Partial-height aperture
-domain 影响 7 个旧权限阻断：S091 新增安全 auto；S030/S045 曾得到安全 candidate；
-S008/S028 的 candidate 不安全并被预算阻断；S010/S049 被 content veto 阻断。完整黄金 diagnostic mean 为
-3.899 秒，只作开发归因。当前安全但 Review 的 nominal candidate 为 S030/S058；S059 经校准 center authority
-新增为安全 auto。S045/S109 先前的 candidate 对黄金虽安全，但完整 source-W 状态同时容许未证明 overlap，
-已前移为 topology Review。S012 的
-candidate 会越过黄金 cross-low 预算，仍由 `direct_use_budget_exceeded` 安全阻断。S007/S026/S040/S110
-从迟到的 `fixed_template_mismatch` 前移为 `adjacency_topology_unresolved`；S010/S045/S108/S109 也在下游
-消费 W 前暴露同一缺口。本阶段没有生成绑定最终 commit 的正式 performance receipt；正式 5 秒 Gate 只在
-release commit 上复验。
+共执行 19 次、投影 24 个无权限 binding、完成 15 次有界 Grid solve。
+完整黄金 development-detail mean 为 3.977 秒，只作开发归因。当前安全但 Review 的 nominal candidate 为
+S030/S058/S109；S045 的 candidate 不安全并继续被 5%/budget Gate 阻断。S012 的 candidate 会越过黄金
+cross-low 预算，同样保持安全 Review。本阶段没有生成绑定最终 commit 的正式 performance receipt；正式
+5 秒 Gate 只在 release commit 上复验。
 
 对 96 个 nominal 的同源 v4.2.8/V5 对照中，发布版 80 个 auto 里有 70 个黄金危险自动裁切；发布版仅
 11 个 geometry 安全。当前 V5 已让其中 S022、S025 安全 auto；其余 9 个仍按真实 typed root 安全 Review：
@@ -112,28 +109,29 @@ output budget，S032 为 phase ambiguity。
 - 106-source/110-task development gold 用于发现机制、调试和 incident regression，不估计未来生产错误率。
   独立 calibration/sealed 是未来概率选择与未见来源声明的前提，但不再是首版发布前置条件。
 - 当前 96 个 nominal 仍有 80 个 review。主要 phase root failure 为
-  `discrete_phase_ambiguous` 13、`fixed_template_mismatch` 10、`adjacency_topology_unresolved` 8、
+  `discrete_phase_ambiguous` 13、`fixed_template_mismatch` 10、`adjacency_topology_unresolved` 6、
   `calibrated_nominal_grid_conflict` 5、`source_frame_width_conflict` 4、
   `nominal_grid_phase_anchor_unavailable` 3、`direct_phase_anchor_unavailable` 2、
   `direct_role_binding_authority_unavailable` 2、`frame_width_inference_unavailable` 1、
   `separator_material_conflict` 1 与
-  `adjacency_observation_coverage_incomplete` 1；另有 46 个 nominal 已通过 phase，其中只有 16 个最终安全
+  `adjacency_observation_coverage_incomplete` 1；另有 48 个 nominal 已通过 phase，其中只有 16 个最终安全
   auto。S012、S030 与 S058 说明 phase 通过不等于输出风险已闭合。
 - 完全不可见 Frame 已可由校准 Grid 生成，但这不是像素事实，也不直接授权 auto。候选仍须通过完整
   containment、content veto 与最坏预算；后续应改善 anchor、local correction 与直接 evidence，而非收窄
   传播不确定性。概率 scorer 当前不进入 Runtime。
 - 内容是否连续穿过理论间隔的 continuity 仍不完整；source truncation 与片夹遮挡也缺少统一
   clipped-boundary geometry。宽缓单根长轴 material 仍可能是构图线，不能单独创造 phase。
-- 19 个 selected unique enclosing-support source 的 aperture-center calibration 已闭合并可由黄金分析复算。
+- 21 个 selected unique enclosing-support source 的 aperture-center calibration 已闭合并可由黄金分析复算。
   S030/S058 仍因真实逐侧 residual/完整预算 Review，S012 的 candidate 仍会切入黄金边界；后续应提高
   shared top/bottom 的观察与拟合精度，不能扩大 center calibration、删除 residual 或用 bleed 掩盖缺口。
 
 ## 精确下一步
 
-1. 对 8 个 `adjacency_topology_unresolved` 做下一轮单机制归因：区分 native role 绑定错误、缺少直接 local
-   relation、真实 Contact/Overlap 与 source-W interval 本身尚未闭合。S026 的 boundary-edge:28 当前绑定为
+1. 对 S007/S010/S026/S040/S108/S110 这 6 个 `adjacency_topology_unresolved` 做下一轮单机制归因：区分
+   native role 绑定错误、缺少直接 local relation、真实 Contact/Overlap 与 source-W interval 本身尚未
+   闭合。S026 的 boundary-edge:28 当前绑定为
    F2 END，却也位于下一 Frame 的 separator side；应先修唯一 role/relation owner，不能收窄 W、挑有利
-   状态或把未知 overlap 伪装成 `OverlapRelation`。S045/S109 的黄金安全候选也不能绕过完整 interval 证明。
+   状态或把未知 overlap 伪装成 `OverlapRelation`。
 2. 对 4 个 `source_frame_width_conflict` 只按 source physical W 与 direct lattice 的真实冲突继续诊断；不得
    扩大 W prior 或回退旧“两张 Frame 才算 W”的权限。S077 的 registered counterevidence 也必须保留。
 3. 随后按真实 root 继续离散 ambiguity、剩余 direct-role 与 clipped-boundary geometry；

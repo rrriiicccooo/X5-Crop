@@ -441,7 +441,7 @@ class GoldAnalysisContractTest(unittest.TestCase):
         configured = ENCLOSING_SUPPORT_APERTURE_CALIBRATION_SPEC
         ratios = [-0.008894822743034225, 0.006143972364182875] + [
             0.0
-        ] * 17
+        ] * 19
         records = tuple(
             {
                 "sample_id": f"S{index:03d}",
@@ -464,8 +464,8 @@ class GoldAnalysisContractTest(unittest.TestCase):
             _round_outward_lower(ratios[0], 0.001),
             -0.009,
         )
-        self.assertEqual(calibration["eligible_source_count"], 19)
-        self.assertEqual(calibration["eligible_task_count"], 19)
+        self.assertEqual(calibration["eligible_source_count"], 21)
+        self.assertEqual(calibration["eligible_task_count"], 21)
         self.assertAlmostEqual(
             calibration["derived_outward_interval"]["minimum"],
             -0.009,

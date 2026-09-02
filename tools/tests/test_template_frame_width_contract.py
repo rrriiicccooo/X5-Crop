@@ -547,6 +547,108 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             selected.best.pitch_fit.canonical_frame_width_px,
         )
 
+    def test_complete_frames_and_direct_lattice_reconcile_one_source_width(
+        self,
+    ) -> None:
+        observations = (
+            phase_edge("a-frame-1-start", 40.0),
+            phase_edge("b-frame-1-end", 140.0),
+            phase_edge("c-frame-3-start", 280.0),
+            replace(
+                phase_edge("z-frame-3-end", 380.0),
+                full_position_interval_px=FiniteInterval(370.0, 390.0),
+            ),
+        )
+        phase = self._with_selected_width_prerequisites(
+            fit_template_phase(observations, phase_template(3)),
+            observations,
+        )
+        source = SourceScanGeometry.create(
+            FramePhysicalSpec(10.0, 24.0, None),
+            width_scale_px_per_mm=PositiveInterval.exact(10.0),
+            height_scale_px_per_mm=PositiveInterval.exact(10.0),
+        )
+
+        calibrated, authority = calibrate_source_frame_width(
+            source,
+            phase,
+            observations,
+        )
+
+        self.assertEqual(authority.state, EvidenceState.SUPPORTED)
+        self.assertEqual(
+            authority.basis,
+            SourceFrameWidthAuthorityBasis.RECONCILED_DIRECT_CONSTRAINTS,
+        )
+        self.assertEqual(authority.supporting_frame_ordinals, (1, 3))
+        self.assertEqual(len(authority.supporting_constraint_ids), 3)
+        self.assertEqual(len(authority.observation_ids), 4)
+        self.assertEqual(
+            calibrated.width_state.extent_projection_px(),
+            FiniteInterval.exact(100.0),
+        )
+
+    def test_disjoint_complete_frame_and_direct_lattice_width_is_conflict(
+        self,
+    ) -> None:
+        observations = (
+            phase_edge("a-frame-1-start", 40.0),
+            phase_edge("b-frame-1-end", 140.0),
+            phase_edge("c-frame-3-start", 280.0),
+            phase_edge("z-frame-3-end", 380.0),
+        )
+        phase = self._with_selected_width_prerequisites(
+            fit_template_phase(observations, phase_template(3)),
+            observations,
+        )
+        lattice = phase.global_lattice_authority
+        assert phase.best is not None and lattice is not None
+        constraints = tuple(
+            replace(
+                constraint,
+                value_interval_px=FiniteInterval(145.0, 145.0),
+            )
+            if constraint.role_index == 1
+            else constraint
+            for constraint in lattice.constraints
+        )
+        phase = replace(
+            phase,
+            best=replace(
+                phase.best,
+                pitch_fit=replace(
+                    phase.best.pitch_fit,
+                    frame_width_px=FiniteInterval(90.0, 110.0),
+                ),
+            ),
+            global_lattice_authority=replace(
+                lattice,
+                constraints=constraints,
+            ),
+        )
+        source = SourceScanGeometry.create(
+            FramePhysicalSpec(10.0, 24.0, None),
+            width_scale_px_per_mm=PositiveInterval.exact(10.0),
+            height_scale_px_per_mm=PositiveInterval.exact(10.0),
+        )
+
+        retained, authority = calibrate_source_frame_width(
+            source,
+            phase,
+            observations,
+        )
+
+        self.assertEqual(retained, source)
+        self.assertEqual(authority.state, EvidenceState.CONTRADICTED)
+        self.assertEqual(
+            authority.failure_kind,
+            SourceFrameWidthAuthorityFailureKind.PHYSICAL_WIDTH_CONFLICT,
+        )
+        self.assertEqual(
+            authority.reason,
+            "complete-Frame and direct-lattice W constraints do not intersect",
+        )
+
     def test_rank_three_direct_roles_close_correlated_source_width(self) -> None:
         observations = (
             replace(

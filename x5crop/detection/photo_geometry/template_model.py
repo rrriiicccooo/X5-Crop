@@ -447,6 +447,7 @@ class SourceFrameWidthAuthorityBasis(str, Enum):
 
     INDEPENDENT_COMPLETE_FRAMES = "independent_complete_frames"
     DIRECT_LATTICE_CLOSURE = "direct_lattice_closure"
+    RECONCILED_DIRECT_CONSTRAINTS = "reconciled_direct_constraints"
 
 
 @dataclass(frozen=True)
@@ -519,6 +520,15 @@ class FrameWidthInferenceAssessment:
                     self.authority_basis
                     == SourceFrameWidthAuthorityBasis
                     .INDEPENDENT_COMPLETE_FRAMES
+                    and (
+                        len(self.supporting_frame_ordinals) < 2
+                        or len(self.observation_ids) < 4
+                    )
+                )
+                or (
+                    self.authority_basis
+                    == SourceFrameWidthAuthorityBasis
+                    .RECONCILED_DIRECT_CONSTRAINTS
                     and (
                         len(self.supporting_frame_ordinals) < 2
                         or len(self.observation_ids) < 4

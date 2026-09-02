@@ -1376,9 +1376,14 @@ def _validate_frame_width_inference(value: object) -> None:
             not in {
                 "independent_complete_frames",
                 "direct_lattice_closure",
+                "reconciled_direct_constraints",
             }
             or (
                 authority_basis == "independent_complete_frames"
+                and (len(supporting) < 2 or len(observation_ids) < 4)
+            )
+            or (
+                authority_basis == "reconciled_direct_constraints"
                 and (len(supporting) < 2 or len(observation_ids) < 4)
             )
             or (
@@ -1471,12 +1476,21 @@ def _validate_source_frame_width_authority(value: object) -> None:
             not in {
                 "independent_complete_frames",
                 "direct_lattice_closure",
+                "reconciled_direct_constraints",
             }
             or (
                 basis == "independent_complete_frames"
                 and (
                     len(supporting) < 2
                     or constraint_ids
+                    or len(observation_ids) < 4
+                )
+            )
+            or (
+                basis == "reconciled_direct_constraints"
+                and (
+                    len(supporting) < 2
+                    or len(constraint_ids) != 3
                     or len(observation_ids) < 4
                 )
             )
