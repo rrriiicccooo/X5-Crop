@@ -229,6 +229,32 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_current_report_record(record)
 
+    def test_current_report_accepts_holder_slot_subset_search_authority(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            outcome = self._process_pixels(
+                Path(temporary),
+                np.zeros((100, 720), dtype=np.uint16),
+            )
+        self.assertIsInstance(outcome, CompletedInput)
+        assert isinstance(outcome, CompletedInput)
+        record = deepcopy(outcome.result)
+        record["photo_geometry"]["lanes"][0]["coarse_strip_support"][
+            "long_authority"
+        ] = "holder_slot_subset_conservative"
+
+        validate_current_report_record(record)
+
+        record["photo_geometry"]["lanes"][0]["coarse_strip_support"][
+            "short_authority"
+        ] = "holder_slot_subset_conservative"
+        with self.assertRaisesRegex(
+            ValueError,
+            "template alignment summary is invalid",
+        ):
+            validate_current_report_record(record)
+
     def test_direct_role_report_separates_coordinate_and_evidence_group(self) -> None:
         authority = {
             "state": "supported",

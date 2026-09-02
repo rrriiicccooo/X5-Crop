@@ -221,11 +221,14 @@ format/count/holder 编译固定模板、coarse intents 与工作上界
 - phase、role、cross、placement、像素与内存上界。
 
 Coarse pass 对每个 lane 只执行一个长轴和一个短轴 aggregate query，输出保守 interval 和 receipt；
-aggregate interval 本身没有角色、ordinal、placement 或输出 deskew authority。短轴 query 的各条
+aggregate interval 本身没有角色、ordinal、placement 或输出 deskew authority。长轴 role-free material
+hull 只有在输出 slot 数等于该 lane 的片夹容量时才可缩窄 phase 搜索；当输出 slot 只是片夹 slot 的一个
+未知连续子集时，hull 不能证明该子集位于哪一段，搜索 interval 必须保留完整 lane。短轴 query 的各条
 已注册 trace 若能直接闭合为双侧 track，可以在满足第 8.2 节全部条件时建立 enclosing support；
 这份 authority 来自逐 trace 直接观察，不来自 aggregate interval。Long-axis precision 从左右 holder 端
 分别投影 format/count 编译的完整且相关的 `W/pitch` 状态，合并为候选无关 role search core；没有
-direct coarse observation 时才使用一个保守全长窗口。所有计划内的精测窗口随后一次登记、一次读取；
+direct coarse observation，或输出 count 只是未知 holder-slot 子集时，使用保守全长窗口。所有计划内的
+精测窗口随后一次登记、一次读取；
 某个 selected placement 是否真正被覆盖，必须在测量后按第 7 节逐 adjacency 证明，不能从“查询已全部
 执行”反推。不能为某个 candidate 重读 TIFF、扩张全图搜索或 winner-specific requery。
 
@@ -652,14 +655,25 @@ observation；只有两侧都非空才支持带推断的正常 Grid，否则产�
 `outer_frame_observation_authority_unavailable`。这些证明都保留完整传播不确定性，并先于输出预算进入
 review。
 
-`SequenceAnchorDiscoveryDomain` 是候选无关查询走廊的唯一 owner。存在 coarse direct long support 时，
-它从 format/count 编译的完整 `W/pitch` 区间分别按左端锚定向右、右端锚定向左投影每个 START/END，
+`SequenceAnchorDiscoveryDomain` 是候选无关查询走廊的唯一 owner。`coarse_strip_support.py` 先按下表决定
+它可以消费的长轴搜索 interval；片夹容量与输出 count 只来自已编译的 measurement plan，不从文件名、
+目录或历史 full/partial 标签推断：
+
+| direct long hull | output count 与 lane capacity | 搜索 interval / typed authority |
+|---|---|---|
+| 有 | 相等 | 在完整 lane 内扩张 hull；`pixel_observed` |
+| 有 | 小于 | 完整 lane；保留 hull 与 observation identity，`holder_slot_subset_conservative` |
+| 无 | 任意合法关系 | 完整 lane；`holder_conservative` |
+
+第二行只修复候选无关查询 coverage：它不居中、不选择 contiguous subset、不创建 phase/ordinal/rank，也不
+把 holder extent 冒充照片边界。Normal report、development detail 与 Debug 都显示该 authority；直接 hull
+继续作为诊断 observation 保存。确定搜索 interval 后，owner 从 format/count 编译的完整 `W/pitch` 区间
+分别按左端锚定向右、右端锚定向左投影每个 START/END，
 再加唯一的 role refinement radius、裁到 coarse support 并合并重叠 core。合并后的理论 core 是窗口种子；
 相邻种子之间在中点分界，把 coarse support 内每个可测整数像素中心恰好分配给一个窗口。Measurement halo
 可以重叠，transition ownership 不得重叠或留洞。右端公式直接保留同一 `W/pitch` 状态的相关性，不能先
-制造 origin 区间再重复叠加 pitch 极值。没有 direct long support 时使用一个保守全 support 窗口。全部
-窗口在 placement 前登记，并从同一条全长 baseline trace 切片；该分区不新增 TIFF 读取或 query，不读取
-winner，也不授予 phase、ordinal 或 placement 权限。
+制造 origin 区间再重复叠加 pitch 极值。全部窗口在 placement 前登记，并从同一条全长 baseline trace
+切片；该分区不新增 TIFF 读取或 query，不读取 winner，也不授予 phase、ordinal 或 placement 权限。
 
 模板放置后，`template_alignment_diagnostic` 只读比较 theoretical role 与 bound observation，并报告
 直接角色权限、全局 constraint rank、逐 adjacency coverage、外侧 Frame observation authority、

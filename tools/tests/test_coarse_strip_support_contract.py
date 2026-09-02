@@ -11,6 +11,7 @@ from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.evidence.scan_canvas import observe_scan_canvas
 from x5crop.detection.photo_geometry.coarse_strip_support import (
     _coarse_short_trace_lattices,
+    _long_axis_search_support,
     _sparse_positions,
     CoarseAxisSupport,
     CoarseStripSupport,
@@ -117,6 +118,72 @@ def _lane(
 
 
 class CoarseStripSupportContractTest(unittest.TestCase):
+    def test_holder_slot_subset_keeps_full_phase_search_authority(self) -> None:
+        authority = FiniteInterval(0.0, 1999.0)
+        direct = FiniteInterval(100.0, 1200.0)
+        observation_ids = (ObservationId("coarse:long"),)
+
+        subset = _long_axis_search_support(
+            direct,
+            observation_ids,
+            authority,
+            margin_px=100.0,
+            minimum_width_px=500.0,
+            output_slot_count=2,
+            measurement_slot_count=6,
+        )
+
+        self.assertEqual(subset.interval_px, authority)
+        self.assertEqual(subset.direct_interval_px, direct)
+        self.assertEqual(subset.observation_ids, observation_ids)
+        self.assertEqual(
+            subset.authority,
+            CoarseSupportAuthority.HOLDER_SLOT_SUBSET_CONSERVATIVE,
+        )
+
+    def test_full_capacity_sequence_retains_pixel_localization(self) -> None:
+        authority = FiniteInterval(0.0, 1999.0)
+        direct = FiniteInterval(300.0, 1200.0)
+
+        support = _long_axis_search_support(
+            direct,
+            (ObservationId("coarse:long"),),
+            authority,
+            margin_px=100.0,
+            minimum_width_px=500.0,
+            output_slot_count=6,
+            measurement_slot_count=6,
+        )
+
+        self.assertEqual(support.interval_px, FiniteInterval(200.0, 1300.0))
+        self.assertEqual(
+            support.authority,
+            CoarseSupportAuthority.PIXEL_OBSERVED,
+        )
+
+    def test_holder_slot_subset_without_direct_hull_remains_conservative(
+        self,
+    ) -> None:
+        authority = FiniteInterval(0.0, 1999.0)
+
+        support = _long_axis_search_support(
+            None,
+            (),
+            authority,
+            margin_px=100.0,
+            minimum_width_px=500.0,
+            output_slot_count=2,
+            measurement_slot_count=6,
+        )
+
+        self.assertEqual(support.interval_px, authority)
+        self.assertIsNone(support.direct_interval_px)
+        self.assertEqual(support.observation_ids, ())
+        self.assertEqual(
+            support.authority,
+            CoarseSupportAuthority.HOLDER_CONSERVATIVE,
+        )
+
     @staticmethod
     def _observed_support(
         pixels: np.ndarray,

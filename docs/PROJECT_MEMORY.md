@@ -47,6 +47,11 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   anchor 将它放入 TIFF。Direct rank 3 是更强的完全直接闭合路径，不是唯一许可；逐 adjacency coverage
   完整且无反证时，Grid 可以生成两侧都未直接观察的 Frame。直接 observation 保留 native coordinate
   并形成 local relation；完整相关包络仍由 containment、content veto 与每侧 5% 预算决定 auto/review。
+- 显式 count 小于 lane 片夹容量时，role-free long material hull 不能确定照片组占用哪一个连续 slot 子集。
+  `coarse_strip_support.py` 因此以 `holder_slot_subset_conservative` 保留完整 lane 搜索权限，同时保存 direct
+  hull 与 observation identity 供诊断；它不居中、不选择 subset、不创建 phase/rank，也不增加 query。
+  Full-capacity sequence 仍使用 pixel-localized hull。S107/S112 已由此从无 proposal 变为完整 Review
+  proposal，后续 eligibility 与正式决定未改变。
 - `SourceFrameWidthAuthority` 是 source W 的唯一 owner：`independent_complete_frames` 消费至少两张完整
   直接 Frame，`direct_lattice_closure` 消费全部 retained direct-role coordinate 已达到 rank 3 的系统并
   对同一系统投影相关 W；
@@ -105,7 +110,7 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   不允许成为 candidate；弱 anchor、多解或方向不足仍保持 typed unresolved，其中方向有界且角色已登记的
   弱 anchor 可以保留明确标注的 Review proposal。两条 H 路径都不增加 direct rank、不覆盖两侧 native
   boundary，并继续受完整不确定性、containment 与每侧 5% 预算约束。
-- 当前 Report revision 为 `x5crop_v5_template_report_56`；普通报告与 Debug 显式分开 proposal、eligibility、
+- 当前 Report revision 为 `x5crop_v5_template_report_57`；普通报告与 Debug 显式分开 proposal、eligibility、
   selected output 和决定，并继续保存 calibration identity、anchor、inferred adjacency、完全未观察 Frame、
   联合参数依据、measured relation、projection outcome、typed failure、cross-H/source-W/frame-inference basis、全部
   retained W constraint/observation、W topology facts、partial-height aperture domain 与工作量。完整路径最多
@@ -116,16 +121,16 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   source manifest 不等于 HEAD，以及成员、观测值、数量或登记数值的任何漂移。区间仍为
   `[-0.009H, +0.007H]`，crop geometry 未改变。
 
-完整 development gold diagnostic 已完成 110/110，分析错误 0。现有主模型生成 107 个 proposal，3 个
-尚未生成；proposal 为 26 safe / 81 unsafe / 3 unavailable。Eligibility 层仍保留 40 个 candidate，形成
-19 safe / 21 unsafe / 70 unavailable：其中 7 个安全 proposal 与 60 个不安全 proposal 被保留为 Review。
-Runtime stage 为 16 approved auto、24 eligible candidate Review、67 proposal-generated/eligibility-withheld、
-3 proposal unavailable。S106 现在从三段独立支撑、方向有界的 bottom role hypothesis 与校准 H 保留完整
-Cross proposal；它仍是 candidate unavailable 与 Review，黄金明确暴露 Frame 1–8 的 `cross_low` 向内越线，
-Frame 9–12 无逐侧违例。当前仍是 16 个安全 auto、94 个 Review、危险 auto 0，但 release detection gate
-未达标；开发 report 即使出现危险 auto 也必须完整列出，不能把中间结果称为发布通过。
-当前 dirty-tree detector manifest `63c867b5bb47f2cd4d6866a5473ce53df207a7082d5838c860437476d560d8f9`
-的 development-detail mean 为 3.947 秒，只作开发归因；
+完整 development gold diagnostic 已完成 110/110，分析错误 0。现有主模型生成 109 个 proposal，唯一
+unavailable 是 S002 的 `producer_bound_exceeded`；proposal 为 27 safe / 82 unsafe / 1 unavailable。
+Eligibility 层仍保留 40 个 candidate，形成 19 safe / 21 unsafe / 70 unavailable：8 个安全 proposal 与
+61 个不安全 proposal 被保留为 Review。Runtime stage 为 16 approved auto、24 eligible candidate Review、
+69 proposal-generated/eligibility-withheld、1 proposal unavailable。S112 新增安全 Review proposal；S107
+新增不安全 Review proposal，主要暴露 partial Frame 1 的 `sequence_end` 直接使用预算超限。当前仍是 16 个
+安全 auto、94 个 Review、危险 auto 0，但 release detection gate 未达标；开发 report 即使出现危险 auto
+也必须完整列出，不能把中间结果称为发布通过。
+当前 dirty-tree detector manifest `5c2c6d9ae403bd6cf2d2dafa65fa13a7e9b40a4cf8840c7009217a49698604af`
+的 development-detail mean 为 3.938 秒，只作开发归因；
 相同检测源码最近一次 clean-checkpoint 24-source 正式性能 mean 为 3.536 秒，通过 5 秒 Gate，3 秒目标仍为
 非阻断 challenge，该旧性能 receipt 不替代未来 release commit 的复验。
 
@@ -148,16 +153,17 @@ output budget，S032 为 phase ambiguity。
 
 - 106-source/110-task development gold 用于发现机制、调试和 incident regression，不估计未来生产错误率。
   独立 calibration/sealed 是未来概率选择与未见来源声明的前提，但不再是首版发布前置条件。
-- 当前 3 个 proposal unavailable 才是真正的生成缺口；另有 67 个 proposal 已完整形成但 eligibility
-  withheld。后者包含 7 个黄金安全 proposal（S014/S048/S079/S083/S085/S088/S094）和 60 个不安全 proposal；
+- 当前唯一 proposal unavailable 是 S002 的 Cross `producer_bound_exceeded`；另有 69 个 proposal 已完整
+  形成但 eligibility withheld。后者包含 8 个黄金安全 proposal
+  （S014/S048/S079/S083/S085/S088/S094/S112）和 61 个不安全 proposal；
   安全并不自动证明当前阻断多余，不安全也不能因 Review 而隐藏，必须分别追到通用权限或几何根因。
 - 当前 96 个 nominal 仍有 80 个 review。主要 phase root failure 为
   `discrete_phase_ambiguous` 13、`fixed_template_mismatch` 10、`adjacency_topology_unresolved` 6、
   `calibrated_nominal_grid_conflict` 5、`source_frame_width_conflict` 4、
-  `nominal_grid_phase_anchor_unavailable` 3、`direct_phase_anchor_unavailable` 2、
-  `direct_role_binding_authority_unavailable` 2、`frame_width_inference_unavailable` 1、
+  `nominal_grid_phase_anchor_unavailable` 3、`direct_role_binding_authority_unavailable` 2、
+  `frame_width_inference_unavailable` 1、
   `separator_material_conflict` 1 与
-  `adjacency_observation_coverage_incomplete` 1；另有 48 个 nominal 已通过 phase，其中只有 16 个最终安全
+  `adjacency_observation_coverage_incomplete` 1；另有 50 个 nominal 已通过 phase，其中只有 16 个最终安全
   auto。S012、S030 与 S058 说明 phase 通过不等于输出风险已闭合。
 - 完全不可见 Frame 已可由校准 Grid 生成，但这不是像素事实，也不直接授权 auto。候选仍须通过完整
   containment、content veto 与最坏预算；后续应改善 anchor、local correction 与直接 evidence，而非收窄
@@ -171,16 +177,16 @@ output budget，S032 为 phase ambiguity。
 
 ## 精确下一步
 
-1. 继续让所有合法 format/count 尽量形成完整 proposal。剩余 3 个 unavailable 已收敛为两类：S107/S112
-   缺 absolute phase anchor；S002 超出 Cross producer bound。逐组修通用生成能力，不能把缺失权限伪装成
-   approved，也不能用样片特例生成。
+1. 继续让所有合法 format/count 尽量形成完整 proposal。当前唯一生成缺口是 S002 的 Cross
+   `producer_bound_exceeded`；修复 producer 工作上界或物理多解根因时不能截断候选、伪装 approved 或建立
+   样片特例。S107/S112 已有完整 proposal，下一步只处理其真实下游几何与 eligibility。
 2. 对新暴露的 Cross proposal 分开修根因：S033/S068/S069 的 `cross_high` 预算超限回到 Cross anchor、
    calibrated H 与方向 owner；S082/S108 的长轴向内越线回到 phase/local relation。随后继续处理此前
    calibrated-H proposal：S011/S020/S037/S097 的长轴向内越线优先回到
    phase/local relation；S001/S004/S018/S019/S056/S066 的逐侧外扩超预算回到 cross anchor、H interval 或
    residual/bleed 的真实 owner。不能为了让黄金变绿而收窄校准区间或放宽 5% 合同。
-3. 在 107 个已生成 proposal 上优先修 81 个黄金不安全几何的通用 detector、anchor、local relation、cross
-   或 output 根因；黄金只作离线比较，不能进入 Runtime。随后审计 7 个安全但 eligibility withheld 的方案，
+3. 在 109 个已生成 proposal 上优先修 82 个黄金不安全几何的通用 detector、anchor、local relation、cross
+   或 output 根因；黄金只作离线比较，不能进入 Runtime。随后审计 8 个安全但 eligibility withheld 的方案，
    只移除真正放错层级或重复的阻断，保留真实 counterevidence。
 4. Proposal 几何稳定后再收紧 eligibility 与 DecisionGate，使 96 个 nominal 全部安全 auto；开发期间任何
    危险 auto 都完整列出并继续修复，release commit 才硬性归零。每次只闭合一个通用机制，不恢复旧终判、

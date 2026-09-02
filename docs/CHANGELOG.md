@@ -129,6 +129,20 @@ unavailable，candidate 保持 19 safe / 21 unsafe / 70 unavailable；S106 从�
 proposal unavailable；本次观测危险 auto 为 0，release detection gate 尚未达标。Development-detail mean
 为 3.947 秒，只作开发归因，不替代正式性能 Gate。
 
+显式 count 小于 lane 片夹容量时，role-free long material hull 不再被误当成“该照片组必定位于 hull 内”的
+权限。`coarse_strip_support.py` 现在保留 direct hull 与 observation identity 作为诊断事实，同时以
+`holder_slot_subset_conservative` 为完整 lane 登记 phase 搜索；它不居中、不选择 slot subset，也不新增
+query、candidate、rank、score 或正式输出权限。Full-capacity sequence 仍使用原 pixel-localized interval，
+没有 direct hull 时仍使用 `holder_conservative`。Normal report、development detail、Debug 与 validator
+共享该 typed authority，Report revision 更新为 `x5crop_v5_template_report_57`。
+
+完整 110-task development report 无分析错误：proposal 从 107 增至 109，变为 27 safe / 82 unsafe / 1
+unavailable；S112 新增安全 Review proposal，S107 新增不安全 Review proposal，唯一生成缺口只剩 S002 的
+`producer_bound_exceeded`。Candidate 保持 19 safe / 21 unsafe / 70 unavailable，Runtime 保持 16 safe
+approved auto、24 eligible candidate Review；proposal-generated / eligibility-withheld 增至 69。当前观测
+危险 auto 为 0，但这只是诊断事实而非开发提交的前置门槛；release detection gate 仍未达标。
+Development-detail mean 为 3.938 秒，只作开发归因，不替代正式性能 Gate。
+
 ### 产品行为
 
 - 用户提供 format，并确认匹配片夹的默认 count 或显式 count；count 包含中间空白曝光格。Runtime 不猜

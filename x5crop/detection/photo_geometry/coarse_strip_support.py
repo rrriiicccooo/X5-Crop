@@ -62,6 +62,9 @@ COARSE_BROAD_REGION_TRACE_COUNT = 3 * 3
 class CoarseSupportAuthority(str, Enum):
     PIXEL_OBSERVED = "pixel_observed"
     HOLDER_CONSERVATIVE = "holder_conservative"
+    HOLDER_SLOT_SUBSET_CONSERVATIVE = (
+        "holder_slot_subset_conservative"
+    )
 
 
 @dataclass(frozen=True)
@@ -80,7 +83,10 @@ class CoarseAxisSupport:
             or len(set(self.observation_ids)) != len(self.observation_ids)
         ):
             raise ValueError("coarse axis support is invalid")
-        if self.authority == CoarseSupportAuthority.PIXEL_OBSERVED:
+        if self.authority in {
+            CoarseSupportAuthority.PIXEL_OBSERVED,
+            CoarseSupportAuthority.HOLDER_SLOT_SUBSET_CONSERVATIVE,
+        }:
             if (
                 not isinstance(self.direct_interval_px, FiniteInterval)
                 or not self.observation_ids
@@ -620,6 +626,46 @@ def _axis_support(
     )
 
 
+def _long_axis_search_support(
+    direct: FiniteInterval | None,
+    observation_ids: tuple[ObservationId, ...],
+    authority: FiniteInterval,
+    *,
+    margin_px: float,
+    minimum_width_px: float,
+    output_slot_count: int,
+    measurement_slot_count: int,
+) -> CoarseAxisSupport:
+    """Retain every legal holder-slot subset in the phase search domain.
+
+    A role-free material hull can localize a sequence that occupies the whole
+    lane capacity.  When the user supplies fewer output slots, however, the
+    hull cannot identify which contiguous holder-slot subset they occupy.  In
+    that case its pixel observation remains diagnostic, while the registered
+    phase search conservatively covers the complete lane authority.
+    """
+
+    if (
+        output_slot_count <= 0
+        or measurement_slot_count < output_slot_count
+    ):
+        raise ValueError("coarse long-axis slot counts are invalid")
+    if direct is not None and output_slot_count < measurement_slot_count:
+        return CoarseAxisSupport(
+            authority,
+            direct,
+            CoarseSupportAuthority.HOLDER_SLOT_SUBSET_CONSERVATIVE,
+            observation_ids,
+        )
+    return _axis_support(
+        direct,
+        observation_ids,
+        authority,
+        margin_px=margin_px,
+        minimum_width_px=minimum_width_px,
+    )
+
+
 def observe_coarse_strip_support(
     field: PhotoBoundaryMeasurementField,
     lane: SourceLaneEvidence,
@@ -731,12 +777,14 @@ def observe_coarse_strip_support(
         template.frame_width_px.maximum
         + max(0, template.count - 1) * template.pitch_px.maximum
     )
-    long_support = _axis_support(
+    long_support = _long_axis_search_support(
         direct_long,
         long_ids,
         long_authority,
         margin_px=template.pitch_px.maximum,
         minimum_width_px=group_span + 2.0 * template.pitch_px.maximum,
+        output_slot_count=measurement_plan.count,
+        measurement_slot_count=measurement_plan.full_count,
     )
     support_height = (
         OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio

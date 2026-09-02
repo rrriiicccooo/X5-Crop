@@ -8,6 +8,9 @@ from typing import Any
 from x5crop.detection.candidate.assessment.model import CANDIDATE_GATE_CHECK_CODES
 from x5crop.detection.decision.vocabulary import FINAL_REVIEW_REASONS
 from x5crop.detection.output_deskew import DeskewSkipReason
+from x5crop.detection.photo_geometry.coarse_strip_support import (
+    CoarseSupportAuthority,
+)
 from x5crop.detection.photo_geometry.output_model import FootprintSaturationKind
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossFailureKind,
@@ -101,6 +104,13 @@ _OBSERVED_DESKEW_SKIP_REASONS = {
     DeskewSkipReason.ROTATION_NOT_NEEDED.value,
     DeskewSkipReason.ROTATION_EXCEEDS_CLEANUP_LIMIT.value,
 }
+_COARSE_SUPPORT_AUTHORITIES = {
+    item.value for item in CoarseSupportAuthority
+}
+_SHORT_AXIS_COARSE_SUPPORT_AUTHORITIES = (
+    _COARSE_SUPPORT_AUTHORITIES
+    - {CoarseSupportAuthority.HOLDER_SLOT_SUBSET_CONSERVATIVE.value}
+)
 _TEMPLATE_ALIGNMENT_FIELDS = {
     "path",
     "pattern",
@@ -2716,9 +2726,9 @@ def _validate_geometry(record: dict[str, Any]) -> None:
                 "short_interval_px",
             }
             or coarse["long_authority"]
-            not in {"pixel_observed", "holder_conservative"}
+            not in _COARSE_SUPPORT_AUTHORITIES
             or coarse["short_authority"]
-            not in {"pixel_observed", "holder_conservative"}
+            not in _SHORT_AXIS_COARSE_SUPPORT_AUTHORITIES
             or not isinstance(alignment, dict)
             or set(alignment) != _TEMPLATE_ALIGNMENT_FIELDS
             or alignment["pattern"]
