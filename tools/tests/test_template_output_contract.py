@@ -41,6 +41,7 @@ from x5crop.detection.photo_geometry.output_model import (
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossFit,
     CrossFitStatus,
+    CrossLineProjectionBasis,
     CrossPairSupportMode,
     EnclosingSupportPair,
 )
@@ -1198,6 +1199,73 @@ class TemplateOutputContractTest(unittest.TestCase):
                 protections[BoundaryRole.TOP].local_boundary_residual_px,
                 protections[BoundaryRole.BOTTOM].local_boundary_residual_px,
             ),
+        )
+
+    def test_retained_review_cross_uses_only_statistical_fit_projection(
+        self,
+    ) -> None:
+        template = _template(3)
+        cross = _cross(template, direction=_direction())
+        top, bottom = cross.direct_bindings
+        top = replace(
+            top,
+            canonical_direction_degrees=0.0,
+            fit_direction_interval_degrees=FiniteInterval.exact(0.0),
+            full_direction_interval_degrees=FiniteInterval(-1.0, 1.0),
+            observed_direction_interval_degrees=FiniteInterval(-1.0, 1.0),
+        )
+        bottom = replace(
+            bottom,
+            canonical_direction_degrees=0.0,
+            fit_direction_interval_degrees=FiniteInterval.exact(0.0),
+            full_direction_interval_degrees=FiniteInterval.exact(0.0),
+            observed_direction_interval_degrees=FiniteInterval.exact(0.0),
+        )
+        complete_cross = replace(
+            cross,
+            direct_bindings=(top, bottom),
+            line_projection_basis=(
+                CrossLineProjectionBasis.COMPLETE_PHYSICAL_DIRECTION
+            ),
+        )
+        retained_cross = replace(
+            complete_cross,
+            line_projection_basis=(
+                CrossLineProjectionBasis.RETAINED_REVIEW_STATISTICAL_FIT
+            ),
+        )
+        complete_placement = _compose(
+            template,
+            _sequence(template),
+            complete_cross,
+        )
+        retained_placement = _compose(
+            template,
+            _sequence(template),
+            retained_cross,
+        )
+
+        def top_residual(placement) -> float:
+            output = output_footprint_from_template_placement(
+                placement,
+                project_format_placement(placement),
+                lane=_lane(),
+                lane_ordinal=3,
+                layout="horizontal",
+            )
+            return next(
+                item.local_boundary_residual_px
+                for item in output.boundary_protections
+                if item.role == BoundaryRole.TOP
+            )
+
+        self.assertGreater(
+            top_residual(complete_placement),
+            top_residual(retained_placement),
+        )
+        self.assertNotEqual(
+            complete_placement.placement_id,
+            retained_placement.placement_id,
         )
 
     def test_opposite_side_projection_cannot_erase_uncovered_edge_position(self) -> None:

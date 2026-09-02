@@ -39,7 +39,10 @@ from .output_model import (
     footprint_overflow_px,
 )
 from .template_placement import FormatPlacement, TemplateFrame
-from .template_cross_model import CrossRoleBinding
+from .template_cross_model import (
+    CrossLineProjectionBasis,
+    CrossRoleBinding,
+)
 from .trace_support import PIXEL_CENTER_EXTENT_PX
 
 
@@ -382,11 +385,13 @@ def _state_cross_outward_departure_px(
 ) -> float:
     """Evaluate one cross-edge residual against the same feasible state.
 
-    Aperture output retains the complete fitted line family over this frame's
-    source span, plus any directly measured trace departures.  This is safety
-    evidence only: it cannot rotate or move the selected source-axis frame.
-    Enclosing support instead retains the same-state material-edge slope owned
-    by its joint feasible projection.
+    Eligible aperture output retains the complete physical line family over
+    this frame's source span.  An explicitly retained unresolved Review
+    proposal instead materializes its statistical fitted line while preserving
+    the full physical family in evidence.  Directly measured trace departures
+    remain attached in either case.  This cannot rotate or move the selected
+    source-axis frame.  Enclosing support instead retains the same-state
+    material-edge slope owned by its joint feasible projection.
     """
 
     direct = {item.role: item for item in placement.cross_fit.direct_bindings}
@@ -428,6 +433,9 @@ def _state_cross_outward_departure_px(
             binding,
             lane_reference_trace_px=placement.cross_fit.lane_reference_trace_px,
             support=support,
+            line_projection_basis=(
+                placement.cross_fit.line_projection_basis
+            ),
         )
         if not possible_positions:
             return 0.0
@@ -518,11 +526,22 @@ def _aperture_binding_positions(
     *,
     lane_reference_trace_px: float,
     support: FiniteInterval,
+    line_projection_basis: CrossLineProjectionBasis,
 ) -> tuple[float, ...]:
-    """Bound one direct aperture edge over a selected frame support."""
+    """Project one direct aperture edge with its explicit typed basis."""
 
     positions: list[float] = []
-    direction = binding.full_direction_interval_degrees
+    if not isinstance(line_projection_basis, CrossLineProjectionBasis):
+        raise TypeError("aperture line projection basis must be typed")
+    use_statistical_fit = (
+        line_projection_basis
+        == CrossLineProjectionBasis.RETAINED_REVIEW_STATISTICAL_FIT
+    )
+    direction = (
+        binding.fit_direction_interval_degrees
+        if use_statistical_fit
+        else binding.full_direction_interval_degrees
+    )
     if direction is not None:
         positions.extend(
             value

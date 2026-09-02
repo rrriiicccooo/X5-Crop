@@ -1265,6 +1265,21 @@ Cross authority，不增加 constraint rank，不创建 winner，也不改变原
 与 Debug 必须同时显示 retained basis、best/runner 和原失败；placement eligibility 仍要求 Cross
 `RESOLVED`，因此这类 proposal 只能进入黄金比较与 Review，不能成为 candidate 或正式输出。
 
+`CrossLineProjectionBasis` 进一步隔离“物理资格包络”和“Review proposal 的具体画法”。Resolved Cross
+及任何可进入 eligibility 的 fit 必须使用 `complete_physical_direction`：把直接线的完整物理方向区间传播到
+每张 Frame，并由同一 5% 预算承担最坏状态。只有已经明确携带 `CrossRetainedProposalBasis` 的 unresolved
+best proposal 才使用 `retained_review_statistical_fit`：在保留 native reference coordinate 的同时，以该线
+自己的统计拟合方向区间形成一份可比较的具体 Review geometry。完整物理方向区间、原 failure 与 runner
+仍完整保存在 evidence/report 中；统计拟合不能取得 Cross authority、constraint rank、candidate、Gate 或
+正式输出权限，也不能改变 resolved fit。若没有有界统计拟合方向，就不能声明该 projection basis。
+
+| Cross 状态 | line projection | 权限 |
+|---|---|---|
+| `RESOLVED` | `complete_physical_direction` | 按完整相关 uncertainty 进入 eligibility 与预算评估 |
+| `UNRESOLVED` + retained proposal | `retained_review_statistical_fit` | 只生成黄金比较与 Debug 使用的具体 proposal；原失败继续阻断 eligibility |
+| `UNRESOLVED` 且没有 retained basis | 不得使用统计拟合 projection | 不虚构完整 proposal |
+| retained proposal 使用 `complete_physical_direction`，或 resolved fit 使用 Review projection | typed model 拒绝 | 两种语义不得混用 |
+
 | registered Cross 事实 | retained proposal | 原 Cross 结果 |
 |---|---|---|
 | 多个 fixed-H-compatible、role-authorized direct pair，但没有唯一 authority | 最外侧 admissible TOP 锚定；同锚点先按校准 H、再按方向相容性保留 proposal 与 runner | `non_equivalent_fits` 与 `UNRESOLVED` 不变 |

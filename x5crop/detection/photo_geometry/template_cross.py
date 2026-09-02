@@ -35,6 +35,7 @@ from .template_cross_model import (
     CrossFit,
     CrossFitCompetition,
     CrossHeightInferenceBasis,
+    CrossLineProjectionBasis,
     CrossRetainedProposalBasis,
     CrossRoleBinding,
     CrossFitStatus,
@@ -522,6 +523,9 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             ),
             boundary_use=OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR,
             pair_support_mode=None,
+            line_projection_basis=(
+                CrossLineProjectionBasis.COMPLETE_PHYSICAL_DIRECTION
+            ),
             enclosing_support_pair=candidate.pair,
             height_compatibility_px=fixed_height,
             shift_interval_px=top_full,
@@ -971,6 +975,16 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                 aperture_aspect_ratio_authority=aspect_ratio_authority,
             )
         retained_receipt.validate_bounds()
+        retained_fits = tuple(
+            replace(
+                item,
+                line_projection_basis=(
+                    CrossLineProjectionBasis
+                    .RETAINED_REVIEW_STATISTICAL_FIT
+                ),
+            )
+            for item in retained_fits
+        )
         retained_best = retained_fits[0]
         retained_runner = next(
             (

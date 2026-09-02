@@ -26,6 +26,7 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     CrossFailureKind,
     CrossFitStatus,
     CrossHeightInferenceBasis,
+    CrossLineProjectionBasis,
     CrossPairSupportMode,
     CrossRetainedProposalBasis,
     CrossWinnerBasis,
@@ -222,6 +223,24 @@ class TemplateCrossContractTest(unittest.TestCase):
             ObservationId("observation:bottom"),
         ))
         self.assertEqual(result.receipt.compatible_pair_count, 1)
+        self.assertEqual(
+            result.best.line_projection_basis,
+            CrossLineProjectionBasis.COMPLETE_PHYSICAL_DIRECTION,
+        )
+        with self.assertRaisesRegex(
+            ValueError,
+            "resolved cross requires complete physical line projection",
+        ):
+            replace(
+                result,
+                best=replace(
+                    result.best,
+                    line_projection_basis=(
+                        CrossLineProjectionBasis
+                        .RETAINED_REVIEW_STATISTICAL_FIT
+                    ),
+                ),
+            )
 
     def test_complementary_domains_close_unique_direct_pair(self) -> None:
         domains = (
@@ -469,6 +488,25 @@ class TemplateCrossContractTest(unittest.TestCase):
             result.failure_kind,
             CrossFailureKind.PAIR_SUPPORT_UNAVAILABLE,
         )
+        assert result.best is not None
+        self.assertEqual(
+            result.best.line_projection_basis,
+            CrossLineProjectionBasis.RETAINED_REVIEW_STATISTICAL_FIT,
+        )
+        with self.assertRaisesRegex(
+            ValueError,
+            "retained cross proposal requires statistical-fit projection",
+        ):
+            replace(
+                result,
+                best=replace(
+                    result.best,
+                    line_projection_basis=(
+                        CrossLineProjectionBasis
+                        .COMPLETE_PHYSICAL_DIRECTION
+                    ),
+                ),
+            )
 
     def test_multiple_complementary_domain_pairs_remain_unresolved(self) -> None:
         domains = (

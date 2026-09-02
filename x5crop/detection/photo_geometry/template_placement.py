@@ -780,25 +780,28 @@ def compose_format_placement(
                 canonical_source_polygon=polygon,
             )
         )
-    realized_geometry_identity = tuple(
-        (
-            frame.lane_ordinal,
-            *tuple(
-                (
-                    boundary.canonical_position_px.hex(),
-                    boundary.full_position_interval_px.minimum.hex(),
-                    boundary.full_position_interval_px.maximum.hex(),
-                    tuple(map(str, boundary.position_observation_ids)),
-                )
-                for boundary in (
-                    frame.start,
-                    frame.end,
-                    frame.top,
-                    frame.bottom,
-                )
-            ),
-        )
-        for frame in frames
+    realized_geometry_identity = (
+        cross_fit.line_projection_basis.value,
+        tuple(
+            (
+                frame.lane_ordinal,
+                *tuple(
+                    (
+                        boundary.canonical_position_px.hex(),
+                        boundary.full_position_interval_px.minimum.hex(),
+                        boundary.full_position_interval_px.maximum.hex(),
+                        tuple(map(str, boundary.position_observation_ids)),
+                    )
+                    for boundary in (
+                        frame.start,
+                        frame.end,
+                        frame.top,
+                        frame.bottom,
+                    )
+                ),
+            )
+            for frame in frames
+        ),
     )
     identity = placement_id or run_local_id(
         "template-placement",

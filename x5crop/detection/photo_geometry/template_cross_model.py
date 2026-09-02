@@ -114,6 +114,13 @@ class CrossRetainedProposalBasis(str, Enum):
     )
 
 
+class CrossLineProjectionBasis(str, Enum):
+    """Direction interval used to materialize one Cross line over a Frame."""
+
+    COMPLETE_PHYSICAL_DIRECTION = "complete_physical_direction"
+    RETAINED_REVIEW_STATISTICAL_FIT = "retained_review_statistical_fit"
+
+
 class CrossPairSupportMode(str, Enum):
     """Independent support contract that closes one direct aperture pair."""
 
@@ -794,6 +801,9 @@ class CrossFit:
     residual_sum_px: float
     boundary_use: OutputBoundaryUse
     pair_support_mode: CrossPairSupportMode | None
+    line_projection_basis: CrossLineProjectionBasis = (
+        CrossLineProjectionBasis.COMPLETE_PHYSICAL_DIRECTION
+    )
     enclosing_support_pair: EnclosingSupportPair | None = None
     height_compatibility_px: FiniteInterval | None = None
     shift_interval_px: FiniteInterval | None = None
@@ -811,6 +821,30 @@ class CrossFit:
             raise ValueError("cross fit requires a template identity")
         if not isinstance(self.boundary_use, OutputBoundaryUse):
             raise TypeError("cross fit requires a typed boundary use")
+        if not isinstance(
+            self.line_projection_basis,
+            CrossLineProjectionBasis,
+        ):
+            raise TypeError("cross fit requires a typed line projection basis")
+        if (
+            self.line_projection_basis
+            == CrossLineProjectionBasis.RETAINED_REVIEW_STATISTICAL_FIT
+            and self.boundary_use != OutputBoundaryUse.APERTURE_PAIR
+        ):
+            raise ValueError(
+                "retained Review line projection requires aperture output"
+            )
+        if (
+            self.line_projection_basis
+            == CrossLineProjectionBasis.RETAINED_REVIEW_STATISTICAL_FIT
+            and any(
+                item.fit_direction_interval_degrees is None
+                for item in self.direct_bindings
+            )
+        ):
+            raise ValueError(
+                "retained Review line projection requires fitted direction"
+            )
         if not self.fixed_height_px.contains(
             self.bottom_canonical_px - self.top_canonical_px,
             epsilon=max(self.fixed_height_px.width, 1.0e-8),
@@ -992,6 +1026,15 @@ class CrossFitCompetition:
             raise ValueError(
                 "resolved cross competition requires a best fit and winner basis"
             )
+        if (
+            self.status == CrossFitStatus.RESOLVED
+            and self.best is not None
+            and self.best.line_projection_basis
+            != CrossLineProjectionBasis.COMPLETE_PHYSICAL_DIRECTION
+        ):
+            raise ValueError(
+                "resolved cross requires complete physical line projection"
+            )
         if self.status != CrossFitStatus.RESOLVED and self.winner_basis is not None:
             raise ValueError("unresolved cross competition cannot have a winner basis")
         if (self.status == CrossFitStatus.RESOLVED) != (
@@ -1028,5 +1071,19 @@ class CrossFitCompetition:
                 or self.best.height_inference_basis is None
             ):
                 raise ValueError("retained cross proposal basis is invalid")
+            if (
+                self.best.line_projection_basis
+                != CrossLineProjectionBasis.RETAINED_REVIEW_STATISTICAL_FIT
+            ):
+                raise ValueError(
+                    "retained cross proposal requires statistical-fit projection"
+                )
+        elif self.best is not None and (
+            self.best.line_projection_basis
+            != CrossLineProjectionBasis.COMPLETE_PHYSICAL_DIRECTION
+        ):
+            raise ValueError(
+                "statistical-fit projection cannot leave retained Review scope"
+            )
         if self.reason is not None and not self.reason:
             raise ValueError("cross competition reason cannot be empty")

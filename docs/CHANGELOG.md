@@ -189,6 +189,20 @@ Frame 6 `cross_high` 外扩 107.332 px 略超 106.483 px。S019 则把 W→H 真
 Development-detail mean 为 3.954 秒，只作开发归因。本机制不新增 TIFF query、detector、candidate、score、
 fallback 或样片规则。
 
+Cross 的 retained Review proposal 不再把一条局部线的完整物理方向区间当作具体 proposal 的唯一画法。
+`CrossLineProjectionBasis` 现在强制隔离两条路径：resolved/eligible Cross 继续用
+`complete_physical_direction` 承担完整最坏包络；只有携带 `CrossRetainedProposalBasis` 的 unresolved best
+才能用 `retained_review_statistical_fit` 形成一份可供黄金比较的具体几何。原完整物理区间、typed failure、
+runner、candidate 与正式输出权限均不改变，placement identity、Normal report 与 Debug 显式记录 projection
+basis。Report revision 更新为 `x5crop_v5_template_report_61`，不保留旧 schema 兼容路径。
+
+完整 110-task development gold 无分析错误，全部 proposal 继续生成；只有 S002 从 unsafe proposal 变为
+safe，Frame 6 `cross_high` 外扩由 107.332 px 降至 53.215 px，进入 106.483 px 黄金预算。Proposal 分布为
+30 safe / 80 unsafe；candidate 仍为 19 safe / 21 unsafe / 70 unavailable，决定仍为 16 safe auto / 94
+Review，runner 与 typed root failure 分布均未改变，危险 auto 为 0。S051 反例仍是 unsafe candidate 与
+`needs_review`，证明 Review projection 没有泄漏到 eligibility。Development-detail mean 为 3.971 秒，只作
+开发归因；本机制不新增 TIFF query、detector、candidate、rank、score、fallback 或样片规则。
+
 ### 产品行为
 
 - 用户提供 format，并确认匹配片夹的默认 count 或显式 count；count 包含中间空白曝光格。Runtime 不猜

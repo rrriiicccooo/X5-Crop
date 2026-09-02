@@ -128,6 +128,12 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                     else lane.prepared.cross_competition
                     .retained_proposal_basis.value
                 ),
+                "cross_line_projection_basis": (
+                    None
+                    if lane.prepared.cross_competition.best is None
+                    else lane.prepared.cross_competition.best
+                    .line_projection_basis.value
+                ),
                 "cross_height_inference_basis": (
                     None
                     if lane.prepared.cross_competition.best is None
