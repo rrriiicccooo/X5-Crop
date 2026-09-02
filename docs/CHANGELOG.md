@@ -173,6 +173,22 @@ unavailable candidate，以及 16 safe auto / 94 Review；当前观测危险 aut
 release detection gate 仍未达标。Development-detail mean 为 3.961 秒，只作开发归因，不替代正式性能
 Gate。
 
+`SourceFrameWidthAuthority` 不再把“离散竞争仍有 runner”误写成“W 不知道”。唯一 canonical owner 现在用
+`resolved_placement | retained_ambiguous_proposal` 明确 W 所属 scope；后者只收紧保留的 best proposal 并补其
+已有缺失 opposite，原 `AMBIGUOUS`、typed failure 与 runner 不变，也不取得 candidate/auto 权限。额外
+native pair/单边 local rebind 仍只允许 resolved placement；W 不能回写 rank、选择 runner 或覆盖 direct
+native coordinate。Report revision 更新为 `x5crop_v5_template_report_60`，development gold record/summary
+更新为 v16/v18；旧字段、旧 failure 和旧 schema 不保留兼容层。
+
+完整 110-task development gold 无分析错误，全部 proposal 仍已生成。14 个 ambiguous proposal 建立
+placement-bound W，其中 S029、S078 从 unsafe proposal 变为 safe，没有 safe→unsafe 回归；proposal 分布变为
+29 safe / 81 unsafe，candidate 仍为 19 safe / 21 unsafe / 70 unavailable，决定仍为 16 safe auto / 94
+Review。S002 的 Frame 1 END measurement expansion 从 243.794 px 降至 31.088 px，长轴预算根因闭合；只剩
+Frame 6 `cross_high` 外扩 107.332 px 略超 106.483 px。S019 则把 W→H 真实反证迁移为
+`aperture_aspect_ratio_conflict`。当前观测危险 auto 为 0，但仍只是开发事实；release detection gate 未达标。
+Development-detail mean 为 3.954 秒，只作开发归因。本机制不新增 TIFF query、detector、candidate、score、
+fallback 或样片规则。
+
 ### 产品行为
 
 - 用户提供 format，并确认匹配片夹的默认 count 或显式 count；count 包含中间空白曝光格。Runtime 不猜

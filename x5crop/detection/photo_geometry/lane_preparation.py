@@ -44,7 +44,7 @@ from .observation_types import (
 )
 from .template_evidence import template_evidence_use_ledger
 from .template_frame_width import (
-    apply_selected_source_frame_width,
+    apply_placement_source_frame_width,
     calibrate_source_frame_width,
 )
 from .template_aspect_ratio import (
@@ -796,7 +796,7 @@ def prepare_template_lane(
             placement_sequence_edges,
         )
     )
-    selected_width_phase = apply_selected_source_frame_width(
+    selected_width_phase = apply_placement_source_frame_width(
         phase_candidate.result,
         source_frame_width_authority,
     )

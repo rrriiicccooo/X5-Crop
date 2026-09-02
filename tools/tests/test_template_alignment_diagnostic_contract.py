@@ -15,8 +15,9 @@ from x5crop.detection.photo_geometry.template_model import (
     SourceFrameWidthAuthorityBasis,
 )
 from x5crop.detection.photo_geometry.template_frame_width import (
-    apply_selected_source_frame_width,
+    apply_placement_source_frame_width,
     SourceFrameWidthAuthority,
+    SourceFrameWidthAuthorityPlacementScope,
 )
 from x5crop.detection.photo_geometry.template_phase import (
     finalize_template_phase_candidate,
@@ -130,10 +131,13 @@ class TemplateAlignmentDiagnosticContractTest(unittest.TestCase):
         source_width = SourceFrameWidthAuthority(
             authority_id="alignment-independent-source-width",
             state=EvidenceState.SUPPORTED,
-            selected_integer_slot_offset=(
+            placement_scope=(
+                SourceFrameWidthAuthorityPlacementScope.RESOLVED_PLACEMENT
+            ),
+            placement_integer_slot_offset=(
                 fit.phase_lattice_fit.integer_slot_offset
             ),
-            selected_phase_anchor_observation_ids=tuple(
+            placement_phase_anchor_observation_ids=tuple(
                 binding.observation_id
                 if binding is not None
                 and binding.use == SequenceBindingUse.PHASE_ANCHOR
@@ -161,7 +165,7 @@ class TemplateAlignmentDiagnosticContractTest(unittest.TestCase):
             failure_kind=None,
             reason=None,
         )
-        selected = apply_selected_source_frame_width(
+        selected = apply_placement_source_frame_width(
             candidate.result,
             source_width,
         )

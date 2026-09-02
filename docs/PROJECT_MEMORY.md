@@ -51,9 +51,12 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   hull 与 observation identity 供诊断；它不居中、不选择 subset、不创建 phase/rank，也不增加 query。
   Full-capacity sequence 仍使用 pixel-localized hull。S107/S112 已由此从无 proposal 变为完整 Review
   proposal，后续 eligibility 与正式决定未改变。
-- `SourceFrameWidthAuthority` 是 source W 的唯一 owner：`independent_complete_frames` 消费至少两张完整
-  直接 Frame，`direct_lattice_closure` 消费全部 retained direct-role coordinate 已达到 rank 3 的系统并
-  对同一系统投影相关 W；
+- `SourceFrameWidthAuthority` 是 source W 的唯一 owner，并用 `placement_scope` 区分
+  `resolved_placement | retained_ambiguous_proposal`。Ambiguous scope 只收紧保留的 best proposal、补其已有
+  缺失 opposite，原 phase failure 与 runner 不变，也不取得 candidate/auto 权限；额外 native pair/单边
+  local rebind 仍只允许 resolved placement。`independent_complete_frames` 消费至少两张完整直接 Frame，
+  `direct_lattice_closure` 消费全部 retained direct-role coordinate 已达到 rank 3 的系统，并对同一系统投影
+  相关 W；
   两组同时可用时，`reconciled_direct_constraints` 只发布二者交集。交集为空产生
   `physical_width_conflict`，不得挑选有利的一组；reconciliation 保留全部 Frame/constraint/observation
   provenance，但不回写 Frame-width observation、不增加 rank、不参与离散选择。Direct-rank 不能任取
@@ -112,11 +115,11 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
 - Cross registered-run 上限按物理角色独立拥有：TOP 与 BOTTOM 各自最多 512 条，一侧不能占用另一侧
   配额；任一侧超界仍 typed Review。Report/Debug 同时显示两侧实际计数和每角色上限，canonical fitted
   observation 与 pair 上限保持独立。S002 的 TOP 393 / BOTTOM 185 因而不再被两侧合计 578 假性终止。
-- 当前 Report revision 为 `x5crop_v5_template_report_59`；普通报告与 Debug 显式分开 proposal、eligibility、
+- 当前 Report revision 为 `x5crop_v5_template_report_60`；普通报告与 Debug 显式分开 proposal、eligibility、
   selected output 和决定，并继续保存 calibration identity、anchor、inferred adjacency、完全未观察 Frame、
   联合参数依据、measured relation、projection outcome、typed failure、cross-H/source-W/frame-inference basis、全部
-  retained W constraint/observation、W topology facts、partial-height aperture domain 与工作量。完整路径最多
-  6 次 fit pass，不增加 TIFF query、第二 detector 或旧 schema 兼容层。
+  retained W constraint/observation、placement scope、W topology facts、partial-height aperture domain 与
+  工作量。完整路径最多 6 次 fit pass，不增加 TIFF query、第二 detector 或旧 schema 兼容层。
 - Enclosing-support aperture-center v2 calibration 使用 20 个当前仍具唯一 selected support pair、且黄金
   top/bottom 均为 `directly_visible` 的 source，并同时绑定 cohort、eligibility 与精确 observation-set SHA。
   S109 在 canonical W 扩大后成为 cross 多解，不再冒充 calibration observation；release analysis 会阻断
@@ -124,26 +127,29 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   `[-0.009H, +0.007H]`，crop geometry 未改变。
 
 完整 development gold diagnostic 已完成 110/110，分析错误 0。现有主模型为全部 110 个 task 生成完整
-proposal，分布为 27 safe / 83 unsafe。S002 的 retained Cross pair 已不再向内越过黄金上下边界；其剩余
-不安全事实是 Frame 1 的 `cross_high` 与 `sequence_end` 外扩超出逐侧 5% 预算，typed root 仍为
-`discrete_phase_ambiguous`、`non_equivalent_fits` 与 `phase_placement_ambiguous`。Eligibility 层仍保留
-40 个 candidate，形成 19 safe / 21 unsafe / 70 unavailable：8 个安全 proposal 与 62 个不安全 proposal
+proposal，分布为 29 safe / 81 unsafe。S002 的 source W 已在保留的 ambiguous proposal 内闭合，Frame 1
+END measurement expansion 从 243.794 px 降到 31.088 px，进入 157.689 px 预算；其唯一黄金失败是 Frame 6
+`cross_high` 外扩 107.332 px，略超 106.483 px，typed phase/cross root 仍为 `discrete_phase_ambiguous`、
+`non_equivalent_fits` 与 `phase_placement_ambiguous`。Eligibility 层仍保留
+40 个 candidate，形成 19 safe / 21 unsafe / 70 unavailable：10 个安全 proposal 与 60 个不安全 proposal
 被保留为 Review。Runtime stage 为 16 approved auto、24 eligible candidate Review、70 proposal-generated /
 eligibility-withheld。当前仍是 16 个安全 auto、94 个 Review、危险 auto 0，但 release detection gate 未
 达标；开发 report 即使出现危险 auto 也必须完整列出，不能把中间结果称为发布通过。
-本次 development-detail mean 为 3.961 秒，只作开发归因，不是正式性能 receipt；
+本次 development-detail mean 为 3.954 秒，只作开发归因，不是正式性能 receipt；
 最近一次 clean-checkpoint 24-source 正式性能 mean 为 3.536 秒，通过 5 秒 Gate，3 秒目标仍为
 非阻断 challenge，该旧性能 receipt 不替代未来 release commit 的复验。
 
 黄金 line/polygon 的原 TIFF 坐标现在由唯一 comparator owner 使用冻结的 `raw_to_canonical` affine 恰好
 映射一次，再与 canonical Runtime footprint 比较；Orientation 3/8 不再混用坐标空间。源截断 Frame 的
 非四边形 polygon 使用真实人工 boundary line 半平面逐侧判断，避免把 TIFF 裁切交点误认成物理边界。
-Development gold record 为 v15、summary 为 v17。
+Development gold record 为 v16、summary 为 v18。
 
-Source W 仍为 51 supported / 55 unavailable / 4 contradicted；其中 18 个由完整 Frame、11 个由 direct
-lattice、22 个由两组 direct constraint reconciliation 闭合。Frame-width inference 为 24 supported /
-43 unavailable / 43 not applicable；唯一 `direct_lattice_counterevidence` 是 S077。Late-binding projection
-共执行 18 次、投影 23 个无权限 binding、完成 15 次有界 Grid solve。
+Source W 为 65 supported / 41 unavailable / 4 contradicted；51 个属于 resolved placement，14 个属于
+retained ambiguous proposal；其中 22 个由完整 Frame、13 个由 direct lattice、30 个由两组 direct constraint
+reconciliation 闭合。Frame-width inference 为 33 supported / 41 unavailable / 36 not applicable；唯一
+`direct_lattice_counterevidence` 是 S077。S029、S078 的 proposal 由 unsafe 变为 safe，没有 safe→unsafe
+回归；S019 的 W→H 反证迁移为 `aperture_aspect_ratio_conflict`。Candidate、决定与 runner 分布均未改变。
+Late-binding projection 共执行 18 次、投影 23 个无权限 binding、完成 15 次有界 Grid solve。
 
 对 96 个 nominal 的同源 v4.2.8/V5 对照中，发布版 80 个 auto 里有 70 个黄金危险自动裁切；发布版仅
 11 个 geometry 安全。当前 V5 已让其中 S022、S025 安全 auto；其余 9 个仍按真实 typed root 安全 Review：
@@ -154,8 +160,8 @@ output budget，S032 为 phase ambiguity。
 
 - 106-source/110-task development gold 用于发现机制、调试和 incident regression，不估计未来生产错误率。
   独立 calibration/sealed 是未来概率选择与未见来源声明的前提，但不再是首版发布前置条件。
-- 当前 110 个 task 均有完整 proposal，其中 70 个 eligibility withheld。后者包含 8 个黄金安全 proposal
-  （S014/S048/S079/S083/S085/S088/S094/S112）和 62 个不安全 proposal；
+- 当前 110 个 task 均有完整 proposal，其中 70 个 eligibility withheld。后者包含 10 个黄金安全 proposal
+  （S014/S029/S048/S078/S079/S083/S085/S088/S094/S112）和 60 个不安全 proposal；
   安全并不自动证明当前阻断多余，不安全也不能因 Review 而隐藏，必须分别追到通用权限或几何根因。
 - 当前 96 个 nominal 仍有 80 个 review。主要 phase root failure 为
   `discrete_phase_ambiguous` 13、`fixed_template_mismatch` 10、`adjacency_topology_unresolved` 6、
@@ -177,16 +183,16 @@ output budget，S032 为 phase ambiguity。
 
 ## 精确下一步
 
-1. 全部 110 个合法黄金 task 已能生成完整 proposal。下一步保持 S002 的 phase/cross runner，沿
-   `discrete_phase_ambiguous` 与 local relation 追查 Frame 1 `sequence_end` 外扩超预算；短轴只剩同一 Frame
-   的 `cross_high` 外扩预算，不再把局部 Cross runner 提升成 winner，也不能收窄 H 或扩大 5% 预算。
+1. 全部 110 个合法黄金 task 已能生成完整 proposal。S002 的 source-W/`sequence_end` 根因已经闭合；下一步
+   保持 phase/cross runner，追查 Frame 6 `cross_high` 仅超预算 0.849 px 的真实 Cross residual/H 根因，不把
+   局部 Cross runner 提升成 winner，也不能收窄 H 或扩大 5% 预算。
 2. 对其它已暴露的 Cross proposal 分开修根因：S033/S068/S069 的 `cross_high` 预算超限回到 Cross anchor、
    calibrated H 与方向 owner；S082/S108 的长轴向内越线回到 phase/local relation。随后继续处理此前
    calibrated-H proposal：S011/S020/S037/S097 的长轴向内越线优先回到
    phase/local relation；S001/S004/S018/S019/S056/S066 的逐侧外扩超预算回到 cross anchor、H interval 或
    residual/bleed 的真实 owner。不能为了让黄金变绿而收窄校准区间或放宽 5% 合同。
-3. 在 110 个已生成 proposal 上优先修 83 个黄金不安全几何的通用 detector、anchor、local relation、cross
-   或 output 根因；黄金只作离线比较，不能进入 Runtime。随后审计 8 个安全但 eligibility withheld 的方案，
+3. 在 110 个已生成 proposal 上优先修 81 个黄金不安全几何的通用 detector、anchor、local relation、cross
+   或 output 根因；黄金只作离线比较，不能进入 Runtime。随后审计 10 个安全但 eligibility withheld 的方案，
    只移除真正放错层级或重复的阻断，保留真实 counterevidence。
 4. Proposal 几何稳定后再收紧 eligibility 与 DecisionGate，使 96 个 nominal 全部安全 auto；开发期间任何
    危险 auto 都完整列出并继续修复，release commit 才硬性归零。每次只闭合一个通用机制，不恢复旧终判、

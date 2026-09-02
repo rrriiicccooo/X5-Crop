@@ -24,6 +24,7 @@ from x5crop.detection.photo_geometry.template_aspect_ratio_model import (
 from x5crop.detection.photo_geometry.template_frame_width import (
     SourceFrameWidthAuthority,
     SourceFrameWidthAuthorityFailureKind,
+    SourceFrameWidthAuthorityPlacementScope,
 )
 from x5crop.detection.photo_geometry.template_model import (
     SourceFrameWidthAuthorityBasis,
@@ -94,8 +95,9 @@ def _source_width_authority(
         return SourceFrameWidthAuthority(
             authority_id="test-source-width-unavailable",
             state=EvidenceState.UNAVAILABLE,
-            selected_integer_slot_offset=None,
-            selected_phase_anchor_observation_ids=(),
+            placement_scope=None,
+            placement_integer_slot_offset=None,
+            placement_phase_anchor_observation_ids=(),
             supporting_role_observation_ids=(),
             basis=None,
             supporting_frame_ordinals=(),
@@ -116,8 +118,11 @@ def _source_width_authority(
     return SourceFrameWidthAuthority(
         authority_id=f"test-source-width:{basis.value}",
         state=EvidenceState.SUPPORTED,
-        selected_integer_slot_offset=0,
-        selected_phase_anchor_observation_ids=observation_ids,
+        placement_scope=(
+            SourceFrameWidthAuthorityPlacementScope.RESOLVED_PLACEMENT
+        ),
+        placement_integer_slot_offset=0,
+        placement_phase_anchor_observation_ids=observation_ids,
         supporting_role_observation_ids=observation_ids,
         basis=basis,
         supporting_frame_ordinals=() if direct_lattice else (1, 2),

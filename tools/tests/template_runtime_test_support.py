@@ -255,8 +255,9 @@ def prepared_template_lane() -> PreparedTemplateLane:
         source_frame_width_authority=SourceFrameWidthAuthority(
             authority_id="source-width:test:unavailable",
             state=EvidenceState.UNAVAILABLE,
-            selected_integer_slot_offset=None,
-            selected_phase_anchor_observation_ids=(),
+            placement_scope=None,
+            placement_integer_slot_offset=None,
+            placement_phase_anchor_observation_ids=(),
             supporting_role_observation_ids=(),
             basis=None,
             supporting_frame_ordinals=(),
@@ -265,9 +266,10 @@ def prepared_template_lane() -> PreparedTemplateLane:
             canonical_width_px=None,
             observation_ids=(),
             failure_kind=(
-                SourceFrameWidthAuthorityFailureKind.UNIQUE_PLACEMENT_UNAVAILABLE
+                SourceFrameWidthAuthorityFailureKind
+                .PLACEMENT_HYPOTHESIS_UNAVAILABLE
             ),
-            reason="test fixture has no selected placement",
+            reason="test fixture has no retained placement hypothesis",
         ),
         phase_input=phase_input,
         cross_input=cross_input,

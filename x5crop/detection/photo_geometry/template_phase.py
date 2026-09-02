@@ -52,8 +52,8 @@ from .template_evidence import separator_support_authority
 from .template_frame_width import (
     SourceFrameWidthAuthority,
     apply_correlated_frame_width_inference,
-    apply_selected_source_frame_width,
-    assess_selected_source_frame_width_topology,
+    apply_placement_source_frame_width,
+    assess_placement_source_frame_width_topology,
 )
 from .template_adjacency_coverage import (
     AdjacencyCoverageState,
@@ -1837,21 +1837,24 @@ def refine_template_phase_with_source_frame_width(
 ) -> PhaseFitResult:
     """Bind only roles uniquely selected by an independent source-level W.
 
-    The discrete placement is already fixed and source W is independently
+    The discrete placement must already be resolved and source W independently
     closed either by complete Frames or by a retained full-rank direct
-    lattice.  This pass may bind a registered native edge pair that the
-    broader format interval could not distinguish.  It never creates a
-    coordinate or changes phase, pitch, or ordinal mapping.
+    lattice. This selected-candidate-only pass may bind a registered native
+    edge pair that the broader format interval could not distinguish. An
+    ambiguous retained proposal consumes W for its existing missing roles but
+    does not run this additional local rebinding pass.
     """
 
     if authority.state != EvidenceState.SUPPORTED:
         return result
-    if result.status != PhaseFitStatus.RESOLVED or result.best is None:
-        raise ValueError("supported source W requires one resolved placement")
+    if result.status != PhaseFitStatus.RESOLVED:
+        return result
+    if result.best is None:
+        raise ValueError("resolved source W requires one placement")
     if not result.best.unbound_role_indices:
         return result
     if (
-        not authority.matches_selected_placement(result.best)
+        not authority.matches_placement(result.best)
         or authority.width_px is None
     ):
         raise ValueError("source W authority belongs to a different placement")
@@ -2021,16 +2024,16 @@ def _apply_final_lattice_contract(
     """Require direct-role, global, and local authority for one placement."""
 
     # A local native-edge pass or late authority projection may rebuild the
-    # continuous fit after source W was first closed.  The source-W owner must
-    # narrow that final fit again before any authority or inference ledger is
-    # assessed; this is idempotent and does not register new evidence.
+    # continuous fit after source W was first closed. The source-W owner must
+    # narrow that final retained placement again before any authority or
+    # inference ledger is assessed; this is idempotent, does not register new
+    # evidence and never changes ambiguity status or removes the runner.
     if (
         source_frame_width_authority is not None
         and source_frame_width_authority.state == EvidenceState.SUPPORTED
-        and result.status == PhaseFitStatus.RESOLVED
         and result.best is not None
     ):
-        result = apply_selected_source_frame_width(
+        result = apply_placement_source_frame_width(
             result,
             source_frame_width_authority,
         )
@@ -2081,9 +2084,9 @@ def _apply_final_lattice_contract(
         and source_frame_width_authority.state == EvidenceState.SUPPORTED
     ):
         # Only an authorized correlated-W inference transfers boundary
-        # ownership.  Assess that final ledger, not every role that happened
-        # to be unbound earlier in the selected-only flow.
-        result = assess_selected_source_frame_width_topology(
+        # ownership. Assess that final ledger, not every role that happened
+        # to be unbound earlier in the placement-bound flow.
+        result = assess_placement_source_frame_width_topology(
             result,
             source_frame_width_authority,
         )
@@ -2284,7 +2287,7 @@ def retain_pre_local_phase_proposal(
 def fit_template_phase_candidate_with_adjacency_relations(
     phase_input: TemplatePhaseInput,
 ) -> TemplatePhaseCandidateCompetition:
-    """Resolve discrete/local competition before selected-only source W."""
+    """Resolve discrete/local competition before placement-bound source W."""
 
     if not isinstance(phase_input, TemplatePhaseInput):
         raise TypeError(
@@ -2492,7 +2495,7 @@ def finalize_template_phase_candidate(
     *,
     source_frame_width_authority: SourceFrameWidthAuthority | None,
 ) -> PhaseFitResult:
-    """Apply selected-only lattice and inference contracts to one competition."""
+    """Apply placement-bound lattice and inference contracts to one competition."""
 
     if not isinstance(candidate, TemplatePhaseCandidateCompetition):
         raise TypeError("phase finalization requires a candidate competition")

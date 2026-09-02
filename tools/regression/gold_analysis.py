@@ -51,8 +51,8 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v15"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v17"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v16"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v18"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
 SOURCE_TIMEOUT_SECONDS = 600
@@ -1138,6 +1138,9 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
             None if global_lattice is None else global_lattice["basis"]
         ),
         "source_frame_width_authority_state": source_width["state"],
+        "source_frame_width_authority_placement_scope": source_width[
+            "placement_scope"
+        ],
         "source_frame_width_authority_basis": source_width["basis"],
         "source_frame_width_authority_failure_kind": source_width[
             "failure_kind"
@@ -2614,6 +2617,10 @@ def _summary(
             records,
             "source_frame_width_authority_state",
         ),
+        "source_frame_width_authority_placement_scope_counts": _counter(
+            records,
+            "source_frame_width_authority_placement_scope",
+        ),
         "source_frame_width_authority_basis_counts": _counter(
             records,
             "source_frame_width_authority_basis",
@@ -2888,6 +2895,7 @@ def run_gold_analysis(
                 "global_lattice_authority_state": None,
                 "global_lattice_authority_basis": None,
                 "source_frame_width_authority_state": None,
+                "source_frame_width_authority_placement_scope": None,
                 "source_frame_width_authority_basis": None,
                 "source_frame_width_authority_failure_kind": None,
                 "frame_width_inference_state": None,

@@ -224,6 +224,9 @@ class GoldAnalysisContractTest(unittest.TestCase):
             "global_lattice_authority_state": "supported",
             "global_lattice_authority_basis": "direct_role_system",
             "source_frame_width_authority_state": "supported",
+            "source_frame_width_authority_placement_scope": (
+                "resolved_placement"
+            ),
             "source_frame_width_authority_basis": (
                 "independent_complete_frames"
             ),

@@ -422,6 +422,7 @@ def alignment_summary(detection: FinalDetection) -> str:
         )
         source_width = lane.prepared.source_frame_width_authority
         source_width_proof = (
+            f"{source_width.placement_scope.value.upper()} · "
             f"{source_width.basis.value.upper()} "
             f"{len(source_width.supporting_frame_ordinals)}F/"
             f"{len(source_width.supporting_constraint_ids)}C/"

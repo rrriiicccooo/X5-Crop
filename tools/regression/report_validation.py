@@ -159,8 +159,9 @@ _APERTURE_ASPECT_RATIO_FIELDS = {
 _SOURCE_FRAME_WIDTH_AUTHORITY_FIELDS = {
     "authority_id",
     "state",
-    "selected_integer_slot_offset",
-    "selected_phase_anchor_observation_ids",
+    "placement_scope",
+    "placement_integer_slot_offset",
+    "placement_phase_anchor_observation_ids",
     "supporting_role_observation_ids",
     "basis",
     "supporting_frame_ordinals",
@@ -172,7 +173,7 @@ _SOURCE_FRAME_WIDTH_AUTHORITY_FIELDS = {
     "reason",
 }
 _SOURCE_FRAME_WIDTH_FAILURE_KINDS = {
-    "unique_placement_unavailable",
+    "placement_hypothesis_unavailable",
     "direct_role_authority_unavailable",
     "direct_role_authority_contradicted",
     "global_lattice_rank_insufficient",
@@ -1489,7 +1490,7 @@ def _validate_source_frame_width_authority(value: object) -> None:
     ):
         raise ValueError("source Frame-width authority summary is invalid")
     state = value["state"]
-    phase_anchor_ids = value["selected_phase_anchor_observation_ids"]
+    phase_anchor_ids = value["placement_phase_anchor_observation_ids"]
     supporting_role_ids = value["supporting_role_observation_ids"]
     basis = value["basis"]
     supporting = value["supporting_frame_ordinals"]
@@ -1526,7 +1527,9 @@ def _validate_source_frame_width_authority(value: object) -> None:
     canonical = value["canonical_width_px"]
     if supported:
         if (
-            not isinstance(value["selected_integer_slot_offset"], int)
+            value["placement_scope"]
+            not in {"resolved_placement", "retained_ambiguous_proposal"}
+            or not isinstance(value["placement_integer_slot_offset"], int)
             or not phase_anchor_ids
             or not any(phase_anchor_ids)
             or not any(supporting_role_ids)
@@ -1577,7 +1580,8 @@ def _validate_source_frame_width_authority(value: object) -> None:
             raise ValueError("supported source Frame-width authority is invalid")
         return
     if (
-        value["selected_integer_slot_offset"] is not None
+        value["placement_scope"] is not None
+        or value["placement_integer_slot_offset"] is not None
         or phase_anchor_ids
         or supporting_role_ids
         or basis is not None

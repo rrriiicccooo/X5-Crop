@@ -66,9 +66,9 @@ def _topology_frame_ordinals(fit: SequenceFit) -> frozenset[int]:
 
 
 class SourceFrameWidthAuthorityFailureKind(str, Enum):
-    """Why selected-only source W cannot be established."""
+    """Why placement-bound source W cannot be established."""
 
-    UNIQUE_PLACEMENT_UNAVAILABLE = "unique_placement_unavailable"
+    PLACEMENT_HYPOTHESIS_UNAVAILABLE = "placement_hypothesis_unavailable"
     DIRECT_ROLE_AUTHORITY_UNAVAILABLE = "direct_role_authority_unavailable"
     DIRECT_ROLE_AUTHORITY_CONTRADICTED = "direct_role_authority_contradicted"
     GLOBAL_LATTICE_RANK_INSUFFICIENT = "global_lattice_rank_insufficient"
@@ -77,14 +77,27 @@ class SourceFrameWidthAuthorityFailureKind(str, Enum):
     PHYSICAL_WIDTH_CONFLICT = "physical_width_conflict"
 
 
+class SourceFrameWidthAuthorityPlacementScope(str, Enum):
+    """Which retained placement hypothesis owns the correlated W state."""
+
+    RESOLVED_PLACEMENT = "resolved_placement"
+    RETAINED_AMBIGUOUS_PROPOSAL = "retained_ambiguous_proposal"
+
+
 @dataclass(frozen=True)
 class SourceFrameWidthAuthority:
-    """One source W derived only after discrete placement is fixed."""
+    """One source W projected inside one retained placement hypothesis.
+
+    The authority closes W only for the identified placement.  It never says
+    that placement won the discrete competition and therefore cannot resolve
+    an ambiguous phase or remove its runner.
+    """
 
     authority_id: str
     state: EvidenceState
-    selected_integer_slot_offset: int | None
-    selected_phase_anchor_observation_ids: tuple[ObservationId | None, ...]
+    placement_scope: SourceFrameWidthAuthorityPlacementScope | None
+    placement_integer_slot_offset: int | None
+    placement_phase_anchor_observation_ids: tuple[ObservationId | None, ...]
     supporting_role_observation_ids: tuple[ObservationId | None, ...]
     basis: SourceFrameWidthAuthorityBasis | None
     supporting_frame_ordinals: tuple[int, ...]
@@ -116,7 +129,7 @@ class SourceFrameWidthAuthority:
             or any(
                 identity is not None and not isinstance(identity, ObservationId)
                 for identity in (
-                    *self.selected_phase_anchor_observation_ids,
+                    *self.placement_phase_anchor_observation_ids,
                     *self.supporting_role_observation_ids,
                 )
             )
@@ -126,11 +139,15 @@ class SourceFrameWidthAuthority:
             )
             or supported
             != (
-                self.selected_integer_slot_offset is not None
-                and bool(self.selected_phase_anchor_observation_ids)
-                and any(self.selected_phase_anchor_observation_ids)
+                isinstance(
+                    self.placement_scope,
+                    SourceFrameWidthAuthorityPlacementScope,
+                )
+                and self.placement_integer_slot_offset is not None
+                and bool(self.placement_phase_anchor_observation_ids)
+                and any(self.placement_phase_anchor_observation_ids)
                 and len(self.supporting_role_observation_ids)
-                == len(self.selected_phase_anchor_observation_ids)
+                == len(self.placement_phase_anchor_observation_ids)
                 and any(self.supporting_role_observation_ids)
                 and {
                     identity
@@ -177,8 +194,10 @@ class SourceFrameWidthAuthority:
             != (
                 self.width_px is None
                 and self.canonical_width_px is None
+                and self.placement_scope is None
+                and self.placement_integer_slot_offset is None
                 and self.basis is None
-                and not self.selected_phase_anchor_observation_ids
+                and not self.placement_phase_anchor_observation_ids
                 and not self.supporting_role_observation_ids
                 and not self.supporting_constraint_ids
                 and not self.observation_ids
@@ -191,7 +210,7 @@ class SourceFrameWidthAuthority:
         ):
             raise ValueError("source Frame-width authority is invalid")
 
-    def matches_selected_placement(self, fit: SequenceFit) -> bool:
+    def matches_placement(self, fit: SequenceFit) -> bool:
         """Check immutable discrete identity and every W-owning role."""
 
         if self.state != EvidenceState.SUPPORTED:
@@ -204,9 +223,9 @@ class SourceFrameWidthAuthority:
             for binding in fit.role_bindings
         )
         if (
-            self.selected_integer_slot_offset
+            self.placement_integer_slot_offset
             != fit.phase_lattice_fit.integer_slot_offset
-            or phase_anchor_ids != self.selected_phase_anchor_observation_ids
+            or phase_anchor_ids != self.placement_phase_anchor_observation_ids
         ):
             return False
         return all(
@@ -237,8 +256,9 @@ def _failed_source_width_authority(
             () if fit is None else fit.binding_observation_ids,
         ),
         state=state,
-        selected_integer_slot_offset=None,
-        selected_phase_anchor_observation_ids=(),
+        placement_scope=None,
+        placement_integer_slot_offset=None,
+        placement_phase_anchor_observation_ids=(),
         supporting_role_observation_ids=(),
         basis=None,
         supporting_frame_ordinals=(),
@@ -346,24 +366,37 @@ def calibrate_source_frame_width(
     phase: PhaseFitResult,
     sequence_edges: tuple[BoundaryEdgeObservation, ...],
 ) -> tuple[SourceScanGeometry, SourceFrameWidthAuthority]:
-    """Narrow source W from authorized Frames after candidate selection.
+    """Narrow source W inside one retained placement hypothesis.
 
-    The candidate has already fixed ordinal ownership and exposed direct-role,
-    coverage and pre-W lattice assessments.  Source W may add one correlated
-    constraint afterwards; it never recompiles the template, deletes a runner
-    or changes the selected ordinal mapping.  Outer-Frame authority remains a
-    final Grid-inference Gate and is not a prerequisite for measuring W from
-    other directly observed complete Frames.
+    A resolved placement or the best retained member of an ambiguous
+    competition has fixed ordinal ownership and exposed direct-role, coverage
+    and pre-W lattice assessments. Source W may add one correlated constraint
+    to that hypothesis afterwards; it never recompiles the template, deletes
+    a runner, resolves ambiguity or changes ordinal mapping. Outer-Frame
+    authority remains a final Grid-inference Gate and is not a prerequisite
+    for measuring W from other directly observed complete Frames.
     """
 
     fit = phase.best
-    if phase.status != PhaseFitStatus.RESOLVED or fit is None:
+    if (
+        fit is None
+        or phase.status
+        not in {PhaseFitStatus.RESOLVED, PhaseFitStatus.AMBIGUOUS}
+    ):
         return source_geometry, _failed_source_width_authority(
             phase,
             EvidenceState.UNAVAILABLE,
-            SourceFrameWidthAuthorityFailureKind.UNIQUE_PLACEMENT_UNAVAILABLE,
-            "source W requires one uniquely resolved discrete placement",
+            SourceFrameWidthAuthorityFailureKind
+            .PLACEMENT_HYPOTHESIS_UNAVAILABLE,
+            "source W requires one resolved placement or a retained member "
+            "of an ambiguous placement competition",
         )
+    placement_scope = (
+        SourceFrameWidthAuthorityPlacementScope.RESOLVED_PLACEMENT
+        if phase.status == PhaseFitStatus.RESOLVED
+        else SourceFrameWidthAuthorityPlacementScope
+        .RETAINED_AMBIGUOUS_PROPOSAL
+    )
     direct = phase.direct_role_binding_authority
     if direct is None:
         return source_geometry, _failed_source_width_authority(
@@ -577,10 +610,10 @@ def calibrate_source_frame_width(
             "authorized Frame widths have no common physical source state",
         )
     try:
-        # The selected fit is a compatibility constraint, not new pixel
+        # The retained fit is a compatibility constraint, not new pixel
         # evidence.  Clip the correlated source state before publishing the
         # authority so an incompatible W becomes typed counterevidence rather
-        # than a runtime exception in the selected-only consumer.
+        # than a runtime exception in the placement-bound consumer.
         width_state = width_state.intersect_inferred_extent(
             FiniteInterval(
                 fit.pitch_fit.frame_width_px.minimum,
@@ -592,7 +625,7 @@ def calibrate_source_frame_width(
             phase,
             EvidenceState.CONTRADICTED,
             SourceFrameWidthAuthorityFailureKind.PHYSICAL_WIDTH_CONFLICT,
-            "selected placement W contradicts the direct source W state",
+            "retained placement W contradicts the direct source W state",
         )
     calibrated = SourceScanGeometry.from_axis_states(
         source_geometry.frame_spec,
@@ -631,6 +664,7 @@ def calibrate_source_frame_width(
         authority_id=physical_fact_id(
             "source-frame-width-authority",
             phase.template.template_id,
+            placement_scope.value,
             fit.phase_lattice_fit.integer_slot_offset,
             phase_anchor_ids,
             supporting_role_ids,
@@ -641,10 +675,11 @@ def calibrate_source_frame_width(
             identities,
         ),
         state=EvidenceState.SUPPORTED,
-        selected_integer_slot_offset=(
+        placement_scope=placement_scope,
+        placement_integer_slot_offset=(
             fit.phase_lattice_fit.integer_slot_offset
         ),
-        selected_phase_anchor_observation_ids=phase_anchor_ids,
+        placement_phase_anchor_observation_ids=phase_anchor_ids,
         supporting_role_observation_ids=supporting_role_ids,
         basis=basis,
         supporting_frame_ordinals=supporting_frame_ordinals,
@@ -723,10 +758,11 @@ def _assess_source_frame_width_topology(
 ) -> SourceFrameWidthTopologyAssessment:
     """Require every correlated-W opposite to preserve normal adjacency.
 
-    This selected-only check does not choose a favorable width.  It evaluates
+    This placement-bound check does not choose a favorable width. It evaluates
     the complete authorized W interval against the native adjacent boundaries;
     an interval spanning both normal and unproved-overlap states remains typed
-    unresolved.
+    unresolved. For an ambiguous proposal it records the fact without changing
+    the pre-existing ambiguity or selecting its runner.
     """
 
     if (
@@ -856,19 +892,21 @@ def _assess_source_frame_width_topology(
     )
 
 
-def apply_selected_source_frame_width(
+def apply_placement_source_frame_width(
     phase: PhaseFitResult,
     authority: SourceFrameWidthAuthority,
 ) -> PhaseFitResult:
-    """Narrow only the selected fit's continuous W; preserve every runner."""
+    """Narrow only the authority-bound fit's W; preserve status and runner."""
 
     if authority.state == EvidenceState.CONTRADICTED:
+        if phase.status != PhaseFitStatus.RESOLVED:
+            return phase
         return replace(
             phase,
             status=PhaseFitStatus.UNRESOLVED,
             ambiguity_reason=(
                 authority.reason
-                or "direct source W contradicts the selected placement"
+                or "direct source W contradicts the retained placement"
             ),
             failure_kind=PhaseFailureKind.SOURCE_FRAME_WIDTH_CONFLICT,
             winner_basis=None,
@@ -876,11 +914,9 @@ def apply_selected_source_frame_width(
     if authority.state != EvidenceState.SUPPORTED:
         return phase
     fit = phase.best
-    if phase.status != PhaseFitStatus.RESOLVED or fit is None:
-        raise ValueError("supported source W requires its selected placement")
-    if (
-        not authority.matches_selected_placement(fit)
-    ):
+    if fit is None:
+        raise ValueError("supported source W requires its retained placement")
+    if not authority.matches_placement(fit):
         raise ValueError("source W authority belongs to a different placement")
     assert authority.width_px is not None
     assert authority.canonical_width_px is not None
@@ -888,11 +924,11 @@ def apply_selected_source_frame_width(
     minimum = max(old_width.minimum, authority.width_px.minimum)
     maximum = min(old_width.maximum, authority.width_px.maximum)
     if maximum < minimum:
-        raise ValueError("selected source W contradicts the fitted width interval")
+        raise ValueError("retained source W contradicts the fitted width interval")
     selected_width = FiniteInterval(minimum, maximum)
     canonical = authority.canonical_width_px
     if not selected_width.contains(canonical, epsilon=1.0e-9):
-        raise ValueError("selected source W canonical state leaves the fit interval")
+        raise ValueError("retained source W canonical state leaves the fit interval")
     selected_pitch_fit = replace(
         fit.pitch_fit,
         frame_width_px=selected_width,
@@ -917,7 +953,7 @@ def apply_selected_source_frame_width(
     )
 
 
-def assess_selected_source_frame_width_topology(
+def assess_placement_source_frame_width_topology(
     phase: PhaseFitResult,
     authority: SourceFrameWidthAuthority,
 ) -> PhaseFitResult:
@@ -927,8 +963,8 @@ def assess_selected_source_frame_width_topology(
         return phase
     fit = phase.best
     if fit is None:
-        raise ValueError("supported source W requires its selected placement")
-    if not authority.matches_selected_placement(fit):
+        raise ValueError("supported source W requires its retained placement")
+    if not authority.matches_placement(fit):
         raise ValueError("source W authority belongs to a different placement")
     topology = _assess_source_frame_width_topology(fit, authority)
     if (
@@ -1171,7 +1207,7 @@ def apply_correlated_frame_width_inference(
     if (
         source_frame_width_authority is not None
         and source_frame_width_authority.state == EvidenceState.SUPPORTED
-        and not source_frame_width_authority.matches_selected_placement(fit)
+        and not source_frame_width_authority.matches_placement(fit)
     ):
         raise ValueError("source W inference belongs to another placement")
     (
@@ -1292,7 +1328,7 @@ def apply_correlated_frame_width_inference(
         )
         > 1.0e-9
     ):
-        raise ValueError("selected fit escaped its source W authority")
+        raise ValueError("retained fit escaped its source W authority")
     assessment = FrameWidthInferenceAssessment(
         state=EvidenceState.SUPPORTED,
         inferred_role_indices=missing,
@@ -1317,9 +1353,10 @@ def apply_correlated_frame_width_inference(
 
 __all__ = [
     "apply_correlated_frame_width_inference",
-    "apply_selected_source_frame_width",
-    "assess_selected_source_frame_width_topology",
+    "apply_placement_source_frame_width",
+    "assess_placement_source_frame_width_topology",
     "calibrate_source_frame_width",
     "SourceFrameWidthAuthority",
     "SourceFrameWidthAuthorityFailureKind",
+    "SourceFrameWidthAuthorityPlacementScope",
 ]

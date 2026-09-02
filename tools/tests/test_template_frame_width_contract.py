@@ -15,11 +15,12 @@ from tools.tests.template_test_support import (
 from x5crop.detection.photo_geometry.template_contact import observe_contact_edges
 from x5crop.detection.photo_geometry.template_frame_width import (
     apply_correlated_frame_width_inference,
-    apply_selected_source_frame_width,
-    assess_selected_source_frame_width_topology,
+    apply_placement_source_frame_width,
+    assess_placement_source_frame_width_topology,
     calibrate_source_frame_width,
     SourceFrameWidthAuthority,
     SourceFrameWidthAuthorityFailureKind,
+    SourceFrameWidthAuthorityPlacementScope,
 )
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.template_direct_role_authority import (
@@ -78,10 +79,13 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
         return SourceFrameWidthAuthority(
             authority_id="test-independent-source-width",
             state=EvidenceState.SUPPORTED,
-            selected_integer_slot_offset=(
+            placement_scope=(
+                SourceFrameWidthAuthorityPlacementScope.RESOLVED_PLACEMENT
+            ),
+            placement_integer_slot_offset=(
                 fit.phase_lattice_fit.integer_slot_offset
             ),
-            selected_phase_anchor_observation_ids=tuple(
+            placement_phase_anchor_observation_ids=tuple(
                 binding.observation_id
                 if binding is not None
                 and binding.use == SequenceBindingUse.PHASE_ANCHOR
@@ -149,13 +153,13 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
 
     @staticmethod
     def _apply_width_and_topology(phase, authority):
-        selected = apply_selected_source_frame_width(phase, authority)
+        selected = apply_placement_source_frame_width(phase, authority)
         assert selected.best is not None
         inferred = apply_correlated_frame_width_inference(
             selected.best,
             source_frame_width_authority=authority,
         )
-        return assess_selected_source_frame_width_topology(
+        return assess_placement_source_frame_width_topology(
             replace(selected, best=inferred),
             authority,
         )
@@ -252,14 +256,14 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             ),
             supporting_frame_ordinals=(1, 4),
         )
-        selected = apply_selected_source_frame_width(phase, authority)
+        selected = apply_placement_source_frame_width(phase, authority)
         assert selected.best is not None
         inferred = apply_correlated_frame_width_inference(
             selected.best,
             source_frame_width_authority=authority,
         )
 
-        assessed = assess_selected_source_frame_width_topology(
+        assessed = assess_placement_source_frame_width_topology(
             replace(selected, best=inferred),
             authority,
         )
@@ -518,7 +522,7 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             authority.observation_ids,
             tuple(sorted(authority.observation_ids, key=str)),
         )
-        selected = apply_selected_source_frame_width(phase, authority)
+        selected = apply_placement_source_frame_width(phase, authority)
         assert selected.best is not None and phase.best is not None
         self.assertEqual(selected.runner_up, phase.runner_up)
         self.assertEqual(
@@ -850,7 +854,7 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             calibrated.width_state.extent_projection_px(),
             FiniteInterval.exact(100.0),
         )
-        selected = apply_selected_source_frame_width(phase, authority)
+        selected = apply_placement_source_frame_width(phase, authority)
         assert selected.best is not None
         source_binding = selected.best.role_bindings[1]
         assert source_binding is not None
@@ -872,7 +876,7 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             role_bindings=tuple(local_bindings),
         )
         self.assertTrue(
-            authority.matches_selected_placement(with_unrelated_local)
+            authority.matches_placement(with_unrelated_local)
         )
         inferred_with_local = apply_correlated_frame_width_inference(
             with_unrelated_local,
@@ -899,7 +903,7 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             use=SequenceBindingUse.LOCAL_REFINEMENT,
         )
         self.assertFalse(
-            authority.matches_selected_placement(
+            authority.matches_placement(
                 replace(
                     selected.best,
                     role_bindings=tuple(changed_phase_anchors),
@@ -1050,10 +1054,13 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
         authority = SourceFrameWidthAuthority(
             authority_id="source-width:test",
             state=EvidenceState.SUPPORTED,
-            selected_integer_slot_offset=(
+            placement_scope=(
+                SourceFrameWidthAuthorityPlacementScope.RESOLVED_PLACEMENT
+            ),
+            placement_integer_slot_offset=(
                 fit.phase_lattice_fit.integer_slot_offset
             ),
-            selected_phase_anchor_observation_ids=tuple(
+            placement_phase_anchor_observation_ids=tuple(
                 binding.observation_id
                 if binding is not None
                 and binding.use == SequenceBindingUse.PHASE_ANCHOR
@@ -1098,7 +1105,7 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             reason=None,
         )
 
-        selected = apply_selected_source_frame_width(phase, authority)
+        selected = apply_placement_source_frame_width(phase, authority)
 
         assert selected.best is not None
         self.assertEqual(
@@ -1252,22 +1259,39 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             authority.failure_kind,
             SourceFrameWidthAuthorityFailureKind.PHYSICAL_WIDTH_CONFLICT,
         )
-        rejected = apply_selected_source_frame_width(phase, authority)
+        rejected = apply_placement_source_frame_width(phase, authority)
         self.assertEqual(rejected.status, PhaseFitStatus.UNRESOLVED)
         self.assertEqual(
             rejected.failure_kind,
             PhaseFailureKind.SOURCE_FRAME_WIDTH_CONFLICT,
         )
 
-    def test_source_width_never_resolves_an_ambiguous_placement(self) -> None:
+    def test_source_width_narrows_retained_ambiguous_proposal_without_resolving(
+        self,
+    ) -> None:
         observations = (
             phase_edge("frame-1-start", 40.0),
             phase_edge("frame-1-end", 139.0),
+            phase_edge("frame-2-start", 160.0),
+            phase_edge("frame-2-end", 260.0),
             phase_edge("frame-3-start", 280.0),
             phase_edge("frame-3-end", 381.0),
         )
         phase = fit_template_phase(observations, phase_template(3))
+        assert phase.best is not None
+        bindings = list(phase.best.role_bindings)
+        bindings[1] = None
+        phase = replace(
+            phase,
+            best=replace(
+                phase.best,
+                role_bindings=tuple(bindings),
+                phase_support_coverage=3.0,
+            ),
+        )
         phase = self._with_selected_width_prerequisites(phase, observations)
+        assert phase.best is not None
+        prior_missing_interval = phase.best.model_full_role_intervals_px[1]
         ambiguous = replace(
             phase,
             status=PhaseFitStatus.AMBIGUOUS,
@@ -1281,18 +1305,46 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             height_scale_px_per_mm=PositiveInterval.exact(10.0),
         )
 
-        retained, authority = calibrate_source_frame_width(
+        calibrated, authority = calibrate_source_frame_width(
             source,
             ambiguous,
             observations,
         )
 
-        self.assertEqual(retained, source)
-        self.assertEqual(authority.state, EvidenceState.UNAVAILABLE)
+        self.assertNotEqual(calibrated.width_state, source.width_state)
+        self.assertEqual(authority.state, EvidenceState.SUPPORTED)
         self.assertEqual(
-            authority.failure_kind,
-            SourceFrameWidthAuthorityFailureKind.UNIQUE_PLACEMENT_UNAVAILABLE,
+            authority.placement_scope,
+            SourceFrameWidthAuthorityPlacementScope
+            .RETAINED_AMBIGUOUS_PROPOSAL,
         )
+        narrowed = apply_placement_source_frame_width(ambiguous, authority)
+        self.assertEqual(narrowed.status, PhaseFitStatus.AMBIGUOUS)
+        self.assertEqual(
+            narrowed.failure_kind,
+            PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS,
+        )
+        self.assertEqual(narrowed.runner_up, ambiguous.runner_up)
+        assert narrowed.best is not None
+        self.assertTrue(authority.matches_placement(narrowed.best))
+        inferred = apply_correlated_frame_width_inference(
+            narrowed.best,
+            source_frame_width_authority=authority,
+        )
+        assessment = inferred.frame_width_inference
+        assert assessment is not None
+        self.assertEqual(assessment.state, EvidenceState.SUPPORTED)
+        self.assertEqual(assessment.inferred_role_indices, (1,))
+        assert assessment.width_px is not None
+        opposite = inferred.role_bindings[0]
+        assert opposite is not None
+        inferred_interval = FiniteInterval(
+            opposite.full_position_interval_px.minimum
+            + assessment.width_px.minimum,
+            opposite.full_position_interval_px.maximum
+            + assessment.width_px.maximum,
+        )
+        self.assertLess(inferred_interval.width, prior_missing_interval.width)
 
     def test_rank_two_selected_lattice_can_close_source_width(self) -> None:
         observations = (
@@ -1323,7 +1375,7 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             calibrated.width_state.observation_ids,
             authority.observation_ids,
         )
-        selected = apply_selected_source_frame_width(phase, authority)
+        selected = apply_placement_source_frame_width(phase, authority)
         assert selected.best is not None
         closed_input = TemplatePhaseInput(
             observations=observations,

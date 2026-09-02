@@ -43,8 +43,9 @@ from x5crop.detection.photo_geometry.template_model import (
     template_role_refinement_radius_px,
 )
 from x5crop.detection.photo_geometry.template_frame_width import (
-    apply_selected_source_frame_width,
+    apply_placement_source_frame_width,
     SourceFrameWidthAuthority,
+    SourceFrameWidthAuthorityPlacementScope,
 )
 from x5crop.detection.photo_geometry.template_overlap import (
     observe_overlap_edge_pairs,
@@ -149,7 +150,7 @@ def _fit_with_independent_source_width(
     observation_ids: tuple[ObservationId, ...],
     supporting_frame_ordinals: tuple[int, ...],
 ):
-    """Run the production selected-only flow with a typed test W authority."""
+    """Run the production placement-bound flow with a typed test W authority."""
 
     candidate = fit_template_phase_candidate_with_adjacency_relations(
         phase_input
@@ -159,10 +160,13 @@ def _fit_with_independent_source_width(
     authority = SourceFrameWidthAuthority(
         authority_id="test-independent-source-width",
         state=EvidenceState.SUPPORTED,
-        selected_integer_slot_offset=(
+        placement_scope=(
+            SourceFrameWidthAuthorityPlacementScope.RESOLVED_PLACEMENT
+        ),
+        placement_integer_slot_offset=(
             fit.phase_lattice_fit.integer_slot_offset
         ),
-        selected_phase_anchor_observation_ids=tuple(
+        placement_phase_anchor_observation_ids=tuple(
             binding.observation_id
             if binding is not None
             and binding.use == SequenceBindingUse.PHASE_ANCHOR
@@ -188,7 +192,7 @@ def _fit_with_independent_source_width(
         failure_kind=None,
         reason=None,
     )
-    selected = apply_selected_source_frame_width(candidate.result, authority)
+    selected = apply_placement_source_frame_width(candidate.result, authority)
     selected = refine_template_phase_with_source_frame_width(
         selected,
         authority,

@@ -832,7 +832,7 @@ class PhaseFitResult:
 
 @dataclass(frozen=True)
 class TemplatePhaseCandidateCompetition:
-    """One discrete/local competition before selected-only W is consumed."""
+    """One discrete/local competition before placement-bound W is consumed."""
 
     result: PhaseFitResult
     directly_observed_adjacency_ordinals: tuple[int, ...]
