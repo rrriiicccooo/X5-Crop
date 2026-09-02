@@ -113,6 +113,88 @@ def _directional_geometry(
     }
 
 
+def _orientation_eight_directional_geometry() -> dict[str, object]:
+    """One non-square raw TIFF authority mapped to canonical horizontal space."""
+
+    canonical_polygon = [
+        [20.0, 10.0],
+        [580.0, 10.0],
+        [580.0, 90.0],
+        [20.0, 90.0],
+    ]
+
+    def to_raw(point: list[float]) -> list[float]:
+        return [99.0 - point[1], point[0]]
+
+    return {
+        "format_id": "120-66",
+        "count": 1,
+        "strip_orientation": "horizontal",
+        "coordinate_system": {
+            "origin": "top_left",
+            "x_direction": "right",
+            "y_direction": "down",
+            "continuous_coordinates": "raw_tiff_raster_pixel_centers",
+            "canonical_extent": {"width": 600, "height": 100},
+            "orientation_mapping": {
+                "original_tag": 8,
+                "raw_to_canonical": [
+                    [0.0, 1.0, 0.0],
+                    [-1.0, 0.0, 99.0],
+                    [0.0, 0.0, 1.0],
+                ],
+                "canonical_to_raw": [
+                    [0.0, -1.0, 99.0],
+                    [1.0, 0.0, 0.0],
+                    [0.0, 0.0, 1.0],
+                ],
+            },
+        },
+        "shared_edges": [
+            _basis_line(
+                "E1",
+                "directly_visible",
+                [to_raw([0.0, 10.0]), to_raw([600.0, 10.0])],
+            ),
+            _basis_line(
+                "E2",
+                "directly_visible",
+                [to_raw([0.0, 90.0]), to_raw([600.0, 90.0])],
+            ),
+        ],
+        "boundary_pool": [
+            _basis_line(
+                "B001",
+                "directly_visible",
+                [to_raw([20.0, 10.0]), to_raw([20.0, 90.0])],
+            ),
+            _basis_line(
+                "B002",
+                "directly_visible",
+                [to_raw([580.0, 10.0]), to_raw([580.0, 90.0])],
+            ),
+        ],
+        "slots": [
+            {
+                "ordinal": 1,
+                "slot_kind": "image",
+                "reference_geometry": {
+                    "kind": "boundary_pair",
+                    "start_boundary_id": "B001",
+                    "end_boundary_id": "B002",
+                },
+            }
+        ],
+        "adjacencies": [],
+        "frames": [_frame([to_raw(point) for point in canonical_polygon])],
+        "evaluation_role": {
+            "contract": EVALUATION_ROLE_CONTRACT,
+            "cohort_role": "nominal",
+            "reasons": [],
+        },
+    }
+
+
 def _basis_aware_record(
     *,
     start_basis: str = "human_width_estimate",
@@ -643,6 +725,76 @@ class GoldAccuracyContractTest(unittest.TestCase):
 
         self.assertTrue(validate_proposal_coverage(record, report))
         self.assertFalse(validate_selected_candidate_coverage(record, report))
+
+    def test_orientation_eight_gold_is_compared_in_canonical_space(self) -> None:
+        canonical = [
+            [20.0, 10.0],
+            [580.0, 10.0],
+            [580.0, 90.0],
+            [20.0, 90.0],
+        ]
+        record = {
+            "sample_id": "orientation-eight-proposal",
+            "format_id": "120-66",
+            "confirmed_geometry": _orientation_eight_directional_geometry(),
+        }
+        report = {
+            "photo_geometry": {
+                "source_placement_proposal": {"state": "generated"},
+                "lanes": [
+                    {
+                        "placement_proposal": {
+                            "output_footprints": [_output(canonical)]
+                        },
+                        "output_footprints": [_output(canonical)],
+                    }
+                ],
+            }
+        }
+
+        self.assertTrue(validate_proposal_coverage(record, report))
+        diagnostics = gold_frame_diagnostics(record, report)
+        self.assertEqual(diagnostics[0]["inward_failure_sides"], [])
+        self.assertEqual(
+            diagnostics[0]["outward_budget_failure_sides"],
+            [],
+        )
+        for value in diagnostics[0]["expansion_px_by_side"].values():
+            self.assertAlmostEqual(value, 0.0)
+
+    def test_orientation_eight_inward_cut_still_fails(self) -> None:
+        record = {
+            "sample_id": "orientation-eight-cut",
+            "format_id": "120-66",
+            "confirmed_geometry": _orientation_eight_directional_geometry(),
+        }
+        report = {
+            "photo_geometry": {
+                "source_placement_proposal": {"state": "generated"},
+                "lanes": [
+                    {
+                        "placement_proposal": {
+                            "output_footprints": [
+                                _output(
+                                    [
+                                        [20.0, 10.0],
+                                        [580.0, 10.0],
+                                        [580.0, 89.0],
+                                        [20.0, 89.0],
+                                    ]
+                                )
+                            ]
+                        }
+                    }
+                ],
+            }
+        }
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "proposal crosses user-confirmed inward baseline",
+        ):
+            validate_proposal_coverage(record, report)
 
     def test_unsafe_review_proposal_remains_visible_to_gold(self) -> None:
         gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]

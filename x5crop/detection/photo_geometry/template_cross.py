@@ -208,7 +208,10 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         )
     )
 
-    def retained_grid_proposal_fits() -> tuple[CrossFit, ...]:
+    def retained_grid_proposal_fits() -> tuple[
+        tuple[CrossFit, ...],
+        CrossRetainedProposalBasis | None,
+    ]:
         """Retain at most two default cross Grids without granting authority."""
 
         height = fixed_height if inferred_height is None else inferred_height
@@ -253,6 +256,10 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             )
         )
         anchors: list[CrossRoleBinding] = []
+        retained_basis = (
+            CrossRetainedProposalBasis
+            .CALIBRATED_HEIGHT_FROM_OUTERMOST_REGISTERED_ROLE
+        )
         if authorized_top:
             anchors.append(authorized_top[0])
         if authorized_bottom:
@@ -264,6 +271,56 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                 else authorized_bottom[1:]
             )
             anchors.extend(remaining[: 2 - len(anchors)])
+
+        if not anchors:
+            # A role-specific registered query may produce a stable physical
+            # line while background-sidedness is unavailable, for example
+            # where one aperture side leaves the TIFF.  Three independent
+            # support regions plus bounded direction may position a Review
+            # proposal, but never grant aperture-role or candidate authority.
+            hypothesis_top = tuple(
+                sorted(
+                    (
+                        item
+                        for item in top
+                        if not item.role_authorized
+                        and item.evidence == CrossEvidence.DIRECT
+                        and item.independent_support_region_count
+                        >= SPATIAL_SUPPORT_REGION_COUNT
+                    ),
+                    key=lambda item: (
+                        item.full_interval_px.minimum,
+                        item.full_interval_px.maximum,
+                        str(item.observation_id),
+                    ),
+                )
+            )
+            hypothesis_bottom = tuple(
+                sorted(
+                    (
+                        item
+                        for item in bottom
+                        if not item.role_authorized
+                        and item.evidence == CrossEvidence.DIRECT
+                        and item.independent_support_region_count
+                        >= SPATIAL_SUPPORT_REGION_COUNT
+                    ),
+                    key=lambda item: (
+                        -item.full_interval_px.maximum,
+                        -item.full_interval_px.minimum,
+                        str(item.observation_id),
+                    ),
+                )
+            )
+            if hypothesis_top:
+                anchors.append(hypothesis_top[0])
+            if hypothesis_bottom:
+                anchors.append(hypothesis_bottom[0])
+            if anchors:
+                retained_basis = (
+                    CrossRetainedProposalBasis
+                    .CALIBRATED_HEIGHT_FROM_REGISTERED_ROLE_HYPOTHESIS
+                )
 
         fits: list[CrossFit] = []
         for anchor in anchors:
@@ -293,7 +350,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             ):
                 continue
             fits.append(fit)
-        return tuple(fits)
+        return tuple(fits), (retained_basis if fits else None)
 
     enclosing_support_fit: CrossFit | None = None
     support_competition = None
@@ -816,17 +873,22 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                     "direct top/bottom evidence contradicts fixed height"
                 ),
             }[failure_kind]
+        elif any(
+            not item.role_authorized for item in (*top, *bottom)
+        ):
+            failure_kind = CrossFailureKind.DIRECT_ROLE_AUTHORITY_UNAVAILABLE
+            reason = "registered cross role lacks direct boundary authority"
         else:
             failure_kind = CrossFailureKind.INDEPENDENT_SUPPORT_UNAVAILABLE
             reason = "single-side evidence lacks independent support or direction"
-        retained_fits = (
+        retained_fits, retained_basis = (
             retained_grid_proposal_fits()
             if failure_kind
             not in {
                 CrossFailureKind.FIXED_HEIGHT_INCOMPATIBLE,
                 CrossFailureKind.OUTWARD_ROLE_COUNTEREVIDENCE,
             }
-            else ()
+            else ((), None)
         )
         if retained_fits:
             receipt = replace(
@@ -862,8 +924,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             retained_proposal_basis=(
                 None
                 if not retained_fits
-                else CrossRetainedProposalBasis
-                .CALIBRATED_HEIGHT_FROM_OUTERMOST_REGISTERED_ROLE
+                else retained_basis
             ),
         )
 

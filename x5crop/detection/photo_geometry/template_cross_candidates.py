@@ -229,19 +229,19 @@ def _retained_grid_candidate(
     height_inference_basis: CrossHeightInferenceBasis,
     source_direction: SharedStripDirection | None,
 ) -> _Candidate | None:
-    """Build one proposal-only cross Grid from a registered role anchor.
+    """Build one proposal-only cross Grid from a registered role hypothesis.
 
     The caller has already established that ordinary cross authority failed.
-    This helper deliberately does not promote local support or direction to
-    authority.  The shared strip direction supplies the model direction when
-    available; otherwise the registered anchor retains its own bounded line
-    direction.  The direct role contributes its native coordinate at the
-    registered reference trace, and the fit must remain unresolved downstream.
+    This helper deliberately does not promote role, local support, or direction
+    to authority.  The shared strip direction supplies the model direction when
+    available; otherwise the registered hypothesis retains its own bounded line
+    direction.  The registered role contributes its native coordinate at the
+    reference trace, and the fit must remain unresolved downstream.
     """
 
     if not isinstance(height_inference_basis, CrossHeightInferenceBasis):
         raise TypeError("retained cross Grid needs a typed H inference basis")
-    if not binding.role_authorized or (
+    if binding.evidence != CrossEvidence.DIRECT or (
         source_direction is None
         and (
             binding.canonical_direction_degrees is None

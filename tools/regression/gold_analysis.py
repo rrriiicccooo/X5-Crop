@@ -42,6 +42,7 @@ from .accuracy import (
 )
 from .file_identity import sha256_file
 from .gold_geometry import (
+    canonical_gold_point,
     gold_frame_diagnostics,
     gold_proposal_frame_diagnostics,
     validate_proposal_coverage,
@@ -50,8 +51,8 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v14"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v16"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v15"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v17"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
 SOURCE_TIMEOUT_SECONDS = 600
@@ -63,34 +64,6 @@ COMPARATOR_SOURCE_PATHS = (
     "tools/regression/gold_geometry.py",
     "tools/regression/report_validation.py",
 )
-
-
-def _canonical_point(
-    geometry: dict[str, Any],
-    point: Sequence[float],
-) -> tuple[float, float]:
-    matrix = geometry["coordinate_system"]["orientation_mapping"][
-        "raw_to_canonical"
-    ]
-    x = float(point[0])
-    y = float(point[1])
-    transformed = (
-        float(matrix[0][0]) * x
-        + float(matrix[0][1]) * y
-        + float(matrix[0][2]),
-        float(matrix[1][0]) * x
-        + float(matrix[1][1]) * y
-        + float(matrix[1][2]),
-        float(matrix[2][0]) * x
-        + float(matrix[2][1]) * y
-        + float(matrix[2][2]),
-    )
-    if abs(transformed[2]) < 1.0e-12:
-        raise ValueError("gold orientation mapping has an invalid homogeneous scale")
-    return (
-        transformed[0] / transformed[2],
-        transformed[1] / transformed[2],
-    )
 
 
 def line_axis_position(
@@ -105,7 +78,7 @@ def line_axis_position(
     if axis not in {"sequence", "cross"}:
         raise ValueError("gold analysis axis is invalid")
     points = tuple(
-        _canonical_point(geometry, point)
+        canonical_gold_point(geometry, point)
         for point in line["points_raw"]
     )
     horizontal = geometry["strip_orientation"] == "horizontal"

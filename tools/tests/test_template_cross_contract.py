@@ -2505,7 +2505,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         )
         self.assertIsNone(result.winner_basis)
 
-    def test_cross_grid_proposal_requires_registered_direction_and_role(self) -> None:
+    def test_cross_grid_proposal_requires_registered_direction(self) -> None:
         without_direction = fit_template_cross(
             aspect_input(
                 template=template(),
@@ -2524,7 +2524,13 @@ class TemplateCrossContractTest(unittest.TestCase):
                 ),
             )
         )
-        without_role = fit_template_cross(
+
+        self.assertEqual(without_direction.status, CrossFitStatus.UNRESOLVED)
+        self.assertIsNone(without_direction.best)
+        self.assertIsNone(without_direction.retained_proposal_basis)
+
+    def test_cross_grid_retains_spatially_complete_role_hypothesis(self) -> None:
+        result = fit_template_cross(
             aspect_input(
                 template=template(),
                 fixed_height_px=240.0,
@@ -2535,16 +2541,55 @@ class TemplateCrossContractTest(unittest.TestCase):
                         "unqualified-top",
                         100.0,
                         role_authorized=False,
+                        independent_regions=3,
                         source_spanning=False,
                     ),
                 ),
             )
         )
 
-        for result in (without_direction, without_role):
-            self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
-            self.assertIsNone(result.best)
-            self.assertIsNone(result.retained_proposal_basis)
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            CrossFailureKind.DIRECT_ROLE_AUTHORITY_UNAVAILABLE,
+        )
+        self.assertEqual(
+            result.retained_proposal_basis,
+            CrossRetainedProposalBasis
+            .CALIBRATED_HEIGHT_FROM_REGISTERED_ROLE_HYPOTHESIS,
+        )
+        assert result.best is not None
+        self.assertTrue(result.best.single_side_inferred)
+        self.assertFalse(result.best.direct_bindings[0].role_authorized)
+        self.assertIsNone(result.runner_up)
+        self.assertIsNone(result.winner_basis)
+
+    def test_cross_grid_rejects_local_role_hypothesis(self) -> None:
+        result = fit_template_cross(
+            aspect_input(
+                template=template(),
+                fixed_height_px=240.0,
+                source_direction=placement_direction(),
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "local-unqualified-top",
+                        100.0,
+                        role_authorized=False,
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            CrossFailureKind.DIRECT_ROLE_AUTHORITY_UNAVAILABLE,
+        )
+        self.assertIsNone(result.best)
+        self.assertIsNone(result.retained_proposal_basis)
 
     def test_cross_grid_proposal_respects_evaluated_fit_bound(self) -> None:
         result = fit_template_cross(

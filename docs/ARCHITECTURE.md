@@ -1221,24 +1221,29 @@ retained basis、原 failure 和 runner；`template_alignment.path` 统一为 `r
 | producer bound exceeded | 任意 | 任意 | 不得保留或截断 proposal |
 
 短轴 Cross 也必须区分“没有自动使用权限”和“没有可比较几何”。`template_cross.py` 是唯一保留
-Cross proposal owner；当正常 Cross competition 没有形成 fit，但仍存在至少一条 role-authorized、带有界
-方向的 registered direct TOP/BOTTOM，且 source 已有校准 H 时，可以从最外侧 TOP、最外侧 BOTTOM 各保留
-至多一个 fixed-H proposal。若没有 shared strip direction，只使用该 direct role 自己的完整方向区间；
-不得由模板虚构方向。完全相同的几何去重，整个 Cross competition 最多保留两个 fit，继续受原
-`evaluated_fit_bound` 约束。
+Cross proposal owner；当正常 Cross competition 没有形成 fit，且 source 已有校准 H 时，可以从 registered
+direct TOP/BOTTOM 保留至多两个 fixed-H proposal。优先使用 role-authorized、带有界方向的物理最外侧角色；
+若没有任何这类角色，也可使用覆盖至少三个独立高度区域、方向有界但背景侧证据不足的 direct role
+hypothesis。后者只表示机器在预登记角色走廊中稳定看见一条物理线，不取得 aperture role authority。
+若没有 shared strip direction，只使用该 observation 自己的完整方向区间，不得由模板虚构方向。完全相同
+的几何去重，整个 Cross competition 仍最多保留两个 fit，并继续受原 `evaluated_fit_bound` 约束。
 
-`CrossRetainedProposalBasis.CALIBRATED_HEIGHT_FROM_OUTERMOST_REGISTERED_ROLE` 只说明完整几何如何被保留。
-它不把局部线升级为 Cross authority，不增加 constraint rank，不创建 winner，也不改变原
-`CrossFailureKind`。Production summary 与 Debug 必须同时显示 retained basis 和原失败；placement eligibility
-仍要求 Cross `RESOLVED`，因此该 proposal 只能进入黄金比较与 Review，不能成为 candidate 或正式输出。
+`CrossRetainedProposalBasis` 分别记录
+`calibrated_height_from_outermost_registered_role` 与
+`calibrated_height_from_registered_role_hypothesis`。两者只说明完整几何如何被保留；都不把局部线升级为
+Cross authority，不增加 constraint rank，不创建 winner，也不改变原 `CrossFailureKind`。Production summary
+与 Debug 必须同时显示 retained basis 和原失败；placement eligibility 仍要求 Cross `RESOLVED`，因此这类
+proposal 只能进入黄金比较与 Review，不能成为 candidate 或正式输出。
 
 | registered Cross 事实 | retained proposal | 原 Cross 结果 |
 |---|---|---|
 | role-authorized direct role + shared direction，或该 role 自身有完整方向 | 最外侧 TOP/BOTTOM 各至多一个 | `UNRESOLVED` 与原 typed failure 不变 |
+| 没有 role-authorized anchor；direct role hypothesis 覆盖至少三个独立高度区域，且有 shared direction 或自身完整方向 | 最外侧 TOP/BOTTOM hypothesis 各至多一个 | `direct_role_authority_unavailable` 与 `UNRESOLVED` 不变 |
+| role hypothesis 只有一至两个独立高度区域，或没有任何有界方向 | 不保留 | 原 typed failure 不变 |
 | 多条同角色 direct role | 先取物理最外侧；需要 runner 时再取第二条，全部几何上限仍为 2 | 不按 support、residual 或 score 选 winner |
 | direct top/bottom 明确违反校准 H | 不保留 fixed-H proposal | `fixed_height_incompatible` 优先 |
 | 存在严格更外侧 direct counterevidence | 不保留 fixed-H proposal | `outward_role_counterevidence` 优先 |
-| 没有 role authority、没有任何有界方向或 producer bound exceeded | 不保留 | 原 typed unavailable/bound failure |
+| producer bound exceeded | 不保留 | 原 typed bound failure |
 
 `CandidateGate` 只汇总 typed facts：输入 authority、measurement completeness、producer bounds、
 adjacency relation、获准的 selected placement、content、holder fill、source-space 联合 footprint 和 budget；
@@ -1453,6 +1458,11 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   Review proposal/candidate 的偏差不产生正式输出，因此不能称为用户层危险批准。几何 epsilon 只吸收浮点计算
   误差。具有向外预算权限的每一侧，其总 expansion 不得超过对应确认 W/H span 的 5% 加命名的 sampling
   allowance，uncertainty、residual 与 bleed 均消耗该预算。这不是零像素误差或对称接近度要求。
+- 人工 line、polygon 与 `source_truncated` 交集始终以原 TIFF 坐标持久化；Runtime footprint 使用
+  Orientation-normalized canonical 坐标。`tools/regression/gold_geometry.py` 是验收映射的唯一 owner，必须
+  用冻结的 `raw_to_canonical` affine 将全部人工几何恰好转换一次，再进行 proposal、candidate 或正式输出
+  比较。源截断 polygon 可能不是四边形，逐侧包含必须使用真实人工 boundary line 的半平面，不能按 polygon
+  顶点序号猜测 START/END/TOP/BOTTOM。
 - 逐线 `review_basis` 分别决定向内包含与向外 5% 预算能否产生阻断 accuracy verdict：
 
   | 证据基础 | 向内越线 | 向外超过 5% |

@@ -106,6 +106,9 @@ class CrossRetainedProposalBasis(str, Enum):
     CALIBRATED_HEIGHT_FROM_OUTERMOST_REGISTERED_ROLE = (
         "calibrated_height_from_outermost_registered_role"
     )
+    CALIBRATED_HEIGHT_FROM_REGISTERED_ROLE_HYPOTHESIS = (
+        "calibrated_height_from_registered_role_hypothesis"
+    )
 
 
 class CrossPairSupportMode(str, Enum):

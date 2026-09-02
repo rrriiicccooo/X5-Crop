@@ -111,6 +111,24 @@ proposal 继续 unavailable。Runtime stage 为 16 approved auto、24 eligible c
 proposal-generated / eligibility-withheld、4 proposal unavailable；本次观测仍为 0 个危险 auto，release
 detection gate 尚未达标。Development-detail mean 为 3.938 秒，只作开发归因，不替代正式性能 Gate。
 
+Cross proposal 进一步区分“角色权限不足”和“没有稳定物理线”。当没有 role-authorized TOP/BOTTOM，但某条
+registered direct role hypothesis 覆盖至少三个独立高度区域并具有有界方向时，`template_cross.py` 可用
+校准 H 保留 Review-only fixed-H geometry，并记录
+`calibrated_height_from_registered_role_hypothesis`；原
+`direct_role_authority_unavailable`、`UNRESOLVED`、runner、candidate 阻断和工作量上限均不改变。一至两个
+区域、无方向、固定 H 冲突、严格外侧反证或 producer bound 仍不保留。Report revision 更新为
+`x5crop_v5_template_report_56`，不新增 query、detector、rank、score 或正式输出路径。
+
+黄金比较同时修正了 Orientation 坐标职责：人工线与 polygon 继续只保存原 TIFF 坐标，唯一 comparator
+现在用冻结 `raw_to_canonical` affine 恰好转换一次后再与 canonical Runtime footprint 比较；截断 Frame 的
+非四边形 polygon 按真实人工 boundary line 半平面逐侧验收，不再按顶点序号猜边。Development gold record
+更新为 v15、summary 更新为 v17。完整 110-task report 无分析错误：proposal 为 26 safe / 81 unsafe / 3
+unavailable，candidate 保持 19 safe / 21 unsafe / 70 unavailable；S106 从无完整 source geometry 变为
+不安全 Review proposal，Frame 1–8 只暴露真实 `cross_low` 向内越线，Frame 9–12 无逐侧违例。Runtime
+仍为 16 approved auto、24 eligible candidate Review、67 proposal-generated / eligibility-withheld、3
+proposal unavailable；本次观测危险 auto 为 0，release detection gate 尚未达标。Development-detail mean
+为 3.947 秒，只作开发归因，不替代正式性能 Gate。
+
 ### 产品行为
 
 - 用户提供 format，并确认匹配片夹的默认 count 或显式 count；count 包含中间空白曝光格。Runtime 不猜
