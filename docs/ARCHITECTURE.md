@@ -1181,6 +1181,20 @@ format/count 有效且固定模板已编译
 或自动批准，不应反向删除已经形成的 proposal；坐标非法、format/count 无效或根本无法形成完整 footprint
 时才保留 typed proposal unavailable。
 
+长轴 phase 同样遵守这项分层。`template_phase.py` 中的 `PhaseRetainedProposalBasis` 只记录一份已经完整
+定位、随后被 local evidence 否决 eligibility 的 pre-local phase；它可以来自 direct lattice 或 calibrated
+nominal Grid。保留动作不得清除原 `PhaseFailureKind`、改回 `RESOLVED`、建立 winner authority，或把该
+phase 计入 constraint rank。若短轴也能形成完整几何，`detector.py` 可据此组合 source proposal；若短轴
+仍不可用，则只保留轴级 Debug 事实，完整 source proposal 继续 typed unavailable。
+
+| pre-local phase | local / adjacency 结果 | cross | proposal 与资格 |
+|---|---|---|---|
+| 完整且唯一定位 | 仍 resolved | 任意 | 正常路径，不登记 retained basis |
+| 完整且唯一定位 | typed unresolved / conflict | resolved | 保留完整 source proposal；candidate 不可用，进入 Review |
+| 完整且唯一定位 | typed unresolved / conflict | unavailable | 只保留 phase proposal；source proposal 不可用 |
+| 未形成完整定位 | 任意 | 任意 | 不得虚构 retained proposal |
+| producer bound exceeded | 任意 | 任意 | 不得保留或截断 proposal |
+
 `CandidateGate` 只汇总 typed facts：输入 authority、measurement completeness、producer bounds、
 adjacency relation、获准的 selected placement、content、holder fill、source-space 联合 footprint 和 budget；
 未来概率层若启用，还包括其 versioned selection assessment 与 abstention facts。Phase、
@@ -1336,7 +1350,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/template_aspect_ratio_model.py`、`template_aspect_ratio.py` | 校准 W/H 比例的 typed authority、相关 H 推断、direct H 对账与预算失败 |
 | `photo_geometry/template_model.py` | Sequence coordinate/evidence identity、`AdjacencyRelation` sum type、measured separator 的直接 gap identity 与相关 delta realization，以及统一 O(count) prefix |
 | `photo_geometry/template_phase_model.py`、`template_phase_candidates.py` | role binding、projection outcome/type、phase-authority ceiling、同一离散 identity 的有界投影重拟合，以及 physical/source W 下的有界 native-edge rebind |
-| `photo_geometry/template_phase.py`、`template_pitch.py`、`template_residual.py` | phase/ordinal 求解、连续 placement identity、candidate-bound direct separator relation、Contact/Overlap/Separator 离散竞争、selected-only source-W rebind 调度与 source pitch |
+| `photo_geometry/template_phase.py`、`template_pitch.py`、`template_residual.py` | phase/ordinal 求解、连续 placement identity、candidate-bound direct separator relation、Contact/Overlap/Separator 离散竞争、被 local 反证后的 pre-local phase proposal provenance、selected-only source-W rebind 调度与 source pitch |
 | `photo_geometry/template_direct_role_authority.py` | 每个 bounded phase candidate 与最终已选 START/END 的 native-coordinate 权限证明及共享 evidence ledger |
 | `photo_geometry/template_direct_role_aperture_domain.py` | partial-height separator role 在全部可行 cross 状态中的两侧 aperture-domain containment；不读取像素或创建 placement |
 | `photo_geometry/template_lattice_authority.py` | `(phase, W, pitch)` 的全部 retained direct 约束矩阵、native coordinate interval 与独立 rank 闭合证明；只证明全局未知量是否闭合，不消费、选择或重登记 canonical source W |

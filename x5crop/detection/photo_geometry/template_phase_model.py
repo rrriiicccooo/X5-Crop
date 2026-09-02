@@ -370,6 +370,17 @@ class PhaseWinnerBasis(str, Enum):
     RESIDUAL_SEPARATION = "residual_separation"
 
 
+class PhaseRetainedProposalBasis(str, Enum):
+    """Why an unresolved phase still carries one complete proposal fit."""
+
+    CALIBRATED_NOMINAL_GRID_BEFORE_LOCAL_COUNTEREVIDENCE = (
+        "calibrated_nominal_grid_before_local_counterevidence"
+    )
+    DIRECT_LATTICE_BEFORE_LOCAL_COUNTEREVIDENCE = (
+        "direct_lattice_before_local_counterevidence"
+    )
+
+
 class SourceFrameWidthTopologyFailureKind(str, Enum):
     """Why one independently closed source W cannot preserve normal topology."""
 
@@ -634,6 +645,7 @@ class PhaseFitResult:
     registered_direct_observation_ids: tuple[ObservationId, ...]
     failure_kind: PhaseFailureKind | None = None
     winner_basis: PhaseWinnerBasis | None = None
+    retained_proposal_basis: PhaseRetainedProposalBasis | None = None
     best_phase_candidate_authority_projection: (
         PhaseCandidateAuthorityProjection | None
     ) = None
@@ -681,6 +693,26 @@ class PhaseFitResult:
             self.winner_basis, PhaseWinnerBasis
         ):
             raise ValueError("phase winner basis must match resolved status")
+        if self.retained_proposal_basis is not None:
+            calibrated = (
+                self.best is not None
+                and self.best.calibrated_nominal_grid_fit_state is not None
+            )
+            if (
+                not isinstance(
+                    self.retained_proposal_basis,
+                    PhaseRetainedProposalBasis,
+                )
+                or self.status == PhaseFitStatus.RESOLVED
+                or self.best is None
+                or calibrated
+                != (
+                    self.retained_proposal_basis
+                    == PhaseRetainedProposalBasis
+                    .CALIBRATED_NOMINAL_GRID_BEFORE_LOCAL_COUNTEREVIDENCE
+                )
+            ):
+                raise ValueError("retained phase proposal basis is invalid")
         if (
             self.best_phase_candidate_authority_projection is not None
             and not isinstance(

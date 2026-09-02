@@ -32,6 +32,10 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   `TemplatePlacementProposal` / `TemplateSourceProposal` 是 proposal 的唯一 owner；资格不足不再删除已经形成的
   方案，正式 TIFF 仍只来自 approved output。Development gold 分别比较 proposal、candidate 与正式 auto；
   `--gate report` 保留危险 auto 诊断，`--gate release` 与 `tools/verify accuracy` 才执行发布检测门槛。
+- 已完整定位的 direct 或 calibrated-Grid phase 不再因后续 local counterevidence 被删除。
+  `PhaseRetainedProposalBasis` 只保存 pre-local proposal provenance；原 typed failure、unresolved 状态与 winner
+  缺失保持不变。Cross 可用时可组合完整 source proposal，Cross 不可用时只显示轴级事实；两种情况都不取得
+  candidate 或 auto 权限。
 - Grid 是唯一 placement 主生成模型；format 提供黄金集校准且有界的 `W/H/pitch`，至少一个 absolute
   anchor 将它放入 TIFF。Direct rank 3 是更强的完全直接闭合路径，不是唯一许可；逐 adjacency coverage
   完整且无反证时，Grid 可以生成两侧都未直接观察的 Frame。直接 observation 保留 native coordinate
@@ -88,7 +92,7 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   同一个两侧 direct aperture，或两侧 enclosing support 经 fixed H 闭合出的 aperture 内时，才保留 native
   coordinate。单侧/无唯一域为 unavailable，域坍缩或 trace 越域为 conflict；该证明不新增像素读取、候选
   或 rank，content veto 与 5% 预算继续独立生效。
-- 当前 Report revision 为 `x5crop_v5_template_report_51`；普通报告与 Debug 显式分开 proposal、eligibility、
+- 当前 Report revision 为 `x5crop_v5_template_report_52`；普通报告与 Debug 显式分开 proposal、eligibility、
   selected output 和决定，并继续保存 calibration identity、anchor、inferred adjacency、完全未观察 Frame、
   联合参数依据、measured relation、projection outcome、typed failure、source-W/frame-inference basis、全部
   retained W constraint/observation、W topology facts、partial-height aperture domain 与工作量。完整路径最多
@@ -99,13 +103,14 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   source manifest 不等于 HEAD，以及成员、观测值、数量或登记数值的任何漂移。区间仍为
   `[-0.009H, +0.007H]`，crop geometry 未改变。
 
-完整 development gold diagnostic 已完成 110/110，分析错误 0。现有主模型生成 85 个 proposal，25 个
-尚未生成；proposal 为 25 safe / 60 unsafe / 25 unavailable。Eligibility 层保留 39 个 candidate，形成
-19 safe / 20 unsafe / 71 unavailable：其中 6 个安全 proposal 与 40 个不安全 proposal 被保留为 Review。
-Runtime stage 为 16 approved auto、23 eligible candidate Review、46 proposal-generated/eligibility-withheld、
-25 proposal unavailable。当前恰好仍是 16 个安全 auto、94 个 Review、危险 auto 0，但 release detection
-gate 未达标；不能把这个中间结果称为发布通过。绑定 proposal 检查点的 development-detail mean 为
-4.172 秒，只作开发归因；
+完整 development gold diagnostic 已完成 110/110，分析错误 0。现有主模型生成 90 个 proposal，20 个
+尚未生成；proposal 为 26 safe / 64 unsafe / 20 unavailable。Eligibility 层仍保留 39 个 candidate，形成
+19 safe / 20 unsafe / 71 unavailable：其中 7 个安全 proposal 与 44 个不安全 proposal 被保留为 Review。
+Runtime stage 为 16 approved auto、23 eligible candidate Review、51 proposal-generated/eligibility-withheld、
+20 proposal unavailable。S070、S085、S096、S099、S101 从无方案变成可比较方案；只有 S085 安全，其余
+四张暴露明确黄金越线或预算错误，五张全部保持无 candidate 与 Review。当前仍是 16 个安全 auto、94 个
+Review、危险 auto 0，但 release detection gate 未达标；不能把这个中间结果称为发布通过。绑定当前源码
+的 development-detail mean 为 4.003 秒，只作开发归因；
 相同检测源码最近一次 clean-checkpoint 24-source 正式性能 mean 为 3.536 秒，通过 5 秒 Gate，3 秒目标仍为
 非阻断 challenge，该旧性能 receipt 不替代未来 release commit 的复验。
 
@@ -123,8 +128,8 @@ output budget，S032 为 phase ambiguity。
 
 - 106-source/110-task development gold 用于发现机制、调试和 incident regression，不估计未来生产错误率。
   独立 calibration/sealed 是未来概率选择与未见来源声明的前提，但不再是首版发布前置条件。
-- 当前 25 个 proposal unavailable 才是真正的生成缺口；另有 46 个 proposal 已完整形成但 eligibility
-  withheld。后者包含 6 个黄金安全 proposal（S014/S048/S079/S083/S088/S094）和 40 个不安全 proposal；
+- 当前 20 个 proposal unavailable 才是真正的生成缺口；另有 51 个 proposal 已完整形成但 eligibility
+  withheld。后者包含 7 个黄金安全 proposal（S014/S048/S079/S083/S085/S088/S094）和 44 个不安全 proposal；
   安全并不自动证明当前阻断多余，不安全也不能因 Review 而隐藏，必须分别追到通用权限或几何根因。
 - 当前 96 个 nominal 仍有 80 个 review。主要 phase root failure 为
   `discrete_phase_ambiguous` 13、`fixed_template_mismatch` 10、`adjacency_topology_unresolved` 6、
@@ -146,12 +151,15 @@ output budget，S032 为 phase ambiguity。
 
 ## 精确下一步
 
-1. 先让所有合法 format/count 尽量形成完整 proposal。对 25 个 unavailable 按 typed root 逐类修生成能力：
-   `phase_template_mismatch` 9、aspect budget 5、anchor 2、Grid conflict 2，其余各 1；不能把缺失权限伪装成
+1. 先让所有合法 format/count 尽量形成完整 proposal。对 20 个 unavailable 按 typed root 逐类修生成能力：
+   aspect budget 5、`phase_template_mismatch` 4、anchor 2、Grid conflict 2，其余各 1；不能把缺失权限伪装成
    approved，也不能用样片特例生成。
-2. 在 85 个已生成 proposal 上优先修 60 个黄金不安全几何的通用 detector、anchor、local relation、cross
-   或 output 根因；黄金只作离线比较，不能进入 Runtime。随后审计 6 个安全但 eligibility withheld 的方案，
+2. 下一小机制先审计仍为 `phase_template_mismatch` 的 S018、S056、S102、S106：它们已有 retained phase，
+   但 cross 分别缺少 physical group 或 independent support。应区分“短轴已有完整 pre-local proposal 后被
+   反证”与“短轴从未形成完整 proposal”，再修 cross proposal owner；不得借此抬升 eligibility。
+3. 在 90 个已生成 proposal 上优先修 64 个黄金不安全几何的通用 detector、anchor、local relation、cross
+   或 output 根因；黄金只作离线比较，不能进入 Runtime。随后审计 7 个安全但 eligibility withheld 的方案，
    只移除真正放错层级或重复的阻断，保留真实 counterevidence。
-3. Proposal 几何稳定后再收紧 eligibility 与 DecisionGate，使 96 个 nominal 全部安全 auto；开发期间任何
+4. Proposal 几何稳定后再收紧 eligibility 与 DecisionGate，使 96 个 nominal 全部安全 auto；开发期间任何
    危险 auto 都完整列出并继续修复，release commit 才硬性归零。每次只闭合一个通用机制，不恢复旧终判、
    放宽预算或建立兼容路径；真实 incident 经人工确认后永久进入回归集。

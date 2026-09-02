@@ -82,6 +82,7 @@ from .template_phase_model import (
     PhaseFailureKind,
     PhaseFitResult,
     PhaseFitStatus,
+    PhaseRetainedProposalBasis,
     PhaseWinnerBasis,
     TemplatePhaseCandidateCompetition,
     TemplatePhaseInput,
@@ -2160,6 +2161,51 @@ def _apply_final_lattice_contract(
     return result
 
 
+def retain_pre_local_phase_proposal(
+    result: PhaseFitResult,
+    *,
+    prior: PhaseFitResult,
+) -> PhaseFitResult:
+    """Keep one complete positioned phase after local evidence rejects eligibility.
+
+    ``prior`` is the uniquely positioned direct or calibrated-Grid solution
+    that exists before local refinement or adjacency continuity introduces
+    counterevidence. A later refit may therefore withhold the candidate, but it
+    must not erase that already complete pre-Gate proposal. The retained fit
+    never changes ``result.status`` or ``result.failure_kind`` and cannot
+    acquire candidate or automatic-approval authority.
+    """
+
+    if result.template != prior.template:
+        raise ValueError("retained phase proposal crosses template identity")
+    if (
+        result.best is not None
+        or result.status == PhaseFitStatus.BOUND_EXCEEDED
+        or prior.status != PhaseFitStatus.RESOLVED
+        or prior.best is None
+    ):
+        return result
+    calibrated = prior.best.calibrated_nominal_grid_fit_state is not None
+    return replace(
+        result,
+        best=prior.best,
+        runner_up=prior.runner_up,
+        best_phase_candidate_authority_projection=(
+            prior.best_phase_candidate_authority_projection
+        ),
+        runner_phase_candidate_authority_projection=(
+            prior.runner_phase_candidate_authority_projection
+        ),
+        retained_proposal_basis=(
+            PhaseRetainedProposalBasis
+            .CALIBRATED_NOMINAL_GRID_BEFORE_LOCAL_COUNTEREVIDENCE
+            if calibrated
+            else PhaseRetainedProposalBasis
+            .DIRECT_LATTICE_BEFORE_LOCAL_COUNTEREVIDENCE
+        ),
+    )
+
+
 def fit_template_phase_candidate_with_adjacency_relations(
     phase_input: TemplatePhaseInput,
 ) -> TemplatePhaseCandidateCompetition:
@@ -2201,6 +2247,7 @@ def fit_template_phase_candidate_with_adjacency_relations(
             directly_observed_ordinals=(),
         )
         return TemplatePhaseCandidateCompetition(assessed, ())
+    pre_local_proposal = normal
     normal = _refine_selected_roles_with_candidate_elimination(
         normal,
         phase_input,
@@ -2210,6 +2257,10 @@ def fit_template_phase_candidate_with_adjacency_relations(
             normal,
             phase_input,
             directly_observed_ordinals=(),
+        )
+        assessed = retain_pre_local_phase_proposal(
+            assessed,
+            prior=pre_local_proposal,
         )
         return TemplatePhaseCandidateCompetition(assessed, ())
     assert normal.best is not None
@@ -2349,6 +2400,10 @@ def fit_template_phase_candidate_with_adjacency_relations(
         adjusted,
         phase_input,
         directly_observed_ordinals=directly_observed_ordinals,
+    )
+    assessed = retain_pre_local_phase_proposal(
+        assessed,
+        prior=normal,
     )
     return TemplatePhaseCandidateCompetition(
         assessed,

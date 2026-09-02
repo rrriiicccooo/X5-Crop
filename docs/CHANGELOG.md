@@ -44,6 +44,20 @@ report 仍只负责如实暴露；detector/comparator source manifest 不等于 
 更新为 `x5crop_v5_template_report_51`，不保留 v1 calibration 或旧 schema 兼容路径；数值区间仍为
 `[-0.009H, +0.007H]`，没有改变 crop geometry。
 
+局部反证不再抹掉此前已经完整定位的 phase proposal。`PhaseRetainedProposalBasis` 明确区分 direct lattice
+与 calibrated nominal Grid 的 pre-local proposal；后续 `fixed_template_mismatch` 等 typed failure、unresolved
+状态和 winner 缺失全部保留，因此 retained phase 只能参与 pre-Gate proposal，不能取得 candidate 或 auto
+权限。若 cross 仍不可用，只显示轴级事实，不伪造完整 source proposal。Normal report、development detail
+与 Debug 均显示该 provenance，Report revision 更新为 `x5crop_v5_template_report_52`。
+
+完整 110-task development diagnostic 无分析错误：proposal 从 85 增至 90，unavailable 从 25 降至 20；
+proposal 为 26 safe / 64 unsafe / 20 unavailable，candidate 仍为 19 safe / 20 unsafe / 71 unavailable。
+S070、S085、S096、S099、S101 新增完整 proposal，其中只有 S085 安全，其余四张暴露明确黄金越线或预算
+错误；五张全部保持 candidate unavailable 与 Review。Runtime stage 仍为 16 approved auto、23 eligible
+candidate Review，变化仅为 51 proposal-generated/eligibility-withheld 与 20 proposal unavailable；危险 auto
+仍为 0，但这只是当前开发结果，不是发布通过。Development-detail mean 为 4.003 秒，只作开发归因；本机制
+不新增 TIFF query、detector、candidate search、score 或正式输出。
+
 ### 产品行为
 
 - 用户提供 format，并确认匹配片夹的默认 count 或显式 count；count 包含中间空白曝光格。Runtime 不猜

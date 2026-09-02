@@ -13,6 +13,7 @@ from ..detection.photo_geometry.template_phase_model import PhaseFitStatus
 from ..detection.photo_geometry.template_stability import (
     leave_one_anchor_out_phase_stability,
 )
+from .summary import template_alignment_path
 
 
 def _measurement_set_read_model(measurement_set: object) -> dict[str, object]:
@@ -174,11 +175,10 @@ def development_report_facts(
                     .source_frame_width_topology_assessment
                 ),
                 "alignment_path": (
-                    None
-                    if lane.prepared.phase_competition.best is None
-                    else "adjacency_relations"
-                    if lane.prepared.phase_competition.best.adjacency_relations
-                    else "normal"
+                    template_alignment_path(
+                        lane.prepared.phase_competition,
+                        alignment_by_lane[lane.lane_id],
+                    )
                 ),
                 "phase_stability": typed_read_model(
                     stability_by_lane[lane.lane_id]

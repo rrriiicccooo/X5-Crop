@@ -73,6 +73,7 @@ from x5crop.detection.photo_geometry.template_phase import (
     fit_template_phase_candidate_with_adjacency_relations,
     fit_template_phase_with_adjacency_relations,
     refine_template_phase_with_source_frame_width,
+    retain_pre_local_phase_proposal,
 )
 from x5crop.detection.photo_geometry.template_lattice_authority import (
     direct_role_constraint_rank,
@@ -95,6 +96,7 @@ from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseCandidateProjectionOutcome,
     PhaseFailureKind,
     PhaseFitStatus,
+    PhaseRetainedProposalBasis,
     PhaseWinnerBasis,
     TemplatePhaseInput,
 )
@@ -2748,6 +2750,111 @@ class TemplatePhaseContractTest(unittest.TestCase):
             retained.best.calibrated_nominal_grid_fit_state
         )
         self.assertIsNotNone(retained.calibrated_nominal_grid_evidence)
+
+    def test_local_counterevidence_retains_a_complete_pre_local_proposal(
+        self,
+    ) -> None:
+        spec = template(4)
+        observations = tuple(
+            replace(
+                edge(f"retained-proposal:{slot}", 40.0 + 120.0 * slot),
+                qualified_anchor_roles=(BoundaryRole.START,),
+            )
+            for slot in range(4)
+        )
+        nominal = fit_template_phase_with_adjacency_relations(
+            TemplatePhaseInput(
+                observations=observations,
+                separator_bands=(),
+                template=spec,
+                calibrated_nominal_grid_prior=(
+                    calibrated_nominal_grid_prior(spec)
+                ),
+                scale_px_per_mm=None,
+                holder_span_px=FiniteInterval(0.0, 520.0),
+                phase_authority_px=FiniteInterval.exact(40.0),
+                sequence_measurement_sets=(
+                    phase_sequence_measurement(
+                        "retained-proposal-complete",
+                        FiniteInterval(0.0, 520.0),
+                    ),
+                ),
+            )
+        )
+        self.assertEqual(nominal.status, PhaseFitStatus.RESOLVED)
+        assert nominal.best is not None
+        self.assertIsNotNone(
+            nominal.best.calibrated_nominal_grid_fit_state
+        )
+        failed = replace(
+            nominal,
+            best=None,
+            runner_up=None,
+            status=PhaseFitStatus.UNRESOLVED,
+            ambiguity_reason="local adjacency refit rejected the normal Grid",
+            failure_kind=PhaseFailureKind.FIXED_TEMPLATE_MISMATCH,
+            winner_basis=None,
+            best_phase_candidate_authority_projection=None,
+            runner_phase_candidate_authority_projection=None,
+            global_lattice_authority=None,
+            calibrated_nominal_grid_evidence=None,
+            adjacency_observation_coverage=(),
+            adjacency_continuity_observations=(),
+            direct_role_binding_authority=None,
+            outer_frame_observation_authority=None,
+            source_frame_width_topology_assessment=None,
+        )
+
+        retained = retain_pre_local_phase_proposal(
+            failed,
+            prior=nominal,
+        )
+
+        self.assertEqual(retained.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(
+            retained.failure_kind,
+            PhaseFailureKind.FIXED_TEMPLATE_MISMATCH,
+        )
+        self.assertIs(retained.best, nominal.best)
+        self.assertIsNone(retained.winner_basis)
+        self.assertEqual(
+            retained.retained_proposal_basis,
+            PhaseRetainedProposalBasis
+            .CALIBRATED_NOMINAL_GRID_BEFORE_LOCAL_COUNTEREVIDENCE,
+        )
+
+        direct_prior = fit_template_phase(
+            observations,
+            spec,
+            phase_authority_px=FiniteInterval.exact(40.0),
+        )
+        assert direct_prior.best is not None
+        self.assertIsNone(
+            direct_prior.best.calibrated_nominal_grid_fit_state
+        )
+        retained_direct = retain_pre_local_phase_proposal(
+            failed,
+            prior=direct_prior,
+        )
+        self.assertIs(retained_direct.best, direct_prior.best)
+        self.assertEqual(
+            retained_direct.retained_proposal_basis,
+            PhaseRetainedProposalBasis
+            .DIRECT_LATTICE_BEFORE_LOCAL_COUNTEREVIDENCE,
+        )
+
+        bounded = replace(
+            failed,
+            status=PhaseFitStatus.BOUND_EXCEEDED,
+            ambiguity_reason="phase hypothesis bound exceeded",
+            failure_kind=PhaseFailureKind.HYPOTHESIS_BOUND_EXCEEDED,
+        )
+        not_retained = retain_pre_local_phase_proposal(
+            bounded,
+            prior=nominal,
+        )
+        self.assertIsNone(not_retained.best)
+        self.assertIsNone(not_retained.retained_proposal_basis)
 
     def test_direct_phase_authority_preserves_calibrated_placement(self) -> None:
         observations = (

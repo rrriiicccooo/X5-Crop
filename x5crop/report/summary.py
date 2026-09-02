@@ -10,6 +10,16 @@ from ..detection.photo_geometry.template_alignment_diagnostic import (
 from .read_models import typed_read_model
 
 
+def template_alignment_path(phase: object, alignment: object) -> str | None:
+    if phase.retained_proposal_basis is not None:
+        return "retained_pre_local_phase_proposal"
+    if phase.best is None or alignment.pattern.value == "unresolved":
+        return None
+    if any(relation.is_anomaly for relation in phase.best.adjacency_relations):
+        return "adjacency_relations"
+    return "normal"
+
+
 def measurement_summary(detection: object, workspace: object) -> dict[str, Any]:
     field = workspace.boundary_measurement_field
     return {
@@ -97,6 +107,13 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                 "phase_failure_reason": (
                     lane.prepared.phase_competition.ambiguity_reason
                 ),
+                "phase_retained_proposal_basis": (
+                    None
+                    if lane.prepared.phase_competition.retained_proposal_basis
+                    is None
+                    else lane.prepared.phase_competition
+                    .retained_proposal_basis.value
+                ),
                 "cross_status": lane.prepared.cross_competition.status.value,
                 "cross_failure_kind": (
                     None
@@ -116,19 +133,9 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                     .direct_role_aperture_domain_authority
                 ),
                 "template_alignment": {
-                    "path": (
-                        None
-                        if (
-                            lane.prepared.phase_competition.best is None
-                            or alignments[lane.lane_id].pattern.value
-                            == "unresolved"
-                        )
-                        else "adjacency_relations"
-                        if any(
-                            relation.is_anomaly
-                            for relation in lane.prepared.phase_competition.best.adjacency_relations
-                        )
-                        else "normal"
+                    "path": template_alignment_path(
+                        lane.prepared.phase_competition,
+                        alignments[lane.lane_id],
                     ),
                     "pattern": alignments[lane.lane_id].pattern.value,
                     "absolute_phase_px": (

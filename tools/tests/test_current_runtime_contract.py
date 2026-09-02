@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from tools.tests.current_only_support import *
 from tools.regression.diagnostic_cohort import (
     RECORD_SCHEMA,
@@ -8,6 +10,7 @@ from tools.regression.diagnostic_cohort import (
     load_diagnostic_sources,
 )
 from tools.regression.report_validation import validate_output_footprint_authority
+from x5crop.report.summary import template_alignment_path
 
 
 def _boundary_protections():
@@ -26,6 +29,43 @@ def _boundary_protections():
 
 
 class CurrentRuntimeContractTest(unittest.TestCase):
+    def test_template_alignment_path_separates_retained_proposal_from_unresolved_fit(
+        self,
+    ) -> None:
+        unresolved = SimpleNamespace(
+            pattern=SimpleNamespace(value="unresolved")
+        )
+        normal = SimpleNamespace(pattern=SimpleNamespace(value="normal"))
+        fit = SimpleNamespace(
+            adjacency_relations=(SimpleNamespace(is_anomaly=False),)
+        )
+        anomalous = SimpleNamespace(
+            adjacency_relations=(SimpleNamespace(is_anomaly=True),)
+        )
+        def phase(best, retained=None):
+            return SimpleNamespace(
+                best=best,
+                retained_proposal_basis=retained,
+            )
+        self.assertIsNone(
+            template_alignment_path(phase(fit), unresolved)
+        )
+        self.assertEqual(
+            template_alignment_path(
+                phase(fit, object()),
+                unresolved,
+            ),
+            "retained_pre_local_phase_proposal",
+        )
+        self.assertEqual(
+            template_alignment_path(phase(fit), normal),
+            "normal",
+        )
+        self.assertEqual(
+            template_alignment_path(phase(anomalous), normal),
+            "adjacency_relations",
+        )
+
     def test_diagnostic_cohort_schema_is_current_and_complete(self) -> None:
         self.assertEqual(RECORD_SCHEMA, "x5crop_diagnostic_record_v5")
         self.assertEqual(SUMMARY_SCHEMA, "x5crop_diagnostic_summary_v5")
@@ -216,7 +256,7 @@ class CurrentRuntimeContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_ID, "x5crop_detection_report_v5")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "x5crop_v5_template_report_51",
+            "x5crop_v5_template_report_52",
         )
         candidate = candidate_gate_assessment(
             {

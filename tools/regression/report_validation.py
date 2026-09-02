@@ -12,6 +12,7 @@ from x5crop.detection.photo_geometry.output_model import FootprintSaturationKind
 from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseFailureKind,
     PhaseFitStatus,
+    PhaseRetainedProposalBasis,
 )
 from x5crop.domain import Box
 from x5crop.formats import OUTPUT_PROTECTION_SPEC
@@ -78,6 +79,9 @@ _DIRECT_USE_EDGE_FIELDS = {
 _DESKEW_SKIP_REASONS = tuple(item.value for item in DeskewSkipReason)
 _PHASE_FAILURE_KINDS = {None, *(item.value for item in PhaseFailureKind)}
 _PHASE_STATUSES = {item.value for item in PhaseFitStatus}
+_PHASE_RETAINED_PROPOSAL_BASES = {
+    item.value for item in PhaseRetainedProposalBasis
+}
 _OBSERVED_DESKEW_SKIP_REASONS = {
     DeskewSkipReason.ROTATION_NOT_NEEDED.value,
     DeskewSkipReason.ROTATION_EXCEEDS_CLEANUP_LIMIT.value,
@@ -2622,6 +2626,9 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         phase_status = lane.get("phase_status")
         phase_failure_kind = lane.get("phase_failure_kind")
         phase_failure_reason = lane.get("phase_failure_reason")
+        phase_retained_proposal_basis = lane.get(
+            "phase_retained_proposal_basis"
+        )
         if (
             phase_status not in _PHASE_STATUSES
             or phase_failure_kind not in _PHASE_FAILURE_KINDS
@@ -2634,6 +2641,14 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             and (
                 not isinstance(phase_failure_reason, str)
                 or not phase_failure_reason
+            )
+            or phase_retained_proposal_basis is not None
+            and (
+                # A complete long-axis proposal may remain visible while an
+                # independent cross-axis gap keeps the source proposal absent.
+                phase_retained_proposal_basis
+                not in _PHASE_RETAINED_PROPOSAL_BASES
+                or phase_status == PhaseFitStatus.RESOLVED.value
             )
         ):
             raise ValueError("phase status is invalid")
@@ -2662,11 +2677,17 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             or alignment["pattern"]
             not in {"normal", "measured_relations", "unresolved"}
             or alignment["path"]
-            != {
-                "normal": "normal",
-                "measured_relations": "adjacency_relations",
-                "unresolved": None,
-            }[alignment["pattern"]]
+            != (
+                "retained_pre_local_phase_proposal"
+                if phase_retained_proposal_basis is not None
+                else {
+                    "normal": "normal",
+                    "measured_relations": "adjacency_relations",
+                    "unresolved": None,
+                }[alignment["pattern"]]
+            )
+            or phase_retained_proposal_basis is not None
+            and alignment["pattern"] != "unresolved"
             or (alignment["pattern"] == "unresolved")
             != (alignment["unresolved_reason"] is not None)
             or "direct_role_aperture_domain_authority" not in lane
@@ -3155,6 +3176,7 @@ def _validate_phase_competition(value: object) -> None:
         "registered_direct_observation_ids",
         "failure_kind",
         "winner_basis",
+        "retained_proposal_basis",
         "best_phase_candidate_authority_projection",
         "runner_phase_candidate_authority_projection",
         "eliminated_candidate_authority_projections",
@@ -3171,6 +3193,24 @@ def _validate_phase_competition(value: object) -> None:
     runner = value["runner_up"]
     best_projection = value["best_phase_candidate_authority_projection"]
     runner_projection = value["runner_phase_candidate_authority_projection"]
+    retained_proposal_basis = value["retained_proposal_basis"]
+    if retained_proposal_basis is not None:
+        calibrated = (
+            isinstance(best, dict)
+            and best.get("calibrated_nominal_grid_fit_state") is not None
+        )
+        if (
+            retained_proposal_basis not in _PHASE_RETAINED_PROPOSAL_BASES
+            or best is None
+            or value["status"] == PhaseFitStatus.RESOLVED.value
+            or calibrated
+            != (
+                retained_proposal_basis
+                == PhaseRetainedProposalBasis
+                .CALIBRATED_NOMINAL_GRID_BEFORE_LOCAL_COUNTEREVIDENCE.value
+            )
+        ):
+            raise ValueError("development retained phase proposal is invalid")
     if (
         best is None
         and best_projection is not None
