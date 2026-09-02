@@ -323,7 +323,7 @@ def development_report_facts(
                     ),
                     "cross_registered_run_count": (
                         lane.prepared.cross_competition.receipt
-                        .registered_run_count
+                        .total_registered_run_count
                     ),
                     "cross_fit_evaluation_count": (
                         lane.prepared.cross_competition.receipt.evaluated_fit_count

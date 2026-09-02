@@ -3143,26 +3143,54 @@ class TemplateCrossContractTest(unittest.TestCase):
             aspect_input(
                 template=template(),
                 fixed_height_px=240.0,
-                registered_run_count=513,
-                maximum_registered_runs=512,
+                registered_top_run_count=513,
+                registered_bottom_run_count=0,
+                maximum_registered_runs_per_role=512,
             )
         )
 
         self.assertEqual(result.status, CrossFitStatus.BOUND_EXCEEDED)
         self.assertEqual(result.reason, "cross registration bound exceeded")
-        self.assertEqual(result.receipt.registered_run_count, 513)
-        self.assertEqual(result.receipt.registered_run_bound, 512)
+        self.assertEqual(result.receipt.registered_top_run_count, 513)
+        self.assertEqual(result.receipt.registered_bottom_run_count, 0)
+        self.assertEqual(result.receipt.registered_run_bound_per_role, 512)
+
+    def test_independent_cross_roles_do_not_share_registration_quota(
+        self,
+    ) -> None:
+        result = fit_template_cross(
+            aspect_input(
+                template=template(),
+                fixed_height_px=240.0,
+                top_bindings=(
+                    binding(BoundaryRole.TOP, "top", 100.0),
+                ),
+                bottom_bindings=(
+                    binding(BoundaryRole.BOTTOM, "bottom", 340.0),
+                ),
+                registered_top_run_count=393,
+                registered_bottom_run_count=185,
+                maximum_registered_runs_per_role=512,
+            )
+        )
+
+        self.assertNotEqual(result.status, CrossFitStatus.BOUND_EXCEEDED)
+        self.assertEqual(result.receipt.registered_top_run_count, 393)
+        self.assertEqual(result.receipt.registered_bottom_run_count, 185)
+        self.assertEqual(result.receipt.total_registered_run_count, 578)
 
     def test_input_receipt_includes_late_registered_bindings(self) -> None:
         cross_input = aspect_input(
             template=template(),
             fixed_height_px=240.0,
             top_bindings=(binding(BoundaryRole.TOP, "coarse-top", 100.0),),
-            registered_run_count=0,
+            registered_top_run_count=0,
+            registered_bottom_run_count=0,
             fitted_observation_count=0,
         )
 
-        self.assertEqual(cross_input.registered_run_count, 1)
+        self.assertEqual(cross_input.registered_top_run_count, 1)
+        self.assertEqual(cross_input.registered_bottom_run_count, 0)
         self.assertEqual(cross_input.fitted_observation_count, 1)
 
     def test_direction_provenance_retains_selected_observations_and_interval(self) -> None:

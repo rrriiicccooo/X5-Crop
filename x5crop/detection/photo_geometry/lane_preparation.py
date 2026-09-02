@@ -862,7 +862,9 @@ def prepare_template_lane(
         height_axis=height_axis,
         height_scale_px_per_mm=scales.height_axis_px_per_mm,
         lane_reference_trace_px=width_authority.center,
-        maximum_runs=measurement_plan.cross_bounds.max_registered_runs,
+        maximum_runs_per_role=(
+            measurement_plan.cross_bounds.max_registered_runs_per_role
+        ),
     )
     fixed_height = source_geometry.height_state.extent_projection_px()
     canonical_height = fixed_height.center
@@ -938,11 +940,14 @@ def prepare_template_lane(
         top_bindings=top_bindings,
         bottom_bindings=bottom_bindings,
         boundary_axis=height_axis,
-        maximum_registered_runs=measurement_plan.cross_bounds.max_registered_runs,
+        maximum_registered_runs_per_role=(
+            measurement_plan.cross_bounds.max_registered_runs_per_role
+        ),
         maximum_fitted_observations=measurement_plan.cross_bounds.max_fitted_observations,
         maximum_compatible_pairs=measurement_plan.cross_bounds.max_compatible_pairs,
         maximum_evaluated_fits=measurement_plan.cross_bounds.max_evaluated_fits,
-        registered_run_count=cross.registered_run_count,
+        registered_top_run_count=cross.registered_top_run_count,
+        registered_bottom_run_count=cross.registered_bottom_run_count,
         fitted_observation_count=cross.fitted_observation_count,
         aperture_aspect_ratio_authority=aperture_aspect_ratio,
     )

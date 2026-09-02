@@ -911,10 +911,13 @@ fragment；registration 先把投影坐标与完整方向区间相容的同角�
 
 Raster trace 不连续不等于物理边界不同；完整并集重拟合能够成立时，跨 domain fragment 仍可属于同一条线。
 反过来，坐标邻近、方向相似、support 更多或 residual 更小都不能选择性合并其中一部分。Selection 不再
-拥有 broader/local containment 或 dominance 逻辑，只消费 registration 的 canonical identity。每个最多
-256 个 registered run 的集合只做有界 compatibility 与每个多成员 component 一次重拟合，不新增 TIFF
-读取或 selected-placement query。Family state、成员/transition/final identity 与 typed failure 写入
-development report 和 Debug。
+拥有 broader/local containment 或 dominance 逻辑，只消费 registration 的 canonical identity。TOP 与
+BOTTOM 是两个独立 registered-run producer，各自使用同一编译合同与每角色 512 条上限；一侧的局部
+fragment 不能占用另一侧配额，总工作量只由两侧 receipt 求和。任一侧单独超界即产生
+`producer_bound_exceeded`，不能把总数与单侧上限比较、截断候选或静默跳过。后续 canonical fitted
+observation 仍独立受 512 条上限约束，compatible pair / evaluated fit 各受 4096 上限约束；整个过程不新增
+TIFF 读取或 selected-placement query。每角色 run 数、上限、Family state、成员/transition/final identity
+与 typed failure 写入 development report 和 Debug。
 
 直接 top/bottom pair 有两种互斥的 typed support mode：
 

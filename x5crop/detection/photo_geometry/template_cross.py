@@ -84,19 +84,23 @@ def calibrate_source_frame_height(
 def _receipt(
     *,
     inputs: TemplateCrossInput,
-    registered_runs: int,
+    registered_top_runs: int,
+    registered_bottom_runs: int,
     fitted_observations: int,
     compatible_pairs: int,
     single_side_inferences: int,
     evaluated_fits: int,
 ) -> CrossSearchReceipt:
     return CrossSearchReceipt(
-        registered_run_count=registered_runs,
+        registered_top_run_count=registered_top_runs,
+        registered_bottom_run_count=registered_bottom_runs,
         fitted_observation_count=fitted_observations,
         compatible_pair_count=compatible_pairs,
         single_side_inference_count=single_side_inferences,
         evaluated_fit_count=evaluated_fits,
-        registered_run_bound=inputs.maximum_registered_runs,
+        registered_run_bound_per_role=(
+            inputs.maximum_registered_runs_per_role
+        ),
         fitted_observation_bound=inputs.maximum_fitted_observations,
         compatible_pair_bound=inputs.maximum_compatible_pairs,
         evaluated_fit_bound=inputs.maximum_evaluated_fits,
@@ -117,9 +121,13 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     all_ids = tuple(item.observation_id for item in (*top, *bottom))
     if len(set(all_ids)) != len(all_ids):
         raise ValueError("cross observation registered more than once")
-    registered_runs = max(
-        int(inputs.registered_run_count),
-        len({item.run_id for item in (*top, *bottom)}),
+    registered_top_runs = max(
+        int(inputs.registered_top_run_count),
+        len({item.run_id for item in top}),
+    )
+    registered_bottom_runs = max(
+        int(inputs.registered_bottom_run_count),
+        len({item.run_id for item in bottom}),
     )
     fitted_observations = max(
         int(inputs.fitted_observation_count),
@@ -128,13 +136,18 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     aspect_ratio_authority = inputs.aperture_aspect_ratio_authority
     empty_receipt = lambda: _receipt(
         inputs=inputs,
-        registered_runs=registered_runs,
+        registered_top_runs=registered_top_runs,
+        registered_bottom_runs=registered_bottom_runs,
         fitted_observations=fitted_observations,
         compatible_pairs=0,
         single_side_inferences=0,
         evaluated_fits=0,
     )
-    if registered_runs > inputs.maximum_registered_runs or fitted_observations > inputs.maximum_fitted_observations:
+    if (
+        registered_top_runs > inputs.maximum_registered_runs_per_role
+        or registered_bottom_runs > inputs.maximum_registered_runs_per_role
+        or fitted_observations > inputs.maximum_fitted_observations
+    ):
         return CrossFitCompetition(
             template_id=inputs.template.template_id,
             best=None,
@@ -581,7 +594,8 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                     if compatible_pairs > inputs.maximum_compatible_pairs:
                         receipt = _receipt(
                             inputs=inputs,
-                            registered_runs=registered_runs,
+                            registered_top_runs=registered_top_runs,
+                            registered_bottom_runs=registered_bottom_runs,
                             fitted_observations=fitted_observations,
                             compatible_pairs=compatible_pairs,
                             single_side_inferences=0,
@@ -819,7 +833,8 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     single_count = sum(not item.direct_pair for item in candidates)
     receipt = _receipt(
         inputs=inputs,
-        registered_runs=registered_runs,
+        registered_top_runs=registered_top_runs,
+        registered_bottom_runs=registered_bottom_runs,
         fitted_observations=fitted_observations,
         compatible_pairs=compatible_pairs,
         single_side_inferences=single_count,

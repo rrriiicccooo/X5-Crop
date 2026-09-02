@@ -15,6 +15,8 @@ from .template_nominal_grid_model import CalibratedNominalGridPrior
 MAX_QUERY_INTENTS = 8
 MAX_REGISTERED_QUERIES = 64
 MAX_PHASE_OBSERVATIONS = 512
+MAX_CROSS_REGISTERED_RUNS_PER_ROLE = 512
+MAX_CROSS_FITTED_OBSERVATIONS = 512
 MAX_CROSS_PAIRS = 4096
 MAX_PLACEMENT_CHECKS = 4
 MAX_PIXEL_COORDINATES = 32_000_000_000
@@ -203,7 +205,7 @@ class TemplateRoleBounds:
 
 @dataclass(frozen=True)
 class TemplateCrossBounds:
-    max_registered_runs: int
+    max_registered_runs_per_role: int
     max_fitted_observations: int
     max_compatible_pairs: int
     max_evaluated_fits: int
@@ -211,7 +213,7 @@ class TemplateCrossBounds:
 
     def __post_init__(self) -> None:
         if min(
-            self.max_registered_runs,
+            self.max_registered_runs_per_role,
             self.max_fitted_observations,
             self.max_compatible_pairs,
             self.max_evaluated_fits,

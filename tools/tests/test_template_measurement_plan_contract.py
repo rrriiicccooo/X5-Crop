@@ -9,6 +9,8 @@ from x5crop.detection.photo_geometry.template_measurement_plan import (
     compile_template_measurement_plan,
 )
 from x5crop.detection.photo_geometry.template_measurement_plan_model import (
+    MAX_CROSS_FITTED_OBSERVATIONS,
+    MAX_CROSS_REGISTERED_RUNS_PER_ROLE,
     MeasurementIntentKind,
     MeasurementUnit,
 )
@@ -128,6 +130,14 @@ class TemplateMeasurementPlanContractTest(unittest.TestCase):
         plan = _plan()
         self.assertGreater(plan.work_bounds.max_work_units, 0)
         self.assertGreater(plan.cross_bounds.max_evaluated_fits, 0)
+        self.assertEqual(
+            plan.cross_bounds.max_registered_runs_per_role,
+            MAX_CROSS_REGISTERED_RUNS_PER_ROLE,
+        )
+        self.assertEqual(
+            plan.cross_bounds.max_fitted_observations,
+            MAX_CROSS_FITTED_OBSERVATIONS,
+        )
         self.assertGreater(plan.pixel_bounds.max_registered_queries, len(plan.query_intents))
         plan.validate_execution(
             registered_query_count=3,

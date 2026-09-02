@@ -81,7 +81,8 @@ class RegisteredCrossEvidence:
     bottom_bindings: tuple[CrossRoleBinding, ...]
     observations: tuple[PhotoBoundaryObservation, ...]
     fit_attempt_count: int
-    registered_run_count: int | None = None
+    registered_top_run_count: int | None = None
+    registered_bottom_run_count: int | None = None
     fitted_observation_count: int | None = None
     family_resolutions: tuple[CrossBoundaryFamilyResolution, ...] = ()
 
@@ -94,16 +95,21 @@ class RegisteredCrossEvidence:
             raise ValueError("cross boundary families must be registered once")
         if self.fit_attempt_count < len(self.observations):
             raise ValueError("cross fit-attempt receipt is incomplete")
-        binding_run_count = len(
-            {
-                item.run_id
-                for item in (*self.top_bindings, *self.bottom_bindings)
-            }
+        binding_top_run_count = len(
+            {item.run_id for item in self.top_bindings}
         )
-        registered_run_count = (
-            binding_run_count
-            if self.registered_run_count is None
-            else self.registered_run_count
+        binding_bottom_run_count = len(
+            {item.run_id for item in self.bottom_bindings}
+        )
+        registered_top_run_count = (
+            binding_top_run_count
+            if self.registered_top_run_count is None
+            else self.registered_top_run_count
+        )
+        registered_bottom_run_count = (
+            binding_bottom_run_count
+            if self.registered_bottom_run_count is None
+            else self.registered_bottom_run_count
         )
         fitted_observation_count = (
             len(self.observations)
@@ -111,13 +117,24 @@ class RegisteredCrossEvidence:
             else self.fitted_observation_count
         )
         if (
-            not isinstance(registered_run_count, int)
-            or registered_run_count < binding_run_count
+            not isinstance(registered_top_run_count, int)
+            or registered_top_run_count < binding_top_run_count
+            or not isinstance(registered_bottom_run_count, int)
+            or registered_bottom_run_count < binding_bottom_run_count
             or not isinstance(fitted_observation_count, int)
             or fitted_observation_count < len(self.observations)
         ):
             raise ValueError("cross registration receipt is invalid")
-        object.__setattr__(self, "registered_run_count", registered_run_count)
+        object.__setattr__(
+            self,
+            "registered_top_run_count",
+            registered_top_run_count,
+        )
+        object.__setattr__(
+            self,
+            "registered_bottom_run_count",
+            registered_bottom_run_count,
+        )
         object.__setattr__(
             self,
             "fitted_observation_count",
@@ -473,11 +490,11 @@ def register_cross_evidence(
     height_axis: BoundaryAxis,
     height_scale_px_per_mm: PositiveInterval,
     lane_reference_trace_px: float,
-    maximum_runs: int = 256,
+    maximum_runs_per_role: int = 256,
 ) -> RegisteredCrossEvidence:
     """Fit every registered top/bottom run once, without placement queries."""
 
-    if maximum_runs <= 0:
+    if maximum_runs_per_role <= 0:
         raise ValueError("cross registration bound must be positive")
     qualified = tuple(
         run
@@ -485,13 +502,23 @@ def register_cross_evidence(
         if run.role_hint in {BoundaryRole.TOP, BoundaryRole.BOTTOM}
         and (run.pair_qualified or run.anchor_qualified_for(run.role_hint))
     )
-    if len(qualified) > maximum_runs:
+    qualified_top = tuple(
+        run for run in qualified if run.role_hint == BoundaryRole.TOP
+    )
+    qualified_bottom = tuple(
+        run for run in qualified if run.role_hint == BoundaryRole.BOTTOM
+    )
+    if (
+        len(qualified_top) > maximum_runs_per_role
+        or len(qualified_bottom) > maximum_runs_per_role
+    ):
         return RegisteredCrossEvidence(
             top_bindings=(),
             bottom_bindings=(),
             observations=(),
             fit_attempt_count=0,
-            registered_run_count=len(qualified),
+            registered_top_run_count=len(qualified_top),
+            registered_bottom_run_count=len(qualified_bottom),
             fitted_observation_count=0,
         )
     observations_by_role: dict[BoundaryRole, dict[str, PhotoBoundaryObservation]] = {
@@ -576,7 +603,8 @@ def register_cross_evidence(
         ),
         observations=tuple(observation for _binding, observation in ordered),
         fit_attempt_count=fit_attempt_count,
-        registered_run_count=len(qualified),
+        registered_top_run_count=len(qualified_top),
+        registered_bottom_run_count=len(qualified_bottom),
         fitted_observation_count=len(ordered),
         family_resolutions=tuple(
             sorted(family_resolutions, key=lambda item: item.family_id)
@@ -796,14 +824,32 @@ def register_template_local_cross_refinements(
         bindings.setdefault(key, binding)
 
     if len(bindings) > maximum_bindings:
+        top_binding_count = len(
+            {
+                item.run_id
+                for item in bindings.values()
+                if item.role == BoundaryRole.TOP
+            }
+        )
+        bottom_binding_count = len(
+            {
+                item.run_id
+                for item in bindings.values()
+                if item.role == BoundaryRole.BOTTOM
+            }
+        )
         return RegisteredCrossEvidence(
             top_bindings=registered.top_bindings,
             bottom_bindings=registered.bottom_bindings,
             observations=registered.observations,
             fit_attempt_count=fit_attempt_count,
-            registered_run_count=max(
-                int(registered.registered_run_count),
-                len(bindings),
+            registered_top_run_count=max(
+                int(registered.registered_top_run_count),
+                top_binding_count,
+            ),
+            registered_bottom_run_count=max(
+                int(registered.registered_bottom_run_count),
+                bottom_binding_count,
             ),
             fitted_observation_count=len(bindings),
             family_resolutions=registered.family_resolutions,
@@ -821,6 +867,12 @@ def register_template_local_cross_refinements(
     ordered_observations = tuple(
         observations[key] for key in sorted(observations)
     )
+    top_binding_count = len(
+        {item.run_id for item in ordered if item.role == BoundaryRole.TOP}
+    )
+    bottom_binding_count = len(
+        {item.run_id for item in ordered if item.role == BoundaryRole.BOTTOM}
+    )
     return RegisteredCrossEvidence(
         top_bindings=tuple(
             item for item in ordered if item.role == BoundaryRole.TOP
@@ -830,9 +882,13 @@ def register_template_local_cross_refinements(
         ),
         observations=ordered_observations,
         fit_attempt_count=fit_attempt_count,
-        registered_run_count=max(
-            int(registered.registered_run_count),
-            len({item.run_id for item in ordered}),
+        registered_top_run_count=max(
+            int(registered.registered_top_run_count),
+            top_binding_count,
+        ),
+        registered_bottom_run_count=max(
+            int(registered.registered_bottom_run_count),
+            bottom_binding_count,
         ),
         fitted_observation_count=len(ordered_observations),
         family_resolutions=registered.family_resolutions,

@@ -17,7 +17,9 @@ from ..source_core import SourceStripValidationDomain
 from .model import PHOTO_BOUNDARY_MEASUREMENT_SPEC
 from .source_geometry import centered_short_axis_authority_px
 from .template_measurement_plan_model import (
+    MAX_CROSS_FITTED_OBSERVATIONS,
     MAX_CROSS_PAIRS,
+    MAX_CROSS_REGISTERED_RUNS_PER_ROLE,
     MAX_PHASE_OBSERVATIONS,
     MAX_PIXEL_COORDINATES,
     MAX_PLACEMENT_CHECKS,
@@ -157,8 +159,8 @@ def compile_template_measurement_plan(
         max_adjacency_relations=max(0, count - 1),
     )
     cross_bounds = TemplateCrossBounds(
-        max_registered_runs=MAX_PHASE_OBSERVATIONS,
-        max_fitted_observations=MAX_PHASE_OBSERVATIONS,
+        max_registered_runs_per_role=MAX_CROSS_REGISTERED_RUNS_PER_ROLE,
+        max_fitted_observations=MAX_CROSS_FITTED_OBSERVATIONS,
         max_compatible_pairs=MAX_CROSS_PAIRS,
         max_evaluated_fits=MAX_CROSS_PAIRS,
         max_inferred_observations=2,

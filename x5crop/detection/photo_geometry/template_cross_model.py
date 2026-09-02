@@ -545,11 +545,12 @@ class TemplateCrossInput:
     registered_trace_coordinates_px: tuple[int, ...] = ()
     longitudinal_support_domains_px: tuple[FiniteInterval, ...] = ()
     boundary_axis: BoundaryAxis = BoundaryAxis.Y
-    maximum_registered_runs: int = 256
+    maximum_registered_runs_per_role: int = 256
     maximum_fitted_observations: int = 256
     maximum_compatible_pairs: int = 4096
     maximum_evaluated_fits: int = 4096
-    registered_run_count: int | None = None
+    registered_top_run_count: int | None = None
+    registered_bottom_run_count: int | None = None
     fitted_observation_count: int | None = None
     minimum_shared_trace_support: int = 2
     aperture_aspect_ratio_authority: ApertureAspectRatioAuthority = field(
@@ -614,15 +615,18 @@ class TemplateCrossInput:
         ):
             raise ValueError("cross longitudinal support domains are invalid")
         bounds = (
-            self.maximum_registered_runs,
+            self.maximum_registered_runs_per_role,
             self.maximum_fitted_observations,
             self.maximum_compatible_pairs,
             self.maximum_evaluated_fits,
         )
         if any(not isinstance(value, int) or value <= 0 for value in bounds):
             raise ValueError("cross work bounds must be positive integers")
-        binding_run_count = len(
-            {item.run_id for item in (*self.top_bindings, *self.bottom_bindings)}
+        binding_top_run_count = len(
+            {item.run_id for item in self.top_bindings}
+        )
+        binding_bottom_run_count = len(
+            {item.run_id for item in self.bottom_bindings}
         )
         observation_count = len(
             {
@@ -630,11 +634,21 @@ class TemplateCrossInput:
                 for item in (*self.top_bindings, *self.bottom_bindings)
             }
         )
-        registered_run_count = self.registered_run_count
+        registered_top_run_count = self.registered_top_run_count
+        registered_bottom_run_count = self.registered_bottom_run_count
         fitted_observation_count = self.fitted_observation_count
         if (
-            registered_run_count is not None
-            and (not isinstance(registered_run_count, int) or registered_run_count < 0)
+            registered_top_run_count is not None
+            and (
+                not isinstance(registered_top_run_count, int)
+                or registered_top_run_count < 0
+            )
+        ) or (
+            registered_bottom_run_count is not None
+            and (
+                not isinstance(registered_bottom_run_count, int)
+                or registered_bottom_run_count < 0
+            )
         ) or (
             fitted_observation_count is not None
             and (
@@ -645,8 +659,13 @@ class TemplateCrossInput:
             raise ValueError("cross input registration receipt is invalid")
         object.__setattr__(
             self,
-            "registered_run_count",
-            max(binding_run_count, registered_run_count or 0),
+            "registered_top_run_count",
+            max(binding_top_run_count, registered_top_run_count or 0),
+        )
+        object.__setattr__(
+            self,
+            "registered_bottom_run_count",
+            max(binding_bottom_run_count, registered_bottom_run_count or 0),
         )
         object.__setattr__(
             self,
@@ -664,24 +683,26 @@ class TemplateCrossInput:
 class CrossSearchReceipt:
     """Auditable work counts and their explicit structural bounds."""
 
-    registered_run_count: int
+    registered_top_run_count: int
+    registered_bottom_run_count: int
     fitted_observation_count: int
     compatible_pair_count: int
     single_side_inference_count: int
     evaluated_fit_count: int
-    registered_run_bound: int
+    registered_run_bound_per_role: int
     fitted_observation_bound: int
     compatible_pair_bound: int
     evaluated_fit_bound: int
 
     def __post_init__(self) -> None:
         values = (
-            self.registered_run_count,
+            self.registered_top_run_count,
+            self.registered_bottom_run_count,
             self.fitted_observation_count,
             self.compatible_pair_count,
             self.single_side_inference_count,
             self.evaluated_fit_count,
-            self.registered_run_bound,
+            self.registered_run_bound_per_role,
             self.fitted_observation_bound,
             self.compatible_pair_bound,
             self.evaluated_fit_bound,
@@ -691,7 +712,7 @@ class CrossSearchReceipt:
         if any(
             value <= 0
             for value in (
-                self.registered_run_bound,
+                self.registered_run_bound_per_role,
                 self.fitted_observation_bound,
                 self.compatible_pair_bound,
                 self.evaluated_fit_bound,
@@ -700,7 +721,11 @@ class CrossSearchReceipt:
             raise ValueError("cross search receipt bounds must be positive")
 
     def validate_bounds(self) -> None:
-        if self.registered_run_count > self.registered_run_bound:
+        if (
+            self.registered_top_run_count > self.registered_run_bound_per_role
+            or self.registered_bottom_run_count
+            > self.registered_run_bound_per_role
+        ):
             raise ValueError("cross registered-run bound exceeded")
         if self.fitted_observation_count > self.fitted_observation_bound:
             raise ValueError("cross fitted-observation bound exceeded")
@@ -708,6 +733,10 @@ class CrossSearchReceipt:
             raise ValueError("cross compatible-pair bound exceeded")
         if self.evaluated_fit_count > self.evaluated_fit_bound:
             raise ValueError("cross evaluated-fit bound exceeded")
+
+    @property
+    def total_registered_run_count(self) -> int:
+        return self.registered_top_run_count + self.registered_bottom_run_count
 
 
 class CrossFitStatus(str, Enum):

@@ -50,6 +50,108 @@ def _lattice() -> PhaseLatticeAuthority:
 
 class TemplateRegistrationContractTest(unittest.TestCase):
     @staticmethod
+    def _role_scoped_registration(
+        roles: tuple[BoundaryRole, ...],
+        *,
+        maximum_runs_per_role: int,
+    ) -> RegisteredCrossEvidence:
+        measurement = make_side_measurement_set(
+            tuple(
+                ((100.0 if index < 6 else 340.0),)
+                for index in range(12)
+            )
+        )
+        transitions = {
+            item.trace_ordinal: item for item in measurement.transitions
+        }
+        role_ordinals = {
+            BoundaryRole.TOP: iter(((0, 1), (2, 3), (4, 5))),
+            BoundaryRole.BOTTOM: iter(((6, 7), (8, 9), (10, 11))),
+        }
+        runs = []
+        for index, role in enumerate(roles):
+            group = next(role_ordinals[role])
+            selected = tuple(transitions[ordinal] for ordinal in group)
+            coordinate = 100.0 if role == BoundaryRole.TOP else 340.0
+            runs.append(
+                ProfileRun(
+                    run_id=f"{role.value}:{index}",
+                    coordinate_interval_px=FiniteInterval(
+                        coordinate - 0.25,
+                        coordinate + 0.25,
+                    ),
+                    transition_ids=tuple(
+                        item.transition_id for item in selected
+                    ),
+                    trace_coordinates_px=tuple(
+                        item.trace_coordinate_px for item in selected
+                    ),
+                    role_hint=role,
+                    qualified_anchor_roles=(role,),
+                    support_fraction=2.0 / 12.0,
+                    continuous_support_fraction=0.2,
+                    fit_residual_px=0.0,
+                    evidence_strength=10.0,
+                    pair_qualified=True,
+                )
+            )
+        profile = BasicAxisProfile(
+            "cross",
+            400,
+            measurement.query.trace_positions_px,
+            tuple(
+                sorted(
+                    runs,
+                    key=lambda item: (
+                        item.coordinate_interval_px.center,
+                        item.run_id,
+                    ),
+                )
+            ),
+        )
+        return register_cross_evidence(
+            profile=profile,
+            top_measurement=measurement,
+            bottom_measurement=measurement,
+            width_axis=BoundaryAxis.Y,
+            height_axis=BoundaryAxis.X,
+            height_scale_px_per_mm=PositiveInterval.exact(10.0),
+            lane_reference_trace_px=55.0,
+            maximum_runs_per_role=maximum_runs_per_role,
+        )
+
+    def test_top_and_bottom_registration_use_independent_run_bounds(self) -> None:
+        registered = self._role_scoped_registration(
+            (
+                BoundaryRole.TOP,
+                BoundaryRole.TOP,
+                BoundaryRole.BOTTOM,
+                BoundaryRole.BOTTOM,
+            ),
+            maximum_runs_per_role=2,
+        )
+
+        self.assertEqual(registered.registered_top_run_count, 2)
+        self.assertEqual(registered.registered_bottom_run_count, 2)
+        self.assertGreater(registered.fit_attempt_count, 0)
+
+    def test_one_cross_role_cannot_consume_the_other_role_bound(self) -> None:
+        registered = self._role_scoped_registration(
+            (
+                BoundaryRole.TOP,
+                BoundaryRole.TOP,
+                BoundaryRole.TOP,
+                BoundaryRole.BOTTOM,
+            ),
+            maximum_runs_per_role=2,
+        )
+
+        self.assertEqual(registered.registered_top_run_count, 3)
+        self.assertEqual(registered.registered_bottom_run_count, 1)
+        self.assertEqual(registered.fit_attempt_count, 0)
+        self.assertEqual(registered.observations, ())
+
+    @staticmethod
     def _registered_top_families(
         coordinates_px: tuple[float, ...],
         groups: tuple[tuple[int, ...], ...],

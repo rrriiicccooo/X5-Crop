@@ -793,6 +793,17 @@ def axis_authority_summaries(
             }
         )
     )
+    def cross_registration_label(lane) -> str:
+        receipt = lane.prepared.cross_competition.receipt
+        return (
+            f"T{receipt.registered_top_run_count}/"
+            f"B{receipt.registered_bottom_run_count}"
+            f"≤{receipt.registered_run_bound_per_role}"
+        )
+
+    cross_registration = "/".join(
+        sorted({cross_registration_label(lane) for lane in lanes})
+    )
     cross_failures = "/".join(
         sorted(
             {
@@ -933,6 +944,7 @@ def axis_authority_summaries(
         )
         return (
             f"CROSS FIT · {cross_status} · COARSE {coarse_short} · "
+            f"RUNS {cross_registration} · "
             f"COARSE ORIENTATION {direction} · ENCLOSING {enclosing} · "
             f"EVIDENCE {enclosing_resolution} · "
             f"RUNNER {cross_runners}{cross_failure_suffix}"
@@ -972,6 +984,7 @@ def axis_authority_summaries(
     )
     return (
         f"CROSS FIT · {cross_status} · COARSE {coarse_short} · "
+        f"RUNS {cross_registration} · "
         f"COARSE ORIENTATION {direction} · ENCLOSING {enclosing} "
         f"{enclosing_resolution} → "
         + "/".join(

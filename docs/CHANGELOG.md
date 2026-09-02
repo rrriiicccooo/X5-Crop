@@ -143,6 +143,21 @@ approved auto、24 eligible candidate Review；proposal-generated / eligibility-
 危险 auto 为 0，但这只是诊断事实而非开发提交的前置门槛；release detection gate 仍未达标。
 Development-detail mean 为 3.938 秒，只作开发归因，不替代正式性能 Gate。
 
+Cross 原始 run 的工作量现在按物理角色独立计账。TOP 与 BOTTOM 各自拥有编译的 512 条 producer 上限；
+总数只用于 receipt，不再拿两侧合计误触单侧上限。任一侧真正超界仍产生 typed
+`registration_bound_exceeded`，不截断、不按分数丢弃，也不增加 TIFF query。Canonical fitted observation
+与 compatible-pair 上限保持独立。Report 与 Debug 显示 TOP/BOTTOM 实际计数和每角色上限，Report revision
+更新为 `x5crop_v5_template_report_58`，不保留合并配额字段或旧 schema 兼容路径。
+
+完整 110-task development report 无分析错误：proposal 从 109 增至 110，变为 27 safe / 83 unsafe；
+S002 的 TOP 393、BOTTOM 185 分别未超过 512，因而不再假性终止，并暴露完整不安全 Review proposal。
+其 Frame 4–6 `cross_high` 向内越过黄金线，Frame 1 的 `cross_high` 与 `sequence_end` 超过逐侧 5% 外扩预算；
+真实下游根因为 `discrete_phase_ambiguous`、`non_equivalent_fits` 和 `phase_placement_ambiguous`。
+Candidate 仍为 19 safe / 21 unsafe / 70 unavailable；Runtime 为 16 approved auto、24 eligible candidate
+Review、70 proposal-generated / eligibility-withheld，正式输出行为未改变。当前观测危险 auto 为 0，但仍
+只是开发事实；release detection gate 未达标。干净提交上的 development-detail mean 为 3.956 秒，只作
+开发归因，不替代正式性能 Gate。
+
 ### 产品行为
 
 - 用户提供 format，并确认匹配片夹的默认 count 或显式 count；count 包含中间空白曝光格。Runtime 不猜
