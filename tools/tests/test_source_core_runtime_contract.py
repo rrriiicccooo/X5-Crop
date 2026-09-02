@@ -148,6 +148,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         )
         lane = record["photo_geometry"]["lanes"][0]
         self.assertEqual(lane["cross_status"], "unresolved")
+        self.assertIsNone(lane["cross_retained_proposal_basis"])
         self.assertIsNone(lane["cross_height_inference_basis"])
         self.assertEqual(
             lane["cross_failure_kind"],

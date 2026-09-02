@@ -25,13 +25,17 @@ from .template_cross_candidates import (
     _fit_from_group,
     _group_candidates,
     _longitudinal_domain_count,
+    _retained_grid_candidate,
     _single_candidate,
 )
 from .template_cross_model import (
+    CrossEvidence,
     CrossFailureKind,
     CrossFit,
     CrossFitCompetition,
     CrossHeightInferenceBasis,
+    CrossRetainedProposalBasis,
+    CrossRoleBinding,
     CrossFitStatus,
     CrossWinnerBasis,
     CrossSearchReceipt,
@@ -204,6 +208,93 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         )
     )
 
+    def retained_grid_proposal_fits() -> tuple[CrossFit, ...]:
+        """Retain at most two default cross Grids without granting authority."""
+
+        height = fixed_height if inferred_height is None else inferred_height
+        canonical_height = (
+            inferred_canonical_height
+            if inferred_canonical_height is not None
+            else float(inputs.canonical_fixed_height_px)
+        )
+        basis = (
+            CrossHeightInferenceBasis.APERTURE_ASPECT_RATIO
+            if inferred_height is not None
+            else CrossHeightInferenceBasis.CALIBRATED_FORMAT_HEIGHT
+        )
+        authorized_top = tuple(
+            sorted(
+                (
+                    item
+                    for item in top
+                    if item.role_authorized
+                    and item.evidence == CrossEvidence.DIRECT
+                ),
+                key=lambda item: (
+                    item.full_interval_px.minimum,
+                    item.full_interval_px.maximum,
+                    str(item.observation_id),
+                ),
+            )
+        )
+        authorized_bottom = tuple(
+            sorted(
+                (
+                    item
+                    for item in bottom
+                    if item.role_authorized
+                    and item.evidence == CrossEvidence.DIRECT
+                ),
+                key=lambda item: (
+                    -item.full_interval_px.maximum,
+                    -item.full_interval_px.minimum,
+                    str(item.observation_id),
+                ),
+            )
+        )
+        anchors: list[CrossRoleBinding] = []
+        if authorized_top:
+            anchors.append(authorized_top[0])
+        if authorized_bottom:
+            anchors.append(authorized_bottom[0])
+        if len(anchors) < 2:
+            remaining = (
+                authorized_top[1:]
+                if authorized_top
+                else authorized_bottom[1:]
+            )
+            anchors.extend(remaining[: 2 - len(anchors)])
+
+        fits: list[CrossFit] = []
+        for anchor in anchors:
+            candidate = _retained_grid_candidate(
+                anchor,
+                fixed_height=height,
+                canonical_height_px=canonical_height,
+                height_inference_basis=basis,
+                source_direction=inputs.source_direction,
+            )
+            if candidate is None:
+                continue
+            fit = _fit_from_group(
+                (candidate,),
+                template=inputs.template,
+                lane_reference_trace_px=inputs.lane_reference_trace_px,
+                registered_trace_coordinates_px=registered_trace_coordinates,
+                longitudinal_support_domains_px=(
+                    inputs.longitudinal_support_domains_px
+                ),
+            )
+            if any(
+                existing.top_full_interval_px == fit.top_full_interval_px
+                and existing.bottom_full_interval_px
+                == fit.bottom_full_interval_px
+                for existing in fits
+            ):
+                continue
+            fits.append(fit)
+        return tuple(fits)
+
     enclosing_support_fit: CrossFit | None = None
     support_competition = None
     support_checked = False
@@ -374,6 +465,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         *,
         best: CrossFit | None = None,
         runner_up: CrossFit | None = None,
+        retained_proposal_basis: CrossRetainedProposalBasis | None = None,
     ) -> CrossFitCompetition:
         support_result, receipt = support_resolution(receipt)
         if support_result is not None:
@@ -387,6 +479,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             reason=reason,
             failure_kind=failure_kind,
             receipt=receipt,
+            retained_proposal_basis=retained_proposal_basis,
             aperture_aspect_ratio_authority=aspect_ratio_authority,
         )
 
@@ -726,7 +819,53 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         else:
             failure_kind = CrossFailureKind.INDEPENDENT_SUPPORT_UNAVAILABLE
             reason = "single-side evidence lacks independent support or direction"
-        return unresolved(receipt, reason, failure_kind)
+        retained_fits = (
+            retained_grid_proposal_fits()
+            if failure_kind
+            not in {
+                CrossFailureKind.FIXED_HEIGHT_INCOMPATIBLE,
+                CrossFailureKind.OUTWARD_ROLE_COUNTEREVIDENCE,
+            }
+            else ()
+        )
+        if retained_fits:
+            receipt = replace(
+                receipt,
+                single_side_inference_count=len(retained_fits),
+                evaluated_fit_count=len(retained_fits),
+            )
+            if receipt.evaluated_fit_count > receipt.evaluated_fit_bound:
+                return CrossFitCompetition(
+                    template_id=inputs.template.template_id,
+                    best=None,
+                    runner_up=None,
+                    status=CrossFitStatus.BOUND_EXCEEDED,
+                    winner_basis=None,
+                    reason="cross evaluated-fit bound exceeded",
+                    failure_kind=(
+                        CrossFailureKind.EVALUATED_FIT_BOUND_EXCEEDED
+                    ),
+                    receipt=receipt,
+                    aperture_aspect_ratio_authority=(
+                        aspect_ratio_authority
+                    ),
+                )
+            receipt.validate_bounds()
+        return unresolved(
+            receipt,
+            reason,
+            failure_kind,
+            best=None if not retained_fits else retained_fits[0],
+            runner_up=(
+                None if len(retained_fits) < 2 else retained_fits[1]
+            ),
+            retained_proposal_basis=(
+                None
+                if not retained_fits
+                else CrossRetainedProposalBasis
+                .CALIBRATED_HEIGHT_FROM_OUTERMOST_REGISTERED_ROLE
+            ),
+        )
 
     # A unique two-sided enclosing support is stronger output authority than
     # a one-sided aperture whose opposite edge is only format-inferred. The

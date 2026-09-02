@@ -27,6 +27,7 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     CrossFitStatus,
     CrossHeightInferenceBasis,
     CrossPairSupportMode,
+    CrossRetainedProposalBasis,
     CrossWinnerBasis,
     CrossRoleBinding,
     TemplateCrossInput as _TemplateCrossInput,
@@ -457,7 +458,13 @@ class TemplateCrossContractTest(unittest.TestCase):
         )
 
         self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
-        self.assertIsNone(result.best)
+        self.assertIsNotNone(result.best)
+        self.assertIsNone(result.runner_up)
+        self.assertEqual(
+            result.retained_proposal_basis,
+            CrossRetainedProposalBasis
+            .CALIBRATED_HEIGHT_FROM_OUTERMOST_REGISTERED_ROLE,
+        )
         self.assertEqual(
             result.failure_kind,
             CrossFailureKind.PAIR_SUPPORT_UNAVAILABLE,
@@ -563,7 +570,13 @@ class TemplateCrossContractTest(unittest.TestCase):
         )
 
         self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
-        self.assertIsNone(result.best)
+        self.assertIsNotNone(result.best)
+        self.assertIsNone(result.runner_up)
+        self.assertEqual(
+            result.retained_proposal_basis,
+            CrossRetainedProposalBasis
+            .CALIBRATED_HEIGHT_FROM_OUTERMOST_REGISTERED_ROLE,
+        )
         self.assertEqual(
             result.failure_kind,
             CrossFailureKind.PAIR_SUPPORT_UNAVAILABLE,
@@ -863,7 +876,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             result.aperture_aspect_ratio_authority.blocks_cross_resolution
         )
 
-    def test_weak_single_side_cannot_anchor_calibrated_format_height(
+    def test_weak_single_side_retains_proposal_without_authority(
         self,
     ) -> None:
         result = fit_template_cross(
@@ -883,7 +896,13 @@ class TemplateCrossContractTest(unittest.TestCase):
         )
 
         self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
-        self.assertIsNone(result.best)
+        self.assertIsNotNone(result.best)
+        self.assertIsNone(result.runner_up)
+        self.assertEqual(
+            result.retained_proposal_basis,
+            CrossRetainedProposalBasis
+            .CALIBRATED_HEIGHT_FROM_OUTERMOST_REGISTERED_ROLE,
+        )
         self.assertEqual(
             result.failure_kind,
             CrossFailureKind.INDEPENDENT_SUPPORT_UNAVAILABLE,
@@ -997,7 +1016,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         )
         self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
 
-    def test_local_discrete_single_sides_have_no_placement_authority(self) -> None:
+    def test_local_discrete_single_sides_retain_bounded_proposals(self) -> None:
         result = fit_template_cross(
             aspect_input(
                 template=template(),
@@ -1019,8 +1038,13 @@ class TemplateCrossContractTest(unittest.TestCase):
             )
         )
         self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
-        self.assertIsNone(result.best)
-        self.assertIsNone(result.runner_up)
+        self.assertIsNotNone(result.best)
+        self.assertIsNotNone(result.runner_up)
+        self.assertEqual(
+            result.retained_proposal_basis,
+            CrossRetainedProposalBasis
+            .CALIBRATED_HEIGHT_FROM_OUTERMOST_REGISTERED_ROLE,
+        )
 
     def test_three_region_direct_pair_narrows_fixed_height(self) -> None:
         result = fit_template_cross(
@@ -2054,7 +2078,13 @@ class TemplateCrossContractTest(unittest.TestCase):
             )
         )
         self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
-        self.assertIsNone(result.best)
+        self.assertIsNotNone(result.best)
+        self.assertIsNone(result.runner_up)
+        self.assertEqual(
+            result.retained_proposal_basis,
+            CrossRetainedProposalBasis
+            .CALIBRATED_HEIGHT_FROM_OUTERMOST_REGISTERED_ROLE,
+        )
 
     def test_domain_complete_anchor_requires_every_frame_domain(self) -> None:
         domains = (
@@ -2081,7 +2111,13 @@ class TemplateCrossContractTest(unittest.TestCase):
             )
         )
         self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
-        self.assertIsNone(result.best)
+        self.assertIsNotNone(result.best)
+        self.assertIsNone(result.runner_up)
+        self.assertEqual(
+            result.retained_proposal_basis,
+            CrossRetainedProposalBasis
+            .CALIBRATED_HEIGHT_FROM_OUTERMOST_REGISTERED_ROLE,
+        )
 
     def test_domain_complete_anchor_requires_complete_direction(self) -> None:
         domains = (
@@ -2174,7 +2210,13 @@ class TemplateCrossContractTest(unittest.TestCase):
             )
         )
         self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
-        self.assertIsNone(result.best)
+        self.assertIsNotNone(result.best)
+        self.assertIsNone(result.runner_up)
+        self.assertEqual(
+            result.retained_proposal_basis,
+            CrossRetainedProposalBasis
+            .CALIBRATED_HEIGHT_FROM_OUTERMOST_REGISTERED_ROLE,
+        )
 
     def test_template_wide_anchor_cannot_promote_role_unknown_opposite_line(self) -> None:
         domains = (
@@ -2368,6 +2410,179 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertIsNotNone(result.best)
         self.assertIsNotNone(result.runner_up)
         self.assertEqual(result.receipt.evaluated_fit_count, 2)
+
+    def test_cross_grid_proposal_survives_pair_support_failure(self) -> None:
+        result = fit_template_cross(
+            aspect_input(
+                template=template(),
+                fixed_height_px=FiniteInterval(236.0, 244.0),
+                source_direction=placement_direction(),
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "proposal-top",
+                        100.0,
+                        traces=(0, 10),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "proposal-bottom",
+                        342.0,
+                        traces=(90, 100),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            CrossFailureKind.PAIR_SUPPORT_UNAVAILABLE,
+        )
+        self.assertEqual(
+            result.retained_proposal_basis,
+            CrossRetainedProposalBasis
+            .CALIBRATED_HEIGHT_FROM_OUTERMOST_REGISTERED_ROLE,
+        )
+        assert result.best is not None and result.runner_up is not None
+        self.assertTrue(result.best.single_side_inferred)
+        self.assertEqual(
+            result.best.direct_provenance_ids,
+            (ObservationId("observation:proposal-top"),),
+        )
+        self.assertEqual(
+            result.runner_up.direct_provenance_ids,
+            (ObservationId("observation:proposal-bottom"),),
+        )
+        self.assertEqual(result.receipt.single_side_inference_count, 2)
+        self.assertEqual(result.receipt.evaluated_fit_count, 2)
+
+    def test_cross_grid_proposal_keeps_direction_counterevidence(self) -> None:
+        result = fit_template_cross(
+            aspect_input(
+                template=template(),
+                fixed_height_px=FiniteInterval(236.0, 244.0),
+                source_direction=placement_direction(),
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "wrong-direction-top",
+                        100.0,
+                        angle=0.6,
+                        angle_interval=FiniteInterval(0.5, 0.7),
+                        source_spanning=False,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "wrong-direction-bottom",
+                        340.0,
+                        angle=0.6,
+                        angle_interval=FiniteInterval(0.5, 0.7),
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            CrossFailureKind.DIRECTION_INCOMPATIBLE,
+        )
+        self.assertIsNotNone(result.best)
+        self.assertEqual(
+            result.retained_proposal_basis,
+            CrossRetainedProposalBasis
+            .CALIBRATED_HEIGHT_FROM_OUTERMOST_REGISTERED_ROLE,
+        )
+        self.assertIsNone(result.winner_basis)
+
+    def test_cross_grid_proposal_requires_registered_direction_and_role(self) -> None:
+        without_direction = fit_template_cross(
+            aspect_input(
+                template=template(),
+                fixed_height_px=240.0,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "weak-top",
+                        100.0,
+                        traces=(0,),
+                        independent_regions=1,
+                        source_spanning=False,
+                        angle=None,
+                        angle_interval=None,
+                    ),
+                ),
+            )
+        )
+        without_role = fit_template_cross(
+            aspect_input(
+                template=template(),
+                fixed_height_px=240.0,
+                source_direction=placement_direction(),
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "unqualified-top",
+                        100.0,
+                        role_authorized=False,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+
+        for result in (without_direction, without_role):
+            self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+            self.assertIsNone(result.best)
+            self.assertIsNone(result.retained_proposal_basis)
+
+    def test_cross_grid_proposal_respects_evaluated_fit_bound(self) -> None:
+        result = fit_template_cross(
+            aspect_input(
+                template=template(),
+                fixed_height_px=FiniteInterval(236.0, 244.0),
+                source_direction=placement_direction(),
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "bounded-top",
+                        100.0,
+                        traces=(0, 10),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "bounded-bottom",
+                        342.0,
+                        traces=(90, 100),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+                maximum_evaluated_fits=1,
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.BOUND_EXCEEDED)
+        self.assertEqual(
+            result.failure_kind,
+            CrossFailureKind.EVALUATED_FIT_BOUND_EXCEEDED,
+        )
+        self.assertIsNone(result.best)
+        self.assertIsNone(result.retained_proposal_basis)
 
     def test_nearby_exact_pairs_remain_discrete_without_shared_identity(self) -> None:
         result = fit_template_cross(
@@ -3030,7 +3245,13 @@ class TemplateCrossContractTest(unittest.TestCase):
             )
         )
         self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
-        self.assertIsNone(result.best)
+        self.assertIsNotNone(result.best)
+        self.assertIsNone(result.runner_up)
+        self.assertEqual(
+            result.retained_proposal_basis,
+            CrossRetainedProposalBasis
+            .CALIBRATED_HEIGHT_FROM_OUTERMOST_REGISTERED_ROLE,
+        )
 
     def test_support_and_residual_do_not_choose_discrete_groups(self) -> None:
         result = fit_template_cross(

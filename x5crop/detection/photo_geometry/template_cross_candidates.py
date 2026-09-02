@@ -212,6 +212,62 @@ def _single_candidate(
         )
     ):
         return None
+    return _single_candidate_geometry(
+        binding,
+        fixed_height=fixed_height,
+        canonical_height_px=canonical_height_px,
+        height_inference_basis=height_inference_basis,
+        source_direction=source_direction,
+    )
+
+
+def _retained_grid_candidate(
+    binding: CrossRoleBinding,
+    *,
+    fixed_height: FiniteInterval,
+    canonical_height_px: float,
+    height_inference_basis: CrossHeightInferenceBasis,
+    source_direction: SharedStripDirection | None,
+) -> _Candidate | None:
+    """Build one proposal-only cross Grid from a registered role anchor.
+
+    The caller has already established that ordinary cross authority failed.
+    This helper deliberately does not promote local support or direction to
+    authority.  The shared strip direction supplies the model direction when
+    available; otherwise the registered anchor retains its own bounded line
+    direction.  The direct role contributes its native coordinate at the
+    registered reference trace, and the fit must remain unresolved downstream.
+    """
+
+    if not isinstance(height_inference_basis, CrossHeightInferenceBasis):
+        raise TypeError("retained cross Grid needs a typed H inference basis")
+    if not binding.role_authorized or (
+        source_direction is None
+        and (
+            binding.canonical_direction_degrees is None
+            or binding.full_direction_interval_degrees is None
+        )
+    ):
+        return None
+    return _single_candidate_geometry(
+        binding,
+        fixed_height=fixed_height,
+        canonical_height_px=canonical_height_px,
+        height_inference_basis=height_inference_basis,
+        source_direction=source_direction,
+    )
+
+
+def _single_candidate_geometry(
+    binding: CrossRoleBinding,
+    *,
+    fixed_height: FiniteInterval,
+    canonical_height_px: float,
+    height_inference_basis: CrossHeightInferenceBasis,
+    source_direction: SharedStripDirection | None,
+) -> _Candidate:
+    """Materialize the one canonical single-role fixed-H geometry."""
+
     if binding.role == BoundaryRole.TOP:
         top = binding
         bottom = binding

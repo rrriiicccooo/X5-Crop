@@ -1214,6 +1214,26 @@ phase 计入 constraint rank。若短轴也能形成完整几何，`detector.py`
 | 未形成完整定位 | 任意 | 任意 | 不得虚构 retained proposal |
 | producer bound exceeded | 任意 | 任意 | 不得保留或截断 proposal |
 
+短轴 Cross 也必须区分“没有自动使用权限”和“没有可比较几何”。`template_cross.py` 是唯一保留
+Cross proposal owner；当正常 Cross competition 没有形成 fit，但仍存在至少一条 role-authorized、带有界
+方向的 registered direct TOP/BOTTOM，且 source 已有校准 H 时，可以从最外侧 TOP、最外侧 BOTTOM 各保留
+至多一个 fixed-H proposal。若没有 shared strip direction，只使用该 direct role 自己的完整方向区间；
+不得由模板虚构方向。完全相同的几何去重，整个 Cross competition 最多保留两个 fit，继续受原
+`evaluated_fit_bound` 约束。
+
+`CrossRetainedProposalBasis.CALIBRATED_HEIGHT_FROM_OUTERMOST_REGISTERED_ROLE` 只说明完整几何如何被保留。
+它不把局部线升级为 Cross authority，不增加 constraint rank，不创建 winner，也不改变原
+`CrossFailureKind`。Production summary 与 Debug 必须同时显示 retained basis 和原失败；placement eligibility
+仍要求 Cross `RESOLVED`，因此该 proposal 只能进入黄金比较与 Review，不能成为 candidate 或正式输出。
+
+| registered Cross 事实 | retained proposal | 原 Cross 结果 |
+|---|---|---|
+| role-authorized direct role + shared direction，或该 role 自身有完整方向 | 最外侧 TOP/BOTTOM 各至多一个 | `UNRESOLVED` 与原 typed failure 不变 |
+| 多条同角色 direct role | 先取物理最外侧；需要 runner 时再取第二条，全部几何上限仍为 2 | 不按 support、residual 或 score 选 winner |
+| direct top/bottom 明确违反校准 H | 不保留 fixed-H proposal | `fixed_height_incompatible` 优先 |
+| 存在严格更外侧 direct counterevidence | 不保留 fixed-H proposal | `outward_role_counterevidence` 优先 |
+| 没有 role authority、没有任何有界方向或 producer bound exceeded | 不保留 | 原 typed unavailable/bound failure |
+
 `CandidateGate` 只汇总 typed facts：输入 authority、measurement completeness、producer bounds、
 adjacency relation、获准的 selected placement、content、holder fill、source-space 联合 footprint 和 budget；
 未来概率层若启用，还包括其 versioned selection assessment 与 abstention facts。Phase、

@@ -100,6 +100,14 @@ class CrossHeightInferenceBasis(str, Enum):
     CALIBRATED_FORMAT_HEIGHT = "calibrated_format_height"
 
 
+class CrossRetainedProposalBasis(str, Enum):
+    """Why an unresolved cross fit still carries one complete proposal."""
+
+    CALIBRATED_HEIGHT_FROM_OUTERMOST_REGISTERED_ROLE = (
+        "calibrated_height_from_outermost_registered_role"
+    )
+
+
 class CrossPairSupportMode(str, Enum):
     """Independent support contract that closes one direct aperture pair."""
 
@@ -926,6 +934,7 @@ class CrossFitCompetition:
     reason: str | None
     failure_kind: CrossFailureKind | None
     receipt: CrossSearchReceipt
+    retained_proposal_basis: CrossRetainedProposalBasis | None = None
     aperture_aspect_ratio_authority: ApertureAspectRatioAuthority = field(
         default_factory=unavailable_aperture_aspect_ratio_authority
     )
@@ -961,5 +970,17 @@ class CrossFitCompetition:
             raise TypeError("cross competition failure kind must be typed")
         if self.status == CrossFitStatus.BOUND_EXCEEDED and self.best is not None:
             raise ValueError("bound-exceeded cross competition cannot select a fit")
+        if self.retained_proposal_basis is not None:
+            if (
+                not isinstance(
+                    self.retained_proposal_basis,
+                    CrossRetainedProposalBasis,
+                )
+                or self.status != CrossFitStatus.UNRESOLVED
+                or self.best is None
+                or not self.best.single_side_inferred
+                or self.best.height_inference_basis is None
+            ):
+                raise ValueError("retained cross proposal basis is invalid")
         if self.reason is not None and not self.reason:
             raise ValueError("cross competition reason cannot be empty")

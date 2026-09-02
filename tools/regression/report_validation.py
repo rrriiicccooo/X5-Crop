@@ -10,7 +10,10 @@ from x5crop.detection.decision.vocabulary import FINAL_REVIEW_REASONS
 from x5crop.detection.output_deskew import DeskewSkipReason
 from x5crop.detection.photo_geometry.output_model import FootprintSaturationKind
 from x5crop.detection.photo_geometry.template_cross_model import (
+    CrossFailureKind,
+    CrossFitStatus,
     CrossHeightInferenceBasis,
+    CrossRetainedProposalBasis,
 )
 from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseFailureKind,
@@ -88,6 +91,11 @@ _PHASE_RETAINED_PROPOSAL_BASES = {
 _CROSS_HEIGHT_INFERENCE_BASES = {
     None,
     *(item.value for item in CrossHeightInferenceBasis),
+}
+_CROSS_FAILURE_KINDS = {None, *(item.value for item in CrossFailureKind)}
+_CROSS_STATUSES = {item.value for item in CrossFitStatus}
+_CROSS_RETAINED_PROPOSAL_BASES = {
+    item.value for item in CrossRetainedProposalBasis
 }
 _OBSERVED_DESKEW_SKIP_REASONS = {
     DeskewSkipReason.ROTATION_NOT_NEEDED.value,
@@ -2639,6 +2647,12 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         cross_height_inference_basis = lane.get(
             "cross_height_inference_basis"
         )
+        cross_status = lane.get("cross_status")
+        cross_failure_kind = lane.get("cross_failure_kind")
+        cross_failure_reason = lane.get("cross_failure_reason")
+        cross_retained_proposal_basis = lane.get(
+            "cross_retained_proposal_basis"
+        )
         if (
             phase_status not in _PHASE_STATUSES
             or phase_failure_kind not in _PHASE_FAILURE_KINDS
@@ -2663,6 +2677,26 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             or "cross_height_inference_basis" not in lane
             or cross_height_inference_basis
             not in _CROSS_HEIGHT_INFERENCE_BASES
+            or cross_status not in _CROSS_STATUSES
+            or cross_failure_kind not in _CROSS_FAILURE_KINDS
+            or (cross_status == CrossFitStatus.RESOLVED.value)
+            != (
+                cross_failure_kind is None
+                and cross_failure_reason is None
+            )
+            or cross_failure_reason is not None
+            and (
+                not isinstance(cross_failure_reason, str)
+                or not cross_failure_reason
+            )
+            or "cross_retained_proposal_basis" not in lane
+            or cross_retained_proposal_basis is not None
+            and (
+                cross_retained_proposal_basis
+                not in _CROSS_RETAINED_PROPOSAL_BASES
+                or cross_status != CrossFitStatus.UNRESOLVED.value
+                or cross_height_inference_basis is None
+            )
         ):
             raise ValueError("phase or cross inference status is invalid")
         if (
@@ -3371,6 +3405,10 @@ def _validate_development(record: dict[str, Any]) -> None:
                 "source_frame_width_topology_assessment"
             )
             or not isinstance(lane.get("cross_competition"), dict)
+            or lane.get("cross_competition", {}).get(
+                "retained_proposal_basis"
+            )
+            != production_lane.get("cross_retained_proposal_basis")
             or lane.get("aperture_aspect_ratio_authority")
             != lane.get("cross_competition", {}).get(
                 "aperture_aspect_ratio_authority"
@@ -3400,6 +3438,20 @@ def _validate_development(record: dict[str, Any]) -> None:
             != placement.get("runner_up_placement_id")
         ):
             raise ValueError("development template ledger is invalid")
+        cross_competition = lane["cross_competition"]
+        retained_cross = cross_competition.get(
+            "retained_proposal_basis"
+        )
+        retained_cross_fit = cross_competition.get("best")
+        if retained_cross is not None and (
+            retained_cross not in _CROSS_RETAINED_PROPOSAL_BASES
+            or cross_competition.get("status")
+            != CrossFitStatus.UNRESOLVED.value
+            or not isinstance(retained_cross_fit, dict)
+            or retained_cross_fit.get("single_side_inferred") is not True
+            or retained_cross_fit.get("height_inference_basis") is None
+        ):
+            raise ValueError("development retained cross proposal is invalid")
         _validate_direct_role_aperture_domain_authority(
             placement.get("direct_role_aperture_domain_authority")
         )

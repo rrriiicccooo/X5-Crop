@@ -76,6 +76,25 @@ S097 仍存在黄金向内越线，其余六张只超过逐侧 5% 外扩预算�
 `6c4414d8418613686c90736510befefc2130ee939a0e28112ff7ba108d22d4d1` 的 development-detail mean 为
 4.035 秒，只作开发归因，不替代正式性能 Gate。
 
+Cross competition 不再把“局部 direct top/bottom 尚不足以取得短轴 authority”等同于“短轴没有任何可比较
+几何”。普通 Cross fit 为空时，唯一 `template_cross.py` owner 可从 role-authorized、方向有界的最外侧
+registered direct TOP/BOTTOM 与当前校准 H 保留至多两个 fixed-H proposal，并以
+`CrossRetainedProposalBasis.CALIBRATED_HEIGHT_FROM_OUTERMOST_REGISTERED_ROLE` 明确 provenance。原
+`CrossFailureKind`、`UNRESOLVED`、runner 和工作量上限全部保留；固定 H 明确冲突、严格外侧反证、无角色
+权限、无方向或 producer bound 仍不生成这条 proposal。它不增加 rank、candidate、score、TIFF query 或
+正式输出权限，Normal report 与 Debug 同时显示 retained basis 和原失败。Report revision 更新为
+`x5crop_v5_template_report_54`，不保留旧 schema 兼容路径。
+
+完整 110-task development report 无分析错误：proposal 从 100 增至 105，unavailable 从 10 降至 5；
+proposal 为 26 safe / 79 unsafe / 5 unavailable，candidate 保持 19 safe / 21 unsafe / 70 unavailable。
+S033、S068、S069、S082、S108 新增完整 proposal，黄金均判定为不安全：S033/S068/S069 的主要短轴
+问题表现为 `cross_high` 逐侧预算超限，S108 还有 `cross_low` 预算超限，S082 与 S108 另暴露长轴向内
+越线；五张全部保持 candidate unavailable 与
+`needs_review`。Runtime stage 为 16 approved auto、24 eligible candidate Review、65 proposal-generated /
+eligibility-withheld、5 proposal unavailable；本次观测仍为 0 个危险 auto，但这是开发诊断事实，不是中间
+改动必须归零的前置条件。Release detection gate 尚未达标。Development-detail mean 为 3.958 秒，只作开发
+归因，不替代正式性能 Gate。
+
 ### 产品行为
 
 - 用户提供 format，并确认匹配片夹的默认 count 或显式 count；count 包含中间空白曝光格。Runtime 不猜
