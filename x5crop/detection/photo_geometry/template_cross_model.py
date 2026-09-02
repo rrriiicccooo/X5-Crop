@@ -88,6 +88,16 @@ class CrossEvidence(str, Enum):
     DIRECT = "direct"
     TEMPLATE_LOCAL_REFINEMENT = "template_local_refinement"
     ASPECT_RATIO_HEIGHT_INFERRED = "aspect_ratio_height_inferred"
+    CALIBRATED_FORMAT_HEIGHT_INFERRED = (
+        "calibrated_format_height_inferred"
+    )
+
+
+class CrossHeightInferenceBasis(str, Enum):
+    """Authority used to infer the unobserved short-axis role."""
+
+    APERTURE_ASPECT_RATIO = "aperture_aspect_ratio"
+    CALIBRATED_FORMAT_HEIGHT = "calibrated_format_height"
 
 
 class CrossPairSupportMode(str, Enum):
@@ -747,6 +757,7 @@ class CrossFit:
     parallel_direction_interval_degrees: FiniteInterval | None = None
     direction_provenance_ids: tuple[ObservationId, ...] = ()
     single_side_inferred: bool = False
+    height_inference_basis: CrossHeightInferenceBasis | None = None
     direct_provenance_ids: tuple[ObservationId, ...] = ()
     independent_support_region_count: int = 0
     longitudinal_support_domain_count: int = 0
@@ -784,11 +795,27 @@ class CrossFit:
             for item in self.direct_bindings
         ):
             raise ValueError("direct ledger contains inferred binding")
-        if any(
-            item.evidence != CrossEvidence.ASPECT_RATIO_HEIGHT_INFERRED
-            for item in self.inferred_bindings
+        inferred_evidence = {
+            CrossHeightInferenceBasis.APERTURE_ASPECT_RATIO: (
+                CrossEvidence.ASPECT_RATIO_HEIGHT_INFERRED
+            ),
+            CrossHeightInferenceBasis.CALIBRATED_FORMAT_HEIGHT: (
+                CrossEvidence.CALIBRATED_FORMAT_HEIGHT_INFERRED
+            ),
+        }
+        if self.direct_pair:
+            if self.inferred_bindings or self.height_inference_basis is not None:
+                raise ValueError("direct cross fit cannot carry H inference")
+        elif (
+            not isinstance(
+                self.height_inference_basis,
+                CrossHeightInferenceBasis,
+            )
+            or len(self.inferred_bindings) != 1
+            or self.inferred_bindings[0].evidence
+            != inferred_evidence[self.height_inference_basis]
         ):
-            raise ValueError("inferred ledger contains direct binding")
+            raise ValueError("single-side cross H inference is invalid")
         if self.boundary_use == OutputBoundaryUse.APERTURE_PAIR:
             if self.enclosing_support_pair is not None:
                 raise ValueError("aperture fit cannot carry support output")
@@ -909,6 +936,11 @@ class CrossFitCompetition:
             ApertureAspectRatioAuthority,
         ):
             raise TypeError("cross competition requires aspect-ratio authority")
+        if (
+            self.status == CrossFitStatus.RESOLVED
+            and self.aperture_aspect_ratio_authority.blocks_cross_resolution
+        ):
+            raise ValueError("resolved cross cannot retain a blocking H authority")
         if self.status == CrossFitStatus.RESOLVED and (
             self.best is None
             or not isinstance(self.winner_basis, CrossWinnerBasis)

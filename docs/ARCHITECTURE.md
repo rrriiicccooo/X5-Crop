@@ -866,6 +866,25 @@ Photo aperture 的候选必须有正确 top/bottom 角色、外侧背景、有�
   two-region edge 的要求；
 - 同侧多个相距较远且物理相连的 fragments。
 
+单侧 opposite 的 H 有且只有两种 typed basis。`SourceScanGeometry.height_state` 是
+`calibrated_format_height` 的 canonical owner：它由 format 设计 H、黄金校准的统一 mixed guard 与两轴共享
+扫描尺度形成完整 interval，不是零误差常量，也不依赖 source W。Source W 与 format-specific ratio 能闭合
+时，`aperture_aspect_ratio` 可以进一步收紧同一 H；它不增加独立 rank。`CrossFit.height_inference_basis` 与
+inferred binding 的 `CrossEvidence` 必须一致，Debug 和 report 同时显示 basis：
+
+| 单侧 anchor / H 事实 | cross 结果 |
+|---|---|
+| 唯一 source-spanning 或完整 selected-domain direct anchor；ratio supported | 使用有界 ratio H，`aperture_aspect_ratio` |
+| 同一唯一 anchor；source W/ratio unavailable | 使用完整 calibrated format H，`calibrated_format_height` |
+| 同一 anchor；ratio 与 format H 或 5% 预算冲突 | 保留 calibrated-format-H proposal 与 typed ratio failure；不得成为 candidate |
+| anchor role、方向、独立区域或完整 domain 不足 | 不生成单侧 cross；`independent_support_unavailable` |
+| 多个非等价完整 anchor | 保留 best/runner，`non_equivalent_fits`；不得按 residual 或 support 选 winner |
+
+这条路径不会让 format H 覆盖两侧 direct native coordinate，也不会把 nominal H 重新登记成 pixel
+observation。完整 H interval、anchor line uncertainty、local departure、bleed 与 source containment 继续在
+统一输出包络中受检验；黄金报告可以把已生成 proposal 判为 unsafe，但 eligibility 和正式输出不得因此被
+伪造为 supported。
+
 Cross registration 是同角色边界 family identity 的唯一 owner。Transition tracking 可以先产生多个局部
 fragment；registration 先把投影坐标与完整方向区间相容的同角色 observation 组成有界 component，再对
 该 component 的完整 transition 并集只重拟合一次：

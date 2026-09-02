@@ -9,6 +9,9 @@ from x5crop.detection.candidate.assessment.model import CANDIDATE_GATE_CHECK_COD
 from x5crop.detection.decision.vocabulary import FINAL_REVIEW_REASONS
 from x5crop.detection.output_deskew import DeskewSkipReason
 from x5crop.detection.photo_geometry.output_model import FootprintSaturationKind
+from x5crop.detection.photo_geometry.template_cross_model import (
+    CrossHeightInferenceBasis,
+)
 from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseFailureKind,
     PhaseFitStatus,
@@ -81,6 +84,10 @@ _PHASE_FAILURE_KINDS = {None, *(item.value for item in PhaseFailureKind)}
 _PHASE_STATUSES = {item.value for item in PhaseFitStatus}
 _PHASE_RETAINED_PROPOSAL_BASES = {
     item.value for item in PhaseRetainedProposalBasis
+}
+_CROSS_HEIGHT_INFERENCE_BASES = {
+    None,
+    *(item.value for item in CrossHeightInferenceBasis),
 }
 _OBSERVED_DESKEW_SKIP_REASONS = {
     DeskewSkipReason.ROTATION_NOT_NEEDED.value,
@@ -2629,6 +2636,9 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         phase_retained_proposal_basis = lane.get(
             "phase_retained_proposal_basis"
         )
+        cross_height_inference_basis = lane.get(
+            "cross_height_inference_basis"
+        )
         if (
             phase_status not in _PHASE_STATUSES
             or phase_failure_kind not in _PHASE_FAILURE_KINDS
@@ -2650,8 +2660,11 @@ def _validate_geometry(record: dict[str, Any]) -> None:
                 not in _PHASE_RETAINED_PROPOSAL_BASES
                 or phase_status == PhaseFitStatus.RESOLVED.value
             )
+            or "cross_height_inference_basis" not in lane
+            or cross_height_inference_basis
+            not in _CROSS_HEIGHT_INFERENCE_BASES
         ):
-            raise ValueError("phase status is invalid")
+            raise ValueError("phase or cross inference status is invalid")
         if (
             not isinstance(width_ids, list)
             or (source_width["state"] == "supported") != bool(width_ids)

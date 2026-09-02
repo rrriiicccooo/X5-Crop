@@ -25,6 +25,7 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     CrossEvidence,
     CrossFailureKind,
     CrossFitStatus,
+    CrossHeightInferenceBasis,
     CrossPairSupportMode,
     CrossWinnerBasis,
     CrossRoleBinding,
@@ -32,6 +33,7 @@ from x5crop.detection.photo_geometry.template_cross_model import (
 )
 from x5crop.detection.photo_geometry.template_aspect_ratio_model import (
     ApertureAspectRatioAuthority,
+    ApertureAspectRatioFailureKind,
 )
 from x5crop.detection.photo_geometry.output_model import OutputBoundaryUse
 from x5crop.detection.photo_geometry.model import PHOTO_BOUNDARY_MEASUREMENT_SPEC
@@ -800,6 +802,10 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertEqual(result.status, CrossFitStatus.RESOLVED)
         assert result.best is not None
         self.assertFalse(result.best.direct_pair)
+        self.assertEqual(
+            result.best.height_inference_basis,
+            CrossHeightInferenceBasis.APERTURE_ASPECT_RATIO,
+        )
         self.assertAlmostEqual(result.best.top_canonical_px, 100.0)
         self.assertAlmostEqual(result.best.bottom_canonical_px, 340.0)
         self.assertEqual(result.best.inferred_bindings[0].evidence, CrossEvidence.ASPECT_RATIO_HEIGHT_INFERRED)
@@ -816,6 +822,136 @@ class TemplateCrossContractTest(unittest.TestCase):
             (ObservationId("observation:top"),),
         )
         self.assertEqual(result.receipt.single_side_inference_count, 1)
+
+    def test_single_side_uses_calibrated_format_height_without_source_w(
+        self,
+    ) -> None:
+        result = fit_template_cross(
+            _TemplateCrossInput(
+                template=template(),
+                fixed_height_px=FiniteInterval(238.0, 242.0),
+                canonical_fixed_height_px=240.0,
+                top_bindings=(
+                    binding(BoundaryRole.TOP, "nominal-height-top", 100.0),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        self.assertEqual(
+            result.winner_basis,
+            CrossWinnerBasis.ONLY_AUTHORITATIVE_FIT,
+        )
+        assert result.best is not None
+        self.assertEqual(
+            result.best.height_inference_basis,
+            CrossHeightInferenceBasis.CALIBRATED_FORMAT_HEIGHT,
+        )
+        self.assertEqual(
+            result.best.inferred_bindings[0].evidence,
+            CrossEvidence.CALIBRATED_FORMAT_HEIGHT_INFERRED,
+        )
+        self.assertEqual(
+            result.best.bottom_full_interval_px,
+            FiniteInterval(338.0, 342.0),
+        )
+        self.assertEqual(
+            result.aperture_aspect_ratio_authority.state,
+            EvidenceState.UNAVAILABLE,
+        )
+        self.assertFalse(
+            result.aperture_aspect_ratio_authority.blocks_cross_resolution
+        )
+
+    def test_weak_single_side_cannot_anchor_calibrated_format_height(
+        self,
+    ) -> None:
+        result = fit_template_cross(
+            _TemplateCrossInput(
+                template=template(),
+                fixed_height_px=FiniteInterval(238.0, 242.0),
+                canonical_fixed_height_px=240.0,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "local-nominal-height-top",
+                        100.0,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertIsNone(result.best)
+        self.assertEqual(
+            result.failure_kind,
+            CrossFailureKind.INDEPENDENT_SUPPORT_UNAVAILABLE,
+        )
+        self.assertFalse(
+            result.aperture_aspect_ratio_authority.blocks_cross_resolution
+        )
+
+    def test_ratio_counterevidence_keeps_nominal_height_proposal_unresolved(
+        self,
+    ) -> None:
+        contradicted_ratio = replace(
+            _supported_aspect_ratio(FiniteInterval(238.0, 242.0)),
+            state=EvidenceState.CONTRADICTED,
+            minimum_output_expansion_mm=2.0,
+            output_expansion_limit_mm=1.0,
+            failure_kind=ApertureAspectRatioFailureKind.BUDGET_EXHAUSTED,
+            failure_detail="ratio H uncertainty exceeds the output budget",
+        )
+        result = fit_template_cross(
+            _TemplateCrossInput(
+                template=template(),
+                fixed_height_px=FiniteInterval(238.0, 242.0),
+                canonical_fixed_height_px=240.0,
+                top_bindings=(
+                    binding(BoundaryRole.TOP, "blocked-nominal-top", 100.0),
+                ),
+                aperture_aspect_ratio_authority=contradicted_ratio,
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            CrossFailureKind.APERTURE_ASPECT_RATIO_CONFLICT,
+        )
+        assert result.best is not None
+        self.assertEqual(
+            result.best.height_inference_basis,
+            CrossHeightInferenceBasis.CALIBRATED_FORMAT_HEIGHT,
+        )
+        self.assertTrue(
+            result.aperture_aspect_ratio_authority.blocks_cross_resolution
+        )
+
+    def test_multiple_nominal_height_anchors_retain_runner_without_winner(
+        self,
+    ) -> None:
+        result = fit_template_cross(
+            _TemplateCrossInput(
+                template=template(),
+                fixed_height_px=FiniteInterval(238.0, 242.0),
+                canonical_fixed_height_px=240.0,
+                top_bindings=(
+                    binding(BoundaryRole.TOP, "nominal-top-a", 100.0),
+                    binding(BoundaryRole.TOP, "nominal-top-b", 104.0),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            CrossFailureKind.NON_EQUIVALENT_FITS,
+        )
+        self.assertIsNotNone(result.best)
+        self.assertIsNotNone(result.runner_up)
+        self.assertIsNone(result.winner_basis)
 
     def test_single_side_does_not_recalibrate_fixed_height(self) -> None:
         result = fit_template_cross(

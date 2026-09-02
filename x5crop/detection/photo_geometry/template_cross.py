@@ -31,6 +31,7 @@ from .template_cross_model import (
     CrossFailureKind,
     CrossFit,
     CrossFitCompetition,
+    CrossHeightInferenceBasis,
     CrossFitStatus,
     CrossWinnerBasis,
     CrossSearchReceipt,
@@ -171,14 +172,24 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         *,
         template_domain_complete: bool = False,
     ):
-        if inferred_height is None or inferred_canonical_height is None:
-            return None
+        height = fixed_height if inferred_height is None else inferred_height
+        canonical_height = (
+            inferred_canonical_height
+            if inferred_canonical_height is not None
+            else float(inputs.canonical_fixed_height_px)
+        )
+        basis = (
+            CrossHeightInferenceBasis.APERTURE_ASPECT_RATIO
+            if inferred_height is not None
+            else CrossHeightInferenceBasis.CALIBRATED_FORMAT_HEIGHT
+        )
         return _single_candidate(
             binding,
-            fixed_height=inferred_height,
-            canonical_height_px=inferred_canonical_height,
+            fixed_height=height,
+            canonical_height_px=canonical_height,
             source_direction=inputs.source_direction,
             template_domain_complete=template_domain_complete,
+            height_inference_basis=basis,
         )
     registered_trace_coordinates = (
         inputs.registered_trace_coordinates_px
@@ -678,10 +689,6 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         )
     receipt.validate_bounds()
     if not candidates:
-        if inferred_height is None:
-            aspect_ratio_authority = require_aperture_aspect_ratio_for_cross(
-                aspect_ratio_authority
-            )
         if outward_contested_pair_ids:
             failure_kind = CrossFailureKind.OUTWARD_ROLE_COUNTEREVIDENCE
             reason = "direct cross role has strictly outward counterevidence"
@@ -877,6 +884,25 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             best=best,
             runner_up=runner,
         )
+    if (
+        best.height_inference_basis
+        == CrossHeightInferenceBasis.CALIBRATED_FORMAT_HEIGHT
+        and aspect_ratio_authority.state == EvidenceState.CONTRADICTED
+    ):
+        blocked_aspect_ratio = require_aperture_aspect_ratio_for_cross(
+            aspect_ratio_authority
+        )
+        return CrossFitCompetition(
+            template_id=inputs.template.template_id,
+            best=best,
+            runner_up=runner,
+            status=CrossFitStatus.UNRESOLVED,
+            winner_basis=None,
+            reason=blocked_aspect_ratio.failure_detail,
+            failure_kind=CrossFailureKind.APERTURE_ASPECT_RATIO_CONFLICT,
+            receipt=receipt,
+            aperture_aspect_ratio_authority=blocked_aspect_ratio,
+        )
     resolved_aspect_ratio_authority = aspect_ratio_authority
     if best.direct_pair:
         if (
@@ -906,7 +932,10 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                         resolved_aspect_ratio_authority
                     ),
                 )
-    else:
+    elif (
+        best.height_inference_basis
+        == CrossHeightInferenceBasis.APERTURE_ASPECT_RATIO
+    ):
         resolved_aspect_ratio_authority = (
             consume_aperture_aspect_ratio_for_cross(
                 aspect_ratio_authority

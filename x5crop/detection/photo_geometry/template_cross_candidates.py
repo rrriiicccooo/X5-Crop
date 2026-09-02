@@ -28,6 +28,7 @@ from .template_cross_model import (
     CrossEvidence,
     CrossFailureKind,
     CrossFit,
+    CrossHeightInferenceBasis,
     CrossPairSupportMode,
     CrossRoleBinding,
 )
@@ -50,6 +51,7 @@ class _Candidate:
     support_trace_coordinates_px: tuple[int, ...]
     authority_trace_coordinates_px: tuple[int, ...]
     pair_support_mode: CrossPairSupportMode | None
+    height_inference_basis: CrossHeightInferenceBasis | None
     top_full_override: FiniteInterval | None = None
     bottom_full_override: FiniteInterval | None = None
     source_direction: SharedStripDirection | None = None
@@ -162,6 +164,7 @@ def _direct_candidate(
             support_trace_coordinates_px=support_traces,
             authority_trace_coordinates_px=authority_traces,
             pair_support_mode=pair_support_mode,
+            height_inference_basis=None,
             source_direction=None,
         ),
         None,
@@ -173,6 +176,7 @@ def _single_candidate(
     *,
     fixed_height: FiniteInterval,
     canonical_height_px: float,
+    height_inference_basis: CrossHeightInferenceBasis,
     source_direction: SharedStripDirection | None = None,
     template_domain_complete: bool = False,
 ) -> _Candidate | None:
@@ -185,6 +189,8 @@ def _single_candidate(
     # ledger reports only two independent regions. The caller must establish
     # this per-domain direct-trace fact from the registered lattice; this flag
     # never lowers the general support requirement for local edges.
+    if not isinstance(height_inference_basis, CrossHeightInferenceBasis):
+        raise TypeError("single-side cross needs a typed H inference basis")
     if (
         not binding.role_authorized
         or (
@@ -242,6 +248,7 @@ def _single_candidate(
         support_trace_coordinates_px=binding.trace_coordinates_px,
         authority_trace_coordinates_px=binding.trace_coordinates_px,
         pair_support_mode=None,
+        height_inference_basis=height_inference_basis,
         top_full_override=top_full,
         bottom_full_override=bottom_full,
         source_direction=source_direction,
@@ -278,6 +285,14 @@ def _fit_from_candidate(
 ) -> CrossFit:
     top = candidate.top
     bottom = candidate.bottom
+    inferred_evidence = {
+        CrossHeightInferenceBasis.APERTURE_ASPECT_RATIO: (
+            CrossEvidence.ASPECT_RATIO_HEIGHT_INFERRED
+        ),
+        CrossHeightInferenceBasis.CALIBRATED_FORMAT_HEIGHT: (
+            CrossEvidence.CALIBRATED_FORMAT_HEIGHT_INFERRED
+        ),
+    }
     if candidate.direct_pair:
         top_fit = top.fit_interval_px
         bottom_fit = bottom.fit_interval_px
@@ -338,7 +353,7 @@ def _fit_from_candidate(
                     top.fit_direction_interval_degrees
                 ),
                 full_direction_interval_degrees=top.full_direction_interval_degrees,
-                evidence=CrossEvidence.ASPECT_RATIO_HEIGHT_INFERRED,
+                evidence=inferred_evidence[candidate.height_inference_basis],
                 source_observation_ids=(top.observation_id,),
                 independent_support_region_count=top.independent_support_region_count,
                 source_spanning_continuous=top.source_spanning_continuous,
@@ -381,7 +396,7 @@ def _fit_from_candidate(
                     bottom.fit_direction_interval_degrees
                 ),
                 full_direction_interval_degrees=bottom.full_direction_interval_degrees,
-                evidence=CrossEvidence.ASPECT_RATIO_HEIGHT_INFERRED,
+                evidence=inferred_evidence[candidate.height_inference_basis],
                 source_observation_ids=(bottom.observation_id,),
                 independent_support_region_count=bottom.independent_support_region_count,
                 source_spanning_continuous=bottom.source_spanning_continuous,
@@ -419,6 +434,7 @@ def _fit_from_candidate(
         parallel_direction_interval_degrees=candidate.direction_interval,
         direction_provenance_ids=(selected_direction.selected_observation_ids if selected_direction is not None else ()),
         single_side_inferred=not candidate.direct_pair,
+        height_inference_basis=candidate.height_inference_basis,
         independent_support_region_count=candidate.shared_support,
     )
 
@@ -504,6 +520,7 @@ def _fit_from_group(
         item.direct_pair != candidate.direct_pair
         or item.top.observation_id != candidate.top.observation_id
         or item.bottom.observation_id != candidate.bottom.observation_id
+        or item.height_inference_basis != candidate.height_inference_basis
         for item in group[1:]
     ):
         raise AssertionError("cross group merged distinct physical bindings")

@@ -58,6 +58,24 @@ candidate Review，变化仅为 51 proposal-generated/eligibility-withheld 与 2
 仍为 0，但这只是当前开发结果，不是发布通过。Development-detail mean 为 4.003 秒，只作开发归因；本机制
 不新增 TIFF query、detector、candidate search、score 或正式输出。
 
+单侧短轴不再把“source W / ratio 尚未闭合”等同于“H 不存在”。`SourceScanGeometry.height_state` 已经拥有由
+format 设计 H、黄金校准 mixed guard 与 source 扫描尺度形成的有界 H；唯一 source-spanning 或完整
+selected-domain direct anchor 可以用它推导 opposite。若 source W 与 format ratio 已闭合，仍优先使用更窄的
+ratio H；ratio 形成反证时只保留 calibrated-H proposal 并阻断 eligibility。`CrossHeightInferenceBasis`、
+inferred binding、Normal report 与 Debug 统一显示 `aperture_aspect_ratio | calibrated_format_height`，旧式
+“ratio unavailable 就删除完整方案”的权限缺口不再存在。Report revision 更新为
+`x5crop_v5_template_report_53`；该能力不新增 TIFF query、detector、score、候选空间或正式输出路径。
+
+完整 110-task development report 无分析错误：proposal 从 90 增至 100，unavailable 从 20 降至 10；
+proposal 为 26 safe / 74 unsafe / 10 unavailable，candidate 为 19 safe / 21 unsafe / 70 unavailable。
+S001、S004、S011、S018、S019、S020、S037、S056、S066、S097 新增完整 proposal；S011、S020、S037、
+S097 仍存在黄金向内越线，其余六张只超过逐侧 5% 外扩预算。S066 新增不安全 Review candidate；十张都保持
+`needs_review`，没有获得正式输出。Runtime stage 为 16 approved auto、24 eligible candidate Review、
+60 proposal-generated/eligibility-withheld、10 proposal unavailable；本次危险 auto 为 0，但 report gate 即使
+出现危险 auto 也会完整列出而不会伪造通过。Release detection gate 仍未达标。绑定 detector manifest
+`6c4414d8418613686c90736510befefc2130ee939a0e28112ff7ba108d22d4d1` 的 development-detail mean 为
+4.035 秒，只作开发归因，不替代正式性能 Gate。
+
 ### 产品行为
 
 - 用户提供 format，并确认匹配片夹的默认 count 或显式 count；count 包含中间空白曝光格。Runtime 不猜

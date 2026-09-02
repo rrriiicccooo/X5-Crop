@@ -820,6 +820,23 @@ def axis_authority_summaries(
     cross_pair_mode_suffix = (
         "" if not cross_pair_modes else f" · PAIR {cross_pair_modes}"
     )
+    cross_height_inference_bases = "/".join(
+        sorted(
+            {
+                lane.prepared.cross_competition.best
+                .height_inference_basis.value.upper()
+                for lane in lanes
+                if lane.prepared.cross_competition.best is not None
+                and lane.prepared.cross_competition.best
+                .height_inference_basis is not None
+            }
+        )
+    )
+    cross_height_inference_suffix = (
+        ""
+        if not cross_height_inference_bases
+        else f" · H BASIS {cross_height_inference_bases}"
+    )
     phase_runners = sum(
         lane.prepared.phase_competition.runner_up is not None
         for lane in lanes
@@ -902,7 +919,8 @@ def axis_authority_summaries(
             f"CROSS FIT · {cross_status} · COARSE {coarse_short} · "
             f"COARSE ORIENTATION {direction} · ENCLOSING {enclosing} · "
             f"EVIDENCE {enclosing_resolution} · "
-            f"RUNNER {cross_runners}{cross_failure_suffix}",
+            f"RUNNER {cross_runners}{cross_failure_suffix}"
+            f"{cross_height_inference_suffix}",
             f"SEQUENCE FIT · {phase_status} · COARSE {coarse_long} · "
             f"RUNNER {phase_runners}{lattice_fit_suffix}"
             f"{retained_phase_proposal_suffix}",
@@ -951,7 +969,8 @@ def axis_authority_summaries(
             )
         )
         + f" · DIRECT {direct_cross} · INFERRED {inferred_cross}"
-        + cross_pair_mode_suffix,
+        + cross_pair_mode_suffix
+        + cross_height_inference_suffix,
         f"SEQUENCE FIT · {phase_status} · COARSE {coarse_long} → "
         f"DIRECT {direct_sequence} · INFERRED {inferred_sequence}"
         f"{lattice_fit_suffix}{retained_phase_proposal_suffix}",

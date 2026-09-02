@@ -32,6 +32,7 @@ from x5crop.detection.photo_geometry.template_cross import fit_template_cross
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossEvidence,
     CrossFitStatus,
+    CrossHeightInferenceBasis,
     TemplateCrossInput,
 )
 from x5crop.detection.photo_geometry.template_phase import fit_template_phase
@@ -281,7 +282,7 @@ class TemplateAspectRatioContractTest(unittest.TestCase):
         )
         self.assertTrue(conflict.blocks_cross_resolution)
 
-    def test_cross_truth_table_preserves_direct_h_and_requires_ratio_for_inference(
+    def test_cross_truth_table_preserves_direct_h_and_uses_calibrated_h_without_ratio(
         self,
     ) -> None:
         unavailable = _derive(
@@ -313,8 +314,12 @@ class TemplateAspectRatioContractTest(unittest.TestCase):
 
         self.assertEqual(direct.status, CrossFitStatus.RESOLVED)
         self.assertTrue(direct.best.direct_pair)
-        self.assertEqual(missing.status, CrossFitStatus.UNRESOLVED)
-        self.assertTrue(
+        self.assertEqual(missing.status, CrossFitStatus.RESOLVED)
+        self.assertEqual(
+            missing.best.height_inference_basis,
+            CrossHeightInferenceBasis.CALIBRATED_FORMAT_HEIGHT,
+        )
+        self.assertFalse(
             missing.aperture_aspect_ratio_authority.blocks_cross_resolution
         )
 
@@ -398,7 +403,7 @@ class TemplateAspectRatioContractTest(unittest.TestCase):
             GateGap.APERTURE_ASPECT_RATIO_DIRECT_CONFLICT,
         )
 
-    def test_required_missing_ratio_reaches_the_typed_gate_failure(self) -> None:
+    def test_missing_ratio_does_not_create_a_ratio_gate_failure(self) -> None:
         unavailable = _derive(
             SourceScanGeometry.create(
                 FramePhysicalSpec(20.0, 10.0, None),
@@ -430,13 +435,18 @@ class TemplateAspectRatioContractTest(unittest.TestCase):
             content_assessment=None,
         )
 
+        self.assertEqual(cross.status, CrossFitStatus.RESOLVED)
+        self.assertEqual(
+            cross.best.height_inference_basis,
+            CrossHeightInferenceBasis.CALIBRATED_FORMAT_HEIGHT,
+        )
         self.assertEqual(
             competition.failure.gap,
-            GateGap.APERTURE_ASPECT_RATIO_AUTHORITY_UNAVAILABLE,
+            GateGap.COMPLETE_PLACEMENT_UNAVAILABLE,
         )
         self.assertEqual(
             competition.failure.minimum_missing_fact,
-            MinimumMissingFact.APERTURE_ASPECT_RATIO_AUTHORITY,
+            MinimumMissingFact.UNIQUE_PLACEMENT,
         )
 
     def test_required_ratio_failures_keep_distinct_gate_roots(self) -> None:
