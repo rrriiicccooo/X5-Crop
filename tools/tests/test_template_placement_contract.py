@@ -23,6 +23,7 @@ from x5crop.detection.photo_geometry.output_model import (
 from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossFit,
+    CrossHeightProjectionBasis,
     CrossPairSupportMode,
 )
 from x5crop.detection.photo_geometry.template_model import (
@@ -235,6 +236,9 @@ class TemplatePlacementContractTest(unittest.TestCase):
             residual_sum_px=0.0,
             boundary_use=OutputBoundaryUse.APERTURE_PAIR,
             pair_support_mode=CrossPairSupportMode.SHARED_TRACES,
+            height_projection_basis=(
+                CrossHeightProjectionBasis.COMPLETE_PHYSICAL_INTERVAL
+            ),
         )
         frame = _compose(template, sequence, cross).frames[0]
         self.assertEqual(frame.start.full_position_interval_px, FiniteInterval.exact(100.0))

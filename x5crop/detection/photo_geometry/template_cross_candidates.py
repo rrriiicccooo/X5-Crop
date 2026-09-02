@@ -29,6 +29,7 @@ from .template_cross_model import (
     CrossFailureKind,
     CrossFit,
     CrossHeightInferenceBasis,
+    CrossHeightProjectionBasis,
     CrossLineProjectionBasis,
     CrossPairSupportMode,
     CrossRoleBinding,
@@ -486,6 +487,9 @@ def _fit_from_candidate(
         residual_sum_px=candidate.residual,
         boundary_use=OutputBoundaryUse.APERTURE_PAIR,
         pair_support_mode=candidate.pair_support_mode,
+        height_projection_basis=(
+            CrossHeightProjectionBasis.COMPLETE_PHYSICAL_INTERVAL
+        ),
         line_projection_basis=(
             CrossLineProjectionBasis.COMPLETE_PHYSICAL_DIRECTION
         ),

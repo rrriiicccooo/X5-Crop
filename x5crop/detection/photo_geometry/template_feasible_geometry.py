@@ -18,6 +18,7 @@ from .template_model import (
     SeparatorRelation,
     SeparatorRelationKind,
 )
+from .template_cross_model import CrossHeightProjectionBasis
 from .template_placement import FormatPlacement
 
 
@@ -527,14 +528,22 @@ def _aperture_cross_vertices(
     bottom = _LinearExpression(np.asarray((1.0, 1.0)), 0.0)
     if cross.boundary_use != OutputBoundaryUse.APERTURE_PAIR:
         raise ValueError("aperture projection cannot consume support geometry")
+    height_interval = (
+        FiniteInterval.exact(
+            cross.bottom_canonical_px - cross.top_canonical_px
+        )
+        if cross.height_projection_basis
+        == CrossHeightProjectionBasis.RETAINED_REVIEW_CANONICAL_HEIGHT
+        else cross.fixed_height_px
+    )
     bounds = (
         (
             cross.top_full_interval_px.minimum,
             cross.top_full_interval_px.maximum,
         ),
         (
-            cross.fixed_height_px.minimum,
-            cross.fixed_height_px.maximum,
+            height_interval.minimum,
+            height_interval.maximum,
         ),
     )
     intervals = (

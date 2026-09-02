@@ -121,6 +121,15 @@ class CrossLineProjectionBasis(str, Enum):
     RETAINED_REVIEW_STATISTICAL_FIT = "retained_review_statistical_fit"
 
 
+class CrossHeightProjectionBasis(str, Enum):
+    """Height state used to materialize one concrete Cross proposal."""
+
+    COMPLETE_PHYSICAL_INTERVAL = "complete_physical_interval"
+    RETAINED_REVIEW_CANONICAL_HEIGHT = (
+        "retained_review_canonical_height"
+    )
+
+
 class CrossPairSupportMode(str, Enum):
     """Independent support contract that closes one direct aperture pair."""
 
@@ -801,6 +810,7 @@ class CrossFit:
     residual_sum_px: float
     boundary_use: OutputBoundaryUse
     pair_support_mode: CrossPairSupportMode | None
+    height_projection_basis: CrossHeightProjectionBasis
     line_projection_basis: CrossLineProjectionBasis = (
         CrossLineProjectionBasis.COMPLETE_PHYSICAL_DIRECTION
     )
@@ -826,6 +836,11 @@ class CrossFit:
             CrossLineProjectionBasis,
         ):
             raise TypeError("cross fit requires a typed line projection basis")
+        if not isinstance(
+            self.height_projection_basis,
+            CrossHeightProjectionBasis,
+        ):
+            raise TypeError("cross fit requires a typed height projection basis")
         if (
             self.line_projection_basis
             == CrossLineProjectionBasis.RETAINED_REVIEW_STATISTICAL_FIT
@@ -844,6 +859,18 @@ class CrossFit:
         ):
             raise ValueError(
                 "retained Review line projection requires fitted direction"
+            )
+        if (
+            self.height_projection_basis
+            == CrossHeightProjectionBasis.RETAINED_REVIEW_CANONICAL_HEIGHT
+            and (
+                self.boundary_use != OutputBoundaryUse.APERTURE_PAIR
+                or self.direct_pair
+                or not self.single_side_inferred
+            )
+        ):
+            raise ValueError(
+                "retained Review height projection requires single-side aperture inference"
             )
         if not self.fixed_height_px.contains(
             self.bottom_canonical_px - self.top_canonical_px,
@@ -1035,6 +1062,15 @@ class CrossFitCompetition:
             raise ValueError(
                 "resolved cross requires complete physical line projection"
             )
+        if (
+            self.status == CrossFitStatus.RESOLVED
+            and self.best is not None
+            and self.best.height_projection_basis
+            != CrossHeightProjectionBasis.COMPLETE_PHYSICAL_INTERVAL
+        ):
+            raise ValueError(
+                "resolved cross requires complete physical height projection"
+            )
         if self.status != CrossFitStatus.RESOLVED and self.winner_basis is not None:
             raise ValueError("unresolved cross competition cannot have a winner basis")
         if (self.status == CrossFitStatus.RESOLVED) != (
@@ -1078,12 +1114,29 @@ class CrossFitCompetition:
                 raise ValueError(
                     "retained cross proposal requires statistical-fit projection"
                 )
+            expected_height_projection = (
+                CrossHeightProjectionBasis.COMPLETE_PHYSICAL_INTERVAL
+                if pair_basis
+                else CrossHeightProjectionBasis
+                .RETAINED_REVIEW_CANONICAL_HEIGHT
+            )
+            if self.best.height_projection_basis != expected_height_projection:
+                raise ValueError(
+                    "retained cross proposal has invalid height projection"
+                )
         elif self.best is not None and (
             self.best.line_projection_basis
             != CrossLineProjectionBasis.COMPLETE_PHYSICAL_DIRECTION
         ):
             raise ValueError(
                 "statistical-fit projection cannot leave retained Review scope"
+            )
+        elif self.best is not None and (
+            self.best.height_projection_basis
+            != CrossHeightProjectionBasis.COMPLETE_PHYSICAL_INTERVAL
+        ):
+            raise ValueError(
+                "canonical-height projection cannot leave retained Review scope"
             )
         if self.reason is not None and not self.reason:
             raise ValueError("cross competition reason cannot be empty")

@@ -33,6 +33,7 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     CrossEvidence,
     CrossFit,
     CrossHeightInferenceBasis,
+    CrossHeightProjectionBasis,
     CrossPairSupportMode,
     CrossRoleBinding,
 )
@@ -544,11 +545,15 @@ def placement_cross(
         pair_support_mode=(
             None if one_sided else CrossPairSupportMode.SHARED_TRACES
         ),
+        height_projection_basis=(
+            CrossHeightProjectionBasis.COMPLETE_PHYSICAL_INTERVAL
+        ),
         height_inference_basis=(
             CrossHeightInferenceBasis.APERTURE_ASPECT_RATIO
             if one_sided
             else None
         ),
+        single_side_inferred=one_sided,
     )
 
 

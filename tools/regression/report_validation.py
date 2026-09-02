@@ -16,6 +16,8 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     CrossFailureKind,
     CrossFitStatus,
     CrossHeightInferenceBasis,
+    CrossHeightProjectionBasis,
+    CrossLineProjectionBasis,
     CrossRetainedProposalBasis,
 )
 from x5crop.detection.photo_geometry.template_phase_model import (
@@ -94,6 +96,14 @@ _PHASE_RETAINED_PROPOSAL_BASES = {
 _CROSS_HEIGHT_INFERENCE_BASES = {
     None,
     *(item.value for item in CrossHeightInferenceBasis),
+}
+_CROSS_HEIGHT_PROJECTION_BASES = {
+    None,
+    *(item.value for item in CrossHeightProjectionBasis),
+}
+_CROSS_LINE_PROJECTION_BASES = {
+    None,
+    *(item.value for item in CrossLineProjectionBasis),
 }
 _CROSS_FAILURE_KINDS = {None, *(item.value for item in CrossFailureKind)}
 _CROSS_STATUSES = {item.value for item in CrossFitStatus}
@@ -2661,6 +2671,12 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         cross_height_inference_basis = lane.get(
             "cross_height_inference_basis"
         )
+        cross_height_projection_basis = lane.get(
+            "cross_height_projection_basis"
+        )
+        cross_line_projection_basis = lane.get(
+            "cross_line_projection_basis"
+        )
         cross_status = lane.get("cross_status")
         cross_failure_kind = lane.get("cross_failure_kind")
         cross_failure_reason = lane.get("cross_failure_reason")
@@ -2691,6 +2707,11 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             or "cross_height_inference_basis" not in lane
             or cross_height_inference_basis
             not in _CROSS_HEIGHT_INFERENCE_BASES
+            or "cross_height_projection_basis" not in lane
+            or cross_height_projection_basis
+            not in _CROSS_HEIGHT_PROJECTION_BASES
+            or "cross_line_projection_basis" not in lane
+            or cross_line_projection_basis not in _CROSS_LINE_PROJECTION_BASES
             or cross_status not in _CROSS_STATUSES
             or cross_failure_kind not in _CROSS_FAILURE_KINDS
             or (cross_status == CrossFitStatus.RESOLVED.value)
@@ -3432,6 +3453,22 @@ def _validate_development(record: dict[str, Any]) -> None:
                 "retained_proposal_basis"
             )
             != production_lane.get("cross_retained_proposal_basis")
+            or (
+                None
+                if lane.get("cross_competition", {}).get("best") is None
+                else lane["cross_competition"]["best"].get(
+                    "height_projection_basis"
+                )
+            )
+            != production_lane.get("cross_height_projection_basis")
+            or (
+                None
+                if lane.get("cross_competition", {}).get("best") is None
+                else lane["cross_competition"]["best"].get(
+                    "line_projection_basis"
+                )
+            )
+            != production_lane.get("cross_line_projection_basis")
             or lane.get("aperture_aspect_ratio_authority")
             != lane.get("cross_competition", {}).get(
                 "aperture_aspect_ratio_authority"
@@ -3488,6 +3525,20 @@ def _validate_development(record: dict[str, Any]) -> None:
                 retained_cross_fit.get("height_inference_basis") is None
             )
             != retained_cross_is_pair
+            or retained_cross_fit.get("line_projection_basis")
+            != (
+                CrossLineProjectionBasis
+                .RETAINED_REVIEW_STATISTICAL_FIT.value
+            )
+            or retained_cross_fit.get("height_projection_basis")
+            != (
+                CrossHeightProjectionBasis.COMPLETE_PHYSICAL_INTERVAL.value
+                if retained_cross_is_pair
+                else (
+                    CrossHeightProjectionBasis
+                    .RETAINED_REVIEW_CANONICAL_HEIGHT.value
+                )
+            )
         ):
             raise ValueError("development retained cross proposal is invalid")
         _validate_direct_role_aperture_domain_authority(

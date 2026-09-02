@@ -15,6 +15,10 @@ from x5crop.detection.photo_geometry.template_model import (
 from x5crop.detection.photo_geometry.template_nominal_grid_model import (
     CalibratedNominalGridFitState,
 )
+from x5crop.detection.photo_geometry.template_cross_model import (
+    CrossHeightProjectionBasis,
+    CrossLineProjectionBasis,
+)
 from tools.tests.template_test_support import (
     placement_compose as _compose,
     placement_cross as _cross,
@@ -233,6 +237,55 @@ class TemplateFeasibleGeometryContractTest(unittest.TestCase):
                 == 240.0
                 for state in projection.frame_states[0]
             )
+        )
+
+    def test_retained_review_height_projects_only_canonical_proposal(
+        self,
+    ) -> None:
+        template = _template(1)
+        cross = _cross(
+            template,
+            one_sided=True,
+            direction=_direction(),
+        )
+        inferred = replace(
+            cross.inferred_bindings[0],
+            coordinate_interval_px=FiniteInterval(240.0, 260.0),
+            fit_interval_px=FiniteInterval.exact(250.0),
+            full_interval_px=FiniteInterval(240.0, 260.0),
+        )
+        physical_cross = replace(
+            cross,
+            fixed_height_px=FiniteInterval(230.0, 250.0),
+            bottom_full_interval_px=FiniteInterval(240.0, 260.0),
+            inferred_bindings=(inferred,),
+        )
+        retained_cross = replace(
+            physical_cross,
+            height_projection_basis=(
+                CrossHeightProjectionBasis
+                .RETAINED_REVIEW_CANONICAL_HEIGHT
+            ),
+            line_projection_basis=(
+                CrossLineProjectionBasis
+                .RETAINED_REVIEW_STATISTICAL_FIT
+            ),
+        )
+
+        physical = project_format_placement(
+            _compose(template, _sequence(template), physical_cross)
+        )
+        retained = project_format_placement(
+            _compose(template, _sequence(template), retained_cross)
+        )
+
+        self.assertEqual(
+            self._cross_interval(physical, 1),
+            FiniteInterval(240.0, 260.0),
+        )
+        self.assertEqual(
+            self._cross_interval(retained, 1),
+            FiniteInterval.exact(250.0),
         )
 
     def test_narrower_joint_constraints_never_widen_projection(self) -> None:

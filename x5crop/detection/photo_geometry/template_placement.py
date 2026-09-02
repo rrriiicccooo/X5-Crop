@@ -781,6 +781,7 @@ def compose_format_placement(
             )
         )
     realized_geometry_identity = (
+        cross_fit.height_projection_basis.value,
         cross_fit.line_projection_basis.value,
         tuple(
             (

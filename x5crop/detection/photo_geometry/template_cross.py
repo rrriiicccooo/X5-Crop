@@ -35,6 +35,7 @@ from .template_cross_model import (
     CrossFit,
     CrossFitCompetition,
     CrossHeightInferenceBasis,
+    CrossHeightProjectionBasis,
     CrossLineProjectionBasis,
     CrossRetainedProposalBasis,
     CrossRoleBinding,
@@ -523,6 +524,9 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             ),
             boundary_use=OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR,
             pair_support_mode=None,
+            height_projection_basis=(
+                CrossHeightProjectionBasis.COMPLETE_PHYSICAL_INTERVAL
+            ),
             line_projection_basis=(
                 CrossLineProjectionBasis.COMPLETE_PHYSICAL_DIRECTION
             ),
@@ -981,6 +985,13 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                 line_projection_basis=(
                     CrossLineProjectionBasis
                     .RETAINED_REVIEW_STATISTICAL_FIT
+                ),
+                height_projection_basis=(
+                    CrossHeightProjectionBasis
+                    .RETAINED_REVIEW_CANONICAL_HEIGHT
+                    if item.single_side_inferred
+                    else CrossHeightProjectionBasis
+                    .COMPLETE_PHYSICAL_INTERVAL
                 ),
             )
             for item in retained_fits

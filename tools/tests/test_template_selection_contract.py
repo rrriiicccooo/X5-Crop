@@ -30,6 +30,7 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     CrossFit,
     CrossFailureKind,
     CrossFitStatus,
+    CrossHeightProjectionBasis,
     EnclosingSupportPair,
     TemplateCrossInput,
 )
@@ -167,6 +168,9 @@ def _enclosing_cross_fit(spec) -> CrossFit:
         residual_sum_px=0.0,
         boundary_use=OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR,
         pair_support_mode=None,
+        height_projection_basis=(
+            CrossHeightProjectionBasis.COMPLETE_PHYSICAL_INTERVAL
+        ),
         enclosing_support_pair=support,
     )
 

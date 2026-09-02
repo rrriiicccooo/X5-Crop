@@ -150,6 +150,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         self.assertEqual(lane["cross_status"], "unresolved")
         self.assertIsNone(lane["cross_retained_proposal_basis"])
         self.assertIsNone(lane["cross_line_projection_basis"])
+        self.assertIsNone(lane["cross_height_projection_basis"])
         self.assertIsNone(lane["cross_height_inference_basis"])
         self.assertEqual(
             lane["cross_failure_kind"],

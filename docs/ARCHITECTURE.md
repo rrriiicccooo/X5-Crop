@@ -1280,6 +1280,21 @@ best proposal 才使用 `retained_review_statistical_fit`：在保留 native ref
 | `UNRESOLVED` 且没有 retained basis | 不得使用统计拟合 projection | 不虚构完整 proposal |
 | retained proposal 使用 `complete_physical_direction`，或 resolved fit 使用 Review projection | typed model 拒绝 | 两种语义不得混用 |
 
+`CrossHeightProjectionBasis` 对 H 作同样的职责分离。Resolved/eligible Cross 与 retained direct pair 必须
+使用 `complete_physical_interval`，把全部 H uncertainty 传播进真实资格与预算。只有由单侧角色结合校准 H
+补出 opposite 的 retained unresolved best 可以使用 `retained_review_canonical_height`，以校准 Grid 的
+canonical H 画出一份具体、可比较的 Review proposal；完整 `fixed_height_px`、inferred role 的
+`full_interval_px`、原 failure 与 runner 仍保留在 evidence/report 中，并继续阻断 eligibility。该画法可以
+在 development gold 中暴露向内越线或其它模型误差，不能把完整 H 区间外扩后得到的保守包络冒充默认
+proposal，也不能把 canonical H 冒充零不确定性的物理事实。
+
+| Cross 来源 | height projection | 权限 |
+|---|---|---|
+| resolved/eligible fit | `complete_physical_interval` | 全部相关 H uncertainty 进入资格与预算 |
+| retained direct pair | `complete_physical_interval` | 两侧 native coordinate 不被校准 H 改写 |
+| retained single-side best | `retained_review_canonical_height` | 只画具体 Review proposal；完整 H 风险仍独立保留 |
+| canonical-height projection 离开 retained single-side Review scope | typed model 拒绝 | 不得进入 candidate、Gate 或正式输出 |
+
 | registered Cross 事实 | retained proposal | 原 Cross 结果 |
 |---|---|---|
 | 多个 fixed-H-compatible、role-authorized direct pair，但没有唯一 authority | 最外侧 admissible TOP 锚定；同锚点先按校准 H、再按方向相容性保留 proposal 与 runner | `non_equivalent_fits` 与 `UNRESOLVED` 不变 |

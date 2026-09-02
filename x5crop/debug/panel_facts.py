@@ -880,6 +880,21 @@ def axis_authority_summaries(
         if not cross_line_projection_bases
         else f" · LINE {cross_line_projection_bases}"
     )
+    cross_height_projection_bases = "/".join(
+        sorted(
+            {
+                lane.prepared.cross_competition.best
+                .height_projection_basis.value.upper()
+                for lane in lanes
+                if lane.prepared.cross_competition.best is not None
+            }
+        )
+    )
+    cross_height_projection_suffix = (
+        ""
+        if not cross_height_projection_bases
+        else f" · H PROJECTION {cross_height_projection_bases}"
+    )
     phase_runners = sum(
         lane.prepared.phase_competition.runner_up is not None
         for lane in lanes
@@ -966,7 +981,8 @@ def axis_authority_summaries(
             f"RUNNER {cross_runners}{cross_failure_suffix}"
             f"{cross_height_inference_suffix}"
             f"{retained_cross_proposal_suffix}"
-            f"{cross_line_projection_suffix}",
+            f"{cross_line_projection_suffix}"
+            f"{cross_height_projection_suffix}",
             f"SEQUENCE FIT · {phase_status} · COARSE {coarse_long} · "
             f"RUNNER {phase_runners}{lattice_fit_suffix}"
             f"{retained_phase_proposal_suffix}",
@@ -1019,7 +1035,8 @@ def axis_authority_summaries(
         + cross_pair_mode_suffix
         + cross_height_inference_suffix
         + retained_cross_proposal_suffix
-        + cross_line_projection_suffix,
+        + cross_line_projection_suffix
+        + cross_height_projection_suffix,
         f"SEQUENCE FIT · {phase_status} · COARSE {coarse_long} → "
         f"DIRECT {direct_sequence} · INFERRED {inferred_sequence}"
         f"{lattice_fit_suffix}{retained_phase_proposal_suffix}",

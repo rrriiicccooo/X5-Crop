@@ -203,6 +203,20 @@ Review，runner 与 typed root failure 分布均未改变，危险 auto 为 0。
 `needs_review`，证明 Review projection 没有泄漏到 eligibility。Development-detail mean 为 3.971 秒，只作
 开发归因；本机制不新增 TIFF query、detector、candidate、rank、score、fallback 或样片规则。
 
+Retained Cross 的 H 现在也由 `CrossHeightProjectionBasis` 显式分层：resolved/eligible fit 与 retained
+direct pair 使用 `complete_physical_interval`；只有单侧角色结合校准 H 的 unresolved Review best 使用
+`retained_review_canonical_height` 画具体默认 proposal。完整 H interval、typed failure、runner 和 eligibility
+仍独立保留，canonical H 不取得物理权限，也不能进入正式输出。Report revision 更新为
+`x5crop_v5_template_report_62`，旧 schema 不保留兼容路径。
+
+完整 110-task development gold 无分析错误且全部生成 proposal。7 个 task 的 53 个 Cross side 采用新的
+Review 画法：S069 从 unsafe proposal 变为 safe；S112 从 safe 变为 unsafe，明确暴露 canonical H 在
+`cross_low` 向黄金内侧 15.047 px，而不再用完整 H 风险包络掩盖默认模型误差；S033、S068、S106、S107、
+S108 仍为 unsafe proposal。总分布保持 30 safe / 80 unsafe，candidate、决定、runner 与 typed root 均不变：
+19 safe / 21 unsafe / 70 unavailable candidate，16 safe auto / 94 Review，当前观测危险 auto 为 0。
+Development-detail mean 为 3.954 秒，只作开发归因。本机制不新增 TIFF query、detector、candidate、rank、
+score、fallback、Gate 权限或样片规则。
+
 ### 产品行为
 
 - 用户提供 format，并确认匹配片夹的默认 count 或显式 count；count 包含中间空白曝光格。Runtime 不猜

@@ -26,6 +26,7 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     CrossFailureKind,
     CrossFitStatus,
     CrossHeightInferenceBasis,
+    CrossHeightProjectionBasis,
     CrossLineProjectionBasis,
     CrossPairSupportMode,
     CrossRetainedProposalBasis,
@@ -226,6 +227,10 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertEqual(
             result.best.line_projection_basis,
             CrossLineProjectionBasis.COMPLETE_PHYSICAL_DIRECTION,
+        )
+        self.assertEqual(
+            result.best.height_projection_basis,
+            CrossHeightProjectionBasis.COMPLETE_PHYSICAL_INTERVAL,
         )
         with self.assertRaisesRegex(
             ValueError,
@@ -493,6 +498,24 @@ class TemplateCrossContractTest(unittest.TestCase):
             result.best.line_projection_basis,
             CrossLineProjectionBasis.RETAINED_REVIEW_STATISTICAL_FIT,
         )
+        self.assertEqual(
+            result.best.height_projection_basis,
+            CrossHeightProjectionBasis.RETAINED_REVIEW_CANONICAL_HEIGHT,
+        )
+        with self.assertRaisesRegex(
+            ValueError,
+            "retained cross proposal has invalid height projection",
+        ):
+            replace(
+                result,
+                best=replace(
+                    result.best,
+                    height_projection_basis=(
+                        CrossHeightProjectionBasis
+                        .COMPLETE_PHYSICAL_INTERVAL
+                    ),
+                ),
+            )
         with self.assertRaisesRegex(
             ValueError,
             "retained cross proposal requires statistical-fit projection",
