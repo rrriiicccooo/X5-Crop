@@ -100,8 +100,10 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   错误为 0，16 个安全 auto、94 个 Review、`unsafe_approved_auto = 0`；22 个 task 使用 reconciliation，
   `adjacency_topology_unresolved` 从 8 降到 6。Candidate 从 72 unavailable / 19 safe / 19 unsafe 迁移为
   70 / 20 / 20：S109 新增安全 Review candidate，S045 的不安全 candidate 仍被 5%/budget Gate 阻断。
-  Development-detail mean 为 3.977 秒，不冒充正式 release performance receipt；不新增 TIFF query、
-  detector、candidate search、score、fallback 或样片规则。
+  绑定检测提交 `03242641` 的完整黄金 receipt 中，development-detail mean 为 4.010 秒；同一提交的
+  24-source 正式性能工具 mean 为 3.642 秒，通过 5 秒 Gate，3 秒目标仍为非阻断 challenge。该开发检查点
+  不替代未来 release commit 的重新验证；本机制不新增 TIFF query、detector、candidate search、score、
+  fallback 或样片规则。
 - Report revision 更新为 `x5crop_v5_template_report_44`，不保留旧 schema 兼容路径。Report/Debug 与
   development gold 分别显示 global lattice、source W、frame inference 的 state、basis 与 typed failure。
   当前 110 个 development task 的完整机制验收无分析错误：16 个安全 auto、94 个安全 review、

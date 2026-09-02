@@ -94,10 +94,11 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
 45 not applicable；6 个使用完整 Frame basis、18 个使用 reconciliation。唯一
 `direct_lattice_counterevidence` 是 S077。S076/S090 明确为 `physical_width_conflict`。Late-binding projection
 共执行 19 次、投影 24 个无权限 binding、完成 15 次有界 Grid solve。
-完整黄金 development-detail mean 为 3.977 秒，只作开发归因。当前安全但 Review 的 nominal candidate 为
+绑定检测提交 `03242641` 的完整黄金 development-detail mean 为 4.010 秒，只作开发归因；同一提交的
+24-source 正式性能工具 mean 为 3.642 秒，通过 5 秒 Gate，3 秒目标仍为非阻断 challenge。当前安全但
+Review 的 nominal candidate 为
 S030/S058/S109；S045 的 candidate 不安全并继续被 5%/budget Gate 阻断。S012 的 candidate 会越过黄金
-cross-low 预算，同样保持安全 Review。本阶段没有生成绑定最终 commit 的正式 performance receipt；正式
-5 秒 Gate 只在 release commit 上复验。
+cross-low 预算，同样保持安全 Review。该开发检查点不替代未来 release commit 的正式性能复验。
 
 对 96 个 nominal 的同源 v4.2.8/V5 对照中，发布版 80 个 auto 里有 70 个黄金危险自动裁切；发布版仅
 11 个 geometry 安全。当前 V5 已让其中 S022、S025 安全 auto；其余 9 个仍按真实 typed root 安全 Review：
