@@ -104,6 +104,19 @@ TIFF/metadata、安装、三目标平台、打包与 Hook/CI。当前没有 seal
   24-source 正式性能工具 mean 为 3.642 秒，通过 5 秒 Gate，3 秒目标仍为非阻断 challenge。该开发检查点
   不替代未来 release commit 的重新验证；本机制不新增 TIFF query、detector、candidate search、score、
   fallback 或样片规则。
+- Direct-rank W 不再从 retained coordinate 中任取一个 deterministic 三行子集。`GlobalLatticeAuthority`
+  只证明 `(phase,W,pitch)` 是否满秩并保存全部约束；唯一 canonical `SourceFrameWidthAuthority` 使用全部
+  retained direct-role coordinate 做 direct-only 投影。恰好三条约束时保持精确解；过定系统把每条 native
+  interval 与其实际 fit residual 通过同一线性 estimator 传播，既不要求真实 source 的 Frame width 零波动，
+  也不让 calibrated prior、自选子集或完整 Frame basis 替直接系统消除反证。全部 constraint/observation
+  provenance 进入 Report/Debug；物理区间冲突继续 typed Review。Report revision 更新为
+  `x5crop_v5_template_report_49`，旧 basis helper 与旧 schema 同批删除。完整 110-task development gold
+  无分析错误，16 个安全 auto、94 个安全 Review、`unsafe_approved_auto = 0`；candidate 为
+  71 unavailable / 19 safe / 20 unsafe。S108 的旧 topology root 被解除并迁移到下游 aperture/budget；
+  S109 先前依赖任意三行收窄 W 的安全 Review candidate 被撤回，完整 W 使 relation 5 的 signed-gap
+  interval 跨零，因此准确保留 `adjacency_topology_unresolved`。Source W 仍为 51 supported /
+  55 unavailable / 4 contradicted。相同检测源码的 clean-checkpoint 24-source 正式 performance mean 为
+  3.536 秒，通过 5 秒 Gate；3 秒仍为非阻断目标。不新增 TIFF query、detector、candidate、score 或样片规则。
 - Report revision 更新为 `x5crop_v5_template_report_44`，不保留旧 schema 兼容路径。Report/Debug 与
   development gold 分别显示 global lattice、source W、frame inference 的 state、basis 与 typed failure。
   当前 110 个 development task 的完整机制验收无分析错误：16 个安全 auto、94 个安全 review、

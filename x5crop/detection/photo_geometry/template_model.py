@@ -537,7 +537,7 @@ class FrameWidthInferenceAssessment:
                 or (
                     self.authority_basis
                     == SourceFrameWidthAuthorityBasis.DIRECT_LATTICE_CLOSURE
-                    and len(self.observation_ids) != 3
+                    and len(self.observation_ids) < 3
                 )
                 or self.failure_kind is not None
             ):

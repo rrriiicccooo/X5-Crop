@@ -288,41 +288,7 @@ def assess_global_lattice_authority(
     )
 
 
-def direct_lattice_constraint_basis(
-    authority: GlobalLatticeAuthority,
-) -> tuple[GlobalLatticeConstraint, ...]:
-    """Return one deterministic rank-three basis of direct role constraints."""
-
-    if not isinstance(authority, GlobalLatticeAuthority):
-        raise TypeError("direct lattice basis requires typed authority")
-    if (
-        authority.state != EvidenceState.SUPPORTED
-        or authority.basis != GlobalLatticeAuthorityBasis.DIRECT_ROLE_SYSTEM
-        or authority.direct_role_constraint_rank != 3
-    ):
-        return ()
-    selected: list[GlobalLatticeConstraint] = []
-    current_rank = 0
-    for constraint in authority.constraints:
-        if constraint.kind != GlobalLatticeConstraintKind.DIRECT_ROLE_COORDINATE:
-            continue
-        proposed = (*selected, constraint)
-        proposed_rank = _constraint_rank(
-            tuple(item.coefficients for item in proposed)
-        )
-        if proposed_rank <= current_rank:
-            continue
-        selected.append(constraint)
-        current_rank = proposed_rank
-        if current_rank == 3:
-            break
-    if len(selected) != 3:
-        raise ValueError("supported direct lattice lacks a rank-three basis")
-    return tuple(selected)
-
-
 __all__ = [
     "assess_global_lattice_authority",
-    "direct_lattice_constraint_basis",
     "direct_role_constraint_rank",
 ]

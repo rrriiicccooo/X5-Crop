@@ -44,7 +44,6 @@ from x5crop.detection.photo_geometry.template_model import (
 )
 from x5crop.detection.photo_geometry.template_lattice_authority import (
     assess_global_lattice_authority,
-    direct_lattice_constraint_basis,
     direct_role_constraint_rank,
 )
 from x5crop.detection.photo_geometry.template_outer_frame_authority import (
@@ -507,9 +506,9 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
         self.assertEqual(authority.state, EvidenceState.SUPPORTED)
         self.assertEqual(
             authority.basis,
-            SourceFrameWidthAuthorityBasis.INDEPENDENT_COMPLETE_FRAMES,
+            SourceFrameWidthAuthorityBasis.RECONCILED_DIRECT_CONSTRAINTS,
         )
-        self.assertFalse(authority.supporting_constraint_ids)
+        self.assertEqual(len(authority.supporting_constraint_ids), 4)
         self.assertEqual(authority.supporting_frame_ordinals, (1, 3))
         self.assertEqual(
             authority.observation_ids,
@@ -581,14 +580,156 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             SourceFrameWidthAuthorityBasis.RECONCILED_DIRECT_CONSTRAINTS,
         )
         self.assertEqual(authority.supporting_frame_ordinals, (1, 3))
-        self.assertEqual(len(authority.supporting_constraint_ids), 3)
+        self.assertEqual(len(authority.supporting_constraint_ids), 4)
         self.assertEqual(len(authority.observation_ids), 4)
         self.assertEqual(
             calibrated.width_state.extent_projection_px(),
             FiniteInterval.exact(100.0),
         )
 
-    def test_disjoint_complete_frame_and_direct_lattice_width_is_conflict(
+    def test_direct_lattice_width_consumes_every_retained_constraint(
+        self,
+    ) -> None:
+        template = replace(
+            phase_template(3),
+            frame_width_px=FiniteInterval(90.0, 110.0),
+            nominal_gap_px=FiniteInterval(10.0, 30.0),
+        )
+        observations = (
+            replace(
+                phase_edge("a-wide-frame-1-end", 140.0),
+                qualified_anchor_roles=(BoundaryRole.END,),
+                full_position_interval_px=FiniteInterval(130.0, 150.0),
+                polarity=-1,
+            ),
+            replace(
+                phase_edge("b-frame-2-start", 160.0),
+                qualified_anchor_roles=(BoundaryRole.START,),
+                polarity=1,
+            ),
+            replace(
+                phase_edge("c-frame-3-start", 280.0),
+                qualified_anchor_roles=(BoundaryRole.START,),
+                polarity=1,
+            ),
+            replace(
+                phase_edge("d-frame-3-end", 380.0),
+                qualified_anchor_roles=(BoundaryRole.END,),
+                polarity=-1,
+            ),
+        )
+        phase = self._with_selected_width_prerequisites(
+            fit_template_phase(
+                observations,
+                template,
+                phase_authority_px=FiniteInterval(39.0, 41.0),
+            ),
+            observations,
+        )
+        source = SourceScanGeometry.create(
+            FramePhysicalSpec(10.0, 24.0, None),
+            width_scale_px_per_mm=PositiveInterval(9.0, 11.0),
+            height_scale_px_per_mm=PositiveInterval.exact(10.0),
+        )
+
+        _calibrated, authority = calibrate_source_frame_width(
+            source,
+            phase,
+            observations,
+        )
+
+        self.assertEqual(authority.state, EvidenceState.SUPPORTED)
+        self.assertEqual(
+            authority.basis,
+            SourceFrameWidthAuthorityBasis.DIRECT_LATTICE_CLOSURE,
+        )
+        self.assertEqual(len(authority.supporting_constraint_ids), 4)
+        self.assertEqual(len(authority.observation_ids), 4)
+        assert authority.width_px is not None
+        self.assertGreater(authority.width_px.minimum, 96.0)
+        self.assertLess(authority.width_px.maximum, 104.0)
+
+    def test_incompatible_retained_direct_constraint_is_width_conflict(
+        self,
+    ) -> None:
+        template = replace(
+            phase_template(3),
+            frame_width_px=FiniteInterval(90.0, 110.0),
+            nominal_gap_px=FiniteInterval(10.0, 30.0),
+        )
+        observations = (
+            replace(
+                phase_edge("a-wide-frame-1-end", 140.0),
+                qualified_anchor_roles=(BoundaryRole.END,),
+                full_position_interval_px=FiniteInterval(130.0, 150.0),
+                polarity=-1,
+            ),
+            replace(
+                phase_edge("b-frame-2-start", 160.0),
+                qualified_anchor_roles=(BoundaryRole.START,),
+                polarity=1,
+            ),
+            replace(
+                phase_edge("c-frame-3-start", 280.0),
+                qualified_anchor_roles=(BoundaryRole.START,),
+                polarity=1,
+            ),
+            replace(
+                phase_edge("d-frame-3-end", 380.0),
+                qualified_anchor_roles=(BoundaryRole.END,),
+                polarity=-1,
+            ),
+        )
+        phase = self._with_selected_width_prerequisites(
+            fit_template_phase(
+                observations,
+                template,
+                phase_authority_px=FiniteInterval(39.0, 41.0),
+            ),
+            observations,
+        )
+        lattice = phase.global_lattice_authority
+        assert lattice is not None
+        contradictory = tuple(
+            replace(
+                constraint,
+                value_interval_px=FiniteInterval(409.8, 410.2),
+            )
+            if constraint.role_index == 5
+            else constraint
+            for constraint in lattice.constraints
+        )
+        phase = replace(
+            phase,
+            global_lattice_authority=replace(
+                lattice,
+                constraints=contradictory,
+            ),
+        )
+        source = SourceScanGeometry.create(
+            FramePhysicalSpec(10.0, 24.0, None),
+            width_scale_px_per_mm=PositiveInterval(9.0, 11.0),
+            height_scale_px_per_mm=PositiveInterval.exact(10.0),
+        )
+
+        retained, authority = calibrate_source_frame_width(
+            source,
+            phase,
+            observations,
+        )
+
+        self.assertEqual(retained, source)
+        self.assertEqual(authority.state, EvidenceState.CONTRADICTED)
+        self.assertEqual(
+            authority.failure_kind,
+            SourceFrameWidthAuthorityFailureKind.PHYSICAL_WIDTH_CONFLICT,
+        )
+        self.assertEqual(
+            authority.reason,
+            "direct lattice canonical W leaves the physical source state",
+        )
+
+    def test_overdetermined_direct_residual_reconciles_complete_frame_width(
         self,
     ) -> None:
         observations = (
@@ -632,22 +773,21 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             height_scale_px_per_mm=PositiveInterval.exact(10.0),
         )
 
-        retained, authority = calibrate_source_frame_width(
+        calibrated, authority = calibrate_source_frame_width(
             source,
             phase,
             observations,
         )
 
-        self.assertEqual(retained, source)
-        self.assertEqual(authority.state, EvidenceState.CONTRADICTED)
+        self.assertEqual(authority.state, EvidenceState.SUPPORTED)
         self.assertEqual(
-            authority.failure_kind,
-            SourceFrameWidthAuthorityFailureKind.PHYSICAL_WIDTH_CONFLICT,
+            authority.basis,
+            SourceFrameWidthAuthorityBasis.RECONCILED_DIRECT_CONSTRAINTS,
         )
-        self.assertEqual(
-            authority.reason,
-            "complete-Frame and direct-lattice W constraints do not intersect",
-        )
+        self.assertEqual(len(authority.supporting_constraint_ids), 4)
+        width = calibrated.width_state.extent_projection_px()
+        self.assertTrue(width.contains(100.0))
+        self.assertLess(width.maximum - width.minimum, 1.0)
 
     def test_rank_three_direct_roles_close_correlated_source_width(self) -> None:
         observations = (
@@ -830,11 +970,9 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
         )
         lattice = phase.global_lattice_authority
         assert lattice is not None
-        basis = direct_lattice_constraint_basis(lattice)
-        self.assertEqual(len(basis), 3)
         end_2_constraint = next(
             item
-            for item in basis
+            for item in lattice.constraints
             if item.observation_ids == (observations[2].observation_id,)
         )
         self.assertEqual(

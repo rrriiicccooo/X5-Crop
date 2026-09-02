@@ -32,10 +32,14 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   完整且无反证时，Grid 可以生成两侧都未直接观察的 Frame。直接 observation 保留 native coordinate
   并形成 local relation；完整相关包络仍由 containment、content veto 与每侧 5% 预算决定 auto/review。
 - `SourceFrameWidthAuthority` 是 source W 的唯一 owner：`independent_complete_frames` 消费至少两张完整
-  直接 Frame，`direct_lattice_closure` 消费保留的 rank-3 direct-role constraint 并对同一系统投影相关 W；
+  直接 Frame，`direct_lattice_closure` 消费全部 retained direct-role coordinate 已达到 rank 3 的系统并
+  对同一系统投影相关 W；
   两组同时可用时，`reconciled_direct_constraints` 只发布二者交集。交集为空产生
   `physical_width_conflict`，不得挑选有利的一组；reconciliation 保留全部 Frame/constraint/observation
-  provenance，但不回写 Frame-width observation、不增加 rank、不参与离散选择。比例层显式消费同一
+  provenance，但不回写 Frame-width observation、不增加 rank、不参与离散选择。Direct-rank 不能任取
+  三行：恰好三条约束时精确投影；过定系统以全部 direct coordinate 的 direct-only fit 传播每条 native
+  interval 与实际 residual。`GlobalLatticeAuthority` 只拥有约束矩阵与 rank，canonical W 只由
+  `SourceFrameWidthAuthority` 发布。比例层显式消费同一
   authority，W→H 仍为 rank 0 相关推断。若建立 W 时投影退出的 local line 仍构成反证，缺失角色保持
   `direct_lattice_counterevidence` review，不能删除反证后自证。
 - `SourceFrameWidthTopologyAssessment` 独立回答“已获权限的 correlated-W inference 是否在全部 W 状态下
@@ -79,25 +83,29 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   同一个两侧 direct aperture，或两侧 enclosing support 经 fixed H 闭合出的 aperture 内时，才保留 native
   coordinate。单侧/无唯一域为 unavailable，域坍缩或 trace 越域为 conflict；该证明不新增像素读取、候选
   或 rank，content veto 与 5% 预算继续独立生效。
-- 当前 Report revision 为 `x5crop_v5_template_report_48`；Debug/报告显式保存 calibration identity、anchor、
+- 当前 Report revision 为 `x5crop_v5_template_report_49`；Debug/报告显式保存 calibration identity、anchor、
   inferred adjacency、完全未观察 Frame、联合参数依据、measured relation、projection outcome、typed
-  failure、source-W/frame-inference basis、W topology facts、partial-height aperture domain 与工作量。Debug
+  failure、source-W/frame-inference basis、全部 retained W constraint/observation、W topology facts、
+  partial-height aperture domain 与工作量。Debug
   列出精确 anchor role、逐 adjacency local delta、direct correction、coverage/counterevidence、candidate
   elimination、enclosing-support center authority/有效偏移区间与最终联合 envelope。完整路径最多 6 次
   fit pass，不增加 TIFF query、第二 detector 或旧 schema 兼容层。
 
 完整 development gold 已完成 110/110，分析错误 0，`unsafe_approved_auto = 0`。安全 auto 为基础 nominal
-14/66、较难 nominal 2/30、challenge 0/14；94 个 task 安全 review。Candidate 为 70 个不可用、20 个安全、
+14/66、较难 nominal 2/30、challenge 0/14；94 个 task 安全 review。Candidate 为 71 个不可用、19 个安全、
 20 个不安全；全部不安全 candidate 均保持 review，14 个 challenge 的安全 Review 均合格。Source W 为
 51 supported / 55 unavailable / 4 contradicted；其中 18 个由完整 Frame、11 个由 direct lattice、22 个由
 两组 direct constraint reconciliation 闭合。Frame-width inference 为 24 supported / 41 unavailable /
 45 not applicable；6 个使用完整 Frame basis、18 个使用 reconciliation。唯一
 `direct_lattice_counterevidence` 是 S077。S076/S090 明确为 `physical_width_conflict`。Late-binding projection
-共执行 19 次、投影 24 个无权限 binding、完成 15 次有界 Grid solve。
-绑定检测提交 `03242641` 的完整黄金 development-detail mean 为 4.010 秒，只作开发归因；同一提交的
-24-source 正式性能工具 mean 为 3.642 秒，通过 5 秒 Gate，3 秒目标仍为非阻断 challenge。当前安全但
+共执行 18 次、投影 23 个无权限 binding、完成 15 次有界 Grid solve。S108 已从
+`adjacency_topology_unresolved` 进入下游 aperture/budget；S109 则因全部 retained constraint 传播后的 W
+让 relation 5 signed-gap interval 跨零，撤回旧任意三行 basis 产生的安全 candidate，准确保留 topology
+Review。当前 development-detail mean 为 4.020 秒，只作开发归因；相同检测源码的 clean-checkpoint
+24-source 正式性能工具 mean 为 3.536 秒，通过 5 秒 Gate，3 秒目标仍为非阻断 challenge。当前安全但
 Review 的 nominal candidate 为
-S030/S058/S109；S045 的 candidate 不安全并继续被 5%/budget Gate 阻断。S012 的 candidate 会越过黄金
+S030/S058；S044 是一个安全 Review challenge candidate。S045 的 candidate 不安全并继续被 5%/budget
+Gate 阻断。S012 的 candidate 会越过黄金
 cross-low 预算，同样保持安全 Review。该开发检查点不替代未来 release commit 的正式性能复验。
 
 对 96 个 nominal 的同源 v4.2.8/V5 对照中，发布版 80 个 auto 里有 70 个黄金危险自动裁切；发布版仅
@@ -128,7 +136,7 @@ output budget，S032 为 phase ambiguity。
 
 ## 精确下一步
 
-1. 对 S007/S010/S026/S040/S108/S110 这 6 个 `adjacency_topology_unresolved` 做下一轮单机制归因：区分
+1. 对 S007/S010/S026/S040/S109/S110 这 6 个 `adjacency_topology_unresolved` 做下一轮单机制归因：区分
    native role 绑定错误、缺少直接 local relation、真实 Contact/Overlap 与 source-W interval 本身尚未
    闭合。S026 的 boundary-edge:28 当前绑定为
    F2 END，却也位于下一 Frame 的 separator side；应先修唯一 role/relation owner，不能收窄 W、挑有利

@@ -1388,7 +1388,7 @@ def _validate_frame_width_inference(value: object) -> None:
             )
             or (
                 authority_basis == "direct_lattice_closure"
-                and len(observation_ids) != 3
+                and len(observation_ids) < 3
             )
             or not _valid_interval(width)
             or not _finite_number(canonical)
@@ -1490,7 +1490,7 @@ def _validate_source_frame_width_authority(value: object) -> None:
                 basis == "reconciled_direct_constraints"
                 and (
                     len(supporting) < 2
-                    or len(constraint_ids) != 3
+                    or len(constraint_ids) < 3
                     or len(observation_ids) < 4
                 )
             )
@@ -1498,8 +1498,8 @@ def _validate_source_frame_width_authority(value: object) -> None:
                 basis == "direct_lattice_closure"
                 and (
                     supporting
-                    or len(constraint_ids) != 3
-                    or len(observation_ids) != 3
+                    or len(constraint_ids) < 3
+                    or len(observation_ids) < 3
                 )
             )
             or not _valid_interval(width)

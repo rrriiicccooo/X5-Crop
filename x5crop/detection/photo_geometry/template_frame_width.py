@@ -32,8 +32,9 @@ from .template_model import (
     SourceFrameWidthAuthorityBasis,
     realize_adjacency_relations,
 )
-from .template_lattice_authority import direct_lattice_constraint_basis
 from .template_phase_model import (
+    GlobalLatticeAuthorityBasis,
+    GlobalLatticeConstraintKind,
     PhaseFailureKind,
     PhaseFitResult,
     PhaseFitStatus,
@@ -157,15 +158,15 @@ class SourceFrameWidthAuthority:
                         == SourceFrameWidthAuthorityBasis
                         .DIRECT_LATTICE_CLOSURE
                         and not self.supporting_frame_ordinals
-                        and len(self.supporting_constraint_ids) == 3
-                        and len(self.observation_ids) == 3
+                        and len(self.supporting_constraint_ids) >= 3
+                        and len(self.observation_ids) >= 3
                     )
                     or (
                         self.basis
                         == SourceFrameWidthAuthorityBasis
                         .RECONCILED_DIRECT_CONSTRAINTS
                         and len(self.supporting_frame_ordinals) >= 2
-                        and len(self.supporting_constraint_ids) == 3
+                        and len(self.supporting_constraint_ids) >= 3
                         and len(self.observation_ids) >= 4
                     )
                 )
@@ -253,47 +254,74 @@ def _failed_source_width_authority(
 def _direct_lattice_width_projection(
     phase: PhaseFitResult,
 ) -> tuple[FiniteInterval, tuple[ObservationId, ...], tuple[str, ...]] | None:
-    """Project a retained rank-three direct system onto its correlated W."""
+    """Project every retained direct constraint onto one correlated W.
+
+    A source can have small real Frame-width variation, so an overdetermined
+    direct system is not required to have zero residual.  The direct-only
+    least-squares solution closes the three global unknowns without consulting
+    the calibrated prior; every retained coordinate interval and its observed
+    residual then propagate through the same linear estimator.  With exactly
+    three constraints this reduces to the former exact rank-three projection.
+    """
 
     fit = phase.best
     lattice = phase.global_lattice_authority
     if (
         fit is None
         or lattice is None
+        or lattice.state != EvidenceState.SUPPORTED
+        or lattice.basis != GlobalLatticeAuthorityBasis.DIRECT_ROLE_SYSTEM
+        or lattice.direct_role_constraint_rank != 3
         or any(
             isinstance(relation, (ContactRelation, OverlapRelation))
             for relation in fit.adjacency_relations
         )
     ):
         return None
-    constraints = direct_lattice_constraint_basis(lattice)
-    if not constraints:
-        return None
+    constraints = tuple(
+        constraint
+        for constraint in lattice.constraints
+        if constraint.kind
+        == GlobalLatticeConstraintKind.DIRECT_ROLE_COORDINATE
+    )
+    if len(constraints) < 3:
+        raise ValueError("rank-three direct lattice lacks retained constraints")
     matrix = np.asarray(
         [constraint.coefficients for constraint in constraints],
         dtype=np.float64,
     )
-    inverse = np.linalg.inv(matrix)
-    width_coefficients = inverse[1]
-    minimum = 0.0
-    maximum = 0.0
-    for coefficient, constraint in zip(
-        width_coefficients,
-        constraints,
-        strict=True,
-    ):
+    if int(np.linalg.matrix_rank(matrix)) != 3:
+        raise ValueError("retained direct lattice no longer has rank three")
+    centers: list[float] = []
+    intervals: list[FiniteInterval] = []
+    for constraint in constraints:
         interval = constraint.value_interval_px
         if interval is None:
-            raise ValueError("direct lattice basis lacks a coordinate interval")
+            raise ValueError("direct lattice constraint lacks a coordinate interval")
+        centers.append(interval.center)
+        intervals.append(interval)
+    center_values = np.asarray(centers, dtype=np.float64)
+    direct_solution = np.linalg.lstsq(matrix, center_values, rcond=None)[0]
+    estimator = np.linalg.pinv(matrix)[1]
+    residuals = np.abs(matrix @ direct_solution - center_values)
+    minimum = 0.0
+    maximum = 0.0
+    for coefficient, interval, residual in zip(
+        estimator,
+        intervals,
+        residuals,
+        strict=True,
+    ):
+        radius = 0.0 if residual <= 1.0e-7 else float(residual)
         values = (
-            coefficient * interval.minimum,
-            coefficient * interval.maximum,
+            coefficient * (interval.minimum - radius),
+            coefficient * (interval.maximum + radius),
         )
         minimum += min(values)
         maximum += max(values)
     fitted = fit.pitch_fit.frame_width_px
-    minimum = max(minimum, fitted.minimum)
-    maximum = min(maximum, fitted.maximum)
+    minimum = max(float(minimum), fitted.minimum)
+    maximum = min(float(maximum), fitted.maximum)
     if maximum < minimum:
         raise ValueError("direct lattice W leaves its fitted physical interval")
     observation_ids = tuple(
@@ -307,7 +335,7 @@ def _direct_lattice_width_projection(
         )
     )
     return (
-        FiniteInterval(float(minimum), float(maximum)),
+        FiniteInterval(minimum, maximum),
         observation_ids,
         tuple(sorted(constraint.constraint_id for constraint in constraints)),
     )
@@ -480,18 +508,12 @@ def calibrate_source_frame_width(
     try:
         lattice_projection = _direct_lattice_width_projection(phase)
     except ValueError:
-        if complete_frame_projection is None:
-            return source_geometry, _failed_source_width_authority(
-                phase,
-                EvidenceState.CONTRADICTED,
-                SourceFrameWidthAuthorityFailureKind.PHYSICAL_WIDTH_CONFLICT,
-                "retained direct lattice W contradicts its fitted physical state",
-            )
-        # A residual-compatible overdetermined direct system can have no
-        # single exact rank-three projection.  It therefore contributes no
-        # second W constraint; the independent complete-Frame authority
-        # remains valid and retains its full conservative hull.
-        lattice_projection = None
+        return source_geometry, _failed_source_width_authority(
+            phase,
+            EvidenceState.CONTRADICTED,
+            SourceFrameWidthAuthorityFailureKind.PHYSICAL_WIDTH_CONFLICT,
+            "retained direct lattice W contradicts its fitted physical state",
+        )
     if complete_frame_projection is not None and lattice_projection is not None:
         lattice_width, lattice_identities, constraint_ids = lattice_projection
         minimum = max(
@@ -1056,7 +1078,7 @@ def _yield_local_roles_to_correlated_width(
     direct_lattice = (
         source_frame_width_authority.basis
         == SourceFrameWidthAuthorityBasis.DIRECT_LATTICE_CLOSURE
-        and len(source_frame_width_authority.supporting_constraint_ids) == 3
+        and len(source_frame_width_authority.supporting_constraint_ids) >= 3
         and len(width_ids) >= 3
     )
     if not (independent_complete_frames or direct_lattice):
