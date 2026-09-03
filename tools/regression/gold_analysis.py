@@ -52,7 +52,7 @@ from .report_validation import validate_current_report_record
 
 
 ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v16"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v18"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v19"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
 SOURCE_TIMEOUT_SECONDS = 600
@@ -2510,9 +2510,25 @@ def _summary(
         identity.get("detector_paths_match_head") is True
         and identity.get("comparator_paths_match_head") is True
     )
+    release_detection_gate_ready = (
+        analysis_error_count == 0
+        and release_analysis_identity_ready
+        and not physical_prior_calibration_failures
+        and not any(record["unsafe_approved_auto"] for record in records)
+        and not any(
+            record["cohort_role"] == "nominal"
+            and not record["nominal_auto_goal_passed"]
+            for record in records
+        )
+    )
     return {
         "summary_schema": ANALYSIS_SUMMARY_SCHEMA,
         "validation_role": "development_gold_diagnostic",
+        "result_disposition": (
+            "development_detection_gate_ready_not_formal_delivery"
+            if release_detection_gate_ready
+            else "development_only_not_release_ready"
+        ),
         "analysis_identity": identity,
         "task_count": len(records),
         "analysis_completed_count": len(records) - analysis_error_count,
@@ -2537,17 +2553,7 @@ def _summary(
         ),
         "unsafe_approved_auto_diagnostics": unsafe_auto_diagnostics,
         "release_analysis_identity_ready": release_analysis_identity_ready,
-        "release_detection_gate_ready": (
-            analysis_error_count == 0
-            and release_analysis_identity_ready
-            and not physical_prior_calibration_failures
-            and not any(record["unsafe_approved_auto"] for record in records)
-            and not any(
-                record["cohort_role"] == "nominal"
-                and not record["nominal_auto_goal_passed"]
-                for record in records
-            )
-        ),
+        "release_detection_gate_ready": release_detection_gate_ready,
         "proposal_generation_state_counts": dict(
             sorted(proposal_generation_states.items())
         ),
@@ -3009,6 +3015,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     if summary["analysis_error_count"] != 0:
         return 1
+    if not summary["release_detection_gate_ready"]:
+        unsafe_count = int(summary.get("unsafe_approved_auto_count", 0))
+        suffix = (
+            f"; known unsafe approved_auto={unsafe_count}"
+            if unsafe_count
+            else ""
+        )
+        print(
+            "development gold analysis: DEVELOPMENT ONLY — NOT RELEASE "
+            f"READY; not valid for formal delivery{suffix}",
+            file=sys.stderr,
+        )
     if args.gate == "release" and not summary["release_detection_gate_ready"]:
         return 1
     return 0

@@ -23,12 +23,16 @@ from .template_enclosing_support_aperture import (
     EnclosingSupportApertureAuthority,
     derive_enclosing_support_aperture_authority,
 )
+from .template_lattice_authority import (
+    global_lattice_authority_matches_fit,
+)
 from .template_model import (
     OverlapRelation,
     SequenceFit,
     SequenceRoleLineEvidence,
     TemplateSpec,
 )
+from .template_phase_model import GlobalLatticeAuthority
 
 
 _ROLES = (
@@ -137,6 +141,7 @@ class FormatPlacement:
     output_slot_count: int
     source_scan_geometry: SourceScanGeometry
     sequence_fit: SequenceFit
+    global_lattice_authority: GlobalLatticeAuthority | None
     cross_fit: CrossFit
     width_axis: BoundaryAxis
     height_axis: BoundaryAxis
@@ -154,6 +159,13 @@ class FormatPlacement:
             or not self.lane_id
             or self.output_slot_count != template.count
             or self.source_scan_geometry.frame_spec != self.frame_spec
+            or (
+                self.global_lattice_authority is not None
+                and not global_lattice_authority_matches_fit(
+                    self.global_lattice_authority,
+                    self.sequence_fit,
+                )
+            )
             or self.cross_fit.template_id != template.template_id
             or self.width_axis == self.height_axis
             or not self.frames
@@ -626,6 +638,7 @@ def compose_format_placement(
     frame_spec: FramePhysicalSpec,
     source_scan_geometry: SourceScanGeometry,
     sequence_fit: SequenceFit,
+    global_lattice_authority: GlobalLatticeAuthority | None,
     cross_fit: CrossFit,
     width_axis: BoundaryAxis,
     height_axis: BoundaryAxis,
@@ -818,6 +831,7 @@ def compose_format_placement(
         output_slot_count=template.count,
         source_scan_geometry=source_scan_geometry,
         sequence_fit=sequence_fit,
+        global_lattice_authority=global_lattice_authority,
         cross_fit=cross_fit,
         width_axis=width_axis,
         height_axis=height_axis,

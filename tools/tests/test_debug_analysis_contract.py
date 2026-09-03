@@ -30,8 +30,9 @@ from x5crop.debug.panel_facts import (
     output_footprints,
     primary_geometry_by_identity,
     root_gate_summary,
-    selected_output_safety_summary,
     runner_geometry_by_identity,
+    selected_output_safety_summary,
+    selection_summary,
     source_projection,
 )
 from x5crop.debug.panel_layout import (
@@ -649,6 +650,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
                 "SELECTED OUTPUT SAFETY · "
             )
         )
+        self.assertIn(" · ENVELOPE ", selection_summary(detection))
 
 
 if __name__ == "__main__":

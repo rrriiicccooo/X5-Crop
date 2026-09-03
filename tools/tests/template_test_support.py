@@ -564,6 +564,7 @@ def placement_compose(
     *,
     frame_spec: FramePhysicalSpec | None = None,
     lane_id: str = "lane:test",
+    global_lattice_authority=None,
 ) -> FormatPlacement:
     spec = frame_spec or FramePhysicalSpec(36.0, 24.0, 2.0)
     source = SourceScanGeometry.create(
@@ -576,6 +577,7 @@ def placement_compose(
         frame_spec=spec,
         source_scan_geometry=source,
         sequence_fit=sequence,
+        global_lattice_authority=global_lattice_authority,
         cross_fit=cross,
         width_axis=BoundaryAxis.X,
         height_axis=BoundaryAxis.Y,

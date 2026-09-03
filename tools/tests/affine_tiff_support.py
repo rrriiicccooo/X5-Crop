@@ -21,6 +21,7 @@ from x5crop.detection.photo_geometry.output_model import (
     JointPlacementEnvelope,
     OutputBoundaryUse,
     OutputFootprint,
+    SequenceProjectionConstraintBasis,
 )
 from x5crop.export.crops import write_crops
 from x5crop.geometry.affine import (
@@ -79,6 +80,10 @@ def sampling_footprint(authority: Box) -> OutputFootprint:
             canonical_source_footprint=polygon,
             feasible_source_footprint=polygon,
             extreme_evaluation_count=1,
+            sequence_constraint_basis=(
+                SequenceProjectionConstraintBasis.MODEL_INTERVALS
+            ),
+            global_lattice_constraint_ids=(),
         ),
         mandatory_source_footprint=polygon,
         requested_source_footprint=polygon,

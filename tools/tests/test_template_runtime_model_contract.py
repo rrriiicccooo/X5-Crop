@@ -23,6 +23,7 @@ from x5crop.detection.photo_geometry.output_model import (
     JointPlacementEnvelope,
     OutputBoundaryUse,
     OutputFootprint,
+    SequenceProjectionConstraintBasis,
 )
 from x5crop.detection.photo_geometry.template_model import (
     PhaseLatticeAuthority,
@@ -387,6 +388,10 @@ def _output_footprint():
         canonical_source_footprint=polygon,
         feasible_source_footprint=polygon,
         extreme_evaluation_count=8,
+        sequence_constraint_basis=(
+            SequenceProjectionConstraintBasis.MODEL_INTERVALS
+        ),
+        global_lattice_constraint_ids=(),
     )
     return OutputFootprint(
         geometry_id="geometry:0",

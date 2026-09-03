@@ -497,6 +497,7 @@ class TemplatePlacementContractTest(unittest.TestCase):
                 frame_spec=bad_spec,
                 source_scan_geometry=source,
                 sequence_fit=_sequence(template),
+                global_lattice_authority=None,
                 cross_fit=_cross(template, direction=_direction()),
                 width_axis=BoundaryAxis.X,
                 height_axis=BoundaryAxis.Y,

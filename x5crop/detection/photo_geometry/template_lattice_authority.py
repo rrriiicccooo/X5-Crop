@@ -170,6 +170,47 @@ def direct_role_constraint_rank(
     )
 
 
+def global_lattice_authority_matches_fit(
+    authority: GlobalLatticeAuthority,
+    fit: SequenceFit,
+) -> bool:
+    """Return whether one supported authority belongs to this exact fit.
+
+    The authority is assessed after the discrete placement and every measured
+    local advance are fixed. Output projection may therefore reuse its direct
+    coordinate constraints only when the retained phase-anchor mapping and the
+    canonical adjacency algebra are unchanged.
+    """
+
+    if (
+        not isinstance(authority, GlobalLatticeAuthority)
+        or not isinstance(fit, SequenceFit)
+        or authority.state != EvidenceState.SUPPORTED
+    ):
+        return False
+    expected = tuple(
+        (
+            role.role_index,
+            binding.observation_id,
+            coefficients,
+            _direct_role_value_interval(fit, role, binding),
+        )
+        for role, binding, coefficients in _direct_role_rows(fit, None)
+    )
+    actual = tuple(
+        (
+            constraint.role_index,
+            constraint.observation_ids[0],
+            constraint.coefficients,
+            constraint.value_interval_px,
+        )
+        for constraint in authority.constraints
+        if constraint.kind
+        == GlobalLatticeConstraintKind.DIRECT_ROLE_COORDINATE
+    )
+    return actual == expected
+
+
 def assess_global_lattice_authority(
     fit: SequenceFit,
     phase_input: TemplatePhaseInput,
@@ -291,4 +332,5 @@ def assess_global_lattice_authority(
 __all__ = [
     "assess_global_lattice_authority",
     "direct_role_constraint_rank",
+    "global_lattice_authority_matches_fit",
 ]

@@ -11,7 +11,10 @@ from scipy.optimize import linprog
 from ...domain import FiniteInterval
 from ...run_local_identity import run_local_id
 from .model import BoundaryRole, PositionSource
-from .output_model import OutputBoundaryUse
+from .output_model import (
+    OutputBoundaryUse,
+    SequenceProjectionConstraintBasis,
+)
 from .template_model import (
     ContactRelation,
     OverlapRelation,
@@ -19,6 +22,7 @@ from .template_model import (
     SeparatorRelationKind,
 )
 from .template_cross_model import CrossHeightProjectionBasis
+from .template_phase_model import GlobalLatticeConstraintKind
 from .template_placement import FormatPlacement
 
 
@@ -72,6 +76,8 @@ class FeasiblePlacementProjection:
     placement_id: str
     frame_states: tuple[tuple[JointFrameState, ...], ...]
     extreme_evaluation_count: int
+    sequence_constraint_basis: SequenceProjectionConstraintBasis
+    global_lattice_constraint_ids: tuple[str, ...]
 
     def __post_init__(self) -> None:
         if (
@@ -80,6 +86,21 @@ class FeasiblePlacementProjection:
             or not self.frame_states
             or any(not states for states in self.frame_states)
             or self.extreme_evaluation_count <= 0
+            or not isinstance(
+                self.sequence_constraint_basis,
+                SequenceProjectionConstraintBasis,
+            )
+            or len(set(self.global_lattice_constraint_ids))
+            != len(self.global_lattice_constraint_ids)
+            or any(
+                not identity
+                for identity in self.global_lattice_constraint_ids
+            )
+            or (
+                self.sequence_constraint_basis
+                == SequenceProjectionConstraintBasis.GLOBAL_LATTICE_AUTHORITY
+            )
+            != bool(self.global_lattice_constraint_ids)
             or self.extreme_evaluation_count
             > (
                 (2 * _MAX_SUPPORT_EVALUATIONS + 2)
@@ -399,6 +420,36 @@ def _sequence_system(
         topology_constraints.append(
             (_LinearExpression(expression, 0.0), signed_gap)
         )
+    authority_constraints: list[
+        tuple[_LinearExpression, FiniteInterval]
+    ] = []
+    authority = placement.global_lattice_authority
+    if authority is not None:
+        for constraint in authority.constraints:
+            if (
+                constraint.kind
+                == GlobalLatticeConstraintKind.DIRECT_ROLE_COORDINATE
+            ):
+                assert constraint.role_index is not None
+                binding = sequence.role_bindings[constraint.role_index]
+                if binding is None:
+                    raise ValueError(
+                        "global lattice authority lost a direct role binding"
+                    )
+                authority_constraints.append(
+                    (
+                        roles[constraint.role_index],
+                        binding.full_position_interval_px,
+                    )
+                )
+            elif constraint.kind == GlobalLatticeConstraintKind.ABSOLUTE_PHASE:
+                assert constraint.value_interval_px is not None
+                authority_constraints.append(
+                    (
+                        _LinearExpression(absolute_phase, origin),
+                        constraint.value_interval_px,
+                    )
+                )
     constraints = tuple(
         (expression, interval)
         for expression, interval in zip(
@@ -412,7 +463,7 @@ def _sequence_system(
             lattice.absolute_phase_interval_px,
         ),
         (_LinearExpression(gap, 0.0), sequence.pitch_fit.gap_interval_px),
-    ) + tuple(topology_constraints)
+    ) + tuple(topology_constraints) + tuple(authority_constraints)
     inequality_rows, inequality_limits = _constraints(constraints)
     if nominal_state is not None:
         assert scale_index is not None
@@ -687,6 +738,17 @@ def project_format_placement(
 
     if not isinstance(placement, FormatPlacement):
         raise TypeError("joint projection requires a format placement")
+    authority = placement.global_lattice_authority
+    constraint_basis = (
+        SequenceProjectionConstraintBasis.GLOBAL_LATTICE_AUTHORITY
+        if authority is not None
+        else SequenceProjectionConstraintBasis.MODEL_INTERVALS
+    )
+    constraint_ids = (
+        ()
+        if authority is None
+        else tuple(item.constraint_id for item in authority.constraints)
+    )
     sequence_system, roles = _sequence_system(placement)
     support_system = (
         _support_system(placement)
@@ -758,8 +820,12 @@ def project_format_placement(
         projection_id=run_local_id(
             "joint-placement-projection",
             placement.placement_id,
+            constraint_basis.value,
+            constraint_ids,
         ),
         placement_id=placement.placement_id,
         frame_states=tuple(frames),
         extreme_evaluation_count=evaluation_count,
+        sequence_constraint_basis=constraint_basis,
+        global_lattice_constraint_ids=constraint_ids,
     )

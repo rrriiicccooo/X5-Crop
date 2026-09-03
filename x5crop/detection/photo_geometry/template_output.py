@@ -735,6 +735,10 @@ def joint_placement_envelope(
             projection,
         ),
         extreme_evaluation_count=projection.extreme_evaluation_count,
+        sequence_constraint_basis=projection.sequence_constraint_basis,
+        global_lattice_constraint_ids=(
+            projection.global_lattice_constraint_ids
+        ),
     )
 
 

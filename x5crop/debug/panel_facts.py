@@ -125,6 +125,22 @@ def selection_summary(detection: FinalDetection) -> str:
     proposed = sum(
         item.placement_proposal.state.value == "generated" for item in lanes
     )
+    sequence_envelopes = {
+        (
+            output.envelope.sequence_constraint_basis.value.upper(),
+            len(output.envelope.global_lattice_constraint_ids),
+        )
+        for lane in lanes
+        for output in lane.placement_proposal.output_footprints
+    }
+    envelope_summary = (
+        "NONE"
+        if not sequence_envelopes
+        else "/".join(
+            f"{basis} C{constraint_count}"
+            for basis, constraint_count in sorted(sequence_envelopes)
+        )
+    )
     selected = sum(item.selected_placement is not None for item in lanes)
     bounded = any(item.work.bound_exceeded for item in lanes)
     return (
@@ -133,6 +149,7 @@ def selection_summary(detection: FinalDetection) -> str:
         f"PROJECT {projection_evaluations}/{projection_successes} · "
         f"DROP {projected_bindings} · "
         f"PLACEMENTS {placements} · PROPOSAL {proposed}/{len(lanes)} · "
+        f"ENVELOPE {envelope_summary} · "
         f"SELECTED {selected} · "
         f"VETO {vetoes} · BOUND {'EXCEEDED' if bounded else 'OK'}"
     )

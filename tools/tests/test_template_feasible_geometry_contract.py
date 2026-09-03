@@ -7,13 +7,22 @@ from x5crop.domain import FiniteInterval, ObservationId, PositiveInterval
 from x5crop.detection.photo_geometry.template_feasible_geometry import (
     project_format_placement,
 )
+from x5crop.detection.photo_geometry.template_lattice_authority import (
+    assess_global_lattice_authority,
+)
 from x5crop.detection.photo_geometry.template_model import (
     LatticeParameterFitBasis,
     PhaseLatticeFit,
     PitchFit,
 )
+from x5crop.detection.photo_geometry.output_model import (
+    SequenceProjectionConstraintBasis,
+)
 from x5crop.detection.photo_geometry.template_nominal_grid_model import (
     CalibratedNominalGridFitState,
+)
+from x5crop.detection.photo_geometry.template_phase_model import (
+    TemplatePhaseInput,
 )
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossHeightProjectionBasis,
@@ -25,6 +34,7 @@ from tools.tests.template_test_support import (
     placement_direction as _direction,
     placement_sequence as _sequence,
     placement_template as _template,
+    unavailable_nominal_grid_prior,
 )
 
 
@@ -111,6 +121,127 @@ class TemplateFeasibleGeometryContractTest(unittest.TestCase):
                 for state in projection.frame_states[1]
             },
         )
+
+    def test_global_lattice_constraints_narrow_one_unobserved_frame(self) -> None:
+        template = replace(
+            _template(3),
+            frame_width_px=PositiveInterval(90.0, 110.0),
+            pitch_px=PositiveInterval(110.0, 130.0),
+        )
+        sequence = _sequence(template, missing=(2, 3, 5))
+        model_intervals = tuple(
+            FiniteInterval(position - 50.0, position + 50.0)
+            for position in sequence.model_role_positions_px
+        )
+        sequence = replace(
+            sequence,
+            phase_lattice_fit=replace(
+                sequence.phase_lattice_fit,
+                cycle_phase_interval_px=FiniteInterval(90.0, 110.0),
+                absolute_phase_interval_px=FiniteInterval(90.0, 110.0),
+            ),
+            pitch_fit=replace(
+                sequence.pitch_fit,
+                frame_width_px=PositiveInterval(90.0, 110.0),
+                gap_interval_px=FiniteInterval(0.0, 40.0),
+                pitch_interval_px=FiniteInterval(110.0, 130.0),
+            ),
+            model_role_intervals_px=model_intervals,
+            model_full_role_intervals_px=model_intervals,
+        )
+        authority = assess_global_lattice_authority(
+            sequence,
+            TemplatePhaseInput(
+                observations=(),
+                separator_bands=(),
+                template=template,
+                calibrated_nominal_grid_prior=(
+                    unavailable_nominal_grid_prior(template)
+                ),
+                scale_px_per_mm=None,
+                holder_span_px=None,
+                phase_authority_px=None,
+            ),
+        )
+
+        broad = project_format_placement(
+            _compose(
+                template,
+                sequence,
+                _cross(template, direction=_direction()),
+            )
+        )
+        constrained = project_format_placement(
+            _compose(
+                template,
+                sequence,
+                _cross(template, direction=_direction()),
+                global_lattice_authority=authority,
+            )
+        )
+
+        self.assertEqual(
+            broad.sequence_constraint_basis,
+            SequenceProjectionConstraintBasis.MODEL_INTERVALS,
+        )
+        self.assertEqual(broad.global_lattice_constraint_ids, ())
+        self.assertEqual(
+            constrained.sequence_constraint_basis,
+            SequenceProjectionConstraintBasis.GLOBAL_LATTICE_AUTHORITY,
+        )
+        self.assertEqual(
+            constrained.global_lattice_constraint_ids,
+            tuple(item.constraint_id for item in authority.constraints),
+        )
+        self.assertGreater(
+            self._sequence_interval(broad, 1, 0).width,
+            0.0,
+        )
+        self.assertEqual(
+            self._sequence_interval(constrained, 1, 0),
+            FiniteInterval.exact(220.0),
+        )
+        self.assertEqual(
+            self._sequence_interval(constrained, 1, 1),
+            FiniteInterval.exact(320.0),
+        )
+
+    def test_stale_global_lattice_authority_is_rejected(self) -> None:
+        template = _template(2)
+        sequence = _sequence(template)
+        authority = assess_global_lattice_authority(
+            sequence,
+            TemplatePhaseInput(
+                observations=(),
+                separator_bands=(),
+                template=template,
+                calibrated_nominal_grid_prior=(
+                    unavailable_nominal_grid_prior(template)
+                ),
+                scale_px_per_mm=None,
+                holder_span_px=None,
+                phase_authority_px=None,
+            ),
+        )
+        bindings = list(sequence.role_bindings)
+        assert bindings[0] is not None
+        bindings[0] = replace(
+            bindings[0],
+            observation_id=ObservationId("sequence:changed"),
+            evidence_group_id=ObservationId("sequence:changed"),
+        )
+        stale = replace(sequence, role_bindings=tuple(bindings))
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "identity or authority is inconsistent",
+        ):
+            _compose(
+                template,
+                stale,
+                _cross(template, direction=_direction()),
+                global_lattice_authority=authority,
+            )
 
     def test_one_direct_side_projects_only_calibrated_width_states(self) -> None:
         template = replace(

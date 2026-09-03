@@ -232,6 +232,27 @@ S082 的第二张 START 因而从错误的 edge 115 回到真实 edge 111，消�
 S051、S070 只迁移到更具体的下游 typed root，产品终态不变。Development-detail mean 为 4.074 秒，只作
 开发归因，不替代正式性能 Gate；本机制不新增 TIFF query、detector、candidate、score 或样片规则。
 
+已经 resolved 的 `GlobalLatticeAuthority` 不再只停留在诊断层。唯一
+`template_feasible_geometry.py` owner 现在把同一 direct-role/absolute-phase 约束加入既有低维联合可行集合，
+再投影未观察角色；因此不会把 phase、W、pitch 与 local delta 各自不相关的边际端点拼成一个实际不可能
+同时发生的最坏状态。Direct native coordinate、canonical placement、runner、eligibility 与 Gate 均未被
+改写。Phase competition 尚 unresolved 或 rank 0–2 时仍使用完整 `model_intervals` proposal，不会因把冲突
+约束强行求交而丢失方案。`JointPlacementEnvelope`、Normal report 与 Debug 显式保存
+`sequence_constraint_basis` 和实际 constraint identity；Report revision 更新为
+`x5crop_v5_template_report_64`。
+
+完整 110-task development gold report 无分析错误且全部生成 proposal：33 safe / 77 unsafe proposal、
+21 safe / 19 unsafe / 70 unavailable candidate，18 auto / 92 Review。其中 17 个 auto 安全；S035 Frame 6
+是唯一已知错误 auto，`cross_low` 相对人工基线外扩 120.752 px，超过 106.682 px 上限。直接 Cross TOP
+role 位于约 y=339–343，而该 Frame 的黄金 aperture top 位于约 y=368–373；当前通用根因是 Cross TOP
+角色绑定到了真实 aperture 外侧的错误材料边，Runtime 自身没有形成 counterevidence。相对上一检查点，
+S028、S033 proposal 和 S038 candidate 变为安全，S038 安全 auto；S035 则从 unsafe Review 暴露为 unsafe
+auto。该提交因此明确是 **DEVELOPMENT ONLY / NOT RELEASE READY**，不可用于正式发布或交付；
+`--gate report` 只完成诊断，`--gate release` 仍失败。Development summary 更新为 v19，并以
+`result_disposition=development_only_not_release_ready` 和终端警告防止把 report 的成功退出误称为验证
+通过。Development-detail mean 为 3.968 秒，只作开发归因；本机制不新增 TIFF query、detector、candidate、
+score、fallback 或样片规则。
+
 ### 产品行为
 
 - 用户提供 format，并确认匹配片夹的默认 count 或显式 count；count 包含中间空白曝光格。Runtime 不猜

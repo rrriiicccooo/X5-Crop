@@ -202,6 +202,13 @@ class OutputBoundaryUse(str, Enum):
     ENCLOSING_SUPPORT_PAIR = "enclosing_support_pair"
 
 
+class SequenceProjectionConstraintBasis(str, Enum):
+    """Long-axis constraints consumed by one joint footprint projection."""
+
+    MODEL_INTERVALS = "model_intervals"
+    GLOBAL_LATTICE_AUTHORITY = "global_lattice_authority"
+
+
 @dataclass(frozen=True)
 class JointPlacementEnvelope:
     """All retained states of one selected placement, before product bleed."""
@@ -214,6 +221,8 @@ class JointPlacementEnvelope:
     canonical_source_footprint: ConvexPolygon
     feasible_source_footprint: ConvexPolygon
     extreme_evaluation_count: int
+    sequence_constraint_basis: SequenceProjectionConstraintBasis
+    global_lattice_constraint_ids: tuple[str, ...]
 
     def __post_init__(self) -> None:
         if (
@@ -223,6 +232,21 @@ class JointPlacementEnvelope:
             or self.lane_ordinal <= 0
             or self.extreme_evaluation_count <= 0
             or not isinstance(self.boundary_use, OutputBoundaryUse)
+            or not isinstance(
+                self.sequence_constraint_basis,
+                SequenceProjectionConstraintBasis,
+            )
+            or len(set(self.global_lattice_constraint_ids))
+            != len(self.global_lattice_constraint_ids)
+            or any(
+                not identity
+                for identity in self.global_lattice_constraint_ids
+            )
+            or (
+                self.sequence_constraint_basis
+                == SequenceProjectionConstraintBasis.GLOBAL_LATTICE_AUTHORITY
+            )
+            != bool(self.global_lattice_constraint_ids)
         ):
             raise ValueError("joint placement envelope identity is invalid")
         _validate_continuous_footprint(

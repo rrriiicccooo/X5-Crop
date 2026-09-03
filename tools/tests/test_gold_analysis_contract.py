@@ -349,6 +349,10 @@ class GoldAnalysisContractTest(unittest.TestCase):
         self.assertFalse(summary["release_analysis_identity_ready"])
         self.assertFalse(summary["release_detection_gate_ready"])
         self.assertEqual(
+            summary["result_disposition"],
+            "development_only_not_release_ready",
+        )
+        self.assertEqual(
             summary["unsafe_approved_auto_diagnostics"][0]["sample_id"],
             "auto",
         )
@@ -656,9 +660,11 @@ class GoldAnalysisContractTest(unittest.TestCase):
 
     def test_release_gate_blocks_an_unready_development_result(self) -> None:
         output = io.StringIO()
+        error = io.StringIO()
         summary = {
             "analysis_error_count": 0,
             "release_detection_gate_ready": False,
+            "unsafe_approved_auto_count": 1,
         }
         with (
             patch(
@@ -666,6 +672,7 @@ class GoldAnalysisContractTest(unittest.TestCase):
                 return_value=summary,
             ),
             redirect_stdout(output),
+            redirect_stderr(error),
         ):
             result = gold_analysis_main(
                 [
@@ -676,6 +683,10 @@ class GoldAnalysisContractTest(unittest.TestCase):
                 ]
             )
         self.assertEqual(result, 1)
+        self.assertIn("DEVELOPMENT ONLY", error.getvalue())
+        self.assertIn("NOT RELEASE READY", error.getvalue())
+        self.assertIn("not valid for formal delivery", error.getvalue())
+        self.assertIn("known unsafe approved_auto=1", error.getvalue())
 
     def test_release_gate_can_use_a_temporary_receipt_directory(self) -> None:
         output = io.StringIO()
@@ -701,6 +712,7 @@ class GoldAnalysisContractTest(unittest.TestCase):
         self,
     ) -> None:
         output = io.StringIO()
+        error = io.StringIO()
         summary = {
             "analysis_error_count": 0,
             "release_detection_gate_ready": False,
@@ -712,6 +724,7 @@ class GoldAnalysisContractTest(unittest.TestCase):
                 return_value=summary,
             ),
             redirect_stdout(output),
+            redirect_stderr(error),
         ):
             result = gold_analysis_main(
                 [
@@ -722,6 +735,10 @@ class GoldAnalysisContractTest(unittest.TestCase):
                 ]
             )
         self.assertEqual(result, 0)
+        self.assertIn("DEVELOPMENT ONLY", error.getvalue())
+        self.assertIn("NOT RELEASE READY", error.getvalue())
+        self.assertIn("not valid for formal delivery", error.getvalue())
+        self.assertIn("known unsafe approved_auto=3", error.getvalue())
 
 
 if __name__ == "__main__":

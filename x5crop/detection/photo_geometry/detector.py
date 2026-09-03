@@ -96,6 +96,7 @@ def _compose(
     prepared: PreparedTemplateLane,
     *,
     sequence_fit,
+    global_lattice_authority,
     cross_fit,
     source_geometry,
 ) -> FormatPlacement | None:
@@ -107,6 +108,7 @@ def _compose(
             frame_spec=prepared.source_scan_geometry.frame_spec,
             source_scan_geometry=source_geometry,
             sequence_fit=sequence_fit,
+            global_lattice_authority=global_lattice_authority,
             cross_fit=cross_fit,
             width_axis=prepared.width_axis,
             height_axis=prepared.height_axis,
@@ -125,9 +127,20 @@ def _placements(
 ) -> tuple[FormatPlacement | None, FormatPlacement | None]:
     phase = prepared.phase_competition
     cross = prepared.cross_competition
+    best_lattice_authority = (
+        phase.global_lattice_authority
+        if phase.global_lattice_authority is not None
+        and phase.global_lattice_authority.state == EvidenceState.SUPPORTED
+        # A rank-closed authority inside an unresolved competition remains
+        # diagnostic. It cannot replace that competition's retained proposal
+        # intervals or make proposal generation disappear.
+        and phase.status == PhaseFitStatus.RESOLVED
+        else None
+    )
     best = _compose(
         prepared,
         sequence_fit=phase.best,
+        global_lattice_authority=best_lattice_authority,
         cross_fit=cross.best,
         source_geometry=source_geometry,
     )
@@ -136,6 +149,7 @@ def _placements(
         runner = _compose(
             prepared,
             sequence_fit=phase.runner_up,
+            global_lattice_authority=None,
             cross_fit=cross.best,
             source_geometry=source_geometry,
         )
@@ -143,6 +157,7 @@ def _placements(
         runner = _compose(
             prepared,
             sequence_fit=phase.best,
+            global_lattice_authority=best_lattice_authority,
             cross_fit=cross.runner_up,
             source_geometry=source_geometry,
         )

@@ -394,6 +394,16 @@ Grid 始终可以生成一个待检验的默认 placement，但它不能仅凭�
   provenance 的线性约束；外部直接 phase、共同 W 或 pitch authority 也只能各形成自己拥有的一行。
   `GlobalLatticeAuthority` 保存全部约束与矩阵秩，只有 joint rank 为 3 才表示三个未知量独立闭合。
   Raw edge 数、同一位置的重复支持和连续缺失 adjacency 数都不是闭合证明。
+- 已经 `RESOLVED` 的 phase competition 若携带 supported `GlobalLatticeAuthority`，
+  `template_feasible_geometry.py` 必须把同一组 direct-role/absolute-phase 约束加入现有低维联合可行集合，再
+  投影每个未观察角色。不得把 phase、W、pitch 和 local delta 的独立边际端点拼成一个无法同时发生的最坏
+  状态，也不得因此修改任何直接角色的 native coordinate。Report/Debug 在
+  `JointPlacementEnvelope.sequence_constraint_basis` 中区分 `global_lattice_authority | model_intervals`，并
+  保存实际消费的 constraint identity。
+- Rank 闭合但 phase competition 仍 unresolved 时，该 authority 只是一项诊断事实，不能接管 proposal 的
+  包络。Runtime 继续保留原完整 Grid proposal 及其 model interval，同时由既有 typed phase conflict 阻断
+  eligibility；不得因尝试把互相冲突的事实强行求交而让 proposal 消失。Rank 0–2 也继续使用模型包络，不能
+  冒充 full direct closure。
 - Rank 3 直接坐标系统由 `template_phase_candidates.py` 在同一个连续 placement 内联合拟合
   `(phase, W, source_pitch)`。无约束最小二乘若落在已编译的 phase、W、pitch 与
   `pitch-W` 全部区间内，记录 `direct_least_squares`；若只越过这些硬区间，求解器在同一可行集合内取得
@@ -1013,7 +1023,8 @@ Enclosing pair 以 source 已闭合的 `fixed_height_px` 与 canonical H 检查�
 ## 9. Compose、竞争、闭环与 holder fill
 
 `compose_format_placement` 一次把 `TemplateSpec + SequenceFit + CrossFit` 编译为全部 source-axis
-固定 frame。之后检查：
+固定 frame；resolved phase 可以同时绑定与该 fit identity 完全一致的 `GlobalLatticeAuthority`，其它状态
+不得把诊断 authority 送入输出投影。之后检查：
 
 - W/H、pitch、cross offset 与 format/source authority 相容；
 - ordinal 单调、frame 不交叉；
@@ -1496,8 +1507,8 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/template_placement.py`、`template_selection.py` | source-axis frame 的一次 compose、显式 overlap 的 cross-support 去重，以及 proposal 之后的离散 eligibility/winner/runner |
 | `photo_geometry/template_holder_fill.py` | selected PhotoGroupOuter 与 W-only fill assessment |
 | `photo_geometry/content_*.py` | 最终 post-bleed polygon 上的二维 negative veto |
-| `photo_geometry/template_feasible_geometry.py` | 任一已 compose placement 的低维联合可行集合与 footprint projection；不决定 eligibility |
-| `photo_geometry/template_output.py`、`output_model.py` | JointPlacementEnvelope、基础 bleed、Contact/Overlap 两侧 topology protection、enclosing-support aperture-center risk、OutputFootprint 与同一 5% budget |
+| `photo_geometry/template_feasible_geometry.py` | 任一已 compose placement 的低维联合可行集合与 footprint projection；resolved global-lattice direct constraint 在此唯一参与联合投影，不决定 eligibility |
+| `photo_geometry/template_output.py`、`output_model.py` | JointPlacementEnvelope、实际 sequence constraint basis/identity、基础 bleed、Contact/Overlap 两侧 topology protection、enclosing-support aperture-center risk、OutputFootprint 与同一 5% budget |
 | `photo_geometry/template_runtime_model.py`、`detector.py` | `TemplatePlacementProposal` / `TemplateSourceProposal`、eligibility/selection handoff 与顶层编排；proposal 不授权正式输出 |
 | `photo_geometry/template_gate.py` | selected-only CandidateGate facts；不生成、选择或删除 proposal |
 | `x5crop/detection/output_deskew.py` | approved-only 6–24 trace、role-free、candidate-independent 的可选输出角度 observation |
@@ -1631,7 +1642,9 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   5% 安全预算或样片白名单。“机器是否看见”必须由每次运行的 observation/binding 事实重新生成，不能
   写回人工基线。分析结果绑定 HEAD、detector source manifest、comparator source manifest 与 development
   gold SHA，并分别记录两组路径是否与 HEAD 一致。默认 `--gate report` 只要求诊断完整，始终报告 proposal、
-  candidate、危险 auto 与 root failure；即使发现危险 auto 也保留成功退出，便于开发修复。`--gate release`
+  candidate、危险 auto 与 root failure；即使发现危险 auto 也保留成功退出，便于开发修复，但 summary 必须写
+  `result_disposition=development_only_not_release_ready`，终端必须明确显示 `DEVELOPMENT ONLY — NOT
+  RELEASE READY` 与已知危险 auto 数量，不能把退出码 0 描述成验证通过或正式交付资格。`--gate release`
   只接受完整 development gold、detector/comparator source manifest 与 HEAD 一致，并硬性要求 nominal
   全部安全 `approved_auto`、全部角色
   `unsafe_approved_auto = 0`，以及全部 runtime calibration 的 cohort、eligibility、observation set 与登记数值
