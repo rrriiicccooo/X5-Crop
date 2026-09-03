@@ -219,12 +219,14 @@ platform | platform-check | platform-package | pre-push
   auto 重复任务。重置或尚无当前确认时，development gold 必须明确失败为
   `calibration is incomplete`，不得回退旧基线。
 - Development gold 必须分开报告：完整 pre-Gate proposal 覆盖及黄金安全性、candidate eligibility、
-  `unsafe_approved_auto`、nominal 自动覆盖和 challenge 能力。开发中的 `unsafe_approved_auto > 0` 是必须
-  暴露和修复的事实，不使诊断命令失败，也不得迫使 proposal 生成层提前放弃方案；报告必须逐项保存
-  sample、错误边界和根因，并明确该提交尚未达到发布检测门槛。已知危险 auto 只能存在于未发布开发版本和
-  临时测试输出，不能被描述为验证通过或用于正式交付。Review proposal/candidate 的偏差不是用户层危险
-  输出；challenge 的安全 `approved_auto` 与安全 `needs_review` 都是合格结果，前者单独记录为能力发现。
-  不得新增样片规则、whitelist、格式 denylist 或根据当前输出自动晋升黄金。
+  `unsafe_approved_auto`、nominal 自动覆盖和 challenge 能力。所有合法、受支持的黄金 task 都应先生成可比较
+  proposal，并无条件接受黄金评价；先修不安全 proposal 的通用几何根因，再审计安全 proposal 的错误权限
+  阻断，最后优化 auto/review 决定。开发中的 `unsafe_approved_auto > 0` 是必须暴露和修复的自然事实，不使
+  诊断命令失败，也不得迫使生成层提前放弃方案；但不能人为绕过 Runtime Gate 来制造危险 auto。报告必须
+  逐项保存 sample、错误边界和根因，并明确该提交尚未达到发布检测门槛。已知危险 auto 只能存在于未发布
+  开发版本和临时测试输出，不能被描述为验证通过或用于正式交付。Review proposal/candidate 的偏差不是
+  用户层危险输出；challenge 的安全 `approved_auto` 与安全 `needs_review` 都是合格结果，前者单独记录为
+  能力发现。不得新增样片规则、whitelist、格式 denylist 或根据当前输出自动晋升黄金。
   检测能力发布底线要求当前 development nominal 全部安全 `approved_auto`，且全部角色
   `unsafe_approved_auto = 0`；challenge 的安全 `approved_auto` 与安全 `needs_review` 都合格。未来建立
   sealed cohort 后，其 nominal 也必须全部安全自动通过。不得把失败 nominal 改成 challenge、隐藏 runner

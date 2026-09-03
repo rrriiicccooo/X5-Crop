@@ -28,6 +28,8 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     CrossHeightInferenceBasis,
     CrossHeightProjectionBasis,
     CrossLineProjectionBasis,
+    CrossLongitudinalProjectionBasis,
+    CrossLongitudinalProjectionFailureKind,
     CrossPairSupportMode,
     CrossRetainedProposalBasis,
     CrossWinnerBasis,
@@ -289,10 +291,18 @@ class TemplateCrossContractTest(unittest.TestCase):
             CrossPairSupportMode.COMPLEMENTARY_DOMAINS,
         )
         self.assertEqual(result.best.shared_trace_support_count, 0)
-        self.assertEqual(result.best.longitudinal_support_domain_count, 3)
         self.assertEqual(
-            result.best.role_authorized_pair_support_domain_count,
-            3,
+            result.best.longitudinal_projection_authority.state,
+            EvidenceState.SUPPORTED,
+        )
+        self.assertEqual(
+            result.best.longitudinal_projection_authority.basis,
+            CrossLongitudinalProjectionBasis.COMPLETE_TEMPLATE_DOMAINS,
+        )
+        self.assertEqual(
+            result.best.longitudinal_projection_authority
+            .supported_domain_ordinals,
+            (1, 2, 3),
         )
 
     def test_inward_local_alternative_does_not_block_outer_complementary_pair(
@@ -764,11 +774,167 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertEqual(supported.status, CrossFitStatus.RESOLVED)
         assert supported.best is not None
         self.assertEqual(supported.best.independent_support_region_count, 2)
-        self.assertEqual(supported.best.longitudinal_support_domain_count, 2)
         self.assertEqual(
-            supported.best.role_authorized_pair_support_domain_count,
-            2,
+            supported.best.longitudinal_projection_authority.state,
+            EvidenceState.SUPPORTED,
         )
+        self.assertEqual(
+            supported.best.longitudinal_projection_authority
+            .supported_domain_ordinals,
+            (1, 2),
+        )
+
+    def test_local_pair_cannot_extrapolate_beyond_observed_half(self) -> None:
+        domains = tuple(
+            FiniteInterval(float(index * 40), float(index * 40 + 20))
+            for index in range(6)
+        )
+        result = fit_template_cross(
+            aspect_input(
+                template=template(count=6),
+                fixed_height_px=240.0,
+                registered_trace_coordinates_px=tuple(
+                    index * 40 + 10 for index in range(6)
+                ),
+                longitudinal_support_domains_px=domains,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "left-half-top",
+                        100.0,
+                        traces=(10, 50, 90),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "left-half-bottom",
+                        340.0,
+                        traces=(10, 50, 90),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            CrossFailureKind
+            .LONGITUDINAL_PROJECTION_AUTHORITY_UNAVAILABLE,
+        )
+        assert result.best is not None
+        authority = result.best.longitudinal_projection_authority
+        self.assertEqual(authority.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(authority.supported_domain_ordinals, (1, 2, 3))
+        self.assertFalse(authority.template_extent_bracketed)
+        self.assertEqual(
+            authority.failure_kind,
+            CrossLongitudinalProjectionFailureKind
+            .TEMPLATE_EXTENT_UNBRACKETED,
+        )
+
+    def test_two_shared_domains_cannot_export_complementary_tails(self) -> None:
+        domains = tuple(
+            FiniteInterval(float(index * 40), float(index * 40 + 20))
+            for index in range(6)
+        )
+        result = fit_template_cross(
+            aspect_input(
+                template=template(count=6),
+                fixed_height_px=240.0,
+                registered_trace_coordinates_px=tuple(
+                    index * 40 + 10 for index in range(6)
+                ),
+                longitudinal_support_domains_px=domains,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "middle-to-right-top",
+                        100.0,
+                        traces=(50, 90, 130, 170, 210),
+                        independent_regions=3,
+                        source_spanning=False,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "left-to-middle-bottom",
+                        340.0,
+                        traces=(10, 50, 90),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertEqual(
+            result.failure_kind,
+            CrossFailureKind
+            .LONGITUDINAL_PROJECTION_AUTHORITY_UNAVAILABLE,
+        )
+        assert result.best is not None
+        authority = result.best.longitudinal_projection_authority
+        self.assertEqual(authority.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(authority.supported_domain_ordinals, (2, 3))
+        self.assertEqual(
+            authority.failure_kind,
+            CrossLongitudinalProjectionFailureKind
+            .INDEPENDENT_DOMAIN_SUPPORT_UNAVAILABLE,
+        )
+
+    def test_bracketed_pair_interpolates_across_unobserved_domains(self) -> None:
+        domains = tuple(
+            FiniteInterval(float(index * 40), float(index * 40 + 20))
+            for index in range(6)
+        )
+        result = fit_template_cross(
+            aspect_input(
+                template=template(count=6),
+                fixed_height_px=240.0,
+                registered_trace_coordinates_px=tuple(
+                    index * 40 + 10 for index in range(6)
+                ),
+                longitudinal_support_domains_px=domains,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "bracketed-top",
+                        100.0,
+                        traces=(10, 90, 210),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "bracketed-bottom",
+                        340.0,
+                        traces=(10, 90, 210),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        assert result.best is not None
+        authority = result.best.longitudinal_projection_authority
+        self.assertEqual(authority.state, EvidenceState.SUPPORTED)
+        self.assertEqual(
+            authority.basis,
+            CrossLongitudinalProjectionBasis.BRACKETED_TEMPLATE_EXTENT,
+        )
+        self.assertEqual(authority.supported_domain_ordinals, (1, 3, 6))
+        self.assertTrue(authority.template_extent_bracketed)
 
     def test_two_domain_pair_cannot_own_three_frame_shared_edges(self) -> None:
         result = fit_template_cross(

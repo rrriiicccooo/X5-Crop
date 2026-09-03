@@ -18,6 +18,8 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     CrossHeightInferenceBasis,
     CrossHeightProjectionBasis,
     CrossLineProjectionBasis,
+    CrossLongitudinalProjectionBasis,
+    CrossLongitudinalProjectionFailureKind,
     CrossRetainedProposalBasis,
 )
 from x5crop.detection.photo_geometry.template_phase_model import (
@@ -109,6 +111,17 @@ _CROSS_FAILURE_KINDS = {None, *(item.value for item in CrossFailureKind)}
 _CROSS_STATUSES = {item.value for item in CrossFitStatus}
 _CROSS_RETAINED_PROPOSAL_BASES = {
     item.value for item in CrossRetainedProposalBasis
+}
+_CROSS_LONGITUDINAL_PROJECTION_FIELDS = {
+    "authority_id",
+    "state",
+    "template_domain_count",
+    "required_independent_domain_count",
+    "supported_domain_ordinals",
+    "template_extent_bracketed",
+    "supporting_observation_ids",
+    "basis",
+    "failure_kind",
 }
 _OBSERVED_DESKEW_SKIP_REASONS = {
     DeskewSkipReason.ROTATION_NOT_NEEDED.value,
@@ -668,6 +681,82 @@ def _interval_contains(
         <= float(value)
         <= float(interval["maximum"]) + epsilon
     )
+
+
+def _validate_cross_longitudinal_projection_authority(
+    value: object,
+) -> None:
+    if (
+        not isinstance(value, dict)
+        or set(value) != _CROSS_LONGITUDINAL_PROJECTION_FIELDS
+    ):
+        raise ValueError(
+            "Cross longitudinal projection authority is incomplete"
+        )
+    state = value["state"]
+    domain_count = value["template_domain_count"]
+    required = value["required_independent_domain_count"]
+    ordinals = value["supported_domain_ordinals"]
+    basis = value["basis"]
+    failure_kind = value["failure_kind"]
+    if (
+        state not in {"supported", "unavailable"}
+        or not isinstance(value["authority_id"], str)
+        or not value["authority_id"]
+        or not isinstance(domain_count, int)
+        or domain_count < 0
+        or not isinstance(required, int)
+        or not 0 <= required <= domain_count
+        or not isinstance(ordinals, list)
+        or any(not isinstance(item, int) for item in ordinals)
+        or ordinals != sorted(set(ordinals))
+        or any(not 1 <= item <= domain_count for item in ordinals)
+        or not isinstance(value["template_extent_bracketed"], bool)
+        or not _valid_ids(value["supporting_observation_ids"])
+    ):
+        raise ValueError(
+            "Cross longitudinal projection authority is invalid"
+        )
+    supported_bases = {
+        item.value for item in CrossLongitudinalProjectionBasis
+    }
+    failure_kinds = {
+        item.value for item in CrossLongitudinalProjectionFailureKind
+    }
+    if state == "supported":
+        if (
+            basis not in supported_bases
+            or failure_kind is not None
+            or value["template_extent_bracketed"] is not True
+        ):
+            raise ValueError(
+                "supported Cross longitudinal projection is invalid"
+            )
+        if (
+            basis == CrossLongitudinalProjectionBasis
+            .COMPLETE_TEMPLATE_DOMAINS.value
+            and ordinals != list(range(1, domain_count + 1))
+        ):
+            raise ValueError(
+                "complete Cross projection domain coverage is invalid"
+            )
+        if (
+            basis == CrossLongitudinalProjectionBasis
+            .BRACKETED_TEMPLATE_EXTENT.value
+            and (
+                len(ordinals) < required
+                or not ordinals
+                or ordinals[0] != 1
+                or ordinals[-1] != domain_count
+            )
+        ):
+            raise ValueError(
+                "bracketed Cross projection domain coverage is invalid"
+            )
+    elif basis is not None or failure_kind not in failure_kinds:
+        raise ValueError(
+            "unavailable Cross longitudinal projection is invalid"
+        )
 
 
 def _validate_aperture_aspect_ratio_authority(value: object) -> None:
@@ -2683,6 +2772,13 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         cross_retained_proposal_basis = lane.get(
             "cross_retained_proposal_basis"
         )
+        cross_longitudinal_projection_authority = lane.get(
+            "cross_longitudinal_projection_authority"
+        )
+        if cross_longitudinal_projection_authority is not None:
+            _validate_cross_longitudinal_projection_authority(
+                cross_longitudinal_projection_authority
+            )
         if (
             phase_status not in _PHASE_STATUSES
             or phase_failure_kind not in _PHASE_FAILURE_KINDS
@@ -2725,6 +2821,13 @@ def _validate_geometry(record: dict[str, Any]) -> None:
                 or not cross_failure_reason
             )
             or "cross_retained_proposal_basis" not in lane
+            or "cross_longitudinal_projection_authority" not in lane
+            or (
+                cross_longitudinal_projection_authority is None
+            )
+            != (
+                lane.get("cross_line_projection_basis") is None
+            )
             or cross_retained_proposal_basis is not None
             and (
                 cross_retained_proposal_basis
@@ -3469,6 +3572,16 @@ def _validate_development(record: dict[str, Any]) -> None:
                 )
             )
             != production_lane.get("cross_line_projection_basis")
+            or (
+                None
+                if lane.get("cross_competition", {}).get("best") is None
+                else lane["cross_competition"]["best"].get(
+                    "longitudinal_projection_authority"
+                )
+            )
+            != production_lane.get(
+                "cross_longitudinal_projection_authority"
+            )
             or lane.get("aperture_aspect_ratio_authority")
             != lane.get("cross_competition", {}).get(
                 "aperture_aspect_ratio_authority"

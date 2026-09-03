@@ -25,7 +25,6 @@ from .template_cross_candidates import (
     _direct_candidate,
     _fit_from_group,
     _group_candidates,
-    _longitudinal_domain_count,
     _retained_grid_candidate,
     _single_candidate,
 )
@@ -37,6 +36,7 @@ from .template_cross_model import (
     CrossHeightInferenceBasis,
     CrossHeightProjectionBasis,
     CrossLineProjectionBasis,
+    CrossLongitudinalProjectionBasis,
     CrossRetainedProposalBasis,
     CrossRoleBinding,
     CrossFitStatus,
@@ -187,11 +187,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         else None
     )
 
-    def inferred_candidate(
-        binding,
-        *,
-        template_domain_complete: bool = False,
-    ):
+    def inferred_candidate(binding):
         height = fixed_height if inferred_height is None else inferred_height
         canonical_height = (
             inferred_canonical_height
@@ -208,7 +204,9 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             fixed_height=height,
             canonical_height_px=canonical_height,
             source_direction=inputs.source_direction,
-            template_domain_complete=template_domain_complete,
+            longitudinal_support_domains_px=(
+                inputs.longitudinal_support_domains_px
+            ),
             height_inference_basis=basis,
         )
     registered_trace_coordinates = (
@@ -410,6 +408,9 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                 canonical_height_px=canonical_height,
                 height_inference_basis=basis,
                 source_direction=inputs.source_direction,
+                longitudinal_support_domains_px=(
+                    inputs.longitudinal_support_domains_px
+                ),
             )
             if candidate is None:
                 continue
@@ -544,8 +545,8 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             independent_support_region_count=(
                 candidate.independent_support_region_count
             ),
-            longitudinal_support_domain_count=(
-                candidate.longitudinal_support_domain_count
+            longitudinal_projection_authority=(
+                candidate.longitudinal_projection_authority
             ),
         )
         return enclosing_support_fit
@@ -696,28 +697,13 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                         )
                 index += 1
     def has_template_pair_authority(candidate: _Candidate) -> bool:
-        if not candidate.top.role_authorized or not candidate.bottom.role_authorized:
-            return False
-        domain_count = _longitudinal_domain_count(
-            candidate.authority_trace_coordinates_px,
-            inputs.longitudinal_support_domains_px,
-        )
-        return domain_count >= min(
-            SPATIAL_SUPPORT_REGION_COUNT,
-            inputs.template.count,
-        ) or (
-            domain_count
-            >= min(MINIMUM_INDEPENDENT_SUPPORT_REGIONS, inputs.template.count)
-            and (
-                _covers_template_domains(
-                    candidate.top,
-                    inputs.longitudinal_support_domains_px,
-                )
-                or _covers_template_domains(
-                    candidate.bottom,
-                    inputs.longitudinal_support_domains_px,
-                )
-            )
+        return (
+            candidate.top.role_authorized
+            and candidate.bottom.role_authorized
+            and candidate.longitudinal_projection_authority.state
+            == EvidenceState.SUPPORTED
+            and candidate.longitudinal_projection_authority.basis
+            != CrossLongitudinalProjectionBasis.SOURCE_SPANNING_CONTINUOUS
         )
 
     # A template-wide pair cannot obtain authority by ignoring a strictly
@@ -887,14 +873,6 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                 for item in (*template_spanning_top, *template_spanning_bottom)
                 if (candidate := inferred_candidate(
                     item,
-                    template_domain_complete=(
-                        len(inputs.longitudinal_support_domains_px)
-                        >= SPATIAL_SUPPORT_REGION_COUNT
-                        and _covers_template_domains(
-                            item,
-                            inputs.longitudinal_support_domains_px,
-                        )
-                    ),
                 )) is not None
             ]
     elif direct_candidates:
@@ -1132,23 +1110,18 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         return (
             item.direct_pair
             and direct_pair_id(item) not in outward_contested_pair_ids
-            and (
-                item.role_authorized_pair_support_domain_count
-                >= min(SPATIAL_SUPPORT_REGION_COUNT, inputs.template.count)
-                or any(
-                    _covers_template_domains(
-                        binding,
-                        inputs.longitudinal_support_domains_px,
-                    )
-                    for binding in item.direct_bindings
-                )
-            )
+            and item.longitudinal_projection_authority.state
+            == EvidenceState.SUPPORTED
+            and item.longitudinal_projection_authority.basis
+            != CrossLongitudinalProjectionBasis.SOURCE_SPANNING_CONTINUOUS
         )
 
     def has_source_spanning_direct_side(item: CrossFit) -> bool:
         if (
             not item.direct_pair
             or direct_pair_id(item) in outward_contested_pair_ids
+            or item.longitudinal_projection_authority.basis
+            != CrossLongitudinalProjectionBasis.SOURCE_SPANNING_CONTINUOUS
         ):
             return False
         top_binding = next(
@@ -1186,6 +1159,8 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             or has_source_spanning_direct_side(item)
             or (
                 not item.direct_pair
+                and item.longitudinal_projection_authority.state
+                == EvidenceState.SUPPORTED
                 and item.independent_support_region_count
                 >= required_support_regions
             )
@@ -1224,6 +1199,18 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             fallback_runner=runner,
         )
     if not authoritative:
+        if any(
+            item.longitudinal_projection_authority.state
+            != EvidenceState.SUPPORTED
+            for item in representative_fits
+        ):
+            return unresolved_with_retained_proposal(
+                "cross support does not bracket the selected template extent",
+                CrossFailureKind
+                .LONGITUDINAL_PROJECTION_AUTHORITY_UNAVAILABLE,
+                fallback_best=best,
+                fallback_runner=runner,
+            )
         return unresolved_with_retained_proposal(
             "cross fit lacks independent spatial support",
             CrossFailureKind.INDEPENDENT_SUPPORT_UNAVAILABLE,

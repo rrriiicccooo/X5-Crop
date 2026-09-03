@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Sequence
 
-from ...domain import FiniteInterval
+from ...domain import EvidenceState, FiniteInterval
 from .interval_math import (
     add as _add,
     intersect as _intersect,
@@ -31,8 +31,15 @@ from .template_cross_model import (
     CrossHeightInferenceBasis,
     CrossHeightProjectionBasis,
     CrossLineProjectionBasis,
+    CrossLongitudinalProjectionAuthority,
+    CrossLongitudinalProjectionBasis,
     CrossPairSupportMode,
     CrossRoleBinding,
+)
+from .template_cross_longitudinal import (
+    assess_cross_longitudinal_projection,
+    covered_template_domain_ordinals,
+    covers_all_template_domains,
 )
 from .template_model import TemplateSpec
 
@@ -54,6 +61,7 @@ class _Candidate:
     authority_trace_coordinates_px: tuple[int, ...]
     pair_support_mode: CrossPairSupportMode | None
     height_inference_basis: CrossHeightInferenceBasis | None
+    longitudinal_projection_authority: CrossLongitudinalProjectionAuthority
     top_full_override: FiniteInterval | None = None
     bottom_full_override: FiniteInterval | None = None
     source_direction: SharedStripDirection | None = None
@@ -98,17 +106,49 @@ def _direct_candidate(
     if height is None or shift is None:
         return None, CrossFailureKind.FIXED_HEIGHT_INCOMPATIBLE
     support_traces = _shared_trace_coordinates(top, bottom)
-    if len(support_traces) >= minimum_shared_trace_support:
-        pair_support_mode = CrossPairSupportMode.SHARED_TRACES
-        authority_traces = support_traces
-    else:
-        authority_traces = tuple(
-            sorted(
-                set(top.trace_coordinates_px).union(
-                    bottom.trace_coordinates_px
-                )
+    combined_traces = tuple(
+        sorted(
+            set(top.trace_coordinates_px).union(
+                bottom.trace_coordinates_px
             )
         )
+    )
+    top_covers_all_domains = covers_all_template_domains(
+        top.trace_coordinates_px,
+        longitudinal_support_domains_px,
+    )
+    bottom_covers_all_domains = covers_all_template_domains(
+        bottom.trace_coordinates_px,
+        longitudinal_support_domains_px,
+    )
+    if len(support_traces) >= minimum_shared_trace_support:
+        pair_support_mode = CrossPairSupportMode.SHARED_TRACES
+        shared_domain_count = len(
+            covered_template_domain_ordinals(
+                support_traces,
+                longitudinal_support_domains_px,
+            )
+        )
+        authority_traces = (
+            combined_traces
+            if not longitudinal_support_domains_px
+            or shared_domain_count
+            >= min(
+                SPATIAL_SUPPORT_REGION_COUNT,
+                len(longitudinal_support_domains_px),
+            )
+            or (
+                shared_domain_count
+                >= min(
+                    MINIMUM_INDEPENDENT_SUPPORT_REGIONS,
+                    len(longitudinal_support_domains_px),
+                )
+                and (top_covers_all_domains or bottom_covers_all_domains)
+            )
+            else support_traces
+        )
+    else:
+        authority_traces = combined_traces
         if (
             top.evidence != CrossEvidence.DIRECT
             or bottom.evidence != CrossEvidence.DIRECT
@@ -128,6 +168,26 @@ def _direct_candidate(
             return None, CrossFailureKind.PAIR_SUPPORT_UNAVAILABLE
         pair_support_mode = CrossPairSupportMode.COMPLEMENTARY_DOMAINS
         support_traces = ()
+    projection_authority = assess_cross_longitudinal_projection(
+        supporting_observation_ids=(
+            top.observation_id,
+            bottom.observation_id,
+        ),
+        trace_coordinates_px=authority_traces,
+        domains=longitudinal_support_domains_px,
+        source_spanning_continuous=(
+            top.source_spanning_continuous
+            and bottom.source_spanning_continuous
+        )
+        or (
+            top.source_spanning_continuous
+            and bottom_covers_all_domains
+        )
+        or (
+            bottom.source_spanning_continuous
+            and top_covers_all_domains
+        ),
+    )
     if source_direction is None:
         direction, direction_ready, contradiction = _direction_closure(
             top,
@@ -167,6 +227,7 @@ def _direct_candidate(
             authority_trace_coordinates_px=authority_traces,
             pair_support_mode=pair_support_mode,
             height_inference_basis=None,
+            longitudinal_projection_authority=projection_authority,
             source_direction=None,
         ),
         None,
@@ -180,25 +241,36 @@ def _single_candidate(
     canonical_height_px: float,
     height_inference_basis: CrossHeightInferenceBasis,
     source_direction: SharedStripDirection | None = None,
-    template_domain_complete: bool = False,
+    longitudinal_support_domains_px: tuple[FiniteInterval, ...] = (),
 ) -> _Candidate | None:
     # A single edge needs independent spatial support and direct direction.
     # It must additionally span the complete registered domain before its
     # coordinate can own placement.  A direct,
     # role-authorized binding with a direct trace in every selected frame
-    # domain (and at least three selected domains) is a separate bounded
-    # authority: it may own fixed-H placement even when its aggregate support
-    # ledger reports only two independent regions. The caller must establish
-    # this per-domain direct-trace fact from the registered lattice; this flag
-    # never lowers the general support requirement for local edges.
+    # domain is a separate bounded authority.  The canonical longitudinal
+    # owner distinguishes that complete-domain fact from generic independent
+    # support; neither may be substituted for the other.
     if not isinstance(height_inference_basis, CrossHeightInferenceBasis):
         raise TypeError("single-side cross needs a typed H inference basis")
+    projection_authority = assess_cross_longitudinal_projection(
+        supporting_observation_ids=(binding.observation_id,),
+        trace_coordinates_px=binding.trace_coordinates_px,
+        domains=longitudinal_support_domains_px,
+        source_spanning_continuous=binding.source_spanning_continuous,
+        require_complete_template_domains=True,
+    )
+    complete_domain_exception = (
+        projection_authority.basis
+        == CrossLongitudinalProjectionBasis.COMPLETE_TEMPLATE_DOMAINS
+        and projection_authority.template_domain_count
+        >= SPATIAL_SUPPORT_REGION_COUNT
+    )
     if (
         not binding.role_authorized
         or (
             binding.independent_support_region_count
             < SPATIAL_SUPPORT_REGION_COUNT
-            and not template_domain_complete
+            and not complete_domain_exception
         )
         or (
             source_direction is None
@@ -209,8 +281,7 @@ def _single_candidate(
             and not _fits_source_direction(binding, source_direction)
         )
         or (
-            not binding.source_spanning_continuous
-            and not template_domain_complete
+            projection_authority.state != EvidenceState.SUPPORTED
         )
     ):
         return None
@@ -219,6 +290,7 @@ def _single_candidate(
         fixed_height=fixed_height,
         canonical_height_px=canonical_height_px,
         height_inference_basis=height_inference_basis,
+        longitudinal_projection_authority=projection_authority,
         source_direction=source_direction,
     )
 
@@ -230,6 +302,7 @@ def _retained_grid_candidate(
     canonical_height_px: float,
     height_inference_basis: CrossHeightInferenceBasis,
     source_direction: SharedStripDirection | None,
+    longitudinal_support_domains_px: tuple[FiniteInterval, ...] = (),
 ) -> _Candidate | None:
     """Build one proposal-only cross Grid from a registered role hypothesis.
 
@@ -256,6 +329,17 @@ def _retained_grid_candidate(
         fixed_height=fixed_height,
         canonical_height_px=canonical_height_px,
         height_inference_basis=height_inference_basis,
+        longitudinal_projection_authority=(
+            assess_cross_longitudinal_projection(
+                supporting_observation_ids=(binding.observation_id,),
+                trace_coordinates_px=binding.trace_coordinates_px,
+                domains=longitudinal_support_domains_px,
+                source_spanning_continuous=(
+                    binding.source_spanning_continuous
+                ),
+                require_complete_template_domains=True,
+            )
+        ),
         source_direction=source_direction,
     )
 
@@ -266,6 +350,7 @@ def _single_candidate_geometry(
     fixed_height: FiniteInterval,
     canonical_height_px: float,
     height_inference_basis: CrossHeightInferenceBasis,
+    longitudinal_projection_authority: CrossLongitudinalProjectionAuthority,
     source_direction: SharedStripDirection | None,
 ) -> _Candidate:
     """Materialize the one canonical single-role fixed-H geometry."""
@@ -307,6 +392,9 @@ def _single_candidate_geometry(
         authority_trace_coordinates_px=binding.trace_coordinates_px,
         pair_support_mode=None,
         height_inference_basis=height_inference_basis,
+        longitudinal_projection_authority=(
+            longitudinal_projection_authority
+        ),
         top_full_override=top_full,
         bottom_full_override=bottom_full,
         source_direction=source_direction,
@@ -317,21 +405,11 @@ def _covers_template_domains(
     binding: CrossRoleBinding,
     domains: tuple[FiniteInterval, ...],
 ) -> bool:
-    """Whether one role-authorized side is observed across every frame domain."""
+    """Whether one authorized role is direct in every Frame domain."""
 
-    return bool(domains) and binding.role_authorized and all(
-        any(domain.contains(float(trace), epsilon=0.5) for trace in binding.trace_coordinates_px)
-        for domain in domains
-    )
-
-
-def _longitudinal_domain_count(
-    traces: tuple[int, ...],
-    domains: tuple[FiniteInterval, ...],
-) -> int:
-    return sum(
-        any(domain.contains(float(trace), epsilon=0.5) for trace in traces)
-        for domain in domains
+    return binding.role_authorized and covers_all_template_domains(
+        binding.trace_coordinates_px,
+        domains,
     )
 
 
@@ -500,6 +578,9 @@ def _fit_from_candidate(
         single_side_inferred=not candidate.direct_pair,
         height_inference_basis=candidate.height_inference_basis,
         independent_support_region_count=candidate.shared_support,
+        longitudinal_projection_authority=(
+            candidate.longitudinal_projection_authority
+        ),
     )
 
 
@@ -530,36 +611,16 @@ def _fit_from_group(
             registered_trace_coordinates_px,
             traces,
         )
-        count = max(count, support_domain_count(traces))
-        return min(SPATIAL_SUPPORT_REGION_COUNT, count)
-
-    def support_domain_count(traces: tuple[int, ...]) -> int:
-        if not longitudinal_support_domains_px:
-            return 0
-        return min(
-            SPATIAL_SUPPORT_REGION_COUNT,
-            sum(
-                any(
-                    domain.contains(float(trace), epsilon=0.5)
-                    for trace in traces
+        count = max(
+            count,
+            len(
+                covered_template_domain_ordinals(
+                    traces,
+                    longitudinal_support_domains_px,
                 )
-                for domain in longitudinal_support_domains_px
             ),
         )
-
-    def role_authorized_pair_domain_count(
-        candidates: Sequence[_Candidate],
-    ) -> int:
-        return max(
-            (
-                support_domain_count(candidate.authority_trace_coordinates_px)
-                for candidate in candidates
-                if candidate.direct_pair
-                and candidate.top.role_authorized
-                and candidate.bottom.role_authorized
-            ),
-            default=0,
-        )
+        return min(SPATIAL_SUPPORT_REGION_COUNT, count)
 
     role_authorized_group = tuple(
         candidate
@@ -567,8 +628,8 @@ def _fit_from_group(
         if candidate.direct_pair
         and candidate.top.role_authorized
         and candidate.bottom.role_authorized
-        and support_domain_count(candidate.authority_trace_coordinates_px)
-        >= min(MINIMUM_INDEPENDENT_SUPPORT_REGIONS, template.count)
+        and candidate.longitudinal_projection_authority.state
+        == EvidenceState.SUPPORTED
     )
     if role_authorized_group:
         group = role_authorized_group
@@ -602,24 +663,28 @@ def _fit_from_group(
             }
         )
     )
-    authority_traces = tuple(
-        sorted(
-            {
-                trace
-                for item in group
-                for trace in item.authority_trace_coordinates_px
-            }
-        )
-    )
+    authorities = {
+        item.longitudinal_projection_authority for item in group
+    }
+    if len(authorities) != 1:
+        raise AssertionError("cross group merged projection authorities")
+    authority = next(iter(authorities))
     return replace(
         representative,
         shared_trace_support_count=len(support_traces),
         continuous_support_fraction=min(item.continuous_support for item in group),
         residual_sum_px=max(item.residual for item in group),
         direct_provenance_ids=tuple(item.observation_id for item in direct),
-        independent_support_region_count=support_region_count(authority_traces),
-        longitudinal_support_domain_count=support_domain_count(authority_traces),
-        role_authorized_pair_support_domain_count=(
-            role_authorized_pair_domain_count(group)
+        independent_support_region_count=support_region_count(
+            tuple(
+                sorted(
+                    {
+                        trace
+                        for item in group
+                        for trace in item.authority_trace_coordinates_px
+                    }
+                )
+            )
         ),
+        longitudinal_projection_authority=authority,
     )

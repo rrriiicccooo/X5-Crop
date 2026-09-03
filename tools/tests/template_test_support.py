@@ -34,6 +34,8 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     CrossFit,
     CrossHeightInferenceBasis,
     CrossHeightProjectionBasis,
+    CrossLongitudinalProjectionAuthority,
+    CrossLongitudinalProjectionBasis,
     CrossPairSupportMode,
     CrossRoleBinding,
 )
@@ -502,6 +504,32 @@ def placement_binding(
     )
 
 
+def placement_cross_longitudinal_authority(
+    template: TemplateSpec,
+    *bindings: CrossRoleBinding,
+) -> CrossLongitudinalProjectionAuthority:
+    """Return explicit complete-domain authority for composed test fits."""
+
+    observation_ids = tuple(
+        sorted({item.observation_id for item in bindings}, key=str)
+    )
+    domain_count = template.count
+    return CrossLongitudinalProjectionAuthority(
+        authority_id=(
+            f"cross-longitudinal-projection:test:{template.template_id}:"
+            + ":".join(str(item) for item in observation_ids)
+        ),
+        state=EvidenceState.SUPPORTED,
+        template_domain_count=domain_count,
+        required_independent_domain_count=min(3, domain_count),
+        supported_domain_ordinals=tuple(range(1, domain_count + 1)),
+        template_extent_bracketed=True,
+        supporting_observation_ids=observation_ids,
+        basis=CrossLongitudinalProjectionBasis.COMPLETE_TEMPLATE_DOMAINS,
+        failure_kind=None,
+    )
+
+
 def placement_cross(
     template: TemplateSpec,
     *,
@@ -511,6 +539,7 @@ def placement_cross(
 ) -> CrossFit:
     top = placement_binding(BoundaryRole.TOP, "top", 10.0)
     bottom = placement_binding(BoundaryRole.BOTTOM, "bottom", 250.0)
+    direct_bindings = (top,) if one_sided else (top, bottom)
     inferred = (
         CrossRoleBinding(
             role=BoundaryRole.BOTTOM,
@@ -534,7 +563,7 @@ def placement_cross(
         bottom_fit_interval_px=FiniteInterval.exact(250.0),
         top_full_interval_px=FiniteInterval.exact(10.0),
         bottom_full_interval_px=FiniteInterval.exact(250.0),
-        direct_bindings=(top,) if one_sided else (top, bottom),
+        direct_bindings=direct_bindings,
         inferred_bindings=inferred,
         selected_direction=direction,
         direct_pair=not one_sided,
@@ -554,6 +583,12 @@ def placement_cross(
             else None
         ),
         single_side_inferred=one_sided,
+        longitudinal_projection_authority=(
+            placement_cross_longitudinal_authority(
+                template,
+                *direct_bindings,
+            )
+        ),
     )
 
 
@@ -598,6 +633,7 @@ __all__ = [
     "placement_binding",
     "placement_compose",
     "placement_cross",
+    "placement_cross_longitudinal_authority",
     "placement_direction",
     "placement_sequence",
     "placement_template",

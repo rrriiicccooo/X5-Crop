@@ -137,6 +137,154 @@ class CrossPairSupportMode(str, Enum):
     COMPLEMENTARY_DOMAINS = "complementary_domains"
 
 
+class CrossLongitudinalProjectionBasis(str, Enum):
+    """Direct support that permits one Cross line to span the placement."""
+
+    SOURCE_SPANNING_CONTINUOUS = "source_spanning_continuous"
+    COMPLETE_TEMPLATE_DOMAINS = "complete_template_domains"
+    BRACKETED_TEMPLATE_EXTENT = "bracketed_template_extent"
+
+
+class CrossLongitudinalProjectionFailureKind(str, Enum):
+    """Why registered Cross support cannot own full-placement projection."""
+
+    TEMPLATE_DOMAINS_UNAVAILABLE = "template_domains_unavailable"
+    INDEPENDENT_DOMAIN_SUPPORT_UNAVAILABLE = (
+        "independent_domain_support_unavailable"
+    )
+    TEMPLATE_EXTENT_UNBRACKETED = "template_extent_unbracketed"
+    COMPLETE_TEMPLATE_DOMAIN_SUPPORT_UNAVAILABLE = (
+        "complete_template_domain_support_unavailable"
+    )
+
+
+@dataclass(frozen=True)
+class CrossLongitudinalProjectionAuthority:
+    """Bounded authority for projecting Cross geometry along the strip.
+
+    Cross-axis line support and longitudinal projection are independent
+    facts.  Three observations in adjacent Frame domains can close a local
+    line, but they cannot authorize extrapolation across unobserved Frames.
+    """
+
+    authority_id: str
+    state: EvidenceState
+    template_domain_count: int
+    required_independent_domain_count: int
+    supported_domain_ordinals: tuple[int, ...]
+    template_extent_bracketed: bool
+    supporting_observation_ids: tuple[ObservationId, ...]
+    basis: CrossLongitudinalProjectionBasis | None
+    failure_kind: CrossLongitudinalProjectionFailureKind | None
+
+    def __post_init__(self) -> None:
+        supported = self.state == EvidenceState.SUPPORTED
+        unavailable = self.state == EvidenceState.UNAVAILABLE
+        if (
+            not self.authority_id
+            or not (supported or unavailable)
+            or not isinstance(self.template_domain_count, int)
+            or self.template_domain_count < 0
+            or not isinstance(self.required_independent_domain_count, int)
+            or not 0
+            <= self.required_independent_domain_count
+            <= self.template_domain_count
+            or tuple(sorted(set(self.supported_domain_ordinals)))
+            != self.supported_domain_ordinals
+            or any(
+                not 1 <= ordinal <= self.template_domain_count
+                for ordinal in self.supported_domain_ordinals
+            )
+            or not isinstance(self.template_extent_bracketed, bool)
+            or not self.supporting_observation_ids
+            or tuple(
+                sorted(set(self.supporting_observation_ids), key=str)
+            )
+            != self.supporting_observation_ids
+            or any(
+                not isinstance(identity, ObservationId)
+                for identity in self.supporting_observation_ids
+            )
+        ):
+            raise ValueError("cross longitudinal projection authority is invalid")
+        if supported:
+            if (
+                not isinstance(self.basis, CrossLongitudinalProjectionBasis)
+                or self.failure_kind is not None
+                or not self.template_extent_bracketed
+            ):
+                raise ValueError(
+                    "supported Cross longitudinal projection is incomplete"
+                )
+            if (
+                self.basis
+                == CrossLongitudinalProjectionBasis.COMPLETE_TEMPLATE_DOMAINS
+                and self.supported_domain_ordinals
+                != tuple(range(1, self.template_domain_count + 1))
+            ):
+                raise ValueError(
+                    "complete Cross projection must cover every template domain"
+                )
+            if (
+                self.basis
+                == CrossLongitudinalProjectionBasis.BRACKETED_TEMPLATE_EXTENT
+                and (
+                    len(self.supported_domain_ordinals)
+                    < self.required_independent_domain_count
+                    or not self.supported_domain_ordinals
+                    or self.supported_domain_ordinals[0] != 1
+                    or self.supported_domain_ordinals[-1]
+                    != self.template_domain_count
+                )
+            ):
+                raise ValueError(
+                    "bracketed Cross projection does not close the template extent"
+                )
+        elif (
+            self.basis is not None
+            or not isinstance(
+                self.failure_kind,
+                CrossLongitudinalProjectionFailureKind,
+            )
+        ):
+            raise ValueError(
+                "unavailable Cross longitudinal projection needs typed failure"
+            )
+
+
+def unavailable_cross_longitudinal_projection_authority(
+    *supporting_observation_ids: ObservationId,
+) -> CrossLongitudinalProjectionAuthority:
+    """Return the canonical unmeasured projection authority."""
+
+    identities = tuple(
+        sorted(
+            {
+                identity
+                if isinstance(identity, ObservationId)
+                else ObservationId(str(identity))
+                for identity in supporting_observation_ids
+            }
+            or {ObservationId("cross-longitudinal-projection:unregistered")},
+            key=str,
+        )
+    )
+    return CrossLongitudinalProjectionAuthority(
+        authority_id="cross-longitudinal-projection:unavailable",
+        state=EvidenceState.UNAVAILABLE,
+        template_domain_count=0,
+        required_independent_domain_count=0,
+        supported_domain_ordinals=(),
+        template_extent_bracketed=False,
+        supporting_observation_ids=identities,
+        basis=None,
+        failure_kind=(
+            CrossLongitudinalProjectionFailureKind
+            .TEMPLATE_DOMAINS_UNAVAILABLE
+        ),
+    )
+
+
 class CrossBoundaryFamilyFailureKind(str, Enum):
     """Why locally compatible same-role lines retained distinct identity."""
 
@@ -779,6 +927,9 @@ class CrossFailureKind(str, Enum):
     INDEPENDENT_SUPPORT_UNAVAILABLE = "independent_support_unavailable"
     DIRECTION_UNAVAILABLE = "direction_unavailable"
     APERTURE_ASPECT_RATIO_CONFLICT = "aperture_aspect_ratio_conflict"
+    LONGITUDINAL_PROJECTION_AUTHORITY_UNAVAILABLE = (
+        "longitudinal_projection_authority_unavailable"
+    )
 
 
 class CrossWinnerBasis(str, Enum):
@@ -823,8 +974,11 @@ class CrossFit:
     height_inference_basis: CrossHeightInferenceBasis | None = None
     direct_provenance_ids: tuple[ObservationId, ...] = ()
     independent_support_region_count: int = 0
-    longitudinal_support_domain_count: int = 0
-    role_authorized_pair_support_domain_count: int = 0
+    longitudinal_projection_authority: (
+        CrossLongitudinalProjectionAuthority
+    ) = field(
+        default_factory=unavailable_cross_longitudinal_projection_authority
+    )
 
     def __post_init__(self) -> None:
         if not self.template_id:
@@ -971,10 +1125,13 @@ class CrossFit:
             raise ValueError("cross shared support count is invalid")
         if not 0 <= self.independent_support_region_count <= 3:
             raise ValueError("cross independent support count is invalid")
-        if not 0 <= self.longitudinal_support_domain_count <= 3:
-            raise ValueError("cross longitudinal support count is invalid")
-        if not 0 <= self.role_authorized_pair_support_domain_count <= 3:
-            raise ValueError("cross role-authorized support count is invalid")
+        if not isinstance(
+            self.longitudinal_projection_authority,
+            CrossLongitudinalProjectionAuthority,
+        ):
+            raise TypeError(
+                "cross fit requires typed longitudinal projection authority"
+            )
         if not 0.0 <= self.continuous_support_fraction <= 1.0:
             raise ValueError("cross continuous support is invalid")
         if not math.isfinite(self.residual_sum_px) or self.residual_sum_px < 0.0:
@@ -1070,6 +1227,15 @@ class CrossFitCompetition:
         ):
             raise ValueError(
                 "resolved cross requires complete physical height projection"
+            )
+        if (
+            self.status == CrossFitStatus.RESOLVED
+            and self.best is not None
+            and self.best.longitudinal_projection_authority.state
+            != EvidenceState.SUPPORTED
+        ):
+            raise ValueError(
+                "resolved cross requires longitudinal projection authority"
             )
         if self.status != CrossFitStatus.RESOLVED and self.winner_basis is not None:
             raise ValueError("unresolved cross competition cannot have a winner basis")

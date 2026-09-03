@@ -9,6 +9,7 @@ from tools.tests.template_test_support import (
     phase_template as template,
     placement_compose as _compose,
     placement_cross,
+    placement_cross_longitudinal_authority,
 )
 from x5crop.detection.candidate.assessment.candidate_gate import (
     candidate_gate_assessment,
@@ -172,6 +173,9 @@ def _enclosing_cross_fit(spec) -> CrossFit:
             CrossHeightProjectionBasis.COMPLETE_PHYSICAL_INTERVAL
         ),
         enclosing_support_pair=support,
+        longitudinal_projection_authority=(
+            placement_cross_longitudinal_authority(spec, top, bottom)
+        ),
     )
 
 

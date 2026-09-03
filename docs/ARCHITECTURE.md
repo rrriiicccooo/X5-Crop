@@ -993,6 +993,32 @@ Source-spanning 单侧 direct anchor 与局部 opposite 即使偶然 fixed-H 相
 source-spanning side 与有界 H 推导 opposite。多个局部 closure 不能替代这条权限，也不能扩大整条片带的
 共同方向。
 
+#### Cross 纵向投影权限
+
+`template_cross_longitudinal.py` 是 `CrossLongitudinalProjectionAuthority` 的唯一 owner。Cross line 的
+局部拟合成立，只证明它在已观测长轴位置附近是合法短轴边；若要把该 line 用于全部 Frame，必须另行证明
+纵向投影范围。该权限只决定 resolved Cross 能否进入 candidate，不删除 Review proposal，也不改变局部
+observation、fixed H、runner 或最终 Gate：
+
+| 已登记的直接纵向事实 | authority |
+|---|---|
+| 同一物理 line 连续 source-spanning | `supported / source_spanning_continuous` |
+| direct trace 覆盖每个 selected Frame domain | `supported / complete_template_domains` |
+| 至少覆盖 3 个独立 selected domain，且同时包含首、末 domain | `supported / bracketed_template_extent` |
+| template domain 未编译 | `unavailable / template_domains_unavailable` |
+| 独立 domain 少于要求 | `unavailable / independent_domain_support_unavailable` |
+| 有局部支持但没有同时括住首、末 domain | `unavailable / template_extent_unbracketed` |
+| 单侧 H 推导没有覆盖每个 selected domain | `unavailable / complete_template_domain_support_unavailable` |
+
+`shared_traces` pair 只有在共享 trace 覆盖至少 3 个 selected domain，或共享 trace 覆盖至少 2 个 domain
+且其中一侧自己覆盖全部 selected domain 时，才能把两侧的其它 direct trace 合并用于完整 extent 判断。
+仅在两个相同局部 domain 共享、再由 TOP/BOTTOM 各自补齐不同尾部的 pair 不能取得完整投影权限；否则两个
+局部 line 会用彼此不共同支持的尾部自证整条 template。`complementary_domains` 仍须两侧各自拥有至少两个
+独立区域，并由两侧 direct trace 的完整并集逐 domain 覆盖 template。
+
+Normal report 与 Debug 必须显示 state、basis、已覆盖/总 domain、首尾 bracket 和 typed failure。以上判断
+只消费已经登记的 trace/domain，不新增 TIFF query、候选、score 或 selected-placement requery。
+
 ### 8.2 `ENCLOSING_SUPPORT_PAIR`
 
 当 aperture 未唯一成立时，可以使用一对直接外侧支撑作为完整输出 top/bottom。Pair 的 observation basis
@@ -1502,7 +1528,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/template_adjacency_topology.py` | selected adjacency 的 continuity ledger、Contact/Overlap 验证与 typed topology failure；不读取像素或重新选择 placement |
 | `photo_geometry/template_outer_frame_authority.py` | 带 Grid 推断时首尾输出 Frame 的直接长轴角色证明 |
 | `photo_geometry/template_alignment_diagnostic.py` | theoretical-vs-observed residual 的只读诊断 |
-| `photo_geometry/interval_math.py`、`template_cross*.py`、`template_cross_support.py` | 共享 interval 运算、source H 校准、局部 top/bottom 方向闭合、typed producer bound 与 enclosing support |
+| `photo_geometry/interval_math.py`、`template_cross*.py`、`template_cross_support.py` | 共享 interval 运算、source H 校准、局部 top/bottom 方向闭合、typed producer bound 与 enclosing support；其中 `template_cross_longitudinal.py` 独占 Cross line 从已观测长轴范围投影到完整 template 的 typed authority |
 | `photo_geometry/template_enclosing_support_aperture.py` | selected unique enclosing support 内的黄金校准 aperture-center authority、精确 observation-set provenance、物理 containment 交集与 typed conflict；rank 0，不选 geometry |
 | `photo_geometry/template_placement.py`、`template_selection.py` | source-axis frame 的一次 compose、显式 overlap 的 cross-support 去重，以及 proposal 之后的离散 eligibility/winner/runner |
 | `photo_geometry/template_holder_fill.py` | selected PhotoGroupOuter 与 W-only fill assessment |
@@ -1608,6 +1634,9 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   `unsafe_approved_auto`、nominal 自动覆盖，以及 challenge capability。决定分布、proposal/candidate 偏差、
   自动覆盖与安全准确性不得合并为单一“准确率”。开发诊断允许暂时出现危险 auto，但必须完整列出样片、
   错误边界和根因，并把结果明确标为未达到 release detection gate；不得隐藏、改角色或提前删除 proposal。
+  所有合法、受支持的黄金 task 应先形成完整 proposal 并接受 pre-Gate 黄金比较；优化顺序是先修 unsafe
+  proposal 的通用几何，再审计 safe proposal 的 eligibility 阻断，最后校准 auto/review 决定。不能让证据
+  不足提前终止 proposal，也不能为了观察错误而人为绕过 Runtime Gate。
 - 检测能力发布底线是当前 development nominal 全部安全 `approved_auto`，全部角色
   `unsafe_approved_auto = 0`；challenge 的安全 auto 是能力发现，安全 review 同样合格，但不能替代
   nominal 覆盖。未来建立 sealed cohort 后，其 nominal 也必须全部安全自动通过。不得把失败 nominal 改成

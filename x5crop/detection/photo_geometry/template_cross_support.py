@@ -8,7 +8,7 @@ from enum import Enum
 import math
 from typing import Sequence
 
-from ...domain import FiniteInterval
+from ...domain import EvidenceState, FiniteInterval
 from ...formats import OUTPUT_PROTECTION_SPEC
 from .interval_math import (
     midpoint as _midpoint_interval,
@@ -25,9 +25,11 @@ from .template_cross_geometry import (
     shared_direction_for as _direction_for,
 )
 from .template_cross_model import (
+    CrossLongitudinalProjectionAuthority,
     CrossRoleBinding,
     EnclosingSupportPair,
 )
+from .template_cross_longitudinal import assess_cross_longitudinal_projection
 from .template_model import TemplateSpec
 
 
@@ -45,7 +47,7 @@ class EnclosingSupportCandidate:
     pair: EnclosingSupportPair
     shared_trace_support_count: int
     independent_support_region_count: int
-    longitudinal_support_domain_count: int
+    longitudinal_projection_authority: CrossLongitudinalProjectionAuthority
 
 
 @dataclass(frozen=True)
@@ -141,13 +143,6 @@ def _candidate(
         SPATIAL_SUPPORT_REGION_COUNT,
         independent_spatial_support_count(registered_traces, traces),
     )
-    domains = min(
-        SPATIAL_SUPPORT_REGION_COUNT,
-        sum(
-            any(domain.contains(float(trace), epsilon=0.5) for trace in traces)
-            for domain in longitudinal_support_domains_px
-        ),
-    )
     source_spanning = top.source_spanning_continuous and bottom.source_spanning_continuous
     # A material/holder support may become the output boundary itself, so a
     # two-region local fragment cannot be extrapolated across the strip merely
@@ -157,10 +152,19 @@ def _candidate(
         and bottom.independent_support_region_count
         >= SPATIAL_SUPPORT_REGION_COUNT
     )
+    projection_authority = assess_cross_longitudinal_projection(
+        supporting_observation_ids=(
+            top.observation_id,
+            bottom.observation_id,
+        ),
+        trace_coordinates_px=traces,
+        domains=longitudinal_support_domains_px,
+        source_spanning_continuous=source_spanning,
+    )
     connected = (
         directly_continuous
         and independent_regions >= SPATIAL_SUPPORT_REGION_COUNT
-        and domains >= min(SPATIAL_SUPPORT_REGION_COUNT, template.count)
+        and projection_authority.state == EvidenceState.SUPPORTED
     )
     if not source_spanning and not connected:
         return None
@@ -243,7 +247,7 @@ def _candidate(
         pair=pair,
         shared_trace_support_count=len(traces),
         independent_support_region_count=independent_regions,
-        longitudinal_support_domain_count=domains,
+        longitudinal_projection_authority=projection_authority,
     )
 
 

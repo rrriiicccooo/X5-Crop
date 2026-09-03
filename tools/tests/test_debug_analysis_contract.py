@@ -117,6 +117,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertIn("COARSE ORIENTATION ", cross)
         self.assertIn("ENCLOSING ", cross)
         self.assertIn("EVIDENCE UNAVAILABLE:PAIR_UNAVAILABLE", cross)
+        self.assertIn("LONG ", cross)
         self.assertIn("SEQUENCE FIT ·", sequence)
         self.assertIn(
             "PARAM CALIBRATED_NOMINAL_GRID",

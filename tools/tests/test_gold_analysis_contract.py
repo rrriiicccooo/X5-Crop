@@ -259,6 +259,11 @@ class GoldAnalysisContractTest(unittest.TestCase):
             "cross_status": "resolved",
             "cross_failure_kind": None,
             "cross_failure_reason": None,
+            "cross_longitudinal_projection_authority_state": "supported",
+            "cross_longitudinal_projection_authority_basis": (
+                "source_spanning_continuous"
+            ),
+            "cross_longitudinal_projection_failure_kind": None,
             "placement_failure_gap": None,
             "selected_cross_boundary_use": "aperture_pair",
             "duration_seconds": 1.0,

@@ -253,6 +253,23 @@ auto。该提交因此明确是 **DEVELOPMENT ONLY / NOT RELEASE READY**，不�
 通过。Development-detail mean 为 3.968 秒，只作开发归因；本机制不新增 TIFF query、detector、candidate、
 score、fallback 或样片规则。
 
+Cross 的局部拟合与完整纵向投影权限现已分离。唯一 `CrossLongitudinalProjectionAuthority` 要求同一物理
+line source-spanning、覆盖全部 selected domain，或至少由 3 个独立 domain 同时括住 template 首尾；单侧
+H 推导仍必须逐 domain 完整覆盖。`shared_traces` pair 不能再用 TOP/BOTTOM 各自未共同观测的互补尾部
+自证完整 template，失败分别保留为 domain 缺失、独立支持不足、extent 未括住或完整单侧覆盖不足。
+Review proposal 继续生成，只有 candidate/auto 权限被收回；Normal report 与 Debug 显示 basis、domain
+覆盖和 typed failure。Report revision 更新为 `x5crop_v5_template_report_65`，development gold record / summary
+分别更新为 v17 / v20，不保留旧 schema 兼容路径。
+
+完整 110-task development diagnostic 无分析错误且全部生成 proposal：32 safe / 78 unsafe proposal、
+20 safe / 17 unsafe / 73 unavailable candidate、16 safe auto / 94 Review，当前观测危险 auto 为 0。
+S035 的局部 Cross 不再越过未观测的末端 Frame 取得 auto；S003 保持安全 auto，S005 保持 Review。
+S025 从安全 auto 变为安全 candidate Review，因为第 6 个 domain 没有 direct Cross 覆盖；S028 因多个非等价
+Cross fit 变为无 candidate，这两项都作为后续能力缺口保留，未被隐藏或改类。Enclosing-support calibration
+的合格 observation 由 S028 迁移为 S025，仍为 20 source 且区间仍为 `[-0.009H, +0.007H]`，精确 digest
+已随当前 observation set 复算。Development-detail mean 为 4.194 秒，只作开发归因，不替代正式性能 Gate；
+本检查点仍为 **DEVELOPMENT ONLY / NOT RELEASE READY**。
+
 ### 产品行为
 
 - 用户提供 format，并确认匹配片夹的默认 count 或显式 count；count 包含中间空白曝光格。Runtime 不猜

@@ -148,6 +148,14 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                     else lane.prepared.cross_competition.best
                     .height_inference_basis.value
                 ),
+                "cross_longitudinal_projection_authority": (
+                    None
+                    if lane.prepared.cross_competition.best is None
+                    else typed_read_model(
+                        lane.prepared.cross_competition.best
+                        .longitudinal_projection_authority
+                    )
+                ),
                 "placement_state": lane.placement_competition.state.value,
                 "placement_failure": typed_read_model(
                     lane.placement_competition.failure

@@ -25,6 +25,7 @@ from .template_cross_model import (
     CrossEvidence,
     CrossRoleBinding,
 )
+from .template_cross_longitudinal import covers_all_template_domains
 from .template_model import (
     PhaseLatticeAuthority,
     TemplateSpec,
@@ -158,19 +159,6 @@ def _interval_distance(
         abs(left.maximum - right.minimum),
     )
     return minimum, maximum
-
-
-def _binding_covers_template_domains(
-    binding: CrossRoleBinding,
-    domains: tuple[FiniteInterval, ...],
-) -> bool:
-    return bool(domains) and all(
-        any(
-            domain.contains(float(trace), epsilon=0.5)
-            for trace in binding.trace_coordinates_px
-        )
-        for domain in domains
-    )
 
 
 def _project_cross_anchor(
@@ -657,7 +645,10 @@ def register_template_local_cross_refinements(
         >= MINIMUM_INDEPENDENT_SUPPORT_REGIONS
         and (
             binding.source_spanning_continuous
-            or _binding_covers_template_domains(binding, domains)
+            or covers_all_template_domains(
+                binding.trace_coordinates_px,
+                domains,
+            )
         )
     )
     if not anchors:

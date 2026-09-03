@@ -51,8 +51,8 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v16"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v19"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v17"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v20"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
 SOURCE_TIMEOUT_SECONDS = 600
@@ -1062,6 +1062,9 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         nominal_authority = production_lanes[0][
             "calibrated_nominal_grid_authority"
         ]
+        cross_longitudinal_authority = production_lanes[0][
+            "cross_longitudinal_projection_authority"
+        ]
         enclosing_support_aperture_authority = production_lanes[0][
             "enclosing_support_aperture_authority"
         ]
@@ -1226,6 +1229,21 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         "cross_failure_reason": development_lanes[0][
             "cross_competition"
         ].get("reason"),
+        "cross_longitudinal_projection_authority_state": (
+            None
+            if cross_longitudinal_authority is None
+            else cross_longitudinal_authority["state"]
+        ),
+        "cross_longitudinal_projection_authority_basis": (
+            None
+            if cross_longitudinal_authority is None
+            else cross_longitudinal_authority["basis"]
+        ),
+        "cross_longitudinal_projection_failure_kind": (
+            None
+            if cross_longitudinal_authority is None
+            else cross_longitudinal_authority["failure_kind"]
+        ),
         "placement_failure_gap": (
             None
             if development_lanes[0]["placement_competition"]["failure"]
@@ -2734,6 +2752,18 @@ def _summary(
             records,
             "cross_failure_kind",
         ),
+        "cross_longitudinal_projection_authority_state_counts": _counter(
+            records,
+            "cross_longitudinal_projection_authority_state",
+        ),
+        "cross_longitudinal_projection_authority_basis_counts": _counter(
+            records,
+            "cross_longitudinal_projection_authority_basis",
+        ),
+        "cross_longitudinal_projection_failure_kind_counts": _counter(
+            records,
+            "cross_longitudinal_projection_failure_kind",
+        ),
         "placement_failure_gap_counts": _counter(
             records,
             "placement_failure_gap",
@@ -2928,6 +2958,9 @@ def run_gold_analysis(
                 "cross_status": None,
                 "cross_failure_kind": None,
                 "cross_failure_reason": None,
+                "cross_longitudinal_projection_authority_state": None,
+                "cross_longitudinal_projection_authority_basis": None,
+                "cross_longitudinal_projection_failure_kind": None,
                 "placement_failure_gap": None,
                 "selected_cross_boundary_use": None,
                 "duration_seconds": 0.0,

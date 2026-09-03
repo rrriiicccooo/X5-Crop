@@ -937,6 +937,35 @@ def axis_authority_summaries(
         if not cross_height_projection_bases
         else f" · H PROJECTION {cross_height_projection_bases}"
     )
+    cross_longitudinal_projection_labels: set[str] = set()
+    for lane in lanes:
+        best = lane.prepared.cross_competition.best
+        authority = (
+            None
+            if best is None
+            else getattr(best, "longitudinal_projection_authority", None)
+        )
+        if authority is None:
+            continue
+        domain_coverage = (
+            f"D{len(authority.supported_domain_ordinals)}/"
+            f"{authority.template_domain_count}"
+        )
+        if authority.state.value == "supported":
+            assert authority.basis is not None
+            outcome = authority.basis.value.upper()
+        else:
+            assert authority.failure_kind is not None
+            outcome = "FAIL " + authority.failure_kind.value.upper()
+        cross_longitudinal_projection_labels.add(
+            f"{outcome} {domain_coverage}"
+        )
+    cross_longitudinal_projection_suffix = (
+        ""
+        if not cross_longitudinal_projection_labels
+        else " · LONG "
+        + "/".join(sorted(cross_longitudinal_projection_labels))
+    )
     phase_runners = sum(
         lane.prepared.phase_competition.runner_up is not None
         for lane in lanes
@@ -1024,7 +1053,8 @@ def axis_authority_summaries(
             f"{cross_height_inference_suffix}"
             f"{retained_cross_proposal_suffix}"
             f"{cross_line_projection_suffix}"
-            f"{cross_height_projection_suffix}",
+            f"{cross_height_projection_suffix}"
+            f"{cross_longitudinal_projection_suffix}",
             f"SEQUENCE FIT · {phase_status} · COARSE {coarse_long} · "
             f"RUNNER {phase_runners}{lattice_fit_suffix}"
             f"{retained_phase_proposal_suffix}",
@@ -1078,7 +1108,8 @@ def axis_authority_summaries(
         + cross_height_inference_suffix
         + retained_cross_proposal_suffix
         + cross_line_projection_suffix
-        + cross_height_projection_suffix,
+        + cross_height_projection_suffix
+        + cross_longitudinal_projection_suffix,
         f"SEQUENCE FIT · {phase_status} · COARSE {coarse_long} → "
         f"DIRECT {direct_sequence} · INFERRED {inferred_sequence}"
         f"{lattice_fit_suffix}{retained_phase_proposal_suffix}",

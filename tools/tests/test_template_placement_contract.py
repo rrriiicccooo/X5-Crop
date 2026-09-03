@@ -108,8 +108,6 @@ class TemplatePlacementContractTest(unittest.TestCase):
             direct_bindings=(top, bottom),
             selected_direction=cross_direction,
             independent_support_region_count=2,
-            longitudinal_support_domain_count=2,
-            role_authorized_pair_support_domain_count=2,
         )
         baseline = _compose(template, sequence, cross)
         placement = _compose(
@@ -452,8 +450,6 @@ class TemplatePlacementContractTest(unittest.TestCase):
             direct_bindings=(top, bottom),
             selected_direction=local_direction,
             independent_support_region_count=2,
-            longitudinal_support_domain_count=2,
-            role_authorized_pair_support_domain_count=2,
         )
         placement = _compose(
             template,
