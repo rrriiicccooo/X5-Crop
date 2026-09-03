@@ -21,6 +21,7 @@ from .separator_material import (
     normal_separator_material_bands,
     normal_separator_material_conflicts,
 )
+from .template_separator_support import resolve_separator_support
 from .template_model import SequenceFit
 
 
@@ -302,14 +303,53 @@ def _direct_role_authority_ledger(
         separator_bands,
         maximum_material_gap_px=fit.template.gap_prior_px.maximum,
     )
+    support_resolution = resolve_separator_support(
+        observations,
+        role_authority_bands,
+    )
+    component_by_band_id = {
+        identity: component
+        for component in support_resolution.components
+        for identity in component.band_observation_ids
+    }
+    unambiguous_band_ids = {
+        band.observation_id
+        for band in role_authority_bands
+        for component in (component_by_band_id[band.observation_id],)
+        if (
+            band.material_support_region_count
+            < SPATIAL_SUPPORT_REGION_COUNT
+            or (
+                component.role_authority_state == EvidenceState.SUPPORTED
+                and (
+                    band.left_edge_observation_id,
+                    band.right_edge_observation_id,
+                )
+                == component.role_authority_pair_edge_observation_ids
+            )
+        )
+    }
+    source_wide_role_band_ids = {
+        band.observation_id
+        for band in role_authority_bands
+        for component in (component_by_band_id[band.observation_id],)
+        if component.role_authority_state == EvidenceState.SUPPORTED
+        and (
+            band.left_edge_observation_id,
+            band.right_edge_observation_id,
+        )
+        == component.role_authority_pair_edge_observation_ids
+        and band.material_support_region_count == SPATIAL_SUPPORT_REGION_COUNT
+    }
     ordered_role_authority_bands = tuple(
         (band, _ordered_separator_edge_pair(band, fit.template.direction))
         for band in role_authority_bands
+        if band.observation_id in unambiguous_band_ids
     )
     source_wide_pairs = frozenset(
         ordered_pair
         for band, ordered_pair in ordered_role_authority_bands
-        if band.material_support_region_count == SPATIAL_SUPPORT_REGION_COUNT
+        if band.observation_id in source_wide_role_band_ids
     )
     partial_height_pairs = frozenset(
         ordered_pair
@@ -330,12 +370,12 @@ def _direct_role_authority_ledger(
         {
             (ordered_pair[0], BoundaryRole.END)
             for band, ordered_pair in ordered_role_authority_bands
-            if band.material_support_region_count == SPATIAL_SUPPORT_REGION_COUNT
+            if band.observation_id in source_wide_role_band_ids
         }
         | {
             (ordered_pair[1], BoundaryRole.START)
             for band, ordered_pair in ordered_role_authority_bands
-            if band.material_support_region_count == SPATIAL_SUPPORT_REGION_COUNT
+            if band.observation_id in source_wide_role_band_ids
         }
     )
 

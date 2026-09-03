@@ -217,6 +217,21 @@ S108 仍为 unsafe proposal。总分布保持 30 safe / 80 unsafe，candidate、
 Development-detail mean 为 3.954 秒，只作开发归因。本机制不新增 TIFF query、detector、candidate、rank、
 score、fallback、Gate 权限或样片规则。
 
+Separator connected component 现在由 `template_separator_support.py` 唯一解析。共享任一 physical edge 的
+全部合格 band 始终属于同一个相关 evidence group；只有唯一、无拓扑分叉的 source-wide pair 能原子授予
+`END → material → START`。多个 source-wide pair 产生 `alternative_pair_interpretations`，唯一 pair 的
+endpoint 若又参与另一 pair 且角色相反则产生 `endpoint_role_conflict`；partial-height alternative 继续保留
+为相关 provenance 和既有的一次权限传递，但不能覆盖 source-wide pair 或增加 rank。孤立 endpoint 的单条
+方向 hint 不再错误推翻完整 material pair。Report revision 更新为 `x5crop_v5_template_report_63`，Debug
+显示 component 的 supported/unavailable/contradicted 数量，不保留旧 grouping helper 或 schema 兼容路径。
+
+S082 的第二张 START 因而从错误的 edge 115 回到真实 edge 111，消除了该长轴向内越过黄金线的根因；它仍因
+独立的短轴 `physical_group_unavailable` 保持 Review。S043、S075 保持 Review，S081、S091 保持安全 auto。
+完整 110-task development gold 无分析错误且全部生成 proposal：30 safe / 80 unsafe proposal、19 safe /
+21 unsafe / 70 unavailable candidate、16 safe auto / 94 Review，当前观测危险 auto 为 0。S019、S026、
+S051、S070 只迁移到更具体的下游 typed root，产品终态不变。Development-detail mean 为 4.074 秒，只作
+开发归因，不替代正式性能 Gate；本机制不新增 TIFF query、detector、candidate、score 或样片规则。
+
 ### 产品行为
 
 - 用户提供 format，并确认匹配片夹的默认 count 或显式 count；count 包含中间空白曝光格。Runtime 不猜

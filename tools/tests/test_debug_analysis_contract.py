@@ -637,6 +637,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertIn(" · APERTURE DOMAIN ", summary)
         self.assertIn(" · OUTER ", summary)
         self.assertIn(" · SEP D ", summary)
+        self.assertRegex(summary, r" · SEP FAMILY S\d+ U\d+ C\d+ · ")
         self.assertIn(" · LOCAL Δ ", summary)
         self.assertIn(" · COVER ", summary)
         self.assertIn(" · OBS ", summary)

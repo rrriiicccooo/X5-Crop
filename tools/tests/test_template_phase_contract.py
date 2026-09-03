@@ -4545,7 +4545,38 @@ class TemplatePhaseContractTest(unittest.TestCase):
             (1, 2),
         )
 
-    def test_source_wide_band_excludes_a_competing_local_edge_pair(self) -> None:
+    def test_unique_source_wide_band_grants_separator_roles(self) -> None:
+        observations = tuple(
+            edge(f"edge:unique-source-wide:{index}", coordinate)
+            for index, coordinate in enumerate((110.0, 130.0))
+        )
+        authority = _separator_role_authority(
+            observations,
+            (
+                separator(
+                    "separator:unique-source-wide",
+                    observations[0],
+                    observations[1],
+                    FiniteInterval(19.8, 20.2),
+                ),
+            )
+        )
+
+        self.assertEqual(
+            authority,
+            {
+                observations[0].observation_id: frozenset(
+                    (BoundaryRole.END,)
+                ),
+                observations[1].observation_id: frozenset(
+                    (BoundaryRole.START,)
+                ),
+            },
+        )
+
+    def test_unique_source_wide_pair_retains_roles_across_leaf_alternative(
+        self,
+    ) -> None:
         observations = list(
             edge(f"edge:source-wide:{index}", coordinate)
             for index, coordinate in enumerate((10.0, 110.0, 130.0, 150.0, 250.0))
@@ -4584,14 +4615,16 @@ class TemplatePhaseContractTest(unittest.TestCase):
             ),
         )
         self.assertEqual(
-            authority[observations[1].observation_id],
-            frozenset((BoundaryRole.END,)),
+            authority,
+            {
+                observations[1].observation_id: frozenset(
+                    (BoundaryRole.END,)
+                ),
+                observations[2].observation_id: frozenset(
+                    (BoundaryRole.START,)
+                ),
+            },
         )
-        self.assertEqual(
-            authority[observations[2].observation_id],
-            frozenset((BoundaryRole.START,)),
-        )
-        self.assertNotIn(observations[3].observation_id, authority)
 
     def test_local_separator_center_protects_only_its_weak_edge(self) -> None:
         observations = (

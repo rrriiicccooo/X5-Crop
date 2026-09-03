@@ -80,6 +80,12 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   时形成 measured `SeparatorRelation`。它保存直接 signed-gap interval 与两侧 observation identity；共享 W/pitch 变化时按
   `delta = signed_gap - (pitch - W)` 重算相关 local advance，不能把 native endpoint 拉回默认 Grid。
   只有完整测量、无反证但没有直接 separator 的 adjacency 才使用 unobserved nominal `local_delta = 0`。
+- `SeparatorSupportComponent` 是 separator band 相关 identity 与 material role authority 的唯一事实。
+  共享 physical edge 的全部合格 band 只形成一个 evidence group；唯一、无拓扑分叉的 source-wide pair
+  原子授予 `END/START`，多个 source-wide pair 或 endpoint 的相反角色 fork 分别 typed contradicted。
+  Partial-height alternative 只保留 provenance 与既有的一次相关权限传递，不能投票覆盖 source-wide pair
+  或增加 rank；孤立 endpoint hint 也不能推翻完整 material。S082 Frame 2 START 已从错误 edge 115 回到
+  真实 edge 111，剩余 Review 根因独立属于短轴。
 - Direct separator refit 保留原 phase anchor；新追加 endpoint 只能作为 `LOCAL_REFINEMENT`。重拟合前的
   全局 phase binding 与 Contact/Overlap 必要角色组成 `phase_anchor_authority_ceiling`；新增 endpoint 不能创造 phase authority、
   constraint rank 或无关 role binding。越过 ceiling 或改变 template、ordinal、relation evidence、role
@@ -120,11 +126,12 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
 - Cross registered-run 上限按物理角色独立拥有：TOP 与 BOTTOM 各自最多 512 条，一侧不能占用另一侧
   配额；任一侧超界仍 typed Review。Report/Debug 同时显示两侧实际计数和每角色上限，canonical fitted
   observation 与 pair 上限保持独立。S002 的 TOP 393 / BOTTOM 185 因而不再被两侧合计 578 假性终止。
-- 当前 Report revision 为 `x5crop_v5_template_report_62`；普通报告与 Debug 显式分开 proposal、eligibility、
+- 当前 Report revision 为 `x5crop_v5_template_report_63`；普通报告与 Debug 显式分开 proposal、eligibility、
   selected output 和决定，并继续保存 calibration identity、anchor、inferred adjacency、完全未观察 Frame、
   联合参数依据、measured relation、projection outcome、typed failure、cross-H/source-W/frame-inference basis、全部
   retained W constraint/observation、placement scope、W topology facts、Cross line/height projection、partial-height
-  aperture domain 与工作量。完整路径最多 6 次 fit pass，不增加 TIFF query、第二 detector 或旧 schema 兼容层。
+  aperture domain、separator component resolution 与工作量。完整路径最多 6 次 fit pass，不增加 TIFF query、
+  第二 detector 或旧 schema 兼容层。
 - Enclosing-support aperture-center v2 calibration 使用 20 个当前仍具唯一 selected support pair、且黄金
   top/bottom 均为 `directly_visible` 的 source，并同时绑定 cohort、eligibility 与精确 observation-set SHA。
   S109 在 canonical W 扩大后成为 cross 多解，不再冒充 calibration observation；release analysis 会阻断
@@ -132,15 +139,13 @@ runtime、无条件 fallback 或无法解释的 post-selection mutation。
   `[-0.009H, +0.007H]`，crop geometry 未改变。
 
 完整 development gold diagnostic 已完成 110/110，分析错误 0。现有主模型为全部 110 个 task 生成完整
-proposal，分布为 30 safe / 80 unsafe。Retained single-side Cross 现在以 canonical H 画具体 Review proposal，
-完整 H 风险继续单独保留；7 个 task 的 53 个 Cross side 受影响。S069 从 unsafe 变为 safe；S112 从 safe
-变为 unsafe，暴露 canonical H 在 `cross_low` 向黄金内侧 15.047 px，而不再由完整 H 风险包络掩盖。S033、
-S068、S106、S107、S108 的 proposal 仍不安全。Eligibility 层仍保留
+proposal，分布为 30 safe / 80 unsafe。Separator component 的原子角色权限修复了 S082 Frame 2 START 的
+长轴误绑定；S019、S026、S051、S070 只迁移到更准确的下游 typed root，产品终态不变。Eligibility 层仍保留
 40 个 candidate，形成 19 safe / 21 unsafe / 70 unavailable：11 个安全 proposal 与 59 个不安全 proposal
 被保留为 Review。Runtime stage 为 16 approved auto、24 eligible candidate Review、70 proposal-generated /
 eligibility-withheld。当前仍是 16 个安全 auto、94 个 Review、危险 auto 0，但 release detection gate 未
 达标；开发 report 即使出现危险 auto 也必须完整列出，不能把中间结果称为发布通过。
-本次 development-detail mean 为 3.954 秒，只作开发归因，不是正式性能 receipt；
+本次 development-detail mean 为 4.074 秒，只作开发归因，不是正式性能 receipt；
 最近一次 clean-checkpoint 24-source 正式性能 mean 为 3.536 秒，通过 5 秒 Gate，3 秒目标仍为
 非阻断 challenge，该旧性能 receipt 不替代未来 release commit 的复验。
 
@@ -169,11 +174,12 @@ output budget，S032 为 phase ambiguity。
   （S002/S014/S029/S048/S069/S078/S079/S083/S085/S088/S094）和 59 个不安全 proposal；
   安全并不自动证明当前阻断多余，不安全也不能因 Review 而隐藏，必须分别追到通用权限或几何根因。
 - 当前 96 个 nominal 仍有 80 个 review。主要 phase root failure 为
-  `discrete_phase_ambiguous` 13、`fixed_template_mismatch` 10、`adjacency_topology_unresolved` 6、
+  `discrete_phase_ambiguous` 12、`fixed_template_mismatch` 9、`adjacency_topology_unresolved` 5、
+  `adjacency_topology_ambiguous` 1、
   `calibrated_nominal_grid_conflict` 5、`source_frame_width_conflict` 4、
   `nominal_grid_phase_anchor_unavailable` 3、`direct_role_binding_authority_unavailable` 2、
   `frame_width_inference_unavailable` 1、
-  `separator_material_conflict` 1 与
+  `separator_material_conflict` 2 与
   `adjacency_observation_coverage_incomplete` 1；另有 50 个 nominal 已通过 phase，其中只有 16 个最终安全
   auto。S012、S030 与 S058 说明 phase 通过不等于输出风险已闭合。
 - 完全不可见 Frame 已可由校准 Grid 生成，但这不是像素事实，也不直接授权 auto。候选仍须通过完整
@@ -189,8 +195,8 @@ output budget，S032 为 phase ambiguity。
 ## 精确下一步
 
 1. 全部 110 个合法黄金 task 已能生成完整 proposal。Cross direction 与 H projection 已分别从物理风险
-   包络中拆出具体 Review 画法，原 failure、runner 与 eligibility 保持不变。S033/S068 的 Cross side 已进入
-   预算，但 proposal 仍因长轴失败不安全；下一步与 S082 一起回到 phase/local relation。S107/S108/S112
+   包络中拆出具体 Review 画法，原 failure、runner 与 eligibility 保持不变。S082 的长轴 role 误绑定已闭合，
+   现只剩短轴 Review。S033/S068 的 Cross side 已进入预算，但 proposal 仍因长轴失败不安全；S107/S108/S112
    暴露的 single-side canonical-H 向内误差回到 Cross anchor、source truncation 与校准 H owner，不能再用
    完整 H interval 外扩伪装默认 proposal。随后继续处理此前
    calibrated-H proposal：S011/S020/S037/S097 的长轴向内越线优先回到

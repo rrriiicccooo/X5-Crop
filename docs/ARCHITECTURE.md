@@ -583,6 +583,24 @@ placement；“观察到了”本身不等于“有权决定裁切”。权限�
 | 无权局部 refinement 满足上方独立 W 让位合同 | 弱线不取得 native coordinate；由已授权 opposite 与完整相关 W 推导该角色 |
 | 只覆盖局部高度，且没有上述任一直接闭环 | `direct_role_binding_authority_unavailable` |
 
+`photo_geometry/template_separator_support.py` 是 separator connected component、相关证据 identity 与
+material role authority 的唯一 owner。它先把共享任一 physical edge 的全部合格 normal band 合并为一个
+`SeparatorSupportComponent`；整个 component 始终只有一个 `evidence_group_id`，不能把同一材料结构重复
+计入 rank。角色权限按下表一次决定，phase、direct-role ledger、stability、alignment、Report 与 Debug 只
+消费同一份 resolution：
+
+| component 中的 source-wide pair 与 edge 关系 | `SeparatorRoleAuthority` |
+|---|---|
+| 没有覆盖全部三个独立高度区域的 pair | `unavailable / insufficient_spatial_support`；partial-height band 只可按既有合同从独立授权的 opposite 传递一次相关权限 |
+| 恰有一个 source-wide pair，且 endpoint 没有形成角色相反的拓扑分叉 | `supported`；该有序 pair 原子授予 `END → material → START`，其它 partial-height alternative 不投票 |
+| 同一 component 存在多个不同 source-wide pair | `contradicted / alternative_pair_interpretations`；不得挑选其中一组 |
+| 唯一 source-wide pair 的 endpoint 同时参加另一 pair，且其独立 role hint 与 material role 相反 | `contradicted / endpoint_role_conflict`；不得让同一 physical edge 同时承担相反 separator role |
+
+孤立 endpoint 的单条方向 hint 弱于唯一 source-wide material pair，不能单独推翻它；只有另一 pair 形成的
+真实 fork 才构成上述冲突。所有 partial-height band 仍留在同一个 component 中供 provenance、反证与一次
+相关权限传递使用，但不能创造第二份 phase/rank authority。该 owner 不读取新像素、不选择 ordinal、
+placement 或 winner，也不按强度分数消解多解。
+
 Separator pair 的 identity 必须保留物理方向，canonical 顺序始终是
 `前一 Frame END → material → 后一 Frame START`。同一两条 edge 的反序 tuple 不是等价集合：若 selected-only
 local refinement 较晚补出精确反序绑定，该 candidate 产生 `direct_role_contradiction` 并被淘汰。只有已经在
@@ -1359,6 +1377,8 @@ Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决
 
 - theoretical template、role-free observations 与跨高度联合观察的 typed resolution；
 - dark/light separator material、逐区域状态、直接角色权限与 material conflict；
+- separator connected component 的 edge/band/pair 成员、唯一 role-authority pair、
+  `supported | unavailable | contradicted` 与 typed failure；
 - 每个直接角色的 coordinate `observation_id`、`evidence_group_id` 与 separator side provenance；
 - 每个 bounded phase candidate 的输入权限、projection outcome、保留 rank、退出几何的 binding、重拟合结果与
   terminal failure；
@@ -1455,6 +1475,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/registered_*.py`、`observations.py`、`separator_*.py` | 一次性 measurement、role-free edge 与 material band |
 | `photo_geometry/cross_height_transition_measurement.py`、`broad_material_transition_measurement.py` | 同一 registered baseline 上的三区域局部弱信号与双尺度宽缓 material 测量 |
 | `photo_geometry/aggregate_edge_support.py` | aggregate edge 的唯一解析、相关证据去重，以及完整三区域 separator pair 向 placement 的唯一投影权限 |
+| `photo_geometry/template_separator_support.py` | 共享 physical edge 的 separator band connected component、唯一相关 evidence group、source-wide pair 原子角色权限与 typed component failure；不读取像素或选择 placement |
 | `photo_geometry/template_contact.py` | candidate-independent `ContactEdgeObservation`：从既有 authoritative edge ledger 证明唯一共享 physical edge，不读取像素或选择 ordinal |
 | `photo_geometry/template_overlap.py` | candidate-independent `OverlapEdgePairObservation`：从既有 authoritative edge ledger 登记唯一反序 END/START pair，不读取像素或选择 ordinal |
 | `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source W/H extent、scan-scale authority 与不增加 direct provenance 的相关 interval 收紧 |

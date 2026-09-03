@@ -12,11 +12,9 @@ from enum import Enum
 
 from ...domain import ObservationId
 from .line_observations import PhotoBoundaryObservation
-from .model import BoundaryEvidenceState
 from .observation_types import (
     BoundaryEdgeObservation,
     AggregateEdgeResolution,
-    SeparatorBandObservation,
 )
 from .template_cross_model import CrossFitCompetition
 from .template_phase_model import PhaseFitResult
@@ -49,43 +47,6 @@ class EvidenceUseFact:
             or not isinstance(self.physical_owner, PhysicalUnknown)
         ):
             raise ValueError("template evidence-use fact is invalid")
-
-
-def separator_support_authority(
-    separator_bands: tuple[SeparatorBandObservation, ...],
-) -> dict[ObservationId, ObservationId]:
-    """Map every connected separator family to one physical support fact."""
-
-    parent: dict[ObservationId, ObservationId] = {}
-    band_ids: dict[ObservationId, set[ObservationId]] = {}
-
-    def find(identity: ObservationId) -> ObservationId:
-        parent.setdefault(identity, identity)
-        while parent[identity] != identity:
-            parent[identity] = parent[parent[identity]]
-            identity = parent[identity]
-        return identity
-
-    def union(left: ObservationId, right: ObservationId) -> None:
-        left_root = find(left)
-        right_root = find(right)
-        if left_root != right_root:
-            parent[max(left_root, right_root)] = min(left_root, right_root)
-
-    supported_bands = tuple(
-        band
-        for band in separator_bands
-        if band.evidence_state == BoundaryEvidenceState.SUPPORT
-    )
-    for band in supported_bands:
-        union(band.left_edge_observation_id, band.right_edge_observation_id)
-    for band in supported_bands:
-        root = find(band.left_edge_observation_id)
-        band_ids.setdefault(root, set()).add(band.observation_id)
-    return {
-        identity: min(band_ids[find(identity)])
-        for identity in parent
-    }
 
 
 def template_evidence_use_ledger(

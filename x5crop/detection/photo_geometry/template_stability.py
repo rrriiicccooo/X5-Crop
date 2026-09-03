@@ -14,7 +14,7 @@ from .template_phase_model import (
     PhaseFitStatus,
     TemplatePhaseInput,
 )
-from .template_evidence import separator_support_authority
+from .template_separator_support import resolve_separator_support
 
 
 class AnchorDependencyEffect(str, Enum):
@@ -84,7 +84,10 @@ def leave_one_anchor_out_phase_stability(
     by_id = {item.observation_id: item for item in observations}
     if not set(ids).issubset(by_id):
         raise ValueError("stability inputs do not cover winner anchors")
-    separator_atoms = separator_support_authority(separator_bands)
+    separator_atoms = resolve_separator_support(
+        observations,
+        separator_bands
+    ).edge_component_ids
     separator_members: dict[ObservationId, set[ObservationId]] = {}
     for band in separator_bands:
         atom = separator_atoms.get(band.left_edge_observation_id)

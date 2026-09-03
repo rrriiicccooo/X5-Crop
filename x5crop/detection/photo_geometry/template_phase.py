@@ -48,7 +48,7 @@ from .template_phase_candidates import (
     _with_separator_role_authority,
 )
 from .separator_material import normal_separator_material_bands
-from .template_evidence import separator_support_authority
+from .template_separator_support import resolve_separator_support
 from .template_frame_width import (
     SourceFrameWidthAuthority,
     apply_correlated_frame_width_inference,
@@ -464,7 +464,10 @@ def fit_template_phase(
         tuple(separator_bands),
         maximum_material_gap_px=template.gap_prior_px.maximum,
     )
-    separator_support_ids = separator_support_authority(phase_separator_bands)
+    separator_support_ids = resolve_separator_support(
+        registered_observations,
+        phase_separator_bands
+    ).edge_component_ids
     observations = _with_separator_role_authority(
         observations,
         separator_bands,
@@ -1716,9 +1719,10 @@ def _project_selected_late_local_refinements(
         phase_input.separator_bands,
         maximum_material_gap_px=template.gap_prior_px.maximum,
     )
-    separator_support_ids = separator_support_authority(
+    separator_support_ids = resolve_separator_support(
+        phase_input.observations,
         phase_separator_bands
-    )
+    ).edge_component_ids
     qualified_observations = _with_separator_role_authority(
         phase_input.observations,
         phase_input.separator_bands,

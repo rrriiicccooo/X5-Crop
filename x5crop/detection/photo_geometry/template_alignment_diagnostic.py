@@ -8,7 +8,7 @@ import math
 from ...domain import FiniteInterval, ObservationId
 from .model import BoundaryRole, SPATIAL_SUPPORT_REGION_COUNT
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
-from .template_evidence import separator_support_authority
+from .template_separator_support import resolve_separator_support
 from .template_model import (
     AdjacencyRelation,
     FrameWidthInferenceAssessment,
@@ -224,11 +224,15 @@ def _role_residuals(
 
 def _incompatible_separator_supports(
     residuals: tuple[TemplateRoleResidual, ...],
+    observations: tuple[BoundaryEdgeObservation, ...],
     separator_bands: tuple[SeparatorBandObservation, ...],
 ) -> tuple[ObservationId, ...]:
     """Find physical separators whose bound sides cannot share one shift."""
 
-    support_by_edge = separator_support_authority(separator_bands)
+    support_by_edge = resolve_separator_support(
+        observations,
+        separator_bands
+    ).edge_component_ids
     support_region_count: dict[ObservationId, int] = {}
     for band in separator_bands:
         support_id = support_by_edge.get(band.left_edge_observation_id)
@@ -293,6 +297,7 @@ def template_alignment_diagnostic(
     )
     incompatible = _incompatible_separator_supports(
         role_residuals,
+        observations,
         separator_bands,
     )
     if phase.status != PhaseFitStatus.RESOLVED:

@@ -513,6 +513,12 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             assert isinstance(outcome, CompletedInput)
             self.assertEqual(analysis_outcome.result["detail_level"], "development")
             self.assertIsNotNone(analysis_outcome.result["development"])
+            self.assertIn(
+                "separator_support_components",
+                analysis_outcome.result["development"]["lanes"][0][
+                    "observations"
+                ],
+            )
             validate_current_report_record(analysis_outcome.result)
             obsolete = deepcopy(analysis_outcome.result)
             obsolete_phase = obsolete["development"]["lanes"][0][

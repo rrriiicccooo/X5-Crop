@@ -10,6 +10,12 @@ from ..detection.photo_geometry.template_alignment_diagnostic import (
     template_alignment_diagnostic,
 )
 from ..detection.photo_geometry.template_phase_model import PhaseFitStatus
+from ..detection.photo_geometry.separator_material import (
+    normal_separator_material_bands,
+)
+from ..detection.photo_geometry.template_separator_support import (
+    resolve_separator_support,
+)
 from ..detection.photo_geometry.template_stability import (
     leave_one_anchor_out_phase_stability,
 )
@@ -45,8 +51,18 @@ def development_report_facts(
     geometry = detection.candidate.geometry
     stability_by_lane = {}
     alignment_by_lane = {}
+    separator_support_by_lane = {}
     for lane in geometry.lane_reconstructions:
         phase = lane.prepared.phase_competition
+        separator_support_by_lane[lane.lane_id] = resolve_separator_support(
+            lane.prepared.sequence_edges,
+            normal_separator_material_bands(
+                lane.prepared.separator_bands,
+                maximum_material_gap_px=(
+                    lane.prepared.template_spec.gap_prior_px.maximum
+                ),
+            )
+        )
         alignment_by_lane[lane.lane_id] = template_alignment_diagnostic(
             phase,
             lane.prepared.sequence_edges,
@@ -117,6 +133,9 @@ def development_report_facts(
                     ),
                     "separator_bands": typed_read_model(
                         lane.prepared.separator_bands
+                    ),
+                    "separator_support_components": typed_read_model(
+                        separator_support_by_lane[lane.lane_id].components
                     ),
                     "contact_edge_observations": typed_read_model(
                         lane.prepared.phase_input.contact_edge_observations

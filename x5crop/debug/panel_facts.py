@@ -6,6 +6,9 @@ from PIL import Image
 
 from ..detection.final.model import FinalDetection
 from ..detection.photo_geometry.model import SPATIAL_SUPPORT_REGION_COUNT
+from ..detection.photo_geometry.separator_material import (
+    normal_separator_material_bands,
+)
 from ..detection.photo_geometry.output_model import (
     FootprintSaturationKind,
     OutputFootprint,
@@ -14,6 +17,9 @@ from ..detection.photo_geometry.template_alignment_diagnostic import (
     template_alignment_diagnostic,
 )
 from ..detection.photo_geometry.template_placement import TemplateFrame
+from ..detection.photo_geometry.template_separator_support import (
+    resolve_separator_support,
+)
 from ..detection.workspace import DetectionWorkspace
 from .canvas import DebugRenderCache, cached_source_image
 from .panel_layout import Projection
@@ -464,6 +470,22 @@ def alignment_summary(detection: FinalDetection) -> str:
             )
             for polarity in ("dark", "light")
         }
+        separator_support = resolve_separator_support(
+            lane.prepared.sequence_edges,
+            normal_separator_material_bands(
+                lane.prepared.separator_bands,
+                maximum_material_gap_px=(
+                    lane.prepared.template_spec.gap_prior_px.maximum
+                ),
+            )
+        )
+        separator_component_counts = {
+            state: sum(
+                item.role_authority_state.value == state
+                for item in separator_support.components
+            )
+            for state in ("supported", "unavailable", "contradicted")
+        }
         joint_total = len(lane.prepared.cross_height_edge_resolutions)
         joint_authority = sum(
             item.kind.value == "bound_direct_edge"
@@ -526,7 +548,10 @@ def alignment_summary(detection: FinalDetection) -> str:
             f"D {separator_counts['dark'][0]}/{separator_counts['dark'][1]}"
             f" C{separator_counts['dark'][2]} "
             f"L {separator_counts['light'][0]}/{separator_counts['light'][1]}"
-            f" C{separator_counts['light'][2]} · GAP REL "
+            f" C{separator_counts['light'][2]} · SEP FAMILY "
+            f"S{separator_component_counts['supported']} "
+            f"U{separator_component_counts['unavailable']} "
+            f"C{separator_component_counts['contradicted']} · GAP REL "
             f"M{selected_separator_relations['normal']} "
             f"W{selected_separator_relations['wide']} "
             f"N{selected_separator_relations['narrow']} · CONTACT "

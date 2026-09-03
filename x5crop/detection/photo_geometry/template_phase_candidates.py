@@ -16,10 +16,7 @@ from ...domain import (
     ObservationId,
     PositiveInterval,
 )
-from .model import (
-    BoundaryRole,
-    SPATIAL_SUPPORT_REGION_COUNT,
-)
+from .model import BoundaryRole
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .separator_material import normal_separator_material_bands
 from .template_contact import ContactEdgeObservation
@@ -54,7 +51,7 @@ from .template_nominal_grid_authority import (
 )
 from .template_nominal_grid_model import CalibratedNominalGridPrior
 from .template_pitch import refine_placement_pitch_interval
-from .template_evidence import separator_support_authority
+from .template_separator_support import resolve_separator_support
 from .template_direct_role_authority import (
     DirectRoleAuthorityFact,
     DirectRoleBindingAuthority,
@@ -601,49 +598,26 @@ def _separator_role_authority(
     A separator's left edge is the END of one slot and its right edge is the
     START of the next slot.  This relation is stronger than a single edge's
     background hint, but it still carries no ordinal until the template is
-    placed.  An identity may occur in several bands; they all prove the same
-    side relation and are never counted as extra votes.
+    placed. An identity may occur in several bands; the canonical component
+    resolver keeps them in one rank group and grants roles only to its unique
+    compatible source-wide pair.
     """
 
-    by_id = {
-        observation.observation_id: observation
-        for observation in observations
-        if isinstance(observation, BoundaryEdgeObservation)
-    }
-    support_ids = separator_support_authority(tuple(separator_bands))
-    components: dict[ObservationId, list[SeparatorBandObservation]] = {}
-    for band in separator_bands:
-        support_id = support_ids.get(band.left_edge_observation_id)
-        if support_id is None:
-            raise ValueError("separator band has no physical support identity")
-        components.setdefault(support_id, []).append(band)
-
+    resolution = resolve_separator_support(
+        tuple(observations),
+        tuple(separator_bands),
+    )
     roles: dict[ObservationId, set[BoundaryRole]] = {}
-    for component in components.values():
-        source_wide = tuple(
-            band
-            for band in component
-            if band.material_support_region_count
-            >= SPATIAL_SUPPORT_REGION_COUNT
-        )
-        if source_wide:
-            selected = source_wide
-        else:
-            # A short dark or bright region inside one photograph can close
-            # the same local polarity pattern as separator material.  It may
-            # join two edges whose independently observed roles already agree,
-            # but it cannot overwrite either role.  Only a source-wide band
-            # has enough spatial support to establish END -> material -> START
-            # authority by itself.
+    for component in resolution.components:
+        pair = component.role_authority_pair_edge_observation_ids
+        if pair is None:
+            # Local material cannot create roles by itself. Multiple
+            # source-wide pairs or an intrinsic endpoint-role conflict are
+            # discrete contradictions rather than votes for either endpoint.
             continue
-
-        for band in selected:
-            roles.setdefault(band.left_edge_observation_id, set()).add(
-                BoundaryRole.END
-            )
-            roles.setdefault(band.right_edge_observation_id, set()).add(
-                BoundaryRole.START
-            )
+        left_id, right_id = pair
+        roles.setdefault(left_id, set()).add(BoundaryRole.END)
+        roles.setdefault(right_id, set()).add(BoundaryRole.START)
     return {identity: frozenset(value) for identity, value in roles.items()}
 
 
@@ -665,40 +639,28 @@ def _with_separator_role_authority(
         for observation in observations
         if isinstance(observation, BoundaryEdgeObservation)
     }
-    support_ids = separator_support_authority(eligible_bands)
-    components: dict[ObservationId, list[SeparatorBandObservation]] = {}
-    for band in eligible_bands:
-        support_id = support_ids.get(band.left_edge_observation_id)
-        if support_id is None:
-            raise ValueError("separator band has no physical support identity")
-        components.setdefault(support_id, []).append(band)
+    resolution = resolve_separator_support(tuple(observations), eligible_bands)
+    bands_by_id = {band.observation_id: band for band in eligible_bands}
     material_intervals: dict[ObservationId, FiniteInterval] = {}
-    for component in components.values():
-        pairs = {
-            (
-                band.left_edge_observation_id,
-                band.right_edge_observation_id,
-            )
-            for band in component
-        }
+    for component_fact in resolution.components:
+        component = tuple(
+            bands_by_id[identity]
+            for identity in component_fact.band_observation_ids
+        )
         # Only one locally observed END -> material -> START relation needs
         # the material center retained as output protection. Source-wide bands
         # already localize their edges directly; alternative pairings remain
         # discrete evidence and must not be hulled into a huge interval.
         if (
-            any(
-                band.material_support_region_count
-                >= SPATIAL_SUPPORT_REGION_COUNT
-                for band in component
-            )
-            or len(pairs) != 1
+            component_fact.role_authority_state != EvidenceState.UNAVAILABLE
+            or len(component_fact.pair_edge_observation_ids) != 1
             or any(
                 band.gap_interval_px.maximum > maximum_material_gap_px
                 for band in component
             )
         ):
             continue
-        left_id, right_id = next(iter(pairs))
+        left_id, right_id = component_fact.pair_edge_observation_ids[0]
         left = by_id.get(left_id)
         right = by_id.get(right_id)
         if left is None or right is None:
@@ -865,16 +827,21 @@ def _refine_local_role_bindings(
     retained runner cannot attach the same illegal assignment again.
     """
 
-    observations = _with_separator_role_authority(
-        observations,
-        separator_bands,
-        maximum_material_gap_px=fit.template.gap_prior_px.maximum,
-    )
+    registered_observations = tuple(observations)
     eligible_bands = normal_separator_material_bands(
         tuple(separator_bands),
         maximum_material_gap_px=fit.template.gap_prior_px.maximum,
     )
-    support_ids = separator_support_authority(eligible_bands)
+    support_resolution = resolve_separator_support(
+        registered_observations,
+        eligible_bands,
+    )
+    observations = _with_separator_role_authority(
+        registered_observations,
+        separator_bands,
+        maximum_material_gap_px=fit.template.gap_prior_px.maximum,
+    )
+    support_ids = support_resolution.edge_component_ids
     facts = _facts(
         observations,
         separator_support_ids=support_ids,
@@ -1005,10 +972,26 @@ def _refine_local_role_bindings(
         for role_index, binding in enumerate(bindings)
         if binding is not None
     }
+    component_by_band_id = {
+        identity: component
+        for component in support_resolution.components
+        for identity in component.band_observation_ids
+    }
+    role_authority_band_ids = {
+        band.observation_id
+        for band in eligible_bands
+        for component in (component_by_band_id[band.observation_id],)
+        if component.role_authority_state == EvidenceState.SUPPORTED
+        and (
+            band.left_edge_observation_id,
+            band.right_edge_observation_id,
+        )
+        == component.role_authority_pair_edge_observation_ids
+    }
     relation_pairs: dict[int, set[tuple[ObservationId, ObservationId]]] = {}
     for band in separator_bands:
         if (
-            band.material_support_region_count < SPATIAL_SUPPORT_REGION_COUNT
+            band.observation_id not in role_authority_band_ids
             or max(
                 band.gap_interval_px.minimum,
                 fit.template.gap_prior_px.minimum,
