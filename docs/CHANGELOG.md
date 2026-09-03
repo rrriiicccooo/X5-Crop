@@ -270,6 +270,24 @@ Cross fit 变为无 candidate，这两项都作为后续能力缺口保留，未
 已随当前 observation set 复算。Development-detail mean 为 4.194 秒，只作开发归因，不替代正式性能 Gate；
 本检查点仍为 **DEVELOPMENT ONLY / NOT RELEASE READY**。
 
+长轴 source 端部的窄材料带现在有唯一 typed owner。`OuterMaterialBoundaryObservation` 只接受物理最外侧、
+宽度不超过模板校准 gap 上界的同角色 START/START 或 END/END pair：三区域事实可直接区分内侧 aperture
+boundary 与外侧 edge；两区域事实只能从已有 intrinsic exterior authority 向内传递一次。内侧 standalone
+aggregate 只有在外侧 edge 已进入基础 placement ledger 时才能加入；内部、过宽或多解 pair 不取得权限。
+首张 START / 末张 END 的正确内侧 edge 保留 native coordinate，外侧 edge 成为 counterevidence；拓扑 owner
+继续只消费 outer 投影前的基础 edge，不会把端部材料误作 contact/overlap。Report revision 更新为
+`x5crop_v5_template_report_66`，Normal report、evidence ledger 与 Debug 显示 observation、使用状态和冲突，
+不新增 TIFF query、detector、candidate search、score 或兼容路径。
+
+完整 110-task development diagnostic 无分析错误且全部生成 proposal：33 safe / 77 unsafe proposal、
+21 safe / 15 unsafe / 74 unavailable candidate、16 safe auto / 94 Review，当前观测危险 auto 为 0。S005
+是唯一 proposal 几何变化，由 unsafe 修正为 safe，candidate 同时变为 safe，但原 Gate 仍保持 Review；没有
+safe→unsafe proposal 回归。S007 的 unsafe proposal 不变，新增的首端材料权限使其形成 unsafe candidate，
+随后由 `direct_use_budget_exceeded` 拦截；S012、S054 的 unsafe proposal 不变，其 unsafe candidate 分别
+迁移为 `separator_material_conflict` 与 `adjacency_topology_unresolved` 下的 unavailable。Development-detail
+mean 为 3.982 秒，只作开发归因，不替代正式性能 Gate；本检查点仍为
+**DEVELOPMENT ONLY / NOT RELEASE READY**。
+
 ### 产品行为
 
 - 用户提供 format，并确认匹配片夹的默认 count 或显式 count；count 包含中间空白曝光格。Runtime 不猜

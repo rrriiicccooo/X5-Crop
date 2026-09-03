@@ -272,6 +272,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                     "blocking_material_conflict_ids": [],
                     "state": "supported",
                     "trace_coordinates_px": [0, 10, 20],
+                    "supporting_outer_material_observation_ids": [],
                 }
             ],
             "unsupported_role_indices": [],
@@ -346,6 +347,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                     "blocking_material_conflict_ids": [],
                     "state": "supported",
                     "trace_coordinates_px": [0, 10, 20],
+                    "supporting_outer_material_observation_ids": [],
                 }
             ],
             "unsupported_role_indices": [],
@@ -515,6 +517,12 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             self.assertIsNotNone(analysis_outcome.result["development"])
             self.assertIn(
                 "separator_support_components",
+                analysis_outcome.result["development"]["lanes"][0][
+                    "observations"
+                ],
+            )
+            self.assertIn(
+                "outer_material_boundaries",
                 analysis_outcome.result["development"]["lanes"][0][
                     "observations"
                 ],

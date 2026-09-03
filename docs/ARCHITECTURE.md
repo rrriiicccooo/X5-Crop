@@ -324,7 +324,7 @@ separator pair 投影的唯一 owner：
 |---|---|---|
 | cross-height 唯一匹配一条空间支持不足的 direct edge | `bound_direct_edge` | 保留 direct native coordinate，以 `aggregate_union` 补足三区域支持，只计一份相关证据 |
 | broad 唯一匹配一条既有 edge | `matched_existing_edge` | 保留既有 edge 原 basis；单根宽缓边不增加坐标或 direct-role 权限 |
-| 没有匹配既有 edge | `standalone_edge` | 只进入 evidence、report 与 Debug；没有完整 pair 时不进入 phase、outer 或 placement |
+| 没有匹配既有 edge | `standalone_edge` | 只进入 evidence、report 与 Debug；除完整 separator pair，或下述合格 outer-material pair 的内侧 boundary 外，不进入 phase 或 placement |
 | 两条已解析 aggregate edge 依次具备 END/START 角色，且其间 material 由三个高度区域共同支持 | `standalone/matched edge + aggregate separator band` | 作为一份 `separator_pair` 投影到 placement；实测 gap 可以约束该 adjacency 的 local advance |
 | 匹配的既有 edge 已覆盖三个高度区域，或已由另一 aggregate 支持 | `redundant_existing_edge` | 保留既有 edge，不重复计票，也不能让未成 pair 的 aggregate edge 进入 placement |
 | aggregate pair 的任一 resolved edge 已属于一组 supported direct/较早 aggregate separator | 保留原 separator 为 canonical | 新 pair 只作诊断，不能用另一侧重新解释同一物理 edge 或改变既有 placement |
@@ -332,11 +332,26 @@ separator pair 投影的唯一 owner：
 | 多个可绑定 aggregate 竞争同一既有 edge | `multiple_aggregates_for_one_existing_edge` | typed contradiction，不授予 aggregate 权限 |
 | edge/material 少于三个支持区域、跨尺度或跨高度状态冲突、角色不相容、coverage 不完整 | 无合格 aggregate pair | `unavailable`，保持原 evidence 与安全终态 |
 
-单条 aggregate edge 不能创造相位候选。只有完整 separator pair 才能把 standalone 坐标带入唯一 placement
-模型；同一物理 pair 已有 direct band 时 direct 事实保持 canonical，aggregate band 不再投票。缺失
-direction 不是反证，但两份明确且不相交的 direction interval 必须保留为不同解释。Development report 与
-Debug 分别显示 local aggregate、broad material、resolution、pair、typed failure 和工作量；Debug 不重新
-测量或求解。
+单条 aggregate edge 不能创造相位候选。Standalone 坐标只有通过完整 separator pair，或下述合格
+outer-material pair 的内侧 boundary，才能进入 placement；同一物理 pair 已有 direct band 时 direct 事实
+保持 canonical，aggregate band 不再投票。缺失 direction 不是反证，但两份明确且不相交的 direction
+interval 必须保留为不同解释。Development report 与 Debug 分别显示 local aggregate、broad material、
+resolution、pair、typed failure 和工作量；Debug 不重新测量或求解。
+
+`outer_material.py` 独占 `OuterMaterialBoundaryObservation`。它处理 source 长轴端部中“两条同角色 edge
+围出一条窄材料带”的物理歧义，并明确区分 aperture boundary 与更外侧 edge：
+
+| 已登记事实 | 结果与权限 |
+|---|---|
+| 唯一、物理最外侧的 START/START 或 END/END pair；material 宽度不超过模板校准 gap 上界；三个独立高度区域一致 | 内侧 edge 取得首张 START 或末张 END 权限；外侧 edge 成为同角色 counterevidence |
+| 只有两个独立高度区域，但外侧 edge 已有 intrinsic direct authority | 允许从外侧 edge 向内侧 boundary 恰好传递一次相关权限；不增加独立 rank |
+| 内侧 boundary 是 standalone aggregate，外侧 edge 已在基础 placement ledger | 只加入内侧 boundary；outer fact 与两条 edge 保留完整 provenance |
+| pair 位于内部、宽于校准 gap、存在重叠的最外侧解释，或外侧 aggregate 自身尚未进入基础 placement ledger | 不形成 outer fact，不按强度或距离选解 |
+
+该事实只消费现有 registered bands 与 edge resolution，不新增 TIFF 读取、查询、候选或 score。Phase owner
+可以消费它来纠正首尾角色；Contact/Overlap owner 仍只查看加入 outer boundary 之前的基础 edge ledger，
+因此 outer material 不能伪造 adjacency topology。Normal report 与 Debug 分别显示 observation、权限使用
+和冲突；未进入唯一 placement 的事实只作 validation。
 
 短轴 coarse owner 使用另一份固定、候选无关的 `COARSE_STRIP_SHORT` 查询：sharp channel 使用 5 条固定
 trace，broad channel 使用 9 条固定 trace（每个长轴区域 3 条），两组坐标先合并为一个 registered union，
@@ -1511,7 +1526,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/corridors.py` | 候选无关 top/bottom 与完整 `W/pitch` sequence 查询走廊 |
 | `photo_geometry/registered_*.py`、`observations.py`、`separator_*.py` | 一次性 measurement、role-free edge 与 material band |
 | `photo_geometry/cross_height_transition_measurement.py`、`broad_material_transition_measurement.py` | 同一 registered baseline 上的三区域局部弱信号与双尺度宽缓 material 测量 |
-| `photo_geometry/aggregate_edge_support.py` | aggregate edge 的唯一解析、相关证据去重，以及完整三区域 separator pair 向 placement 的唯一投影权限 |
+| `photo_geometry/aggregate_edge_support.py`、`outer_material.py` | aggregate edge 的唯一解析、相关证据去重、完整三区域 separator pair 投影，以及物理最外侧窄材料带对首张 START / 末张 END 的唯一 boundary/exterior 解析权限 |
 | `photo_geometry/template_separator_support.py` | 共享 physical edge 的 separator band connected component、唯一相关 evidence group、source-wide pair 原子角色权限与 typed component failure；不读取像素或选择 placement |
 | `photo_geometry/template_contact.py` | candidate-independent `ContactEdgeObservation`：从既有 authoritative edge ledger 证明唯一共享 physical edge，不读取像素或选择 ordinal |
 | `photo_geometry/template_overlap.py` | candidate-independent `OverlapEdgePairObservation`：从既有 authoritative edge ledger 登记唯一反序 END/START pair，不读取像素或选择 ordinal |

@@ -20,6 +20,7 @@ from .observation_types import (
     AggregateEdgeResolution,
     AggregateEdgeResolutionFailureKind,
     AggregateEdgeResolutionKind,
+    OuterMaterialBoundaryObservation,
     SeparatorBandMeasurementBasis,
     SeparatorBandObservation,
 )
@@ -425,11 +426,15 @@ def resolve_aggregate_separator_support(
     )
 
 
-def placement_sequence_edges_with_aggregate_support(
+def placement_sequence_edges_with_material_support(
     sequence_edges: tuple[BoundaryEdgeObservation, ...],
     aggregate_bands: tuple[SeparatorBandObservation, ...],
+    outer_material_boundaries: tuple[
+        OuterMaterialBoundaryObservation,
+        ...,
+    ],
 ) -> tuple[BoundaryEdgeObservation, ...]:
-    """Admit aggregate coordinates only through verified separator material."""
+    """Admit aggregate coordinates only through verified material facts."""
 
     aggregate_bases = {
         SeparatorBandMeasurementBasis.CROSS_HEIGHT_AGGREGATE,
@@ -449,6 +454,31 @@ def placement_sequence_edges_with_aggregate_support(
             band.right_edge_observation_id,
         )
     }
+    base_supported_ids = frozenset(supported_ids)
+    aggregate_edge_ids = {
+        edge.observation_id
+        for edge in sequence_edges
+        if edge.measurement_basis
+        in {
+            BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE,
+            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+        }
+    }
+    base_placement_ids = {
+        edge.observation_id
+        for edge in sequence_edges
+        if edge.observation_id not in aggregate_edge_ids
+        or edge.observation_id in base_supported_ids
+    }
+    supported_ids.update(
+        observation.boundary_edge_observation_id
+        for observation in outer_material_boundaries
+        if (
+            observation.state == EvidenceState.SUPPORTED
+            and observation.exterior_edge_observation_id
+            in base_placement_ids
+        )
+    )
     return tuple(
         edge
         for edge in sequence_edges

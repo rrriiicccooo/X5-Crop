@@ -78,6 +78,7 @@ class TemplateEvidenceContractTest(unittest.TestCase):
             (start, end),
             (),
             (),
+            (),
             phase,
             cross,
             (),
@@ -108,6 +109,7 @@ class TemplateEvidenceContractTest(unittest.TestCase):
 
         ledger = template_evidence_use_ledger(
             observations,
+            (),
             (),
             (),
             phase,
@@ -143,6 +145,7 @@ class TemplateEvidenceContractTest(unittest.TestCase):
                 (observation, observation),
                 (),
                 (),
+                (),
                 phase,
                 cross,
                 (),
@@ -159,6 +162,7 @@ class TemplateEvidenceContractTest(unittest.TestCase):
 
         ledger = template_evidence_use_ledger(
             (observation,),
+            (),
             (),
             (),
             phase,

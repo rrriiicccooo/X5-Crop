@@ -1811,6 +1811,7 @@ def _validate_direct_role_binding_authority(value: object) -> None:
         "aggregate_union",
         "separator_pair",
         "partial_height_separator_pair",
+        "outer_material_boundary",
     }
     for fact in facts:
         if not isinstance(fact, dict) or set(fact) != {
@@ -1824,12 +1825,16 @@ def _validate_direct_role_binding_authority(value: object) -> None:
             "blocking_material_conflict_ids",
             "state",
             "trace_coordinates_px",
+            "supporting_outer_material_observation_ids",
         }:
             raise ValueError("direct-role authority fact is invalid")
         index = fact["role_index"]
         bases = fact["bases"]
         conflicts = fact["blocking_material_conflict_ids"]
         traces = fact["trace_coordinates_px"]
+        outer_material = fact[
+            "supporting_outer_material_observation_ids"
+        ]
         supported = fact["state"] == "supported"
         conflict = fact["state"] == "contradicted"
         if (
@@ -1860,6 +1865,16 @@ def _validate_direct_role_binding_authority(value: object) -> None:
             or not isinstance(traces, list)
             or traces != sorted(set(traces))
             or any(not isinstance(item, int) for item in traces)
+            or not isinstance(outer_material, list)
+            or outer_material != sorted(set(outer_material))
+            or any(
+                not isinstance(item, str) or not item
+                for item in outer_material
+            )
+            or (
+                "outer_material_boundary" in bases
+            )
+            != bool(outer_material)
             or (
                 "partial_height_separator_pair" in bases
                 and not traces

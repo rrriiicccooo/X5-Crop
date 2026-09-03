@@ -134,6 +134,9 @@ def development_report_facts(
                     "separator_bands": typed_read_model(
                         lane.prepared.separator_bands
                     ),
+                    "outer_material_boundaries": typed_read_model(
+                        lane.prepared.outer_material_boundaries
+                    ),
                     "separator_support_components": typed_read_model(
                         separator_support_by_lane[lane.lane_id].components
                     ),

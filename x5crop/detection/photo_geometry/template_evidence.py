@@ -10,11 +10,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from ...domain import ObservationId
+from ...domain import EvidenceState, ObservationId
 from .line_observations import PhotoBoundaryObservation
 from .observation_types import (
     BoundaryEdgeObservation,
     AggregateEdgeResolution,
+    OuterMaterialBoundaryObservation,
+    SeparatorBandObservation,
 )
 from .template_cross_model import CrossFitCompetition
 from .template_phase_model import PhaseFitResult
@@ -52,6 +54,10 @@ class EvidenceUseFact:
 def template_evidence_use_ledger(
     sequence_edges: tuple[BoundaryEdgeObservation, ...],
     separator_bands: tuple[SeparatorBandObservation, ...],
+    outer_material_boundaries: tuple[
+        OuterMaterialBoundaryObservation,
+        ...,
+    ],
     cross_observations: tuple[PhotoBoundaryObservation, ...],
     phase: PhaseFitResult,
     cross: CrossFitCompetition,
@@ -128,6 +134,29 @@ def template_evidence_use_ledger(
                 if identity in adjacency_ids
                 else EvidenceUse.VALIDATION,
                 PhysicalUnknown.ADJACENCY_RELATION,
+            )
+        )
+    fitted_outer_material_ids = {
+        identity
+        for fact in (
+            ()
+            if phase.direct_role_binding_authority is None
+            else phase.direct_role_binding_authority.facts
+        )
+        if fact.state == EvidenceState.SUPPORTED
+        for identity in fact.supporting_outer_material_observation_ids
+    }
+    for observation in outer_material_boundaries:
+        identity = observation.observation_id
+        values.append(
+            EvidenceUseFact(
+                identity,
+                (
+                    EvidenceUse.FIT
+                    if identity in fitted_outer_material_ids
+                    else EvidenceUse.VALIDATION
+                ),
+                PhysicalUnknown.LOCAL_BOUNDARY,
             )
         )
     for observation in cross_observations:

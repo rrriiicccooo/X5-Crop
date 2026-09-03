@@ -215,6 +215,7 @@ def prepared_template_lane() -> PreparedTemplateLane:
         cross_profile=runtime_axis_profile("cross"),
         sequence_edges=(),
         separator_bands=(),
+        outer_material_boundaries=(),
         top_cross_bindings=(),
         bottom_cross_bindings=(),
         raw_cross_observations=(),

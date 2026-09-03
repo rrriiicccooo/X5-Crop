@@ -127,6 +127,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertIn("SOURCE W ", alignment)
         self.assertIn("W TOPO ", alignment)
         self.assertIn("W INFER ", alignment)
+        self.assertIn("OUTER MATERIAL ", alignment)
         self.assertIn("SOURCE FIT ·", source)
 
     def test_three_panels_preserve_four_v5_fact_layers(self) -> None:

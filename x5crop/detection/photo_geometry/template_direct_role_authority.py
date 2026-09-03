@@ -15,6 +15,7 @@ from .model import (
 from .observation_types import (
     BoundaryEdgeMeasurementBasis,
     BoundaryEdgeObservation,
+    OuterMaterialBoundaryObservation,
     SeparatorBandObservation,
 )
 from .separator_material import (
@@ -30,6 +31,7 @@ class DirectRoleAuthorityBasis(str, Enum):
     AGGREGATE_UNION = "aggregate_union"
     SEPARATOR_PAIR = "separator_pair"
     PARTIAL_HEIGHT_SEPARATOR_PAIR = "partial_height_separator_pair"
+    OUTER_MATERIAL_BOUNDARY = "outer_material_boundary"
 
 
 _UNCONDITIONAL_DIRECT_ROLE_BASES = frozenset(
@@ -55,6 +57,10 @@ class DirectRoleAuthorityFact:
     blocking_material_conflict_ids: tuple[ObservationId, ...]
     state: EvidenceState
     trace_coordinates_px: tuple[int, ...] = ()
+    supporting_outer_material_observation_ids: tuple[
+        ObservationId,
+        ...,
+    ] = ()
 
     def __post_init__(self) -> None:
         if (
@@ -115,6 +121,19 @@ class DirectRoleAuthorityFact:
                 not isinstance(item, int)
                 for item in self.trace_coordinates_px
             )
+            or tuple(
+                sorted(set(self.supporting_outer_material_observation_ids))
+            )
+            != self.supporting_outer_material_observation_ids
+            or any(
+                not isinstance(item, ObservationId)
+                for item in self.supporting_outer_material_observation_ids
+            )
+            or (
+                DirectRoleAuthorityBasis.OUTER_MATERIAL_BOUNDARY
+                in self.bases
+            )
+            != bool(self.supporting_outer_material_observation_ids)
             or (
                 DirectRoleAuthorityBasis.PARTIAL_HEIGHT_SEPARATOR_PAIR
                 in self.bases
@@ -197,6 +216,18 @@ class _DirectRoleAuthorityLedger:
         tuple[ObservationId, ...],
     ]
     supported_material_roles: frozenset[tuple[ObservationId, BoundaryRole]]
+    outer_material_by_id: dict[
+        ObservationId,
+        OuterMaterialBoundaryObservation,
+    ]
+    outer_material_roles: dict[
+        tuple[ObservationId, BoundaryRole],
+        tuple[ObservationId, ...],
+    ]
+    outer_material_conflicts_by_edge_role: dict[
+        tuple[ObservationId, BoundaryRole],
+        tuple[ObservationId, ...],
+    ]
     conflicts_by_edge_role: dict[
         tuple[ObservationId, BoundaryRole],
         tuple[tuple[ObservationId, ObservationId], ...],
@@ -293,6 +324,10 @@ def _direct_role_authority_ledger(
     observations: tuple[BoundaryEdgeObservation, ...],
     separator_bands: tuple[SeparatorBandObservation, ...],
     measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
+    outer_material_boundaries: tuple[
+        OuterMaterialBoundaryObservation,
+        ...,
+    ],
 ) -> _DirectRoleAuthorityLedger:
     trace_lattice, region_counts = _trace_lattice_and_support_region_counts(
         observations,
@@ -383,7 +418,43 @@ def _direct_role_authority_ledger(
         observations,
         measurement_sets,
     )
+    outer_material_role_sets: dict[
+        tuple[ObservationId, BoundaryRole],
+        set[ObservationId],
+    ] = {}
+    outer_material_conflict_sets: dict[
+        tuple[ObservationId, BoundaryRole], set[ObservationId]
+    ] = {}
+    outer_material_by_id = {
+        item.observation_id: item for item in outer_material_boundaries
+    }
+    if len(outer_material_by_id) != len(outer_material_boundaries):
+        raise ValueError("outer material authority identities must be unique")
+    for observation in outer_material_boundaries:
+        for identity in (
+            observation.boundary_edge_observation_id,
+            observation.exterior_edge_observation_id,
+        ):
+            if identity not in by_id:
+                raise ValueError(
+                    "outer material authority references an unregistered edge"
+                )
+        outer_material_role_sets.setdefault(
+            (
+                observation.boundary_edge_observation_id,
+                observation.role,
+            ),
+            set(),
+        ).add(observation.observation_id)
+        outer_material_conflict_sets.setdefault(
+            (
+                observation.exterior_edge_observation_id,
+                observation.role,
+            ),
+            set(),
+        ).add(observation.observation_id)
     potential_authority_roles = set(supported_material_roles)
+    potential_authority_roles.update(outer_material_role_sets)
     potential_authority_roles.update(
         (observation_id, role)
         for observation_id in intrinsic_bases
@@ -441,6 +512,15 @@ def _direct_role_authority_ledger(
             for key, values in reversed_normal_pair_conflict_sets.items()
         },
         supported_material_roles=supported_material_roles,
+        outer_material_by_id=outer_material_by_id,
+        outer_material_roles={
+            key: tuple(sorted(values))
+            for key, values in outer_material_role_sets.items()
+        },
+        outer_material_conflicts_by_edge_role={
+            key: tuple(sorted(values))
+            for key, values in outer_material_conflict_sets.items()
+        },
         conflicts_by_edge_role={
             key: tuple(
                 sorted(values, key=lambda item: tuple(map(str, item)))
@@ -523,6 +603,18 @@ def _assess_direct_role_binding_authority(
             == BoundaryEdgeMeasurementBasis.DIRECT_WITH_AGGREGATE
         ):
             bases[role_index].add(DirectRoleAuthorityBasis.AGGREGATE_UNION)
+        role = fit.template.roles[role_index].role
+        outer_role_index = (
+            0 if role == BoundaryRole.START else len(fit.template.roles) - 1
+        )
+        if (
+            role_index == outer_role_index
+            and (observation.observation_id, role)
+            in ledger.outer_material_roles
+        ):
+            bases[role_index].add(
+                DirectRoleAuthorityBasis.OUTER_MATERIAL_BOUNDARY
+            )
 
     for adjacency_index in range(max(0, fit.template.count - 1)):
         end_index = 2 * adjacency_index + 1
@@ -588,6 +680,19 @@ def _assess_direct_role_binding_authority(
     blocking_conflicts: dict[int, tuple[ObservationId, ...]] = {}
     for role_index, observation in selected.items():
         selected_role = fit.template.roles[role_index].role
+        outer_role_index = (
+            0
+            if selected_role == BoundaryRole.START
+            else len(fit.template.roles) - 1
+        )
+        outer_material_conflicts = (
+            ledger.outer_material_conflicts_by_edge_role.get(
+                (observation.observation_id, selected_role),
+                (),
+            )
+            if role_index == outer_role_index
+            else ()
+        )
         alternative_conflicts = (
             tuple(
                 conflict_id
@@ -609,8 +714,29 @@ def _assess_direct_role_binding_authority(
             sorted(
                 set(alternative_conflicts)
                 | set(reversed_pair_conflicts_by_role.get(role_index, ()))
+                | set(outer_material_conflicts)
             )
         )
+
+    def authority_evidence_group_id(role_index: int) -> ObservationId:
+        outer_ids = ledger.outer_material_roles.get(
+            (
+                selected[role_index].observation_id,
+                fit.template.roles[role_index].role,
+            ),
+            (),
+        )
+        if bases[role_index] == {
+            DirectRoleAuthorityBasis.OUTER_MATERIAL_BOUNDARY
+        }:
+            if len(outer_ids) != 1:
+                raise ValueError(
+                    "outer material role must have one evidence group"
+                )
+            return ledger.outer_material_by_id[
+                outer_ids[0]
+            ].evidence_group_id
+        return selected_evidence_groups[role_index]
 
     facts = tuple(
         DirectRoleAuthorityFact(
@@ -618,7 +744,7 @@ def _assess_direct_role_binding_authority(
             lane_ordinal=role_index // 2 + 1,
             role=(BoundaryRole.START if role_index % 2 == 0 else BoundaryRole.END),
             observation_id=selected[role_index].observation_id,
-            evidence_group_id=selected_evidence_groups[role_index],
+            evidence_group_id=authority_evidence_group_id(role_index),
             independent_support_region_count=region_counts[role_index],
             bases=tuple(
                 item
@@ -634,6 +760,22 @@ def _assess_direct_role_binding_authority(
                 else EvidenceState.UNAVAILABLE
             ),
             trace_coordinates_px=selected[role_index].trace_coordinates_px,
+            supporting_outer_material_observation_ids=(
+                ledger.outer_material_roles.get(
+                    (
+                        selected[role_index].observation_id,
+                        (
+                            BoundaryRole.START
+                            if role_index % 2 == 0
+                            else BoundaryRole.END
+                        ),
+                    ),
+                    (),
+                )
+                if DirectRoleAuthorityBasis.OUTER_MATERIAL_BOUNDARY
+                in bases[role_index]
+                else ()
+            ),
         )
         for role_index in sorted(selected)
     )
@@ -683,6 +825,10 @@ def assess_direct_role_binding_authorities(
     separator_bands: tuple[SeparatorBandObservation, ...],
     measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
     *,
+    outer_material_boundaries: tuple[
+        OuterMaterialBoundaryObservation,
+        ...,
+    ] = (),
     authorized_source_frame_width_px: FiniteInterval | None = None,
 ) -> tuple[DirectRoleBindingAuthority, ...]:
     """Assess bounded phase candidates against one pre-indexed evidence ledger."""
@@ -695,7 +841,11 @@ def assess_direct_role_binding_authorities(
     if any(fit.template != template for fit in fits[1:]):
         raise ValueError("direct-role candidate batch requires one fixed template")
     ledger = _direct_role_authority_ledger(
-        fits[0], observations, separator_bands, measurement_sets
+        fits[0],
+        observations,
+        separator_bands,
+        measurement_sets,
+        outer_material_boundaries,
     )
     return tuple(
         _assess_direct_role_binding_authority(
@@ -715,6 +865,10 @@ def assess_direct_role_binding_authority(
     separator_bands: tuple[SeparatorBandObservation, ...],
     measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
     *,
+    outer_material_boundaries: tuple[
+        OuterMaterialBoundaryObservation,
+        ...,
+    ] = (),
     authorized_source_frame_width_px: FiniteInterval | None = None,
 ) -> DirectRoleBindingAuthority:
     """Authorize a short line only through a source W that excludes it."""
@@ -726,6 +880,7 @@ def assess_direct_role_binding_authority(
         observations,
         separator_bands,
         measurement_sets,
+        outer_material_boundaries=outer_material_boundaries,
         authorized_source_frame_width_px=authorized_source_frame_width_px,
     )[0]
 

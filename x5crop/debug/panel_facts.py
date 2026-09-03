@@ -16,6 +16,9 @@ from ..detection.photo_geometry.output_model import (
 from ..detection.photo_geometry.template_alignment_diagnostic import (
     template_alignment_diagnostic,
 )
+from ..detection.photo_geometry.template_direct_role_authority import (
+    DirectRoleAuthorityBasis,
+)
 from ..detection.photo_geometry.template_placement import TemplateFrame
 from ..detection.photo_geometry.template_separator_support import (
     resolve_separator_support,
@@ -398,6 +401,18 @@ def alignment_summary(detection: FinalDetection) -> str:
             if direct is None
             else len({item.evidence_group_id for item in direct.facts})
         )
+        outer_material_used = (
+            0
+            if direct is None
+            else sum(
+                DirectRoleAuthorityBasis.OUTER_MATERIAL_BOUNDARY
+                in item.bases
+                for item in direct.facts
+            )
+        )
+        outer_material_count = len(
+            lane.prepared.outer_material_boundaries
+        )
         aperture_domain = (
             lane.placement_competition
             .direct_role_aperture_domain_authority
@@ -557,6 +572,7 @@ def alignment_summary(detection: FinalDetection) -> str:
             f"I{continuity_counts['coverage_incomplete']} · COVER "
             f"{coverage_proof} · OBS {continuity_proof} · DIRECT "
             f"{direct_supported}/{direct_total} G{direct_evidence_group_count} · "
+            f"OUTER MATERIAL {outer_material_used}/{outer_material_count} · "
             f"APERTURE DOMAIN "
             f"{aperture_domain_proof} · OUTER "
             f"{outer_count}/2 · SOURCE W {source_width_proof} · "

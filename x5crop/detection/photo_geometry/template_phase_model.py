@@ -7,7 +7,11 @@ from enum import Enum
 import math
 
 from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
-from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
+from .observation_types import (
+    BoundaryEdgeObservation,
+    OuterMaterialBoundaryObservation,
+    SeparatorBandObservation,
+)
 from .measurement_model import PhotoBoundaryMeasurementSet
 from .template_adjacency_coverage import AdjacencyObservationCoverage
 from .template_adjacency_topology import AdjacencyContinuityObservation
@@ -185,6 +189,10 @@ class TemplatePhaseInput:
     holder_span_px: FiniteInterval | None
     phase_authority_px: FiniteInterval | None
     calibrated_nominal_grid_prior: CalibratedNominalGridPrior
+    outer_material_boundaries: tuple[
+        OuterMaterialBoundaryObservation,
+        ...,
+    ] = ()
     contact_edge_observations: tuple[ContactEdgeObservation, ...] = ()
     overlap_edge_pair_observations: tuple[
         OverlapEdgePairObservation,
@@ -230,6 +238,11 @@ class TemplatePhaseInput:
         ):
             raise TypeError("phase input sequence measurement ledger is invalid")
         if any(
+            not isinstance(item, OuterMaterialBoundaryObservation)
+            for item in self.outer_material_boundaries
+        ):
+            raise TypeError("phase input outer material ledger is invalid")
+        if any(
             not isinstance(item, ContactEdgeObservation)
             for item in self.contact_edge_observations
         ):
@@ -270,7 +283,13 @@ class TemplatePhaseInput:
             for item in self.overlap_edge_pair_observations
         )
         band_ids = tuple(item.observation_id for item in self.separator_bands)
-        registered_ids = set(identities).union(band_ids)
+        outer_material_ids = tuple(
+            item.observation_id for item in self.outer_material_boundaries
+        )
+        registered_ids = set(identities).union(
+            band_ids,
+            outer_material_ids,
+        )
         evidence_ids = {
             identity
             for group in (
@@ -284,6 +303,16 @@ class TemplatePhaseInput:
             raise ValueError("phase input observation identities are not unique")
         if len(set(contact_ids)) != len(contact_ids):
             raise ValueError("phase input contact identities are not unique")
+        if len(set(outer_material_ids)) != len(outer_material_ids):
+            raise ValueError(
+                "phase input outer material identities are not unique"
+            )
+        if len(registered_ids) != (
+            len(identities) + len(band_ids) + len(outer_material_ids)
+        ):
+            raise ValueError(
+                "phase input evidence identities overlap across ledgers"
+            )
         if len(set(overlap_ids)) != len(overlap_ids):
             raise ValueError("phase input overlap identities are not unique")
         if len(overlap_ids) > max(0, len(identities) - 1):
@@ -293,6 +322,22 @@ class TemplatePhaseInput:
             for item in self.contact_edge_observations
         }.issubset(set(identities)):
             raise ValueError("contact edge leaves the registered observation ledger")
+        outer_material_edge_ids = {
+            identity
+            for item in self.outer_material_boundaries
+            for identity in (
+                item.boundary_edge_observation_id,
+                item.exterior_edge_observation_id,
+            )
+        }
+        missing_outer_material_edges = tuple(
+            sorted(outer_material_edge_ids.difference(identities))
+        )
+        if missing_outer_material_edges:
+            raise ValueError(
+                "outer material boundary leaves the registered observation "
+                f"ledger: {missing_outer_material_edges}"
+            )
         if not {
             identity
             for item in self.overlap_edge_pair_observations

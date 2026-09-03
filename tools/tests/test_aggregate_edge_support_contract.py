@@ -4,7 +4,7 @@ from dataclasses import replace
 import unittest
 
 from x5crop.detection.photo_geometry.aggregate_edge_support import (
-    placement_sequence_edges_with_aggregate_support,
+    placement_sequence_edges_with_material_support,
     resolve_aggregate_edge_support,
     resolve_aggregate_separator_support,
 )
@@ -243,7 +243,7 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
 
         edges, resolutions = self._resolve((), (left, right))
         self.assertEqual(
-            placement_sequence_edges_with_aggregate_support(edges, ()),
+            placement_sequence_edges_with_material_support(edges, (), ()),
             (),
         )
         aggregate_band = replace(
@@ -269,9 +269,10 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
 
         self.assertEqual(len(projected), 1)
         self.assertEqual(
-            placement_sequence_edges_with_aggregate_support(
+            placement_sequence_edges_with_material_support(
                 edges,
                 projected,
+                (),
             ),
             edges,
         )
@@ -323,9 +324,10 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
 
         self.assertEqual(projected, ())
         self.assertEqual(
-            placement_sequence_edges_with_aggregate_support(
+            placement_sequence_edges_with_material_support(
                 edges,
                 projected,
+                (),
             ),
             (),
         )
@@ -361,7 +363,7 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
             ),
         )
         self.assertEqual(
-            placement_sequence_edges_with_aggregate_support(edges, ()),
+            placement_sequence_edges_with_material_support(edges, (), ()),
             (),
         )
         broad_band = replace(
@@ -388,7 +390,11 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
 
         self.assertEqual(len(projected), 1)
         self.assertEqual(
-            placement_sequence_edges_with_aggregate_support(edges, projected),
+            placement_sequence_edges_with_material_support(
+                edges,
+                projected,
+                (),
+            ),
             edges,
         )
 
@@ -504,7 +510,11 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
             BoundaryEdgeMeasurementBasis.DIRECT_TRACE,
         )
         self.assertEqual(
-            placement_sequence_edges_with_aggregate_support(edges, projected),
+            placement_sequence_edges_with_material_support(
+                edges,
+                projected,
+                (),
+            ),
             edges,
         )
 
@@ -633,9 +643,10 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
 
         self.assertEqual(projected, ())
         self.assertEqual(
-            placement_sequence_edges_with_aggregate_support(
+            placement_sequence_edges_with_material_support(
                 edges,
                 projected,
+                (),
             ),
             (),
         )
@@ -771,7 +782,7 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
             AggregateEdgeResolutionKind.REDUNDANT_EXISTING_EDGE,
         )
         self.assertEqual(
-            placement_sequence_edges_with_aggregate_support(edges, ()),
+            placement_sequence_edges_with_material_support(edges, (), ()),
             (),
         )
 

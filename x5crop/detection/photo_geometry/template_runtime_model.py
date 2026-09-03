@@ -30,6 +30,7 @@ from .observation_types import (
     BoundaryEdgeObservation,
     AggregateEdgeResolution,
     AggregateEdgeResolutionKind,
+    OuterMaterialBoundaryObservation,
     SeparatorBandMeasurementBasis,
     SeparatorBandObservation,
 )
@@ -135,6 +136,10 @@ class RegisteredTemplateLane:
     cross_profile: BasicAxisProfile
     sequence_edges: tuple[BoundaryEdgeObservation, ...]
     separator_bands: tuple[SeparatorBandObservation, ...]
+    outer_material_boundaries: tuple[
+        OuterMaterialBoundaryObservation,
+        ...,
+    ]
     top_cross_bindings: tuple[CrossRoleBinding, ...]
     bottom_cross_bindings: tuple[CrossRoleBinding, ...]
     raw_cross_observations: tuple[PhotoBoundaryObservation, ...]
@@ -340,6 +345,14 @@ class RegisteredTemplateLane:
                 band.right_edge_observation_id,
             )
         }
+        outer_material_edge_ids = {
+            identity
+            for observation in self.outer_material_boundaries
+            for identity in (
+                observation.boundary_edge_observation_id,
+                observation.exterior_edge_observation_id,
+            )
+        }
         for edge_basis, _band_basis, _raw_edges, _resolutions in aggregate_families:
             for edge in self.sequence_edges:
                 if edge.measurement_basis != edge_basis:
@@ -352,10 +365,12 @@ class RegisteredTemplateLane:
                     or resolution.final_edge_observation_id
                     != edge.observation_id
                     or edge.observation_id
-                    not in aggregate_separator_edge_ids
+                    not in aggregate_separator_edge_ids.union(
+                        outer_material_edge_ids
+                    )
                 ):
                     raise ValueError(
-                        "standalone aggregate edge lacks separator authority"
+                        "standalone aggregate edge lacks material authority"
                     )
         for edge in self.sequence_edges:
             if (
@@ -379,12 +394,25 @@ class RegisteredTemplateLane:
             raise ValueError("sequence edges must be registered once")
         if len({item.observation_id for item in self.separator_bands}) != len(self.separator_bands):
             raise ValueError("separator bands must be registered once")
+        if len(
+            {
+                item.observation_id
+                for item in self.outer_material_boundaries
+            }
+        ) != len(self.outer_material_boundaries):
+            raise ValueError(
+                "outer material boundaries must be registered once"
+            )
         if any(
             band.left_edge_observation_id not in edge_ids
             or band.right_edge_observation_id not in edge_ids
             for band in self.separator_bands
         ):
             raise ValueError("separator bands must stay inside the placement edge ledger")
+        if not outer_material_edge_ids.issubset(edge_ids):
+            raise ValueError(
+                "outer material boundaries must stay inside the placement edge ledger"
+            )
         if any(
             binding.role.value != expected
             for bindings, expected in (
@@ -495,6 +523,8 @@ class PreparedTemplateLane(RegisteredTemplateLane):
             self.phase_input.template != self.template_spec
             or self.phase_input.observations != self.sequence_edges
             or self.phase_input.separator_bands != self.separator_bands
+            or self.phase_input.outer_material_boundaries
+            != self.outer_material_boundaries
             or self.cross_input.template != self.template_spec
             or self.cross_input.top_bindings != self.top_cross_bindings
             or self.cross_input.bottom_bindings != self.bottom_cross_bindings

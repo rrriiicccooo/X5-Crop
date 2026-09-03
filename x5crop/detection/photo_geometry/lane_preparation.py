@@ -29,10 +29,11 @@ from .measurement_model import (
 from .model import BoundaryRole, QueryPurpose
 from .observations import build_sequence_edge_observations
 from .aggregate_edge_support import (
-    placement_sequence_edges_with_aggregate_support,
+    placement_sequence_edges_with_material_support,
     resolve_aggregate_edge_support,
     resolve_aggregate_separator_support,
 )
+from .outer_material import observe_outer_material_boundaries
 from .output_model import ResolvedOutputSlots, SharedStripDirection
 from .profile_adapters import cross_profile_from_regions, sequence_profile_from_regions
 from .registered_measurement import measure_registered_queries
@@ -43,6 +44,9 @@ from .observation_types import (
     SeparatorBandMeasurementBasis,
 )
 from .template_evidence import template_evidence_use_ledger
+from .template_direct_role_authority import (
+    intrinsic_direct_role_authority_bases,
+)
 from .template_frame_width import (
     apply_placement_source_frame_width,
     calibrate_source_frame_width,
@@ -578,14 +582,64 @@ def prepare_template_lane(
             key=lambda item: str(item.observation_id),
         )
     )
-    placement_sequence_edges = (
-        placement_sequence_edges_with_aggregate_support(
+    sequence_measurement_sets = tuple(
+        item
+        for item in measurement_sets
+        if item.query.purpose == QueryPurpose.SEQUENCE_ANCHOR_WINDOW
+    )
+    intrinsic_authority_edge_ids = frozenset(
+        intrinsic_direct_role_authority_bases(
+            resolved_sequence_edges,
+            sequence_measurement_sets,
+        )
+    )
+    observed_outer_material_boundaries = observe_outer_material_boundaries(
+        (
+            *direct_separator_bands,
+            *cross_height_separator_bands,
+            *broad_material_separator_bands,
+        ),
+        (
+            *cross_height_edge_resolutions,
+            *broad_material_edge_resolutions,
+        ),
+        resolved_sequence_edges,
+        direction=measurement_plan.template_spec.direction,
+        intrinsic_authority_edge_ids=intrinsic_authority_edge_ids,
+        maximum_material_width_px=(
+            measurement_plan.template_spec.gap_prior_px.maximum
+        ),
+    )
+    topology_sequence_edges = (
+        placement_sequence_edges_with_material_support(
             resolved_sequence_edges,
             (
                 *projected_cross_height_separator_bands,
                 *projected_broad_material_separator_bands,
             ),
+            (),
         )
+    )
+    placement_sequence_edges = (
+        placement_sequence_edges_with_material_support(
+            resolved_sequence_edges,
+            (
+                *projected_cross_height_separator_bands,
+                *projected_broad_material_separator_bands,
+            ),
+            observed_outer_material_boundaries,
+        )
+    )
+    placement_sequence_edge_ids = frozenset(
+        item.observation_id for item in placement_sequence_edges
+    )
+    outer_material_boundaries = tuple(
+        observation
+        for observation in observed_outer_material_boundaries
+        if {
+            observation.boundary_edge_observation_id,
+            observation.exterior_edge_observation_id,
+        }.issubset(placement_sequence_edge_ids)
     )
     coverage = tuple(item.coverage for item in measurement_sets)
     work = TemplateMeasurementWorkReceipt(
@@ -631,6 +685,7 @@ def prepare_template_lane(
         cross_profile=cross_profile,
         sequence_edges=placement_sequence_edges,
         separator_bands=separator_bands,
+        outer_material_boundaries=outer_material_boundaries,
         top_cross_bindings=(),
         bottom_cross_bindings=(),
         raw_cross_observations=(),
@@ -643,6 +698,7 @@ def prepare_template_lane(
         placement_sequence_edges,
         template,
         separator_bands=separator_bands,
+        outer_material_boundaries=outer_material_boundaries,
         scale_px_per_mm=scales.width_axis_px_per_mm,
         holder_span_px=width_authority,
     )
@@ -674,6 +730,7 @@ def prepare_template_lane(
             placement_sequence_edges,
             template,
             separator_bands=separator_bands,
+            outer_material_boundaries=outer_material_boundaries,
             scale_px_per_mm=scales.width_axis_px_per_mm,
             holder_span_px=width_authority,
             phase_authority_px=base_phase_hypothesis,
@@ -692,6 +749,7 @@ def prepare_template_lane(
             placement_sequence_edges,
             template,
             separator_bands=separator_bands,
+            outer_material_boundaries=outer_material_boundaries,
             scale_px_per_mm=scales.width_axis_px_per_mm,
             holder_span_px=width_authority,
             phase_authority_px=base_phase_authority,
@@ -726,18 +784,13 @@ def prepare_template_lane(
             )
         )
     )
-    sequence_measurement_sets = tuple(
-        item
-        for item in measurement_sets
-        if item.query.purpose == QueryPurpose.SEQUENCE_ANCHOR_WINDOW
-    )
     contact_edge_observations = observe_contact_edges(
-        placement_sequence_edges,
+        topology_sequence_edges,
         separator_bands,
         sequence_measurement_sets,
     )
     overlap_edge_pair_observations = observe_overlap_edge_pairs(
-        placement_sequence_edges,
+        topology_sequence_edges,
         separator_bands,
         sequence_measurement_sets,
         direction=template.direction,
@@ -755,6 +808,7 @@ def prepare_template_lane(
         calibrated_nominal_grid_prior=(
             measurement_plan.calibrated_nominal_grid_prior
         ),
+        outer_material_boundaries=outer_material_boundaries,
         contact_edge_observations=contact_edge_observations,
         overlap_edge_pair_observations=overlap_edge_pair_observations,
         sequence_measurement_sets=sequence_measurement_sets,
@@ -979,6 +1033,7 @@ def prepare_template_lane(
         evidence_use_ledger=template_evidence_use_ledger(
             placement_sequence_edges,
             separator_bands,
+            outer_material_boundaries,
             cross.observations,
             phase,
             cross_competition,

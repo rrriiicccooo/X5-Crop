@@ -9,7 +9,11 @@ from typing import Sequence
 from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
 from .measurement_model import PhotoBoundaryMeasurementSet
 from .model import BoundaryRole, PHOTO_BOUNDARY_MEASUREMENT_SPEC
-from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
+from .observation_types import (
+    BoundaryEdgeObservation,
+    OuterMaterialBoundaryObservation,
+    SeparatorBandObservation,
+)
 from .template_contact import ContactEdgeObservation
 from .template_overlap import OverlapEdgePairObservation
 from .template_model import (
@@ -440,6 +444,9 @@ def fit_template_phase(
     template: TemplateSpec,
     *,
     separator_bands: Sequence[SeparatorBandObservation] = (),
+    outer_material_boundaries: Sequence[
+        OuterMaterialBoundaryObservation
+    ] = (),
     scale_px_per_mm: PositiveInterval | float | None = None,
     holder_span_px: FiniteInterval | None = None,
     phase_authority_px: FiniteInterval | None = None,
@@ -914,6 +921,9 @@ def fit_template_phase(
             registered_observations,
             tuple(separator_bands),
             measurement_sets,
+            outer_material_boundaries=tuple(
+                outer_material_boundaries
+            ),
         )
         if candidates and measurement_sets
         else ()
@@ -1571,6 +1581,9 @@ def _refine_selected_roles_with_candidate_elimination(
             phase_input.observations,
             phase_input.separator_bands,
             phase_input.sequence_measurement_sets,
+            outer_material_boundaries=(
+                phase_input.outer_material_boundaries
+            ),
         )
         if authority.state != EvidenceState.CONTRADICTED:
             return current
@@ -1694,6 +1707,7 @@ def _project_selected_late_local_refinements(
         phase_input.observations,
         phase_input.separator_bands,
         phase_input.sequence_measurement_sets,
+        outer_material_boundaries=phase_input.outer_material_boundaries,
         authorized_source_frame_width_px=(
             None
             if source_frame_width_authority is None
@@ -1890,6 +1904,9 @@ def _attach_selected_candidate_authorities(
             phase_input.observations,
             phase_input.separator_bands,
             phase_input.sequence_measurement_sets,
+            outer_material_boundaries=(
+                phase_input.outer_material_boundaries
+            ),
             authorized_source_frame_width_px=(
                 None
                 if source_frame_width_authority is None
@@ -2309,6 +2326,9 @@ def fit_template_phase_candidate_with_adjacency_relations(
         observations,
         template,
         separator_bands=separator_bands,
+        outer_material_boundaries=(
+            phase_input.outer_material_boundaries
+        ),
         scale_px_per_mm=scale_px_per_mm,
         holder_span_px=holder_span_px,
         phase_authority_px=phase_authority_px,
@@ -2435,6 +2455,9 @@ def fit_template_phase_candidate_with_adjacency_relations(
         observations,
         template,
         separator_bands=separator_bands,
+        outer_material_boundaries=(
+            phase_input.outer_material_boundaries
+        ),
         scale_px_per_mm=scale_px_per_mm,
         holder_span_px=holder_span_px,
         phase_authority_px=phase_authority_px,

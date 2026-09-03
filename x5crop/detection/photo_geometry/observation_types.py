@@ -429,6 +429,85 @@ class SeparatorBandObservation:
 
 
 @dataclass(frozen=True)
+class OuterMaterialBoundaryObservation:
+    """One material band that distinguishes an aperture edge from its exterior.
+
+    The two physical edges carry the same START or END role.  The inner edge
+    may own only the corresponding first/last template role; the exterior edge
+    is counterevidence for that same role.  Correlated direct, cross-height and
+    broad-material measurements are collapsed into one evidence group.
+    """
+
+    observation_id: ObservationId
+    evidence_group_id: ObservationId
+    role: BoundaryRole
+    boundary_edge_observation_id: ObservationId
+    exterior_edge_observation_id: ObservationId
+    supporting_band_observation_ids: tuple[ObservationId, ...]
+    measurement_bases: tuple[SeparatorBandMeasurementBasis, ...]
+    material_polarities: tuple[SeparatorMaterialPolarity, ...]
+    material_interval_px: FiniteInterval
+    independent_support_region_count: int
+    exterior_edge_has_intrinsic_authority: bool
+    state: EvidenceState = EvidenceState.SUPPORTED
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.observation_id, ObservationId)
+            or not isinstance(self.evidence_group_id, ObservationId)
+            or self.role not in {BoundaryRole.START, BoundaryRole.END}
+            or not isinstance(
+                self.boundary_edge_observation_id,
+                ObservationId,
+            )
+            or not isinstance(
+                self.exterior_edge_observation_id,
+                ObservationId,
+            )
+            or self.boundary_edge_observation_id
+            == self.exterior_edge_observation_id
+            or tuple(sorted(set(self.supporting_band_observation_ids)))
+            != self.supporting_band_observation_ids
+            or not self.supporting_band_observation_ids
+            or any(
+                not isinstance(item, ObservationId)
+                for item in self.supporting_band_observation_ids
+            )
+            or tuple(
+                item
+                for item in SeparatorBandMeasurementBasis
+                if item in self.measurement_bases
+            )
+            != self.measurement_bases
+            or not self.measurement_bases
+            or tuple(
+                item
+                for item in SeparatorMaterialPolarity
+                if item in self.material_polarities
+            )
+            != self.material_polarities
+            or not self.material_polarities
+            or self.material_interval_px.minimum < 0.0
+            or self.independent_support_region_count
+            not in {
+                MINIMUM_INDEPENDENT_SUPPORT_REGIONS,
+                SPATIAL_SUPPORT_REGION_COUNT,
+            }
+            or not isinstance(
+                self.exterior_edge_has_intrinsic_authority,
+                bool,
+            )
+            or (
+                self.independent_support_region_count
+                < SPATIAL_SUPPORT_REGION_COUNT
+                and not self.exterior_edge_has_intrinsic_authority
+            )
+            or self.state != EvidenceState.SUPPORTED
+        ):
+            raise ValueError("outer material boundary observation is invalid")
+
+
+@dataclass(frozen=True)
 class BasicAxisProfile:
     """One lane/axis profile retaining fixed per-trace run identity."""
 

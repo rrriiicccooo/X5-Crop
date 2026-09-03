@@ -135,11 +135,22 @@ def leave_one_anchor_out_phase_stability(
             for item in phase_input.overlap_edge_pair_observations
             if set(item.supporting_observation_ids).issubset(reduced_ids)
         )
+        reduced_outer_material_boundaries = tuple(
+            item
+            for item in phase_input.outer_material_boundaries
+            if {
+                item.boundary_edge_observation_id,
+                item.exterior_edge_observation_id,
+            }.issubset(reduced_ids)
+        )
         refit = fit_template_phase_with_adjacency_relations(
             replace(
                 phase_input,
                 observations=reduced,
                 separator_bands=reduced_bands,
+                outer_material_boundaries=(
+                    reduced_outer_material_boundaries
+                ),
                 contact_edge_observations=reduced_contact_edges,
                 overlap_edge_pair_observations=reduced_overlap_pairs,
                 # The final search authority may itself have been estimated
