@@ -1106,7 +1106,7 @@ placement；Grid coordinate 只保留为模型诊断。Placement 仍保持 sourc
 这是一项当前实现边界，不是对校准概率选择的永久禁令。未经校准的 score 不得拥有最终决定权；
 合法 runner 也不因“仍然合法”而被定义为永久阻断项。
 
-### 9.2 可用性评分与校准概率选择（当前未启用）
+### 9.2 可用性开发排序与校准概率选择（Runtime 未启用）
 
 共同 W 检查点后即可用现有有界候选与黄金标签开展特征、排序和开发评估，不以全部 nominal 自动通过
 或独立 calibration/sealed 数据齐备为开发前置条件。正式概率权限仍需独立证据：
@@ -1146,7 +1146,7 @@ Gold record 在同一 source SHA、format/count 身份下保存每份 placement 
 footprint、typed generation failure 与带 physical frame ID 的逐帧诊断。集合按 task 计数，不将不同 count
 的同源任务混成一个答案；多正例不归一化，unavailable 不产生负例。可用但有 placement 歧义的统计只消费
 明确的 discrete phase ambiguity 或 non-equivalent Cross fits，不将 coverage 缺口或所有 Review 算作歧义。
-该阶段不增加评分、准入权限、content requery 或自动输出，只建立后续特征/排序可复核的输入与标签。
+集合物化本身不增加评分、准入权限、content requery 或自动输出，只建立特征/排序可复核的输入与标签。
 
 候选特征由 `template_acceptability_features.py` 独占，冻结为
 `x5crop_placement_acceptability_features_v1` 的 28 个非负数值字段，定义、顺序、单位和来源字段由
@@ -1165,6 +1165,20 @@ geometry 和 output identity 保留为 provenance，不编码为数值特征；s
 
 开发排序继续复用 `template_selection.py` 的有界竞争身份，黄金标签仍由
 `tools/regression/gold_geometry.py` 独占，集合分析由现有 `gold_analysis.py` 扩展，不另建 detector 或黄金池。
+离线排序由 `tools/regression/placement_ranking.py` 独占，使用当前源码绑定、无分析错误的黄金报告；
+至少需要五个 source group。方法在查看该轮结果前冻结为
+`source_balanced_standardized_ridge_ranking_v1`：source SHA 排序后循环分配五折，同源 count 变体同折；
+每个 source 总权重相等，其内已生成候选等权。仅用训练折拟合各特征的观测均值与标准差；
+缺失项标准化后填 0，另加 28 个缺失指示量。常量与全缺失维度尺度为 1，全缺失中心为 0。
+加权最小二乘使用固定 ridge 系数 0.1，截距不惩罚；不根据本轮结果搜索参数。分数无界，不称为概率。
+每份已有候选独立学习安全标签，多正例不竞争归一化；unavailable 不参与训练或排序。
+最大分数优先，精确同分沿用保留顺序；margin 只报告前两名差值，不授予或否决权限。
+
+Artifact 分开保存 source-grouped out-of-fold 开发结果与全量拟合的 in-sample 结果，记录模型参数、训练
+source、transform、feature/label schema、稳定规则、输入和工具 SHA；验证器核对分组、训练集统计、
+ridge 正规方程、预测及聚合。数值范围与缺失模式只作开发支持诊断，尚未覆盖正式 format/profile/count/
+topology OOD；`formal_ood_evaluated=false`、`calibration_id=null`、`admission_enabled=false`。
+这些已查看开发 source 的分组评估不冒充独立 calibration 或 sealed acceptance。
 开发排序与标签不反写当前 Runtime Gate；正式
 可用性 assessment 最终仍沿 `CandidateGate → DecisionGate` 单向消费，不建立第二个终态 owner。
 

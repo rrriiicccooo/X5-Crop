@@ -42,6 +42,9 @@
   物化一次，正式输出复用 primary。新增投影次数与逐 slot 输出评估次数，不扩大候选搜索或自动权限。
 - 每份 proposal 保留同一 owner 的数值预算和 28 项带单位、provenance 与 missingness 的物理特征；
   正式 candidate 复用 primary 预算，不重复计算。缺失不记为 0；锚点按独立 evidence group 去重。
+- 离线开发排序按 source SHA 分五折，同源 count 不跨折；训练集内标准化和固定 ridge 拟合不读取
+  样片身份或 cohort 特征。多正例与 unavailable 分开处理，独立报告折外与样本内结果。排序分数不是
+  可用概率，数值支持诊断不是正式 OOD，不改变 Runtime 或自动批准权限。
 - Development gold 分开比较 proposal、candidate 与 approved output。Runtime 的实际数值预算评估和
   CandidateGate 的预算阻断分开统计；未评估不能冒充通过。比例 H 的预算诊断只记录实际消费和阻断事实。
   每份保留候选独立记录最终 footprint 与方向性黄金标签，允许多份同时安全；无法生成不算不安全负例。

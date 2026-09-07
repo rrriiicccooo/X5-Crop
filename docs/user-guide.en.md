@@ -73,12 +73,13 @@ an opposite edge that is visible only locally across the whole strip.
 Normal strips use one shared pitch. Every directly proven, ordinal-unique separator may constrain its own wide or narrow
 gap; later Frames apply that measured delta once. Multiple proven gap changes still use one bounded pass. An ambiguous
 gap, missing authority, inability to reliably choose among legal answers, or an unknown required Frame remains `needs_review`.
-Acceptability scoring is not yet enabled; this is a current selection limit, not a requirement to prove one uniquely true crop.
+Runtime acceptability scoring is not yet enabled; this is a current selection limit, not a requirement to prove one uniquely true crop.
 Reports retain each lane's existing primary and single runner crop footprint, or the specific reason it could not be generated.
 Development gold analysis evaluates each footprint independently, allows multiple safe results, and separates unsafe from
 unavailable geometry. Each retained crop also records its numeric budget and physical features with units, provenance,
 and explicit missing reasons. Numeric budget assessment remains separate from final approval conditions.
-These records do not change automatic approval conditions. Contact and
+These records do not change automatic approval conditions. Offline development ranking groups evaluation by source image
+and separates out-of-fold from in-sample results; its scores are not safety probabilities and do not select actual crops. Contact and
 overlap are challenge cases, not predetermined outcomes: the standard detector and Gate may
 approve them when direct-use admission is satisfied, while safe review remains correct when evidence is insufficient. V5 does
 not enable a second detector or a separate bleed budget for them. A proven relation adds topology protection only to
