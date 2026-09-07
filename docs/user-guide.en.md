@@ -80,6 +80,8 @@ Fit compatibility uses the current model and direct anchors, not an earlier resi
 do not alter the global residual calculation.
 A narrow material strip at a film-strip end can lie inside or outside the photo. Existing evidence for both edges is retained;
 the strip alone does not force selection of the inner edge.
+An edge signal cut off by the source or query range cannot alone provide a precise boundary position;
+unmeasured regions are not treated as confirmed background.
 Narrow material at a photo edge also preserves existing boundary-role candidates; possible interpretations are checked
 against the whole-strip constraints.
 When discrete positions remain ambiguous, each candidate's local boundaries are checked independently, and each review

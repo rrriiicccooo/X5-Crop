@@ -18,6 +18,8 @@
   迁入 current owner；删除未经校准的终判、事后改边界、任意 fallback 与旧源码结构。
 - Dark/light separator、共享边 material component、局部 aperture domain、source 端部窄材料带和 Cross
   纵向覆盖分别保留 typed 权限与反证。局部线不能越过未观察区域取得整条片带的输出权限。
+- 源边或查询范围截断的定位峰不再以可见峰尾取得精确坐标；宽缓材质峰同时检查双尺度实际可观测域。
+  完整峰、极性分区和窗口 ownership 保留既有职责，不增加像素读取或放宽测量阈值。
 - 端部窄材料带保留内侧边界假设，但不再仅因窄带存在而否定外侧 edge 的独立角色权限；材料可能处于
   aperture 内。W/ordinal、独立证据和后续风险条件继续约束解释，不强选更内侧边界。
 - 唯一且获权的实测窄 separator 可以原子闭合相邻角色，不再额外要求 gap 达到 nominal 下界；既有
@@ -33,7 +35,7 @@
   候选不合并几何或增加独立票数，登记与 refit 不重复，未闭合的纵向歧义继续进入 Review。
 - 纯离散歧义的 primary/runner 分别以自身合法直接约束收紧 proposal 联合包络；runner 不借用 primary
   的角色或不匹配的 source W。歧义、反证与输出资格不变，空可行集明确保留为 unavailable。
-- Enclosing aperture-center 校准按当前唯一 selected pair 的 18 个 source 重登记观测指纹；
+- Enclosing aperture-center 校准按当前唯一 selected pair 的 17 个 source 重登记观测指纹；
   原资格、source 中位数、全体 hull 与向外量化方法不变，当前区间为 `[-0.008H, +0.010H]`。
 - Source W 明确分开测量、placement 消费和自动输出资格。至少两张合格完整 Frame 或全部独立 rank-3
   直接约束可建立测量；两组都成立时只取交集。远处 coverage、全局 rank 缺口或 unresolved proposal 不再

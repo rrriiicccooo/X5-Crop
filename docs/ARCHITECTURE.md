@@ -277,6 +277,16 @@ Registered measurement 一次生成 role-free、候选无关、数量有界的�
 measurement。它们共同描述同一个 observation，可以互相加强、否定或形成 missing/conflict；不能把增强图、
 另一套阈值或另一次读取包装成平行 detector，再按最高分挑赢家。
 
+`registered_transition_measurement.py` 检查定位峰的半高尾部是否连通实际测量域边界。源边或 query
+截断的峰尾不能以可见部分的中点冒充精确边界；较宽的 tone/texture 支持组仍可延伸到域边，
+不要求整个支持组闭合；既有极性分区保持不变。
+Transition ownership 只分配已有峰，不是像素缺失边界；查询执行完成也不证明
+测量核无法覆盖的源边区域已被观察。
+邻点仍满足同一半高峰条件时，即使低于登记阈值，也继续在当前测量数组中探查实际侧翼。
+探查不扩展可信组的 localization/physical interval、不合并或重复创造 observation；有完整实测侧翼的
+弱峰仍保留。只有尾部真实连通缺测域的峰不登记精确位置，这不构成边界不存在的反证。
+每个峰的每侧探查至多经过当前 trace 的已测坐标数，不新增 TIFF 读取、query、数组或候选搜索。
+
 ### 6.2 `SeparatorBandObservation`
 
 `SeparatorMaterialPolarity = dark | light`。同一个 candidate-independent registered measurement
@@ -316,6 +326,9 @@ transition ownership。它固定分成三个高度区域，并产生两种互不
 位置区间、方向区间、polarity 和 background side 上一致。宽缓通道不伪造 gradient，不降低局部 edge
 阈值，也不扩大既有 query、transition ownership、local measurement halo 或 TIFF 读取。它只复用已经
 完整登记的全长 baseline；新增数组和计算完整进入 work/RSS receipt。
+
+宽缓定位峰的尾部探查还必须在双尺度 `observable` 域内闭合；域外占位零值不是已观察到的信号回落。
+这项完整性检查与局部峰共用当前测量 owner，不扩大窗口、补读像素或创造缺边反证。
 
 两类 aggregate 都不知道 role、ordinal 或 placement。`aggregate_edge_support.py` 是 edge resolution 与
 separator pair 投影的唯一 owner：
@@ -1341,7 +1354,7 @@ Enclosing support 本身只证明真实 aperture 位于两条 support 之间，�
 center_offset_ratio = (gold_aperture_center - support_midpoint) / H
 ```
 
-当前 calibration 只纳入 18 个 selected unique pair、且黄金 top/bottom 均为 `directly_visible` 的 source；
+当前 calibration 只纳入 17 个 selected unique pair、且黄金 top/bottom 均为 `directly_visible` 的 source；
 同源 count 先取中位数，再对 source hull 以 `0.001H` 向外量化，得到 `[-0.008H, +0.010H]`。Calibration
 同时绑定 development cohort SHA、eligibility revision 和精确 observation-set SHA；source 数量相同但成员、
 观测值或 detector 权限变化时同样视为 calibration drift。该 authority

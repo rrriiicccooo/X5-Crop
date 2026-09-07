@@ -618,6 +618,19 @@ def measured_transition_peaks(
             ):
                 right_position += 1
             peak_members = assigned[left_position : right_position + 1]
+            observed_left = int(peak_members[0])
+            observed_right = int(peak_members[-1])
+            while observed_left > 0 and same_peak(observed_left - 1):
+                observed_left -= 1
+            while observed_right + 1 < coordinates.size and same_peak(observed_right + 1):
+                observed_right += 1
+            if observed_left == 0 or observed_right == coordinates.size - 1:
+                # A half-height lobe cut by the measured domain has no
+                # observed midpoint.  Its visible tail must not become a
+                # precise boundary position. Probe past credible-group ends
+                # without changing their localization or merging identities:
+                # a below-threshold but observed tail is not missing data.
+                continue
             peak_minimum = (
                 float(coordinates[int(peak_members[0])])
                 - PIXEL_CENTER_HALF_EXTENT_PX
@@ -726,6 +739,29 @@ def measured_broad_material_peaks(
         ):
             right_position += 1
         peak_members = group[left_position : right_position + 1]
+        observed_left = int(peak_members[0])
+        observed_right = int(peak_members[-1])
+        while (
+            observed_left > 0
+            and material.observable[observed_left - 1]
+            and same_peak(observed_left - 1)
+        ):
+            observed_left -= 1
+        while (
+            observed_right + 1 < measurement.coordinates.size
+            and material.observable[observed_right + 1]
+            and same_peak(observed_right + 1)
+        ):
+            observed_right += 1
+        if (
+            observed_left == 0
+            or observed_right == measurement.coordinates.size - 1
+            or not material.observable[observed_left - 1]
+            or not material.observable[observed_right + 1]
+        ):
+            # Broad windows have a smaller observable domain than the sharp
+            # trace. Masked zeroes beyond it are not observed peak flanks.
+            continue
         peak_minimum = (
             float(measurement.coordinates[int(peak_members[0])])
             - PIXEL_CENTER_HALF_EXTENT_PX

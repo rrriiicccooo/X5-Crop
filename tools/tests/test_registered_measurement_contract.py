@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from tools.tests.photo_geometry_support import *
 from x5crop.detection.photo_geometry.cross_height_transition_measurement import (
     measure_cross_height_transition_regions,
@@ -18,9 +20,219 @@ from x5crop.detection.photo_geometry.transition_tracking import (
     track_cross_height_transition_regions,
 )
 from x5crop.detection.robust_statistics import positive_mad_z
+from x5crop.detection.photo_geometry.template_registration import (
+    register_cross_evidence,
+)
 
 
 class RegisteredMeasurementContractTest(unittest.TestCase):
+    @staticmethod
+    def _registered_step(edge: int, *, mirrored: bool, texture: bool):
+        scale = PositiveInterval(81.514422, 81.514422)
+        traces = tuple(range(0, 901, 100))
+        source = np.full((200, 901), 220, dtype=np.uint8)
+        source[:edge] = 20
+        if texture:
+            source[edge:] = 220 + np.arange(200 - edge)[:, None] % 2
+        if mirrored:
+            source = source[::-1].copy()
+        search = FiniteInterval(0.0, 199.0)
+        query = PhotoBoundaryMeasurementQuery(
+            query_id="query:source-edge",
+            registration_index=0,
+            lane_id="lane:0",
+            purpose=(QueryPurpose.BOTTOM_CORRIDOR if mirrored else QueryPurpose.TOP_CORRIDOR),
+            boundary_axis=BoundaryAxis.Y,
+            trace_positions_px=traces,
+            search_intervals_px=(search,) * len(traces),
+            transition_ownership_intervals_px=(search,) * len(traces),
+            expected_support_px=900.0,
+            boundary_axis_scale_px_per_mm=scale,
+            trace_axis_scale_px_per_mm=scale,
+            measurement_halo_px=PHOTO_BOUNDARY_MEASUREMENT_SPEC.local_measurement_work_radius_px(scale.maximum),
+            registration_provenance_ids=("synthetic-source",),
+        )
+        measured = measure_registered_queries(
+            PhotoBoundaryMeasurementField(source, "horizontal"), (query,),
+        )[0]
+        regions = track_side_transition_regions(
+            (measured,), reference_trace_px=450.0,
+            boundary_axis_scale_px_per_mm=scale,
+        )
+        profile = cross_profile_from_regions(
+            () if mirrored else regions,
+            regions if mirrored else (),
+            coordinate_count=200,
+            transition_by_id={str(item.transition_id): item for item in measured.transitions},
+        )
+        registered = register_cross_evidence(
+            profile=profile, top_measurement=measured, bottom_measurement=measured,
+            width_axis=BoundaryAxis.X, height_axis=BoundaryAxis.Y,
+            height_scale_px_per_mm=scale, lane_reference_trace_px=450.0,
+        )
+        bindings = registered.bottom_bindings if mirrored else registered.top_bindings
+        return measured, bindings
+
+    def test_source_cut_localization_peak_cannot_gain_direct_cross_authority(self) -> None:
+        for mirrored in (False, True):
+            for texture in (False, True):
+                with self.subTest(mirrored=mirrored, texture=texture):
+                    measured, bindings = self._registered_step(
+                        25, mirrored=mirrored, texture=texture,
+                    )
+                    self.assertTrue(measured.coverage.complete)
+                    self.assertEqual(bindings, ())
+
+    def test_complete_source_edge_keeps_its_direct_cross_authority(self) -> None:
+        for mirrored in (False, True):
+            with self.subTest(mirrored=mirrored):
+                _measured, bindings = self._registered_step(
+                    50, mirrored=mirrored, texture=True,
+                )
+                self.assertEqual(len(bindings), 1)
+                self.assertTrue(bindings[0].role_authorized)
+                self.assertTrue(bindings[0].full_interval_px.contains(
+                    149.5 if mirrored else 49.5, epsilon=1.0e-8,
+                ))
+
+    def test_peak_completeness_uses_localization_not_the_whole_signal_group(self) -> None:
+        values = np.full(200, 220, dtype=np.uint8)
+        values[:50] = 20
+        for search, expected_count in (
+            (FiniteInterval(50.0, 80.0), 0),
+            (FiniteInterval(20.0, 50.0), 0),
+            (FiniteInterval(40.0, 60.0), 1),
+        ):
+            with self.subTest(search=search):
+                measured = measure_trace(values, search, 81.514422, PHOTO_BOUNDARY_MEASUREMENT_SPEC)
+                peaks = measured_transition_peaks(
+                    measured, PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+                    split_gradient_reversals=True,
+                )
+                self.assertEqual(len(peaks), expected_count)
+                if peaks:
+                    self.assertEqual(peaks[0].canonical_coordinate, 50.0)
+
+    def test_complete_peak_is_not_cut_by_sequence_ownership_boundary(self) -> None:
+        source = np.full((81, 101), 220, dtype=np.uint8)
+        source[:, :50] = 20
+        baseline = replace(
+            self._cross_height_query(), query_id="baseline",
+            purpose=QueryPurpose.SEQUENCE_BASELINE,
+        )
+        windows = tuple(
+            replace(
+                baseline, query_id=f"window:{index}", registration_index=index,
+                purpose=QueryPurpose.SEQUENCE_ANCHOR_WINDOW,
+                search_intervals_px=(FiniteInterval(40.0, 60.0),) * 9,
+                transition_ownership_intervals_px=(ownership,) * 9,
+            )
+            for index, ownership in enumerate(
+                (FiniteInterval(40.0, 49.0), FiniteInterval(50.0, 60.0)), start=1,
+            )
+        )
+        _baseline, left, right = measure_registered_queries(
+            PhotoBoundaryMeasurementField(source, "horizontal"),
+            (baseline, *windows),
+        )
+        self.assertEqual(left.transitions, ())
+        self.assertEqual(len(right.transitions), 9)
+        self.assertTrue(all(item.coordinate_px == 50.0 for item in right.transitions))
+
+    def test_complete_opposite_polarity_peaks_survive_domain_check(self) -> None:
+        values = np.full(200, 20, dtype=np.uint8)
+        values[50:90] = 220
+        measured = measure_trace(
+            values, FiniteInterval(0.0, 199.0), 81.514422,
+            PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+        )
+        peaks = tuple(
+            peak for peak in measured_transition_peaks(
+                measured, PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+                split_gradient_reversals=True,
+            )
+            if peak.gradient_z >= PHOTO_BOUNDARY_MEASUREMENT_SPEC.gradient_z_minimum
+        )
+        self.assertEqual([item.canonical_coordinate for item in peaks], [50.0, 90.0])
+        self.assertEqual([item.polarity for item in peaks], [1, -1])
+
+    def test_broad_peak_needs_observed_flanks_not_masked_zeroes(self) -> None:
+        for edge, expected_count in ((45, 0), (75, 1)):
+            for mirrored in (False, True):
+                with self.subTest(edge=edge, mirrored=mirrored):
+                    values = np.full(200, 20, dtype=np.uint8)
+                    values[edge:] = 220 + 4 * (np.arange(200 - edge) % 2)
+                    if mirrored:
+                        values = values[::-1].copy()
+                    measured = measure_trace(
+                        values, FiniteInterval(0.0, 199.0), 81.514422,
+                        PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+                        include_broad_material=True,
+                    )
+                    peaks = tuple(
+                        peak for peak in measured_broad_material_peaks(
+                            measured, PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+                        )
+                        if peak.background_side == (1 if mirrored else -1)
+                    )
+                    self.assertEqual(len(peaks), expected_count)
+                    if peaks:
+                        self.assertTrue(peaks[0].physical_position_interval.contains(
+                            199.5 - edge if mirrored else edge - 0.5,
+                            epsilon=1.0e-8,
+                        ))
+
+    def test_weak_tail_checks_real_domain_without_merging_credible_groups(self) -> None:
+        for edge in (30, 60):
+            for signal in ([22, 24, 24, 22], [22, 24, 24, 22, 22, 24, 24, 22]):
+                for mirrored in (False, True):
+                    with self.subTest(edge=edge, signal=signal, mirrored=mirrored):
+                        values = np.full(200, 20, dtype=np.uint8)
+                        values[edge : edge + len(signal)] = signal
+                        if mirrored:
+                            values = values[::-1].copy()
+                        measured = measure_trace(
+                            values, FiniteInterval(0.0, 199.0), 81.514422,
+                            PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+                        )
+                        peaks = measured_transition_peaks(
+                            measured, PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+                            split_gradient_reversals=True,
+                        )
+                        negative = [edge + 6.5 + offset for offset in range(0, len(signal), 4)]
+                        positive = [edge - 2.5 + offset for offset in range(0, len(signal), 4)]
+                        expected = negative if edge == 30 else positive + negative
+                        if mirrored:
+                            expected = [200.0 - value for value in expected]
+                        self.assertEqual(
+                            [peak.canonical_coordinate for peak in peaks], sorted(expected),
+                        )
+                        self.assertTrue(all(peak.peak_width_px == 2.0 for peak in peaks))
+
+    def test_broad_weak_tail_checks_observable_domain_not_credible_threshold(self) -> None:
+        measured = self._broad_material_trace()
+        material = measured.broad_material
+        self.assertIsNotNone(material)
+        for truncated, expected_count in ((False, 1), (True, 0)):
+            with self.subTest(truncated=truncated):
+                contrast = np.zeros(measured.coordinates.size)
+                contrast[50:54] = [2, 4, 4, 2]
+                observable = np.ones(contrast.size, dtype=bool)
+                if truncated:
+                    observable[:50] = False
+                broad = replace(
+                    material, contrast_z=contrast,
+                    supported=np.ones(contrast.size, dtype=bool),
+                    observable=observable,
+                    polarity=np.ones(contrast.size, dtype=np.int8),
+                    background_side=-np.ones(contrast.size, dtype=np.int8),
+                )
+                peaks = measured_broad_material_peaks(
+                    replace(measured, broad_material=broad),
+                    PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+                )
+                self.assertEqual(len(peaks), expected_count)
+
     @staticmethod
     def _cross_height_query() -> PhotoBoundaryMeasurementQuery:
         traces = tuple(range(0, 81, 10))
