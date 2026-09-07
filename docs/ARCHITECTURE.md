@@ -485,8 +485,11 @@ residual、support 或 Grid 强选。
 
 Constraint rank 只由 `template_lattice_authority.py` 计算。相同 `evidence_group_id` 的多个坐标只贡献一行；
 若同组绑定多个 role，按最低 role index 选择该组的 canonical rank row，其余 native coordinates 仍完整保留，
-不能因 rank 去重而合并坐标或隐藏 runner。Measured separator endpoint 不进入 global rank；其 immutable
-evidence identity 只包含 relation family、ordinal、直接 observation ID 与 signed-gap interval，不包含随共享
+不能因 rank 去重而合并坐标或隐藏 runner。候选投影按本次待拟合的 adjacency relations 计算 rank，不能
+沿用变更前 nominal 方程的 rank；全部 advance 由实测 gap 表达时，pitch 可从直接方程中消去，降秩后
+必须走已有校准 Grid 路径或报告其不可用，不得冒充直接满秩重拟合。Measured separator endpoint 不进入
+global rank；其 immutable evidence identity 只包含 relation family、ordinal、直接 observation ID 与
+signed-gap interval，不包含随共享
 W/pitch 重算的 derived delta/kind。整个 projection 只消费已登记 evidence，候选数、角色数与重拟合次数均受
 原 template 上界约束，不增加 TIFF 读取或第二 detector。当前完整路径最多 6 次 fit pass，覆盖 provisional、
 source pitch、base relation、direct separator refit 与 selected source-W refinement；超界产生
@@ -649,6 +652,10 @@ material role authority 的唯一 owner。它先把共享任一 physical edge �
 真实 fork 才构成上述冲突。所有 partial-height band 仍留在同一个 component 中供 provenance、反证与一次
 相关权限传递使用，但不能创造第二份 phase/rank authority。该 owner 不读取新像素、不选择 ordinal、
 placement 或 winner，也不按强度分数消解多解。
+
+局部角色补齐只消费上述唯一获权 pair，并继续检查 ordinal、完整 W 区间和既有 binding；正常材料资格已
+检查 gap 上界，不再把 nominal gap 下界作为原子闭合的附加许可。真实窄 separator 保留自己的实测间距，
+不能用标称间隔覆盖 native endpoint，也不能以此绕过竞争或 partial-height 权限条件。
 
 Separator pair 的 identity 必须保留物理方向，canonical 顺序始终是
 `前一 Frame END → material → 后一 Frame START`。同一两条 edge 的反序 tuple 不是等价集合：若 selected-only

@@ -73,6 +73,9 @@ an opposite edge that is visible only locally across the whole strip.
 Normal strips use one shared pitch. Every directly proven, ordinal-unique separator may constrain its own wide or narrow
 gap; later Frames apply that measured delta once. Multiple proven gap changes still use one bounded pass. An ambiguous
 gap, missing authority, inability to reliably choose among legal answers, or an unknown required Frame remains `needs_review`.
+A measured narrow gap need not reach the format's nominal gap lower bound. If measured relations cannot independently
+determine every template parameter, the existing calibrated bounds test the same placement. Missing or conflicting
+calibration keeps the image in Review; authorized direct coordinates remain unchanged.
 A narrow material strip at a film-strip end can lie inside or outside the photo. Existing evidence for both edges is retained;
 the strip alone does not force selection of the inner edge.
 When discrete positions remain ambiguous, each review footprint still obeys its own jointly supported direct coordinates;

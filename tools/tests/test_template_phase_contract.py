@@ -85,6 +85,7 @@ from x5crop.detection.photo_geometry.template_phase_candidates import (
     _facts,
     _match_roles,
     _refine_local_role_bindings,
+    project_candidate_to_authorized_direct_roles,
 )
 from x5crop.detection.photo_geometry.template_phase_candidates import (
     _separator_role_authority,
@@ -104,6 +105,7 @@ from x5crop.detection.photo_geometry.template_phase_model import (
 from x5crop.detection.photo_geometry.template_residual import (
     ResidualPattern,
     derive_adjacency_relations,
+    derive_candidate_separator_relations,
 )
 from x5crop.detection.photo_geometry.template_stability import (
     AnchorDependencyEffect,
@@ -631,6 +633,51 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
 
         self.assertEqual(refined.fit.binding_observation_ids[:2], (None, None))
+
+    def test_narrow_atomic_separator_closes_missing_roles_without_nominal_gap_permission(
+        self,
+    ) -> None:
+        spec = replace(
+            template(2),
+            frame_width_px=PositiveInterval(90.0, 110.0),
+            nominal_gap_px=FiniteInterval(19.0, 21.0),
+        )
+        fit = placement_sequence(spec, missing=(1, 2))
+        end = self._local_line("narrow:end", 200.0, BoundaryRole.END)
+        start = self._local_line("narrow:start", 210.0, BoundaryRole.START)
+        alternative = self._local_line("narrow:alternative", 211.0, BoundaryRole.START)
+        band = separator("narrow:band", end, start, FiniteInterval(9.8, 10.2))
+
+        refined = _refine_local_role_bindings(fit, (end, start, alternative), (band,))
+
+        self.assertEqual(
+            refined.fit.binding_observation_ids[1:3],
+            (end.observation_id, start.observation_id),
+        )
+        self.assertEqual(refined.fit.phase_lattice_fit, fit.phase_lattice_fit)
+        self.assertEqual(refined.fit.pitch_fit, fit.pitch_fit)
+        self.assertEqual(refined.fit.role_bindings[0], fit.role_bindings[0])
+        self.assertEqual(refined.fit.role_bindings[3], fit.role_bindings[3])
+        self.assertEqual(refined.fit.role_bindings[1].canonical_position_px, 200.0)
+        self.assertEqual(refined.fit.role_bindings[2].canonical_position_px, 210.0)
+
+        competing_band = separator(
+            "narrow:competing-band", end, alternative, FiniteInterval(10.8, 11.2),
+        )
+        partial_band = separator(
+            "narrow:partial-band", end, start, FiniteInterval(9.8, 10.2), region_count=2,
+        )
+        for bands in ((band, competing_band), (partial_band,)):
+            with self.subTest(bands=tuple(item.observation_id for item in bands)):
+                unavailable = _refine_local_role_bindings(
+                    fit, (end, start, alternative), bands
+                )
+                self.assertIsNone(unavailable.fit.role_bindings[2])
+        width_conflict = _refine_local_role_bindings(
+            fit, (end, start, alternative), (band,),
+            frame_width_authority_px=FiniteInterval(99.0, 101.0),
+        )
+        self.assertIsNone(width_conflict.fit.role_bindings[2])
 
     def test_locally_bound_separator_drives_one_wide_advance(self) -> None:
         anchor = replace(
@@ -1433,6 +1480,63 @@ class TemplatePhaseContractTest(unittest.TestCase):
             result.receipt.candidate_direct_role_projection_success_count,
             0,
         )
+
+    def test_measured_separator_projection_uses_the_current_constraint_rank(
+        self,
+    ) -> None:
+        spec = template(2)
+        observations = tuple(
+            edge(f"measured-rank:{index}", coordinate)
+            for index, coordinate in enumerate((10.0, 110.0, 128.0, 228.0))
+        )
+        measurements = (
+            phase_sequence_measurement(
+                "measured-rank", FiniteInterval(0.0, 260.0)
+            ),
+        )
+        initial = fit_template_phase(
+            observations, spec, sequence_measurement_sets=measurements
+        )
+        assert initial.best is not None
+        band = separator(
+            "measured-rank:band", observations[1], observations[2],
+            FiniteInterval(17.8, 18.2),
+        )
+        authority = assess_direct_role_binding_authority(
+            initial.best, observations, (band,), measurements
+        )
+        self.assertEqual(authority.state, EvidenceState.SUPPORTED)
+        self.assertEqual(direct_role_constraint_rank(initial.best), 3)
+        relations = derive_candidate_separator_relations(
+            initial.best, authority, (band,), FiniteInterval.exact(120.0)
+        )
+        self.assertEqual(len(relations), 1)
+        for prior, outcome in (
+            (
+                None,
+                PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID_UNAVAILABLE,
+            ),
+            (
+                calibrated_nominal_grid_prior(spec),
+                PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID,
+            ),
+        ):
+            with self.subTest(calibrated=prior is not None):
+                projected, receipt = project_candidate_to_authorized_direct_roles(
+                    _BoundFit(initial.best, True), authority, _facts(observations),
+                    (), spec.roles, spec, relations, FiniteInterval.exact(120.0),
+                    None, None, prior,
+                )
+                self.assertEqual(receipt.retained_direct_constraint_rank, 2)
+                self.assertEqual(receipt.outcome, outcome)
+                if prior is None:
+                    self.assertIsNone(projected)
+                else:
+                    assert projected is not None
+                    self.assertEqual(
+                        projected.fit.role_bindings,
+                        initial.best.role_bindings,
+                    )
 
     def test_rank_two_projection_requires_a_calibrated_nominal_grid(self) -> None:
         observations = tuple(

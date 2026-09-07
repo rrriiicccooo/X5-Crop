@@ -20,6 +20,9 @@
   纵向覆盖分别保留 typed 权限与反证。局部线不能越过未观察区域取得整条片带的输出权限。
 - 端部窄材料带保留内侧边界假设，但不再仅因窄带存在而否定外侧 edge 的独立角色权限；材料可能处于
   aperture 内。W/ordinal、独立证据和后续风险条件继续约束解释，不强选更内侧边界。
+- 唯一且获权的实测窄 separator 可以原子闭合相邻角色，不再额外要求 gap 达到 nominal 下界；既有
+  材料权限、正常间隔上界、W 与竞争条件不变。候选投影按新的实测关系重算 constraint rank，降秩时使用
+  已有校准 Grid 或保留不可用，不能沿用旧 nominal rank 丢弃合法候选或取得满秩权限。
 - 纯离散歧义的 primary/runner 分别以自身合法直接约束收紧 proposal 联合包络；runner 不借用 primary
   的角色或不匹配的 source W。歧义、反证与输出资格不变，空可行集明确保留为 unavailable。
 - Enclosing aperture-center 校准按当前唯一 selected pair 重登记 17 个 source 的观测指纹；

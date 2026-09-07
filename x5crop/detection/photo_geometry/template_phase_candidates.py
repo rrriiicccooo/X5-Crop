@@ -920,17 +920,9 @@ def _refine_local_role_bindings(
     }
     relation_pairs: dict[int, set[tuple[ObservationId, ObservationId]]] = {}
     for band in separator_bands:
-        if (
-            band.observation_id not in role_authority_band_ids
-            or max(
-                band.gap_interval_px.minimum,
-                fit.template.gap_prior_px.minimum,
-            )
-            > min(
-                band.gap_interval_px.maximum,
-                fit.template.gap_prior_px.maximum,
-            )
-        ):
+        # Normal material eligibility already owns the upper gap bound.
+        # A directly measured narrow separator need not equal nominal pitch-W.
+        if band.observation_id not in role_authority_band_ids:
             continue
         left = by_id.get(band.left_edge_observation_id)
         right = by_id.get(band.right_edge_observation_id)
@@ -2455,7 +2447,11 @@ def project_candidate_to_authorized_direct_roles(
     if not isinstance(authority, DirectRoleBindingAuthority):
         raise TypeError("direct-role projection requires typed authority")
     retained_indices = authority.supported_role_indices
-    retained_rank = direct_role_constraint_rank(candidate.fit, retained_indices)
+    retained_rank = direct_role_constraint_rank(
+        candidate.fit,
+        retained_indices,
+        adjacency_relations=relations,
+    )
     if authority.state == EvidenceState.CONTRADICTED:
         return None, PhaseCandidateAuthorityProjection(
             input_direct_role_authority=authority,

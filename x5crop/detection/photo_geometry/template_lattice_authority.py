@@ -7,6 +7,7 @@ from typing import Sequence
 from ...domain import EvidenceState, FiniteInterval, ObservationId
 from .model import BoundaryRole
 from .template_model import (
+    AdjacencyRelation,
     OverlapRelation,
     SeparatorRelation,
     SeparatorRelationKind,
@@ -66,6 +67,7 @@ def _constraint_rank(rows: Sequence[tuple[float, float, float]]) -> int:
 def _direct_role_rows(
     fit: SequenceFit,
     authorized_role_indices: set[int] | None,
+    adjacency_relations: tuple[AdjacencyRelation, ...] | None = None,
 ) -> tuple[
     tuple[TemplateRole, SequenceRoleBinding, tuple[float, float, float]],
     ...,
@@ -88,7 +90,8 @@ def _direct_role_rows(
             continue
         width_count, pitch_count, _fixed_delta = (
             adjacency_prefix_coefficients(
-                fit.adjacency_relations,
+                fit.adjacency_relations
+                if adjacency_relations is None else adjacency_relations,
                 role.slot_index,
             )
         )
@@ -149,8 +152,10 @@ def _direct_role_value_interval(
 def direct_role_constraint_rank(
     fit: SequenceFit,
     authorized_role_indices: Sequence[int] | None = None,
+    *,
+    adjacency_relations: tuple[AdjacencyRelation, ...] | None = None,
 ) -> int:
-    """Return rank owned only by retained direct phase-anchor coordinates."""
+    """Return retained-anchor rank in the algebra that will be fitted."""
 
     if not isinstance(fit, SequenceFit):
         raise TypeError("direct-role rank requires a sequence fit")
@@ -165,6 +170,7 @@ def direct_role_constraint_rank(
             for _role, _binding, coefficients in _direct_role_rows(
                 fit,
                 authorized,
+                adjacency_relations,
             )
         )
     )
