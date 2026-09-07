@@ -116,6 +116,7 @@ def development_report_facts(
         "lanes": [
             {
                 "lane_id": lane.lane_id,
+                "cross_registration_work": typed_read_model(lane.prepared.cross_registration_work),
                 "template_spec": typed_read_model(lane.prepared.template_spec),
                 "search": {
                     "coarse_strip_support": typed_read_model(

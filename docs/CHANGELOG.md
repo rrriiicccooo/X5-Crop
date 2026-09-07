@@ -18,6 +18,9 @@
   迁入 current owner；删除未经校准的终判、事后改边界、任意 fallback 与旧源码结构。
 - Dark/light separator、共享边 material component、局部 aperture domain、source 端部窄材料带和 Cross
   纵向覆盖分别保留 typed 权限与反证。局部线不能越过未观察区域取得整条片带的输出权限。
+- Cross 单区域片段保留为测量与角色假设，完整 family 并集达到原有两区域要求后才可获权；
+  模板覆盖数不提升原始测量支持。未获权假设不移动边界、不充当外侧反证，也不阻止已有有界缺边精修。
+  完整测量账本与全局 solver 输入分别计数，局部假设不占用全局边界配额；原 producer 与求解上限不变。
 - 源边或查询范围截断的定位峰不再以可见峰尾取得精确坐标；宽缓材质峰同时检查双尺度实际可观测域。
   完整峰、极性分区和窗口 ownership 保留既有职责，不增加像素读取或放宽测量阈值。
 - 端部窄材料带保留内侧边界假设，但不再仅因窄带存在而否定外侧 edge 的独立角色权限；材料可能处于
@@ -58,7 +61,9 @@
 
 - Normal report 与 Debug Analysis 只显示同次检测事实，分开 proposal、candidate、正式输出、runner、
   typed failure、calibration identity 和实际工作量，不重新检测或求解。当前 Report revision 为
-  `x5crop_v5_template_report_71`，逐候选记录 Cross 支撑区间、覆盖序号和真实 source extent，不保留旧 schema 兼容层。
+  `x5crop_v5_template_report_72`，逐候选记录 Cross 支撑区间、覆盖序号和真实 source extent，不保留旧 schema 兼容层。
+- Cross 每条直接边界保留原始独立区域数；开发校验回链原 query/transition、registered binding 与
+  各候选的角色权限。Coarse enclosing track 继续只有外侧几何支撑权限，不冒充照片边界。
 - Source extent 同时绑定 input、Orientation、measurement、全部候选与 final sampling；源截断类别
   由实际源尺寸复算。Final polygon 复用 selected geometry，采样 box 从同一 affine 与 polygon 重建，
   不以整数采样框替代严格黄金包含检查。

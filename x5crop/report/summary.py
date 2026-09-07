@@ -115,6 +115,17 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                     .retained_proposal_basis.value
                 ),
                 "cross_status": lane.prepared.cross_competition.status.value,
+                "cross_direct_support_regions": [
+                    {
+                        "observation_id": str(binding.observation_id),
+                        "role": binding.role.value,
+                        "independent_support_region_count": binding.independent_support_region_count,
+                    }
+                    for binding in (
+                        () if lane.prepared.cross_competition.best is None
+                        else lane.prepared.cross_competition.best.direct_bindings
+                    )
+                ],
                 "cross_failure_kind": (
                     None
                     if lane.prepared.cross_competition.failure_kind is None

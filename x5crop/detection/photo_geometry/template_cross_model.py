@@ -13,6 +13,7 @@ from .interval_math import intersect, subtract
 from .model import (
     BoundaryAxis,
     BoundaryRole,
+    MINIMUM_INDEPENDENT_SUPPORT_REGIONS,
 )
 from .observation_types import ProfileRun
 from .output_model import OutputBoundaryUse, SharedStripDirection
@@ -21,6 +22,19 @@ from .template_aspect_ratio_model import (
     unavailable_aperture_aspect_ratio_authority,
 )
 from .template_model import TemplateSpec
+
+
+def cross_role_authorized_by_measurement(
+    independent_support_region_count: int,
+    background_preference_fraction: float,
+) -> bool:
+    """Separate a local role hypothesis from an independently measured edge."""
+
+    return (
+        independent_support_region_count >= MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+        and background_preference_fraction > 0.5
+    )
+
 
 def _interval(value: FiniteInterval | PositiveInterval | float | int) -> FiniteInterval:
     if isinstance(value, FiniteInterval):
@@ -618,6 +632,17 @@ class CrossRoleBinding:
             raise ValueError("cross source observations must be unique")
         object.__setattr__(self, "source_observation_ids", source)
 
+    @property
+    def has_independent_spatial_support(self) -> bool:
+        """Whether this measured line meets the ordinary two-region minimum.
+
+        Local one-region lines retain a role hypothesis for family fitting.
+        Selected-frame domains cannot promote their raw spatial provenance
+        into measured photo-boundary authority.
+        """
+
+        return self.independent_support_region_count >= MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+
     def projected_shift_px(
         self,
         *,
@@ -706,19 +731,11 @@ class CrossRoleBinding:
             source_spanning_continuous=bool(
                 getattr(observation, "source_spanning_continuous", False)
             ),
-            role_authorized=(
-                float(
-                    getattr(
-                        observation,
-                        (
-                            "left_background_preference_fraction"
-                            if run.role_hint == BoundaryRole.TOP
-                            else "right_background_preference_fraction"
-                        ),
-                        0.0,
-                    )
-                )
-                > 0.5
+            role_authorized=cross_role_authorized_by_measurement(
+                observation.independent_support_region_count,
+                observation.left_background_preference_fraction
+                if run.role_hint == BoundaryRole.TOP
+                else observation.right_background_preference_fraction,
             ),
         )
 
@@ -1239,6 +1256,15 @@ class CrossFitCompetition:
             raise ValueError(
                 "resolved cross competition requires a best fit and winner basis"
             )
+        if (
+            self.status == CrossFitStatus.RESOLVED
+            and self.best is not None
+            and any(
+                not binding.has_independent_spatial_support
+                for binding in self.best.direct_bindings
+            )
+        ):
+            raise ValueError("resolved cross requires independent measured boundary support")
         if (
             self.status == CrossFitStatus.RESOLVED
             and self.best is not None

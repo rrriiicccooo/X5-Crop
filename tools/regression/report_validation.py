@@ -18,7 +18,12 @@ from x5crop.detection.photo_geometry.output_model import (
     sampling_authority_bounds,
     source_boundary_sides,
 )
-from x5crop.detection.photo_geometry.model import AuthoritySide
+from x5crop.detection.photo_geometry.model import (
+    AuthoritySide,
+    MINIMUM_INDEPENDENT_SUPPORT_REGIONS,
+    SPATIAL_SUPPORT_REGION_COUNT,
+    independent_spatial_support_count,
+)
 from x5crop.detection.photo_geometry.template_acceptability_features import (
     PLACEMENT_FEATURE_DEFINITIONS,
     PLACEMENT_FEATURE_SCHEMA,
@@ -36,6 +41,7 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     CrossLongitudinalProjectionBasis,
     CrossLongitudinalProjectionFailureKind,
     CrossRetainedProposalBasis,
+    cross_role_authorized_by_measurement,
 )
 from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseFailureKind,
@@ -45,6 +51,7 @@ from x5crop.detection.photo_geometry.template_phase_model import (
 from x5crop.detection.photo_geometry.template_placement import (
     compile_cross_support_domains_px,
 )
+from x5crop.detection.photo_geometry.template_registration import CrossRegistrationWorkReceipt
 from x5crop.domain import Box, FiniteInterval, ObservationId, WorkspaceExtent
 from x5crop.report.read_models import typed_read_model
 from x5crop.formats import OUTPUT_PROTECTION_SPEC
@@ -702,6 +709,165 @@ def _interval_contains(
         <= float(value)
         <= float(interval["maximum"]) + epsilon
     )
+
+
+def _validate_cross_direct_support_regions(lane: dict[str, Any]) -> None:
+    """Check original per-line support independently of selected-domain counts."""
+
+    support = lane.get("cross_direct_support_regions")
+    authority = lane.get("cross_longitudinal_projection_authority")
+    expected_count = (
+        0 if authority is None
+        else 2 if lane.get("cross_height_inference_basis") is None
+        else 1
+    )
+    if (
+        not isinstance(support, list)
+        or len(support) != expected_count
+        or any(
+            not isinstance(item, dict)
+            or set(item) != {"observation_id", "role", "independent_support_region_count"}
+            or not isinstance(item["observation_id"], str)
+            or not item["observation_id"]
+            or item["role"] not in {"top", "bottom"}
+            or type(item["independent_support_region_count"]) is not int
+            or not 1 <= item["independent_support_region_count"] <= SPATIAL_SUPPORT_REGION_COUNT
+            for item in support
+        )
+        or len({item["role"] for item in support}) != len(support)
+        or (
+            authority is not None
+            and sorted(item["observation_id"] for item in support)
+            != authority["supporting_observation_ids"]
+        )
+    ):
+        raise ValueError("Cross direct spatial support is incomplete or inconsistent")
+    if any(
+        item["independent_support_region_count"] < MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+        for item in support
+    ):
+        raise ValueError("Cross fit lacks independent measured boundary support")
+
+
+def _validate_cross_measurement_support(
+    lane: dict[str, Any], query_records: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Recompute raw Cross spatial provenance from the original query traces."""
+
+    observations = lane.get("observations", {})
+    raw = observations.get("raw_top_bottom_lines")
+    bindings = observations.get("registered_top_bottom_bindings")
+    if not isinstance(raw, list) or not isinstance(bindings, list):
+        raise ValueError("Cross measured support records are missing")
+    work = lane.get("cross_registration_work")
+    if not isinstance(work, dict) or set(work) != {
+        "fit_attempt_count", "raw_observation_count", "local_fragment_count"
+    }:
+        raise ValueError("Cross registration work is incomplete")
+    receipt = CrossRegistrationWorkReceipt(**work)
+    if (
+        receipt.raw_observation_count != len(raw)
+        or receipt.local_fragment_count != sum(
+            item["independent_support_region_count"] < MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+            for item in raw
+        )
+    ):
+        raise ValueError("Cross registration work changed original measurements")
+    registered = {item["observation_id"]: item for item in bindings}
+    if len(registered) != len(bindings):
+        raise ValueError("Cross measured support bindings are duplicated")
+    raw_ids = {item["observation_id"] for item in raw}
+    if len(raw_ids) != len(raw):
+        raise ValueError("Cross measured support observations are duplicated")
+    enclosing = lane.get("search", {}).get("coarse_strip_support", {}).get("enclosing_support")
+    coarse_ids = set()
+    if enclosing is not None:
+        minimum = enclosing["minimum_track"]
+        maximum = enclosing["maximum_track"]
+        pair_id = f"coarse-enclosing-pair:{minimum['observation_id']}:{maximum['observation_id']}"
+        for role, track in (("top", minimum), ("bottom", maximum)):
+            identity = track["observation_id"]
+            binding = registered.get(identity)
+            # Final-H classification may reject the coarse pair entirely.
+            if binding is None:
+                continue
+            if (
+                identity in raw_ids
+                or binding.get("role") != role
+                or binding.get("role_authorized") is not False
+                or binding.get("enclosing_pair_id") != pair_id
+                or binding.get("run_id") != f"coarse-enclosing:{identity}"
+                or any(binding.get(field) != track[field] for field in (
+                    "independent_support_region_count", "trace_coordinates_px"
+                ))
+            ):
+                raise ValueError("Cross coarse support binding is not reproducible")
+            coarse_ids.add(identity)
+    if coarse_ids and len(coarse_ids) != 2:
+        raise ValueError("Cross coarse support pair is incomplete")
+    if set(registered) != raw_ids | coarse_ids:
+        raise ValueError("Cross measured support lost its observation provenance")
+    queries = {}
+    transitions = {}
+    for record in query_records:
+        query = record["query"]
+        if query["lane_id"] != lane["lane_id"]:
+            continue
+        queries[query["query_id"]] = query
+        for transition in record["transitions"]:
+            transitions[transition["transition_id"]] = transition
+    for observation in raw:
+        identities = observation.get("transition_ids")
+        if (
+            not _valid_ids(identities, allow_empty=False)
+            or any(identity not in transitions for identity in identities)
+            or observation.get("observation_id") not in registered
+        ):
+            raise ValueError("Cross measured support lost its transition provenance")
+        points = tuple(transitions[identity] for identity in identities)
+        query_ids = {point["query_id"] for point in points}
+        if len(query_ids) != 1 or not query_ids.issubset(queries):
+            raise ValueError("Cross measured support changed its original query")
+        queried = tuple(queries[next(iter(query_ids))]["trace_positions_px"])
+        traces = sorted(point["trace_coordinate_px"] for point in points)
+        count = independent_spatial_support_count(queried, tuple(traces))
+        binding = registered[observation["observation_id"]]
+        background_field = (
+            "left_background_preference_fraction"
+            if observation.get("role") == "top"
+            else "right_background_preference_fraction"
+        )
+        role_authorized = cross_role_authorized_by_measurement(
+            count, observation[background_field]
+        )
+        if (
+            any(trace not in queried for trace in traces)
+            or observation.get("queried_trace_count") != len(queried)
+            or observation.get("trace_coordinates_px") != traces
+            or observation.get("independent_support_region_count") != count
+            or binding.get("independent_support_region_count") != count
+            or binding.get("trace_coordinates_px") != traces
+            or binding.get("role") != observation.get("role")
+            or binding.get("role_authorized") is not role_authorized
+        ):
+            raise ValueError("Cross measured spatial support is not reproducible")
+    return registered
+
+
+def _validate_cross_fit_binding_support(
+    cross_fit: dict[str, Any], registered_cross: dict[str, dict[str, Any]],
+) -> None:
+    for binding in cross_fit["direct_bindings"]:
+        if binding["independent_support_region_count"] < MINIMUM_INDEPENDENT_SUPPORT_REGIONS:
+            raise ValueError("Cross fit contains a local-only measured fragment")
+        registered = registered_cross.get(binding["observation_id"])
+        if registered is None or any(
+            binding[field] != registered[field] for field in (
+                "role", "role_authorized", "independent_support_region_count",
+                "trace_coordinates_px",
+            )
+        ):
+            raise ValueError("Cross fit changed original measured spatial support")
 
 
 def _validate_cross_longitudinal_projection_authority(
@@ -3217,6 +3383,7 @@ def _validate_geometry(
                 phase_status,
                 phase_failure_kind,
             )
+        _validate_cross_direct_support_regions(lane)
         if (
             phase_status not in _PHASE_STATUSES
             or phase_failure_kind not in _PHASE_FAILURE_KINDS
@@ -3981,6 +4148,23 @@ def _validate_development(record: dict[str, Any]) -> None:
         expected_domains = _cross_support_domains_from_phase_report(
             lane["phase_competition"]
         )
+        registered_cross = _validate_cross_measurement_support(
+            lane, development["measurement"]["queries"]
+        )
+        if cross_competition["receipt"]["fitted_observation_count"] != sum(
+            item["independent_support_region_count"] >= MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+            for item in registered_cross.values()
+        ):
+            raise ValueError("Cross solver count changed the independent measurement projection")
+        best_cross = cross_competition.get("best")
+        expected_direct_support = [
+            {key: binding[key] for key in (
+                "observation_id", "role", "independent_support_region_count"
+            )}
+            for binding in (() if best_cross is None else best_cross["direct_bindings"])
+        ]
+        if production_lane["cross_direct_support_regions"] != expected_direct_support:
+            raise ValueError("Cross direct spatial support changed the selected measurement")
         for cross_fit in (
             cross_competition.get("best"),
             cross_competition.get("runner_up"),
@@ -3988,6 +4172,7 @@ def _validate_development(record: dict[str, Any]) -> None:
         ):
             if cross_fit is None:
                 continue
+            _validate_cross_fit_binding_support(cross_fit, registered_cross)
             authority = cross_fit.get("longitudinal_projection_authority")
             _validate_cross_longitudinal_projection_authority(authority)
             if authority["candidate_support_domains_px"] != expected_domains:

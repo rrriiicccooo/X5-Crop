@@ -70,6 +70,12 @@ side, or multiple equally legal pairs keeps the entire source in `needs_review`.
 same opposite closes against a strictly farther-out local direct edge. Likewise, one source-spanning edge cannot project
 an opposite edge that is visible only locally across the whole strip.
 
+Short fragments of the same photo edge are retained and checked together. They may become an authorized direct boundary
+only when the complete measurement supports at least two independent regions; several photo slots covering the same
+small fragment do not add evidence strength. Unauthorized fragments remain boundary hypotheses without moving a crop
+or preventing further checks of missing edges, and do not consume the global boundary quota. Reports preserve each
+direct boundary's original region count and distinguish complete measurements from boundaries used by the global solver.
+
 Normal strips use one shared pitch. Every directly proven, ordinal-unique separator may constrain its own wide or narrow
 gap; later Frames apply that measured delta once. Multiple proven gap changes still use one bounded pass. An ambiguous
 gap, missing authority, inability to reliably choose among legal answers, or an unknown required Frame remains `needs_review`.

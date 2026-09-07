@@ -700,6 +700,8 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         return (
             candidate.top.role_authorized
             and candidate.bottom.role_authorized
+            and candidate.top.has_independent_spatial_support
+            and candidate.bottom.has_independent_spatial_support
             and candidate.longitudinal_projection_authority.state
             == EvidenceState.SUPPORTED
             and candidate.longitudinal_projection_authority.basis
@@ -754,12 +756,14 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     spanning_top = tuple(
         item
         for item in top
-        if item.role_authorized and item.source_spanning_continuous
+        if item.role_authorized and item.has_independent_spatial_support
+        and item.source_spanning_continuous
     )
     spanning_bottom = tuple(
         item
         for item in bottom
-        if item.role_authorized and item.source_spanning_continuous
+        if item.role_authorized and item.has_independent_spatial_support
+        and item.source_spanning_continuous
     )
     template_spanning_top = tuple(
         item
@@ -1109,6 +1113,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     def has_role_authorized_pair(item: CrossFit) -> bool:
         return (
             item.direct_pair
+            and all(binding.has_independent_spatial_support for binding in item.direct_bindings)
             and direct_pair_id(item) not in outward_contested_pair_ids
             and item.longitudinal_projection_authority.state
             == EvidenceState.SUPPORTED
@@ -1119,6 +1124,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     def has_source_spanning_direct_side(item: CrossFit) -> bool:
         if (
             not item.direct_pair
+            or not all(binding.has_independent_spatial_support for binding in item.direct_bindings)
             or direct_pair_id(item) in outward_contested_pair_ids
             or item.longitudinal_projection_authority.basis
             != CrossLongitudinalProjectionBasis.SOURCE_SPANNING_CONTINUOUS
@@ -1159,6 +1165,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             or has_source_spanning_direct_side(item)
             or (
                 not item.direct_pair
+                and all(binding.has_independent_spatial_support for binding in item.direct_bindings)
                 and item.longitudinal_projection_authority.state
                 == EvidenceState.SUPPORTED
                 and item.independent_support_region_count

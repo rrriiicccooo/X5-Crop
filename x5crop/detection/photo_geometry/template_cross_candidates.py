@@ -155,10 +155,8 @@ def _direct_candidate(
         if (
             top.evidence != CrossEvidence.DIRECT
             or bottom.evidence != CrossEvidence.DIRECT
-            or top.independent_support_region_count
-            < MINIMUM_INDEPENDENT_SUPPORT_REGIONS
-            or bottom.independent_support_region_count
-            < MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+            or not top.has_independent_spatial_support
+            or not bottom.has_independent_spatial_support
             or not covers_all_template_domains(
                 authority_traces, longitudinal_support_domain_groups_px
             )
@@ -258,7 +256,8 @@ def _single_candidate(
         require_complete_template_domains=True,
     )
     complete_domain_exception = (
-        projection_authority.basis
+        binding.has_independent_spatial_support
+        and projection_authority.basis
         == CrossLongitudinalProjectionBasis.COMPLETE_TEMPLATE_DOMAINS
         and projection_authority.template_domain_count
         >= SPATIAL_SUPPORT_REGION_COUNT
@@ -405,9 +404,10 @@ def _covers_template_domains(
 ) -> bool:
     """Whether one authorized role is direct in every Frame domain."""
 
-    return binding.role_authorized and covers_all_template_domains(
-        binding.trace_coordinates_px,
-        domains,
+    return (
+        binding.role_authorized
+        and binding.has_independent_spatial_support
+        and covers_all_template_domains(binding.trace_coordinates_px, domains)
     )
 
 
@@ -627,6 +627,8 @@ def _fit_from_group(
         if candidate.direct_pair
         and candidate.top.role_authorized
         and candidate.bottom.role_authorized
+        and candidate.top.has_independent_spatial_support
+        and candidate.bottom.has_independent_spatial_support
         and candidate.longitudinal_projection_authority.state
         == EvidenceState.SUPPORTED
     )

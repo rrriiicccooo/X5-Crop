@@ -194,6 +194,8 @@ class TemplateCrossContractTest(unittest.TestCase):
             full_direction_interval_degrees=FiniteInterval(-0.2, 0.3),
             independent_support_region_count=2,
             source_spanning_continuous=True,
+            left_background_preference_fraction=0.0,
+            right_background_preference_fraction=0.0,
         )
         registered = CrossRoleBinding.from_measurement(
             run,
@@ -1325,6 +1327,9 @@ class TemplateCrossContractTest(unittest.TestCase):
         )
 
     def test_shared_anchor_does_not_merge_distinct_opposite_boundaries(self) -> None:
+        # Both alternatives independently meet the ordinary two-region
+        # boundary minimum; a local one-region line is not a legal global
+        # alternative merely because the selected template has one domain.
         result = fit_template_cross(
             aspect_input(
                 template=template(),
@@ -1336,7 +1341,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                         BoundaryRole.TOP,
                         "shared-top",
                         100.0,
-                        traces=(0, 20, 50, 100),
+                        traces=(0, 20, 40, 60, 100),
                         independent_regions=3,
                         source_spanning=False,
                     ),
@@ -1346,15 +1351,15 @@ class TemplateCrossContractTest(unittest.TestCase):
                         BoundaryRole.BOTTOM,
                         "front-bottom",
                         340.0,
-                        traces=(0, 20),
-                        independent_regions=1,
+                        traces=(0, 40),
+                        independent_regions=2,
                         source_spanning=False,
                     ),
                     binding(
                         BoundaryRole.BOTTOM,
                         "back-bottom",
                         340.0,
-                        traces=(50, 100),
+                        traces=(60, 100),
                         independent_regions=2,
                         source_spanning=False,
                     ),
@@ -2170,6 +2175,98 @@ class TemplateCrossContractTest(unittest.TestCase):
             result.best.direct_provenance_ids,
             (ObservationId("observation:template-wide-top"),),
         )
+
+    def test_three_selected_domains_cannot_authorize_a_one_region_anchor(self) -> None:
+        result = fit_template_cross(
+            aspect_input(
+                template=template(count=3),
+                fixed_height_px=240.0,
+                registered_trace_coordinates_px=tuple(range(0, 120, 10)),
+                longitudinal_support_domain_groups_px=(tuple(
+                    FiniteInterval(float(start), float(start + 5))
+                    for start in (0, 10, 20)
+                ),),
+                top_bindings=(binding(
+                    BoundaryRole.TOP, "one-region-complete-domains", 100.0,
+                    traces=(0, 10, 20), independent_regions=1,
+                    source_spanning=False,
+                ),),
+            )
+        )
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertEqual(result.failure_kind, CrossFailureKind.INDEPENDENT_SUPPORT_UNAVAILABLE)
+
+    def test_three_selected_domains_cannot_authorize_a_one_region_pair_side(self) -> None:
+        queried_traces = tuple(range(0, 120, 10))
+        domains = tuple(
+            FiniteInterval(float(start), float(start + 5)) for start in (0, 10, 20)
+        )
+        for top_regions, bottom_regions in ((1, 1), (1, 3), (3, 1)):
+            with self.subTest(top_regions=top_regions, bottom_regions=bottom_regions):
+                def side(role, coordinate, regions):
+                    return binding(
+                        role, f"{role.value}-{regions}-regions", coordinate,
+                        traces=(0, 10, 20) if regions == 1 else queried_traces,
+                        independent_regions=regions,
+                        source_spanning=regions == 3,
+                    )
+                result = fit_template_cross(aspect_input(
+                    template=template(count=3), fixed_height_px=240.0,
+                    registered_trace_coordinates_px=queried_traces,
+                    longitudinal_support_domain_groups_px=(domains,),
+                    top_bindings=(side(BoundaryRole.TOP, 100.0, top_regions),),
+                    bottom_bindings=(side(BoundaryRole.BOTTOM, 340.0, bottom_regions),),
+                ))
+                if top_regions == bottom_regions == 1:
+                    self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+                    self.assertIsNotNone(result.best)
+                else:
+                    # A genuine source-wide side may still infer fixed H,
+                    # but the one-region opposite cannot own native height.
+                    self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+                    self.assertFalse(result.best.direct_pair)
+                    self.assertEqual(len(result.best.direct_bindings), 1)
+                    self.assertEqual(result.best.direct_bindings[0].independent_support_region_count, 3)
+
+    def test_independently_authorized_local_outward_line_remains_counterevidence(self) -> None:
+        queried = tuple(range(0, 120, 10))
+        result = fit_template_cross(aspect_input(
+            template=template(count=3), fixed_height_px=FiniteInterval(230.0, 250.0),
+            registered_trace_coordinates_px=queried,
+            longitudinal_support_domain_groups_px=(tuple(
+                FiniteInterval(float(start), float(start + 5)) for start in (0, 10, 20)
+            ),),
+            top_bindings=(
+                binding(BoundaryRole.TOP, "complete-top", 100.0,
+                        traces=queried, independent_regions=3, source_spanning=False),
+                binding(BoundaryRole.TOP, "local-outward-top", 95.0,
+                        traces=(0, 40), independent_regions=2, source_spanning=False),
+            ),
+            bottom_bindings=(
+                binding(BoundaryRole.BOTTOM, "complete-bottom", 340.0,
+                        traces=queried, independent_regions=3, source_spanning=False),
+            ),
+        ))
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertEqual(result.failure_kind, CrossFailureKind.OUTWARD_ROLE_COUNTEREVIDENCE)
+
+    def test_resolved_model_cannot_replace_raw_regions_with_effective_count(self) -> None:
+        result = fit_template_cross(aspect_input(
+            template=template(), fixed_height_px=240.0,
+            top_bindings=(binding(BoundaryRole.TOP, "measured-top", 100.0),),
+            bottom_bindings=(binding(BoundaryRole.BOTTOM, "measured-bottom", 340.0),),
+        ))
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        invalid_fit = replace(
+            result.best,
+            direct_bindings=(
+                replace(result.best.direct_bindings[0], independent_support_region_count=1),
+                result.best.direct_bindings[1],
+            ),
+            independent_support_region_count=3,
+        )
+        with self.assertRaisesRegex(ValueError, "independent measured"):
+            replace(result, best=invalid_fit)
 
     def test_domain_complete_role_anchor_resolves_with_two_regions(self) -> None:
         domains = (
@@ -3366,6 +3463,29 @@ class TemplateCrossContractTest(unittest.TestCase):
                 }
             ).validate_bounds()
 
+    def test_solver_limit_keeps_all_512_inputs_and_counts_added_coarse_pair(self) -> None:
+        originals = tuple(binding(
+            BoundaryRole.TOP, f"measured-{index}", 100.0,
+            role_authorized=False,
+        ) for index in range(512))
+        options = dict(
+            template=template(), fixed_height_px=240.0,
+            maximum_registered_runs_per_role=512,
+            maximum_fitted_observations=512,
+        )
+        exact = fit_template_cross(aspect_input(**options, top_bindings=originals))
+        self.assertNotEqual(exact.status, CrossFitStatus.BOUND_EXCEEDED)
+        self.assertEqual(exact.receipt.fitted_observation_count, 512)
+        coarse_top = binding(BoundaryRole.TOP, "coarse-top", 100.0, role_authorized=False)
+        coarse_bottom = binding(BoundaryRole.BOTTOM, "coarse-bottom", 340.0, role_authorized=False)
+        overflow = fit_template_cross(aspect_input(
+            **options, top_bindings=(*originals[:511], coarse_top), bottom_bindings=(coarse_bottom,),
+        ))
+        self.assertEqual(overflow.status, CrossFitStatus.BOUND_EXCEEDED)
+        self.assertEqual(overflow.receipt.fitted_observation_count, 513)
+        self.assertIsNone(overflow.best)
+        self.assertEqual(overflow.receipt.registered_top_run_count, 512)
+
     def test_registration_overflow_is_a_typed_cross_result(self) -> None:
         result = fit_template_cross(
             aspect_input(
@@ -3374,6 +3494,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                 registered_top_run_count=513,
                 registered_bottom_run_count=0,
                 maximum_registered_runs_per_role=512,
+                top_bindings=(binding(BoundaryRole.TOP, "one-retained", 100.0),),
             )
         )
 

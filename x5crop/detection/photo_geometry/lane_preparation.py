@@ -62,6 +62,7 @@ from .template_runtime_model import (
 )
 from .template_measurement_plan import compile_template_measurement_plan
 from .template_registration import (
+    project_cross_solver_bindings,
     register_cross_evidence,
     register_template_local_cross_refinements,
 )
@@ -934,7 +935,6 @@ def prepare_template_lane(
         fixed_height_px=fixed_height,
         canonical_height_px=canonical_height,
         longitudinal_support_domain_groups_px=longitudinal_support_domain_groups_px,
-        maximum_bindings=measurement_plan.cross_bounds.max_fitted_observations,
     )
     # Coarse measurement happens before sequence scale calibration. Direction
     # remains direct evidence, but boundary use is classified against final H.
@@ -975,6 +975,8 @@ def prepare_template_lane(
     )
     top_bindings = (*cross.top_bindings, *coarse_top)
     bottom_bindings = (*cross.bottom_bindings, *coarse_bottom)
+    solver_top = project_cross_solver_bindings(top_bindings)
+    solver_bottom = project_cross_solver_bindings(bottom_bindings)
     source_direction = _shared_direction_from_coarse(
         coarse_support.shared_direction
     )
@@ -992,8 +994,8 @@ def prepare_template_lane(
             0
         ].query.trace_positions_px,
         longitudinal_support_domain_groups_px=longitudinal_support_domain_groups_px,
-        top_bindings=top_bindings,
-        bottom_bindings=bottom_bindings,
+        top_bindings=solver_top,
+        bottom_bindings=solver_bottom,
         boundary_axis=height_axis,
         maximum_registered_runs_per_role=(
             measurement_plan.cross_bounds.max_registered_runs_per_role
@@ -1003,7 +1005,7 @@ def prepare_template_lane(
         maximum_evaluated_fits=measurement_plan.cross_bounds.max_evaluated_fits,
         registered_top_run_count=cross.registered_top_run_count,
         registered_bottom_run_count=cross.registered_bottom_run_count,
-        fitted_observation_count=cross.fitted_observation_count,
+        fitted_observation_count=len(solver_top) + len(solver_bottom),
         aperture_aspect_ratio_authority=aperture_aspect_ratio,
     )
     cross_competition = fit_template_cross(cross_input)
@@ -1024,6 +1026,7 @@ def prepare_template_lane(
     )
     return PreparedTemplateLane(
         **registered_values,
+        cross_registration_work=cross.work_receipt,
         template_spec=template,
         source_scan_geometry=source_geometry,
         source_frame_width_authority=source_frame_width_authority,

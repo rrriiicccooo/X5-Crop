@@ -66,6 +66,10 @@ from .template_measurement_plan_model import TemplateMeasurementPlan
 from .template_nominal_grid_model import CalibratedNominalGridAuthority
 from .template_phase_model import PhaseFitResult, TemplatePhaseInput
 from .template_placement import FormatPlacement
+from .template_registration import (
+    CrossRegistrationWorkReceipt,
+    project_cross_solver_bindings,
+)
 
 
 @dataclass(frozen=True)
@@ -480,6 +484,7 @@ class PreparedTemplateLane(RegisteredTemplateLane):
     cross_input: TemplateCrossInput
     phase_competition: PhaseFitResult
     cross_competition: CrossFitCompetition
+    cross_registration_work: CrossRegistrationWorkReceipt
     evidence_use_ledger: tuple[EvidenceUseFact, ...] = ()
 
     def __post_init__(self) -> None:
@@ -523,6 +528,17 @@ class PreparedTemplateLane(RegisteredTemplateLane):
             )
         if not isinstance(self.cross_input, TemplateCrossInput):
             raise TypeError("prepared template lane requires its exact cross input")
+        if not isinstance(self.cross_registration_work, CrossRegistrationWorkReceipt):
+            raise TypeError("prepared lane requires cross registration work")
+        local_count = sum(
+            not item.has_independent_spatial_support
+            for item in (*self.top_cross_bindings, *self.bottom_cross_bindings)
+        )
+        if (
+            self.cross_registration_work.raw_observation_count != len(self.raw_cross_observations)
+            or self.cross_registration_work.local_fragment_count != local_count
+        ):
+            raise ValueError("cross registration work disagrees with complete measurements")
         if (
             self.phase_input.template != self.template_spec
             or self.phase_input.observations != self.sequence_edges
@@ -530,8 +546,11 @@ class PreparedTemplateLane(RegisteredTemplateLane):
             or self.phase_input.outer_material_boundaries
             != self.outer_material_boundaries
             or self.cross_input.template != self.template_spec
-            or self.cross_input.top_bindings != self.top_cross_bindings
-            or self.cross_input.bottom_bindings != self.bottom_cross_bindings
+            or self.cross_input.top_bindings != project_cross_solver_bindings(self.top_cross_bindings)
+            or self.cross_input.bottom_bindings != project_cross_solver_bindings(self.bottom_cross_bindings)
+            or self.cross_input.fitted_observation_count != (
+                len(self.cross_input.top_bindings) + len(self.cross_input.bottom_bindings)
+            )
         ):
             raise ValueError("prepared solver inputs disagree with registered evidence")
         if not isinstance(self.phase_competition, PhaseFitResult):

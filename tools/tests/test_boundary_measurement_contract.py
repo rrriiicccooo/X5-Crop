@@ -357,7 +357,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
         self.assertEqual(len(merged.runs), 1)
         self.assertEqual(set(merged.runs[0].transition_ids), set(identities))
 
-    def test_local_cross_segment_reaches_physical_family_merge(self) -> None:
+    def test_local_cross_segment_is_retained_for_registration(self) -> None:
         transition_id = ObservationId("cross:local")
         region = SideTransitionRegion(
             region_id="region:local",

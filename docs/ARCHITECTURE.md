@@ -1009,8 +1009,11 @@ observation。完整 H interval、anchor line uncertainty、local departure、bl
 伪造为 supported。
 
 Cross registration 是同角色边界 family identity 的唯一 owner。Transition tracking 可以先产生多个局部
-fragment；registration 先把投影坐标与完整方向区间相容的同角色 observation 组成有界 component，再对
-该 component 的完整 transition 并集只重拟合一次：
+fragment；初次拟合允许一个独立区域内至少两条不同 trace 成线，保留原始区域数与角色假设，其余梯度、
+材质、方向和残差条件不变。照片边界角色授权仍要求至少两个原查询空间区域及正确外侧背景；单区域假设
+不能移动裁切边、成为外侧角色反证或阻止缺边精修。Selected domain 的数量不能提升原始实测区域数。
+Registration 把投影坐标与完整方向区间相容的同角色 observation 组成有界 component，再对
+该 component 的完整 transition 并集只重拟合一次，继续要求至少两个独立区域：
 
 | registration 事实 | 结果 |
 |---|---|
@@ -1023,10 +1026,19 @@ Raster trace 不连续不等于物理边界不同；完整并集重拟合能够�
 拥有 broader/local containment 或 dominance 逻辑，只消费 registration 的 canonical identity。TOP 与
 BOTTOM 是两个独立 registered-run producer，各自使用同一编译合同与每角色 512 条上限；一侧的局部
 fragment 不能占用另一侧配额，总工作量只由两侧 receipt 求和。任一侧单独超界即产生
-`producer_bound_exceeded`，不能把总数与单侧上限比较、截断候选或静默跳过。后续 canonical fitted
-observation 仍独立受 512 条上限约束，compatible pair / evaluated fit 各受 4096 上限约束；整个过程不新增
+`producer_bound_exceeded`，不能把总数与单侧上限比较、截断候选或静默跳过。Family 完成后，完整 raw 与
+registered binding 账本继续保留所有局部假设；同一 registration owner 只按原始两区域条件编译唯一
+solver 输入，不按背景角色是否获权筛选。全局 canonical fitted observation（包括 coarse pair）仍独立受
+512 条上限约束，compatible pair / evaluated fit 各受 4096 上限约束；局部假设不能占用全局边界配额。
+每角色 producer 原始数量不因投影减少；精修完整保留新增测量，由全局 typed bound 拒绝真实超界，
+不回填旧数组或隐藏工作量。Registration work 另存全部拟合尝试、最终 raw 数与局部假设数；独立线数量
+由 raw 减局部数复算，solver 总数另计真实 coarse pair。整个过程不新增
 TIFF 读取或 selected-placement query。每角色 run 数、上限、Family state、成员/transition/final identity
 与 typed failure 写入 development report 和 Debug。
+Normal report 同时保留 best Cross 每条 direct binding 的原始独立区域数；每条 solver 边都必须满足
+原始两区域要求，不能以 pair 或 selected-domain 的聚合数替代。Development 校验从原 query 和 transition
+复算 raw/binding 区域数及角色权限，再绑定 best、runner 与各 placement；额外 coarse enclosing binding
+只可回链同源 enclosing track，始终不取得 aperture 角色权限。
 
 直接 top/bottom pair 有两种互斥的 typed support mode：
 
@@ -1048,7 +1060,8 @@ fixed-H placement、相同 4096 pair 上界和同一 Gate，不建立第二套 d
 的有界归约。
 
 一条短局部线不能外推整条片带。两个不同合法 side tracks 是两个 placements；不按梯度、support
-数量或 residual 的未经校准标量硬选。已有 direct top+bottom 闭环时，不再执行“缺失 opposite”的局部精修；
+数量或 residual 的未经校准标量硬选。已有两侧各具独立区域支撑的 direct top+bottom 闭环时，不再执行
+“缺失 opposite”的局部精修；
 同一批 raw transitions 的重复拟合不能成为第二个 placement。
 
 Direct top+bottom 的局部方向只验证两侧能否属于同一 fixed-H aperture，并计算逐 trace outward

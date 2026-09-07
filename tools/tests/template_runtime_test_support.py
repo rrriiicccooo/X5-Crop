@@ -43,6 +43,7 @@ from x5crop.detection.photo_geometry.template_phase import fit_template_phase
 from x5crop.detection.photo_geometry.template_phase_model import (
     TemplatePhaseInput,
 )
+from x5crop.detection.photo_geometry.template_registration import CrossRegistrationWorkReceipt
 from x5crop.detection.photo_geometry.template_runtime_model import (
     PreparedTemplateLane,
     RegisteredTemplateLane,
@@ -282,6 +283,7 @@ def prepared_template_lane() -> PreparedTemplateLane:
     )
     return PreparedTemplateLane(
         **registered.__dict__,
+        cross_registration_work=CrossRegistrationWorkReceipt(0, 0, 0),
         template_spec=template,
         source_scan_geometry=source,
         source_frame_width_authority=SourceFrameWidthAuthority(
