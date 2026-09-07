@@ -21,13 +21,19 @@
 
 ## 当前源码与已验证事实
 
-Runtime 最近改动提交为 `080622421ef5e0eedb79ef90a7c29272a7848104`，已正常推送 `main`。
-该提交正常 pre-push Hook 的 853 项工程测试通过、2 项按既定条件跳过；
-[Verify](https://github.com/rrriiicccooo/X5-Crop/actions/runs/34156318723)
+Runtime 最近改动提交为 `691e33edda3f46331419004a0f4dc594e9ff519e`；当前验证基座为
+`058a5d56b8fe3a06a8e9330c1486a8a107d3f5f6`，已正常推送 `main`。
+该基座正常 pre-push Hook 的 866 项工程测试通过、2 项按既定条件跳过；
+[Verify](https://github.com/rrriiicccooo/X5-Crop/actions/runs/34161454158)
 的 12 个 OS/Python 矩阵任务全部通过。工程 CI 不替代最终三目标实机发布 receipt。
-本轮统一真实 TIFF 像素单元源域、严格物理 polygon 与整数采样表示，
-未改变边界测量、placement 求解、Gate 或人工 reference。
+本轮闭合局部 Cross 测量、角色权限与全局 solver 输入之间的阶段合同，
+未放宽测量阈值、producer／solver 上限、Gate 或人工 reference。
 
+- 单区域片段先进入完整 family 联合证明；不能仅因三个 selected domains 同落一区域而获权。
+  原始账本保留全部片段，全局输入只消费达到原始两区域要求的线；未知背景的独立线仍保留。
+  S002 正式报告记录 576 次拟合、574 条 raw、503 条局部假设、71 条 solver 输入，
+  producer 仍为 TOP 391／BOTTOM 183；安全 primary 与原有 runner 均保留，未触发虚假全局超界。
+  精修完整保留新增测量，不再在事后回填旧数组；真实 solver 超界仍由原 typed bound 拒绝。
 - 真实源域为 `[-0.5,width-0.5] × [-0.5,height-0.5]`；只在真实 TIFF 外缘求交，
   不普遍外扩 requested 或内部照片边。内部 lane 保留原中心域限制，完整 requested 继续负责原有预算。
   恒等采样完整保留首末行列；8 种 Orientation、旋转、斜边和亚像素内切反例通过。
@@ -42,7 +48,9 @@ Runtime 最近改动提交为 `080622421ef5e0eedb79ef90a7c29272a7848104`，已�
   不重新排序、不扩大 6-pass 上界。每个新增调用均记录实际工作量。
 - Cross 分别编译两份候选的 N 格支撑区间，同一横向边界须逐组满足原有覆盖条件，不合计为 2N 票。
   S081 的直接 TOP/BOTTOM 闭环恢复，两份候选均安全；S015 新增安全 primary，但数值预算仍失败。
-- Report revision 为 `x5crop_v5_template_report_71`，gold record / summary 为 v20 / v23。
+- Report revision 为 `x5crop_v5_template_report_72`，gold record / summary 为 v20 / v23。
+  每条 direct Cross 保留原始独立区域数；raw、角色权限、solver 投影与三字段 registration work 回链受检。
+  删除 raw、抬高区域数、篡改候选角色或漏计 coarse pair 均不能通过对应校验。
   Cross authority 保留逐候选实际区间与覆盖序号；校验与 Runtime 共用纯 canonical-support owner。
   成对删组、清空全部组或篡改 runner 区间均被拒绝；不复制检测或几何规则。
   每份 footprint 的 `source_extent` 绑定 canonical input、Orientation、measurement 与 deskew；
@@ -60,7 +68,7 @@ Runtime 最近改动提交为 `080622421ef5e0eedb79ef90a7c29272a7848104`，已�
 ## 完整黄金与性能证据
 
 最新完整开发 receipt：
-`/private/tmp/x5crop-source-cell-full-gold-20260908a`。
+`/private/tmp/x5crop-local-cross-stage-projection-full-gold-20260908a`。
 110/110 完成、分析错误 0、全部物理校准登记一致：
 
 | 层级 | 结果 |
@@ -75,51 +83,53 @@ Runtime 最近改动提交为 `080622421ef5e0eedb79ef90a7c29272a7848104`，已�
 | 全部保留候选不安全 | 70 个任务 |
 | 安全候选且有明确 placement 歧义 | 8 个任务 |
 
-与 `/private/tmp/x5crop-localization-completeness-calibrated-full-20260908a` 相比，
-全部 189 份候选的身份、角色、预算、安全标签与 110 个决定不变，没有新增或失去安全 auto。
-992 份 Frame footprint 的 mandatory、requested、边界保护与 envelope 不变；
-103 份仅 required 源边交集与 saturation 记录变化，全部新增真实 `source_extent` 绑定。
-S102/S105 各有一份原来超过末像素中心不足半像素的 bleed 请求现位于真实源域内，
-对应 `output_saturation_count` 各减少 1；其它 acceptability features 不变。
+与 `/private/tmp/x5crop-source-cell-full-gold-20260908a` 相比，
+全部 189 份候选的身份、角色、生成／预算状态、安全标签与 110 个决定不变，没有新增或失去安全 auto。
+992 份 Frame footprint 中，除 S103 两份候选的 24 格外，其余 968 格几何和预算数值不变。
+121 份候选的特征只发生 observation ID 重编号；S103 另两份的 Cross 特征值、输出保护与预算数值变化。
+S103 新增局部片段后，原先两条 TOP 线的已合并 family 扩展为 11 成员 component，完整并集不能重拟合，
+故原片段全部保留。当前 Review 的 TOP／BOTTOM 中心为 47.594098／1939.555653 px，
+先前为 49.846194／1922.880939 px；纵向支撑仍不包围完整 template，两份均为 unsafe Review。
+此变化已经前后正式 CLI 对照，不是安全覆盖改善，也不能称所有候选几何不变。
 S081 两份候选均安全但仍为真实双解 Review；不能因黄金判安全就跳过 Runtime 选择能力缺口。
 S079 仍保留安全 runner，当前 primary 不安全，选择能力缺口仍在。
 
 42 份安全候选中 31 项预算 passed / 11 failed；147 份不安全候选中 25 passed / 122 failed。
 这说明数值预算不能单独代替黄金安全，也不能据此整体关闭风险检查。
 
-该黄金 receipt 生成于提交前，header 记录基座 `02c4de14` 与当时的 detector/comparator 工作树状态，
-不是干净 release receipt。已核对运行时的源文件指纹与已提交的 `08062242` 一致：
+该黄金 receipt 生成于提交前，header 记录基座 `148f85f6` 与当时的 detector/comparator 工作树状态，
+不是干净 release receipt。已核对运行时的源文件指纹与已提交的 `058a5d56` 一致：
 
-- detector：`6e47d9a894e2c2646e7bc8f0744ed83dafaae8b77ee6e5a6612f40a8feba12f6`
-- comparator：`518041a39b85cfefc19f6c96faa38896838fdae1dabbddd5327137f49eac5cc9`
+- detector：`66a784e2b8f8a3a0bdc44370c2ee7afcded569332a52908de6a977db62459d08`
+- comparator：`b850b9ae9dab0945129baa9bdfc08be3eb7f1884d31840d5632934e029b196b8`
 - cohort：`c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`
 
-干净 `08062242` 的正式 `tools/verify performance` receipt：
-`build/v5-performance/performance_receipt.json`。24-source 完整用户路径均值 **3.777348 秒**，
-5 秒 Gate 通过，3 秒挑战未达成；p95 为 6.564203 秒，最慢 S038 为 6.819890 秒。
-未插桩进程峰值 RSS 最大 1,212,432,384 bytes。
+干净 `058a5d56` 的正式 `tools/verify performance` receipt：
+`build/v5-performance/performance_receipt.json`。24-source 完整用户路径均值 **3.825251 秒**，
+5 秒 Gate 通过，3 秒挑战未达成；p95 为 6.609726 秒，最慢 S038 为 6.803222 秒。
+未插桩进程峰值 RSS 最大 1,212,006,400 bytes。
 此结果只证明该提交、当前机器、冻结依赖和本次决定分布，不外推其它平台或未来 release commit。
-新黄金分析 development-detail mean 为 4.049931 秒，
+新黄金分析 development-detail mean 为 4.096786 秒，
 不代替正式性能结果。
 
 ## 开放风险与精确下一步
 
-1. 修复局部 Cross 测量进入联合证明前的阶段合同不一致。Tracking 明确保留 1-region 局部段，
-   registration 首轮却要求 2-region，失败即丢弃，后续 family 看不到这些片段。
-   内存正例证明两区域合法局部段可完整合并 6/6 transition；但同一区域合并失败会原样返回局部线，
-   现有单／双侧 Cross 在三个 selected domains 同落一区域时仍可能 resolved。
-   因此不能仅将首轮 MIN2 改为 1；必须分离“局部测量保留”和“全局正向权限”。
-   先补完整注册链正例，以及单点、同区重复、family 丢点／失败、三个同区 domains 的单／双侧反例，
-   同时保护 source-wide opposite、严格外侧反证、runner 与 fit-attempt 上界。此处仅证实 Cross 权限风险，
-   未证实完整 Template/Gate unsafe auto；未改阈值或实现新权限。
-2. S106 最新正式测量报告为 `/private/tmp/x5crop-S106-source-domain-report-20260908a/x5_crop_report.jsonl`，
-   只读跟踪为 `/private/tmp/x5crop-S106-current-bottom-tracks-20260908a.jsonl`；
-   它们绑定本轮源域修改前的 `04dfb0e5` 检测源码，本轮未改测量，后续检测改动仍须重新复取。
+1. 在阶段合同修复基础上，继续核查 family 成员关联与真实边界测量缺口。S103 前后正式报告分别为
+   `/private/tmp/x5crop-S103-before-local-cross-report-20260908a/x5_crop_report.jsonl`（`148f85f6` 源码）和
+   `/private/tmp/x5crop-S103-local-cross-projection-report-20260908a/x5_crop_report.jsonl`（当前检测源码）。
+   旧 TOP 两成员完整 15-transition union 可以成线；新增局部假设后 TOP／BOTTOM 各形成 11 成员组件，
+   全部并集失败，保留 22 条 raw／18 条局部假设／4 条 solver 线。当前唯一直接 pair 为中段 TOP 13 点与
+   BOTTOM 4 点，纵向支撑不足。下一步应证明哪些成员物理上可以关联；不能仅凭旧答案较有利选择性
+   合并子集、抛弃新测量或降低完整并集要求。S103 与 S106 均为 nominal，不因源截断就改归 challenge。
+2. S106 最新正式测量报告为
+   `/private/tmp/x5crop-S106-local-cross-projection-report-20260908a/x5_crop_report.jsonl`。
+   当前 11 次拟合保留 10 条 raw／9 条局部假设／1 条 solver 线：8 条 TOP 都只有一区域支持；
+   BOTTOM 的局部轨迹现已成功保留为 `format-role-bound-line:9`，robust fit 留下 11 点（trace 3341–5134），
+   外侧背景偏好为 0.727273，但仍只有一区域，不能成为全局边界。唯一全局 BOTTOM 为
+   `format-role-bound-line:10`，83 点覆盖 407–13773，外侧背景偏好仍为 0.433735，角色未获权。
    TOP query `[0,172.624857]`、113 traces、window=21/gap=5 的可测下界为 26 px，
    人工真实 TOP 投影约为 -31.23 至 18.01 px，当前窗口并未观察到；不能将 query 完成当作缺边反证。
-   BOTTOM 的 15 点局部轨迹（trace 3015–5786，均值 gradient/material 为 42.71/8.52）
-   被首轮 2-region 门槛拒绝；尚未证明它通过后续全部物理拟合。其它真实附近短轨迹还存在 material 门槛，
-   不能认为只修注册即可解决整条底边。
+   其它真实附近短轨迹仍存在 material 门槛，后续需按当前源码重新观察，不能认为注册修复解决整条底边。
    源域统一后，第 1、3–7 格不再有源侧内切；第 2 格仍在 TOP 附近有约 5.33 px `sequence_end`
    内切。第 8–12 格 required TOP 仍分别为 10.761929、12.761929、27.044140、27.044140、
    27.044140 px，仍有真实图内缺口。保持严格黄金包含，不移动人工线或增加容差。
