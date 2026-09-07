@@ -22,6 +22,11 @@ from tools.regression.accuracy import (
     validate_release_gold_task_result,
 )
 from tools.regression.gold_cohort import build_gold_cohort_records
+from tools.regression.gold_analysis import (
+    RETAINED_PLACEMENT_SCOPE,
+    _retained_placement_gold_labels,
+    _retained_placement_summary,
+)
 from tools.regression.diagnostic_cohort import DIAGNOSTIC_COHORT_PATH
 from tools.regression.gold_geometry import (
     gold_frame_diagnostics,
@@ -725,6 +730,55 @@ class GoldAccuracyContractTest(unittest.TestCase):
 
         self.assertTrue(validate_proposal_coverage(record, report))
         self.assertFalse(validate_selected_candidate_coverage(record, report))
+
+    def test_retained_placements_allow_multiple_gold_positives_and_unknown(self) -> None:
+        gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
+        record = {
+            "sample_id": "retained-set", "format_id": "120-66",
+            "confirmed_geometry": _directional_geometry(gold),
+        }
+        primary = {
+            "placement_id": "best", "lane_id": "lane:0", "state": "generated",
+            "failure": None, "output_footprints": [_output(gold)],
+        }
+        runner = {
+            **primary, "placement_id": "runner",
+            "output_footprints": [_output([[-1.0, -1.0], [561.0, -1.0], [561.0, 561.0], [-1.0, 561.0]])],
+        }
+        lane = {"placement_proposal": primary, "alternative_placement_proposals": [runner]}
+        labels = _retained_placement_gold_labels(record, lane)
+        self.assertEqual([item["geometry_conformance"] for item in labels], ["safe", "safe"])
+        self.assertTrue(all(item["frame_diagnostics"][0]["physical_frame_id"] for item in labels))
+        analysis = {
+            "sample_id": "retained-set", "count": 1,
+            "retained_placement_scope": RETAINED_PLACEMENT_SCOPE,
+            "retained_placement_gold_labels": labels,
+            "decision_status": "needs_review", "placement_failure_gap": "phase_placement_ambiguous",
+            "phase_failure_kind": "discrete_phase_ambiguous", "cross_failure_kind": None,
+        }
+        summary = _retained_placement_summary([analysis])
+        self.assertEqual(summary["task_set_state_counts"], {"multiple_safe": 1})
+        self.assertEqual(summary["safe_with_placement_ambiguity_task_ids"], ["retained-set"])
+        for role in ("nominal", "challenge"):
+            self.assertEqual(_retained_placement_gold_labels({**record, "cohort_role": role}, lane), labels)
+        analysis["placement_failure_gap"] = "direct_use_budget_exhausted"
+        self.assertEqual(_retained_placement_summary([analysis])["safe_with_placement_ambiguity_task_ids"], [])
+        analysis.update(placement_failure_gap="placement_unresolved", cross_failure_kind="pair_support_unavailable")
+        self.assertEqual(_retained_placement_summary([analysis])["safe_with_placement_ambiguity_task_ids"], [])
+        analysis["cross_failure_kind"] = "non_equivalent_fits"
+        self.assertEqual(_retained_placement_summary([analysis])["safe_with_placement_ambiguity_task_ids"], ["retained-set"])
+        primary["output_footprints"] = [_output([[10.0, 0.0], [560.0, 0.0], [560.0, 560.0], [10.0, 560.0]])]
+        runner.update(state="unavailable", output_footprints=[], failure={"gap": "output_footprint_unavailable"})
+        analysis["retained_placement_gold_labels"] = _retained_placement_gold_labels(record, lane)
+        summary = _retained_placement_summary([analysis])
+        self.assertEqual(summary["task_set_state_counts"], {"unknown_with_unavailable": 1})
+        self.assertEqual(summary["placement_label_counts"], {"not_available": 1, "unsafe": 1})
+        lane["alternative_placement_proposals"] = []
+        analysis["retained_placement_gold_labels"] = _retained_placement_gold_labels(record, lane)
+        self.assertEqual(_retained_placement_summary([analysis])["task_set_state_counts"], {"all_retained_unsafe": 1})
+        analysis["retained_placement_gold_labels"][0]["generation_state"] = "unavailable"
+        with self.assertRaisesRegex(ValueError, "invalid retained placement gold label"):
+            _retained_placement_summary([analysis])
 
     def test_orientation_eight_gold_is_compared_in_canonical_space(self) -> None:
         canonical = [

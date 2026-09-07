@@ -12,6 +12,7 @@ from unittest.mock import patch
 from tools.regression.accuracy import DEVELOPMENT_GOLD_COHORT_PATH
 from tools.regression.gold_analysis import (
     ANALYSIS_RECORD_SCHEMA,
+    RETAINED_PLACEMENT_SCOPE,
     _analysis_identity,
     _axis_guard_calibration,
     _enclosing_support_aperture_center_calibration,
@@ -239,6 +240,16 @@ class GoldAnalysisContractTest(unittest.TestCase):
             "candidate_geometry_failure": (
                 "synthetic candidate failure" if frame_unsafe else None
             ),
+            "retained_placement_scope": RETAINED_PLACEMENT_SCOPE,
+            "retained_placement_gold_labels": [{
+                "placement_id": "placement:primary", "lane_id": "lane:0",
+                "role": "primary", "generation_state": "generated",
+                "generation_failure": None,
+                "output_footprints": [{"required_source_footprint": []}],
+                "geometry_conformance": proposal,
+                "geometry_failure": "unsafe" if proposal_frame_unsafe else None,
+                "frame_diagnostics": [],
+            }] if proposal != "not_available" else [],
             "unsafe_approved_auto": unsafe_auto,
             "nominal_auto_goal_passed": (
                 role == "nominal" and decision == "approved_auto" and not unsafe_auto
@@ -737,6 +748,12 @@ class GoldAnalysisContractTest(unittest.TestCase):
                 validate_gold_analysis_artifacts(root),
                 summary,
             )
+            summary["retained_placement_gold"]["at_least_one_safe_task_count"] = 1
+            (root / "gold_analysis_summary.json").write_text(
+                json.dumps(summary) + "\n", encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "artifact is invalid"):
+                validate_gold_analysis_artifacts(root)
 
     def test_release_gate_requires_the_complete_cohort(self) -> None:
         error = io.StringIO()

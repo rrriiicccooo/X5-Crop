@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from ...configuration.model import DetectionConfiguration, ResolvedSlotCount
 from ...domain import EvidenceState
 from ..evidence.content_occupancy_model import ContentOccupancyObservationSet
@@ -166,6 +168,58 @@ def _placements(
     return best, runner
 
 
+def _materialize_placement_proposal(
+    prepared: PreparedTemplateLane,
+    placement: FormatPlacement,
+    *,
+    layout,
+) -> tuple[TemplatePlacementProposal, int]:
+    """Project one existing placement once, without granting output authority."""
+
+    evaluations = 0
+    outputs: list[OutputFootprint] = []
+    failure = None
+    try:
+        projection = project_format_placement(placement)
+        for ordinal in range(1, placement.output_slot_count + 1):
+            evaluations += 1
+            outputs.append(
+                output_footprint_from_template_placement(
+                    placement,
+                    projection,
+                    lane=prepared.lane,
+                    lane_ordinal=ordinal,
+                    layout=layout,
+                )
+            )
+    except ValueError as error:
+        outputs = []
+        failure = failure_fact(GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE, detail=str(error))
+    return (
+        TemplatePlacementProposal(
+            lane_id=prepared.lane.domain.lane_id,
+            state=(
+                TemplateProposalState.GENERATED
+                if failure is None else TemplateProposalState.UNAVAILABLE
+            ),
+            placement_id=placement.placement_id,
+            output_footprints=tuple(outputs),
+            failure=failure,
+        ),
+        evaluations,
+    )
+
+
+@dataclass(frozen=True)
+class _ProvisionalLanePlacement:
+    best: FormatPlacement | None
+    content_assessment: ContentVetoAssessment | None
+    competition: TemplatePlacementCompetition
+    proposal: TemplatePlacementProposal
+    alternatives: tuple[TemplatePlacementProposal, ...]
+    proposal_output_evaluation_count: int
+
+
 def _empty_result(
     *,
     lanes_available: bool,
@@ -255,15 +309,7 @@ def reconstruct_photo_geometry(
         )
     )
     shared_geometry = _shared_geometry(prepared)
-    provisional: list[
-        tuple[
-            FormatPlacement | None,
-            FormatPlacement | None,
-            ContentVetoAssessment | None,
-            TemplatePlacementCompetition,
-            TemplatePlacementProposal,
-        ]
-    ] = []
+    provisional: list[_ProvisionalLanePlacement] = []
     for lane, content in zip(
         prepared,
         content_observations,
@@ -274,27 +320,13 @@ def reconstruct_photo_geometry(
             lane,
             source_geometry=geometry,
         )
-        best_outputs = ()
-        proposal_failure = None
+        proposal = None
+        proposal_output_evaluations = 0
         if best is not None:
-            try:
-                projection = project_format_placement(best)
-                best_outputs = tuple(
-                    output_footprint_from_template_placement(
-                        best,
-                        projection,
-                        lane=lane.lane,
-                        lane_ordinal=ordinal,
-                        layout=layout,
-                    )
-                    for ordinal in range(1, best.output_slot_count + 1)
-                )
-            except ValueError as error:
-                best_outputs = ()
-                proposal_failure = failure_fact(
-                    GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE,
-                    detail=str(error),
-                )
+            proposal, proposal_output_evaluations = _materialize_placement_proposal(
+                lane, best, layout=layout,
+            )
+        best_outputs = () if proposal is None else proposal.output_footprints
         content_assessment = (
             None
             if (
@@ -317,30 +349,29 @@ def reconstruct_photo_geometry(
             cross=lane.cross_competition,
             content_assessment=content_assessment,
         )
-        proposal = TemplatePlacementProposal(
-            lane_id=lane.lane.domain.lane_id,
-            state=(
-                TemplateProposalState.GENERATED
-                if best is not None
-                and len(best_outputs) == best.output_slot_count
-                else TemplateProposalState.UNAVAILABLE
-            ),
-            placement_id=None if best is None else best.placement_id,
-            output_footprints=best_outputs,
-            failure=(
-                None
-                if best is not None
-                and len(best_outputs) == best.output_slot_count
-                else proposal_failure
-                or competition.failure
-                or failure_fact(GateGap.COMPLETE_PLACEMENT_UNAVAILABLE)
-            ),
-        )
+        if proposal is None:
+            proposal = TemplatePlacementProposal(
+                lane_id=lane.lane.domain.lane_id,
+                state=TemplateProposalState.UNAVAILABLE,
+                placement_id=None,
+                output_footprints=(),
+                failure=competition.failure or failure_fact(GateGap.COMPLETE_PLACEMENT_UNAVAILABLE),
+            )
+        alternatives = ()
+        if runner is not None:
+            alternative, evaluations = _materialize_placement_proposal(
+                lane, runner, layout=layout,
+            )
+            alternatives = (alternative,)
+            proposal_output_evaluations += evaluations
         provisional.append(
-            (best, runner, content_assessment, competition, proposal)
+            _ProvisionalLanePlacement(
+                best, content_assessment, competition, proposal, alternatives,
+                proposal_output_evaluations,
+            )
         )
 
-    lane_proposals = tuple(item[4] for item in provisional)
+    lane_proposals = tuple(item.proposal for item in provisional)
     source_proposal_failure = next(
         (
             item.failure
@@ -371,7 +402,7 @@ def reconstruct_photo_geometry(
     )
 
     source_selection = select_template_source(
-        tuple(item[3] for item in provisional),
+        tuple(item.competition for item in provisional),
         lane_ids=lane_ids,
         shared_scan_geometry=shared_geometry,
     )
@@ -380,7 +411,7 @@ def reconstruct_photo_geometry(
         if failure is None:
             raise ValueError("unresolved source selection requires a typed failure")
         competitions = tuple(
-            withhold_lane_winner(item[3], failure=failure)
+            withhold_lane_winner(item.competition, failure=failure)
             for item in provisional
         )
         source_selection = TemplateSourceSelection(
@@ -392,20 +423,20 @@ def reconstruct_photo_geometry(
             tuple(item.runner_up_placement_id for item in competitions),
         )
     else:
-        competitions = tuple(item[3] for item in provisional)
+        competitions = tuple(item.competition for item in provisional)
 
     reconstructions: list[TemplateLaneReconstruction] = []
     for lane, source_lane, values, competition in zip(
         prepared, lanes, provisional, competitions, strict=True
     ):
         selected = (
-            values[0]
+            values.best
             if source_selection.state == EvidenceState.SUPPORTED
             else None
         )
         output_footprints = ()
         if selected is not None:
-            output_footprints = values[4].output_footprints
+            output_footprints = values.proposal.output_footprints
         budgets = tuple(
             template_direct_use_budget_assessment(
                 selected, output
@@ -444,13 +475,14 @@ def reconstruct_photo_geometry(
             lane.phase_competition.status == PhaseFitStatus.BOUND_EXCEEDED
             or lane.cross_competition.status == CrossFitStatus.BOUND_EXCEEDED
         )
-        content_assessment = values[2]
+        content_assessment = values.content_assessment
         reconstructions.append(
             TemplateLaneReconstruction(
                 lane_id=lane.lane.domain.lane_id,
                 prepared=lane,
                 placement_competition=competition,
-                placement_proposal=values[4],
+                placement_proposal=values.proposal,
+                alternative_placement_proposals=values.alternatives,
                 selected_placement=selected,
                 output_footprints=output_footprints,
                 calibrated_nominal_grid_authority=nominal_grid_authority,
@@ -468,6 +500,8 @@ def reconstruct_photo_geometry(
                         4 * len(item.frames) for item in competition.placements
                     ),
                     content_evaluation_count=int(content_assessment is not None),
+                    proposal_projection_count=len(competition.placements),
+                    proposal_output_evaluation_count=values.proposal_output_evaluation_count,
                     peak_temporary_bytes=max(
                         lane.measurement_work.peak_temporary_bytes,
                         phase_receipt.peak_temporary_bytes,

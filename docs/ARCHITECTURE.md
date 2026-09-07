@@ -1136,6 +1136,18 @@ Margin 只是一项可审计特征，不是独立的一票否决条件。多个�
 footprint，不读取 Runtime 决定来制造正例。内部预算等风险代理必须先与真实黄金结果对照，不能把代理
 全部永久硬化后再期待评分提高覆盖，也不能未经验证整体关闭它们。
 
+第一阶段的集合范围固定为每条 lane 已组成的 best 与单个 runner，最多两个 placement，不是整个 phase/cross
+搜索空间。原有 runner 优先顺序不变，不生成轴组合或新增候选。每个 placement 由同一 production projection
+与 output owner 恰好物化一次完整 footprint 或 typed unavailable；primary 与 alternative 分开保存，选中输出
+直接复用 primary。报告和黄金分析只读取这些同次 runtime facts，不重新求解几何。物化次数与实际逐 slot
+输出评估次数进入工作量 receipt，分别不超过 2 与两份已有 placement 的 slot 总数。
+黄金逐候选标签仍由唯一方向性 comparator 产生；保留集合中没有安全候选，不能外推为所有潜在裁切均不可用。
+Gold record 在同一 source SHA、format/count 身份下保存每份 placement ID、primary/runner 角色、实际
+footprint、typed generation failure 与带 physical frame ID 的逐帧诊断。集合按 task 计数，不将不同 count
+的同源任务混成一个答案；多正例不归一化，unavailable 不产生负例。可用但有 placement 歧义的统计只消费
+明确的 discrete phase ambiguity 或 non-equivalent Cross fits，不将 coverage 缺口或所有 Review 算作歧义。
+该阶段不增加评分、准入权限、content requery 或自动输出，只建立后续特征/排序可复核的输入与标签。
+
 下一机制复用 `template_selection.py` 的有界竞争与选择职责，黄金标签仍由
 `tools/regression/gold_geometry.py` 独占，集合分析由现有 `gold_analysis.py` 扩展，不另建 detector 或黄金池。
 先冻结候选 identity 与最终 footprint，再记录既有 evidence 中的 anchor、角色来源、W/H/pitch 偏差、
@@ -1512,6 +1524,7 @@ selected late-binding projection evaluations / dropped bindings / Grid solves
 local adjacency evaluations
 cross runs / fits
 placement / boundary / content evaluations
+retained placement projections / output-footprint evaluations
 probability candidates / features / OOD evaluations（仅在第 9.2 节获准启用后）
 domain pixels / peak temporary bytes
 ```

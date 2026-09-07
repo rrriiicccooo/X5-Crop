@@ -528,6 +528,15 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 ],
             )
             validate_current_report_record(analysis_outcome.result)
+            for field in ("proposal_projection_count", "proposal_output_evaluation_count"):
+                invalid = deepcopy(analysis_outcome.result)
+                invalid["development"]["lanes"][0]["work"][field] += 100
+                with self.subTest(field=field), self.assertRaises(ValueError):
+                    validate_current_report_record(invalid)
+            inconsistent_alternatives = deepcopy(analysis_outcome.result)
+            inconsistent_alternatives["development"]["lanes"][0]["alternative_placement_proposals"] = [{}]
+            with self.assertRaisesRegex(ValueError, "development template ledger"):
+                validate_current_report_record(inconsistent_alternatives)
             obsolete = deepcopy(analysis_outcome.result)
             obsolete_phase = obsolete["development"]["lanes"][0][
                 "phase_competition"
@@ -564,6 +573,10 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             self.assertEqual(outcome.result["detail_level"], "production")
             self.assertIsNone(outcome.result["development"])
             production_geometry = outcome.result["photo_geometry"]
+            self.assertEqual(
+                analysis_outcome.result["photo_geometry"]["lanes"][0]["alternative_placement_proposals"],
+                production_geometry["lanes"][0]["alternative_placement_proposals"],
+            )
             self.assertNotIn(
                 "legal_combination_count",
                 production_geometry["source_placement_selection"],

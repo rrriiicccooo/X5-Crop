@@ -218,6 +218,9 @@ def development_report_facts(
                 "placement_proposal": typed_read_model(
                     lane.placement_proposal
                 ),
+                "alternative_placement_proposals": typed_read_model(
+                    lane.alternative_placement_proposals
+                ),
                 "winner_basis": {
                     "state": lane.placement_competition.state.value,
                     "phase": (
@@ -358,6 +361,10 @@ def development_report_facts(
                     ),
                     "content_evaluation_count": (
                         lane.work.content_evaluation_count
+                    ),
+                    "proposal_projection_count": lane.work.proposal_projection_count,
+                    "proposal_output_evaluation_count": (
+                        lane.work.proposal_output_evaluation_count
                     ),
                     "domain_pixels": (
                         lane.prepared.lane.domain.work_box.width

@@ -802,6 +802,31 @@ def validate_proposal_coverage(
     return True
 
 
+def placement_proposal_gold_diagnostics(
+    record: dict[str, object],
+    proposal: dict[str, object],
+) -> dict[str, object]:
+    """Label one retained footprint independently of ranking or Runtime gates."""
+
+    if proposal["state"] != "generated":
+        return {
+            "geometry_conformance": "not_available",
+            "geometry_failure": None,
+            "frame_diagnostics": [],
+        }
+    outputs = proposal["output_footprints"]
+    failure = None
+    try:
+        _validate_directional_geometry(record, outputs, subject="retained placement")
+    except ValueError as error:
+        failure = str(error)
+    return {
+        "geometry_conformance": "safe" if failure is None else "unsafe",
+        "geometry_failure": failure,
+        "frame_diagnostics": list(_gold_frame_diagnostics(record, outputs)),
+    }
+
+
 def _source_proposal_outputs(
     report: dict[str, object],
 ) -> tuple[dict[str, object], ...]:

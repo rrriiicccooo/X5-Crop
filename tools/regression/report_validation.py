@@ -2679,6 +2679,25 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             lane_id=lane_id,
         )
         proposal = lane["placement_proposal"]
+        alternatives = lane.get("alternative_placement_proposals")
+        runner_id = lane.get("runner_up_placement_id")
+        if (
+            not isinstance(alternatives, list)
+            or len(alternatives) > 1
+            or bool(alternatives) != (runner_id is not None)
+        ):
+            raise ValueError("alternative proposals do not retain the lane runner")
+        slot_count = sum(
+            identity["lane_id"] == lane_id for identity in geometry["slot_identities"]
+        )
+        for alternative in alternatives:
+            alternative_outputs = _validate_placement_proposal(alternative, lane_id=lane_id)
+            if (
+                alternative["placement_id"] != runner_id
+                or alternative["placement_id"] == proposal["placement_id"]
+                or alternative_outputs and len(alternative_outputs) != slot_count
+            ):
+                raise ValueError("alternative proposal identity or slot count is invalid")
         lane_ids.append(lane_id)
         lane_proposal_ids.append(
             proposal["placement_id"]
@@ -3561,6 +3580,9 @@ def _validate_development(record: dict[str, Any]) -> None:
             or not isinstance(work, dict)
             or work.get("placement_evaluation_count")
             != len(placement.get("placements", ()))
+            or type(work.get("proposal_projection_count")) is not int
+            or work.get("proposal_projection_count")
+            != len(placement.get("placements", ()))
             or not isinstance(lane.get("phase_competition"), dict)
             or not isinstance(lane.get("source_frame_width_authority"), dict)
             or lane.get("source_frame_width_topology_assessment")
@@ -3605,6 +3627,8 @@ def _validate_development(record: dict[str, Any]) -> None:
             or not isinstance(lane.get("template_alignment"), dict)
             or lane.get("placement_proposal")
             != production_lane.get("placement_proposal")
+            or lane.get("alternative_placement_proposals")
+            != production_lane.get("alternative_placement_proposals")
             or not isinstance(winner, dict)
             or set(winner)
             != {
@@ -3627,6 +3651,31 @@ def _validate_development(record: dict[str, Any]) -> None:
             != placement.get("runner_up_placement_id")
         ):
             raise ValueError("development template ledger is invalid")
+        retained = [
+            proposal
+            for proposal in (lane["placement_proposal"], *lane["alternative_placement_proposals"])
+            if proposal["placement_id"] is not None
+        ]
+        placements = placement.get("placements")
+        if not isinstance(placements, list) or len(placements) > 2:
+            raise ValueError("retained placement set exceeds its compiled bound")
+        ids = [item["placement_id"] for item in placements]
+        proposed_ids = [item["placement_id"] for item in retained]
+        evaluated = work.get("proposal_output_evaluation_count")
+        if (
+            len(set(ids)) != len(ids)
+            or len(set(proposed_ids)) != len(proposed_ids)
+            or set(ids) != set(proposed_ids)
+            or not isinstance(evaluated, int)
+            or isinstance(evaluated, bool)
+            or evaluated < sum(len(item["output_footprints"]) for item in retained)
+            or evaluated > sum(len(item["frames"]) for item in placements)
+        ):
+            raise ValueError("retained proposal work or membership is invalid")
+        for proposal in retained:
+            fit = next(item for item in placements if item["placement_id"] == proposal["placement_id"])
+            if proposal["state"] == "generated" and len(proposal["output_footprints"]) != len(fit["frames"]):
+                raise ValueError("retained proposal does not cover its placement")
         cross_competition = lane["cross_competition"]
         retained_cross = cross_competition.get(
             "retained_proposal_basis"

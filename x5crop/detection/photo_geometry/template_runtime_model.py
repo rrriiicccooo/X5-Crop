@@ -627,7 +627,7 @@ class TemplatePlacementCompetition:
                 "placement competition aperture-domain authority is invalid"
             )
         ids = tuple(item.placement_id for item in self.placements)
-        if len(set(ids)) != len(ids) or any(not isinstance(item, FormatPlacement) for item in self.placements):
+        if len(ids) > 2 or len(set(ids)) != len(ids) or any(not isinstance(item, FormatPlacement) for item in self.placements):
             raise ValueError("placement competition identities are invalid")
         if self.selected_placement_id not in ({None} | set(ids)):
             raise ValueError("selected placement is outside its competition")
@@ -653,7 +653,7 @@ class TemplateProposalState(str, Enum):
 
 @dataclass(frozen=True)
 class TemplatePlacementProposal:
-    """One lane's primary placement and complete pre-Gate output geometry."""
+    """One retained placement and its complete pre-Gate output geometry."""
 
     lane_id: str
     state: TemplateProposalState
@@ -741,6 +741,8 @@ class TemplatePlacementWorkReceipt:
     boundary_evaluation_count: int
     content_evaluation_count: int
     peak_temporary_bytes: int
+    proposal_projection_count: int
+    proposal_output_evaluation_count: int
     bound_exceeded: bool = False
 
     def __post_init__(self) -> None:
@@ -749,8 +751,10 @@ class TemplatePlacementWorkReceipt:
             self.boundary_evaluation_count,
             self.content_evaluation_count,
             self.peak_temporary_bytes,
+            self.proposal_projection_count,
+            self.proposal_output_evaluation_count,
         )
-        if any(not isinstance(value, int) or value < 0 for value in values):
+        if any(type(value) is not int or value < 0 for value in values):
             raise ValueError("template placement work values must be non-negative")
         if not isinstance(self.bound_exceeded, bool):
             raise TypeError("placement bound status must be boolean")
@@ -764,6 +768,7 @@ class TemplateLaneReconstruction:
     prepared: PreparedTemplateLane
     placement_competition: TemplatePlacementCompetition
     placement_proposal: TemplatePlacementProposal
+    alternative_placement_proposals: tuple[TemplatePlacementProposal, ...]
     selected_placement: FormatPlacement | None
     output_footprints: tuple[OutputFootprint, ...]
     calibrated_nominal_grid_authority: CalibratedNominalGridAuthority
@@ -787,19 +792,39 @@ class TemplateLaneReconstruction:
         placement_ids = {item.placement_id for item in placements}
         if proposal.placement_id not in ({None} | placement_ids):
             raise ValueError("placement proposal is outside its competition")
-        if proposal.state == TemplateProposalState.GENERATED:
+        alternatives = self.alternative_placement_proposals
+        if len(alternatives) > 1 or any(
+            item.placement_id != self.placement_competition.runner_up_placement_id
+            or item.placement_id is None
+            or item.lane_id != self.lane_id
+            for item in alternatives
+        ):
+            raise ValueError("alternative proposal must retain the lane runner")
+        retained = tuple(
+            item for item in (proposal, *alternatives)
+            if item.placement_id is not None
+        )
+        retained_ids = tuple(item.placement_id for item in retained)
+        if len(set(retained_ids)) != len(retained_ids) or set(retained_ids) != placement_ids:
+            raise ValueError("each retained placement requires exactly one proposal")
+        for item in retained:
             proposed = next(
-                item
-                for item in placements
-                if item.placement_id == proposal.placement_id
+                placement for placement in placements
+                if placement.placement_id == item.placement_id
             )
-            if len(proposal.output_footprints) != proposed.output_slot_count:
-                raise ValueError("placement proposal does not cover every slot")
-            if any(
-                item.envelope.lane_id != self.lane_id
-                for item in proposal.output_footprints
+            if item.state == TemplateProposalState.GENERATED and (
+                len(item.output_footprints) != proposed.output_slot_count
+                or any(output.envelope.lane_id != self.lane_id for output in item.output_footprints)
             ):
-                raise ValueError("proposal footprint crosses lane authority")
+                raise ValueError("placement proposal does not cover its lane slots")
+        if (
+            self.work.proposal_projection_count != len(placements)
+            or self.work.proposal_output_evaluation_count
+            < sum(len(item.output_footprints) for item in retained)
+            or self.work.proposal_output_evaluation_count
+            > sum(item.output_slot_count for item in placements)
+        ):
+            raise ValueError("retained proposal work exceeds its placement bounds")
         selected_id = self.placement_competition.selected_placement_id
         if not isinstance(
             self.calibrated_nominal_grid_authority,

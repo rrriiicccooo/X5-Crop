@@ -45,14 +45,16 @@ from .gold_geometry import (
     canonical_gold_point,
     gold_frame_diagnostics,
     gold_proposal_frame_diagnostics,
+    placement_proposal_gold_diagnostics,
     validate_proposal_coverage,
     validate_selected_candidate_coverage,
 )
 from .report_validation import validate_current_report_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v18"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v21"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v19"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v22"
+RETAINED_PLACEMENT_SCOPE = "retained_best_and_single_runner"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
 SOURCE_TIMEOUT_SECONDS = 600
@@ -900,6 +902,96 @@ def _frame_diagnostics_with_physical_identity(
     return results
 
 
+def _retained_placement_gold_labels(
+    record: dict[str, Any], lane: dict[str, Any],
+) -> list[dict[str, Any]]:
+    proposals = (
+        ("primary", lane["placement_proposal"]),
+        *(("runner", item) for item in lane["alternative_placement_proposals"]),
+    )
+    labels = []
+    for role, proposal in proposals:
+        if proposal["placement_id"] is None:
+            continue
+        diagnostic = placement_proposal_gold_diagnostics(record, proposal)
+        labels.append({
+            "placement_id": proposal["placement_id"],
+            "lane_id": proposal["lane_id"],
+            "role": role,
+            "generation_state": proposal["state"],
+            "generation_failure": proposal["failure"],
+            "output_footprints": proposal["output_footprints"],
+            "geometry_conformance": diagnostic["geometry_conformance"],
+            "geometry_failure": diagnostic["geometry_failure"],
+            "frame_diagnostics": _frame_diagnostics_with_physical_identity(
+                record, diagnostic["frame_diagnostics"],
+            ),
+        })
+    return labels
+
+
+def _retained_placement_summary(records: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """Count each task's retained set; unknown geometry is never a negative label."""
+
+    states: Counter[str] = Counter()
+    label_counts: Counter[str] = Counter()
+    safe_ambiguity_tasks = []
+    for record in records:
+        if record["retained_placement_scope"] != RETAINED_PLACEMENT_SCOPE:
+            raise ValueError("invalid retained placement scope")
+        labels = record["retained_placement_gold_labels"]
+        ids = [item["placement_id"] for item in labels]
+        if (
+            len(labels) > 2 or len(set(ids)) != len(ids)
+            or any(not isinstance(identity, str) or not identity for identity in ids)
+            or [item["role"] for item in labels] not in ([], ["primary"], ["primary", "runner"])
+        ):
+            raise ValueError("invalid retained placement identities")
+        counts: Counter[str] = Counter()
+        for item in labels:
+            conformance = item["geometry_conformance"]
+            if (
+                conformance not in {"safe", "unsafe", "not_available"}
+                or item["generation_state"] != (
+                    "unavailable" if conformance == "not_available" else "generated"
+                )
+                or (item["generation_failure"] is not None) != (conformance == "not_available")
+                or (item["geometry_failure"] is not None) != (conformance == "unsafe")
+                or len(item["output_footprints"]) != (
+                    0 if conformance == "not_available" else record["count"]
+                )
+            ):
+                raise ValueError("invalid retained placement gold label")
+            counts[conformance] += 1
+        state = (
+            "no_retained_placement" if not labels
+            else "multiple_safe" if counts["safe"] > 1
+            else "one_safe" if counts["safe"] == 1
+            else "unknown_with_unavailable" if counts["not_available"]
+            else "all_retained_unsafe"
+        )
+        states[state] += 1
+        label_counts.update(counts)
+        if (
+            counts["safe"] and record["decision_status"] == "needs_review"
+            and (
+                record["placement_failure_gap"] == "phase_placement_ambiguous"
+                and record["phase_failure_kind"] == "discrete_phase_ambiguous"
+                or record["placement_failure_gap"] == "placement_unresolved"
+                and record["cross_failure_kind"] == "non_equivalent_fits"
+            )
+        ):
+            safe_ambiguity_tasks.append(record["sample_id"])
+    return {
+        "scope": RETAINED_PLACEMENT_SCOPE,
+        "completed_task_count": len(records),
+        "task_set_state_counts": dict(sorted(states.items())),
+        "placement_label_counts": dict(sorted(label_counts.items())),
+        "at_least_one_safe_task_count": states["one_safe"] + states["multiple_safe"],
+        "safe_with_placement_ambiguity_task_ids": sorted(safe_ambiguity_tasks),
+    }
+
+
 def _challenge_capability_outcome(
     *,
     cohort_role: str,
@@ -1142,6 +1234,10 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         "proposal_geometry_failure": proposal_geometry_failure,
         "candidate_geometry_conformance": candidate_geometry_conformance,
         "candidate_geometry_failure": candidate_geometry_failure,
+        "retained_placement_scope": RETAINED_PLACEMENT_SCOPE,
+        "retained_placement_gold_labels": _retained_placement_gold_labels(
+            record, production_lanes[0],
+        ),
         "runtime_budget_state": _runtime_budget_state(
             [item for lane in production_lanes for item in lane["direct_use_budget_assessments"]],
             expected_count=record["count"],
@@ -2649,6 +2745,7 @@ def _summary(
         "proposal_geometry_conformance_counts": dict(
             sorted(proposal_states.items())
         ),
+        "retained_placement_gold": _retained_placement_summary(completed),
         "proposal_candidate_conformance_matrix": {
             proposal_state: dict(sorted(candidate_states.items()))
             for proposal_state, candidate_states in sorted(
@@ -3006,6 +3103,8 @@ def run_gold_analysis(
                 "proposal_geometry_failure": None,
                 "candidate_geometry_conformance": "not_available",
                 "candidate_geometry_failure": None,
+                "retained_placement_scope": RETAINED_PLACEMENT_SCOPE,
+                "retained_placement_gold_labels": [],
                 "runtime_budget_state": None,
                 "runtime_budget_assessments": [],
                 "runtime_budget_gate": None,
