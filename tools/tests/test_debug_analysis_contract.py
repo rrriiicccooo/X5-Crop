@@ -124,7 +124,8 @@ class DebugAnalysisContractTest(unittest.TestCase):
             sequence,
         )
         alignment = alignment_summary(detection)
-        self.assertIn("SOURCE W ", alignment)
+        self.assertIn("MEASURED W ", alignment)
+        self.assertIn("PLACEMENT W ", alignment)
         self.assertIn("W TOPO ", alignment)
         self.assertIn("W INFER ", alignment)
         self.assertIn("OUTER MATERIAL ", alignment)
