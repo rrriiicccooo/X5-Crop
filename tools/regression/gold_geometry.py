@@ -31,10 +31,6 @@ class _FrameAccuracySides:
     outward_budget_blocking: frozenset[str]
     sequence_axis: tuple[float, float]
     cross_axis: tuple[float, float]
-    boundary_lines: dict[
-        str,
-        tuple[tuple[float, float], tuple[float, float]],
-    ]
 
 
 def canonical_gold_point(
@@ -343,26 +339,6 @@ def _accuracy_sides_by_frame(
                 outward_budget_blocking=frozenset(outward_budget_blocking),
                 sequence_axis=sequence_axis,
                 cross_axis=cross_axis,
-                boundary_lines={
-                    "sequence_start": _line_points(
-                        start_line,
-                        name=(
-                            f"gold frame {frame_index} sequence_start"
-                        ),
-                    ),
-                    "sequence_end": _line_points(
-                        end_line,
-                        name=f"gold frame {frame_index} sequence_end",
-                    ),
-                    "cross_low": _line_points(
-                        shared_edges[0],
-                        name="gold cross_low",
-                    ),
-                    "cross_high": _line_points(
-                        shared_edges[1],
-                        name="gold cross_high",
-                    ),
-                },
             )
         )
     return tuple(sides_by_frame)
@@ -400,16 +376,13 @@ def _respects_blocking_sides(
     *,
     sequence_axis: tuple[float, float] | None = None,
     cross_axis: tuple[float, float] | None = None,
-    boundary_lines: dict[
-        str,
-        tuple[tuple[float, float], tuple[float, float]],
-    ]
-    | None = None,
     epsilon: float = 1.0e-6,
 ) -> bool:
+    if len(output) < 3 or len(gold) < 3:
+        return False
+    if _contains_polygon(output, gold):
+        return True
     if blocking_sides == FRAME_SIDES:
-        return _contains_polygon(output, gold)
-    if len(output) < 4 or len(gold) < 3:
         return False
     horizontal = strip_orientation == "horizontal"
     if sequence_axis is None or cross_axis is None:
@@ -425,17 +398,11 @@ def _respects_blocking_sides(
             (0, 3) if horizontal else (0, 1),
             (1, 2) if horizontal else (3, 2),
         )
-    center_sequence = sum(
-        point[0] * sequence_axis[0] + point[1] * sequence_axis[1]
-        for point in output
-    ) / len(output)
-    center_cross = sum(
-        point[0] * cross_axis[0] + point[1] * cross_axis[1]
-        for point in output
-    ) / len(output)
-    points_by_side: dict[str, list[Sequence[float]]] = {
-        side: [] for side in FRAME_SIDES
-    }
+    center_x = sum(float(point[0]) for point in output) / len(output)
+    center_y = sum(float(point[1]) for point in output) / len(output)
+    center_sequence = center_x * sequence_axis[0] + center_y * sequence_axis[1]
+    center_cross = center_x * cross_axis[0] + center_y * cross_axis[1]
+    checked_sides: set[str] = set()
     for left, right in zip(output, (*output[1:], output[0]), strict=True):
         edge_x = right[0] - left[0]
         edge_y = right[1] - left[1]
@@ -461,53 +428,30 @@ def _respects_blocking_sides(
                 if midpoint_sequence <= center_sequence
                 else "sequence_end"
             )
-        points_by_side[side].extend((left, right))
-    edge_by_side = (
-        {
-            "cross_low": 0,
-            "sequence_end": 1,
-            "cross_high": 2,
-            "sequence_start": 3,
-        }
-        if strip_orientation == "horizontal"
-        else {
-            "sequence_start": 0,
-            "cross_high": 1,
-            "sequence_end": 2,
-            "cross_low": 3,
-        }
-    )
-    gold_center = (
-        sum(float(point[0]) for point in gold) / len(gold),
-        sum(float(point[1]) for point in gold) / len(gold),
-    )
-    for side in blocking_sides:
-        if not points_by_side[side]:
-            return False
-        if boundary_lines is None:
-            if len(gold) != 4:
-                return False
-            edge_index = edge_by_side[side]
-            gold_left = gold[edge_index]
-            gold_right = gold[(edge_index + 1) % 4]
-        else:
-            gold_left, gold_right = boundary_lines[side]
-        edge_x = gold_right[0] - gold_left[0]
-        edge_y = gold_right[1] - gold_left[1]
+        if side not in blocking_sides:
+            continue
+        checked_sides.add(side)
+        # The actual frozen polygon is the protected source domain.  Test its
+        # vertices against each blocking output half-plane; the original
+        # physical line may continue beyond a source-clipped polygon and must
+        # not demand unavailable source pixels.  Human lines still determine
+        # the physical axes and per-side permissions above.
         interior_cross = (
-            edge_x * (gold_center[1] - gold_left[1])
-            - edge_y * (gold_center[0] - gold_left[0])
+            edge_x * (center_y - left[1])
+            - edge_y * (center_x - left[0])
         )
         if abs(interior_cross) <= epsilon:
             return False
-        for point in points_by_side[side]:
+        for point in gold:
             point_cross = (
-                edge_x * (point[1] - gold_left[1])
-                - edge_y * (point[0] - gold_left[0])
+                edge_x * (point[1] - left[1])
+                - edge_y * (point[0] - left[0])
             )
-            if point_cross * (1.0 if interior_cross > 0.0 else -1.0) > epsilon:
+            if point_cross * (1.0 if interior_cross > 0.0 else -1.0) < -epsilon:
                 return False
-    return True
+    # A partial-permission result cannot silently omit a protected side when
+    # an oblique clipped edge was classified under a different physical axis.
+    return blocking_sides.issubset(checked_sides)
 
 
 def _unit_vector(x: float, y: float) -> tuple[float, float]:
@@ -729,7 +673,6 @@ def _slot_aware_gold_mapping(
             blocking_sides,
             sequence_axis=accuracy_sides.sequence_axis,
             cross_axis=accuracy_sides.cross_axis,
-            boundary_lines=accuracy_sides.boundary_lines,
         ):
             return ()
         mapping.append(output_index)
@@ -869,7 +812,6 @@ def _gold_frame_diagnostics(
                 frozenset({side}),
                 sequence_axis=frame_accuracy_sides.sequence_axis,
                 cross_axis=frame_accuracy_sides.cross_axis,
-                boundary_lines=frame_accuracy_sides.boundary_lines,
             )
         )
         expansion_by_side, limits, outward_failures = (

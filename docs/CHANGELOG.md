@@ -71,7 +71,9 @@
   集合统计区分单份安全、多份安全、全部保留候选不安全和存在未能评价的候选，并对照每份 proposal 的
   数值预算。Gold record / summary 为 v20 / v23。
 - 人工 reference 只来自原图坐标中的用户确认或独立外部测量，绑定 source SHA；模型与自动工具只产生
-  proposal。Comparator 对原图黄金执行一次冻结 affine 变换，源截断 polygon 使用人工边界半平面判断。
+  proposal。Comparator 对原图黄金执行一次冻结 affine 变换；人工线确定物理轴与逐侧权限，实际确认
+  polygon 由受保护输出边的半平面检查。源截断后的自包含与逐侧诊断一致，缺失受保护侧不能静默通过；
+  不要求输出包住 TIFF 外的物理线，也不修改冻结坐标或放宽亚像素内切规则。
 - `--gate report` 完整保存开发错误与危险 auto；成功退出只表示诊断完成。`--gate release` 与
   `tools/verify accuracy` 要求当前 nominal 全部安全自动批准、全部角色危险 auto 为 0。
   Challenge 的安全 auto 与安全 Review 分开记录，继续争取安全自动覆盖。

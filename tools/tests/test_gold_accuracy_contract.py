@@ -227,6 +227,23 @@ def _approved_report(polygon: list[list[float]]) -> dict[str, object]:
     }
 
 
+def _source_clipped_record(
+    *,
+    start_basis: str = "human_width_estimate",
+) -> dict[str, object]:
+    record = _basis_aware_record(start_basis=start_basis)
+    geometry = record["confirmed_geometry"]
+    geometry["shared_edges"][0]["points_raw"] = [
+        [0.0, -20.0], [560.0, 20.0],
+    ]
+    geometry["slots"][0]["slot_kind"] = "source_truncated"
+    geometry["frames"][0]["polygon_source_pixel_center_coordinates"] = [
+        [0.0, 0.0], [280.0, 0.0], [560.0, 20.0],
+        [560.0, 560.0], [0.0, 560.0],
+    ]
+    return record
+
+
 class GoldAccuracyContractTest(unittest.TestCase):
     def test_floating_partial_role_is_recomputed_from_frozen_geometry(self) -> None:
         gold = [
@@ -536,6 +553,102 @@ class GoldAccuracyContractTest(unittest.TestCase):
             "exceeds acceptance-baseline direct-use budget",
         ):
             validate_release_gold_task_result(record, _approved_report(output))
+
+    def test_source_clipped_gold_contains_itself_for_partial_permissions(self) -> None:
+        record = _source_clipped_record()
+        polygon = record["confirmed_geometry"]["frames"][0][
+            "polygon_source_pixel_center_coordinates"
+        ]
+        for output in (polygon, polygon[2:] + polygon[:2], list(reversed(polygon))):
+            with self.subTest(output=output):
+                report = _approved_report(output)
+                validate_approved_geometry(record, report)
+                self.assertEqual(
+                    gold_frame_diagnostics(record, report)[0]["inward_failure_sides"],
+                    [],
+                )
+
+    def test_source_clipped_diagnostics_agree_with_full_containment(self) -> None:
+        record = _source_clipped_record(start_basis="directly_visible")
+        polygon = record["confirmed_geometry"]["frames"][0][
+            "polygon_source_pixel_center_coordinates"
+        ]
+        report = _approved_report(polygon)
+        validate_approved_geometry(record, report)
+        self.assertEqual(
+            gold_frame_diagnostics(record, report)[0]["inward_failure_sides"],
+            [],
+        )
+
+    def test_source_clipped_partial_crop_keeps_estimated_side_nonblocking(self) -> None:
+        record = _source_clipped_record()
+        output = [
+            [10.0, 0.0], [280.0, 0.0], [560.0, 20.0],
+            [560.0, 560.0], [10.0, 560.0],
+        ]
+        validate_approved_geometry(record, _approved_report(output))
+        record["confirmed_geometry"]["boundary_pool"][0][
+            "review_basis"
+        ] = "visible_content_limit"
+        with self.assertRaisesRegex(ValueError, "crosses user-confirmed inward baseline"):
+            validate_approved_geometry(record, _approved_report(output))
+
+    def test_source_clipped_subpixel_inset_remains_blocking(self) -> None:
+        record = _source_clipped_record()
+        for inset in (0.01, 0.5):
+            output = [
+                [10.0, inset], [280.0, inset], [560.0, 20.0 + inset],
+                [560.0, 560.0], [10.0, 560.0],
+            ]
+            with self.subTest(inset=inset):
+                report = _approved_report(output)
+                with self.assertRaisesRegex(
+                    ValueError, "crosses user-confirmed inward baseline",
+                ):
+                    validate_approved_geometry(record, report)
+                self.assertEqual(
+                    gold_frame_diagnostics(record, report)[0]["inward_failure_sides"],
+                    ["cross_low"],
+                )
+
+    def test_source_cell_edge_is_not_silently_changed_to_pixel_center(self) -> None:
+        record = _source_clipped_record()
+        polygon = record["confirmed_geometry"]["frames"][0][
+            "polygon_source_pixel_center_coordinates"
+        ]
+        polygon[0] = [0.0, -0.5]
+        polygon[1] = [273.0, -0.5]
+        output = [
+            [0.0, 0.0], [280.0, 0.0], [560.0, 20.0],
+            [560.0, 560.0], [0.0, 560.0],
+        ]
+        frozen = copy.deepcopy(record)
+        with self.assertRaisesRegex(ValueError, "crosses user-confirmed inward baseline"):
+            validate_approved_geometry(record, _approved_report(output))
+        self.assertEqual(record, frozen)
+
+    def test_partial_permissions_do_not_skip_unrepresented_protected_sides(self) -> None:
+        for record, output in (
+            (
+                _source_clipped_record(),
+                [[400.0, 280.0], [561.0, 21.0], [562.0, 200.0],
+                 [562.0, 400.0], [561.0, 559.0]],
+            ),
+            (
+                _basis_aware_record(),
+                [[400.0, 280.0], [560.0, 1.0], [560.0, 559.0]],
+            ),
+        ):
+            with self.subTest(output=output):
+                report = _approved_report(output)
+                with self.assertRaisesRegex(
+                    ValueError, "crosses user-confirmed inward baseline",
+                ):
+                    validate_approved_geometry(record, report)
+                self.assertEqual(
+                    gold_frame_diagnostics(record, report)[0]["inward_failure_sides"],
+                    ["cross_high", "cross_low"],
+                )
 
     def test_challenge_review_keeps_candidate_accuracy_diagnostic_only(
         self,

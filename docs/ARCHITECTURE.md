@@ -1733,8 +1733,11 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
 - 人工 line、polygon 与 `source_truncated` 交集始终以原 TIFF 坐标持久化；Runtime footprint 使用
   Orientation-normalized canonical 坐标。`tools/regression/gold_geometry.py` 是验收映射的唯一 owner，必须
   用冻结的 `raw_to_canonical` affine 将全部人工几何恰好转换一次，再进行 proposal、candidate 或正式输出
-  比较。源截断 polygon 可能不是四边形，逐侧包含必须使用真实人工 boundary line 的半平面，不能按 polygon
-  顶点序号猜测 START/END/TOP/BOTTOM。
+  比较。源截断 polygon 可能不是四边形；真实人工 boundary line 确定物理轴与逐侧权限，不能按 polygon
+  顶点序号猜测 START/END/TOP/BOTTOM。完整包含确认 polygon 时，各种权限组合均通过向内检查；否则
+  逐条检查属于受保护侧的输出边半平面是否包含全部实际确认顶点，且每个受保护侧都必须实际参与检查。
+  未裁剪的人工物理线可以延伸到 TIFF 外，不能因此要求输出超出已冻结的源内 polygon。判定与逐侧诊断
+  使用同一检查，不修改确认坐标、不补齐源外内容，也不增加亚像素容差。
 - 逐线 `review_basis` 分别决定向内包含与向外 5% 预算能否产生阻断 accuracy verdict：
 
   | 证据基础 | 向内越线 | 向外超过 5% |

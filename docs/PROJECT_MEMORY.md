@@ -21,11 +21,15 @@
 
 ## 当前源码与已验证事实
 
-源码提交为 `ecf6a9a9e3e7a730d7ad0213dfe09d9bfefc60bb`，已正常推送 `main`。
-正常 pre-push Hook 的 827 项工程测试通过、2 项按既定条件跳过；
+Runtime 最近改动提交为 `ecf6a9a9e3e7a730d7ad0213dfe09d9bfefc60bb`，已正常推送 `main`。
+该提交正常 pre-push Hook 的 827 项工程测试通过、2 项按既定条件跳过；
 [Verify](https://github.com/rrriiicccooo/X5-Crop/actions/runs/34145570146)
 的 12 个 OS/Python 矩阵任务全部通过。工程 CI 不替代最终三目标实机发布 receipt。
+本轮仅修正黄金比较器与对应文档，未改变 Runtime、Gate 或人工 reference；62 项黄金专项测试通过。
 
+- 源截断后的实际确认 polygon 是包含检查对象。人工线确定物理轴与权限，受保护输出边的半平面
+  检查全部确认顶点，且每个受保护侧都必须实际参与。完整自包含与逐侧诊断一致；
+  亚像素内切、缺失受保护侧的斜凸多边形和 `visible_content_limit` 反例均保持失败。
 - Material pair 保留 endpoint 原有像素角色候选；两种解释不增加独立票数或 rank，各自核验直接权限。
   S106 旧的第 2 格约 87 px 纵向内切已消除，仍有独立 Cross 内切待解决。
 - 纯离散歧义的 primary/runner 分别补全局部边界、投影晚期弱线并保留硬反证；不共享 selected W、
@@ -46,7 +50,7 @@
 ## 完整黄金与性能证据
 
 最新完整开发 receipt：
-`/private/tmp/x5crop-cross-domain-calibrated-full-20260908a`。
+`/private/tmp/x5crop-source-clipped-comparator-full-20260908a`。
 110/110 完成、分析错误 0、全部物理校准登记一致：
 
 | 层级 | 结果 |
@@ -61,22 +65,20 @@
 | 全部保留候选不安全 | 72 个任务 |
 | 安全候选且有明确 placement 歧义 | 8 个任务 |
 
-与 `/private/tmp/x5crop-ambiguous-local-full-20260908a` 相比，
-S015 primary 与 S081 两份候选的黄金标签从 unsafe 改善为 safe，其它候选标签、预算状态和决定未变。
-与本轮开始前的旧基线相比，S081 从 auto 转为真实双解 Review，自动覆盖由 18 降至 17；
-不能仅因两份候选现在均被黄金判安全，就跳过 Runtime 选择能力缺口。
+与 `/private/tmp/x5crop-cross-domain-calibrated-full-20260908a` 相比，全部 185 份 footprint、
+黄金标签、数值预算和决定完全一致。逐侧诊断修正五处：S048 runner 第 1 格移除 Cross LOW 误报；
+S052 primary 第 1 格补报 Cross LOW；S081 两份候选第 2 格和 S098 primary 第 10 格移除 END 误报。
+S081 两份候选均安全但仍为真实双解 Review；不能因黄金判安全就跳过 Runtime 选择能力缺口。
 S079 的旧安全候选仍保留为 runner，新 primary 不安全；没有隐藏这项选择退步。
 
-纯支撑 compiler 提取和 calibration 更新前后的全部 185 份 requested/required footprint 完全一致；
-黄金标签、预算通过状态与最终决定也一致。数值校准仍改变其所负责的风险区间。
 40 份安全候选中 32 项预算 passed / 8 failed；145 份不安全候选中 24 passed / 121 failed。
 这说明数值预算不能单独代替黄金安全，也不能据此整体关闭风险检查。
 
-该黄金 receipt 生成于提交前，header 仍记录基座 `7b9c6d5f`，不是干净 release receipt。
-提交后已重新核对 detector/comparator 与 HEAD 匹配，且与该 receipt 的源文件指纹完全一致：
+该黄金 receipt 生成于提交前，header 记录基座 `2f588c84`；detector 与 HEAD 匹配，comparator 为本轮
+工作树状态，不是干净 release receipt。已核对运行时的源文件指纹与当前工作树一致：
 
 - detector：`c95c0112da545c0f568f0635abe8676711d7e1a7b3f4ebf4fb921eb236f830ca`
-- comparator：`51a770d0a580b9a2cdc58f568d48c1393b6c8779495f21a7e7fa7fa040ba22f1`
+- comparator：`096711cbe5bfff1996419c2f646318db1951fce9c34d393952fe55d9e4d9430c`
 - cohort：`c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`
 
 干净 `ecf6a9a9` 的正式 `tools/verify performance` receipt：
@@ -84,7 +86,8 @@ S079 的旧安全候选仍保留为 runner，新 primary 不安全；没有隐�
 5 秒 Gate 通过，3 秒挑战未达成；p95 为 6.540389 秒，最慢 S038 为 6.792203 秒。
 未插桩进程峰值 RSS 最大 1,209,221,120 bytes。
 此结果只证明该提交、当前机器、冻结依赖和本次决定分布，不外推其它平台或未来 release commit。
-黄金分析 development-detail mean 为 4.021726 秒，不代替正式性能结果。
+本轮仅改 comparator，不重复正式性能测试。新黄金分析 development-detail mean 为 3.985933 秒，
+不代替正式性能结果。
 
 ## 开放风险与精确下一步
 
@@ -98,9 +101,15 @@ S079 的旧安全候选仍保留为 runner，新 primary 不安全；没有隐�
    `registered_transition_measurement.measure_trace` 的 window=21、gap=5，使本例可测下界为 26 px。
    `coverage.complete` 不等于 y<26 已有边界存在或不存在的证据，也不据此判定该字段有 bug。
    第 8–12 格 required TOP 为 10.762、12.762、26.762、24.762、27.415 px，仍有图内缺口。
-   先核对测量与源截断合同，再确定最小正反例；不先放宽窗口或拼接碎片。
-2. S106 前 7 格 required TOP=0，黄金投影仍有约 0.4–0.52 px 内切。source y=0 与黄金轴投影不是同一量，
-   必须核查真实人工端点、半平面与 clipping/censor 语义；不能因数值小或源边饱和而豁免失败。
+   同 scale 的低层阶跃反例中，真实分界在 24.5 px 时，peak physical interval 为 `[25.5,50.5]`；
+   查询端截断可能让定位区间漏掉真实分界，尚未证明它会获得完整 Runtime direct authority。
+   先闭合 source/query 端截断 peak 的测量权限，不先放宽窗口或拼接碎片。
+2. S106 前 7 格 required TOP=0，而冻结 polygon TOP=-0.5。人工原始 E1 经 tag 8 正确映射到
+   `(0.033445,-31.449926) → (18266.966555,18.011230)`；不是 Orientation 错误。
+   标注器按像素单元域 `[-0.5,extent-0.5]` 裁剪，Runtime 按像素中心域 `[0,extent-1]` 裁剪。
+   约 0.4–0.52 px 是这半像素差与各 Frame 斜轴、长轴余量共同投影的结果，不是逐格垂直内切距离。
+   本轮已修复另一个独立的未裁剪半平面误报，但没有改变该域差异或黄金坐标；当前仍失败。
+   下一步须统一可用源域与真实采样语义的证明，不能移动人工线或增加容差来豁免。
 3. 继续核查 S069 transition 1330 的上游身份。其完整 union 曾因 28 条中的 1 条超出 0.10 mm 而被
    exact-union 正确拒绝，三条区间已有共同直线无解证书：
    `/private/tmp/x5crop-family-S069-20260908.jsonl`。不以黄金斜率强行合并或放宽容差。
