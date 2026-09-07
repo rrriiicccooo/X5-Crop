@@ -1110,7 +1110,9 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
         )
         fit = replace(fit, adjacency_relations=(relation,))
         phase = replace(phase, best=fit)
-        selected_width = fit.pitch_fit.canonical_frame_width_px + 1.0
+        # Use the declared feasible endpoint, not a BLAS-dependent fitted
+        # value plus one: 100 + roundoff + 1 can leave the exact [99, 101] fit.
+        selected_width = fit.pitch_fit.frame_width_px.maximum
         authority = SourceFrameWidthAuthority(
             authority_id="source-width:test",
             state=EvidenceState.SUPPORTED,
