@@ -438,6 +438,11 @@ Grid 始终可以生成一个待检验的默认 placement，但它不能仅凭�
   权限，不能改变 lineage、ordinal、winner 或 runner。受约束后仍存在另一离散
   ordinal/edge 解释时保留 runner 并产生 `discrete_phase_ambiguous`；连续最小二乘不能充当 best-score。
 
+每次直接或 calibrated Grid 重拟合后，residual compatibility 都按当前 `PHASE_ANCHOR` 的 native coordinate
+相对当前 model role 的绝对残差均值重评，阈值保持 `max(2 px, 1.5% W)`，只吸收既有数值 epsilon。
+不能继承旧几何的合格或不合格标志；`LOCAL_REFINEMENT` 不参与该全局均值，也不按 evidence group 去重。
+Report/feature 的总 residual 仍保留自己的既有口径，不拿包含 local 的总量替代 phase compatibility。
+
 Production phase competition 在离散比较前，对每个去重后的 bounded candidate 对称执行
 `DirectRoleBindingAuthority` 和 `PhaseCandidateAuthorityProjection`。`contradicted` 表示直接物理反证，
 始终终止该解释；`unavailable` 只表示某个被绑定像素线没有 native-coordinate 权限，因此先把这些 binding

@@ -76,6 +76,8 @@ gap, missing authority, inability to reliably choose among legal answers, or an 
 A measured narrow gap need not reach the format's nominal gap lower bound. If measured relations cannot independently
 determine every template parameter, the existing calibrated bounds test the same placement. Missing or conflicting
 calibration keeps the image in Review; authorized direct coordinates remain unchanged.
+Fit compatibility uses the current model and direct anchors, not an earlier residual verdict. Local boundary refinements
+do not alter the global residual calculation.
 A narrow material strip at a film-strip end can lie inside or outside the photo. Existing evidence for both edges is retained;
 the strip alone does not force selection of the inner edge.
 When discrete positions remain ambiguous, each review footprint still obeys its own jointly supported direct coordinates;

@@ -99,6 +99,24 @@ class _BoundFit:
     residual_compatible: bool
 
 
+def _phase_residual_compatible(fit: SequenceFit) -> bool:
+    """Assess this lattice, without counting local corrections as anchors."""
+
+    residuals = tuple(
+        abs(binding.canonical_position_px - canonical)
+        for binding, canonical in zip(
+            fit.role_bindings, fit.model_role_positions_px, strict=True
+        )
+        if binding is not None and binding.use == SequenceBindingUse.PHASE_ANCHOR
+    )
+    if not residuals:
+        return False
+    limit = max(2.0, fit.pitch_fit.canonical_frame_width_px * 0.015)
+    # The physical limit is inclusive.  Absorb only LAPACK-scale numeric
+    # error at the boundary, not an additional geometry tolerance.
+    return sum(residuals) / len(residuals) <= limit + _NUMERIC_RESIDUAL_EPSILON_PX
+
+
 @dataclass(frozen=True)
 class _LocalRoleRefinement:
     fit: SequenceFit
@@ -2006,15 +2024,6 @@ def _fit_seed(
     )
     residual_sum = sum(residuals)
     residual_mean = residual_sum / len(residuals)
-    residual_compatibility_limit = max(2.0, width * 0.015)
-    # The physical contract is inclusive at the residual limit.  LAPACK
-    # implementations can place the same least-squares result a few ulps on
-    # either side of that exact boundary, so absorb only numerically negligible
-    # pixel error here; this is not an additional geometry tolerance.
-    residual_compatible = (
-        residual_mean
-        <= residual_compatibility_limit + _NUMERIC_RESIDUAL_EPSILON_PX
-    )
     # One role's residual belongs to that role.  Smearing the largest residual
     # over every boundary turns one local observation into source-wide
     # uncertainty and can exceed the direct-use budget even when the template
@@ -2149,7 +2158,7 @@ def _fit_seed(
         residual_sum_px=residual_sum,
         phase_support_coverage=phase_support_coverage,
     )
-    return _BoundFit(fit, residual_compatible)
+    return _BoundFit(fit, _phase_residual_compatible(fit))
 
 
 def _interval_hull(
@@ -2332,7 +2341,7 @@ def _fit_calibrated_nominal_grid_candidate(
         ),
         phase_support_coverage=sum(support_by_location.values()),
     )
-    return _BoundFit(fit, candidate.residual_compatible)
+    return _BoundFit(fit, _phase_residual_compatible(fit))
 
 
 def _projected_role_counterevidence_conflicts(

@@ -84,6 +84,7 @@ from x5crop.detection.photo_geometry.template_phase_candidates import (
     _bounded_lattice_least_squares,
     _facts,
     _match_roles,
+    _phase_residual_compatible,
     _refine_local_role_bindings,
     project_candidate_to_authorized_direct_roles,
 )
@@ -1537,6 +1538,84 @@ class TemplatePhaseContractTest(unittest.TestCase):
                         projected.fit.role_bindings,
                         initial.best.role_bindings,
                     )
+
+    def test_grid_refit_rechecks_current_residuals_in_both_directions(self) -> None:
+        spec = template(2)
+        observations = tuple(
+            replace(
+                edge(f"grid-residual:{index}", coordinate),
+                full_position_interval_px=FiniteInterval(
+                    coordinate - 20.0, coordinate + 20.0
+                ),
+            )
+            for index, coordinate in enumerate((10.0, 110.0, 128.0, 228.0))
+        )
+        measurements = (
+            phase_sequence_measurement(
+                "grid-residual", FiniteInterval(0.0, 260.0)
+            ),
+        )
+        initial = fit_template_phase(
+            observations, spec, sequence_measurement_sets=measurements
+        )
+        assert initial.best is not None
+        band = separator(
+            "grid-residual:band", observations[1], observations[2],
+            FiniteInterval(17.8, 18.2),
+        )
+        authority = assess_direct_role_binding_authority(
+            initial.best, observations, (band,), measurements
+        )
+        relations = derive_candidate_separator_relations(
+            initial.best, authority, (band,), FiniteInterval.exact(120.0)
+        )
+        for old_verdict, phase_authority, expected in (
+            (False, None, True),
+            (True, FiniteInterval.exact(25.0), False),
+        ):
+            with self.subTest(old_verdict=old_verdict):
+                projected, receipt = project_candidate_to_authorized_direct_roles(
+                    _BoundFit(initial.best, old_verdict), authority,
+                    _facts(observations), (), spec.roles, spec, relations,
+                    FiniteInterval.exact(120.0), phase_authority, None,
+                    calibrated_nominal_grid_prior(spec),
+                )
+                self.assertEqual(
+                    receipt.outcome,
+                    PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID,
+                )
+                assert projected is not None
+                self.assertEqual(projected.residual_compatible, expected)
+                self.assertEqual(
+                    projected.fit.role_bindings, initial.best.role_bindings
+                )
+
+    def test_phase_residual_compatibility_excludes_local_refinements(self) -> None:
+        base = placement_sequence(template(2))
+        for phase_error, expected in ((0.0, True), (2.0, True), (3.0, False)):
+            for local_error in (0.0, 1000.0):
+                with self.subTest(phase_error=phase_error, local_error=local_error):
+                    bindings = []
+                    for index, (binding, canonical) in enumerate(zip(
+                        base.role_bindings, base.model_role_positions_px, strict=True
+                    )):
+                        position = canonical + (phase_error if index == 0 else local_error)
+                        interval = FiniteInterval.exact(position)
+                        bindings.append(replace(
+                            binding,
+                            use=(
+                                SequenceBindingUse.PHASE_ANCHOR if index == 0
+                                else SequenceBindingUse.LOCAL_REFINEMENT
+                            ),
+                            canonical_position_px=position,
+                            fit_position_interval_px=interval,
+                            full_position_interval_px=interval,
+                        ))
+                    fit = replace(
+                        base, role_bindings=tuple(bindings), phase_support_coverage=1.0
+                    )
+                    self.assertEqual(_phase_residual_compatible(fit), expected)
+                    self.assertEqual(fit.role_bindings, tuple(bindings))
 
     def test_rank_two_projection_requires_a_calibrated_nominal_grid(self) -> None:
         observations = tuple(
