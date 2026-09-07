@@ -19,13 +19,19 @@
 - 此前确认的全部能力完成后，才启动文末“共同 W 与逐 Frame 真实变化审计”。该任务当前只登记，
   不打断现有工作，不提前增加自由度或回退已有正确改动。
 
-## 当前候选特征与开发排序检查点
+## 当前几何与验证检查点
 
-Detector/comparator 源码提交为 `38178c4a`，离线排序提交为 `938d985f`，均已推送 `main`。
-最新正常 Hook 完成 798 项工程测试、2 项按既定条件跳过；远端
-[Verify](https://github.com/rrriiicccooo/X5-Crop/actions/runs/34118890430)
+当前源码为 `89e74346`，端部材料与条件几何修正为 `3601023d`，均已推送 `main`。
+最新正常 Hook 完成 805 项工程测试、2 项按既定条件跳过；远端
+[Verify](https://github.com/rrriiicccooo/X5-Crop/actions/runs/34129207993)
 的 12 个 OS/Python 矩阵任务全部通过。工程 CI 不替代最终三目标实机发布 receipt。
 
+- 端部窄材料带保留内侧边界假设，但不再否定外侧 edge 的独立角色权限；窄带可能位于 aperture 内。
+  真实 separator material 与反序 pair 的反证仍保留，没有扩大 W、bleed 或预算。
+- 纯离散歧义的 primary/runner 分别消费自身 supported direct-role/rank-3 约束；runner 重新核验自身
+  ledger，并去除不匹配 source W 的输入。条件几何不授予选择权限；其它 typed conflict 不能借此收紧。
+- Enclosing aperture-center 校准从当前唯一 selected pair 重算：S005、S007 退出，S012 进入，18→17 个
+  source。登记的 observation-set 指纹已刷新，方法、资格与 `[-0.009H, +0.007H]` 数值均不变。
 - 每条 lane 的已有 best 与单个 runner 经同一 projection/output owner 各物化一次；正式输出复用
   primary。没有扩大搜索、增加像素查询或改变 selection/Gate。投影与实际逐 slot 输出评估次数均有界。
 - Report revision 为 `x5crop_v5_template_report_69`；gold record / summary 为 v20 / v23。每份候选保留
@@ -36,32 +42,38 @@ Detector/comparator 源码提交为 `38178c4a`，离线排序提交为 `938d985f
 - 专项反例覆盖一次投影/预算、工作量与特征篡改、缺失不记 0、锚点去重、同 SHA 同折、source 等权、
   训练集内 transform、多正例、未知不算负例、稳定同分、模型正规方程、预测与聚合不可篡改。
 
-最新完整 receipt 为 `/private/tmp/x5crop-placement-features-full-20260907b`，绑定干净提交
-`38178c4a`；detector/comparator 均匹配 HEAD，全部物理校准登记通过，110/110 完成、分析错误 0。
-`938d985f` 只增加离线工具、测试和文档，检测与黄金比较器 manifest 未变：
+最新完整 receipt 为 `/private/tmp/x5crop-outer-material-full-20260907b`，绑定干净提交
+`89e74346`；detector/comparator 均匹配 HEAD，全部物理校准登记通过，110/110 完成、分析错误 0：
 
 | 层级 | 结果 |
 |---|---|
 | 完整 proposal | 110；36 safe / 74 unsafe |
-| Candidate | 21 safe / 14 unsafe / 75 unavailable |
+| Candidate | 20 safe / 13 unsafe / 77 unavailable |
 | 最终决定 | 16 safe auto / 0 unsafe auto / 94 Review |
 | Nominal | 16 safe auto / 80 Review |
 | Challenge | 14 Review，尚无安全 auto |
-| 保留候选集合 | 185 份；39 safe / 146 unsafe |
+| 保留候选集合 | 189 份；39 safe / 150 unsafe |
 | 每任务至少一份安全 | 37；其中 nominal 33 / challenge 4 |
 | 单份 / 多份安全 | 35 / 2 个任务 |
 | 全部保留候选不安全 | 73 个任务；其中 nominal 63 |
-| 安全候选且有明确 placement 歧义 | 6 个任务 |
+| 安全候选且有明确 placement 歧义 | 7 个任务 |
 
-S028 仅 runner 安全；S078、S081 的 primary 与 runner 均安全。与前一完整候选集合检查点
-`/private/tmp/x5crop-retained-placements-full-20260907b` 逐任务比较，原 proposal/candidate 黄金状态、逐帧诊断、
-phase/placement failure、最终状态与 Review reasons 全部不变。
+与上一轮候选特征基线 `/private/tmp/x5crop-placement-features-full-20260907b` 比较，所有 task 的主 proposal
+黄金 verdict 和最终决定未变。S005 的安全 candidate 变为歧义 unavailable，S007、S070 的 unsafe candidate
+变为 unavailable，S012 从 unavailable 变为 unsafe。不能把这些资格变化冒充黄金准确率改善。
 
-逐候选数值预算对照：39 份黄金安全中 30 passed / 9 failed；146 份不安全中 21 passed / 125 failed。
+S017 首 START 与 S109 末 END 的内切消除；S005 主 proposal 保持安全，runner 仍在第 5 张 START 内切
+约 33 px。S012 第 6 张 START、S019 第 4 张 END 各新增一处内切。全体主 proposal 的逐 Frame/side
+内切数仍为 158，外扩超限数 262→255；整体安全 proposal 和自动覆盖没有增加。
+校准登记更新前后两份完整 receipt 逐任务比较，几何、资格、失败原因和最终决定均不变。
+
+逐候选数值预算对照：39 份黄金安全中 30 passed / 9 failed；150 份不安全中 26 passed / 124 failed。
 它不能单独代替真实黄金安全，也不能据此整体关闭现有风险条件。
 
-首轮离线 artifact 为 `/private/tmp/x5crop-placement-ranking-20260907a/placement_ranking.json`，
-覆盖 106 个 source SHA、110 个 task、185 份候选。固定五折、训练折标准化、source 等权 ridge 的方法见
+首轮离线排序提交为 `938d985f`，artifact 为
+`/private/tmp/x5crop-placement-ranking-20260907a/placement_ranking.json`，仍绑定此前 `38178c4a` 的特征基线，
+不是当前 189 份候选的重训结果。它覆盖 106 个 source SHA、110 个 task、185 份候选。
+固定五折、训练折标准化、source 等权 ridge 的方法见
 架构第 9.2 节，不根据本轮结果调参：
 
 | 开发比较 | 首选安全 | 排序后安全 | 改善 / 退步 |
@@ -73,11 +85,11 @@ S041、S069 错误 runner 均向内切入人工边界，数值预算却通过；
 较小 residual 的错误候选更高分。S028 的安全 runner 在折外没有胜出。上述结果不支持接入选择；
 分数无界、没有 calibration、没有正式 OOD、`admission_enabled=false`，不改变任何 Runtime 结果。
 
-干净提交 `938d985f` 的正式 `tools/verify performance` receipt 为
-`build/v5-performance/performance_receipt.json`：24-source mean **3.743795 秒**，5 秒 Gate 通过；
-3 秒挑战未达成。p95 为 6.541792 秒，最慢 S038 为 6.760584 秒，未插桩进程峰值 RSS 最大
-1,212,956,672 bytes。该计时只证明当前机器、依赖和当前决定分布。
-黄金分析的 development-detail mean 为 3.937861 秒，不能替代该正式性能结果。
+干净提交 `89e74346` 的正式 `tools/verify performance` receipt 为
+`build/v5-performance/performance_receipt.json`：24-source mean **3.963855 秒**，5 秒 Gate 通过；
+3 秒挑战未达成。p95 为 6.809904 秒，最慢 S038 为 7.088964 秒，未插桩进程峰值 RSS 最大
+1,212,563,456 bytes。该计时只证明当前机器、依赖和当前决定分布。
+黄金分析的 development-detail mean 为 4.220328 秒，不能替代该正式性能结果。
 
 ## 验证边界与开放风险
 
@@ -90,6 +102,8 @@ S041、S069 错误 runner 均向内切入人工边界，数值预算却通过；
   独立概率权限的 calibration/sealed 前提与首版确定性能力验收分开。
 - Source truncation、片夹遮挡、部分 Cross 覆盖与连续内容反证仍有能力缺口。不能用更窄 uncertainty、
   更宽校准、丢弃 residual 或删除真实反证来换覆盖。
+- S017 的 Cross 端部方向外推仍超预算。逐端点收紧内部 polygon 不是已证明的修复：最终使用唯一
+  source-wide deskew 后的矩形 AABB，仍须包住另一端极值；不能把内部轮廓缩小冒充真实裁切收益。
 - 首轮可用性排序没有改善现有选择；集合只有 33 个 nominal 至少有一份安全候选，单靠选择无法完成目标。
   集合范围只含当前 best/单 runner，不能把其余 63 个 nominal 外推成所有潜在裁切均不安全。
   这 63 项的 primary 首个黄金失败为 47 项向内切入、16 项向外超预算，属于诊断分组而非已证明根因。
@@ -97,13 +111,24 @@ S041、S069 错误 runner 均向内切入人工边界，数值预算却通过；
 
 ## 精确下一步
 
-1. 从 S028、S041、S069 的已有同次事实核查 Cross 方向/位置、支持、residual 和预算的物理职责：
+1. 先以 S012、S019 的新内切回归核对局部 separator 生成与候选保留：
+
+   - S012 正确 START105 仍注册，但最终候选的投影输入已无该 role；source-W 后走廊排除它，改由 END138
+     推断 START。S019 的内侧 END128 在 W 建立前已为 phase anchor，正确 END129→START130 的完整
+     separator 仍注册。两者都不是 W 直接替换已绑定边。
+   - `template_phase_candidates.py::_refine_local_role_bindings` 的原子 pair 要求 component supported 且
+     实测 gap 与 nominal gap 双侧相交。两例实测 gap 均低于 nominal 下界；S012 另有既有 partial-height
+     一次传权与原子补边资格是否一致的问题。用通用最小正反例核对是否遗漏既有合法权限，不扩大 W。
+   - S019 的 adjacency ledger 只查询当前精确 pair，未消费同 corridor 的完整另一 pair；核查应否保留
+     离散竞争，不直接替换已有 anchor。现 report 不含早期全部 candidate 淘汰记录，最早退出点尚未证明。
+
+2. 从 S028、S041、S069 的已有同次事实核查 Cross 方向/位置、支持、residual 和预算的物理职责：
    区分真实硬合法性、内切内容风险与过度保守的代理，补足可核验的 hard-legality/risk assessment。
    不以临时分差阈值、样片特例、盲目调参或关闭 Gate 消除失败；新特征仍必须来自现有 typed facts，
    不增加像素查询、候选笛卡尔积或平行 detector。开发评估与独立概率校准保持分开。
-2. 同时沿 63 个 nominal 的已有候选全部不安全分组，优先追查方向性向内切入的几何生成根因，
+3. 沿 63 个 nominal 的已有候选全部不安全分组，优先追查方向性向内切入的几何生成根因，
    用最小正反例和正式 CLI 样片检查推进已有能力；不提前启动逐 Frame W 变化审计。
-3. 用明确的可用候选缺口和几何根因继续完成 nominal/challenge 能力；最终在同一 release commit 完成
+4. 用明确的可用候选缺口和几何根因继续完成 nominal/challenge 能力；最终在同一 release commit 完成
    全部黄金、正式性能和工程/平台验收。只有此前能力完成后，才执行下列延后审计。
 
 ## 延后任务：共同 W 与逐 Frame 真实变化审计
