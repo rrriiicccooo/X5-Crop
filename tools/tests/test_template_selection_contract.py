@@ -476,6 +476,15 @@ class TemplateSelectionContractTest(unittest.TestCase):
             phase.template,
             one_sided=True,
         )
+        # Isolate the inferred opposite side, not an independently unsupported
+        # direct anchor: all three registered trace regions support this top.
+        inferred_cross_fit = replace(
+            inferred_cross_fit,
+            direct_bindings=tuple(replace(
+                item, independent_support_region_count=3,
+                source_spanning_continuous=True, role_authorized=True,
+            ) for item in inferred_cross_fit.direct_bindings),
+        )
         inferred_cross = replace(cross, best=inferred_cross_fit)
         placement = _compose(
             phase.template,
