@@ -198,9 +198,6 @@ _SOURCE_FRAME_WIDTH_AUTHORITY_FIELDS = {
 _SOURCE_FRAME_WIDTH_FAILURE_KINDS = {
     "placement_hypothesis_unavailable",
     "direct_role_authority_unavailable",
-    "direct_role_authority_contradicted",
-    "global_lattice_rank_insufficient",
-    "adjacency_coverage_incomplete",
     "source_width_closure_unavailable",
     "physical_width_conflict",
 }
@@ -1572,7 +1569,7 @@ def _validate_frame_width_inference(value: object) -> None:
         or authority_basis is not None
         or value["failure_kind"]
         not in {
-            "complete_frame_unobserved",
+            "source_width_placement_conflict",
             "common_width_authority_unavailable",
             "direct_lattice_counterevidence",
         }
@@ -1627,7 +1624,11 @@ def _validate_source_frame_width_authority(value: object) -> None:
     if supported:
         if (
             value["placement_scope"]
-            not in {"resolved_placement", "retained_ambiguous_proposal"}
+            not in {
+                "resolved_placement",
+                "retained_ambiguous_proposal",
+                "retained_unresolved_proposal",
+            }
             or not isinstance(value["placement_integer_slot_offset"], int)
             or not phase_anchor_ids
             or not any(phase_anchor_ids)

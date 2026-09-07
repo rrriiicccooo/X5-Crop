@@ -1,223 +1,100 @@
 # 项目记忆
 
-更新：2026-09-03。现场 `main`、tracked cohort、原 TIFF、source SHA、current report 与最新命令输出
-高于历史记录。长期合同见 [ARCHITECTURE.md](ARCHITECTURE.md)，标注规则见
-[MANUAL_ANNOTATION.md](MANUAL_ANNOTATION.md)，协作与验证规则见 [AGENTS.md](../AGENTS.md)。
+更新：2026-09-07。现场 Git、原 TIFF、source SHA、current report 与最新验证高于本文件。
+长期合同见 [ARCHITECTURE.md](ARCHITECTURE.md)，人工权限见
+[MANUAL_ANNOTATION.md](MANUAL_ANNOTATION.md)，协作规则见 [AGENTS.md](../AGENTS.md)。
 
-## 当前目标
+## 当前目标与执行顺序
 
-优先让当前 96 个 development nominal 全部安全 `approved_auto`。Release commit 必须让 110 个
-development task 的 `unsafe_approved_auto = 0`；中间开发允许黄金集暴露危险 auto，但必须逐项保存样片、
-错误边界与根因，并明确不能发布或正式交付。Challenge 不预设终态：安全 auto 是能力发现，安全 review
-同样合格。不得改样片角色、隐藏 runner、放宽黄金合同或用更大 bleed 换覆盖。
+- 当前 96 个 development nominal 全部正确 `approved_auto`，全部角色 `unsafe_approved_auto = 0`；
+  challenge 尽量安全自动通过，证据不足时安全 Review 不掩盖能力缺口。中间开发可暴露危险 auto，但必须
+  保存具体边界与根因，并明确不可发布；release commit 才是硬性归零验收。
+- 保持 current-only、唯一 canonical owner、无旧兼容、无样片特例，不放宽 format/count authority、
+  人工黄金、真实反证或逐侧预算，不通过事后修框、合并候选外包框或扩大 bleed 获得批准。
+- 正式 24-source 完整用户路径平均耗时 `<= 5s`，持续争取 `<= 3s`；工程、黄金、正式性能、
+  TIFF/metadata、安装、三目标平台、打包和 Hook/CI 分别验证，全部发布证据绑定同一 release commit。
+- 先闭合当前 source-W 测量/消费检查点；随后按架构第 9.2 节开展已有有界候选的黄金可用性集合分析、
+  typed features、开发排序与风险代理评估。不要求全部 nominal 先通过才开发评分；排序不是概率，
+  开发标签不反写 Runtime Gate，正式概率自动权限另需独立校准与准入证据。
+- 此前确认的全部能力完成后，才启动文末“共同 W 与逐 Frame 真实变化审计”。该任务当前只登记，
+  不打断现有工作，不提前增加自由度或回退已有正确改动。
 
-开发顺序固定为：所有合法、受支持 task 先生成完整 proposal 并接受黄金比较；优先修复 unsafe proposal
-的通用几何根因；再处理 safe proposal 被 eligibility 错误阻断的问题；最后让全部 nominal 安全 auto。
-Runtime Gate 始终正常运行，不为开发诊断而人为放行 proposal。
+## 当前 source-W 检查点
 
-V5 是 v4.2.8 已有效检测能力在 current-only 物理与安全架构中的重建和增强，不是另一个从零设计的
-裁切器。删除旧机制前必须先确认它为何在真实像素上有效，把有效部分迁入唯一 observation、anchor、
-local correction、risk feature、veto、protection 或 selection owner；不保留旧源码结构、兼容层、平行
-runtime、无条件 fallback 或无法解释的 post-selection mutation。
+当前 tracked 基线为 `98d25e64`；本轮修改尚在验证，不能作为 release receipt。
 
-发布验收分为两层：
+- 合格局部完整 Frame 测量不再依赖远处 coverage、全局 phase/rank 或 proposal 已获资格。全部直接
+  rank-3 约束仍参与同一 W 投影；两组合法测量只取交集，测量与 placement 消费分别保留。
+- Retained ambiguous/unresolved proposal 可以消费 W，但原失败、runner 与 candidate/auto 权限不变。
+  完整未观察 Frame 继续归 Grid；它不阻止其它单边 Frame 的相关 W 推导。
+- 原联合 canonical W 仍可行时保留它；必须改变时同步更新派生 gap、local delta 与角色区间，native
+  binding 不变。弱局部角色成为 validation-only 时，旧 model/full hull 同时退出联合约束，且只重建
+  该角色的 Grid 边际，不改其它已投影区间。
+- 数值预算评估、CandidateGate 预算阻断与黄金安全结果分开报告；空评估不是通过。Report revision
+  为 `x5crop_v5_template_report_67`，gold record / summary 为 v18 / v21，无旧 schema 兼容。
+- 67 项 source-W、联合几何与 gold-analysis 专项测试通过。最小弱边界反例先失败后修正：
+  退出角色恢复为完整 Grid 区间，远处完全未观察 Frame 的联合范围不再被无权旧线压成单点。
 
-- 检测能力：development nominal 全部安全自动通过，全部角色危险自动批准为 0；未来建立 sealed cohort
-  后，其 nominal 适用同一标准。
-- 工程能力：正式 24-source mean `<= 5s`，并通过 TIFF/metadata、安装、Apple Silicon macOS、Intel
-  macOS、Windows x64、打包与 Hook/CI 验证。3 秒 mean 仍是非阻断优化目标。
+最新已完成的完整 receipt 是弱角色区间修正后的
+`/private/tmp/x5crop-source-w-full-20260907i`，110/110 完成、分析错误 0：
 
-当前没有 sealed cohort，黄金也未覆盖 `xpan`、`120-645`、`135-dual`。这些事实不阻断首版发布，但必须
-披露为“尚无未见/真实样片覆盖”，不能宣称已经验证，也不能据此建立 format 禁用、白名单或宽松规则。
+| 层级 | 结果 |
+|---|---|
+| 完整 proposal | 110；36 safe / 74 unsafe |
+| Candidate | 21 safe / 14 unsafe / 75 unavailable |
+| 最终决定 | 16 safe auto / 0 unsafe auto / 94 Review |
+| Nominal | 16 safe auto / 80 Review |
+| Challenge | 14 Review，尚无安全 auto |
+| Source W | 83 supported / 24 unavailable / 3 contradicted |
+| 单边 W 推导 | 55 supported / 18 unavailable / 37 not applicable |
 
-## 当前检查点
+与同源干净基线 `/private/tmp/x5crop-source-w-baseline-20260904` 相比，S041、S050、S098 的 proposal
+从 unsafe 变为 safe，无 safe→unsafe proposal 回归；S047 的 unsafe candidate 被 W 反证撤回，最终决定未变。
+该 receipt 的 development-detail mean 为 4.374 秒，仅作开发归因，不是正式性能资格。
 
-- Runtime 已严格分开完整 pre-Gate proposal、candidate eligibility 与 `approved_auto | needs_review`。
-  `TemplatePlacementProposal` / `TemplateSourceProposal` 是 proposal 的唯一 owner；资格不足不再删除已经形成的
-  方案，正式 TIFF 仍只来自 approved output。Development gold 分别比较 proposal、candidate 与正式 auto；
-  `--gate report` 保留危险 auto 诊断，`--gate release` 与 `tools/verify accuracy` 才执行发布检测门槛。
-- 有 absolute anchor 且已形成全部 role 坐标的 direct 或 calibrated-Grid phase 不再因权限不足被当作
-  “无几何”。`PhaseRetainedProposalBasis` 同时表达 pre-local counterevidence 与 residual counterevidence；
-  后者在全部 bounded fit 都超过直接残差合同时保留一份诊断 proposal 和一个离散 runner。原 typed failure、
-  unresolved 状态与 winner 权限保持不变。Cross 可用时可组合完整 source proposal，Cross 不可用时只显示
-  轴级事实；两种情况都不取得 candidate 或 auto 权限。
-- 普通 Cross competition 没有取得 authority 时，`CrossRetainedProposalBasis` 仍可保留 Review-only 几何。
-  多个合法 direct pair 先由物理最外侧 TOP 锚定，再按校准 H、方向相容性和稳定 identity 保留 proposal 与
-  runner；两侧保持 native coordinate。没有 pair 时，才从 role-authorized 最外侧单边或覆盖至少三个独立
-  高度区域的有界 direct-role hypothesis 结合校准 H 补 opposite。原 `UNRESOLVED`、typed failure、runner
-  与工作量上限不变；任何路径都不增加 candidate、rank、查询、score 或正式输出权限。
-  `CrossLineProjectionBasis` 让 resolved/eligible fit 继续使用完整物理方向包络，而 retained unresolved best
-  只用自身统计拟合方向形成可比较的 Review proposal；完整物理区间仍留在 evidence/report，不能借此取得
-  candidate 或 auto 权限。`CrossHeightProjectionBasis` 同样让 resolved/eligible 与 retained direct pair
-  使用完整 H interval；retained single-side best 只用 canonical H 画具体 Review proposal，完整 H 风险仍
-  独立保留并阻断 eligibility。
-- Grid 是唯一 placement 主生成模型；format 提供黄金集校准且有界的 `W/H/pitch`，至少一个 absolute
-  anchor 将它放入 TIFF。Direct rank 3 是更强的完全直接闭合路径，不是唯一许可；逐 adjacency coverage
-  完整且无反证时，Grid 可以生成两侧都未直接观察的 Frame。直接 observation 保留 native coordinate
-  并形成 local relation；完整相关包络仍由 containment、content veto 与每侧 5% 预算决定 auto/review。
-  已 resolved 的 `GlobalLatticeAuthority` 约束由 `template_feasible_geometry.py` 在同一低维联合可行集合中
-  消费，不能再把 phase、W、pitch 与 local delta 的独立边际极值拼成无法同时发生的状态；unresolved
-  competition 与 rank 0–2 仍保留完整 model-interval proposal，不因诊断 authority 丢失方案。
-- 显式 count 小于 lane 片夹容量时，role-free long material hull 不能确定照片组占用哪一个连续 slot 子集。
-  `coarse_strip_support.py` 因此以 `holder_slot_subset_conservative` 保留完整 lane 搜索权限，同时保存 direct
-  hull 与 observation identity 供诊断；它不居中、不选择 subset、不创建 phase/rank，也不增加 query。
-  Full-capacity sequence 仍使用 pixel-localized hull。S107/S112 已由此从无 proposal 变为完整 Review
-  proposal，后续 eligibility 与正式决定未改变。
-- `SourceFrameWidthAuthority` 是 source W 的唯一 owner，并用 `placement_scope` 区分
-  `resolved_placement | retained_ambiguous_proposal`。Ambiguous scope 只收紧保留的 best proposal、补其已有
-  缺失 opposite，原 phase failure 与 runner 不变，也不取得 candidate/auto 权限；额外 native pair/单边
-  local rebind 仍只允许 resolved placement。`independent_complete_frames` 消费至少两张完整直接 Frame，
-  `direct_lattice_closure` 消费全部 retained direct-role coordinate 已达到 rank 3 的系统，并对同一系统投影
-  相关 W；
-  两组同时可用时，`reconciled_direct_constraints` 只发布二者交集。交集为空产生
-  `physical_width_conflict`，不得挑选有利的一组；reconciliation 保留全部 Frame/constraint/observation
-  provenance，但不回写 Frame-width observation、不增加 rank、不参与离散选择。Direct-rank 不能任取
-  三行：恰好三条约束时精确投影；过定系统以全部 direct coordinate 的 direct-only fit 传播每条 native
-  interval 与实际 residual。`GlobalLatticeAuthority` 只拥有约束矩阵与 rank，canonical W 只由
-  `SourceFrameWidthAuthority` 发布。比例层显式消费同一
-  authority，W→H 仍为 rank 0 相关推断。若建立 W 时投影退出的 local line 仍构成反证，缺失角色保持
-  `direct_lattice_counterevidence` review，不能删除反证后自证。
-- `SourceFrameWidthTopologyAssessment` 独立回答“已获权限的 correlated-W inference 是否在全部 W 状态下
-  保持既有普通 adjacency”。它只检查最终确实由 W 拥有的角色；跨零或全负 signed-gap interval 分别保存
-  `normal_adjacency_unresolved | normal_adjacency_contradicted`，并映射为
-  `adjacency_topology_unresolved`。W inference 未获权限时显示 `NOT USED`，不抢占
-  `complete_frame_unobserved` 或 counterevidence；direct Separator/Contact/Overlap 继续由各自关系 owner
-  优先。该检查不挑有利 W、不新增查询、候选、rank 或 score，工作量为 `O(count)`。
-- 唯一直接 END → separator material → START 始终保存 direct gap；gap 异常或需要约束未观察 suffix role
-  时形成 measured `SeparatorRelation`。它保存直接 signed-gap interval 与两侧 observation identity；共享 W/pitch 变化时按
-  `delta = signed_gap - (pitch - W)` 重算相关 local advance，不能把 native endpoint 拉回默认 Grid。
-  只有完整测量、无反证但没有直接 separator 的 adjacency 才使用 unobserved nominal `local_delta = 0`。
-- `SeparatorSupportComponent` 是 separator band 相关 identity 与 material role authority 的唯一事实。
-  共享 physical edge 的全部合格 band 只形成一个 evidence group；唯一、无拓扑分叉的 source-wide pair
-  原子授予 `END/START`，多个 source-wide pair 或 endpoint 的相反角色 fork 分别 typed contradicted。
-  Partial-height alternative 只保留 provenance 与既有的一次相关权限传递，不能投票覆盖 source-wide pair
-  或增加 rank；孤立 endpoint hint 也不能推翻完整 material。S082 Frame 2 START 已从错误 edge 115 回到
-  真实 edge 111，剩余 Review 根因独立属于短轴。
-- Direct separator refit 保留原 phase anchor；新追加 endpoint 只能作为 `LOCAL_REFINEMENT`。重拟合前的
-  全局 phase binding 与 Contact/Overlap 必要角色组成 `phase_anchor_authority_ceiling`；新增 endpoint 不能创造 phase authority、
-  constraint rank 或无关 role binding。越过 ceiling 或改变 template、ordinal、relation evidence、role
-  mapping 时 typed review。
-- `AdjacencyRelation` 统一表达 Separator、Contact 与 Overlap，并只作一次 O(count) prefix。已证明的异常
-  topology 只保护前一 Frame END 与后一 Frame START，基础 bleed、uncertainty、residual 与 topology
-  protection 共用原有每侧 5% 预算；输出 polygon 不被事后修补。
-- Coarse short-axis sharp/broad material 共用一次 registered measurement。唯一、跨高度一致且满足固定 H
-  的 enclosing pair 可以取得权限；多解或不相容保持 typed review，不按 score 选解。
-- Enclosing support 的 shared slope 只由 `JointFrameState` 传播一次；local residual 比较实测 trace 与同一
-  状态直线，域外只传播 observed direction 相对该 slope 的差。绝对斜率不能在联合 footprint 与 residual
-  中重复计数；现有 `BoundaryProtectionFact`、预算 Gate 与 Debug 是唯一 owner 和可见表达。
-- Separator pair 的 canonical identity 是有序 `END → material → START`。Selected-only refinement 若较晚
-  补出精确反序绑定，当前 candidate 以 typed contradiction 淘汰；只有已保留且权限合格的 runner 可晋升，
-  非法 role/edge 不得重新绑定。仍获权限的 local refinement 保持原离散 identity。该过程最多评估两个
-  selected fit，不增加查询、候选或 score。
-- Enclosing support 本身只证明 aperture 位于两条 support 之间。Selected unique pair 之后，唯一
-  `EnclosingSupportApertureAuthority` 用 20 个黄金 source 的直接 top/bottom 校准剩余中心偏移；同源中位数、
-  source hull 与 `0.001H` 向外量化得到 `[-0.009H, +0.007H]`。它是 rank 0 相关推断，不选择 geometry、
-  不把 support 变成 direct aperture，也不修改 output polygon。Calibration 不可用时继续评估完整物理
-  中心区间；与直接 containment 无交集时 typed Review。`EnclosingSupportApertureRisk` 仍按同一联合状态
-  消费原有 5% 预算。
-- Selected lattice 在 local relation/source-W 阶段追加 late binding 后，由同一 projection owner 重新核对。
-  校准 Grid 与 direct-rank 使用同一 bounded projection；无坐标权限弱线只有在完整区间与对应 role 包络
-  相交时才降为 validation provenance，不相交分别产生 `calibrated_nominal_grid_conflict` 或
-  `direct_lattice_conflict`。Direct-rank 路径先让独立 source W 尝试闭合 opposite，再投影仍无权限的晚期
-  弱线；Contact/Overlap 必需 binding 不得退出。仍有权限的 local native binding 继续拥有自己的 role。
-- Partial-height separator role 只有在 `DirectRoleApertureDomainAuthority` 证明全部登记 trace span 位于
-  同一个两侧 direct aperture，或两侧 enclosing support 经 fixed H 闭合出的 aperture 内时，才保留 native
-  coordinate。单侧/无唯一域为 unavailable，域坍缩或 trace 越域为 conflict；该证明不新增像素读取、候选
-  或 rank，content veto 与 5% 预算继续独立生效。
-- 单侧短轴 H 现在有两种明确且互斥的 inference basis。Source W 与 format ratio 已闭合时使用
-  `aperture_aspect_ratio`；否则，唯一 source-spanning 或完整 selected-domain direct anchor 使用
-  `SourceScanGeometry.height_state` 已拥有的有界 `calibrated_format_height`。Ratio 反证只允许保留 proposal，
-  不允许成为 candidate；弱 anchor、多解或方向不足仍保持 typed unresolved，其中方向有界且角色已登记的
-  弱 anchor 可以保留明确标注的 Review proposal。两条 H 路径都不增加 direct rank、不覆盖两侧 native
-  boundary，并继续受完整不确定性、containment 与每侧 5% 预算约束。
-- Cross registered-run 上限按物理角色独立拥有：TOP 与 BOTTOM 各自最多 512 条，一侧不能占用另一侧
-  配额；任一侧超界仍 typed Review。Report/Debug 同时显示两侧实际计数和每角色上限，canonical fitted
-  observation 与 pair 上限保持独立。S002 的 TOP 393 / BOTTOM 185 因而不再被两侧合计 578 假性终止。
-- `CrossLongitudinalProjectionAuthority` 现由 `template_cross_longitudinal.py` 独占：局部 Cross fit 只有在
-  source-spanning、逐 selected domain 完整覆盖，或至少由 3 个独立 domain 同时括住 template 首尾时，
-  才能投影到全部 Frame。单侧 H 推导仍须逐 domain 完整覆盖；只有两个共享 domain、再由 TOP/BOTTOM
-  各自补不同尾部的 pair 不能自证完整 extent。失败保留 Review proposal，并分别记录 domain 缺失、独立
-  支持不足、extent 未括住或单侧覆盖不足，不新增 TIFF query、candidate 或 score。
-- `OuterMaterialBoundaryObservation` 现在只解析 source 长轴端部唯一、窄于模板校准 gap 上界的同角色
-  START/START 或 END/END material pair。它让内侧 aperture boundary 只拥有首张 START / 末张 END，外侧
-  edge 成为 counterevidence；两区域事实只允许从 intrinsic exterior authority 传递一次，内部、过宽、
-  多解或没有基础 exterior ledger 的 pair 不取得权限。Topology 仍消费投影前 edge，不受该事实扩张。
-- 当前 Report revision 为 `x5crop_v5_template_report_66`；普通报告与 Debug 显式分开 proposal、eligibility、
-  selected output 和决定，并继续保存 calibration identity、anchor、inferred adjacency、完全未观察 Frame、
-  联合参数依据、measured relation、projection outcome、typed failure、cross-H/source-W/frame-inference basis、全部
-  retained W constraint/observation、placement scope、W topology facts、Cross line/height/longitudinal projection、
-  partial-height aperture domain、separator component resolution、joint-envelope constraint basis/identity 与工作量。
-  完整路径最多 6 次 fit pass，不增加 TIFF query、第二 detector 或旧 schema 兼容层。Development gold record / summary
-  为 v17 / v20；未达发布门槛时机器可读状态固定为 `development_only_not_release_ready`，终端同时明确警告
-  不可发布、不可正式交付及已知危险 auto 数量。
-- Enclosing-support aperture-center v2 calibration 使用 20 个当前仍具唯一 selected support pair、且黄金
-  top/bottom 均为 `directly_visible` 的 source，并同时绑定 cohort、eligibility 与精确 observation-set SHA。
-  S109 在 canonical W 扩大后成为 cross 多解，不再冒充 calibration observation；本阶段因 Cross 纵向权限
-  重算后，合格 observation 由 S028 迁移为 S025，source 数量与 `[-0.009H, +0.007H]` 区间不变，精确 digest
-  已重编译。Release analysis 会阻断 source manifest 不等于 HEAD，以及成员、观测值、数量或登记数值漂移。
+## 验证边界与开放风险
 
-完整 development gold diagnostic 已完成 110/110，分析错误 0。现有主模型为全部 110 个 task 生成完整
-proposal，分布为 33 safe / 77 unsafe。Eligibility 层形成 21 safe / 15 unsafe / 74 unavailable candidate；
-其中 12 个安全 proposal 与 62 个不安全 proposal 被保留为 Review。Runtime stage 为 16 approved auto、
-20 eligible candidate Review、74 proposal-generated / eligibility-withheld；最终是 16 个安全 auto、
-危险 auto 0 与 94 个 Review。
-
-窄端部材料带使 S005 的 proposal 与 candidate 从 unsafe 修正为 safe，仍由既有 Gate 保持 Review；这是
-本阶段唯一 proposal 几何变化，没有 safe→unsafe 回归。S007 的 unsafe proposal 未变，但取得首端权限后
-形成 unsafe candidate，并由 `direct_use_budget_exceeded` 正常拦截。S012、S054 的 unsafe proposal 未变，
-原 unsafe candidate 分别被更明确的 material/topology 反证撤回。当前危险 auto 为 0 只是本次开发观测，
-不是中间机制必须满足的前置条件；release detection gate 仍因 80 个 nominal Review 未达标。
-Development-detail mean 为 3.982 秒，只作开发归因，不是正式性能 receipt；
-最近一次 clean-checkpoint 24-source 正式性能 mean 为 3.536 秒，通过 5 秒 Gate，3 秒目标仍为
-非阻断 challenge，该旧性能 receipt 不替代未来 release commit 的复验。
-
-黄金 line/polygon 的原 TIFF 坐标现在由唯一 comparator owner 使用冻结的 `raw_to_canonical` affine 恰好
-映射一次，再与 canonical Runtime footprint 比较；Orientation 3/8 不再混用坐标空间。源截断 Frame 的
-非四边形 polygon 使用真实人工 boundary line 半平面逐侧判断，避免把 TIFF 裁切交点误认成物理边界。
-
-Source W 为 61 supported / 45 unavailable / 4 contradicted；48 个属于 resolved placement，13 个属于
-retained ambiguous proposal；其中 20 个由完整 Frame、14 个由 direct lattice、27 个由两组 direct constraint
-reconciliation 闭合。Frame-width inference 为 28 supported / 45 unavailable / 37 not applicable；唯一
-`direct_lattice_counterevidence` 是 S077。Late-binding projection 共评估 17 次、投影 22 个无权限 binding；
-selected nominal Grid solve 为 14/14 成功。
-
-对 96 个 nominal 的同源 v4.2.8/V5 对照中，发布版 80 个 auto 里有 70 个黄金危险自动裁切；发布版仅
-11 个 geometry 安全。当前 V5 已让 S022、S038 安全 auto；S025 形成安全 candidate 后 Review，S033 形成
-安全 proposal 后仍被 eligibility 保留。S028 当前有 Cross 多解；S004/S007/S010/S011/S026/S032 仍暴露
-aspect、adjacency、Grid 或 phase 的真实下游缺口。
-
-## 证据边界与开放风险
-
-- 106-source/110-task development gold 用于发现机制、调试和 incident regression，不估计未来生产错误率。
-  独立 calibration/sealed 是未来概率选择与未见来源声明的前提，但不再是首版发布前置条件。
-- 当前 110 个 task 均有完整 proposal，其中 74 个 eligibility withheld。后者包含 12 个黄金安全 proposal
-  （S002/S014/S029/S033/S048/S069/S078/S079/S083/S085/S088/S094）和 62 个不安全 proposal；
-  安全并不自动证明当前阻断多余，不安全也不能因 Review 而隐藏，必须分别追到通用权限或几何根因。
-- 当前 96 个 nominal 有 16 个安全 auto 与 80 个 Review。跨全部 task 的主要 phase failure 为
-  `discrete_phase_ambiguous` 13、`fixed_template_mismatch` 9、`calibrated_nominal_grid_conflict` 9、
-  `adjacency_topology_unresolved` 4、`source_frame_width_conflict` 4，以及少量 anchor、coverage、material
-  与 role authority failure。另有 54 个 task 已通过 phase；S012、S030 与 S058 仍说明 phase 通过不等于
-  Cross/output 风险已闭合。
-- 完全不可见 Frame 已可由校准 Grid 生成，但这不是像素事实，也不直接授权 auto。候选仍须通过完整
-  containment、content veto 与最坏预算；后续应改善 anchor、local correction 与直接 evidence，而非收窄
-  传播不确定性。概率 scorer 当前不进入 Runtime。
-- 内容是否连续穿过理论间隔的 continuity 仍不完整；source truncation 与片夹遮挡也缺少统一
-  clipped-boundary geometry。宽缓单根长轴 material 仍可能是构图线，不能单独创造 phase。
-- 20 个 selected unique enclosing-support source 的 aperture-center calibration 已闭合并由精确 observation
-  set digest 复算一致。
-  S030/S058 仍因真实逐侧 residual/完整预算 Review；S012 的 unsafe proposal 仍会切入黄金边界，但
-  candidate 已被 `separator_material_conflict` 淘汰。后续应提高 shared top/bottom 与长轴边界的观察、拟合
-  和反证表达，不能扩大 center calibration、删除 residual 或用 bleed 掩盖缺口。
+- 当前仍为 `development_only_not_release_ready`；80 个 nominal Review 与 74 个不安全 proposal 表明
+  检测目标未完成。黄金安全不自动证明当前阻断多余，Review 也不允许隐藏不安全候选。
+- 弱角色区间修正未改变完整黄金的几何安全、phase failure 或终态分布；最小反例验证了真实区间缺陷。
+- Enclosing-support aperture-center 校准登记已按完整结果更新为 18 个合格 source/task 和精确 digest
+  `2aee837e8bc5b552cd1d3ac22690ba718ef3a0e00b13fcfbff743d97005c63ab`。干净基线复算已是 19，source-W
+  变化再使 S047 失去资格；推导区间仍为 `[-0.009H,+0.007H]`，没有改变数值范围。上述 receipt 早于
+  此登记更新；已用唯一 calibration owner 对完整 records 复算通过，但尚需当前身份的端到端复验。
+- 当前 development gold 已用于机制发现，不估计未来生产错误率。当前没有 sealed cohort，且黄金未覆盖
+  `xpan`、`120-645`、`135-dual`；如实披露，不冒充已验证或据此建立格式禁用规则。
+  独立概率权限的 calibration/sealed 前提与首版确定性能力验收分开。
+- Source truncation、片夹遮挡、部分 Cross 覆盖与连续内容反证仍有能力缺口。不能用更窄 uncertainty、
+  更宽校准、丢弃 residual 或删除真实反证来换覆盖。
+- 可用性排序开发尚未实现。标签必须独立评价每份最终 footprint，允许同 source 多个正例；
+  先区分“至少一份可用”“多份可用”“可用但被歧义拒绝”“全部不可用”，再判断生成或选择的改进空间。
+  Margin 不是永久 veto，近似框也不能相互合并或假定等价。
 
 ## 精确下一步
 
-1. 在 110 个已生成 proposal 上继续修 77 个黄金不安全几何的通用 detector、anchor、local relation、cross
-   或 output 根因；当前 52 个含 inward failure，长轴 END/START 分别涉及 26/16 个 source，优先按共享机制
-   聚类真实 native boundary、Grid/local correction 与空 slot 传播，不能逐样片调参。黄金只作离线比较，
-   不能进入 Runtime。
-2. Proposal 几何稳定后，再审计 12 个安全但 eligibility withheld 的方案，
-   只移除真正放错层级或重复的阻断，保留真实 counterevidence。S068 与其它 calibrated-H / source-truncated
-   样片仍回到各自 canonical owner，不能通过收窄校准区间掩盖。
-3. Proposal 几何稳定后再收紧 eligibility 与 DecisionGate，使 96 个 nominal 全部安全 auto；开发期间任何
-   危险 auto 都完整列出并继续修复，release commit 才硬性归零。每次只闭合一个通用机制，不恢复旧终判、
-   放宽预算或建立兼容路径；真实 incident 经人工确认后永久进入回归集。
+1. 在干净提交上取得包含新 calibration identity 的完整黄金复验，核对几何和终态保持、分析错误为零，
+   以及全部物理校准登记一致。
+2. 验收本轮 source-W、预算报告及相关文档，按正常 Hook 提交并推送 `main`；只作开发检查点，
+   不创建发布物，不用 development duration 替代正式性能。
+3. 进入架构第 9.2 节的候选集合可用性分析。复用 `template_selection.py` 的有界竞争、
+   `gold_geometry.py` 的标签 owner 与 `gold_analysis.py` 的集合统计；不建立第二 detector 或黄金池，
+   不为评分增加像素查询、候选笛卡尔积或无界搜索。
+4. 用明确的可用候选缺口和几何根因继续完成 nominal/challenge 能力；最终在同一 release commit 完成
+   全部黄金、正式性能和工程/平台验收。只有此前能力完成后，才执行下列延后审计。
+
+## 延后任务：共同 W 与逐 Frame 真实变化审计
+
+启动条件：此前已确认的全部能力完成后再开展，不打断当前工作，不提前实施，不据此回退正确改动。
+
+审计问题是区分“各 Frame 围绕 source 共同 W 有经过校准的小幅真实变化”和“全部 Frame 共享同一个
+尚不精确的 W”。扩大共同 W 区间不必然等价于允许逐 Frame 变化。侧会话提供的三条线索——source W
+估计容许 residual 并传播到 W、双侧/单侧/无直接边的投影方式不同、完整未观察 Frame 调用整条 sequence
+联合约束而可能暴露远处冲突——均是待验证机制，不是已证明的样片根因，也不授权放宽 Gate。
+
+1. 区分测量误差、真实 aperture/走片变化与模型误差，核对各自 canonical owner。
+2. 以最小正反例和少量真实样片，验证三种投影是否遵守一致物理合同。
+3. 仅在开发测试的 solver 输入隐藏指定 observation；原 TIFF、测量记录和黄金不变，检查几何跳变或
+   无解是否合理。测试实验不得成为平行 production path。
+4. 若确认问题，优先复用共同 W、local correction 与联合 uncertainty；只有证据证明必要时才设计
+   经校准、有界的局部变化合同，不增加样片特例，不隐藏反证。
+5. 作为独立小机制闭环完成全部黄金与相应性能验证；当前仅登记，不调整物理模型或验收标准。

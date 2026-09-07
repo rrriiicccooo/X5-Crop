@@ -760,10 +760,11 @@ def prepare_template_lane(
                 proposed_base_phase,
             )
     # Source pitch comes only from candidate-independent separator positions.
-    # Source W is deliberately absent here: a provisional role mapping cannot
-    # recompile the template and then use that narrowed template to delete its
-    # own runner.  Selected-only W is consumed below after discrete/local
-    # competition has already resolved.
+    # The common-W prior already belongs to this primary template. Native
+    # pair measurements tighten its retained model below without recompiling
+    # the search space or letting an inferred role delete its own runner.
+    # Measuring local W does not require global rank or remote coverage;
+    # those remain placement-consumption and eligibility assessments.
     phase_search_authority = close_separator_phase_hypothesis(
         pitch_calibration,
         base_phase,

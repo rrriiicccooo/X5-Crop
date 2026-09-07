@@ -297,15 +297,15 @@ ENCLOSING_SUPPORT_APERTURE_CALIBRATION_SPEC = (
             DEVELOPMENT_GOLD_CALIBRATION_COHORT_SHA256
         ),
         development_observation_set_sha256=(
-            "d38919444a290f1fdbd86af37ef03702feb8783e93fb0f178dea37e9bc6cd5bf"
+            "2aee837e8bc5b552cd1d3ac22690ba718ef3a0e00b13fcfbff743d97005c63ab"
         ),
         eligibility_revision=(
             "x5crop_selected_unique_enclosing_support_gold_aperture_center_v1"
         ),
         minimum_center_offset_ratio=-0.009,
         maximum_center_offset_ratio=0.007,
-        development_source_count=20,
-        development_task_count=20,
+        development_source_count=18,
+        development_task_count=18,
         outward_rounding_ratio=0.001,
     )
 )

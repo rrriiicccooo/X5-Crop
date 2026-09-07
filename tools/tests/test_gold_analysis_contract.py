@@ -19,6 +19,7 @@ from tools.regression.gold_analysis import (
     _nominal_pitch_calibration,
     _round_outward,
     _round_outward_lower,
+    _runtime_budget_state,
     _source_variation_summary,
     _summary,
     line_axis_position,
@@ -34,6 +35,25 @@ from x5crop.formats import (
 
 
 class GoldAnalysisContractTest(unittest.TestCase):
+    def test_runtime_budget_uses_its_receipt_not_gold_or_decision(self) -> None:
+        self.assertEqual(_runtime_budget_state([], expected_count=2), "not_evaluated")
+        self.assertEqual(
+            _runtime_budget_state([{"state": "supported"}], expected_count=2),
+            "incomplete",
+        )
+        self.assertEqual(
+            _runtime_budget_state([{"state": "supported"}], expected_count=1),
+            "passed",
+        )
+        self.assertEqual(
+            _runtime_budget_state(
+                [{"state": "supported"}, {"state": "contradicted"}], expected_count=2,
+            ),
+            "failed",
+        )
+        with self.assertRaisesRegex(ValueError, "invalid assessment state"):
+            _runtime_budget_state([{"state": "unavailable"}], expected_count=1)
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.records = {
@@ -188,6 +208,17 @@ class GoldAnalysisContractTest(unittest.TestCase):
             },
             "decision_status": decision,
             "final_review_reasons": [],
+            "runtime_budget_state": "not_evaluated",
+            "runtime_budget_assessments": [],
+            "runtime_budget_gate": {
+                "evaluated": False, "blocks": False, "state": "unavailable",
+            },
+            "runtime_ratio_height_budgets": [{
+                "lane_id": "lane:0",
+                "state": "unavailable", "failure_kind": "aperture_aspect_ratio_authority_unavailable",
+                "blocks_cross_resolution": False, "consumed_for_cross_inference": False,
+                "minimum_output_expansion_mm": None, "output_expansion_limit_mm": None,
+            }],
             "release_detection_gate_passed": contract_passed,
             "release_detection_gate_failure": (
                 None if contract_passed else "synthetic contract failure"
@@ -381,9 +412,69 @@ class GoldAnalysisContractTest(unittest.TestCase):
             {"safe": {"safe": 1}, "unsafe": {"unsafe": 1}},
         )
         self.assertEqual(
+            summary["proposal_runtime_budget_matrix"],
+            {"safe": {"not_evaluated": 1}, "unsafe": {"not_evaluated": 1}},
+        )
+        self.assertEqual(
             summary["count_variant_candidate_safety_mismatch_count"],
             1,
         )
+
+    def test_ratio_height_budget_diagnostic_keeps_consumption_and_blocking_distinct(self) -> None:
+        records = []
+        for index, blocking in enumerate((False, True)):
+            record = self._analysis_record(
+                f"ratio-budget-{index}", source_sha256=str(index) * 64,
+                role="nominal", decision="needs_review", candidate="not_available",
+                proposal="safe", unsafe_auto=False, physical_frame_id="B1|B2",
+            )
+            record["runtime_ratio_height_budgets"] = [{
+                "lane_id": "lane:0",
+                "state": "contradicted",
+                "failure_kind": "aperture_aspect_ratio_budget_exhausted",
+                "blocks_cross_resolution": blocking,
+                "consumed_for_cross_inference": False,
+                "minimum_output_expansion_mm": 1.5,
+                "output_expansion_limit_mm": 1.2,
+            }]
+            records.append(record)
+
+        summary = _summary(records, {"fixture": True})
+
+        self.assertEqual(summary["proposal_runtime_budget_matrix"], {
+            "safe": {"not_evaluated": 2},
+        })
+        self.assertEqual(
+            [item["blocks_cross_resolution"] for item in summary["ratio_height_budget_diagnostics"]],
+            [False, True],
+        )
+
+    def test_budget_assessment_failure_is_not_an_unevaluated_gate_block(self) -> None:
+        record = self._analysis_record(
+            "budget-stage", source_sha256="e" * 64, role="nominal",
+            decision="needs_review", proposal="unsafe", candidate="not_available",
+            unsafe_auto=False, physical_frame_id="B1|B2",
+        )
+        record["runtime_budget_assessments"] = [{"state": "contradicted"}]
+        record["runtime_budget_state"] = "failed"
+
+        summary = _summary((record,), {"fixture": True})
+
+        self.assertEqual(summary["proposal_runtime_budget_matrix"], {"unsafe": {"failed": 1}})
+        self.assertEqual(summary["proposal_runtime_budget_gate_matrix"], {
+            "unsafe": {"not_evaluated": 1},
+        })
+
+    def test_budget_receipt_cannot_claim_pass_without_assessments(self) -> None:
+        record = self._analysis_record(
+            "false-budget-pass", source_sha256="f" * 64, role="nominal",
+            decision="needs_review", proposal="safe", candidate="not_available",
+            unsafe_auto=False, physical_frame_id="B1|B2",
+        )
+        record["runtime_budget_state"] = "passed"
+
+        with self.assertRaisesRegex(ValueError, "disagrees with its assessment receipt"):
+            _summary((record,), {"fixture": True})
 
     def test_summary_exposes_a_safe_proposal_withheld_by_eligibility(self) -> None:
         record = self._analysis_record(

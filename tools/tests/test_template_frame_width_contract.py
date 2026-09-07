@@ -8,11 +8,17 @@ from tools.tests.template_test_support import (
     phase_separator,
     phase_sequence_measurement,
     phase_template,
+    placement_compose,
+    placement_cross,
+    placement_direction,
     placement_sequence,
     placement_template,
     unavailable_nominal_grid_prior,
 )
 from x5crop.detection.photo_geometry.template_contact import observe_contact_edges
+from x5crop.detection.photo_geometry.template_feasible_geometry import (
+    project_format_placement,
+)
 from x5crop.detection.photo_geometry.template_frame_width import (
     apply_correlated_frame_width_inference,
     apply_placement_source_frame_width,
@@ -39,6 +45,7 @@ from x5crop.detection.photo_geometry.template_adjacency_topology import (
 from x5crop.detection.photo_geometry.template_model import (
     FrameWidthInferenceFailureKind,
     SeparatorRelation,
+    SeparatorRelationKind,
     SequenceBindingUse,
     SourceFrameWidthAuthorityBasis,
     measured_separator_relation_kind,
@@ -213,6 +220,25 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             0.0,
         )
 
+    def test_topology_consumes_placement_intersection_not_raw_measurement(self) -> None:
+        phase, authority = self._source_width_topology_fixture(
+            FiniteInterval(269.8, 270.2)
+        )
+        authority = replace(
+            authority, width_px=FiniteInterval(80.0, 120.0),
+            canonical_width_px=110.0,
+        )
+
+        selected = self._apply_width_and_topology(phase, authority)
+
+        self.assertEqual(selected.status, PhaseFitStatus.RESOLVED)
+        assessment = selected.source_frame_width_topology_assessment
+        assert assessment is not None and selected.best is not None
+        self.assertEqual(assessment.state, EvidenceState.SUPPORTED)
+        self.assertGreater(assessment.facts[0].signed_gap_interval_px.minimum, 0.0)
+        self.assertLess(selected.best.pitch_fit.frame_width_px.maximum, 110.0)
+        self.assertEqual(authority.width_px, FiniteInterval(80.0, 120.0))
+
     def test_source_width_inference_reports_certain_unproved_overlap(
         self,
     ) -> None:
@@ -236,7 +262,7 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
         )
         self.assertLess(assessment.facts[0].signed_gap_interval_px.maximum, 0.0)
 
-    def test_unavailable_width_inference_does_not_claim_topology_ownership(
+    def test_grid_only_frame_does_not_claim_opposite_width_topology(
         self,
     ) -> None:
         phase, _authority = self._source_width_topology_fixture(
@@ -268,16 +294,37 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             authority,
         )
 
-        assert inferred.frame_width_inference is not None
-        self.assertEqual(
-            inferred.frame_width_inference.failure_kind,
-            FrameWidthInferenceFailureKind.COMPLETE_FRAME_UNOBSERVED,
-        )
+        self.assertIsNone(inferred.frame_width_inference)
         self.assertEqual(assessed.status, PhaseFitStatus.RESOLVED)
         topology = assessed.source_frame_width_topology_assessment
         assert topology is not None
         self.assertEqual(topology.state, EvidenceState.SUPPORTED)
         self.assertFalse(topology.facts)
+
+    def test_grid_neighbour_does_not_turn_correlated_marginals_into_counterevidence(self) -> None:
+        phase, authority = self._source_width_topology_fixture(
+            FiniteInterval(270.0, 290.0)
+        )
+        assert phase.best is not None
+        bindings = list(phase.best.role_bindings)
+        bindings[2] = bindings[3] = None
+        fit = replace(
+            phase.best, role_bindings=tuple(bindings), phase_support_coverage=1.0,
+        )
+        authority = self._independent_width_authority(
+            fit, authority.observation_ids, supporting_frame_ordinals=(1, 4),
+        )
+
+        selected = self._apply_width_and_topology(replace(phase, best=fit), authority)
+
+        self.assertEqual(selected.status, phase.status)
+        assert selected.best is not None
+        self.assertEqual(selected.best.completely_unobserved_frame_ordinals, (2,))
+        self.assertEqual(selected.best.frame_width_inference.inferred_role_indices, (4,))
+        topology = selected.source_frame_width_topology_assessment
+        assert topology is not None
+        self.assertFalse(topology.facts)
+        self.assertEqual(selected.adjacency_observation_coverage, phase.adjacency_observation_coverage)
 
     @staticmethod
     def _with_selected_width_prerequisites(phase, observations):
@@ -489,7 +536,12 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             phase_edge("frame-3-start", 280.0),
             phase_edge("frame-3-end", 381.0),
         )
-        phase = fit_template_phase(observations, phase_template(3))
+        template = replace(
+            phase_template(3),
+            frame_width_px=PositiveInterval(99.0, 101.0),
+            nominal_gap_px=FiniteInterval(19.0, 21.0),
+        )
+        phase = fit_template_phase(observations, template)
         self.assertEqual(phase.status, PhaseFitStatus.RESOLVED)
         source = SourceScanGeometry.create(
             FramePhysicalSpec(10.0, 24.0, None),
@@ -505,7 +557,8 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
         )
 
         width = calibrated.width_state.extent_projection_px()
-        self.assertEqual(width, FiniteInterval.exact(100.0))
+        self.assertAlmostEqual(width.minimum, 98.6)
+        self.assertAlmostEqual(width.maximum, 101.4)
         self.assertEqual(len(calibrated.width_state.observation_ids), 4)
         self.assertEqual(authority.state, EvidenceState.SUPPORTED)
         self.assertEqual(
@@ -529,10 +582,12 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             selected.best.binding_observation_ids,
             phase.best.binding_observation_ids,
         )
-        self.assertEqual(
+        for selected_position, original_position in zip(
             selected.best.model_role_positions_px,
             phase.best.model_role_positions_px,
-        )
+            strict=True,
+        ):
+            self.assertAlmostEqual(selected_position, original_position)
         self.assertGreaterEqual(
             selected.best.pitch_fit.frame_width_px.minimum,
             width.minimum,
@@ -586,10 +641,9 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
         self.assertEqual(authority.supporting_frame_ordinals, (1, 3))
         self.assertEqual(len(authority.supporting_constraint_ids), 4)
         self.assertEqual(len(authority.observation_ids), 4)
-        self.assertEqual(
-            calibrated.width_state.extent_projection_px(),
-            FiniteInterval.exact(100.0),
-        )
+        width = calibrated.width_state.extent_projection_px()
+        self.assertAlmostEqual(width.minimum, 94.7)
+        self.assertAlmostEqual(width.maximum, 105.3)
 
     def test_direct_lattice_width_consumes_every_retained_constraint(
         self,
@@ -730,7 +784,7 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
         )
         self.assertEqual(
             authority.reason,
-            "direct lattice canonical W leaves the physical source state",
+            "direct lattice W estimate leaves the physical source distribution",
         )
 
     def test_overdetermined_direct_residual_reconciles_complete_frame_width(
@@ -850,10 +904,9 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
                 key=str,
             )
         ))
-        self.assertEqual(
-            calibrated.width_state.extent_projection_px(),
-            FiniteInterval.exact(100.0),
-        )
+        width = calibrated.width_state.extent_projection_px()
+        self.assertAlmostEqual(width.minimum, 99.2)
+        self.assertAlmostEqual(width.maximum, 100.8)
         selected = apply_placement_source_frame_width(phase, authority)
         assert selected.best is not None
         source_binding = selected.best.role_bindings[1]
@@ -1003,7 +1056,9 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             authority.basis,
             SourceFrameWidthAuthorityBasis.DIRECT_LATTICE_CLOSURE,
         )
-        self.assertEqual(authority.width_px, FiniteInterval.exact(100.0))
+        assert authority.width_px is not None
+        self.assertAlmostEqual(authority.width_px.minimum, 99.6)
+        self.assertAlmostEqual(authority.width_px.maximum, 100.4)
 
     def test_source_width_rebinds_measured_delta_without_moving_edges(
         self,
@@ -1016,7 +1071,12 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             phase_edge("frame-3-start", 280.0),
             phase_edge("frame-3-end", 380.0),
         )
-        phase = fit_template_phase(observations, phase_template(3))
+        template = replace(
+            phase_template(3),
+            frame_width_px=PositiveInterval(99.0, 101.0),
+            nominal_gap_px=FiniteInterval(19.0, 21.0),
+        )
+        phase = fit_template_phase(observations, template)
         assert phase.best is not None
         fit = replace(
             phase.best,
@@ -1105,12 +1165,32 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             reason=None,
         )
 
+        preserved = apply_placement_source_frame_width(phase, authority)
+        self.assertEqual(
+            preserved.best.model_role_positions_px, fit.model_role_positions_px,
+        )
+        self.assertEqual(
+            preserved.best.pitch_fit.canonical_frame_width_px,
+            fit.pitch_fit.canonical_frame_width_px,
+        )
+        authority = replace(
+            authority, width_px=FiniteInterval.exact(selected_width),
+        )
         selected = apply_placement_source_frame_width(phase, authority)
 
         assert selected.best is not None
-        self.assertEqual(
-            selected.best.model_role_positions_px,
-            fit.model_role_positions_px,
+        self.assertEqual(selected.best.role_bindings, fit.role_bindings)
+        self.assertEqual(selected.status, phase.status)
+        self.assertEqual(selected.runner_up, phase.runner_up)
+        self.assertAlmostEqual(
+            selected.best.model_role_positions_px[1]
+            - selected.best.model_role_positions_px[0],
+            selected_width,
+        )
+        self.assertAlmostEqual(
+            selected.best.model_role_positions_px[2]
+            - selected.best.model_role_positions_px[1],
+            signed_gap,
         )
         (selected_relation,) = selected.best.adjacency_relations
         self.assertAlmostEqual(
@@ -1119,6 +1199,56 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             - fit.pitch_fit.canonical_pitch_px
             + signed_gap,
         )
+
+    def test_changed_source_width_rebuilds_grid_gap_and_joint_role_state(self) -> None:
+        template = replace(
+            placement_template(3), frame_width_px=PositiveInterval(90.0, 110.0),
+            nominal_gap_px=FiniteInterval(10.0, 30.0),
+        )
+        fit = placement_sequence(template, missing=(0, 1))
+        bindings = tuple(
+            replace(
+                binding,
+                canonical_position_px=binding.canonical_position_px - 5.0,
+                fit_position_interval_px=FiniteInterval.exact(
+                    binding.canonical_position_px - 5.0
+                ),
+                full_position_interval_px=FiniteInterval.exact(
+                    binding.canonical_position_px - 5.0
+                ),
+            ) if binding is not None and index % 2 else binding
+            for index, binding in enumerate(fit.role_bindings)
+        )
+        fit = replace(
+            fit, role_bindings=bindings,
+            pitch_fit=replace(fit.pitch_fit, gap_interval_px=FiniteInterval.exact(20.0)),
+        )
+        phase = replace(
+            fit_template_phase((), template), best=fit,
+        )
+        authority = replace(
+            self._independent_width_authority(
+                fit, tuple(sorted(fit.bound_observation_ids)),
+                supporting_frame_ordinals=(2, 3),
+            ),
+            width_px=FiniteInterval.exact(95.0), canonical_width_px=95.0,
+        )
+
+        selected = apply_placement_source_frame_width(phase, authority)
+
+        self.assertEqual(selected.status, phase.status)
+        self.assertEqual(selected.failure_kind, phase.failure_kind)
+        self.assertEqual(selected.best.role_bindings, bindings)
+        self.assertEqual(selected.best.pitch_fit.gap_interval_px, FiniteInterval.exact(25.0))
+        projection = project_format_placement(placement_compose(
+            template, selected.best,
+            placement_cross(template, direction=placement_direction()),
+        ))
+        self.assertTrue(projection.frame_states[0])
+        self.assertTrue(all(
+            abs(state.sequence_end_px - state.sequence_start_px - 95.0) < 1.0e-9
+            for state in projection.frame_states[0]
+        ))
 
     def test_contact_adjacent_frames_do_not_calibrate_source_width(
         self,
@@ -1253,13 +1383,11 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             observations,
         )
 
-        self.assertEqual(retained, source)
-        self.assertEqual(authority.state, EvidenceState.CONTRADICTED)
-        self.assertEqual(
-            authority.failure_kind,
-            SourceFrameWidthAuthorityFailureKind.PHYSICAL_WIDTH_CONFLICT,
-        )
+        self.assertNotEqual(retained.width_state, source.width_state)
+        self.assertEqual(authority.state, EvidenceState.SUPPORTED)
+        self.assertIsNone(authority.failure_kind)
         rejected = apply_placement_source_frame_width(phase, authority)
+        self.assertEqual(rejected.best, phase.best)
         self.assertEqual(rejected.status, PhaseFitStatus.UNRESOLVED)
         self.assertEqual(
             rejected.failure_kind,
@@ -1398,7 +1526,7 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
         self.assertEqual(closed.state, EvidenceState.SUPPORTED)
         self.assertEqual(closed.joint_constraint_rank, 3)
 
-    def test_rank_one_lattice_cannot_claim_source_width(self) -> None:
+    def test_rank_one_does_not_erase_two_reliable_complete_widths(self) -> None:
         observations = (
             phase_edge("rank-one-frame-1-start", 40.0),
             phase_edge("rank-one-frame-1-end", 139.0),
@@ -1439,14 +1567,179 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             observations,
         )
 
-        self.assertEqual(retained, source)
-        self.assertEqual(authority.state, EvidenceState.UNAVAILABLE)
-        self.assertEqual(
-            authority.failure_kind,
-            SourceFrameWidthAuthorityFailureKind.GLOBAL_LATTICE_RANK_INSUFFICIENT,
+        self.assertNotEqual(retained.width_state, source.width_state)
+        self.assertEqual(authority.state, EvidenceState.SUPPORTED)
+        self.assertEqual(authority.supporting_frame_ordinals, (1, 3))
+        self.assertEqual(phase.global_lattice_authority.joint_constraint_rank, 1)
+
+    def test_unresolved_phase_keeps_local_width_without_acquiring_eligibility(self) -> None:
+        observations = tuple(
+            phase_edge(f"retained-width:{index}", coordinate)
+            for index, coordinate in enumerate((40.0, 140.0, 160.0, 260.0))
+        )
+        phase = self._with_selected_width_prerequisites(
+            fit_template_phase(observations, phase_template(2)), observations,
+        )
+        phase = replace(
+            phase,
+            status=PhaseFitStatus.UNRESOLVED,
+            failure_kind=PhaseFailureKind.ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE,
+            ambiguity_reason="remote registered corridor is incomplete",
+            winner_basis=None,
+            global_lattice_authority=None,
+        )
+        source = SourceScanGeometry.create(
+            FramePhysicalSpec(10.0, 24.0, None),
+            width_scale_px_per_mm=PositiveInterval.exact(10.0),
+            height_scale_px_per_mm=PositiveInterval.exact(10.0),
         )
 
-    def test_incomplete_inferred_adjacency_blocks_source_width(self) -> None:
+        _, authority = calibrate_source_frame_width(source, phase, observations)
+        applied = apply_placement_source_frame_width(phase, authority)
+
+        self.assertEqual(authority.state, EvidenceState.SUPPORTED)
+        self.assertEqual(
+            authority.placement_scope,
+            SourceFrameWidthAuthorityPlacementScope.RETAINED_UNRESOLVED_PROPOSAL,
+        )
+        self.assertEqual(applied.status, phase.status)
+        self.assertEqual(applied.failure_kind, phase.failure_kind)
+        self.assertEqual(applied.runner_up, phase.runner_up)
+        self.assertEqual(applied.best.role_bindings, phase.best.role_bindings)
+
+    def test_remote_role_conflict_does_not_erase_other_complete_frame_widths(self) -> None:
+        observations = tuple(
+            phase_edge(f"local-width:{index}", coordinate)
+            for index, coordinate in enumerate(
+                (40.0, 140.0, 160.0, 260.0, 280.0, 380.0)
+            )
+        )
+        phase = self._with_selected_width_prerequisites(
+            fit_template_phase(observations, phase_template(3)), observations,
+        )
+        direct = phase.direct_role_binding_authority
+        assert direct is not None
+        conflict = replace(
+            direct.facts[0], bases=(),
+            blocking_material_conflict_ids=(ObservationId("remote-material-conflict"),),
+            state=EvidenceState.CONTRADICTED,
+        )
+        phase = replace(
+            phase,
+            direct_role_binding_authority=DirectRoleBindingAuthority(
+                state=EvidenceState.CONTRADICTED,
+                facts=(conflict, *direct.facts[1:]),
+                unsupported_role_indices=(0,),
+                reason="first role is contradicted",
+            ),
+        )
+        source = SourceScanGeometry.create(
+            FramePhysicalSpec(10.0, 24.0, None),
+            width_scale_px_per_mm=PositiveInterval.exact(10.0),
+            height_scale_px_per_mm=PositiveInterval.exact(10.0),
+        )
+
+        _, authority = calibrate_source_frame_width(source, phase, observations)
+
+        self.assertEqual(authority.state, EvidenceState.SUPPORTED)
+        self.assertEqual(authority.supporting_frame_ordinals, (2, 3))
+        self.assertNotIn(observations[0].observation_id, authority.observation_ids)
+        self.assertEqual(phase.direct_role_binding_authority.facts[0], conflict)
+
+    def test_incomplete_visible_span_does_not_measure_or_erase_complete_widths(self) -> None:
+        observations = tuple(
+            phase_edge(f"partial-width:{index}", coordinate)
+            for index, coordinate in enumerate(
+                (40.0, 140.0, 160.0, 260.0, 280.0, 380.0)
+            )
+        )
+        phase = fit_template_phase(observations, phase_template(3))
+        assert phase.best is not None
+        short_end = phase_edge("partial-width:1", 80.0)
+        observations = (observations[0], short_end, *observations[2:])
+        bindings = list(phase.best.role_bindings)
+        bindings[1] = replace(
+            bindings[1], canonical_position_px=80.0,
+            fit_position_interval_px=short_end.fit_position_interval_px,
+            full_position_interval_px=short_end.full_position_interval_px,
+        )
+        phase = self._with_selected_width_prerequisites(
+            replace(phase, best=replace(phase.best, role_bindings=tuple(bindings))),
+            observations,
+        )
+        source = SourceScanGeometry.create(
+            FramePhysicalSpec(10.0, 24.0, None),
+            width_scale_px_per_mm=PositiveInterval.exact(10.0),
+            height_scale_px_per_mm=PositiveInterval.exact(10.0),
+        )
+
+        _, authority = calibrate_source_frame_width(source, phase, observations)
+
+        self.assertEqual(authority.state, EvidenceState.SUPPORTED)
+        self.assertEqual(authority.supporting_frame_ordinals, (2, 3))
+        self.assertEqual(authority.basis, SourceFrameWidthAuthorityBasis.INDEPENDENT_COMPLETE_FRAMES)
+        self.assertNotIn(short_end.observation_id, authority.observation_ids)
+        self.assertEqual(phase.best.role_bindings[1].canonical_position_px, 80.0)
+
+    def test_non_width_outer_material_group_does_not_enter_pair_validation(self) -> None:
+        observations = tuple(
+            phase_edge(f"outer-width:{index}", coordinate)
+            for index, coordinate in enumerate(
+                (40.0, 140.0, 160.0, 260.0, 280.0, 380.0)
+            )
+        )
+        phase = self._with_selected_width_prerequisites(
+            fit_template_phase(observations, phase_template(3)), observations,
+        )
+        direct = phase.direct_role_binding_authority
+        assert direct is not None
+        outer = replace(
+            direct.facts[0], bases=(DirectRoleAuthorityBasis.OUTER_MATERIAL_BOUNDARY,),
+            evidence_group_id=ObservationId("outer-material-independent-group"),
+            supporting_outer_material_observation_ids=(ObservationId("outer-material"),),
+        )
+        phase = replace(phase, direct_role_binding_authority=replace(
+            direct, facts=(outer, *direct.facts[1:]),
+        ))
+        source = SourceScanGeometry.create(
+            FramePhysicalSpec(10.0, 24.0, None),
+            width_scale_px_per_mm=PositiveInterval.exact(10.0),
+            height_scale_px_per_mm=PositiveInterval.exact(10.0),
+        )
+
+        _, authority = calibrate_source_frame_width(source, phase, observations)
+
+        self.assertEqual(authority.state, EvidenceState.SUPPORTED)
+        self.assertEqual(authority.supporting_frame_ordinals, (2, 3))
+
+    def test_width_measurement_rejects_stale_facts_and_duplicate_ledger_ids(self) -> None:
+        observations = tuple(
+            phase_edge(f"width-identity:{index}", coordinate)
+            for index, coordinate in enumerate((40.0, 140.0, 160.0, 260.0))
+        )
+        phase = self._with_selected_width_prerequisites(
+            fit_template_phase(observations, phase_template(2)), observations,
+        )
+        source = SourceScanGeometry.create(
+            FramePhysicalSpec(10.0, 24.0, None),
+            width_scale_px_per_mm=PositiveInterval.exact(10.0),
+            height_scale_px_per_mm=PositiveInterval.exact(10.0),
+        )
+        with self.assertRaisesRegex(ValueError, "unique observation ledger"):
+            calibrate_source_frame_width(source, phase, (*observations, observations[0]))
+        direct = phase.direct_role_binding_authority
+        assert direct is not None
+        stale = replace(direct.facts[0], observation_id=ObservationId("stale-edge"))
+        with self.assertRaisesRegex(ValueError, "direct fact disagrees"):
+            calibrate_source_frame_width(
+                source,
+                replace(phase, direct_role_binding_authority=replace(
+                    direct, facts=(stale, *direct.facts[1:]),
+                )),
+                observations,
+            )
+
+    def test_incomplete_remote_adjacency_preserves_local_source_width(self) -> None:
         observations = (
             phase_edge("coverage-frame-1-start", 40.0),
             phase_edge("coverage-frame-1-end", 139.0),
@@ -1522,14 +1815,14 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             observations,
         )
 
-        self.assertEqual(retained, source)
-        self.assertEqual(authority.state, EvidenceState.UNAVAILABLE)
-        self.assertEqual(
-            authority.failure_kind,
-            SourceFrameWidthAuthorityFailureKind.ADJACENCY_COVERAGE_INCOMPLETE,
-        )
+        self.assertNotEqual(retained.width_state, source.width_state)
+        self.assertEqual(authority.state, EvidenceState.SUPPORTED)
+        self.assertEqual(authority.supporting_frame_ordinals, (1, 3))
+        applied = apply_placement_source_frame_width(phase, authority)
+        self.assertEqual(applied.adjacency_observation_coverage, coverage)
+        self.assertEqual(applied.global_lattice_authority, phase.global_lattice_authority)
 
-    def test_direct_role_contradiction_precedes_source_width(self) -> None:
+    def test_contradicted_pair_cannot_supply_complete_width(self) -> None:
         observations = (
             phase_edge("conflict-frame-1-start", 40.0),
             phase_edge("conflict-frame-1-end", 139.0),
@@ -1571,10 +1864,10 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
         )
 
         self.assertEqual(retained, source)
-        self.assertEqual(authority.state, EvidenceState.CONTRADICTED)
+        self.assertEqual(authority.state, EvidenceState.UNAVAILABLE)
         self.assertEqual(
             authority.failure_kind,
-            SourceFrameWidthAuthorityFailureKind.DIRECT_ROLE_AUTHORITY_CONTRADICTED,
+            SourceFrameWidthAuthorityFailureKind.SOURCE_WIDTH_CLOSURE_UNAVAILABLE,
         )
 
     def test_one_source_width_authority_infers_multiple_opposite_roles(self) -> None:
@@ -1634,6 +1927,97 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
         )
         self.assertEqual(inference.observation_ids, width_ids)
 
+    def test_released_weak_role_cannot_narrow_remote_grid_frame(self) -> None:
+        from types import SimpleNamespace
+
+        from scipy.optimize import linprog
+
+        from x5crop.detection.photo_geometry.template_feasible_geometry import (
+            _sequence_system,
+        )
+
+        fit, observations, direct = self._local_role_fixture()
+        bindings = list(fit.role_bindings)
+        for index, binding in enumerate(bindings):
+            assert binding is not None
+            if index != 4:
+                interval = FiniteInterval(
+                    binding.canonical_position_px - 3.0,
+                    binding.canonical_position_px + 3.0,
+                )
+                bindings[index] = replace(
+                    binding,
+                    fit_position_interval_px=interval,
+                    full_position_interval_px=interval,
+                )
+        bindings[6] = bindings[7] = None
+        intervals = tuple(
+            FiniteInterval.exact(position)
+            if index == 4
+            else FiniteInterval(position - 10.0, position + 10.0)
+            for index, position in enumerate(fit.model_role_positions_px)
+        )
+        fit = replace(
+            fit,
+            role_bindings=tuple(bindings),
+            pitch_fit=replace(
+                fit.pitch_fit,
+                pitch_interval_px=FiniteInterval(119.0, 121.0),
+                gap_interval_px=FiniteInterval(19.0, 21.0),
+            ),
+            model_role_intervals_px=intervals,
+            model_full_role_intervals_px=intervals,
+            phase_support_coverage=1.0,
+        )
+        direct = replace(direct, facts=direct.facts[:6])
+        width = self._independent_width_authority(
+            fit, tuple(ObservationId(f"sequence:{index}") for index in range(4))
+        )
+        assessed = apply_correlated_frame_width_inference(
+            fit,
+            source_frame_width_authority=width,
+            direct_role_authority=direct,
+            sequence_edges=observations,
+        )
+        assert assessed.frame_width_inference is not None
+        self.assertEqual(
+            assessed.frame_width_inference.validation_only_role_indices, (4,)
+        )
+        self.assertIsNone(assessed.role_bindings[4])
+        self.assertEqual(
+            assessed.model_role_intervals_px[4], FiniteInterval(338.0, 342.0)
+        )
+        self.assertEqual(
+            assessed.model_full_role_intervals_px[4], FiniteInterval(338.0, 342.0)
+        )
+        for index in (0, 1, 2, 3, 5, 6, 7):
+            self.assertEqual(assessed.role_bindings[index], fit.role_bindings[index])
+            self.assertEqual(assessed.model_role_intervals_px[index], intervals[index])
+            self.assertEqual(
+                assessed.model_full_role_intervals_px[index], intervals[index]
+            )
+        self.assertEqual(assessed.pitch_fit, fit.pitch_fit)
+        self.assertEqual(assessed.phase_lattice_fit, fit.phase_lattice_fit)
+        self.assertEqual(
+            assessed.calibrated_nominal_grid_fit_state,
+            fit.calibrated_nominal_grid_fit_state,
+        )
+        system, roles = _sequence_system(
+            SimpleNamespace(sequence_fit=assessed, global_lattice_authority=None)
+        )
+        endpoints = []
+        for sign in (1, -1):
+            result = linprog(
+                sign * roles[6].coefficients,
+                A_ub=system.inequalities[0],
+                b_ub=system.inequalities[1],
+                bounds=system.bounds,
+                method="highs",
+            )
+            self.assertTrue(result.success, result.message)
+            endpoints.append(roles[6].value(result.x))
+        self.assertEqual(endpoints, [457.0, 463.0])
+
     def test_phase_anchor_never_yields_to_source_width(self) -> None:
         fit, observations, authority = self._local_role_fixture(local=False)
 
@@ -1651,6 +2035,68 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
         )
 
         self.assertIsNotNone(assessed.role_bindings[4])
+        self.assertIsNone(assessed.frame_width_inference)
+
+    def test_grid_only_frame_does_not_block_other_weak_role_width_inference(self) -> None:
+        fit, observations, direct = self._local_role_fixture()
+        fit = replace(
+            fit, role_bindings=(*fit.role_bindings[:6], None, None),
+            phase_support_coverage=1.0,
+        )
+        direct = replace(direct, facts=direct.facts[:6])
+
+        assessed = apply_correlated_frame_width_inference(
+            fit,
+            source_frame_width_authority=self._independent_width_authority(
+                fit, tuple(ObservationId(f"sequence:{index}") for index in range(4)),
+            ),
+            direct_role_authority=direct, sequence_edges=observations,
+        )
+
+        self.assertIsNone(assessed.role_bindings[4])
+        self.assertEqual(assessed.completely_unobserved_frame_ordinals, (4,))
+        inference = assessed.frame_width_inference
+        assert inference is not None
+        self.assertEqual(inference.state, EvidenceState.SUPPORTED)
+        self.assertEqual(inference.inferred_role_indices, (4,))
+
+    def test_measured_adjacency_keeps_its_native_role_despite_weak_role_fact(self) -> None:
+        fit, observations, direct = self._local_role_fixture()
+        end = fit.role_bindings[3]
+        start = fit.role_bindings[4]
+        assert end is not None and start is not None
+        gap = fit.template.direction * (
+            start.canonical_position_px - end.canonical_position_px
+        )
+        delta = (
+            fit.pitch_fit.canonical_frame_width_px
+            - fit.pitch_fit.canonical_pitch_px + gap
+        )
+        relation = SeparatorRelation(
+            relation_ordinal=2, kind=measured_separator_relation_kind(delta),
+            delta_interval_px=FiniteInterval.exact(delta), canonical_delta_px=delta,
+            separator_band_observation_id=ObservationId("measured-band"),
+            end_edge_observation_id=end.observation_id,
+            next_start_edge_observation_id=start.observation_id,
+            signed_gap_interval_px=FiniteInterval.exact(gap),
+            canonical_signed_gap_px=gap,
+        )
+        nominal = SeparatorRelation(
+            relation_ordinal=1, kind=SeparatorRelationKind.NOMINAL,
+            delta_interval_px=FiniteInterval.exact(0.0), canonical_delta_px=0.0,
+        )
+        fit = replace(fit, adjacency_relations=(nominal, relation))
+
+        assessed = apply_correlated_frame_width_inference(
+            fit,
+            source_frame_width_authority=self._independent_width_authority(
+                fit, tuple(ObservationId(f"sequence:{index}") for index in range(4)),
+            ),
+            direct_role_authority=direct, sequence_edges=observations,
+        )
+
+        self.assertEqual(assessed.role_bindings[4], start)
+        self.assertEqual(assessed.adjacency_relations, (nominal, relation))
         self.assertIsNone(assessed.frame_width_inference)
 
     def test_width_evidence_that_uses_the_weak_line_cannot_demote_it(
@@ -1699,7 +2145,7 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
         self.assertIsNotNone(assessed.role_bindings[4])
         self.assertIsNone(assessed.frame_width_inference)
 
-    def test_grid_cannot_create_a_frame_with_both_roles_unobserved(self) -> None:
+    def test_unobserved_frame_remains_grid_owned_not_opposite_inferred(self) -> None:
         template = placement_template(3)
         fit = placement_sequence(template, missing=(4, 5))
 
@@ -1714,14 +2160,27 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             ),
         )
 
-        inference = assessed.frame_width_inference
-        self.assertIsNotNone(inference)
-        assert inference is not None
-        self.assertEqual(inference.state, EvidenceState.UNAVAILABLE)
-        self.assertEqual(
-            inference.failure_kind,
-            FrameWidthInferenceFailureKind.COMPLETE_FRAME_UNOBSERVED,
+        self.assertIsNone(assessed.frame_width_inference)
+        self.assertEqual(assessed.model_role_positions_px, fit.model_role_positions_px)
+        self.assertEqual(assessed.completely_unobserved_frame_ordinals, (3,))
+
+    def test_grid_only_frame_does_not_block_other_opposite_inference(self) -> None:
+        template = placement_template(4)
+        fit = placement_sequence(template, missing=(4, 5, 7))
+        authority = self._independent_width_authority(
+            fit, tuple(ObservationId(f"sequence:{index}") for index in range(4)),
         )
+
+        assessed = apply_correlated_frame_width_inference(
+            fit, source_frame_width_authority=authority,
+        )
+
+        inference = assessed.frame_width_inference
+        assert inference is not None
+        self.assertEqual(inference.state, EvidenceState.SUPPORTED)
+        self.assertEqual(inference.inferred_role_indices, (7,))
+        self.assertEqual(assessed.completely_unobserved_frame_ordinals, (3,))
+        self.assertEqual(assessed.bound_observation_ids, fit.bound_observation_ids)
 
     def test_one_complete_frame_cannot_claim_source_common_width(self) -> None:
         template = placement_template(2)

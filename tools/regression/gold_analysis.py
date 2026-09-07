@@ -51,8 +51,8 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v17"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v20"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v18"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v21"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
 SOURCE_TIMEOUT_SECONDS = 600
@@ -941,6 +941,36 @@ def _runtime_pipeline_outcome(
     raise ValueError("runtime pipeline outcome has an invalid decision status")
 
 
+def _runtime_budget_state(
+    assessments: Sequence[dict[str, Any]], *, expected_count: int,
+) -> str:
+    """Read the Runtime risk receipt; do not infer it from gold or auto/review."""
+
+    if not assessments:
+        return "not_evaluated"
+    if any(item["state"] not in {"supported", "contradicted"} for item in assessments):
+        raise ValueError("Runtime budget receipt has an invalid assessment state")
+    if len(assessments) != expected_count:
+        return "incomplete"
+    return (
+        "failed"
+        if any(item["state"] == "contradicted" for item in assessments)
+        else "passed"
+    )
+
+
+def _runtime_budget_gate_state(check: dict[str, Any]) -> str:
+    """Keep Gate evaluation separate from the numerical risk assessment."""
+
+    if not check["evaluated"]:
+        return "not_evaluated"
+    if check["blocks"]:
+        return "blocked"
+    if check["state"] == "supported":
+        return "passed"
+    raise ValueError("Runtime budget Gate receipt has an invalid state")
+
+
 def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
     physical_prior = _physical_prior_diagnostic(record)
     source = (PROJECT_ROOT / record["source_relative_path"]).resolve()
@@ -1112,6 +1142,31 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         "proposal_geometry_failure": proposal_geometry_failure,
         "candidate_geometry_conformance": candidate_geometry_conformance,
         "candidate_geometry_failure": candidate_geometry_failure,
+        "runtime_budget_state": _runtime_budget_state(
+            [item for lane in production_lanes for item in lane["direct_use_budget_assessments"]],
+            expected_count=record["count"],
+        ),
+        "runtime_budget_assessments": [
+            item for lane in production_lanes for item in lane["direct_use_budget_assessments"]
+        ],
+        "runtime_budget_gate": next(
+            check for check in report["candidate_gate"]["checks"]
+            if check["code"] == "direct_use_budget"
+        ),
+        "runtime_ratio_height_budgets": [
+            {
+                "lane_id": lane["lane_id"],
+                **{
+                    key: lane["aperture_aspect_ratio_authority"][key]
+                    for key in (
+                        "state", "failure_kind", "blocks_cross_resolution",
+                        "consumed_for_cross_inference", "minimum_output_expansion_mm",
+                        "output_expansion_limit_mm",
+                    )
+                },
+            }
+            for lane in production_lanes
+        ],
         "unsafe_approved_auto": unsafe_approved_auto,
         "nominal_auto_goal_passed": (
             record["cohort_role"] == "nominal"
@@ -2489,10 +2544,22 @@ def _summary(
         if record["decision_status"] == "needs_review"
     )
     proposal_candidate_matrix: dict[str, Counter[str]] = defaultdict(Counter)
+    proposal_budget_matrix: dict[str, Counter[str]] = defaultdict(Counter)
+    proposal_budget_gate_matrix: dict[str, Counter[str]] = defaultdict(Counter)
     for record in completed:
+        if record["runtime_budget_state"] != _runtime_budget_state(
+            record["runtime_budget_assessments"], expected_count=record["count"],
+        ):
+            raise ValueError("Runtime budget state disagrees with its assessment receipt")
         proposal_candidate_matrix[
             str(record["proposal_geometry_conformance"])
         ][str(record["candidate_geometry_conformance"])] += 1
+        proposal_budget_matrix[str(record["proposal_geometry_conformance"])][
+            str(record["runtime_budget_state"])
+        ] += 1
+        proposal_budget_gate_matrix[str(record["proposal_geometry_conformance"])][
+            _runtime_budget_gate_state(record["runtime_budget_gate"])
+        ] += 1
     unsafe_auto_diagnostics = [
         {
             "sample_id": record["sample_id"],
@@ -2588,6 +2655,24 @@ def _summary(
                 proposal_candidate_matrix.items()
             )
         },
+        "proposal_runtime_budget_matrix": {
+            state: dict(sorted(counts.items()))
+            for state, counts in sorted(proposal_budget_matrix.items())
+        },
+        "proposal_runtime_budget_gate_matrix": {
+            state: dict(sorted(counts.items()))
+            for state, counts in sorted(proposal_budget_gate_matrix.items())
+        },
+        "ratio_height_budget_diagnostics": [
+            {
+                "sample_id": record["sample_id"],
+                "proposal_geometry_conformance": record["proposal_geometry_conformance"],
+                **budget,
+            }
+            for record in completed
+            for budget in record["runtime_ratio_height_budgets"]
+            if budget["failure_kind"] == "aperture_aspect_ratio_budget_exhausted"
+        ],
         "runtime_pipeline_outcome_counts": _counter(
             records,
             "runtime_pipeline_outcome",
@@ -2921,6 +3006,10 @@ def run_gold_analysis(
                 "proposal_geometry_failure": None,
                 "candidate_geometry_conformance": "not_available",
                 "candidate_geometry_failure": None,
+                "runtime_budget_state": None,
+                "runtime_budget_assessments": [],
+                "runtime_budget_gate": None,
+                "runtime_ratio_height_budgets": [],
                 "unsafe_approved_auto": False,
                 "nominal_auto_goal_passed": False,
                 "challenge_capability_outcome": None,

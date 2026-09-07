@@ -24,11 +24,13 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
 
 ## 子代理调度
 
-以下原则适用于 `luna_worker` 及其他自定义 subagent；主 Agent 负责拆解任务、保持主任务目标
-不变，并验收 worker 的结果：
+以下原则适用于所有 subagent；主 Agent 负责拆解任务、保持主任务目标不变，并验收结果：
 
-- 体量较大且相互独立的子任务，优先派发给多个 `luna_worker` 并行处理；几分钟内能够完成的
-  轻量任务直接留在主线程。
+- 影响 reference 权限、物理模型、Gate、黄金结论或发布资格的判断由主 Agent 负责。可以并行收集
+  只读证据，但不得仅为节省时间或额度把最终判断交给较弱模型。
+- 只在子任务体量较大、相互独立且并行能明显节省时间或提高质量时派发。按任务选择角色：
+  `explorer` 回答具体代码问题，`luna_worker` 处理边界清楚且可机械验收的执行任务，复杂独立实现使用
+  能力相称的 worker；几分钟内能够完成的轻量任务留在主线程。
 - 每个 worker 的任务描述必须上下文完整，明确文件范围、任务边界、预期输出和可核验的验收
   标准；worker 不得修改主任务目标或自行扩大范围。
 - 只读任务可以并行。涉及文件写入的 worker 必须使用独立 worktree；无法隔离时改为串行，
@@ -97,91 +99,26 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
 - `docs/PROJECT_MEMORY.md` 是唯一跨会话检查点；不建立 `SESSION_HANDOFF.md`、
   `NEXT_ACTIONS.md`、`DECISIONS.md` 或同类文件。
 - 只在用户明确要求时读写，并只保留当前目标、已验证事实、开放风险和精确下一步。
-- Baseline 必须绑定 source SHA，并由用户在原图坐标中直接确认，或来自独立校准的外部测量。
-  用户红线是尽量贴近该 source 真实有效成像边界的最内侧可接受裁切基准，基本可作为该 source 的
-  aperture 尺寸观测；它不是跨相机固定常量、实验室级绝对测量或 detector 唯一答案。红线可以校准
-  W/H、separator 与 aperture 的分布和 source-level authority，但不得由开发集直接压成适用于所有相机的
-  单一尺寸。方向性包含与 5% 外扩预算以 `docs/ARCHITECTURE.md` 为准，并统一适用于全部当前与以后用户
-  确认的黄金样片。OpenCV、SciPy、X5 Crop、模型视觉、生成 JPG 和算法一致只能产生非权威 proposal。
-- 不让模型查看完整长 TIFF 后代写 reference 边界；边界判断歧义保持 unresolved。
+- 人工 reference 的 authority、黄金几何语义与 source-SHA 绑定只由 `docs/ARCHITECTURE.md` 第 14 节和
+  `docs/MANUAL_ANNOTATION.md` 定义。只有用户在原图坐标中直接确认的边界或独立外部测量可以成为
+  reference；自动工具和模型只能产生 proposal。不得让模型查看完整长 TIFF 后代写 reference，歧义保持
+  unresolved。
 
-## 当前产品边界
+## 架构与实现协作
 
-- 仓库只有一条 V5 current-only production path；公开稳定版仍是 `v4.2.8`，V5 尚未发布。
-- V5 直接在 `main` 开发，不创建 V5 分支。历史实现只保存在 Git history 与 tags。
-- 只处理 standalone X5 Crop workflow；除非用户明确恢复，不开发旧 app 或 native packaging。
-- 输入是用户已提供 format 和可选 count 的 Hasselblad / Imacon X5 片夹扫描。正式 TIFF
-  域、物理模型、Gate、输出事务和源码 owner 以 `docs/ARCHITECTURE.md` 为唯一说明。
-
-以下产品语义不可被便利性优化绕过：
-
-- 用户 format 始终是 authority。省略 count 表示用户确认匹配片夹的默认完整格数；明确 count 表示
-  用户确认实际 slot 数，并包含中间空白曝光格。片夹容量不得猜 format、真实照片数或 filename
-  count。Runtime 不保留 full/partial mode，也不使用长轴居中；是否铺满只在 selection 后按 outer
-  外侧能否再容纳一个 W 判断。`135-dual` 只有 12=6+6 可自动处理，其它 count 直接 review。
-- Detector 先从整条片带建立 coarse support 和共同方向，再把 format、count 与片夹 authority 编译成
-  有界固定模板，只在理论 outer、separator 和 top/bottom 附近精修。独立像素观察负责对准、约束每个
-  已唯一绑定 adjacency 的直接 local advance，并否决非法 placement；不得用模板投影创造自己的 phase
-  authority。全部 local advance 的数量始终不超过 `count - 1`，且只作一次 O(count) 传播。
-- 固定模板中的校准 Grid 是唯一 placement 主生成模型：format/count 定义带不确定性的理想尺子，直接
-  observation 确定 absolute phase、保留 native boundary 并加入局部修正，counterevidence 淘汰非法状态。
-  Grid 不是 detector 失败后的 fallback，但也不能仅凭自身取得 `approved_auto` 权限。Direct rank 3 是更强
-  的完全直接闭合路径，不是唯一许可；校准 prior、至少一个 absolute anchor、逐 adjacency 完整 coverage
-  与无反证成立时，Grid 可以生成两侧都未直接观察的 Frame，但必须把完整相关包络交给 containment、
-  content veto 与每侧 5% 预算决定 auto/review。
-- Runtime 尽量为每个合法 format/count 保留一份完整 pre-Gate proposal；proposal 可以不安全，也不等于
-  eligible candidate 或 `approved_auto`。权限、runner、counterevidence 与 Gate 只能阻止 eligibility 或正式
-  输出，不能反向删除已经形成的 proposal。只有 `approved_auto` 写正式 TIFF；坐标非法、无法形成完整
-  footprint 等真实生成缺口使用 typed proposal unavailable。
-- Format 画幅比例是强物理先验，但不能作为零不确定性的 W→H 等式。跨轴推断必须由黄金集校准的
-  format-specific ratio interval、typed authority 和完整相关 uncertainty 单独拥有；它不冒充 direct H、
-  不增加独立 constraint rank，并继续受 5% 预算、反证和 sealed acceptance 约束。
-- 当前 production 只用 typed hard facts 选择 placement。未来可以在全部硬物理合法性、source
-  containment、输出预算和 content veto 之后加入经独立数据校准且带 abstention 的概率选择，但未经校准
-  的 score 不得拥有最终决定权。启用前必须冻结 feature/model/calibration schema、绝对概率与 margin
-  阈值、evidence coverage、OOD、typed failure、source-SHA calibration/sealed 分区和 `O(K × F)` 工作上界；
-  runner 必须保留在报告中，评分不得新增像素读取或复活非法候选。
-- 安全层只处理唯一胜出 placement 的联合可行状态，不合并落选位置、不分别相加不能同时发生的
-  最大误差、不静默裁掉越界 footprint。具体 bleed 和预算只由 `docs/ARCHITECTURE.md` 定义。
-- Contact 与 overlap 始终属于 challenge。Challenge 是预检测评测角色，不预设 runtime 终态：标准
-  detector 与 Gate 能把风险判定为可直接使用时可以 `approved_auto`，证据不足时 `needs_review` 同样
-  合格。不得为提高通过率强推自动批准，也不建立第二套 detector 或独立特殊 bleed 预算；未来显式 topology
-  protection 只能作用于已证明关系的边界，并消耗同一 5% 总预算。
-- `CandidateGate` 只记录 typed assessment；只有 `DecisionGate` 创建 final status 与 reasons。
-- 任一 slot 不安全时，整个 source `needs_review` 且不写正式照片；不做 slot salvage。
-- 不为减少 blank TIFF 牺牲内容保护或 direct-use 质量。V5 不实现 blank suppression。
-- TIFF 位深、通道、ICC、resolution、支持的 metadata、无损压缩和 Orientation 必须按当前
-  I/O 合同保真；正式输出写 `Orientation=1`。
-
-## 实现边界
-
-- 每个概念只有一个 canonical name、type、owner 和真相来源。权限只沿 input、evidence、
-  assessment、selection、decision、finalization、output、report、debug 单向流动。
-- 删除稳定发布版中曾对真实样片有效的机制前，必须先从对应 tag 源码确认其像素事实与物理作用，
-  将有效部分明确归入 observation、anchor、local correction、risk feature、veto、protection 或
-  selection 的唯一 current owner，或用黄金反例证明它本身不安全且已被现机制覆盖。完成迁移后才删除
-  旧式表达；这项审计不授权复制旧源码、保留兼容入口、平行 runtime 或无法解释的 fallback。
-- 问题修复必须消除根因，以唯一 canonical 逻辑直接定义正确行为；被替代的 API、schema、flag、
-  alias、wrapper、test、import、错误路径、临时补丁、绕行分支、fallback、shim、feature flag、
-  dead code 与平行 runtime 同批删除，production 只保留当前路径。
-- Producer 必须 fixed-template-first 且工作量有界；不恢复完整链 materialization/cache、通用 DP、
-  top-K、候选笛卡尔积、逐帧尺寸、selected-placement 临时 query 或无界全图 evidence。
-- 新增自由度必须说明它减少的物理未知量、唯一 owner、启用与禁止条件、工作上界、反例、Debug、
-  Gate 失败表达，并完整报告 development gold 的 proposal、安全性、自动决定与根因迁移；sealed acceptance
-  不得因开发而打开。不能完成这些合同的能力不进入 production。
-- 连续几何保留到最终 sampling；不得逐格取整并累计坐标误差。不同 placement 保持竞争，同一
-  placement 的连续误差才进入联合安全范围。
-- 性能优化只能复用 candidate-independent 计算或完全相同的状态。除非用户明确批准行为变化，优化
-  前后 registered observations、合法 placements、winner/runner 与 provenance 必须相同。
-- `tifffile + imagecodecs` 独占正式 TIFF I/O；OpenCV 只作有界像素测量；SciPy 只作数值与
-  sampling；Pillow 只在显式 Debug Analysis 时延迟导入。
-- V5 首版不加入视觉大模型、训练模型、ONNX Runtime 或 PyTorch runtime。未来 learned evidence
-  仍须经过同一物理求解、安全 Gate 与黄金验证。
-- X5 Crop 是唯一并发 owner。生产默认 `--jobs 1`、上限 3；OpenCV、BLAS、OpenMP 与 SciPy
-  内部线程固定为 1，除非三目标平台冻结基准证明改变更快且内存有界。
-- 安装器按模块能力复用现有全局 Python 环境。缺失项才最小安装；版本不符只沿已确认的原
-  pip distribution 或 Homebrew formula 更新；未知 ownership 在写入前停止。不创建 `.venv`，
-  不叠加第二个 provider，不把 Homebrew 设为前置条件。
+- 仓库只有一条 V5 current-only production path；V5 直接在 `main` 开发。除非用户明确恢复，不开发
+  历史 app、native packaging、兼容入口或平行 runtime。
+- `docs/ARCHITECTURE.md` 是产品合同、运行流、数值合同、工作量上限、验证语义与源码 owner 的唯一
+  说明。修改 detector、placement、Gate、输出、report、TIFF I/O、性能或黄金比较前，读取相关章节和
+  当前源码；`AGENTS.md` 不复制这些合同。行为变化更新该唯一 owner、`docs/CHANGELOG.md` 和受影响的
+  中英文公共文档。
+- 项目规则和用户指令优先于通用 skill。通用调试、简化或验证方法不得改变 format/count authority、
+  reference 权限、typed evidence、自动批准边界或发布标准；精确语义以架构文档为准。
+- 修复聚焦用户要求范围内的根因，并在同一机制内删除已被替代的路径；不得借“彻底修复”扩大到无关
+  清理。删除稳定版曾对真实样片有效的机制前，先从对应 tag 确认其物理作用，并将有效事实迁入架构文档
+  指定的 current owner，或用黄金反例证明其不安全且已被现机制覆盖。
+- 不新增样片特例、白名单、格式 denylist、无法解释的 fallback 或仅为提高覆盖率而放宽的权限。新增
+  自由度、依赖、并发或性能行为必须先满足架构文档中的 authority、工作量、反例、Gate 与验证合同。
 
 ## 验证
 
@@ -198,62 +135,14 @@ platform | platform-check | platform-package | pre-push
   不得使用 `--no-verify`。
 - Commit 或 push 前不手工重复运行即将由对应 Hook 覆盖的同一验证。只有 Hook 未覆盖的专项检查，或
   为诊断已经出现的失败，才额外手工运行；最终以正常 Hook 结果为准。
-- 日常算法开发使用 `tools.regression.gold_analysis --gate report`，即使发现危险 auto 也必须完整写出诊断
-  receipt；`tools/verify accuracy` 与 `gold_analysis --gate release` 是 release detection gate，不能用作迫使
-  中间版本提前 Review 的开发前置条件。`tools/verify accuracy` 薄调用同一完整黄金分析，并同时要求全部
-  detector/comparator source 与 HEAD 一致，以及全部 runtime calibration 的 cohort、eligibility、精确
-  observation set 与登记数值可复算一致。
-- Performance 不属于日常 commit 或 push Gate。只在准备发布时运行，并绑定最终 release commit；
-  tree 变化后旧 receipt 立即失效。
-- `Test/` 不受 Git 跟踪，目录布局不是 runtime authority；工具以 cohort 中的相对路径、source SHA、
-  format 和显式 count 绑定样片。当前本地样片统一为
-  `Test/<format>/Sxxx_count-N.tif`，使用正式 format ID，不建立 `full/partial` 子目录。文件名中的 count
-  只镜像 cohort authority，任何工具都不得从路径反推。不得把 TIFF、生成输出或 receipt 提交到 Git。
-- 人工校准工作集按 source SHA 去重；同一字节内容只准备一张待标注工作副本，但不同显式 count 的
-  sample task 必须分别保留，不能当成重复项合并。Manifest 同时记录 task identity、count 与 source
-  alias；活动工作副本统一位于 `Test/manual_review/gold_calibration/<format>/`，用 `counts-N-M` 镜像全部
-  task count，不从目录或文件名反推 authority。只有用户明确确认的原图坐标才能进入黄金基线；不建立
-  平行校准池。
-- 当前已知样片只使用 `development_gold` 与 `development_diagnostic` 两种验证角色；它们都属于可查看、
-  可调试的 development corpus，不证明未见 X5 扫描的泛化。每个 task 运行一次并携带明确 count；不保留
-  auto 重复任务。重置或尚无当前确认时，development gold 必须明确失败为
-  `calibration is incomplete`，不得回退旧基线。
-- Development gold 必须分开报告：完整 pre-Gate proposal 覆盖及黄金安全性、candidate eligibility、
-  `unsafe_approved_auto`、nominal 自动覆盖和 challenge 能力。所有合法、受支持的黄金 task 都应先生成可比较
-  proposal，并无条件接受黄金评价；先修不安全 proposal 的通用几何根因，再审计安全 proposal 的错误权限
-  阻断，最后优化 auto/review 决定。开发中的 `unsafe_approved_auto > 0` 是必须暴露和修复的自然事实，不使
-  诊断命令失败，也不得迫使生成层提前放弃方案；但不能人为绕过 Runtime Gate 来制造危险 auto。报告必须
-  逐项保存 sample、错误边界和根因，并明确该提交尚未达到发布检测门槛。已知危险 auto 只能存在于未发布
-  开发版本和临时测试输出，不能被描述为验证通过或用于正式交付。Review proposal/candidate 的偏差不是
-  用户层危险输出；challenge 的安全 `approved_auto` 与安全 `needs_review` 都是合格结果，前者单独记录为
-  能力发现。不得新增样片规则、whitelist、格式 denylist 或根据当前输出自动晋升黄金。
-  检测能力发布底线要求当前 development nominal 全部安全 `approved_auto`，且全部角色
-  `unsafe_approved_auto = 0`；challenge 的安全 `approved_auto` 与安全 `needs_review` 都合格。未来建立
-  sealed cohort 后，其 nominal 也必须全部安全自动通过。不得把失败 nominal 改成 challenge、隐藏 runner
-  或放宽安全合同来达标。
-  对 count 小于 format 最大完整格数的单片带，若人工确认的照片组在 source 长轴两侧都至少留有一个
-  固定 W，且首张 START 与末张 END 不是两条都直接可见，则属于
-  `two_sided_floating_partial_sequence` challenge；该事实只能从冻结前的 source 几何推导，不能读取
-  detector 输出或 post-selection holder fill。
-- 当前 `development_gold.jsonl` 只包含已查看的开发黄金。未来新增 source 在查看任何 detector 结果前，
-  必须按 source SHA 固定为 development 或 sealed acceptance；同 SHA 的全部 count task 必须同分区。
-  生产中发现的危险自动裁切经人工 reference 确认后永久加入 development gold 作为 incident regression；
-  在真实使用中持续补充新的 sealed source，但不把补齐 sealed 设为单次 incident 修复的前置条件，也不建立
-  新的平行黄金池、样片特例或 whitelist。
-  日常开发命令不得读取或输出 sealed 的逐样片结果。显式打开 sealed source 调试后，该 source 永久转为
-  development，并补充新的 sealed source。两个分区共享同一人工 reference 权限，不建立平行校准池。
-- 同 SHA 的合法 count 变体按共享物理 `boundary_pair` 映射真实 Frame。不同 count 可以改变 ambiguity 和
-  auto/review 终态，但新增或省略空白、残缺 slot 不得把共享真实 Frame 重定相到危险位置。任一变体的
-  `approved_auto` 都必须独立满足黄金安全合同；Review candidate 的跨 count 分歧只作机制诊断。
-- Accuracy、diagnostic、performance 与 platform cohort 的每条记录都必须携带明确 count；工具不得
-  从片夹容量、文件名、目录中的历史 full/partial 标签或像素推导。
-- 受跟踪的 diagnostic cohort 只判断 crash、hang、terminal/schema 完整性、authority、query/template、
-  内存和 TIFF 工程合同，不产生 accuracy verdict。
-- 性能 Gate 使用 24-source 完整用户路径，正式 mean 上限为 5 秒；3 秒 mean 只作不阻断的
-  challenge。SHA、profiling 和 Debug Analysis 在计时外；未插桩 production RSS 与 cProfile RSS
-  必须分开记录。Receipt 只证明其中记录的 commit、依赖、工作量和命名机器。
-- Named-TIFF 与端到端验证必须调用正式 CLI 和完整 detection flow；测试工具不得提供更容易
-  通过的 detector path。
+- 验证应与本次改动和声明相称：先运行能证明目标的最小专项检查；只有依赖范围、失败证据、项目 Gate
+  或待提交内容要求时才扩大。一次成功且其输入未变化的检查不重复运行，也不以通用 skill 强制增加
+  release 或 performance 验证。
+- Development gold、diagnostic、accuracy、performance、platform、cohort、source SHA、count、proposal、
+  candidate、decision 与 release threshold 的全部精确语义由 `docs/ARCHITECTURE.md` 第 14 节定义；标注器
+  权限与工作集布局由 `docs/MANUAL_ANNOTATION.md` 定义。此处只保存命令路由，不复制数值或状态合同。
+- `Test/` 不受 Git 跟踪；不得提交原始 TIFF、生成输出或 receipt。Named-TIFF 与端到端验证必须调用正式
+  CLI 和完整 detection flow，测试工具不得提供更容易通过的 detector path。
 
 ## Git、完成与发布
 
@@ -268,10 +157,7 @@ platform | platform-check | platform-package | pre-push
   当前 `HEAD` 读取同一字节写入临时包；不得因此把文件恢复到本地工作区或掩盖其它缺失发布源。
 - `tools/release/manifest.py` 是发布内容唯一 owner。用户包不包含 modular source、tests、tools、
   fixtures、内部文档、开发依赖或生成输出。
-- 构建命令为 `python3 -m tools.release.build --version <version>`。只有 development gold、性能、依赖、
-  TIFF/metadata、中文路径、文件系统恢复、安装/打包、Hook/CI，以及 Apple Silicon macOS、Intel macOS、
-  Windows x64 三目标实机验证全部绑定同一 release commit 后，才可创建 RC、tag、GitHub Release 或公开
-  ZIP。若已有 sealed cohort，其 aggregate receipt 也必须绑定同一 commit；当前没有 sealed cohort 不阻断
-  首版发布，但必须披露尚未完成未见样片验证。现有黄金未覆盖的 `xpan`、`120-645`、`135-dual` 同样不
-  阻断发布；Runtime 保持统一合同，发布说明只能写“尚无真实样片覆盖”，不得宣称已经验证。未提供独立卷时
-  exFAT 必须保持显式 best-effort 未验证。
+- 构建命令为 `python3 -m tools.release.build --version <version>`。Release 内容由
+  `tools/release/manifest.py` 独占，资格、目标平台、receipt 与未覆盖范围的精确合同只以
+  `docs/ARCHITECTURE.md` 第 14 节为准；全部要求绑定同一 release commit 前，不创建 RC、tag、
+  GitHub Release 或公开 ZIP。

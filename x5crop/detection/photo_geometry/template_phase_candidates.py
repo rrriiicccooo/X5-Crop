@@ -39,6 +39,10 @@ from .template_model import (
     adjacency_relation_evidence_identity,
     adjacency_relation_required_bindings,
     adjacency_prefix_coefficients,
+    adjacency_prefix_positions,
+    adjacency_prefix_intervals,
+    template_role_position,
+    template_role_interval,
     most_constrained_lattice_parameter_fit_basis,
     phase_lattice_fit_from_absolute,
     realize_adjacency_relations,
@@ -228,19 +232,6 @@ def _relations(
     return result
 
 
-def _prefixes(
-    relations: tuple[AdjacencyRelation, ...],
-    count: int,
-) -> tuple[float, ...]:
-    result = [0.0]
-    running = 0.0
-    for slot_index in range(1, count):
-        if slot_index <= len(relations):
-            running += relations[slot_index - 1].canonical_delta_px
-        result.append(running)
-    return tuple(result)
-
-
 def _contact_phase_seeds(
     contact_edges: Sequence[ContactEdgeObservation],
     direct: tuple[_AnchorFact, ...],
@@ -317,7 +308,7 @@ def _contact_phase_seeds(
         )
         relations[ordinal - 1] = contact
         realized = tuple(relations)
-        prefixes = _prefixes(realized, template.count)
+        prefixes = adjacency_prefix_positions(realized, template.count)
         end_role_index = 2 * ordinal - 1
         start_role_index = 2 * ordinal
         end_role = roles[end_role_index]
@@ -406,7 +397,7 @@ def _overlap_phase_seeds(
                 phase_anchor = (relation, end)
         assert phase_anchor is not None
         relation, end = phase_anchor
-        prefixes = _prefixes(base_relations, template.count)
+        prefixes = adjacency_prefix_positions(base_relations, template.count)
         end_role = roles[2 * relation.relation_ordinal - 1]
         relative = (
             end_role.slot_index * pitch.center
@@ -481,7 +472,7 @@ def _overlap_phase_seeds(
         )
         relations[ordinal - 1] = overlap
         realized = tuple(relations)
-        prefixes = _prefixes(realized, template.count)
+        prefixes = adjacency_prefix_positions(realized, template.count)
         end_role_index = 2 * ordinal - 1
         start_role_index = 2 * ordinal
         end_role = roles[end_role_index]
@@ -511,67 +502,6 @@ def _overlap_phase_seeds(
                 tuple(map(repr, item.adjacency_relations)),
             ),
         )
-    )
-
-
-def _prefix_intervals(
-    relations: tuple[AdjacencyRelation, ...],
-    count: int,
-) -> tuple[FiniteInterval, ...]:
-    """Propagate each directly authorized adjacency relation exactly once."""
-
-    result = [FiniteInterval.exact(0.0)]
-    minimum = 0.0
-    maximum = 0.0
-    for slot_index in range(1, count):
-        if slot_index <= len(relations):
-            interval = relations[slot_index - 1].delta_interval_px
-            minimum += interval.minimum
-            maximum += interval.maximum
-        result.append(FiniteInterval(minimum, maximum))
-    return tuple(result)
-
-
-def _role_position(
-    role: TemplateRole,
-    *,
-    phase: float,
-    width: float,
-    pitch: float,
-    direction: int,
-    prefixes: tuple[float, ...],
-) -> float:
-    relative = role.slot_index * pitch + prefixes[role.slot_index]
-    if role.role == BoundaryRole.END:
-        relative += width
-    return phase + direction * relative
-
-
-def _inferred_role_interval(
-    role: TemplateRole,
-    *,
-    phase: FiniteInterval,
-    width: FiniteInterval,
-    pitch: FiniteInterval,
-    direction: int,
-    prefixes: tuple[FiniteInterval, ...],
-) -> FiniteInterval:
-    """Project continuous template authority onto one missing boundary."""
-
-    slot = role.slot_index
-    relative_minimum = slot * pitch.minimum + prefixes[slot].minimum
-    relative_maximum = slot * pitch.maximum + prefixes[slot].maximum
-    if role.role == BoundaryRole.END:
-        relative_minimum += width.minimum
-        relative_maximum += width.maximum
-    if direction == 1:
-        return FiniteInterval(
-            phase.minimum + relative_minimum,
-            phase.maximum + relative_maximum,
-        )
-    return FiniteInterval(
-        phase.minimum - relative_maximum,
-        phase.maximum - relative_minimum,
     )
 
 
@@ -1358,7 +1288,7 @@ def _match_roles(
         anchor = direct_by_id.get(observation_id)
         if role is None or anchor is None:
             return ()
-        expected = _role_position(
+        expected = template_role_position(
             role,
             phase=phase,
             width=width,
@@ -1431,7 +1361,7 @@ def _match_roles(
     if direction < 0:
         adjacency_roles = tuple(reversed(adjacency_roles))
     for end_role, start_role in adjacency_roles:
-        end_expected = _role_position(
+        end_expected = template_role_position(
             end_role,
             phase=phase,
             width=width,
@@ -1439,7 +1369,7 @@ def _match_roles(
             direction=direction,
             prefixes=prefixes,
         )
-        start_expected = _role_position(
+        start_expected = template_role_position(
             start_role,
             phase=phase,
             width=width,
@@ -1489,7 +1419,7 @@ def _match_roles(
     if direction < 0:
         slot_roles = tuple(reversed(slot_roles))
     for start_role, end_role in slot_roles:
-        start_expected = _role_position(
+        start_expected = template_role_position(
             start_role,
             phase=phase,
             width=width,
@@ -1497,7 +1427,7 @@ def _match_roles(
             direction=direction,
             prefixes=prefixes,
         )
-        end_expected = _role_position(
+        end_expected = template_role_position(
             end_role,
             phase=phase,
             width=width,
@@ -1893,7 +1823,7 @@ def _fit_seed(
         frame_width_px=width,
         pitch_px=pitch,
     )
-    prefixes = _prefixes(relations, template.count)
+    prefixes = adjacency_prefix_positions(relations, template.count)
     matches: tuple[tuple[TemplateRole, _AnchorFact], ...] = ()
     required = set(seed.required_bindings)
 
@@ -1963,14 +1893,14 @@ def _fit_seed(
             frame_width_px=width,
             pitch_px=pitch,
         )
-        prefixes = _prefixes(relations, template.count)
+        prefixes = adjacency_prefix_positions(relations, template.count)
     residual_limit = max(3.0, width * 0.035)
     retained = tuple(
         (role, anchor)
         for role, anchor in matches
         if abs(
             anchor.coordinate_px
-            - _role_position(
+            - template_role_position(
                 role,
                 phase=phase,
                 width=width,
@@ -2007,13 +1937,13 @@ def _fit_seed(
             frame_width_px=width,
             pitch_px=pitch,
         )
-        prefixes = _prefixes(relations, template.count)
+        prefixes = adjacency_prefix_positions(relations, template.count)
     if not matches:
         return None
     if not template.gap_prior_px.contains(pitch - width):
         return None
     canonical_positions = tuple(
-        _role_position(
+        template_role_position(
             role,
             phase=phase,
             width=width,
@@ -2104,7 +2034,7 @@ def _fit_seed(
     # once.
     uncertainty = max(1.0, min(width * 0.04, residual_mean + 1.0))
     phase_interval = FiniteInterval(phase - uncertainty, phase + uncertainty)
-    prefix_intervals = _prefix_intervals(relations, template.count)
+    prefix_intervals = adjacency_prefix_intervals(relations, template.count)
     measured_pitch = refine_placement_pitch_interval(
         tuple(
             (role.role, role.slot_index, anchor.interval_px)
@@ -2127,7 +2057,7 @@ def _fit_seed(
             observed = local_relation_by_role.get(role.role_index)
             binding_use = SequenceBindingUse.LOCAL_REFINEMENT
         if observed is None:
-            inferred_interval = _inferred_role_interval(
+            inferred_interval = template_role_interval(
                 role,
                 phase=phase_interval,
                 width=FiniteInterval(

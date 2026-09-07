@@ -464,9 +464,18 @@ def alignment_summary(detection: FinalDetection) -> str:
             f"{source_width.basis.value.upper()} "
             f"{len(source_width.supporting_frame_ordinals)}F/"
             f"{len(source_width.supporting_constraint_ids)}C/"
-            f"{len(source_width.observation_ids)}O"
+            f"{len(source_width.observation_ids)}O "
+            f"[{source_width.width_px.minimum:.1f},{source_width.width_px.maximum:.1f}]px"
             if source_width.state.value == "supported"
             else source_width.failure_kind.value.upper()
+        )
+        width_fit = lane.prepared.phase_competition.best
+        width_consumption = (
+            "N/A"
+            if width_fit is None
+            else f"[{width_fit.pitch_fit.frame_width_px.minimum:.1f},"
+            f"{width_fit.pitch_fit.frame_width_px.maximum:.1f}]px "
+            f"GRID {len(width_fit.completely_unobserved_frame_ordinals)}F"
         )
         width_topology = (
             lane.prepared.phase_competition
@@ -575,7 +584,8 @@ def alignment_summary(detection: FinalDetection) -> str:
             f"OUTER MATERIAL {outer_material_used}/{outer_material_count} · "
             f"APERTURE DOMAIN "
             f"{aperture_domain_proof} · OUTER "
-            f"{outer_count}/2 · SOURCE W {source_width_proof} · "
+            f"{outer_count}/2 · MEASURED W {source_width_proof} · "
+            f"PLACEMENT W {width_consumption} · "
             f"W TOPO {width_topology_proof} · "
             f"W INFER {width_proof} · SEP "
             f"D {separator_counts['dark'][0]}/{separator_counts['dark'][1]}"

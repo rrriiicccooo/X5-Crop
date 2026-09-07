@@ -12,7 +12,7 @@ X5 Crop 是已知胶片模板的自动对准器，不是通用照片边界检测
 → format 设计先验与 source-level W/H 模板
 → 从整条片带到局部边界的有界对准
 → 合法 placement 竞争
-→ 唯一获准的 selected placement，或拒绝自动选择
+→ 选取一份获准的 placement，或拒绝自动选择
 → selected-only source-space 安全 polygon
 → CandidateGate / DecisionGate
 → 可选 lightweight deskew
@@ -76,7 +76,7 @@ Frame 校准：只接受 `slot_kind=image` 且 START、END、共享 top/bottom �
 format 或样片例外。该 development 校准尚未经过 sealed 数据验证，因此不能宣称未见来源泛化；缺少
 sealed cohort 本身不阻断首版发布。
 
-设计 W/H 是跨相机的有界搜索先验，不是每台相机共享的绝对片门尺寸。唯一 placement 闭合后，同一
+设计 W/H 是跨相机的有界生成先验，不是每台相机共享的绝对片门尺寸。可靠局部角色配对形成后，同一
 source 的直接 START/END 可以收紧共同 W，唯一直接 aperture top/bottom pair 可以收紧共同 H。Direct
 W/H observation 分别保留自己的 identity；直接可见边界的 native coordinate 始终优先，catalog 或
 比例推断都不能把它拉回名义尺寸。相机 aperture 差异与该轴扫描比例差异在像素域可能不可区分，本项目
@@ -254,7 +254,7 @@ query 或无界 hypothesis。
 | robust Grid fit | anchor 后以规则 lattice 补缺失角色并吸收局部 gap 变化 | `CalibratedNominalGridAuthority`、逐 adjacency coverage、相关 uncertainty | 保留生成能力；删除未校准 fit、自身 residual 自证和覆盖直接线 |
 | BW/white/mask outer 与 separator-first outer | 不同极性和跨高度材料变化提供 enclosing/phase 线索 | coarse strip、broad enclosing material、cross 与 outer-frame authority | 保留 polarity-neutral observation；多个 box 不按 score 选。宽缓单边和 clipped outer 的权限仍须按小机制闭合 |
 | content bbox、content runs | 暴露内容穿越、空白、危险裁切与候选异常 | `content_veto`、adjacency continuity、Debug；未来只作冻结的 risk feature | 保留负向事实；永不单独移动或缩放 geometry |
-| confidence / best score | 在多个近似合法解释中聚合 contrast、距离和 residual | 当前 hard competition；未来为校准概率、runner margin、OOD 与 abstention | 保留可解释特征设计，删除旧任意加权终判；独立数据闭合前不进入 Runtime |
+| confidence / best score | 在多个近似合法解释中聚合 contrast、距离和 residual | 当前 hard competition；下一阶段开发可用性特征与排序，未来为校准可用概率与拒绝选择 | 保留可解释特征，删除旧任意加权终判；开发评估不等待独立数据，正式概率权限须独立验证 |
 | retry、nearby correction、approved polish | 曾隐式补偿 separator 宽度、anchor、aperture、source clipping 或 topology | local relation、source W、aspect authority、clipped-boundary/topology owner | 已迁移的物理修正保留；clipped boundary 仍开放。删除 selection/Gate 后 mutation 与无法解释的 retry |
 | fixed/extra bleed | 对真实边缘误差或异常 topology 提供输出保护 | base physical bleed + typed topology protection，共用每侧 5% 总预算 | 保留已证明关系的定向保护；删除无条件固定像素和借 bleed 掩盖位置错误 |
 | outer-edge deskew | 用两侧稳健线拟合整理输出方向 | `output_deskew.py` + finalization | 保留有界数值观察；整图旋转晚于 Gate，不恢复 competing enhanced angle 对 placement 的权限 |
@@ -351,7 +351,7 @@ resolution、pair、typed failure 和工作量；Debug 不重新测量或求解�
 该事实只消费现有 registered bands 与 edge resolution，不新增 TIFF 读取、查询、候选或 score。Phase owner
 可以消费它来纠正首尾角色；Contact/Overlap owner 仍只查看加入 outer boundary 之前的基础 edge ledger，
 因此 outer material 不能伪造 adjacency topology。Normal report 与 Debug 分别显示 observation、权限使用
-和冲突；未进入唯一 placement 的事实只作 validation。
+和冲突；未进入选定 placement 的事实只作 validation。
 
 短轴 coarse owner 使用另一份固定、候选无关的 `COARSE_STRIP_SHORT` 查询：sharp channel 使用 5 条固定
 trace，broad channel 使用 9 条固定 trace（每个长轴区域 3 条），两组坐标先合并为一个 registered union，
@@ -393,7 +393,7 @@ role = phase
      + (W if END else 0)
 ```
 
-这条 Grid 是唯一 placement 的主生成模型，不是 detector 失败后的 fallback。零偏差状态由 format 的有界
+这条 Grid 是 placement 的唯一主生成模型，不是 detector 失败后的 fallback。零偏差状态由 format 的有界
 `W/H/pitch` 先验、`local_delta = 0` 和 normal adjacency 组成；像素观察随后收紧 source W/H、确定
 absolute phase、保留直接 START/END 的 native coordinate，或给某个 adjacency 增加一次 local advance。
 Grid 始终可以生成一个待检验的默认 placement，但它不能仅凭自己取得 `approved_auto` 权限。
@@ -426,8 +426,8 @@ Grid 始终可以生成一个待检验的默认 placement，但它不能仅凭�
   phase。同一离散 placement 经候选无关 source pitch 或 local advance 重拟合时，报告保留该连续
   lineage 中约束最强的一次参数依据；只有 template 身份、ordinal offset、phase 区间及共享
   observation-role 映射一致才允许继承，runner 之间不能串用。区间不会扩张，直接 role 的 native
-  coordinate 也不会被拟合值覆盖。Source W 只能在离散与 local competition 已唯一结束后收紧 selected
-  fit 的连续 W，不属于候选重拟合，不能改变 lineage、ordinal、winner 或 runner。受约束后仍存在另一离散
+  coordinate 也不会被拟合值覆盖。Source W 可以测量并收紧 retained fit 的连续 W，其消费不授予离散选择
+  权限，不能改变 lineage、ordinal、winner 或 runner。受约束后仍存在另一离散
   ordinal/edge 解释时保留 runner 并产生 `discrete_phase_ambiguous`；连续最小二乘不能充当 best-score。
 
 Production phase competition 在离散比较前，对每个去重后的 bounded candidate 对称执行
@@ -506,9 +506,9 @@ source pitch、base relation、direct separator refit 与 selected source-W refi
 - 离散 placement 与 local topology 必须先在没有 source W evidence 的候选空间中完成有界竞争。普通 local
   refinement 必须使用 format 编译的完整物理 W interval，不能用正在受检验的 fitted Grid W 过滤自己的
   反证；source-wide 与跨高度联合 edge 优先尝试唯一闭合，不能唯一时仍保留全部注册观察参与冲突判断。
-  随后对 resolved placement 或 ambiguous competition 中保留的 best proposal 评估直接角色权限、pre-W
-  lattice rank 与逐 adjacency coverage。Pre-W joint rank 至少为 2、所有必要 coverage 完整且没有直接反证时，
-  唯一 `SourceFrameWidthAuthority` 可以由两类
+  共同 W 的校准先验从模板生成时即生效；可靠配对形成后，不论 retained proposal 是否已取得 placement
+  资格，唯一 `SourceFrameWidthAuthority` 都可以从局部直接事实测量该 source 的 W。测量、消费与自动输出
+  是三个职责：远处 coverage、全局 phase/rank 或另一角色的反证不得抹去已可靠测得的局部宽度。它有两类
   基础闭合：至少两张具有独立直接双边的完整 Frame 形成 `independent_complete_frames`；或全部保留的
   direct-role 坐标系统已使 `(phase,W,pitch)` 达到 rank 3 时，把同一线性系统对 W 的有界投影记录为
   `direct_lattice_closure`。后者只是一份相关 W，不是第四条证据，不回写
@@ -516,29 +516,41 @@ source pitch、base relation、direct separator refit 与 selected source-W refi
   native coordinate interval；若其前缀已有 measured gap，先扣除同一直接 signed-gap interval，再投影 W。
   Contact/Overlap 不进入这条普通 source-W 闭合路径。
 
-  两类基础都只收紧 authority 所属 placement hypothesis 的连续 W，并在最终阶段重新评估 opposite
+  两类基础都先保存不依赖 fitted Grid W 的测量区间，再由消费端与 retained placement 的连续 W 相交；
+  交集为空时保留测量和完整 proposal，以 `source_frame_width_conflict` 阻止该 placement 获得资格。测量的
+  canonical W 只是区间内代表值，不是额外的精确约束；原联合拟合代表仍在交集内时保持它，不能单独换成
+  测量中心而破坏 phase/pitch/W 的相关性。消费端保留原测量与完整交集，原代表被排除时同步更新同一
+  Grid 的派生 gap、local delta 和 role 区间；native binding 不变，联合可行状态仍须由下游完整检查。
+  Catalog separator 是搜索先验，消费后的普通 gap 由同一 W/pitch 差值导出；直接 signed gap 保持 native。
+  最终阶段重新评估 opposite
   inference 与 Gate；不得重编译 template、搜索 phase、删除 runner、改变 ordinal 或参与先前的离散选择。
-  `placement_scope` 明确区分 `resolved_placement | retained_ambiguous_proposal`。后者只改善保留的 pre-Gate
-  proposal，原 `AMBIGUOUS`、typed failure 与 runner 原样保留，不能因此取得 candidate 或 auto 权限；只有
+  `placement_scope` 明确区分 `resolved_placement | retained_ambiguous_proposal | retained_unresolved_proposal`。
+  后两者只改善保留的 pre-Gate proposal，原状态、typed failure 与 runner 原样保留，不能因此取得 candidate
+  或 auto 权限；只有
   resolved placement 才运行额外 native pair/单边 local rebind。Authority identity 固定绑定 scope、template、
   integer offset、全部 phase-anchor role 与实际拥有 W 的 role；无关晚期 refinement 可以变化，W-owning role
   或 phase anchor 变化则 authority 失效。完整 Frame basis 中所有物理相容 Frame 以完整
   uncertainty 进入一个保守 hull；direct-lattice basis 保留全部 retained direct constraint IDs 与 observation，
-  不能挑一组三行形成更有利的 W。
+  不能挑一组三行形成更有利的 W。每条参与测量的 fact 必须与 binding 的 observation/evidence-group identity
+  完全一致；重复 ledger identity 无效。Partial-height-only、outer-material-only、Contact/Overlap 关联 Frame
+  或不相容的残缺可见长度不能成为完整 W 观测。
   恰好三条约束时，W 是该满秩系统的精确区间投影；过定系统则只使用全部 direct coordinate 做一次
   direct-only 最小二乘，并让每条 coordinate interval 与其实际 fit residual 通过同一个线性 estimator
   传播到 W。真实 source 允许小幅 Frame-width 变化，因此过定系统不要求零 residual；但 calibrated prior
-  不参与求出 direct W，任何 retained line 也不能被静默丢弃。投影离开 retained physical W 时产生
+  不参与求出 direct W，任何 retained line 也不能被静默丢弃。直接估计离开 source physical W 分布时产生
   `physical_width_conflict`，不能回退到完整 Frame basis。
   当同一 retained placement hypothesis 同时拥有这两组合法 W 约束时，canonical owner 必须取二者交集并发布
   `reconciled_direct_constraints`；observation identity 与 constraint ID 都完整保留，但不把同一 direct system
   再登记为新的 Frame-width rank。交集为空产生 `physical_width_conflict`，不得选择有利的一组。
-  若每个仍缺角色的 Frame 都至少有一侧直接边缘，同一相关 W 可以推导多条 opposite，但这些推导不增加
+  同一相关 W 可以推导多张单边 Frame 的 opposite；双侧都不可见的其它 Frame 仍由同一 Grid 的
+  W/pitch、absolute anchor 与局部关系放置，不得阻止单边推导，也不登记成 W observation。这些推导不增加
   独立证据。若 direct-lattice W 的建立伴随某条 registered local boundary 被投影退出，该线是直接反证，
   不能再用同一 W 授权缺失角色；产生 `direct_lattice_counterevidence`。一个仅由两高度局部 support 形成、
   没有直接坐标权限的 `LOCAL_REFINEMENT`，只有在 W 不依赖该线、opposite 已授权且 W 走廊内唯一相容时，
   才可让位于 `opposite + correlated W`；原 observation 只保留为 validation provenance，不能收窄 W 或增加
-  rank。
+  rank。已经由 measured Separator/Contact/Overlap 拥有的 endpoint 不得在此退出；其它完整未观察 Frame
+  的存在也不得阻止这条局部单边推导。让位时，原弱线的 model/full 坐标 hull 必须同时退出联合约束，
+  仅将该角色恢复为当前 Grid 的完整边际区间；其它已投影角色区间保持不变，避免弱线继续压窄远处未观察 Frame。
   若某张 Frame 原本双侧都未绑定，但完整 format W 走廊内已有多组 registered native edge，而独立 source W
   能唯一留下其中一组，则允许在固定 placement 上追加一次有界 local lookup 并绑定该原生 pair。它不读取
   新像素、不生成坐标、不改变 phase/pitch/ordinal，也不能在多解时强选。若双侧未绑定 Frame 只有一侧存在
@@ -550,28 +562,31 @@ source pitch、base relation、direct separator refit 与 selected source-W refi
 
 | source W 与缺失角色状态 | 结果 |
 |---|---|
-| 没有 retained placement hypothesis，或状态既非 resolved 也非 ambiguous | `placement_hypothesis_unavailable`；source geometry 与 proposal 均不改变 |
-| retained hypothesis 的 pre-W rank < 2、必要 adjacency coverage 不完整或存在直接反证 | `SourceFrameWidthAuthority` 保存对应 typed failure；source geometry 与 proposal 均不改变 |
-| resolved placement 或 retained ambiguous proposal、pre-W rank = 2、必要 coverage 完整、无反证，且至少两张独立完整 Frame | 建立 `independent_complete_frames` source W；它可以补最后一个 rank，但不能参与先前的离散候选选择 |
-| 全部 retained direct-role constraints 共同达到 rank 3，必要 coverage 完整且无反证 | 建立 `direct_lattice_closure` source W；全部约束参与同一相关 W 投影，不挑有利三行，也不再登记 Frame-width rank |
+| 没有 retained role mapping | `placement_hypothesis_unavailable`；不能虚构完整 Frame 配对 |
+| 至少两张正确配对、独立且完整的 native Frame；全局 rank 不足、远处 coverage 不完整或 placement 尚 unresolved | 建立 `independent_complete_frames` source W；保留原 placement 缺口，不能以 W 冒充 phase/pitch/coverage |
+| 某个配对角色不具权限或有反证 | 该 pair 不参加 W 测量；其它合格完整 Frame 不受牵连，原角色反证继续保留 |
+| 全部 retained direct-role constraints 共同达到 rank 3，且参与约束本身有效 | 建立 `direct_lattice_closure` source W；全部约束参与同一相关 W 投影，不挑有利三行，也不再登记 Frame-width rank |
 | 上述两组 W 约束同时可用且区间相交 | 建立 `reconciled_direct_constraints`，只发布交集；保留完整 Frame ordinal、rank-3 constraint 与 observation provenance，不增加 rank |
 | 上述两组 W 约束同时可用但区间不相交 | `physical_width_conflict` → `source_frame_width_conflict`；不得挑选任一组 |
 | Rank-3 direct system 与 source 物理 W 区间不相交 | `physical_width_conflict` → `source_frame_width_conflict`；直接反证优先 |
-| `placement_scope = retained_ambiguous_proposal` 且 W 已闭合 | 只收紧该 best proposal 并补其已有缺失 opposite；保持 `AMBIGUOUS`、runner 与原 phase failure，不运行额外 local rebind，不取得 candidate/auto 权限 |
+| retained ambiguous/unresolved proposal 且 W 已测得 | 只修正该 proposal；保持原状态、runner 与 phase failure，不运行额外 local rebind，不取得 candidate/auto 权限 |
+| source W 测量与当前 placement W 无交集 | 测量仍 `supported`；消费为 `source_width_placement_conflict`，完整 proposal 与测量均保留 |
 | 没有缺失角色 | 不需要 W 推断，全部直接 native coordinate 保持不变 |
-| 任一 source-W basis 已闭合，且每个缺失 Frame 仍有一侧直接边缘 | `supported`；同一相关 W 补齐全部 opposite，不增加 rank |
+| 任一 source-W basis 已闭合，目标 Frame 有一侧直接边缘 | `supported`；只对该类 missing role 推导 opposite，不增加 rank |
 | `direct_lattice_closure` 已闭合，但先前投影退出的 registered local boundary 仍构成 counterevidence | `direct_lattice_counterevidence` → `frame_width_inference_unavailable`；不能用相关 W 删除反证后自证缺失角色 |
 | 至少两张其它完整直接 Frame 闭合共同 W；某个双侧未绑定 Frame 在该 W 内只有一组 registered、intrinsic-authorized native edge pair | 固定 placement 上绑定该 pair；随后重新计算直接权限、outer、coverage 与 Gate |
 | 至少两张其它完整直接 Frame 闭合共同 W；某个双侧未绑定 Frame 只有一侧唯一 intrinsic edge，另一侧 registered corridor 为空 | 保留该 native edge，以同一相关 W 推导 opposite；calibrated Grid 不能把自己的 W 冒充这份 authority |
-| 双侧未绑定 Frame 没有上述唯一 pair 或唯一单侧 edge，或仍有多组合法解释 | 保持 `complete_frame_unobserved`；source W 不创造坐标也不强选 |
+| 双侧未绑定 Frame 没有上述唯一 pair 或唯一单侧 edge | 保留已有 Grid proposal；其放置和准入由 anchor、pitch、local relation、coverage 与完整风险包络负责 |
 | 无权 `LOCAL_REFINEMENT`，opposite 已授权，W 不依赖该线，且 W 走廊中只有该线相容 | 该角色成为 `validation_only`；完整相关 W 推导坐标，记录 role index 与 validation observation ID |
 | 弱线参与 W、opposite 未授权、W 走廊多解，或该线承担 `PHASE_ANCHOR` | 不让位；原 `direct_role_binding_authority_unavailable` 保持 |
-| 任一 Frame 的 START/END 都未观察，且上述 source-W native-pair rebind 未唯一成立 | `complete_frame_unobserved` → `frame_width_inference_unavailable` |
 | 两类 source-W 基础均不能闭合 | `source_width_closure_unavailable`；缺失 opposite 时继续为 `common_width_authority_unavailable` |
 
 `SourceFrameWidthAuthority` 只回答 W 是否已独立闭合；它不自动证明由 W 推导的 opposite 与相邻 Frame
 仍保持普通 topology。`SourceFrameWidthTopologyAssessment` 在 correlated-W inference 已实际取得角色权限后，
-对每个受影响的 normal adjacency 单独检查完整 W interval 与相邻 native boundary interval。未执行或
+对两侧都由 native boundary 或 native + W 拥有的 normal adjacency，检查当前 placement 消费的完整 W
+交集，而不是重新引入已被合法约束排除的测量状态。若邻接侧属于完整未观察 Frame，该关系仍由既有 Grid
+authority、coverage、counterevidence 和联合可行集合拥有；不得把相关 Grid/W 的两个边际区间当成独立反证。
+未执行或
 unavailable 的 W inference 不转移坐标所有权，因此 assessment 为 `supported` 且 facts 为空，原 typed
 failure 保持；direct measured separator、Contact 与 Overlap 已有自己的关系 owner，不由本检查重新解释。
 
@@ -580,7 +595,8 @@ failure 保持；direct measured separator、Contact 与 Overlap 已有自己的
 | 完整 signed-gap interval 的下界 `>= 0` | `supported`；W inference 可以继续进入后续 authority、Gate 与预算 |
 | signed-gap interval 同时包含负值与非负值 | `normal_adjacency_unresolved` → `adjacency_topology_unresolved` |
 | signed-gap interval 全部 `< 0`，但没有已证明的 `OverlapRelation` | `normal_adjacency_contradicted` → `adjacency_topology_unresolved` |
-| W inference 未获权限，或最终没有由 W 拥有的相邻角色 | `supported`、空 facts；不得抢占 `complete_frame_unobserved`、counterevidence 或其它先发生的 root |
+| W inference 未获权限，或最终没有由 W 推导的 opposite 角色 | `supported`、空 facts；不得抢占消费冲突、counterevidence 或其它先发生的 root |
+| 邻接侧来自完整未观察 Frame | 不登记独立 W topology fact；保留 Grid 的联合关系与全部后续检查，空 facts 不代表该关系已通过 |
 
 该 assessment 不选择有利 W 子区间、不创造 Contact/Overlap、不新增 evidence、rank、query、candidate 或
 score；它只遍历至多 `count - 1` 个关系，工作量为 `O(count)`。同一 W authority identity、每个受影响
@@ -660,7 +676,7 @@ local refinement 较晚补出精确反序绑定，该 candidate 产生 `direct_r
 | supported | 任一登记 trace 越过保守内域 | 域外 | `direct_role_aperture_domain_conflict` |
 
 这样可以吸收发布版“局部 separator edge 与整体 outer/cross 共同工作”的有效能力，同时仍禁止把两个不完整
-机制叠加成批准。独立闭合的 source W 只覆盖真正有权限的 native coordinate；上表的 validation-only 局部线
+机制叠加成批准。独立闭合的 source W 不得覆盖真正有权限的 native coordinate；上表的 validation-only 局部线
 不是 competing placement，也不能反向收窄 W。若同角色 separator-material alternative 与 opposite role
 形成的全部可能 W
 都和这份独立 source W 不相交，它不再是合法 runner；正在拟合的 Grid W、catalog 中心或未授权局部线都
@@ -1084,43 +1100,59 @@ placement；Grid coordinate 只保留为模型诊断。Placement 仍保持 sourc
 投票或样片/format 特判。同一 template identity、integer offset、local topology 与独立物理 support
 下，相交的 role interval 与互补 observation bindings 可以联合成一个连续 placement；同一 role 的不同
 物理 support、不同坐标、ordinal、local topology、boundary use 或 required source footprint 是离散竞争。
-硬物理事实不能唯一闭合时进入 review。
+当前未启用评分选择，硬事实不能区分离散解释时仍进入 review。这是当前选择能力的边界，不是产品要求
+证明唯一真实边界；目标是选择一份满足直接可用合同的已有裁切。
 
 这是一项当前实现边界，不是对校准概率选择的永久禁令。未经校准的 score 不得拥有最终决定权；
 合法 runner 也不因“仍然合法”而被定义为永久阻断项。
 
-### 9.2 校准概率选择层的准入合同（当前未启用）
+### 9.2 可用性评分与校准概率选择（当前未启用）
 
-检测能力与数据条件成熟后，可以在硬物理合同之后加入带拒绝选项的概率选择：
+共同 W 检查点后即可用现有有界候选与黄金标签开展特征、排序和开发评估，不以全部 nominal 自动通过
+或独立 calibration/sealed 数据齐备为开发前置条件。正式概率权限仍需独立证据：
 
 ```text
 registered evidence
 → 固定模板生成有界候选
-→ 硬物理合法性、source containment、输出预算与 content veto
+→ 真正的硬物理合法性、source containment 与直接反证
+→ 明确风险代理的职责，评价每个已有候选的最终 footprint
 → 对剩余合法候选估计校准后的可接受概率
-→ winner / runner + 绝对概率 + margin + evidence coverage + OOD
+→ 经验证的可用性准入 + evidence coverage + OOD + abstention
 → selected placement，或 abstain / needs_review
 ```
 
 概率层不能创建、移动或修补 geometry，不能重新读取像素，不能让被硬合同淘汰的候选复活，也不能
 使用 sample ID、文件名、nominal/challenge 角色或黄金答案作为 runtime feature。这里的训练标签是
 “该候选最终 footprint 是否满足统一的方向性黄金安全合同”；多个候选可以同时可接受，因此候选概率
-不要求总和为 1。危险裁切的代价远高于 review，自动批准必须同时满足预先冻结的高绝对概率阈值、
-winner/runner margin、证据覆盖和 OOD 组成的冻结联合准入规则；绝对概率与 margin 不能再被
-任意加权成一个 confidence。合法 runner 本身不是硬阻断，但必须进入联合规则和 report；未被校准数据
-覆盖的低 margin 区域必须 abstain，而不是普通 `argmax`。
+不要求总和为 1；排名分数也不是可用概率，不得把最贴近红线的一个候选强行标成唯一正例。危险裁切代价
+远高于 review，正式自动权限使用冻结的可用概率阈值、适用范围、证据覆盖、OOD 和拒绝规则。
+Margin 只是一项可审计特征，不是独立的一票否决条件。多个候选都通过经验证的风险准入时，允许按冻结、
+稳定且简单的规则选其中一个；不要求 winner 显著领先。Runner 始终保留，只有影响可靠性的实质解释才
+参与拒绝判断；合法、坐标不同、分数接近或框相近本身都不能证明危险或安全。不得合并离散候选外包框、
+事后修框或扩大 bleed 消除竞争，也不能让高分抵消真实反证。
+
+开发首先报告有界候选集合的黄金可用率：是否至少一份可用、是否多份可用、可用但被歧义拒绝，以及全部
+不可用的 source。只有前两类可能靠选择改善；所有候选都错时继续修复生成。标签独立评价每份最终
+footprint，不读取 Runtime 决定来制造正例。内部预算等风险代理必须先与真实黄金结果对照，不能把代理
+全部永久硬化后再期待评分提高覆盖，也不能未经验证整体关闭它们。
+
+下一机制复用 `template_selection.py` 的有界竞争与选择职责，黄金标签仍由
+`tools/regression/gold_geometry.py` 独占，集合分析由现有 `gold_analysis.py` 扩展，不另建 detector 或黄金池。
+先冻结候选 identity 与最终 footprint，再记录既有 evidence 中的 anchor、角色来源、W/H/pitch 偏差、
+residual、coverage、material/topology、预算及缺失状态。开发排序与标签不反写当前 Runtime Gate；正式
+可用性 assessment 最终仍沿 `CandidateGate → DecisionGate` 单向消费，不建立第二个终态 owner。
 
 准入前必须冻结以下 versioned schema 与 artifact：
 
 | 合同 | 必需内容 |
 |---|---|
-| score schema | `feature_schema_id`、`model_id`、`calibration_id`、`decision_rule_id`、candidate/placement identity、带单位与 missingness 的 typed features、evidence provenance、校准概率 |
-| selection assessment | winner/runner identity 与概率、margin、absolute-threshold、coverage、OOD、abstention 和 hard-legality receipt；runner 始终保留在 report |
+| score schema | `feature_schema_id`、`model_id`、`calibration_id`、`decision_rule_id`、candidate/placement identity、带单位与 missingness 的 typed features、evidence provenance；ranking score 与 calibrated acceptability probability 分开 |
+| selection assessment | 所有保留候选的可用性、winner/runner identity、margin 诊断、准入、稳定选择规则、coverage、OOD、abstention 和 hard-legality receipt；runner 始终保留 |
 | calibration manifest | source-SHA 分区、同 SHA count 绑定、候选生成 commit、label contract、拟合方法、样本量、阈值、可靠性曲线、自动区危险率的单侧上界与适用 format/profile/topology |
 | work receipt | 合法候选数、feature 数、feature evaluation、OOD evaluation、临时内存和编译上界 |
 
-现有 106 个已查看 source 可用于 feature/model development、训练与反例发现，不能事后伪装成独立
-calibration 或 sealed 证据。启用前必须补充在查看 scorer 输出前按 source SHA 冻结的新
+现有已查看 source 可用于 feature/model development、排序、训练与反例发现，不证明独立概率校准。
+正式授予概率自动权限前必须补充在查看 scorer 输出前按 source SHA 冻结的新
 calibration source；同 SHA 的全部 count 变体同分区。Calibration 只拟合概率、联合准入规则与风险上界，
 sealed acceptance 不参与拟合、调参或 feature 选择。Sealed 在不暴露逐样片结果的情况下只检查
 全部角色 `unsafe_approved_auto = 0`、sealed nominal 全部安全自动通过、校准可靠性和 OOD/abstention
@@ -1132,13 +1164,14 @@ OOD 至少覆盖未校准的 format/holder profile/count/topology、必要 featu
 
 失败以 typed facts 表达：`probability_selector_unavailable`、`probability_contract_mismatch`、
 `probability_out_of_distribution`、`probability_evidence_coverage_insufficient`、
-`probability_below_auto_threshold` 或 `probability_margin_insufficient`。它们由 `CandidateGate` 汇总，
+`probability_below_auto_threshold` 或 `candidate_acceptability_unresolved`。不设置仅因分差不足而触发的固定失败。
+这些事实由 `CandidateGate` 汇总，
 `DecisionGate` 仍独占最终状态；不得退化成“低 confidence”这一条不可解释文案。
 
 评分工作量必须是 `O(K × F)`：`K` 为编译时有界的合法 placement 数，`F` 为冻结 feature 数。不得为
 评分层新增 pixel query、候选笛卡尔积、beam/DP、winner-specific requery 或第二 detector；正式
 24-source mean 仍须 `<= 5s`，`<= 3s` 继续作为优化目标。当前没有 calibration pool、sealed cohort
-与准入 receipt，因此本节不授予任何 runtime score 权限。
+与准入 receipt，因此当前只允许开发评分评估，不授予概率自动批准权限。
 
 ### 9.3 Holder fill
 
@@ -1155,10 +1188,10 @@ OOD 至少覆盖未校准的 format/holder profile/count/topology、必要 featu
 
 ## 10. 联合输出保护、bleed 与预算
 
-当前 runtime 的完整安全计算严格晚于唯一获准的 selected placement。若第 9.2 节未来获准启用，
-每个有界合法候选必须先用同一 source containment、预算与已注册 content observation 形成只读 eligibility
-receipt；这不产生正式 OutputFootprint，也不允许 candidate-dependent 像素读取。概率选择后仍只有 selected
-placement 能进入下列完整联合几何与输出流：
+当前 runtime 的完整安全计算晚于选定 placement；这不意味着该 placement 是唯一真实解释。
+第 9.2 节的候选可用性评估必须复用同一 footprint 与安全计算 owner，对每个保留候选形成只读评价，
+使黄金标签对应真正会输出的 footprint，而不是评分专用近似框。候选评价不提交正式输出，不新增
+candidate-dependent 像素读取，不合并离散候选。最终只有被选取并获准的一份 placement 进入输出事务：
 
 ```text
 selected placement
@@ -1185,6 +1218,14 @@ cross：0.25 mm
 
 `APERTURE_PAIR` 四边的完整 expansion（联合不确定性 + 直线 residual + bleed）各自不得超过对应
 format 尺寸的 5%。四边不能借额度；刚好达到上限通过。
+
+这是当前 Runtime 风险代理，不等于黄金验收的实际裁切误差。黄金 5% 以人工确认 span 衡量最终实际外扩，
+是产品质量硬标准；Runtime 5% 以模型尺寸衡量 uncertainty/residual/bleed。二者数值相同不意味着同一
+物理量。开发必须交叉报告 proposal 的 gold safe/unsafe 与数值 assessment 的 passed/failed/not evaluated，
+再单列预算 Gate 的 evaluated/blocks 与上游 ratio-H 的实际消费/阻断状态；算出了超限不代表 Gate 已执行。
+未执行不得写成通过，派生状态必须能从原 receipt 复算。真实非法坐标、输入合同、source/lane containment 和已证明的直接反证
+继续优先拒绝；内部包络与阈值策略可以按黄金结果重新校准，但不能隐藏 uncertainty、人工收窄区间、读取
+黄金坐标或直接整体关闭预算。本阶段保持现有 Runtime 阈值与 Gate 行为，只拆开职责和诊断。
 
 已证明的 Contact/Overlap 只在参与该关系的两侧增加显式 `topology_protection`：前一 Frame 的 END 朝后一格、
 后一 Frame 的 START 朝前一格，其它边仍使用基础 bleed。当前 protection 等于一份同状态的 sequence
@@ -1213,7 +1254,7 @@ Enclosing support 本身只证明真实 aperture 位于两条 support 之间，�
 center_offset_ratio = (gold_aperture_center - support_midpoint) / H
 ```
 
-当前 calibration 只纳入 20 个 selected unique pair、且黄金 top/bottom 均为 `directly_visible` 的 source；
+当前 calibration 只纳入 18 个 selected unique pair、且黄金 top/bottom 均为 `directly_visible` 的 source；
 同源 count 先取中位数，再对 source hull 以 `0.001H` 向外量化，得到 `[-0.009H, +0.007H]`。Calibration
 同时绑定 development cohort SHA、eligibility revision 和精确 observation-set SHA；source 数量相同但成员、
 观测值或 detector 权限变化时同样视为 calibration drift。该 authority
@@ -1435,7 +1476,7 @@ Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决
 - 每个 bounded phase candidate 的输入权限、projection outcome、保留 rank、退出几何的 binding、重拟合结果与
   terminal failure；
 - `partial_height_separator_pair` 角色数、direct aperture domain 条件与对应 typed Gate；
-- placement-bound source W authority 的 `resolved_placement | retained_ambiguous_proposal` scope、
+- source W measurement 的 `resolved_placement | retained_ambiguous_proposal | retained_unresolved_proposal` scope、
   `independent_complete_frames | direct_lattice_closure | reconciled_direct_constraints` basis、placement phase/W
   role signature、支持 Frame、全部 retained direct
   constraint 与 observation 数量、W interval、typed failure，及相关推导角色、
@@ -1531,7 +1572,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/template_contact.py` | candidate-independent `ContactEdgeObservation`：从既有 authoritative edge ledger 证明唯一共享 physical edge，不读取像素或选择 ordinal |
 | `photo_geometry/template_overlap.py` | candidate-independent `OverlapEdgePairObservation`：从既有 authoritative edge ledger 登记唯一反序 END/START pair，不读取像素或选择 ordinal |
 | `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source W/H extent、scan-scale authority 与不增加 direct provenance 的相关 interval 收紧 |
-| `photo_geometry/template_frame_width.py` | placement-bound canonical `SourceFrameWidthAuthority` 的完整 Frame/direct-lattice closure、全 retained constraint 的相关 W 投影与 reconciliation、resolved-only 局部 refinement 让位、相关单侧角色推断，以及只检查实际 W-inferred role 的 `SourceFrameWidthTopologyAssessment`；scope 不改变 ambiguity/runner，不得重复增加 rank、参与离散候选选择或重编译 template |
+| `photo_geometry/template_frame_width.py` | canonical `SourceFrameWidthAuthority` 的可靠完整 Frame/direct-lattice 测量；与 placement 消费分离的 W 区间、相关投影/reconciliation、单边 opposite 推导及其 topology assessment；缺失整 Frame 仍归 Grid，scope 不改变资格/runner，不重复增加 rank 或重编译 template |
 | `photo_geometry/template_aspect_ratio_model.py`、`template_aspect_ratio.py` | 校准 W/H 比例的 typed authority、相关 H 推断、direct H 对账与预算失败 |
 | `photo_geometry/template_model.py` | Sequence coordinate/evidence identity、`AdjacencyRelation` sum type、measured separator 的直接 gap identity 与相关 delta realization，以及统一 O(count) prefix |
 | `photo_geometry/template_phase_model.py`、`template_phase_candidates.py` | role binding、projection outcome/type、phase-authority ceiling、同一离散 identity 的有界投影重拟合，以及 physical/source W 下的有界 native-edge rebind |
@@ -1626,9 +1667,9 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
 - Nominal 的能力目标是安全自动批准；challenge 不预设终态，安全 `approved_auto` 与安全
   `needs_review` 都是合格结果，前者单独记录为能力发现。角色在运行 detector 前按 evaluation task 的
   证据充分性冻结，不读取 detector 输出，也不进入 runtime：只要人工确认的直接证据与
-  format/count/template 能唯一确定合法 placement 和 source-safe footprint，即使存在残缺曝光、源截断、
+  format/count/template 能产生通过直接可用风险准入的 placement 与 footprint，即使存在残缺曝光、源截断、
   空 slot 或 `visible_content_limit`，仍可属于 nominal；这些标签本身不是 challenge 原因。
-  只有必要边界权限缺失、存在多个同样合法的 placement、安全闭合无法唯一证明、未知必需 Frame、
+  只有必要边界权限缺失、竞争 placement 的风险尚不能可靠区分、可用性准入缺少足够依据、未知必需 Frame、
   contact/overlap，或异常数量超出当前固定模板合同等事实使自动安全结论不可靠时，才属于 challenge。
   长轴直接证据还必须满足逐 task 的结构预算。只统计拥有 `boundary_pair` 的非空 Frame，并将
   `visible_content_limit` 与 `human_width_estimate` 计为非直接可见边界；按唯一物理 boundary identity

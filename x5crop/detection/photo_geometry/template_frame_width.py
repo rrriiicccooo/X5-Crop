@@ -1,4 +1,4 @@
-"""Consume one source-level common-Frame-width authority after closure."""
+"""Measure source-common W, then consume it without granting placement authority."""
 
 from __future__ import annotations
 
@@ -16,7 +16,6 @@ from ...domain import (
 from .observation_types import BoundaryEdgeObservation
 from .physical_identity import physical_fact_id
 from .source_geometry import SourceScanGeometry
-from .template_adjacency_coverage import AdjacencyCoverageState
 from .template_direct_role_authority import (
     DirectRoleAuthorityBasis,
     DirectRoleBindingAuthority,
@@ -30,7 +29,11 @@ from .template_model import (
     SequenceBindingUse,
     SequenceFit,
     SourceFrameWidthAuthorityBasis,
+    adjacency_prefix_intervals,
+    adjacency_prefix_positions,
     realize_adjacency_relations,
+    template_role_interval,
+    template_role_position,
 )
 from .template_phase_model import (
     GlobalLatticeAuthorityBasis,
@@ -70,9 +73,6 @@ class SourceFrameWidthAuthorityFailureKind(str, Enum):
 
     PLACEMENT_HYPOTHESIS_UNAVAILABLE = "placement_hypothesis_unavailable"
     DIRECT_ROLE_AUTHORITY_UNAVAILABLE = "direct_role_authority_unavailable"
-    DIRECT_ROLE_AUTHORITY_CONTRADICTED = "direct_role_authority_contradicted"
-    GLOBAL_LATTICE_RANK_INSUFFICIENT = "global_lattice_rank_insufficient"
-    ADJACENCY_COVERAGE_INCOMPLETE = "adjacency_coverage_incomplete"
     SOURCE_WIDTH_CLOSURE_UNAVAILABLE = "source_width_closure_unavailable"
     PHYSICAL_WIDTH_CONFLICT = "physical_width_conflict"
 
@@ -82,6 +82,7 @@ class SourceFrameWidthAuthorityPlacementScope(str, Enum):
 
     RESOLVED_PLACEMENT = "resolved_placement"
     RETAINED_AMBIGUOUS_PROPOSAL = "retained_ambiguous_proposal"
+    RETAINED_UNRESOLVED_PROPOSAL = "retained_unresolved_proposal"
 
 
 @dataclass(frozen=True)
@@ -306,6 +307,15 @@ def _direct_lattice_width_projection(
     )
     if len(constraints) < 3:
         raise ValueError("rank-three direct lattice lacks retained constraints")
+    direct = phase.direct_role_binding_authority
+    facts = {} if direct is None else {item.role_index: item for item in direct.facts}
+    if any(
+        (fact := facts.get(constraint.role_index)) is None
+        or fact.state != EvidenceState.SUPPORTED
+        or fact.observation_id not in constraint.observation_ids
+        for constraint in constraints
+    ):
+        return None
     matrix = np.asarray(
         [constraint.coefficients for constraint in constraints],
         dtype=np.float64,
@@ -339,11 +349,6 @@ def _direct_lattice_width_projection(
         )
         minimum += min(values)
         maximum += max(values)
-    fitted = fit.pitch_fit.frame_width_px
-    minimum = max(float(minimum), fitted.minimum)
-    maximum = min(float(maximum), fitted.maximum)
-    if maximum < minimum:
-        raise ValueError("direct lattice W leaves its fitted physical interval")
     observation_ids = tuple(
         sorted(
             {
@@ -355,7 +360,7 @@ def _direct_lattice_width_projection(
         )
     )
     return (
-        FiniteInterval(minimum, maximum),
+        FiniteInterval(float(minimum), float(maximum)),
         observation_ids,
         tuple(sorted(constraint.constraint_id for constraint in constraints)),
     )
@@ -366,36 +371,30 @@ def calibrate_source_frame_width(
     phase: PhaseFitResult,
     sequence_edges: tuple[BoundaryEdgeObservation, ...],
 ) -> tuple[SourceScanGeometry, SourceFrameWidthAuthority]:
-    """Narrow source W inside one retained placement hypothesis.
+    """Measure W from reliable local pairs or the independent direct system.
 
-    A resolved placement or the best retained member of an ambiguous
-    competition has fixed ordinal ownership and exposed direct-role, coverage
-    and pre-W lattice assessments. Source W may add one correlated constraint
-    to that hypothesis afterwards; it never recompiles the template, deletes
-    a runner, resolves ambiguity or changes ordinal mapping. Outer-Frame
-    authority remains a final Grid-inference Gate and is not a prerequisite
-    for measuring W from other directly observed complete Frames.
+    The retained role mapping identifies pairs, not an approved placement.
+    Only each contributing pair's native-role facts and physical completeness
+    qualify its width. Remote coverage, phase rank and placement failures do
+    not erase that local measurement. Their original assessments remain and
+    are checked when consuming W, inferring adjacency and deciding output.
     """
 
     fit = phase.best
-    if (
-        fit is None
-        or phase.status
-        not in {PhaseFitStatus.RESOLVED, PhaseFitStatus.AMBIGUOUS}
-    ):
+    if fit is None:
         return source_geometry, _failed_source_width_authority(
             phase,
             EvidenceState.UNAVAILABLE,
             SourceFrameWidthAuthorityFailureKind
             .PLACEMENT_HYPOTHESIS_UNAVAILABLE,
-            "source W requires one resolved placement or a retained member "
-            "of an ambiguous placement competition",
+            "source W requires a retained role mapping for complete Frame pairs",
         )
     placement_scope = (
         SourceFrameWidthAuthorityPlacementScope.RESOLVED_PLACEMENT
         if phase.status == PhaseFitStatus.RESOLVED
-        else SourceFrameWidthAuthorityPlacementScope
-        .RETAINED_AMBIGUOUS_PROPOSAL
+        else SourceFrameWidthAuthorityPlacementScope.RETAINED_AMBIGUOUS_PROPOSAL
+        if phase.status == PhaseFitStatus.AMBIGUOUS
+        else SourceFrameWidthAuthorityPlacementScope.RETAINED_UNRESOLVED_PROPOSAL
     )
     direct = phase.direct_role_binding_authority
     if direct is None:
@@ -405,58 +404,15 @@ def calibrate_source_frame_width(
             SourceFrameWidthAuthorityFailureKind.DIRECT_ROLE_AUTHORITY_UNAVAILABLE,
             "source W requires typed direct-role authority facts",
         )
-    if direct.state == EvidenceState.CONTRADICTED:
-        return source_geometry, _failed_source_width_authority(
-            phase,
-            EvidenceState.CONTRADICTED,
-            SourceFrameWidthAuthorityFailureKind.DIRECT_ROLE_AUTHORITY_CONTRADICTED,
-            "source W cannot consume a material-contradicted role binding",
-        )
-    unavailable_phase_anchors = tuple(
-        fact.role_index
-        for fact in direct.facts
-        if fact.state == EvidenceState.UNAVAILABLE
-        and fit.role_bindings[fact.role_index] is not None
-        and fit.role_bindings[fact.role_index].use
-        == SequenceBindingUse.PHASE_ANCHOR
-    )
-    if unavailable_phase_anchors:
-        return source_geometry, _failed_source_width_authority(
-            phase,
-            EvidenceState.UNAVAILABLE,
-            SourceFrameWidthAuthorityFailureKind.DIRECT_ROLE_AUTHORITY_UNAVAILABLE,
-            "source W cannot consume unavailable phase-anchor roles: "
-            + ", ".join(map(str, unavailable_phase_anchors)),
-        )
-    lattice = phase.global_lattice_authority
-    if lattice is None or lattice.joint_constraint_rank < 2:
-        return source_geometry, _failed_source_width_authority(
-            phase,
-            EvidenceState.UNAVAILABLE,
-            SourceFrameWidthAuthorityFailureKind.GLOBAL_LATTICE_RANK_INSUFFICIENT,
-            "source W may close only the final unknown of an already rank-2 lattice",
-        )
-    inferred_coverage = tuple(
-        item
-        for item in phase.adjacency_observation_coverage
-        if item.normal_inference_required
-    )
-    if any(
-        item.state != AdjacencyCoverageState.COMPLETE
-        for item in inferred_coverage
-    ):
-        return source_geometry, _failed_source_width_authority(
-            phase,
-            EvidenceState.UNAVAILABLE,
-            SourceFrameWidthAuthorityFailureKind.ADJACENCY_COVERAGE_INCOMPLETE,
-            "source W requires complete coverage for every inferred adjacency",
-        )
     by_id = {item.observation_id: item for item in sequence_edges}
+    if len(by_id) != len(sequence_edges):
+        raise ValueError("source W requires unique observation ledger identities")
     facts = {item.role_index: item for item in direct.facts}
     physical = source_geometry.width_state.extent_projection_px()
     spans: list[
         tuple[int, FiniteInterval, tuple[ObservationId, ObservationId]]
     ] = []
+    incomplete_pair_present = False
     topology_frames = _topology_frame_ordinals(fit)
     for frame_index, (start, end) in enumerate(
         zip(
@@ -483,6 +439,12 @@ def calibrate_source_frame_width(
             or start.evidence_group_id == end.evidence_group_id
         ):
             continue
+        for binding, fact in ((start, start_fact), (end, end_fact)):
+            if (
+                binding.observation_id != fact.observation_id
+                or binding.evidence_group_id != fact.evidence_group_id
+            ):
+                raise ValueError("source W direct fact disagrees with its role binding")
         if (
             start.observation_id not in by_id
             or end.observation_id not in by_id
@@ -507,12 +469,13 @@ def calibrate_source_frame_width(
         minimum = max(measured.minimum, physical.minimum)
         maximum = min(measured.maximum, physical.maximum)
         if maximum < minimum:
-            return source_geometry, _failed_source_width_authority(
-                phase,
-                EvidenceState.CONTRADICTED,
-                SourceFrameWidthAuthorityFailureKind.PHYSICAL_WIDTH_CONFLICT,
-                "an authorized complete Frame contradicts the physical W interval",
-            )
+            # A visible span outside the complete-aperture distribution is
+            # not a complete W observation (e.g. exposure/source truncation).
+            # Its native roles remain in the placement and its ordinary
+            # fixed-width checks; it cannot erase other complete local pairs
+            # or participate in the ordinary full-Frame lattice W estimator.
+            incomplete_pair_present = True
+            continue
         spans.append(
             (
                 frame_index + 1,
@@ -539,13 +502,24 @@ def calibrate_source_frame_width(
         )
     )
     try:
-        lattice_projection = _direct_lattice_width_projection(phase)
+        lattice_projection = (
+            None if incomplete_pair_present else _direct_lattice_width_projection(phase)
+        )
     except ValueError:
         return source_geometry, _failed_source_width_authority(
             phase,
             EvidenceState.CONTRADICTED,
             SourceFrameWidthAuthorityFailureKind.PHYSICAL_WIDTH_CONFLICT,
             "retained direct lattice W contradicts its fitted physical state",
+        )
+    if lattice_projection is not None and not physical.contains(
+        lattice_projection[0].center, epsilon=1.0e-9
+    ):
+        return source_geometry, _failed_source_width_authority(
+            phase,
+            EvidenceState.CONTRADICTED,
+            SourceFrameWidthAuthorityFailureKind.PHYSICAL_WIDTH_CONFLICT,
+            "direct lattice W estimate leaves the physical source distribution",
         )
     if complete_frame_projection is not None and lattice_projection is not None:
         lattice_width, lattice_identities, constraint_ids = lattice_projection
@@ -609,42 +583,14 @@ def calibrate_source_frame_width(
             SourceFrameWidthAuthorityFailureKind.PHYSICAL_WIDTH_CONFLICT,
             "authorized Frame widths have no common physical source state",
         )
-    try:
-        # The retained fit is a compatibility constraint, not new pixel
-        # evidence.  Clip the correlated source state before publishing the
-        # authority so an incompatible W becomes typed counterevidence rather
-        # than a runtime exception in the placement-bound consumer.
-        width_state = width_state.intersect_inferred_extent(
-            FiniteInterval(
-                fit.pitch_fit.frame_width_px.minimum,
-                fit.pitch_fit.frame_width_px.maximum,
-            )
-        )
-    except ValueError:
-        return source_geometry, _failed_source_width_authority(
-            phase,
-            EvidenceState.CONTRADICTED,
-            SourceFrameWidthAuthorityFailureKind.PHYSICAL_WIDTH_CONFLICT,
-            "retained placement W contradicts the direct source W state",
-        )
     calibrated = SourceScanGeometry.from_axis_states(
         source_geometry.frame_spec,
         width_state,
         source_geometry.height_state,
     )
     width_px = width_state.extent_projection_px()
-    if basis == SourceFrameWidthAuthorityBasis.DIRECT_LATTICE_CLOSURE:
-        canonical_width_px = fit.pitch_fit.canonical_frame_width_px
-        if not width_px.contains(canonical_width_px, epsilon=1.0e-9):
-            return source_geometry, _failed_source_width_authority(
-                phase,
-                EvidenceState.CONTRADICTED,
-                SourceFrameWidthAuthorityFailureKind.PHYSICAL_WIDTH_CONFLICT,
-                "direct lattice canonical W leaves the physical source state",
-            )
-    else:
-        _scale, normalized, _factor = width_state.canonical_state()
-        canonical_width_px = width_state.design_extent_mm * normalized
+    _scale, normalized, _factor = width_state.canonical_state()
+    canonical_width_px = width_state.design_extent_mm * normalized
     phase_anchor_ids = tuple(
         binding.observation_id
         if binding is not None
@@ -713,11 +659,7 @@ def _source_width_boundary(
     )
     opposite = fit.role_bindings[opposite_index]
     if opposite is None:
-        return (
-            fit.model_full_role_intervals_px[role_index],
-            fit.model_role_positions_px[role_index],
-            False,
-        )
+        raise ValueError("full Grid roles are not independent source-W topology bounds")
     direction = fit.template.direction
     if role_index % 2 == 0:
         canonical = (
@@ -781,6 +723,11 @@ def _assess_source_frame_width_topology(
     if inference is not None and inference.state == EvidenceState.SUPPORTED:
         if inference.authority_id != authority.authority_id:
             raise ValueError("source-W topology uses another inference authority")
+    # The measurement remains wider than the state consumed by this fit.
+    # Topology must assess that same complete consumed state, not reintroduce
+    # W states already excluded by the placement's independent constraints.
+    width_px = fit.pitch_fit.frame_width_px
+    canonical_width_px = fit.pitch_fit.canonical_frame_width_px
     facts: list[SourceFrameWidthTopologyFact] = []
     relations = {
         relation.relation_ordinal: relation
@@ -801,18 +748,28 @@ def _assess_source_frame_width_topology(
         )
         if not authorized_indices:
             continue
+        if any(
+            fit.role_bindings[index] is None
+            and fit.role_bindings[index ^ 1] is None
+            for index in (end_index, start_index)
+        ):
+            # A complete unobserved Frame belongs to the correlated Grid.
+            # Its model marginal and a W-inferred neighbour are not independent
+            # bounds. Nominal adjacency coverage, counterevidence and the joint
+            # placement envelope retain responsibility for that relation.
+            continue
         end_interval, end_canonical, end_inferred = _source_width_boundary(
             fit,
             end_index,
-            authority.width_px,
-            authority.canonical_width_px,
+            width_px,
+            canonical_width_px,
         )
         start_interval, start_canonical, start_inferred = (
             _source_width_boundary(
                 fit,
                 start_index,
-                authority.width_px,
-                authority.canonical_width_px,
+                width_px,
+                canonical_width_px,
             )
         )
         inferred_indices = tuple(
@@ -896,7 +853,7 @@ def apply_placement_source_frame_width(
     phase: PhaseFitResult,
     authority: SourceFrameWidthAuthority,
 ) -> PhaseFitResult:
-    """Narrow only the authority-bound fit's W; preserve status and runner."""
+    """Consume W and re-realize its derived Grid state, not native evidence."""
 
     if authority.state == EvidenceState.CONTRADICTED:
         if phase.status != PhaseFitStatus.RESOLVED:
@@ -923,16 +880,40 @@ def apply_placement_source_frame_width(
     old_width = fit.pitch_fit.frame_width_px
     minimum = max(old_width.minimum, authority.width_px.minimum)
     maximum = min(old_width.maximum, authority.width_px.maximum)
-    if maximum < minimum:
-        raise ValueError("retained source W contradicts the fitted width interval")
+    pitch = fit.pitch_fit.pitch_interval_px
+    if maximum < minimum or pitch.maximum < minimum:
+        # A valid local measurement remains valid even when this placement
+        # cannot consume it. Preserve its complete proposal and original
+        # failure/runner; only a still-eligible placement needs a new failure.
+        if phase.status != PhaseFitStatus.RESOLVED:
+            return phase
+        return replace(
+            phase,
+            status=PhaseFitStatus.UNRESOLVED,
+            ambiguity_reason="retained placement cannot consume the measured source W state",
+            failure_kind=PhaseFailureKind.SOURCE_FRAME_WIDTH_CONFLICT,
+            winner_basis=None,
+        )
     selected_width = FiniteInterval(minimum, maximum)
-    canonical = authority.canonical_width_px
-    if not selected_width.contains(canonical, epsilon=1.0e-9):
-        raise ValueError("retained source W canonical state leaves the fit interval")
+    # A measurement's center is not another exact constraint. Preserve the
+    # existing jointly fitted representative while it belongs to the measured
+    # interval; replacing W alone by a new center would break its correlation
+    # with phase/pitch. Debug retains the separate measured representative.
+    canonical = min(
+        maximum, max(minimum, fit.pitch_fit.canonical_frame_width_px)
+    )
     selected_pitch_fit = replace(
         fit.pitch_fit,
         frame_width_px=selected_width,
         canonical_frame_width_px=canonical,
+        # The catalog separator interval compiles search; after independent
+        # source W and pitch are consumed, their difference owns the ordinary
+        # gap. Keeping the old gap would constrain the new W a second time by
+        # a stale derived value. Measured signed gaps remain native below.
+        gap_interval_px=FiniteInterval(
+            max(0.0, pitch.minimum - selected_width.maximum),
+            pitch.maximum - selected_width.minimum,
+        ),
     )
     selected_relations = realize_adjacency_relations(
         fit.adjacency_relations,
@@ -941,10 +922,70 @@ def apply_placement_source_frame_width(
         frame_width_px=canonical,
         pitch_px=fit.pitch_fit.canonical_pitch_px,
     )
+    if canonical == fit.pitch_fit.canonical_frame_width_px:
+        return replace(
+            phase,
+            best=replace(
+                fit, pitch_fit=selected_pitch_fit,
+                adjacency_relations=selected_relations,
+            ),
+            source_frame_width_topology_assessment=None,
+        )
+    prefixes = adjacency_prefix_positions(selected_relations, fit.template.count)
+    prefix_intervals = adjacency_prefix_intervals(
+        selected_relations, fit.template.count
+    )
+    positions: list[float] = []
+    intervals: list[FiniteInterval] = []
+    full_intervals: list[FiniteInterval] = []
+    for role, binding in zip(fit.template.roles, fit.role_bindings, strict=True):
+        position = template_role_position(
+            role,
+            phase=fit.phase_lattice_fit.canonical_absolute_phase_px,
+            width=canonical,
+            pitch=fit.pitch_fit.canonical_pitch_px,
+            direction=fit.template.direction,
+            prefixes=prefixes,
+        )
+        positions.append(position)
+        if binding is None:
+            interval = template_role_interval(
+                role,
+                phase=fit.phase_lattice_fit.absolute_phase_interval_px,
+                width=selected_width,
+                pitch=pitch,
+                direction=fit.template.direction,
+                prefixes=prefix_intervals,
+            )
+            intervals.append(interval)
+            full_intervals.append(interval)
+        else:
+            # Residual belongs to this role, not every source boundary.
+            # Reconstruct the same model/native hull as the primary producer;
+            # an old representative is not an independent constraint on W.
+            for target, native in (
+                (intervals, binding.fit_position_interval_px),
+                (full_intervals, binding.full_position_interval_px),
+            ):
+                target.append(
+                    FiniteInterval(
+                        min(position, native.minimum),
+                        max(position, native.maximum),
+                    )
+                )
     selected = replace(
         fit,
         pitch_fit=selected_pitch_fit,
         adjacency_relations=selected_relations,
+        model_role_positions_px=tuple(positions),
+        model_role_intervals_px=tuple(intervals),
+        model_full_role_intervals_px=tuple(full_intervals),
+        residual_sum_px=sum(
+            abs(binding.canonical_position_px - position)
+            for binding, position in zip(fit.role_bindings, positions, strict=True)
+            if binding is not None
+            and binding.use == SequenceBindingUse.PHASE_ANCHOR
+        ),
     )
     return replace(
         phase,
@@ -1122,6 +1163,12 @@ def _yield_local_roles_to_correlated_width(
 
     validation_only_indices: list[int] = []
     validation_ids: list[ObservationId] = []
+    relation_owned_roles = {
+        index
+        for relation in fit.adjacency_relations
+        if not isinstance(relation, SeparatorRelation) or relation.is_measured
+        for index in (2 * relation.relation_ordinal - 1, 2 * relation.relation_ordinal)
+    }
     for role_index in direct_role_authority.unsupported_role_indices:
         fact = facts[role_index]
         binding = fit.role_bindings[role_index]
@@ -1130,7 +1177,8 @@ def _yield_local_roles_to_correlated_width(
         )
         opposite_fact = facts.get(opposite_index)
         if (
-            binding is None
+            role_index in relation_owned_roles
+            or binding is None
             or binding.use != SequenceBindingUse.LOCAL_REFINEMENT
             or binding.observation_id in width_ids
             or fact.state != EvidenceState.UNAVAILABLE
@@ -1157,17 +1205,30 @@ def _yield_local_roles_to_correlated_width(
     if not validation_only_indices:
         return fit, (), (), ()
     bindings = list(fit.role_bindings)
+    intervals = list(fit.model_role_intervals_px)
+    full_intervals = list(fit.model_full_role_intervals_px)
+    prefixes = adjacency_prefix_intervals(fit.adjacency_relations, fit.template.count)
     for role_index in validation_only_indices:
         bindings[role_index] = None
-    if any(
-        start is None and end is None
-        for start, end in zip(bindings[0::2], bindings[1::2], strict=True)
-    ):
-        return fit, (), (), ()
+        # The released weak coordinate must also leave the joint constraints.
+        # Restore only its Grid marginal; other roles may already carry valid
+        # joint projections and must not be independently reconstructed here.
+        interval = template_role_interval(
+            fit.template.roles[role_index],
+            phase=fit.phase_lattice_fit.absolute_phase_interval_px,
+            width=fit.pitch_fit.frame_width_px,
+            pitch=fit.pitch_fit.pitch_interval_px,
+            direction=fit.template.direction,
+            prefixes=prefixes,
+        )
+        intervals[role_index] = interval
+        full_intervals[role_index] = interval
     return (
         replace(
             fit,
             role_bindings=tuple(bindings),
+            model_role_intervals_px=tuple(intervals),
+            model_full_role_intervals_px=tuple(full_intervals),
             contradicted_observation_count=(
                 fit.contradicted_observation_count
                 + len(validation_only_indices)
@@ -1221,10 +1282,20 @@ def apply_correlated_frame_width_inference(
         sequence_edges,
         source_frame_width_authority,
     )
-    missing = fit.unbound_role_indices
+    missing = fit.opposite_inference_role_indices
     if not missing:
         return fit
-    if fit.completely_unobserved_frame_ordinals:
+    if (
+        source_frame_width_authority is not None
+        and source_frame_width_authority.state == EvidenceState.SUPPORTED
+        and source_frame_width_authority.width_px is not None
+        and (
+            fit.pitch_fit.frame_width_px.maximum
+            < source_frame_width_authority.width_px.minimum
+            or fit.pitch_fit.frame_width_px.minimum
+            > source_frame_width_authority.width_px.maximum
+        )
+    ):
         return replace(
             fit,
             frame_width_inference=FrameWidthInferenceAssessment(
@@ -1237,7 +1308,7 @@ def apply_correlated_frame_width_inference(
                 authority_id=None,
                 authority_basis=None,
                 failure_kind=(
-                    FrameWidthInferenceFailureKind.COMPLETE_FRAME_UNOBSERVED
+                    FrameWidthInferenceFailureKind.SOURCE_WIDTH_PLACEMENT_CONFLICT
                 ),
             ),
         )
@@ -1322,11 +1393,9 @@ def apply_correlated_frame_width_inference(
         < source_frame_width_authority.width_px.minimum - 1.0e-9
         or selected_width.maximum
         > source_frame_width_authority.width_px.maximum + 1.0e-9
-        or abs(
-            selected_canonical_width
-            - source_frame_width_authority.canonical_width_px
+        or not source_frame_width_authority.width_px.contains(
+            selected_canonical_width, epsilon=1.0e-9
         )
-        > 1.0e-9
     ):
         raise ValueError("retained fit escaped its source W authority")
     assessment = FrameWidthInferenceAssessment(

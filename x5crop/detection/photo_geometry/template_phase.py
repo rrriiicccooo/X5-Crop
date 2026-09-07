@@ -29,6 +29,7 @@ from .template_model import (
     TemplateSearchReceipt,
     TemplateSpec,
     adjacency_relation_required_bindings,
+    adjacency_prefix_positions,
     most_constrained_lattice_parameter_fit_basis,
     ordered_template_roles,
 )
@@ -42,7 +43,6 @@ from .template_phase_candidates import (
     _holder_limits,
     _overlap_phase_seeds,
     _positive,
-    _prefixes,
     project_candidate_to_authorized_direct_roles,
     _rank,
     _refine_local_role_bindings,
@@ -581,7 +581,7 @@ def fit_template_phase(
     if maximum < minimum:
         raise ValueError("template pitch and gap prior have no common interval")
     pitch_authority = FiniteInterval(minimum, maximum)
-    prefixes = _prefixes(relations, template.count)
+    prefixes = adjacency_prefix_positions(relations, template.count)
     width0 = width.center
     pitch0 = pitch_authority.center
     coordinates = tuple(item.coordinate_px for item in direct)
@@ -2240,10 +2240,9 @@ def _apply_final_lattice_contract(
                 result,
                 status=PhaseFitStatus.UNRESOLVED,
                 ambiguity_reason=(
-                    "a Frame with two unobserved sequence roles cannot be "
-                    "created from the Grid"
+                    "measured source W does not intersect this placement's W"
                     if width_inference.failure_kind
-                    == FrameWidthInferenceFailureKind.COMPLETE_FRAME_UNOBSERVED
+                    == FrameWidthInferenceFailureKind.SOURCE_WIDTH_PLACEMENT_CONFLICT
                     else "direct-lattice W cannot discard a registered local "
                     "boundary and then authorize missing roles"
                     if width_inference.failure_kind

@@ -7,7 +7,7 @@
 ## 产品行为
 
 X5 Crop 用已知 format 的设计尺寸先验建立该 source 的有界物理模板，而不是做通用照片边界识别。只有
-当整张 source 的每个 slot 都能形成唯一、安全、可直接使用的裁切时，才写出正式 TIFF；否则整张进入
+当整张 source 的每个 slot 都有通过当前风险准入、可直接使用的裁切时，才写出正式 TIFF；否则整张进入
 `needs_review`，不单独抢救部分 slot。
 
 ### Format 与 count
@@ -33,13 +33,15 @@ V5 没有 full/partial mode。
 
 V5 先从整条片带建立粗略支撑和共同方向，再把 format/count 编译成有界 W/H 模板，只在理论 outer、
 separator 与 top/bottom 附近做有界局部测量。Format 尺寸是跨相机先验，不是要求每台相机严格相同的
-片门常量；唯一 placement 中的直接边缘可分别闭合该 source 的共同 W/H，并保留原生位置。像素证据用于
+片门常量；可靠直接边缘可分别测量该 source 的共同 W/H，并保留原生位置。像素证据用于
 对准模板和否决危险裁切，不能凭自身创造 format、count 或 placement。
 
 缺失的单侧 start/end 只有在 source W 已由完整直接 Frame，或满秩的独立直接约束闭合，且该 Frame 的
 另一侧直接可见时才可由共同 W 推断；推断不能覆盖已观察边界或删除反证。双侧都不可见的 Frame 只有在
 校准 Grid 已有可靠 absolute anchor、对应 adjacency 完整检查且无反证时才可生成，并继续接受完整包络与
-5% 预算检查。Direct W/H 分别取证。Format 画幅比例可以在经过黄金集校准、保留完整不确定性后让 W 约束
+5% 预算检查。局部完整 Frame 的可靠 W 不因远处测量不完整或 placement 尚未获准而消失；空 Frame
+也不阻止其它单边 Frame 使用共同 W。测量可用不等于允许自动输出，原反证、歧义和风险检查仍保留。
+Direct W/H 分别取证。Format 画幅比例可以在经过黄金集校准、保留完整不确定性后让 W 约束
 H：W/H compatibility 对所有 format 使用同一个“物理
 毫米下限 + 相对比例”的计算方法，再由两轴 guard 推导各 format 的有界比例区间。它不能冒充直接
 top/bottom、增加独立证据或用名义比例作零误差换算；比例校准不可用、与直接边界冲突或耗尽逐侧 5%
@@ -63,8 +65,9 @@ outer support。它与尖锐边等价时保留尖锐边的原生坐标；两者�
 
 正常片带使用一个共享 pitch；每个直接且 ordinal 唯一的 separator 可以约束自己的宽/窄间隔，后续
 Frame 只累加一次该处实测差值。多个已证明的间隔变化仍以一次有界传播处理；任一间隔存在多种解释、
-缺少必要 authority、存在多个同样合法答案或未知必需 Frame 时保持 `needs_review`。
-Contact 与 overlap 是 challenge，不是预定终态：标准 detector 与 Gate 能唯一证明安全时可以自动批准，
+缺少必要 authority、尚不能从多个合法答案中可靠选择或未知必需 Frame 时保持 `needs_review`。
+当前尚未启用可用性评分；Review 是现有选择能力的边界，不意味着产品要求证明唯一真实裁切。
+Contact 与 overlap 是 challenge，不是预定终态：标准 detector 与 Gate 判定满足直接可用准入时可以自动批准，
 证据不足时安全 review 同样正确。已证明关系只在相邻的 END/START 增加 topology protection，并继续计入
 同一份逐侧 5% 总预算；它不能证明 topology。V5 不为它们启用第二套 detector 或独立 bleed 预算。
 
@@ -81,6 +84,8 @@ top/bottom = 0.25 mm
 ```
 
 测量不确定性、局部 residual 与 bleed 共同消耗每侧最多 5% W/H 的安全外扩预算，边与边之间不能借用。
+这是当前模型的风险预算，不是对真实边界误差的直接测量。开发黄金另以人工基线检查最终裁切的方向性
+包含与实际 5% 外扩；机器不必逐条复原人工线。
 若直接观察到一对连续 outer support 完整包住固定 H，且总高度不超过 `1.1H`，它可以替代不可用的
 aperture top/bottom；这对直接支撑不依赖 W/H 比例推导。此时不再添加 0.25 mm cross bleed，但逐侧与
 同一可行状态的联合对齐 padding 仍分别受 5% 预算保护；support 位置不确定性只计入逐侧预算，不会在

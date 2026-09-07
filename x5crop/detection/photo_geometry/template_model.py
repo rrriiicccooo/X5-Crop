@@ -435,7 +435,7 @@ def most_constrained_lattice_parameter_fit_basis(
 class FrameWidthInferenceFailureKind(str, Enum):
     """Why one required correlated-W inference has no direct authority."""
 
-    COMPLETE_FRAME_UNOBSERVED = "complete_frame_unobserved"
+    SOURCE_WIDTH_PLACEMENT_CONFLICT = "source_width_placement_conflict"
     COMMON_WIDTH_AUTHORITY_UNAVAILABLE = (
         "common_width_authority_unavailable"
     )
@@ -851,6 +851,81 @@ def adjacency_prefix_coefficients(
     return measured_count, slot_index - measured_count, fixed_delta
 
 
+def adjacency_prefix_positions(
+    relations: tuple[AdjacencyRelation, ...],
+    count: int,
+) -> tuple[float, ...]:
+    """Propagate each canonical local correction once, in O(count)."""
+
+    result = [0.0]
+    running = 0.0
+    for slot_index in range(1, count):
+        if slot_index <= len(relations):
+            running += relations[slot_index - 1].canonical_delta_px
+        result.append(running)
+    return tuple(result)
+
+
+def adjacency_prefix_intervals(
+    relations: tuple[AdjacencyRelation, ...],
+    count: int,
+) -> tuple[FiniteInterval, ...]:
+    """Propagate each full local correction interval once, in O(count)."""
+
+    result = [FiniteInterval.exact(0.0)]
+    minimum = maximum = 0.0
+    for slot_index in range(1, count):
+        if slot_index <= len(relations):
+            interval = relations[slot_index - 1].delta_interval_px
+            minimum += interval.minimum
+            maximum += interval.maximum
+        result.append(FiniteInterval(minimum, maximum))
+    return tuple(result)
+
+
+def template_role_position(
+    role: TemplateRole,
+    *,
+    phase: float,
+    width: float,
+    pitch: float,
+    direction: int,
+    prefixes: tuple[float, ...],
+) -> float:
+    relative = role.slot_index * pitch + prefixes[role.slot_index]
+    if role.role == BoundaryRole.END:
+        relative += width
+    return phase + direction * relative
+
+
+def template_role_interval(
+    role: TemplateRole,
+    *,
+    phase: FiniteInterval,
+    width: FiniteInterval,
+    pitch: FiniteInterval,
+    direction: int,
+    prefixes: tuple[FiniteInterval, ...],
+) -> FiniteInterval:
+    """Project a role marginal; joint geometry retains W/pitch correlations."""
+
+    slot = role.slot_index
+    relative_minimum = slot * pitch.minimum + prefixes[slot].minimum
+    relative_maximum = slot * pitch.maximum + prefixes[slot].maximum
+    if role.role == BoundaryRole.END:
+        relative_minimum += width.minimum
+        relative_maximum += width.maximum
+    if direction == 1:
+        return FiniteInterval(
+            phase.minimum + relative_minimum,
+            phase.maximum + relative_maximum,
+        )
+    return FiniteInterval(
+        phase.minimum - relative_maximum,
+        phase.maximum - relative_minimum,
+    )
+
+
 def realize_adjacency_relations(
     relations: tuple[AdjacencyRelation, ...],
     *,
@@ -1208,6 +1283,16 @@ class SequenceFit:
         )
 
     @property
+    def opposite_inference_role_indices(self) -> tuple[int, ...]:
+        """Missing roles with an observed opposite; full missing Frames use Grid."""
+
+        return tuple(
+            index
+            for index in self.unbound_role_indices
+            if self.role_bindings[index ^ 1] is not None
+        )
+
+    @property
     def completely_unobserved_frame_ordinals(self) -> tuple[int, ...]:
         """Frames whose START and END both come only from the Grid model."""
 
@@ -1301,7 +1386,7 @@ class SequenceFit:
                     FrameWidthInferenceAssessment,
                 )
                 or width_inference.inferred_role_indices
-                != self.unbound_role_indices
+                != self.opposite_inference_role_indices
             ):
                 raise ValueError("sequence common-W inference ledger is invalid")
             if width_inference.state == EvidenceState.SUPPORTED:
@@ -1321,10 +1406,6 @@ class SequenceFit:
                 ):
                     raise ValueError(
                         "supported common-W canonical state disagrees with sequence"
-                    )
-                if self.completely_unobserved_frame_ordinals:
-                    raise ValueError(
-                        "supported common-W inference cannot create a full Frame"
                     )
         phase_authority_role_count = sum(
             binding is not None

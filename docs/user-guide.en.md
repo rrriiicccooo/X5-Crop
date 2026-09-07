@@ -8,7 +8,7 @@
 
 X5 Crop uses a known format's design-size prior to establish a bounded physical template for each source; it is not a
 general-purpose photo-boundary recognizer.
-Official TIFFs are written only when every slot in the source has one unique, safe, directly usable crop. Otherwise the
+Official TIFFs are written only when every slot in the source has a directly usable crop that meets the current risk-admission rules. Otherwise the
 entire source becomes `needs_review`; individual slots are never salvaged.
 
 ### Format And Count
@@ -35,14 +35,17 @@ It does not remove, merge, or reorder blank slots. V5 has no full/partial mode.
 V5 first establishes coarse support and a common direction from the whole strip. It then compiles format/count into a
 bounded W/H template and makes bounded local measurements only near theoretical outer, separator, and top/bottom
 positions. Format dimensions are cross-camera priors, not an identical gate size imposed on every camera. Direct edges
-in the unique placement may independently close that source's common W and H while retaining their native positions.
+may independently measure that source's common W and H while retaining their native positions.
 Pixel evidence aligns or rejects the template; it cannot invent format, count, or placement authority.
 
 A missing start/end side may be inferred only after source W is closed by complete direct Frames or a full-rank set of
 independent direct constraints, and that Frame still has its opposite direct side. Inference cannot override an observed
 edge or discard counterevidence. A Frame whose two sides are both unseen may be generated only when the calibrated Grid
 has a reliable absolute anchor, the corresponding adjacencies were fully checked, and no counterevidence exists; the
-complete envelope and five-percent budget still apply. Direct W and H retain separate evidence. A gold-calibrated
+complete envelope and five-percent budget still apply. Reliable local W measurements survive incomplete distant
+coverage or an unresolved placement. A fully unobserved Frame does not prevent other single-sided Frames from using
+common W. Available measurements do not grant automatic output: counterevidence, ambiguity, and risk checks remain.
+Direct W and H retain separate evidence. A gold-calibrated
 aspect-ratio authority may let W constrain H with full uncertainty. Every
 format uses the same physical-millimetre-floor plus relative-ratio method for W/H compatibility, while the propagated
 axis guards produce a bounded ratio interval specific to that format. This authority cannot impersonate direct
@@ -69,9 +72,10 @@ an opposite edge that is visible only locally across the whole strip.
 
 Normal strips use one shared pitch. Every directly proven, ordinal-unique separator may constrain its own wide or narrow
 gap; later Frames apply that measured delta once. Multiple proven gap changes still use one bounded pass. An ambiguous
-gap, missing authority, multiple equally legal answers, or an unknown required Frame remains `needs_review`. Contact and
+gap, missing authority, inability to reliably choose among legal answers, or an unknown required Frame remains `needs_review`.
+Acceptability scoring is not yet enabled; this is a current selection limit, not a requirement to prove one uniquely true crop. Contact and
 overlap are challenge cases, not predetermined outcomes: the standard detector and Gate may
-approve them when safety is uniquely proven, while safe review remains correct when evidence is insufficient. V5 does
+approve them when direct-use admission is satisfied, while safe review remains correct when evidence is insufficient. V5 does
 not enable a second detector or a separate bleed budget for them. A proven relation adds topology protection only to
 the participating END/START boundaries, still inside the same per-side five-percent budget; that protection cannot
 prove the topology.
@@ -89,7 +93,11 @@ top/bottom = 0.25 mm
 ```
 
 Measurement uncertainty, local residual, and bleed share a maximum 5% W/H outward budget per side. Sides cannot
-borrow budget from one another. A directly observed continuous outer-support pair may replace unavailable aperture
+borrow budget from one another. This is a model-risk budget, not a direct measurement of true boundary error.
+Development gold separately checks directional containment and actual five-percent expansion against human baselines;
+the detector need not reproduce each annotated line.
+
+A directly observed continuous outer-support pair may replace unavailable aperture
 top/bottom when it fully encloses fixed H and its total height is no greater than `1.1H`; this direct pair does not
 depend on W/H ratio inference. That mode adds no 0.25 mm cross bleed, while per-side and joint alignment padding remain
 inside their 5% budgets. The joint term uses line-alignment padding from one feasible state only; support-position
