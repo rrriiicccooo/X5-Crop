@@ -73,6 +73,10 @@ an opposite edge that is visible only locally across the whole strip.
 Normal strips use one shared pitch. Every directly proven, ordinal-unique separator may constrain its own wide or narrow
 gap; later Frames apply that measured delta once. Multiple proven gap changes still use one bounded pass. An ambiguous
 gap, missing authority, inability to reliably choose among legal answers, or an unknown required Frame remains `needs_review`.
+A narrow material strip at a film-strip end can lie inside or outside the photo. Existing evidence for both edges is retained;
+the strip alone does not force selection of the inner edge.
+When discrete positions remain ambiguous, each review footprint still obeys its own jointly supported direct coordinates;
+this does not remove the Review requirement.
 Runtime acceptability scoring is not yet enabled; this is a current selection limit, not a requirement to prove one uniquely true crop.
 Reports retain each lane's existing primary and single runner crop footprint, or the specific reason it could not be generated.
 Development gold analysis evaluates each footprint independently, allows multiple safe results, and separates unsafe from

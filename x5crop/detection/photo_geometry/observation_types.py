@@ -430,12 +430,13 @@ class SeparatorBandObservation:
 
 @dataclass(frozen=True)
 class OuterMaterialBoundaryObservation:
-    """One material band that distinguishes an aperture edge from its exterior.
+    """One outer material band supporting an inner aperture-edge hypothesis.
 
     The two physical edges carry the same START or END role.  The inner edge
-    may own only the corresponding first/last template role; the exterior edge
-    is counterevidence for that same role.  Correlated direct, cross-height and
-    broad-material measurements are collapsed into one evidence group.
+    may own only the corresponding first/last template role. The band cannot
+    prove that its material lies outside the aperture, so it does not revoke
+    an independently authorized exterior edge. Correlated direct, cross-height
+    and broad-material measurements are collapsed into one evidence group.
     """
 
     observation_id: ObservationId

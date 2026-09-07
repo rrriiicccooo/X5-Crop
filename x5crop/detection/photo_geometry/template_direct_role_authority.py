@@ -224,10 +224,6 @@ class _DirectRoleAuthorityLedger:
         tuple[ObservationId, BoundaryRole],
         tuple[ObservationId, ...],
     ]
-    outer_material_conflicts_by_edge_role: dict[
-        tuple[ObservationId, BoundaryRole],
-        tuple[ObservationId, ...],
-    ]
     conflicts_by_edge_role: dict[
         tuple[ObservationId, BoundaryRole],
         tuple[tuple[ObservationId, ObservationId], ...],
@@ -422,9 +418,6 @@ def _direct_role_authority_ledger(
         tuple[ObservationId, BoundaryRole],
         set[ObservationId],
     ] = {}
-    outer_material_conflict_sets: dict[
-        tuple[ObservationId, BoundaryRole], set[ObservationId]
-    ] = {}
     outer_material_by_id = {
         item.observation_id: item for item in outer_material_boundaries
     }
@@ -442,13 +435,6 @@ def _direct_role_authority_ledger(
         outer_material_role_sets.setdefault(
             (
                 observation.boundary_edge_observation_id,
-                observation.role,
-            ),
-            set(),
-        ).add(observation.observation_id)
-        outer_material_conflict_sets.setdefault(
-            (
-                observation.exterior_edge_observation_id,
                 observation.role,
             ),
             set(),
@@ -516,10 +502,6 @@ def _direct_role_authority_ledger(
         outer_material_roles={
             key: tuple(sorted(values))
             for key, values in outer_material_role_sets.items()
-        },
-        outer_material_conflicts_by_edge_role={
-            key: tuple(sorted(values))
-            for key, values in outer_material_conflict_sets.items()
         },
         conflicts_by_edge_role={
             key: tuple(
@@ -680,19 +662,6 @@ def _assess_direct_role_binding_authority(
     blocking_conflicts: dict[int, tuple[ObservationId, ...]] = {}
     for role_index, observation in selected.items():
         selected_role = fit.template.roles[role_index].role
-        outer_role_index = (
-            0
-            if selected_role == BoundaryRole.START
-            else len(fit.template.roles) - 1
-        )
-        outer_material_conflicts = (
-            ledger.outer_material_conflicts_by_edge_role.get(
-                (observation.observation_id, selected_role),
-                (),
-            )
-            if role_index == outer_role_index
-            else ()
-        )
         alternative_conflicts = (
             tuple(
                 conflict_id
@@ -714,7 +683,6 @@ def _assess_direct_role_binding_authority(
             sorted(
                 set(alternative_conflicts)
                 | set(reversed_pair_conflicts_by_role.get(role_index, ()))
-                | set(outer_material_conflicts)
             )
         )
 

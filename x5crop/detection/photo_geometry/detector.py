@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from ...configuration.model import DetectionConfiguration, ResolvedSlotCount
 from ...domain import EvidenceState
@@ -22,6 +22,7 @@ from .measurement_model import PhotoBoundaryMeasurementField
 from .output_model import OutputFootprint, OutputSlotIdentity
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import CrossFitStatus
+from .template_direct_role_authority import assess_direct_role_binding_authority
 from .template_acceptability_features import build_placement_acceptability_features
 from .template_feasible_geometry import project_format_placement
 from .template_enclosing_support_aperture import (
@@ -44,7 +45,12 @@ from .template_output import (
 from .template_nominal_grid_authority import (
     assess_calibrated_nominal_grid_authority,
 )
-from .template_phase_model import PhaseFitStatus
+from .template_lattice_authority import assess_global_lattice_authority
+from .template_phase_model import (
+    PhaseCandidateProjectionOutcome,
+    PhaseFailureKind,
+    PhaseFitStatus,
+)
 from .template_placement import FormatPlacement, compose_format_placement
 from .template_runtime_model import (
     PhotoGeometryDetectionResult,
@@ -128,16 +134,33 @@ def _placements(
     *,
     source_geometry: SourceScanGeometry,
 ) -> tuple[FormatPlacement | None, FormatPlacement | None]:
+    """Compose existing fits; conditional constraints do not select a winner."""
+
     phase = prepared.phase_competition
     cross = prepared.cross_competition
+    conditional = (
+        phase.status == PhaseFitStatus.AMBIGUOUS
+        and phase.failure_kind == PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS
+    )
+    legal_projection_outcomes = {
+        PhaseCandidateProjectionOutcome.UNCHANGED,
+        PhaseCandidateProjectionOutcome.DIRECT_SEPARATOR_REFIT,
+        PhaseCandidateProjectionOutcome.PROJECTED,
+        PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID,
+    }
+    primary_projection = phase.best_phase_candidate_authority_projection
     best_lattice_authority = (
         phase.global_lattice_authority
         if phase.global_lattice_authority is not None
         and phase.global_lattice_authority.state == EvidenceState.SUPPORTED
-        # A rank-closed authority inside an unresolved competition remains
-        # diagnostic. It cannot replace that competition's retained proposal
-        # intervals or make proposal generation disappear.
-        and phase.status == PhaseFitStatus.RESOLVED
+        and (
+            phase.status == PhaseFitStatus.RESOLVED
+            or conditional
+            and primary_projection is not None
+            and primary_projection.outcome in legal_projection_outcomes
+            and phase.direct_role_binding_authority is not None
+            and phase.direct_role_binding_authority.state == EvidenceState.SUPPORTED
+        )
         else None
     )
     best = _compose(
@@ -149,10 +172,46 @@ def _placements(
     )
     runner = None
     if phase.runner_up is not None:
+        runner_lattice_authority = None
+        runner_projection = phase.runner_phase_candidate_authority_projection
+        if (
+            conditional
+            and runner_projection is not None
+            and runner_projection.outcome in legal_projection_outcomes
+        ):
+            # Each discrete hypothesis owns its own native constraints. A W
+            # measured from the primary's bindings is not transferable merely
+            # because both fits belong to the same source.
+            width = prepared.source_frame_width_authority
+            width_matches = (
+                width.state == EvidenceState.SUPPORTED
+                and width.matches_placement(phase.runner_up)
+            )
+            phase_input = prepared.phase_input
+            if not width_matches:
+                phase_input = replace(
+                    phase_input,
+                    global_lattice_evidence=replace(
+                        phase_input.global_lattice_evidence,
+                        frame_width_observation_ids=(),
+                    ),
+                )
+            direct = assess_direct_role_binding_authority(
+                phase.runner_up, phase_input.observations,
+                phase_input.separator_bands, phase_input.sequence_measurement_sets,
+                outer_material_boundaries=phase_input.outer_material_boundaries,
+                authorized_source_frame_width_px=width.width_px if width_matches else None,
+            )
+            if direct.state == EvidenceState.SUPPORTED:
+                authority = assess_global_lattice_authority(
+                    phase.runner_up, phase_input, direct_role_authority=direct,
+                )
+                if authority.state == EvidenceState.SUPPORTED:
+                    runner_lattice_authority = authority
         runner = _compose(
             prepared,
             sequence_fit=phase.runner_up,
-            global_lattice_authority=None,
+            global_lattice_authority=runner_lattice_authority,
             cross_fit=cross.best,
             source_geometry=source_geometry,
         )

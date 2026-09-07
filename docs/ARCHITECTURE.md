@@ -339,15 +339,18 @@ interval 必须保留为不同解释。Development report 与 Debug 分别显示
 resolution、pair、typed failure 和工作量；Debug 不重新测量或求解。
 
 `outer_material.py` 独占 `OuterMaterialBoundaryObservation`。它处理 source 长轴端部中“两条同角色 edge
-围出一条窄材料带”的物理歧义，并明确区分 aperture boundary 与更外侧 edge：
+围出一条窄材料带”的物理歧义，登记内侧 aperture boundary 假设与更外侧 edge 的相关关系：
 
 | 已登记事实 | 结果与权限 |
 |---|---|
-| 唯一、物理最外侧的 START/START 或 END/END pair；material 宽度不超过模板校准 gap 上界；三个独立高度区域一致 | 内侧 edge 取得首张 START 或末张 END 权限；外侧 edge 成为同角色 counterevidence |
+| 唯一、物理最外侧的 START/START 或 END/END pair；material 宽度不超过模板校准 gap 上界；三个独立高度区域一致 | 内侧 edge 可承担首张 START 或末张 END 假设；不否定外侧 edge 已有的独立角色权限 |
 | 只有两个独立高度区域，但外侧 edge 已有 intrinsic direct authority | 允许从外侧 edge 向内侧 boundary 恰好传递一次相关权限；不增加独立 rank |
 | 内侧 boundary 是 standalone aggregate，外侧 edge 已在基础 placement ledger | 只加入内侧 boundary；outer fact 与两条 edge 保留完整 provenance |
 | pair 位于内部、宽于校准 gap、存在重叠的最外侧解释，或外侧 aggregate 自身尚未进入基础 placement ledger | 不形成 outer fact，不按强度或距离选解 |
 
+窄带的 tone/texture 与空间位置不能单独证明它在照片 aperture 外：照片内部的均匀窄条也能产生相同事实。
+即使三个区域一致，也不能把外侧直接边界自动登记成反证；两侧角色身份、原生坐标和材料 provenance 均保留。
+具体解释由同一有界模板的 W、pitch、ordinal、独立直接证据与后续风险条件约束；多解仍按原竞争合同处理。
 该事实只消费现有 registered bands 与 edge resolution，不新增 TIFF 读取、查询、候选或 score。Phase owner
 可以消费它来纠正首尾角色；Contact/Overlap owner 仍只查看加入 outer boundary 之前的基础 edge ledger，
 因此 outer material 不能伪造 adjacency topology。Normal report 与 Debug 分别显示 observation、权限使用
@@ -415,10 +418,15 @@ Grid 始终可以生成一个待检验的默认 placement，但它不能仅凭�
   状态，也不得因此修改任何直接角色的 native coordinate。Report/Debug 在
   `JointPlacementEnvelope.sequence_constraint_basis` 中区分 `global_lattice_authority | model_intervals`，并
   保存实际消费的 constraint identity。
-- Rank 闭合但 phase competition 仍 unresolved 时，该 authority 只是一项诊断事实，不能接管 proposal 的
-  包络。Runtime 继续保留原完整 Grid proposal 及其 model interval，同时由既有 typed phase conflict 阻断
-  eligibility；不得因尝试把互相冲突的事实强行求交而让 proposal 消失。Rank 0–2 也继续使用模型包络，不能
-  冒充 full direct closure。
+- 仅有 `discrete_phase_ambiguous` 的 retained primary/runner 可以分别消费自身 supported rank-3 约束，
+  条件是该 fit 的 candidate projection 合法且当前 direct-role authority 为 supported。这是“给定该离散
+  解释”的条件几何，不证明解释正确、coverage 完整或具备输出资格。Primary 复用最终 authority；runner
+  从自己的 binding 和原登记事实重新评估，不能复用 primary 的角色 ledger。只有 source W 与 runner 的
+  placement identity 匹配才参与其 direct-role 评估，否则同时去除独立 W 的 rank 输入。每个 fit 仍只做
+  一次既有联合 footprint projection；交集为空时保存该 placement identity 和 typed unavailable，不退回
+  更宽包络。原 phase status/failure、离散身份和竞争顺序不变，eligibility 仍被阻断。
+- 其它 unresolved/conflict 状态、失败的 candidate projection、direct-role 未闭合或 rank 0–2 继续使用
+  原模型包络；不得借条件几何掩盖已知反证或冒充 full direct closure。
 - Rank 3 直接坐标系统由 `template_phase_candidates.py` 在同一个连续 placement 内联合拟合
   `(phase, W, source_pitch)`。无约束最小二乘若落在已编译的 phase、W、pitch 与
   `pitch-W` 全部区间内，记录 `direct_least_squares`；若只越过这些硬区间，求解器在同一可行集合内取得
@@ -1558,6 +1566,10 @@ probability candidates / features / OOD evaluations（仅在第 9.2 节获准启
 domain pixels / peak temporary bytes
 ```
 
+离散歧义下最多保留两份 placement；primary 复用已有 lattice authority，runner 最多追加一次只读的
+direct-role 与 global-lattice 评估，受同一 placement 上界约束。不新增像素 query、phase 搜索或 footprint
+projection；每份 proposal 的 projection 和 output evaluation 仍由原 receipt 逐次计数。
+
 任何上界不足都显式产生 `producer_bound_exceeded`，不得 silent first-N。像素工作上限为
 `128 × source_pixels`，峰值临时内存上限为 `10 × source_pixels + 32 MiB`。不得恢复通用 DP、
 beam、未校准的第二套 Grid/phase vote 搜索、候选笛卡尔积、完整链 materialization/cache、逐帧尺寸、
@@ -1609,7 +1621,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/corridors.py` | 候选无关 top/bottom 与完整 `W/pitch` sequence 查询走廊 |
 | `photo_geometry/registered_*.py`、`observations.py`、`separator_*.py` | 一次性 measurement、role-free edge 与 material band |
 | `photo_geometry/cross_height_transition_measurement.py`、`broad_material_transition_measurement.py` | 同一 registered baseline 上的三区域局部弱信号与双尺度宽缓 material 测量 |
-| `photo_geometry/aggregate_edge_support.py`、`outer_material.py` | aggregate edge 的唯一解析、相关证据去重、完整三区域 separator pair 投影，以及物理最外侧窄材料带对首张 START / 末张 END 的唯一 boundary/exterior 解析权限 |
+| `photo_geometry/aggregate_edge_support.py`、`outer_material.py` | aggregate edge 的唯一解析、相关证据去重、完整三区域 separator pair 投影，以及最外侧窄材料带对首张 START / 末张 END 的内侧边界假设；窄带不否定外侧 edge 的独立权限 |
 | `photo_geometry/template_separator_support.py` | 共享 physical edge 的 separator band connected component、唯一相关 evidence group、source-wide pair 原子角色权限与 typed component failure；不读取像素或选择 placement |
 | `photo_geometry/template_contact.py` | candidate-independent `ContactEdgeObservation`：从既有 authoritative edge ledger 证明唯一共享 physical edge，不读取像素或选择 ordinal |
 | `photo_geometry/template_overlap.py` | candidate-independent `OverlapEdgePairObservation`：从既有 authoritative edge ledger 登记唯一反序 END/START pair，不读取像素或选择 ordinal |
@@ -1632,7 +1644,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/template_acceptability_features.py` | 已有 placement 的冻结数值特征、单位、missingness 与 provenance；不求解几何、计算预算、评分或批准 |
 | `photo_geometry/template_holder_fill.py` | selected PhotoGroupOuter 与 W-only fill assessment |
 | `photo_geometry/content_*.py` | 最终 post-bleed polygon 上的二维 negative veto |
-| `photo_geometry/template_feasible_geometry.py` | 任一已 compose placement 的低维联合可行集合与 footprint projection；resolved global-lattice direct constraint 在此唯一参与联合投影，不决定 eligibility |
+| `photo_geometry/template_feasible_geometry.py` | 任一已 compose placement 的低维联合可行集合与 footprint projection；resolved 或第 7 节允许的逐假设 global-lattice direct constraint 在此唯一参与联合投影，不决定 eligibility |
 | `photo_geometry/template_output.py`、`output_model.py` | JointPlacementEnvelope、实际 sequence constraint basis/identity、基础 bleed、Contact/Overlap 两侧 topology protection、enclosing-support aperture-center risk、OutputFootprint 与同一 5% budget |
 | `photo_geometry/template_runtime_model.py`、`detector.py` | `TemplatePlacementProposal` / `TemplateSourceProposal`、eligibility/selection handoff 与顶层编排；proposal 不授权正式输出 |
 | `photo_geometry/template_gate.py` | selected-only CandidateGate facts；不生成、选择或删除 proposal |

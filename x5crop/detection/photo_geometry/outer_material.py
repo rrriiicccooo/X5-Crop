@@ -1,4 +1,4 @@
-"""Resolve aperture-versus-exterior material without creating a separator."""
+"""Register outer material and its inner-edge hypothesis, not an exclusion."""
 
 from __future__ import annotations
 
@@ -79,8 +79,10 @@ def observe_outer_material_boundaries(
     authority exactly once, from an independently authoritative exterior edge
     to the inner aperture boundary.  Only the unique spatially outermost pair
     within the calibrated local-gap width is retained.  The fact remains
-    candidate-local: it can affect only the first START or the last END, never
-    an internal role.
+    candidate-local: it can support only the first START or the last END,
+    never an internal role. Material alone does not distinguish film outside
+    the aperture from a uniform strip inside it; the exterior edge retains
+    any independently established coordinate authority.
     """
 
     if direction not in {-1, 1}:

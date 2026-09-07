@@ -439,7 +439,7 @@ class OuterMaterialContractTest(unittest.TestCase):
             (exterior, boundary),
         )
 
-    def test_only_inner_edge_can_own_first_start(self) -> None:
+    def test_fixed_width_can_distinguish_inner_material_boundary(self) -> None:
         exterior = _edge("outer:phase:exterior", 10.0, BoundaryRole.START)
         boundary = _edge(
             "outer:phase:boundary",
@@ -508,7 +508,7 @@ class OuterMaterialContractTest(unittest.TestCase):
             outer[0].evidence_group_id,
         )
 
-    def test_exterior_edge_is_counterevidence_for_first_start(self) -> None:
+    def test_material_band_does_not_contradict_authorized_exterior_start(self) -> None:
         exterior = _edge(
             "outer:conflict:exterior",
             10.0,
@@ -545,14 +545,14 @@ class OuterMaterialContractTest(unittest.TestCase):
                 (exterior.observation_id,)
             ),
         )
-        wrong = fit_template_phase(
+        exterior_fit = fit_template_phase(
             (exterior, end_one, start_two, end_two),
             phase_template(2),
         ).best
-        assert wrong is not None
+        assert exterior_fit is not None
 
         authority = assess_direct_role_binding_authority(
-            wrong,
+            exterior_fit,
             observations,
             (),
             (
@@ -565,10 +565,12 @@ class OuterMaterialContractTest(unittest.TestCase):
         )
 
         first = authority.facts[0]
-        self.assertEqual(first.state, EvidenceState.CONTRADICTED)
+        # A dark strip can be inside the aperture as well as outside it.
+        # The band alone cannot revoke the exterior edge's independent role.
+        self.assertEqual(first.state, EvidenceState.SUPPORTED)
         self.assertEqual(
             first.blocking_material_conflict_ids,
-            (outer[0].observation_id,),
+            (),
         )
 
     def test_outer_material_cannot_authorize_an_internal_start(self) -> None:
@@ -635,6 +637,36 @@ class OuterMaterialContractTest(unittest.TestCase):
             DirectRoleAuthorityBasis.OUTER_MATERIAL_BOUNDARY,
             internal.bases,
         )
+
+    def test_three_region_end_material_also_preserves_exterior_authority(self) -> None:
+        start_one = _edge("outer:end:start-1", 20.0, BoundaryRole.START)
+        end_one = _edge("outer:end:end-1", 120.0, BoundaryRole.END)
+        start_two = _edge("outer:end:start-2", 140.0, BoundaryRole.START)
+        inner = _edge("outer:end:inner", 230.0, BoundaryRole.END)
+        exterior = _edge("outer:end:exterior", 240.0, BoundaryRole.END)
+        observations = (start_one, end_one, start_two, inner, exterior)
+        band = phase_separator(
+            "outer:end:band", inner, exterior, FiniteInterval(9.0, 11.0),
+        )
+        outer = observe_outer_material_boundaries(
+            (band,), (), observations, direction=1,
+            maximum_material_width_px=20.0,
+            intrinsic_authority_edge_ids=frozenset((exterior.observation_id,)),
+        )
+        exterior_fit = fit_template_phase(
+            (start_one, end_one, start_two, exterior), phase_template(2),
+        ).best
+        assert exterior_fit is not None
+        authority = assess_direct_role_binding_authority(
+            exterior_fit, observations, (),
+            (phase_sequence_measurement("outer:end", FiniteInterval(0.0, 260.0)),),
+            outer_material_boundaries=outer,
+        )
+        self.assertEqual(len(outer), 1)
+        self.assertEqual(outer[0].independent_support_region_count, 3)
+        last = next(item for item in authority.facts if item.role_index == 3)
+        self.assertEqual(last.state, EvidenceState.SUPPORTED)
+        self.assertEqual(last.blocking_material_conflict_ids, ())
 
 
 if __name__ == "__main__":
