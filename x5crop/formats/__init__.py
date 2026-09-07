@@ -291,21 +291,21 @@ ENCLOSING_SUPPORT_APERTURE_CALIBRATION_SPEC = (
     EnclosingSupportApertureCalibrationSpec(
         calibration_id=(
             "x5crop_enclosing_support_aperture_center:development_gold_"
-            "selected_unique_pair_hull_outward_0p001ratio_v3"
+            "selected_unique_pair_hull_outward_0p001ratio_v4"
         ),
         development_gold_cohort_sha256=(
             DEVELOPMENT_GOLD_CALIBRATION_COHORT_SHA256
         ),
         development_observation_set_sha256=(
-            "20d2d48c20f66a8ee0492174966af0f28e701992a81630e9e58af82b94349e32"
+            "1f228750b9ff92a81bdd724b456bb8791079dcf346ad73e561840d89cb89f5be"
         ),
         eligibility_revision=(
             "x5crop_selected_unique_enclosing_support_gold_aperture_center_v1"
         ),
         minimum_center_offset_ratio=-0.009,
         maximum_center_offset_ratio=0.007,
-        development_source_count=17,
-        development_task_count=17,
+        development_source_count=18,
+        development_task_count=18,
         outward_rounding_ratio=0.001,
     )
 )
