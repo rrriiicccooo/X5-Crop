@@ -43,6 +43,7 @@ class FinalDetection:
                 or len(self.final_boxes) != expected
                 or any(
                     not footprint.sampling_authority_box.valid()
+                    or footprint.source_extent != self.deskew_assessment.transform.source_extent
                     for footprint in self.output_footprints
                 )
                 or any(not box.valid() for box in self.final_boxes)

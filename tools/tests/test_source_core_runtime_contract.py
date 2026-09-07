@@ -257,6 +257,30 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         ):
             validate_current_report_record(record)
 
+    def test_current_report_binds_all_source_extent_representations(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            outcome = self._process_pixels(
+                Path(temporary), np.zeros((100, 720), dtype=np.uint16)
+            )
+        self.assertIsInstance(outcome, CompletedInput)
+        assert isinstance(outcome, CompletedInput)
+        validate_current_report_record(outcome.result)
+        paths = (
+            ("input", "profile", "shape", 1),
+            ("input", "profile", "orientation", "canonical_width"),
+            ("measurement", "source_extent", "width"),
+            ("runtime_identity", "source", "orientation", "canonical_extent", "width"),
+            ("output", "finalization", "deskew_assessment", "transform", "source_extent", "width"),
+        )
+        for path in paths:
+            invalid = deepcopy(outcome.result)
+            target = invalid
+            for key in path[:-1]:
+                target = target[key]
+            target[path[-1]] += 1000
+            with self.subTest(path=path), self.assertRaisesRegex(ValueError, "source extent"):
+                validate_current_report_record(invalid)
+
     def test_direct_role_report_separates_coordinate_and_evidence_group(self) -> None:
         authority = {
             "state": "supported",

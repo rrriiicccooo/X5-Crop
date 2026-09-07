@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from x5crop.domain import Box
+from x5crop.domain import Box, WorkspaceExtent
 from x5crop.domain import EvidenceState
 from x5crop.detection.final.deskew import assess_output_deskew
 from x5crop.detection.output_deskew import (
@@ -62,7 +62,7 @@ def make_deskew_observation(
     )
 
 
-def sampling_footprint(authority: Box) -> OutputFootprint:
+def sampling_footprint(authority: Box, source_extent: WorkspaceExtent) -> OutputFootprint:
     polygon = (
         (float(authority.left), float(authority.top)),
         (float(authority.right - 1), float(authority.top)),
@@ -101,6 +101,7 @@ def sampling_footprint(authority: Box) -> OutputFootprint:
         enclosing_support_aperture_risk=None,
         saturation_facts=(),
         sampling_authority_box=authority,
+        source_extent=source_extent,
         authority_profile_id="sampling-fixture",
     )
 

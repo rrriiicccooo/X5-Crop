@@ -62,7 +62,7 @@ from x5crop.detection.photo_geometry.template_runtime_model import (
     TemplateSourceProposal,
     TemplateSourceSelection,
 )
-from x5crop.domain import Box, EvidenceState
+from x5crop.domain import Box, EvidenceState, WorkspaceExtent
 def _unresolved_result() -> PhotoGeometryDetectionResult:
     prepared = _prepared()
     competition = TemplatePlacementCompetition(
@@ -510,6 +510,7 @@ def _output_footprint():
         enclosing_support_aperture_risk=None,
         saturation_facts=(),
         sampling_authority_box=Box(0, 0, 10, 10),
+        source_extent=WorkspaceExtent(10, 10),
         authority_profile_id="135_standard",
     )
 

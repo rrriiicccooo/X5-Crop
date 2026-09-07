@@ -11,6 +11,9 @@ from tools.regression.diagnostic_cohort import (
 )
 from tools.regression.report_validation import validate_output_footprint_authority
 from x5crop.report.summary import template_alignment_path
+from x5crop.report.read_models import typed_read_model
+from x5crop.domain import WorkspaceExtent
+from x5crop.io.orientation import orientation_mapping
 
 
 def _boundary_protections():
@@ -89,11 +92,12 @@ class CurrentRuntimeContractTest(unittest.TestCase):
                 [-2.0, 90.0],
             ],
             "required_source_footprint": [
-                [0.0, 10.0],
+                [-0.5, 10.0],
                 [80.0, 10.0],
                 [80.0, 90.0],
-                [0.0, 90.0],
+                [-0.5, 90.0],
             ],
+            "source_extent": {"width": 100, "height": 100},
             "sampling_authority_box": {
                 "left": 0,
                 "top": 0,
@@ -105,18 +109,26 @@ class CurrentRuntimeContractTest(unittest.TestCase):
                 {
                     "authority_side": "left",
                     "kind": "source_boundary_optional_bleed",
-                    "requested_overflow_px": 2.0,
+                    "requested_overflow_px": 1.5,
                     "mandatory_overflow_px": 0.0,
                 }
             ],
         }
-        report = {"photo_geometry": {"lanes": [{"output_footprints": [output]}]}}
+        orientation = orientation_mapping(1, 100, 100)
+        report = {
+            "input": {"profile": {"shape": [100, 100, 3], "axes": "YXS", "orientation": typed_read_model(orientation)}},
+            "measurement": {"source_extent": {"width": 100, "height": 100}},
+            "runtime_identity": {"source": {"orientation": orientation.as_record()}},
+            "output": {"finalization": {"deskew_assessment": {"transform": {"source_extent": {"width": 100, "height": 100}}}}},
+            "photo_geometry": {"lanes": [{"output_footprints": [output]}]},
+        }
         self.assertTrue(_source_geometry_authority_is_explicit(report))
         output["saturation_facts"] = []
         self.assertFalse(_source_geometry_authority_is_explicit(report))
 
     def test_current_report_rejects_duplicate_footprint_authority_sides(self) -> None:
         output = {
+            "source_extent": {"width": 100, "height": 100},
             "mandatory_source_footprint": [
                 [-2.0, 10.0],
                 [80.0, 10.0],
@@ -159,10 +171,11 @@ class CurrentRuntimeContractTest(unittest.TestCase):
         }
 
         with self.assertRaisesRegex(ValueError, "authority side"):
-            validate_output_footprint_authority(output)
+            validate_output_footprint_authority(output, expected_source_extent=WorkspaceExtent(100, 100))
 
     def test_current_report_needs_only_the_safe_source_footprint(self) -> None:
         output = {
+            "source_extent": {"width": 100, "height": 100},
             "mandatory_source_footprint": [
                 [10.0, 10.0],
                 [80.0, 10.0],
@@ -191,7 +204,7 @@ class CurrentRuntimeContractTest(unittest.TestCase):
             "saturation_facts": [],
         }
 
-        validate_output_footprint_authority(output)
+        validate_output_footprint_authority(output, expected_source_extent=WorkspaceExtent(100, 100))
 
     def test_diagnostic_verifier_wraps_the_production_cli(self) -> None:
         diagnostic = (
@@ -256,7 +269,7 @@ class CurrentRuntimeContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_ID, "x5crop_detection_report_v5")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "x5crop_v5_template_report_70",
+            "x5crop_v5_template_report_71",
         )
         candidate = candidate_gate_assessment(
             {

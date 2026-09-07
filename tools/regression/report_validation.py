@@ -11,7 +11,14 @@ from x5crop.detection.output_deskew import DeskewSkipReason
 from x5crop.detection.photo_geometry.coarse_strip_support import (
     CoarseSupportAuthority,
 )
-from x5crop.detection.photo_geometry.output_model import FootprintSaturationKind
+from x5crop.detection.photo_geometry.output_model import (
+    FootprintSaturationKind,
+    footprint_outside_authority_sides,
+    footprint_overflow_px,
+    sampling_authority_bounds,
+    source_boundary_sides,
+)
+from x5crop.detection.photo_geometry.model import AuthoritySide
 from x5crop.detection.photo_geometry.template_acceptability_features import (
     PLACEMENT_FEATURE_DEFINITIONS,
     PLACEMENT_FEATURE_SCHEMA,
@@ -38,10 +45,12 @@ from x5crop.detection.photo_geometry.template_phase_model import (
 from x5crop.detection.photo_geometry.template_placement import (
     compile_cross_support_domains_px,
 )
-from x5crop.domain import Box, FiniteInterval, ObservationId
+from x5crop.domain import Box, FiniteInterval, ObservationId, WorkspaceExtent
 from x5crop.report.read_models import typed_read_model
 from x5crop.formats import OUTPUT_PROTECTION_SPEC
-from x5crop.geometry.convex import clip_convex_polygon_to_box
+from x5crop.geometry.affine import AffineCoordinateTransform
+from x5crop.geometry.convex import clip_convex_polygon_to_bounds, mapped_half_open_box
+from x5crop.io.orientation import orientation_mapping
 from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 
 
@@ -2172,42 +2181,6 @@ def _validate_box(value: object, label: str) -> dict[str, float]:
     return value
 
 
-def _outside_authority_sides(
-    footprint: list[list[float]],
-    authority: dict[str, float],
-) -> tuple[str, ...]:
-    result = []
-    if min(float(point[0]) for point in footprint) < authority["left"]:
-        result.append("left")
-    if min(float(point[1]) for point in footprint) < authority["top"]:
-        result.append("top")
-    if max(float(point[0]) for point in footprint) > authority["right"] - 1:
-        result.append("right")
-    if max(float(point[1]) for point in footprint) > authority["bottom"] - 1:
-        result.append("bottom")
-    return tuple(result)
-
-
-def _authority_overflow_px(
-    footprint: list[list[float]],
-    authority: dict[str, float],
-    side: str,
-) -> float:
-    if side == "left":
-        return max(0.0, authority["left"] - min(point[0] for point in footprint))
-    if side == "top":
-        return max(0.0, authority["top"] - min(point[1] for point in footprint))
-    if side == "right":
-        return max(
-            0.0,
-            max(point[0] for point in footprint) - (authority["right"] - 1),
-        )
-    return max(
-        0.0,
-        max(point[1] for point in footprint) - (authority["bottom"] - 1),
-    )
-
-
 def _same_polygon(
     left: list[list[float]],
     right: tuple[tuple[float, float], ...],
@@ -2219,7 +2192,11 @@ def _same_polygon(
     )
 
 
-def validate_output_footprint_authority(output: dict[str, Any]) -> None:
+def validate_output_footprint_authority(
+    output: dict[str, Any],
+    *,
+    expected_source_extent: WorkspaceExtent,
+) -> None:
     """Validate one serialized output footprint and explicit edge saturation."""
 
     if not isinstance(output, dict):
@@ -2240,6 +2217,15 @@ def validate_output_footprint_authority(output: dict[str, Any]) -> None:
         output.get("sampling_authority_box"),
         "sampling authority box",
     )
+    if (
+        not isinstance(expected_source_extent, WorkspaceExtent)
+        or output.get("source_extent") != typed_read_model(expected_source_extent)
+        or any(type(authority[side]) is not int for side in _AUTHORITY_SIDES)
+    ):
+        raise ValueError("footprint source extent or sampling authority is inconsistent")
+    authority_box = Box(*(authority[side] for side in _AUTHORITY_SIDES))
+    authority_bounds = sampling_authority_bounds(authority_box, expected_source_extent)
+    source_sides = source_boundary_sides(authority_box, expected_source_extent)
     envelope = output.get("envelope")
     boundary_use = (
         envelope.get("boundary_use") if isinstance(envelope, dict) else None
@@ -2353,7 +2339,11 @@ def validate_output_footprint_authority(output: dict[str, Any]) -> None:
         support_output and float(same_state_cross_padding) < 0.0
     ):
         raise ValueError("same-state cross padding is invalid")
-    expected = set(_outside_authority_sides(requested, authority))
+    expected = {
+        side.value for side in footprint_outside_authority_sides(
+            requested, authority_box, expected_source_extent
+        )
+    }
     facts = output.get("saturation_facts")
     if not isinstance(facts, list):
         raise ValueError("footprint saturation facts are invalid")
@@ -2384,12 +2374,16 @@ def validate_output_footprint_authority(output: dict[str, Any]) -> None:
             or float(mandatory_overflow) < 0.0
             or abs(
                 float(requested_overflow)
-                - _authority_overflow_px(requested, authority, side)
+                - footprint_overflow_px(
+                    requested, authority_box, AuthoritySide(side), expected_source_extent
+                )
             )
             > 1.0e-8
             or abs(
                 float(mandatory_overflow)
-                - _authority_overflow_px(mandatory, authority, side)
+                - footprint_overflow_px(
+                    mandatory, authority_box, AuthoritySide(side), expected_source_extent
+                )
             )
             > 1.0e-8
             or (
@@ -2402,6 +2396,12 @@ def validate_output_footprint_authority(output: dict[str, Any]) -> None:
             != (float(mandatory_overflow) > 0.0)
         ):
             raise ValueError("footprint authority side is invalid")
+        source_kind = kind in {
+            FootprintSaturationKind.SOURCE_BOUNDARY_JOINT_PROTECTION.value,
+            FootprintSaturationKind.SOURCE_BOUNDARY_OPTIONAL_BLEED.value,
+        }
+        if source_kind != (AuthoritySide(side) in source_sides):
+            raise ValueError("footprint authority side does not match the TIFF source extent")
         recorded.add(side)
     if recorded != expected:
         raise ValueError("footprint saturation facts disagree with authority")
@@ -2413,13 +2413,10 @@ def validate_output_footprint_authority(output: dict[str, Any]) -> None:
         }
         for fact in facts
     )
-    source_box_values = tuple(authority[side] for side in _AUTHORITY_SIDES)
-    if any(float(value) != int(value) for value in source_box_values):
-        raise ValueError("sampling authority box must use integer pixel bounds")
     expected_required = (
-        clip_convex_polygon_to_box(
+        clip_convex_polygon_to_bounds(
             tuple((float(point[0]), float(point[1])) for point in requested),
-            Box(*(int(value) for value in source_box_values)),
+            authority_bounds,
         )
         if facts and safely_source_bounded
         else tuple((float(point[0]), float(point[1])) for point in requested)
@@ -2676,6 +2673,7 @@ def _validate_placement_proposal(
     *,
     lane_id: str,
     source_geometry: object,
+    expected_source_extent: WorkspaceExtent,
 ) -> list[dict[str, Any]]:
     if (
         not isinstance(value, dict)
@@ -2697,7 +2695,7 @@ def _validate_placement_proposal(
     ) or (not generated and (outputs or not _valid_failure(value["failure"]))):
         raise ValueError("placement proposal state is inconsistent")
     for output in outputs:
-        validate_output_footprint_authority(output)
+        validate_output_footprint_authority(output, expected_source_extent=expected_source_extent)
         envelope = output.get("envelope", {})
         if (
             envelope.get("lane_id") != lane_id
@@ -2910,7 +2908,9 @@ def _validate_gate(record: dict[str, Any], stage: str) -> None:
             raise ValueError(f"{stage} Gate typed gap is inconsistent")
 
 
-def _validate_finalization(record: dict[str, Any]) -> None:
+def _validate_finalization(
+    record: dict[str, Any], expected_source_extent: WorkspaceExtent
+) -> None:
     status = record["decision"]["status"]
     finalization = record["output"]["finalization"]
     geometry = record["photo_geometry"]
@@ -2940,9 +2940,29 @@ def _validate_finalization(record: dict[str, Any]) -> None:
             or len(boxes) != count
         ):
             raise ValueError("approved output lacks complete geometry")
+        if footprints != [
+            item for lane in geometry["lanes"] for item in lane["output_footprints"]
+        ]:
+            raise ValueError("final footprints changed selected output geometry")
         for footprint in footprints:
-            validate_output_footprint_authority(footprint)
+            validate_output_footprint_authority(
+                footprint, expected_source_extent=expected_source_extent
+            )
         output_extent = deskew["transform"]["output_extent"]
+        transform = AffineCoordinateTransform(
+            matrix=tuple(tuple(row) for row in deskew["transform"]["matrix"]),
+            source_extent=expected_source_extent,
+            output_extent=WorkspaceExtent(**output_extent),
+        )
+        expected_boxes = [
+            typed_read_model(mapped_half_open_box(
+                tuple(tuple(point) for point in footprint["required_source_footprint"]),
+                transform.map_point,
+            ))
+            for footprint in footprints
+        ]
+        if boxes != expected_boxes:
+            raise ValueError("final output boxes disagree with physical footprints")
         for box_value in boxes:
             box = _validate_box(box_value, "final output box")
             if (
@@ -2985,7 +3005,9 @@ def _validate_finalization(record: dict[str, Any]) -> None:
         raise ValueError("review output contract is incomplete")
 
 
-def _validate_geometry(record: dict[str, Any]) -> None:
+def _validate_geometry(
+    record: dict[str, Any], expected_source_extent: WorkspaceExtent
+) -> None:
     geometry = record["photo_geometry"]
     source_proposal = _validate_source_proposal(
         geometry.get("source_placement_proposal")
@@ -3049,6 +3071,7 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             lane.get("placement_proposal"),
             lane_id=lane_id,
             source_geometry=lane.get("source_scan_geometry"),
+            expected_source_extent=expected_source_extent,
         )
         proposal = lane["placement_proposal"]
         alternatives = lane.get("alternative_placement_proposals")
@@ -3065,6 +3088,7 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         for alternative in alternatives:
             alternative_outputs = _validate_placement_proposal(
                 alternative, lane_id=lane_id, source_geometry=lane.get("source_scan_geometry"),
+                expected_source_extent=expected_source_extent,
             )
             if (
                 alternative["placement_id"] != runner_id
@@ -3411,7 +3435,7 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         )
         _validate_direct_use_budgets(budgets, outputs, lane.get("source_scan_geometry"))
         for output in outputs:
-            validate_output_footprint_authority(output)
+            validate_output_footprint_authority(output, expected_source_extent=expected_source_extent)
         protected_contact_sides = {
             (
                 protection["topology_relation_id"],
@@ -3970,6 +3994,40 @@ def _validate_development(record: dict[str, Any]) -> None:
                 raise ValueError("Cross support domains changed retained candidate geometry")
 
 
+def validate_report_source_extent(record: dict[str, Any]) -> WorkspaceExtent:
+    """Bind every source-domain representation to the canonical input raster."""
+
+    profile = record.get("input", {}).get("profile", {})
+    shape = profile.get("shape")
+    orientation = profile.get("orientation")
+    if (
+        not isinstance(shape, list)
+        or len(shape) != 3
+        or any(type(value) is not int or value <= 0 for value in shape)
+        or shape[2] != 3
+        or profile.get("axes") != "YXS"
+        or not isinstance(orientation, dict)
+        or any(type(orientation.get(key)) is not int for key in (
+            "original_tag", "raw_width", "raw_height"
+        ))
+    ):
+        raise ValueError("canonical input source extent is invalid")
+    mapping = orientation_mapping(
+        orientation["original_tag"], orientation["raw_width"], orientation["raw_height"]
+    )
+    extent = WorkspaceExtent(shape[1], shape[0])
+    extent_record = typed_read_model(extent)
+    if (
+        orientation != typed_read_model(mapping)
+        or (mapping.canonical_width, mapping.canonical_height) != (extent.width, extent.height)
+        or record.get("measurement", {}).get("source_extent") != extent_record
+        or record.get("runtime_identity", {}).get("source", {}).get("orientation") != mapping.as_record()
+        or record.get("output", {}).get("finalization", {}).get("deskew_assessment", {}).get("transform", {}).get("source_extent") != extent_record
+    ):
+        raise ValueError("report source extents disagree with canonical input")
+    return extent
+
+
 def validate_current_report_record(record: dict[str, Any]) -> None:
     if tuple(record) != CURRENT_REPORT_SECTIONS:
         raise ValueError("current report sections are incomplete or out of order")
@@ -3978,7 +4036,8 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
         or record["schema_revision"] != REPORT_SCHEMA_REVISION
     ):
         raise ValueError("report does not use the current-only schema")
-    _validate_geometry(record)
+    source_extent = validate_report_source_extent(record)
+    _validate_geometry(record, source_extent)
     _validate_gate(record["candidate_gate"], "candidate")
     _validate_gate(record["decision"]["gate"], "decision")
     status = record["decision"].get("status")
@@ -3989,7 +4048,7 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
         or (status == "approved_auto") != (not reasons)
     ):
         raise ValueError("DecisionGate status/reasons are inconsistent")
-    _validate_finalization(record)
+    _validate_finalization(record, source_extent)
     runtime = record["runtime_identity"]
     source = runtime.get("source", {})
     if (

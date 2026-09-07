@@ -49,6 +49,8 @@
   Review proposal；它不冒充 approved sampling geometry。概率可接受性评分目前仅有开发合同，尚未接入 Runtime。
 - 输出以同一联合状态传播 uncertainty、residual、bleed 与 topology protection，逐侧共用原有 5% 预算。
   真实 TIFF 截断与内部 lane 越界分开；不通过裁小请求、扩大 bleed 或混合互斥状态获得批准。
+- 真实 TIFF 外缘统一为首末像素的单元边界，恒等采样完整保留首末行列；只改变源域交集，
+  不普遍外扩照片边界。连续 polygon 与整数采样 box 分开表示，内部 lane 仍按原权限阻断。
 - Deskew 仅整理已批准结果，不参与 placement 或黄金判定。正式 TIFF 保持 16-bit RGB、ICC、resolution、
   支持的 metadata 与无损压缩，写入 Orientation=1；整组 staging 完成后原子发布到新目录。
 
@@ -56,7 +58,10 @@
 
 - Normal report 与 Debug Analysis 只显示同次检测事实，分开 proposal、candidate、正式输出、runner、
   typed failure、calibration identity 和实际工作量，不重新检测或求解。当前 Report revision 为
-  `x5crop_v5_template_report_70`，逐候选记录 Cross 支撑区间和覆盖序号，不保留旧 schema 兼容层。
+  `x5crop_v5_template_report_71`，逐候选记录 Cross 支撑区间、覆盖序号和真实 source extent，不保留旧 schema 兼容层。
+- Source extent 同时绑定 input、Orientation、measurement、全部候选与 final sampling；源截断类别
+  由实际源尺寸复算。Final polygon 复用 selected geometry，采样 box 从同一 affine 与 polygon 重建，
+  不以整数采样框替代严格黄金包含检查。
 - 报告校验接受已有的 `direct_lattice_conflict` 投影失败，继续要求 unavailable authority、
   完整被投影角色和明确失败原因，不改变 Runtime 或批准条件。
 - 黄金集合统计支持只有 runner 能物化的情况，保留原角色，不伪造 primary 或将缺失几何计作负例。

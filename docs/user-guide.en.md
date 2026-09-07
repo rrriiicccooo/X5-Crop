@@ -128,7 +128,9 @@ pair is selected, a gold-calibrated aperture-centre offset interval with full un
 it does not turn support into a photo boundary. Missing calibration retains the complete physically possible centre
 range. A conflict with direct support or expansion beyond 5% keeps the source in review. A true TIFF edge explicitly
 bounds sampling to source pixels that actually exist; the report says whether bleed alone or joint protection reached
-that edge, while the complete unbounded request still owns the 5% budget. Crossing an internal dual-lane boundary or any
+that edge, while the complete unbounded request still owns the 5% budget. Source edges use the outer cell boundaries of
+the first and last pixels; identity sampling retains every edge row and column. This does not expand internal photo
+boundaries, and gold validation still checks the physical polygon strictly. Crossing an internal dual-lane boundary or any
 other authority still enters review, and no bounding is silent.
 
 Two-dimensional content is a conservative veto on the final post-bleed polygon. Picture structure inside bleed may be

@@ -57,7 +57,7 @@ class TiffFoundationContractTest(unittest.TestCase):
                             compression=source_compression,
                         ),
                         (box,),
-                        (sampling_footprint(Box(0, 0, 14, 10)),),
+                        (sampling_footprint(Box(0, 0, 14, 10), WorkspaceExtent(14, 10)),),
                         AffineCoordinateTransform.identity(14, 10),
                         output,
                     )
@@ -130,7 +130,7 @@ class TiffFoundationContractTest(unittest.TestCase):
                 array,
                 profile,
                 (box,),
-                (sampling_footprint(Box(4, 3, 36, 27)),),
+                (sampling_footprint(Box(4, 3, 36, 27), WorkspaceExtent(40, 30)),),
                 transform,
                 Path(temporary),
             )

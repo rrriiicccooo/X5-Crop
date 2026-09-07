@@ -7,6 +7,7 @@ from ..domain import Box
 
 Point = tuple[float, float]
 ConvexPolygon = tuple[Point, ...]
+ContinuousBox = tuple[float, float, float, float]
 
 
 def signed_area(polygon: ConvexPolygon) -> float:
@@ -53,22 +54,27 @@ def convex_hull(points: tuple[Point, ...]) -> ConvexPolygon:
     return hull
 
 
-def clip_convex_polygon_to_box(
+def clip_convex_polygon_to_bounds(
     polygon: ConvexPolygon,
-    box: Box,
+    bounds: ContinuousBox,
 ) -> ConvexPolygon:
-    """Clip one convex polygon to the source pixel-center extent of ``box``."""
+    """Intersect one convex polygon with continuous left/top/right/bottom bounds."""
 
-    if not box.valid():
-        raise ValueError("polygon clipping requires a valid box")
+    left, top, right, bottom = bounds
+    if (
+        any(not math.isfinite(value) for value in bounds)
+        or right <= left
+        or bottom <= top
+    ):
+        raise ValueError("polygon clipping requires valid continuous bounds")
     if len(polygon) < 3 or signed_area(polygon) <= 0.0:
         raise ValueError("polygon clipping requires a non-degenerate CCW polygon")
 
     boundaries = (
-        (0, float(box.left), True),
-        (0, float(box.right - 1), False),
-        (1, float(box.top), True),
-        (1, float(box.bottom - 1), False),
+        (0, left, True),
+        (0, right, False),
+        (1, top, True),
+        (1, bottom, False),
     )
     points = list(polygon)
     for axis, limit, keep_greater in boundaries:
@@ -115,15 +121,17 @@ def mapped_half_open_box(
     polygon: ConvexPolygon,
     map_point,
 ) -> Box:
+    """Cover a mapped physical polygon with output raster sample cells.
+
+    Integer coordinates are sample centers; index i owns [i-.5, i+.5].
+    This changes representation only, never the physical crop authority.
+    """
+
     mapped = tuple(map_point(x, y) for x, y in polygon)
-    left = math.floor(min(point[0] for point in mapped))
-    top = math.floor(min(point[1] for point in mapped))
-    right = math.ceil(
-        math.nextafter(max(point[0] for point in mapped), math.inf)
-    )
-    bottom = math.ceil(
-        math.nextafter(max(point[1] for point in mapped), math.inf)
-    )
+    left = math.floor(min(point[0] for point in mapped) + 0.5)
+    top = math.floor(min(point[1] for point in mapped) + 0.5)
+    right = math.ceil(max(point[0] for point in mapped) + 0.5)
+    bottom = math.ceil(max(point[1] for point in mapped) + 0.5)
     box = Box(left, top, right, bottom)
     if not box.valid():
         raise ValueError("mapped footprint is degenerate")

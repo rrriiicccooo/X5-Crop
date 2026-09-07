@@ -1002,7 +1002,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         self.assertEqual(
             max(point[1] for point in output.required_source_footprint),
-            252.0,
+            252.5,
         )
         gate_fact = _selected_output_gate_fact(
             output,
@@ -1042,7 +1042,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         self.assertEqual(
             max(point[1] for point in output.required_source_footprint),
-            250.0,
+            250.5,
         )
         gate_fact = _selected_output_gate_fact(
             output,

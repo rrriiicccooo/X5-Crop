@@ -1391,8 +1391,12 @@ Support 的共享斜率属于同一个 `JointFrameState`，已经进入该状态
 `required_source_footprint` 是最终实际采样范围。完整 5% 预算始终按 requested 层评估，不能因源边界而
 收窄或掩盖超预算。
 
-真实 TIFF 外缘是可用源像素的绝对极限。Requested 越过该外缘时，required 明确等于其与 TIFF
-pixel-center extent 的交集；typed saturation fact 区分只触及 optional bleed 的
+整数坐标仍表示像素中心，真实 TIFF 的连续可用源域为像素单元域
+`[-0.5, width-0.5] × [-0.5, height-0.5]`，不是首末像素中心之间的矩形。
+Requested 越过该外缘时，required 明确等于其与该连续源域的交集；不对 requested 或内部照片边界
+普遍外扩半像素。`OutputFootprint.source_extent` 绑定实际 canonical TIFF 尺寸，
+`sampling_authority_box` 保持非负整数半开索引；`sampling_authority_bounds` 只在真实源侧使用单元边界，
+内部 lane 仍保留原中心域限制。typed saturation fact 区分只触及 optional bleed 的
 `source_boundary_optional_bleed` 与联合保护也触及边界的 `source_boundary_joint_protection`。两者都保留
 完整 requested/mandatory polygon、越界距离和 Debug 虚线，不伪造 TIFF 外内容，也不因不存在的源像素
 要求 review。双 lane 的内部边界不是 source boundary：`lane_boundary_optional_bleed` 与
@@ -1410,7 +1414,9 @@ Decision 后 finalization 才执行并评估 lightweight deskew。`needs_review`
 `0.35°`、端点位移不超过 `120 px` 时应用。低于下限记录 `rotation_not_needed`；高于小整理上限记录
 `rotation_exceeds_cleanup_limit`。跳过 deskew 不改变 `approved_auto`。有效旋转对横向 layout 使用观测
 角的反号、纵向 layout 使用同号构造 expanded rotation。每个已经确认安全的 polygon 与 source 使用
-同一 affine transform，正式轴对齐 box 由旋转后 polygon 的精确半开 AABB 得到，不能先把 polygon
+同一 affine transform，正式轴对齐 box 由旋转后物理 polygon 的像素单元覆盖 AABB 得到：
+每轴下界为 `floor(min+0.5)`，半开上界为 `ceil(max+0.5)`。这使全源恒等采样恰好为 `[0,width) × [0,height)`，
+首末像素完整保留，也使亚像素物理边界由对应输出单元覆盖。采样 box 不反向扩大 required，不能先把 polygon
 扩成 source AABB，也不能继续裁固定 W×H。
 
 旋转后 AABB 的角落可以位于安全 polygon 之外；这些表示性角落允许写黑色 no-data，不是检测缺口，
@@ -1718,7 +1724,8 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 只有 `blank_exposure` 使用 `reference_geometry: not_applicable`；它仍占显式 count，但没有人工
 start/end 或 accuracy polygon。其它 Frame 必须有 `boundary_pair`。同一物理 Frame 在各 count task 中
 必须共享 `slot_kind`。只有 `source_truncated` 可让物理 Frame 越出 TIFF；冻结 polygon 为物理 Frame 与
-raster pixel-center 域的交集，源外区域不参与黄金包含或 5% 预算。若物理 polygon 没有实际越界，则
+raster 像素单元域 `[-0.5,extent-0.5]` 的交集，坐标仍以整数像素中心表示；
+源外区域不参与黄金包含或 5% 预算。若物理 polygon 没有实际越界，则
 `source_truncated` 标签本身不能通过确认。Orientation 只做可逆显示，持久化始终使用原 TIFF 坐标。
 
 机器拟合、红线导入、有界 JPG 与原 TIFF 窄带精修都只有 proposal 权限。精修不得改变证据基础、物理
@@ -1751,6 +1758,11 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   逐条检查属于受保护侧的输出边半平面是否包含全部实际确认顶点，且每个受保护侧都必须实际参与检查。
   未裁剪的人工物理线可以延伸到 TIFF 外，不能因此要求输出超出已冻结的源内 polygon。判定与逐侧诊断
   使用同一检查，不修改确认坐标、不补齐源外内容，也不增加亚像素容差。
+- 源域表示与采样分开验证：每份 proposal、runner、selected 与 final footprint 的 `source_extent`
+  必须等于 canonical input shape；input/runtime Orientation 由同一 raw extent/tag 复算，并与 measurement
+  及 deskew transform 的 source extent 一致。Saturation 的源侧／内部 lane 分类由实际源尺寸复算，不能
+  自报较小 source 把 lane 越界冒充 TIFF 截断。Final footprint 必须复用 selected geometry，采样 box 由
+  同一物理 polygon 与 affine 重建。黄金仍严格比较 required polygon，不使用有额外单元余量的采样 AABB。
 - 逐线 `review_basis` 分别决定向内包含与向外 5% 预算能否产生阻断 accuracy verdict：
 
   | 证据基础 | 向内越线 | 向外超过 5% |

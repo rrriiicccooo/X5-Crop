@@ -6,10 +6,11 @@ from dataclasses import dataclass
 from enum import Enum
 import math
 
-from ...domain import Box, EvidenceState, FiniteInterval, ObservationId
+from ...domain import Box, EvidenceState, FiniteInterval, ObservationId, WorkspaceExtent
 from ...geometry.convex import (
+    ContinuousBox,
     ConvexPolygon,
-    clip_convex_polygon_to_box,
+    clip_convex_polygon_to_bounds,
     convex_hull,
     signed_area,
 )
@@ -166,32 +167,82 @@ def _validate_continuous_footprint(
         raise ValueError(f"{name} must be an ordered convex hull")
 
 
+def source_boundary_sides(
+    authority: Box,
+    source_extent: WorkspaceExtent,
+) -> tuple[AuthoritySide, ...]:
+    """Identify true TIFF sides, independently of whether a crop reaches them."""
+
+    if (
+        not isinstance(source_extent, WorkspaceExtent)
+        or not authority.valid()
+        or any(type(value) is not int for value in (
+            authority.left, authority.top, authority.right, authority.bottom
+        ))
+        or authority.left < 0
+        or authority.top < 0
+        or authority.right > source_extent.width
+        or authority.bottom > source_extent.height
+    ):
+        raise ValueError("sampling authority must lie inside the TIFF source extent")
+    return tuple(
+        side for side, touches in (
+            (AuthoritySide.LEFT, authority.left == 0),
+            (AuthoritySide.TOP, authority.top == 0),
+            (AuthoritySide.RIGHT, authority.right == source_extent.width),
+            (AuthoritySide.BOTTOM, authority.bottom == source_extent.height),
+        ) if touches
+    )
+
+
+def sampling_authority_bounds(
+    authority: Box,
+    source_extent: WorkspaceExtent,
+) -> ContinuousBox:
+    """Use physical pixel-cell limits only at true source sides.
+
+    Internal lane boundaries retain their original center-domain limits and
+    cannot gain the source-edge saturation permission.
+    """
+
+    source_sides = source_boundary_sides(authority, source_extent)
+    return (
+        authority.left - (0.5 if AuthoritySide.LEFT in source_sides else 0.0),
+        authority.top - (0.5 if AuthoritySide.TOP in source_sides else 0.0),
+        authority.right - (0.5 if AuthoritySide.RIGHT in source_sides else 1.0),
+        authority.bottom - (0.5 if AuthoritySide.BOTTOM in source_sides else 1.0),
+    )
+
+
 def footprint_overflow_px(
     footprint: ConvexPolygon,
     authority: Box,
     side: AuthoritySide,
+    source_extent: WorkspaceExtent,
 ) -> float:
-    """Return one polygon's maximum pixel-center overflow on one side."""
+    """Return overflow beyond the actual continuous authority on one side."""
 
-    if not authority.valid() or not isinstance(side, AuthoritySide):
+    if not isinstance(side, AuthoritySide):
         raise ValueError("footprint overflow requires typed source authority")
+    left, top, right, bottom = sampling_authority_bounds(authority, source_extent)
     if side == AuthoritySide.LEFT:
-        return max(0.0, authority.left - min(x for x, _y in footprint))
+        return max(0.0, left - min(x for x, _y in footprint))
     if side == AuthoritySide.TOP:
-        return max(0.0, authority.top - min(y for _x, y in footprint))
+        return max(0.0, top - min(y for _x, y in footprint))
     if side == AuthoritySide.RIGHT:
-        return max(0.0, max(x for x, _y in footprint) - (authority.right - 1))
-    return max(0.0, max(y for _x, y in footprint) - (authority.bottom - 1))
+        return max(0.0, max(x for x, _y in footprint) - right)
+    return max(0.0, max(y for _x, y in footprint) - bottom)
 
 
 def footprint_outside_authority_sides(
     footprint: ConvexPolygon,
     authority: Box,
+    source_extent: WorkspaceExtent,
 ) -> tuple[AuthoritySide, ...]:
     return tuple(
         side
         for side in AuthoritySide
-        if footprint_overflow_px(footprint, authority, side) > 0.0
+        if footprint_overflow_px(footprint, authority, side, source_extent) > 0.0
     )
 
 
@@ -384,6 +435,7 @@ class OutputFootprint:
     enclosing_support_aperture_risk: EnclosingSupportApertureRisk | None
     saturation_facts: tuple[FootprintSaturationFact, ...]
     sampling_authority_box: Box
+    source_extent: WorkspaceExtent
     authority_profile_id: str
 
     def __post_init__(self) -> None:
@@ -439,19 +491,26 @@ class OutputFootprint:
         expected_sides = footprint_outside_authority_sides(
             self.requested_source_footprint,
             self.sampling_authority_box,
+            self.source_extent,
         )
         if tuple(fact.authority_side for fact in self.saturation_facts) != expected_sides:
             raise ValueError("saturation facts disagree with requested footprint")
         for fact in self.saturation_facts:
+            if fact.source_boundary != (fact.authority_side in source_boundary_sides(
+                self.sampling_authority_box, self.source_extent
+            )):
+                raise ValueError("saturation kind disagrees with the TIFF source extent")
             requested_overflow = footprint_overflow_px(
                 self.requested_source_footprint,
                 self.sampling_authority_box,
                 fact.authority_side,
+                self.source_extent,
             )
             mandatory_overflow = footprint_overflow_px(
                 self.mandatory_source_footprint,
                 self.sampling_authority_box,
                 fact.authority_side,
+                self.source_extent,
             )
             if (
                 abs(fact.requested_overflow_px - requested_overflow) > 1.0e-8
@@ -459,9 +518,9 @@ class OutputFootprint:
             ):
                 raise ValueError("saturation fact distances are not reproducible")
         expected_required = (
-            clip_convex_polygon_to_box(
+            clip_convex_polygon_to_bounds(
                 self.requested_source_footprint,
-                self.sampling_authority_box,
+                sampling_authority_bounds(self.sampling_authority_box, self.source_extent),
             )
             if self.saturation_facts and self.source_authority_supported
             else self.requested_source_footprint

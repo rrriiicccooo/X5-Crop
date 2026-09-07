@@ -107,7 +107,9 @@ aperture top/bottom；这对直接支撑不依赖 W/H 比例推导。此时不�
 保留不确定性的 aperture-center 偏移区间收窄最坏风险；它不会把 support 冒充照片边界。Calibration
 不可用时仍检查完整物理中心区间，与直接 support 冲突或完整 expansion 超过 5% 时进入 review。真实 TIFF
 外缘会显式限定到实际存在的源像素，并在报告中区分是 bleed 还是联合保护触及边界；完整未限定
-footprint 仍负责 5% 预算。双 lane 内部边界或其它 authority 越界继续进入 review，任何限定都不会静默发生。
+footprint 仍负责 5% 预算。源外缘按首末像素的单元边界表示，恒等采样完整保留首末行列；
+内部照片边界不会因此外扩，黄金仍严格检查物理 polygon。双 lane 内部边界或其它 authority 越界继续进入 review，
+任何限定都不会静默发生。
 
 二维内容只在最终 post-bleed polygon 上作保守否决：bleed 内的画面可以保留；可靠内容越过最终裁切边
 会阻止自动输出。尘点、别名和极小角点接触不会单独移动边界或选择另一个 placement。

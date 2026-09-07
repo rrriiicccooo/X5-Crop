@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import math
 
-from ...domain import Box, EvidenceState, FiniteInterval, ObservationId
+from ...domain import Box, EvidenceState, FiniteInterval, ObservationId, WorkspaceExtent
 from ...formats import OUTPUT_PROTECTION_SPEC
 from ...geometry.convex import (
     ConvexPolygon,
-    clip_convex_polygon_to_box,
+    clip_convex_polygon_to_bounds,
     convex_hull,
 )
 from ...run_local_identity import run_local_id
@@ -37,6 +37,8 @@ from .output_model import (
     OutputFootprint,
     footprint_outside_authority_sides,
     footprint_overflow_px,
+    sampling_authority_bounds,
+    source_boundary_sides,
 )
 from .template_placement import FormatPlacement, TemplateFrame
 from .template_cross_model import (
@@ -742,50 +744,40 @@ def joint_placement_envelope(
     )
 
 
-def _authority_side_is_source_boundary(
-    side: AuthoritySide,
-    authority: Box,
-    source: Box,
-) -> bool:
-    return {
-        AuthoritySide.LEFT: authority.left == source.left,
-        AuthoritySide.TOP: authority.top == source.top,
-        AuthoritySide.RIGHT: authority.right == source.right,
-        AuthoritySide.BOTTOM: authority.bottom == source.bottom,
-    }[side]
-
-
 def _saturation_facts(
     requested: ConvexPolygon,
     mandatory: ConvexPolygon,
     authority: Box,
-    source: Box,
+    source: WorkspaceExtent,
 ) -> tuple[FootprintSaturationFact, ...]:
+    source_sides = source_boundary_sides(authority, source)
     return tuple(
         FootprintSaturationFact(
             authority_side=side,
             kind=(
                 FootprintSaturationKind.SOURCE_BOUNDARY_JOINT_PROTECTION
-                if _authority_side_is_source_boundary(side, authority, source)
-                and footprint_overflow_px(mandatory, authority, side) > 0.0
+                if side in source_sides
+                and footprint_overflow_px(mandatory, authority, side, source) > 0.0
                 else FootprintSaturationKind.SOURCE_BOUNDARY_OPTIONAL_BLEED
-                if _authority_side_is_source_boundary(side, authority, source)
+                if side in source_sides
                 else FootprintSaturationKind.LANE_BOUNDARY_JOINT_PROTECTION
-                if footprint_overflow_px(mandatory, authority, side) > 0.0
+                if footprint_overflow_px(mandatory, authority, side, source) > 0.0
                 else FootprintSaturationKind.LANE_BOUNDARY_OPTIONAL_BLEED
             ),
             requested_overflow_px=footprint_overflow_px(
                 requested,
                 authority,
                 side,
+                source,
             ),
             mandatory_overflow_px=footprint_overflow_px(
                 mandatory,
                 authority,
                 side,
+                source,
             ),
         )
-        for side in footprint_outside_authority_sides(requested, authority)
+        for side in footprint_outside_authority_sides(requested, authority, source)
     )
 
 
@@ -801,16 +793,16 @@ def _source_lane_authority(
     raise ValueError(f"unsupported source layout: {layout}")
 
 
-def _source_canvas_authority(
+def _source_canvas_extent(
     lane: SourceLaneEvidence,
     layout: str,
-) -> Box:
+) -> WorkspaceExtent:
     long_axis = lane.scan_canvas.observed_long_axis_px
     short_axis = lane.scan_canvas.observed_short_axis_px
     if layout == "horizontal":
-        return Box(0, 0, long_axis, short_axis)
+        return WorkspaceExtent(long_axis, short_axis)
     if layout == "vertical":
-        return Box(0, 0, short_axis, long_axis)
+        return WorkspaceExtent(short_axis, long_axis)
     raise ValueError(f"unsupported source layout: {layout}")
 
 
@@ -868,23 +860,17 @@ def output_footprint_from_template_placement(
         apply_bleed=True,
     )
     authority = _source_lane_authority(lane, layout)
-    source_authority = _source_canvas_authority(lane, layout)
-    if (
-        authority.left < source_authority.left
-        or authority.top < source_authority.top
-        or authority.right > source_authority.right
-        or authority.bottom > source_authority.bottom
-    ):
-        raise ValueError("source-lane authority exceeds the TIFF source extent")
+    source_extent = _source_canvas_extent(lane, layout)
+    authority_bounds = sampling_authority_bounds(authority, source_extent)
     saturation = _saturation_facts(
         requested,
         mandatory,
         authority,
-        source_authority,
+        source_extent,
     )
     source_boundary_only = all(fact.source_boundary for fact in saturation)
     required = (
-        clip_convex_polygon_to_box(requested, authority)
+        clip_convex_polygon_to_bounds(requested, authority_bounds)
         if saturation and source_boundary_only
         else requested
     )
@@ -935,6 +921,7 @@ def output_footprint_from_template_placement(
         ),
         saturation_facts=saturation,
         sampling_authority_box=authority,
+        source_extent=source_extent,
         authority_profile_id=lane.domain.authority_profile_id,
     )
 

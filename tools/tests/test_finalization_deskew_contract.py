@@ -11,7 +11,7 @@ from x5crop.detection.output_deskew import (
     DeskewSkipReason,
     LightweightDeskewObservation,
 )
-from x5crop.domain import Box, EvidenceState
+from x5crop.domain import Box, EvidenceState, WorkspaceExtent
 
 
 def _supported_observation(angle_degrees: float) -> LightweightDeskewObservation:
@@ -46,7 +46,7 @@ def _unavailable_observation() -> LightweightDeskewObservation:
     )
 
 
-def _candidate(slot_count: int = 2):
+def _candidate(slot_count: int = 2, *, source_width: int = 160, source_height: int = 100):
     source_core = object()
     resolved = SimpleNamespace(output_slot_count=slot_count)
     identities = tuple(f"slot:{index}" for index in range(slot_count))
@@ -58,7 +58,8 @@ def _candidate(slot_count: int = 2):
                 (35.75 + index * 40.0, 42.25),
                 (10.25 + index * 40.0, 42.25),
             ),
-            sampling_authority_box=Box(0, 0, 160, 100),
+            sampling_authority_box=Box(0, 0, source_width, source_height),
+            source_extent=WorkspaceExtent(source_width, source_height),
         )
         for index in range(slot_count)
     )
@@ -94,7 +95,7 @@ class FinalizationDeskewContractTest(unittest.TestCase):
             detection.deskew_assessment.skip_reason,
             DeskewSkipReason.NO_DARK_SUPPORT,
         )
-        self.assertEqual(detection.final_boxes[0], Box(10, 12, 36, 43))
+        self.assertEqual(detection.final_boxes[0], Box(10, 13, 37, 43))
 
     def test_release_minimum_angle_and_span_preserve_real_zero_observation(
         self,
@@ -210,7 +211,7 @@ class FinalizationDeskewContractTest(unittest.TestCase):
     def test_rotated_final_box_is_the_exact_transformed_polygon_envelope(
         self,
     ) -> None:
-        candidate = _candidate(slot_count=1)
+        candidate = _candidate(slot_count=1, source_width=1000)
         detection = finalize_detection(
             candidate,
             SimpleNamespace(status="approved_auto"),
@@ -226,8 +227,8 @@ class FinalizationDeskewContractTest(unittest.TestCase):
             for point in candidate.output_footprints[0].required_source_footprint
         )
 
-        self.assertTrue(all(box.left <= x < box.right for x, _ in mapped))
-        self.assertTrue(all(box.top <= y < box.bottom for _, y in mapped))
+        self.assertTrue(all(box.left - 0.5 <= x <= box.right - 0.5 for x, _ in mapped))
+        self.assertTrue(all(box.top - 0.5 <= y <= box.bottom - 0.5 for _, y in mapped))
         self.assertGreaterEqual(box.left, 0)
         self.assertGreaterEqual(box.top, 0)
         self.assertLessEqual(box.right, transform.output_extent.width)
@@ -237,7 +238,7 @@ class FinalizationDeskewContractTest(unittest.TestCase):
         self,
     ) -> None:
         detection = finalize_detection(
-            _candidate(),
+            _candidate(source_width=1000),
             SimpleNamespace(status="needs_review"),
             None,
             layout="horizontal",
@@ -252,6 +253,14 @@ class FinalizationDeskewContractTest(unittest.TestCase):
         )
         self.assertEqual(detection.output_footprints, ())
         self.assertEqual(detection.final_boxes, ())
+
+    def test_approved_footprint_extent_must_match_the_sampling_transform(self) -> None:
+        with self.assertRaisesRegex(ValueError, "approved finalization"):
+            finalize_detection(
+                _candidate(), SimpleNamespace(status="approved_auto"),
+                _unavailable_observation(), layout="horizontal",
+                source_width=1000, source_height=100,
+            )
 
 
 if __name__ == "__main__":

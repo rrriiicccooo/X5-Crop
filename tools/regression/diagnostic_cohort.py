@@ -15,6 +15,7 @@ from typing import Any, Sequence
 from .report_validation import (
     validate_current_report_record,
     validate_output_footprint_authority,
+    validate_report_source_extent,
 )
 
 from .cohort_count import validate_cohort_counts
@@ -110,9 +111,10 @@ def _source_geometry_authority_is_explicit(report: dict[str, Any]) -> bool:
     """Validate current selected-output overflow facts without clipping."""
 
     try:
+        source_extent = validate_report_source_extent(report)
         for lane in report["photo_geometry"]["lanes"]:
             for output in lane["output_footprints"]:
-                validate_output_footprint_authority(output)
+                validate_output_footprint_authority(output, expected_source_extent=source_extent)
     except (KeyError, TypeError, ValueError):
         return False
     return True
