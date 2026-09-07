@@ -411,6 +411,155 @@ class TemplateCrossContractTest(unittest.TestCase):
             CrossFailureKind.OUTWARD_ROLE_COUNTEREVIDENCE,
         )
 
+    def test_source_spanning_side_preserves_an_already_authorized_shared_pair(self) -> None:
+        domains = tuple(
+            FiniteInterval(float(index * 40), float(index * 40 + 20))
+            for index in range(6)
+        )
+        traces = (10, 50, 90, 130, 170, 210)
+        for spanning, whole_role, partial_traces in (
+            (spanning, role, partial)
+            for spanning in (False, True)
+            for role in (BoundaryRole.TOP, BoundaryRole.BOTTOM)
+            for partial in ((90, 130, 170, 210), (90, 170))
+        ):
+            with self.subTest(spanning=spanning, whole_role=whole_role, partial=partial_traces):
+                result = fit_template_cross(
+                    aspect_input(
+                        template=template(count=6),
+                        fixed_height_px=FiniteInterval(230.0, 250.0),
+                        canonical_fixed_height_px=245.0,
+                        registered_trace_coordinates_px=traces,
+                        longitudinal_support_domain_groups_px=(domains,),
+                        top_bindings=(binding(
+                            BoundaryRole.TOP, "whole-top", 100.0,
+                            traces=traces if whole_role == BoundaryRole.TOP else partial_traces,
+                            independent_regions=3 if whole_role == BoundaryRole.TOP else 2,
+                            source_spanning=spanning and whole_role == BoundaryRole.TOP,
+                        ),),
+                        bottom_bindings=(binding(
+                            BoundaryRole.BOTTOM, "shared-bottom", 338.0,
+                            traces=traces if whole_role == BoundaryRole.BOTTOM else partial_traces,
+                            independent_regions=3 if whole_role == BoundaryRole.BOTTOM else 2,
+                            source_spanning=spanning and whole_role == BoundaryRole.BOTTOM,
+                        ),),
+                    )
+                )
+                self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+                self.assertIsNotNone(result.best)
+                self.assertTrue(result.best.direct_pair)
+                self.assertEqual(result.best.pair_support_mode, CrossPairSupportMode.SHARED_TRACES)
+                self.assertEqual(result.best.shared_trace_support_count, len(partial_traces))
+                self.assertEqual(result.best.longitudinal_projection_authority.state, EvidenceState.SUPPORTED)
+                self.assertAlmostEqual(result.best.bottom_canonical_px - result.best.top_canonical_px, 238.0)
+
+    def test_source_spanning_side_keeps_competing_authorized_shared_pairs(self) -> None:
+        domains = tuple(
+            FiniteInterval(float(index * 40), float(index * 40 + 20))
+            for index in range(6)
+        )
+        traces = (10, 50, 90, 130, 170, 210)
+        result = fit_template_cross(aspect_input(
+            template=template(count=6), fixed_height_px=FiniteInterval(230.0, 250.0),
+            registered_trace_coordinates_px=traces,
+            longitudinal_support_domain_groups_px=(domains,),
+            top_bindings=(binding(BoundaryRole.TOP, "whole-top", 100.0,
+                                  traces=traces, independent_regions=3, source_spanning=True),),
+            bottom_bindings=tuple(
+                binding(BoundaryRole.BOTTOM, f"shared-bottom:{coordinate}", coordinate,
+                        traces=(90, 130, 170, 210), independent_regions=2, source_spanning=False)
+                for coordinate in (338.0, 342.0)
+            ),
+        ))
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertEqual(result.failure_kind, CrossFailureKind.NON_EQUIVALENT_FITS)
+        self.assertIsNotNone(result.best)
+        self.assertIsNotNone(result.runner_up)
+        self.assertTrue(result.best.direct_pair)
+        self.assertTrue(result.runner_up.direct_pair)
+        self.assertNotEqual(result.best.bound_observation_ids, result.runner_up.bound_observation_ids)
+
+    def test_shared_pair_with_spanning_side_keeps_outward_local_counterevidence(self) -> None:
+        domains = tuple(
+            FiniteInterval(float(index * 40), float(index * 40 + 20))
+            for index in range(6)
+        )
+        registered_traces = (10, 15, 50, 90, 130, 170, 210)
+        for whole_role in (BoundaryRole.TOP, BoundaryRole.BOTTOM):
+            for shared_count in (1, 2):
+                with self.subTest(whole_role=whole_role, shared_count=shared_count):
+                    whole = binding(
+                        whole_role, "whole-side",
+                        100.0 if whole_role == BoundaryRole.TOP else 342.0,
+                        traces=(
+                            registered_traces if shared_count == 2
+                            else (10, 50, 90, 130, 170, 210)
+                        ),
+                        independent_regions=3, source_spanning=True,
+                    )
+                    opposite_role = (
+                        BoundaryRole.BOTTOM if whole_role == BoundaryRole.TOP
+                        else BoundaryRole.TOP
+                    )
+                    opposites = (
+                        binding(
+                            opposite_role, "shared-opposite",
+                            338.0 if whole_role == BoundaryRole.TOP else 104.0,
+                            traces=(90, 130, 170, 210),
+                            independent_regions=2, source_spanning=False,
+                        ),
+                        binding(
+                            opposite_role, "outer-local-opposite",
+                            342.0 if whole_role == BoundaryRole.TOP else 100.0,
+                            traces=(10, 15),
+                            independent_regions=2, source_spanning=False,
+                        ),
+                    )
+                    result = fit_template_cross(aspect_input(
+                        template=template(count=6),
+                        fixed_height_px=FiniteInterval(230.0, 250.0),
+                        registered_trace_coordinates_px=registered_traces,
+                        longitudinal_support_domain_groups_px=(domains,),
+                        top_bindings=(whole,) if whole_role == BoundaryRole.TOP else opposites,
+                        bottom_bindings=opposites if whole_role == BoundaryRole.TOP else (whole,),
+                    ))
+                    self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+                    self.assertEqual(
+                        result.failure_kind,
+                        CrossFailureKind.OUTWARD_ROLE_COUNTEREVIDENCE,
+                    )
+
+    def test_source_spanning_pairs_remain_alternatives_not_local_counterevidence(self) -> None:
+        domains = tuple(
+            FiniteInterval(float(index * 40), float(index * 40 + 20))
+            for index in range(6)
+        )
+        traces = (10, 50, 90, 130, 170, 210)
+        for opposite_spanning in (False, True):
+            with self.subTest(opposite_spanning=opposite_spanning):
+                result = fit_template_cross(aspect_input(
+                    template=template(count=6),
+                    fixed_height_px=FiniteInterval(230.0, 250.0),
+                    registered_trace_coordinates_px=traces,
+                    longitudinal_support_domain_groups_px=(domains,),
+                    top_bindings=(binding(
+                        BoundaryRole.TOP, "whole-top", 100.0,
+                        traces=traces, independent_regions=3, source_spanning=True,
+                    ),),
+                    bottom_bindings=tuple(
+                        binding(
+                            BoundaryRole.BOTTOM, f"whole-bottom:{coordinate}", coordinate,
+                            traces=traces, independent_regions=3,
+                            source_spanning=opposite_spanning,
+                        )
+                        for coordinate in (338.0, 342.0)
+                    ),
+                ))
+                self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+                self.assertEqual(result.failure_kind, CrossFailureKind.NON_EQUIVALENT_FITS)
+                self.assertTrue(result.best.direct_pair)
+                self.assertTrue(result.runner_up.direct_pair)
+
     def test_source_spanning_side_does_not_export_local_opposite(self) -> None:
         domains = (
             FiniteInterval(0.0, 20.0),

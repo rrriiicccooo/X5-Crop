@@ -37,6 +37,7 @@ from .template_cross_model import (
     CrossHeightProjectionBasis,
     CrossLineProjectionBasis,
     CrossLongitudinalProjectionBasis,
+    CrossPairSupportMode,
     CrossRetainedProposalBasis,
     CrossRoleBinding,
     CrossFitStatus,
@@ -704,8 +705,15 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             and candidate.bottom.has_independent_spatial_support
             and candidate.longitudinal_projection_authority.state
             == EvidenceState.SUPPORTED
-            and candidate.longitudinal_projection_authority.basis
-            != CrossLongitudinalProjectionBasis.SOURCE_SPANNING_CONTINUOUS
+            and (
+                not (
+                    candidate.top.source_spanning_continuous
+                    or candidate.bottom.source_spanning_continuous
+                )
+                or candidate.pair_support_mode == CrossPairSupportMode.SHARED_TRACES
+                or candidate.longitudinal_projection_authority.basis
+                == CrossLongitudinalProjectionBasis.SOURCE_SPANNING_CONTINUOUS
+            )
         )
 
     # A template-wide pair cannot obtain authority by ignoring a strictly
@@ -805,10 +813,10 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         ]
         candidates = spanning_pairs
     elif bool(spanning_top) != bool(spanning_bottom):
-        # One source-spanning role owns the cross coordinate. Fixed H supplies
-        # the opposite side when several local fragments remain. One unique
-        # direct closure may retain its measured native height, but ambiguous
-        # fragments cannot move geometry fixed by whole-strip evidence.
+        # Source-spanning support must not erase a shared pair that already
+        # closed the original independent-domain and longitudinal contracts.
+        # Otherwise the opposite needs its own complete domain coverage;
+        # a merely local closure cannot replace fixed-H inference.
         spanning = spanning_top or spanning_bottom
         spanning_ids = {item.observation_id for item in spanning}
         all_spanning_pairs = [
@@ -820,20 +828,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         complete_spanning_pairs = [
             candidate
             for candidate in all_spanning_pairs
-            if (
-                candidate.top.observation_id in spanning_ids
-                and _covers_template_domains(
-                    candidate.bottom,
-                    inputs.longitudinal_support_domain_groups_px,
-                )
-            )
-            or (
-                candidate.bottom.observation_id in spanning_ids
-                and _covers_template_domains(
-                    candidate.top,
-                    inputs.longitudinal_support_domain_groups_px,
-                )
-            )
+            if has_template_pair_authority(candidate)
         ]
         candidates = (
             complete_spanning_pairs
@@ -1110,59 +1105,19 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             bottom_binding.observation_id,
         )
 
-    def has_role_authorized_pair(item: CrossFit) -> bool:
-        return (
-            item.direct_pair
-            and all(binding.has_independent_spatial_support for binding in item.direct_bindings)
-            and direct_pair_id(item) not in outward_contested_pair_ids
-            and item.longitudinal_projection_authority.state
-            == EvidenceState.SUPPORTED
-            and item.longitudinal_projection_authority.basis
-            != CrossLongitudinalProjectionBasis.SOURCE_SPANNING_CONTINUOUS
-        )
-
-    def has_source_spanning_direct_side(item: CrossFit) -> bool:
-        if (
-            not item.direct_pair
-            or not all(binding.has_independent_spatial_support for binding in item.direct_bindings)
-            or direct_pair_id(item) in outward_contested_pair_ids
-            or item.longitudinal_projection_authority.basis
-            != CrossLongitudinalProjectionBasis.SOURCE_SPANNING_CONTINUOUS
-        ):
-            return False
-        top_binding = next(
-            binding
-            for binding in item.direct_bindings
-            if binding.role == BoundaryRole.TOP
-        )
-        bottom_binding = next(
-            binding
-            for binding in item.direct_bindings
-            if binding.role == BoundaryRole.BOTTOM
-        )
-        return (
-            top_binding.source_spanning_continuous
-            and bottom_binding.source_spanning_continuous
-        ) or (
-            top_binding.source_spanning_continuous
-            and _covers_template_domains(
-                bottom_binding,
-                inputs.longitudinal_support_domain_groups_px,
-            )
-        ) or (
-            bottom_binding.source_spanning_continuous
-            and _covers_template_domains(
-                top_binding,
-                inputs.longitudinal_support_domain_groups_px,
-            )
-        )
+    # Selection and the outward-counterevidence index consume the same pair
+    # proof. A rejected local complementary pair cannot masquerade as a global
+    # alternative merely because its union borrows one source-spanning side.
+    authorized_pair_ids = {
+        (candidate.top.observation_id, candidate.bottom.observation_id)
+        for candidate in role_authorized_direct_pairs
+    }
 
     authoritative = tuple(
         item
         for item in representative_fits
         if (
-            has_role_authorized_pair(item)
-            or has_source_spanning_direct_side(item)
+            direct_pair_id(item) in authorized_pair_ids
             or (
                 not item.direct_pair
                 and all(binding.has_independent_spatial_support for binding in item.direct_bindings)

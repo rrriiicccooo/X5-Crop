@@ -1082,9 +1082,14 @@ domain、把两个不连通 fragments 合计覆盖、role 未授权或方向不�
 进入 selected placement 的 output budget。
 
 Source-spanning 单侧 direct anchor 与局部 opposite 即使偶然 fixed-H 相容，也不能把局部坐标或方向外推到
-整条 template。只有 opposite 自己覆盖全部 selected domain 时才保留两侧 native height；否则由该
-source-spanning side 与有界 H 推导 opposite。多个局部 closure 不能替代这条权限，也不能扩大整条片带的
-共同方向。
+整条 template。Opposite 自己覆盖全部 selected domain，或两侧已经按上述 `shared_traces` 原合同独立
+闭合 pair 支撑与纵向投影权限时，保留两侧 native height；仅因某侧新增 source-spanning 连续性，不能
+撤销已成立的共享 pair 权限。其它局部 closure 仍由 source-spanning side 与有界 H 推导 opposite，
+不能把单域共享、互补域分支或更多片段伪装成已闭合的共享 pair。多个合法 pair 继续参与原有竞争，
+不按支持数选择，不扩大共同方向或绕过外侧反证。
+候选选择、严格外侧反证索引和最终 direct pair 授权消费同一份 pair proof：被 source-spanning 合同
+排除的局部互补 closure 仍是反证；拥有完整权限的 source-spanning pair 则是合法竞争方案，不能被误当
+局部反证而只保留最外侧方案。
 
 #### Cross 纵向投影权限
 
@@ -1372,7 +1377,7 @@ Enclosing support 本身只证明真实 aperture 位于两条 support 之间，�
 center_offset_ratio = (gold_aperture_center - support_midpoint) / H
 ```
 
-当前 calibration 只纳入 20 个 selected unique pair、且黄金 top/bottom 均为 `directly_visible` 的 source；
+当前 calibration 只纳入 18 个 selected unique pair、且黄金 top/bottom 均为 `directly_visible` 的 source；
 同源 count 先取中位数，再对 source hull 以 `0.001H` 向外量化，得到 `[-0.008H, +0.010H]`。Calibration
 同时绑定 development cohort SHA、eligibility revision 和精确 observation-set SHA；source 数量相同但成员、
 观测值或 detector 权限变化时同样视为 calibration drift。该 authority

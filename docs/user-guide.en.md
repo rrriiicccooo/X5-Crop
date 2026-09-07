@@ -74,6 +74,10 @@ side, or multiple equally legal pairs keeps the entire source in `needs_review`.
 same opposite closes against a strictly farther-out local direct edge. Likewise, one source-spanning edge cannot project
 an opposite edge that is visible only locally across the whole strip.
 
+A direct top/bottom pair that already meets shared-support and longitudinal-coverage requirements retains its measured
+geometry when one side gains more complete source-spanning support. A local opposite edge must still meet the existing
+coverage rules, and multiple legal pairs remain in Review.
+
 Short fragments of the same photo edge are retained and checked together. They may become an authorized direct boundary
 only when the complete measurement supports at least two independent regions; several photo slots covering the same
 small fragment do not add evidence strength. Unauthorized fragments remain boundary hypotheses without moving a crop

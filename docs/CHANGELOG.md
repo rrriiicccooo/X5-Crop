@@ -38,9 +38,13 @@
   不共享 selected source W，不增加 phase 搜索，不改变歧义、候选顺序或批准条件。
 - Cross 支撑区间在纯离散歧义下分别保留 primary/runner 两组；同一横向边界逐组满足原有覆盖要求。
   候选不合并几何或增加独立票数，登记与 refit 不重复，未闭合的纵向歧义继续进入 Review。
+- 已满足共享支撑与纵向覆盖合同的直接 Cross pair，不因某侧新增 source-spanning 连续性而降为
+  单侧 H 推导。未闭合的局部 opposite、多个合法 pair 与外侧反证继续按原条件处理，不放宽阈值。
+  候选选择、反证与最终授权复用同一 pair proof，消除局部互补 closure 漏记反证的问题；
+  完整 pair 仍作为合法方案参与竞争，多个完整方案保持歧义。
 - 纯离散歧义的 primary/runner 分别以自身合法直接约束收紧 proposal 联合包络；runner 不借用 primary
   的角色或不匹配的 source W。歧义、反证与输出资格不变，空可行集明确保留为 unavailable。
-- Enclosing aperture-center 校准按当前唯一 selected pair 的 20 个 source 重登记观测指纹；
+- Enclosing aperture-center 校准按当前唯一 selected pair 的 18 个 source 重登记观测指纹；
   原资格、source 中位数、全体 hull 与向外量化方法不变，当前区间为 `[-0.008H, +0.010H]`。
 - Source W 明确分开测量、placement 消费和自动输出资格。至少两张合格完整 Frame 或全部独立 rank-3
   直接约束可建立测量；两组都成立时只取交集。远处 coverage、全局 rank 缺口或 unresolved proposal 不再
