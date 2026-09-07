@@ -13,7 +13,7 @@
   人工黄金、真实反证或逐侧预算，不通过事后修框、合并候选外包框或扩大 bleed 获得批准。
 - 正式 24-source 完整用户路径平均耗时 `<= 5s`，持续争取 `<= 3s`；工程、黄金、正式性能、
   TIFF/metadata、安装、三目标平台、打包和 Hook/CI 分别验证，全部发布证据绑定同一 release commit。
-- 先闭合当前 source-W 测量/消费检查点；随后按架构第 9.2 节开展已有有界候选的黄金可用性集合分析、
+- Source-W 测量/消费检查点已闭合；下一步按架构第 9.2 节开展已有有界候选的黄金可用性集合分析、
   typed features、开发排序与风险代理评估。不要求全部 nominal 先通过才开发评分；排序不是概率，
   开发标签不反写 Runtime Gate，正式概率自动权限另需独立校准与准入证据。
 - 此前确认的全部能力完成后，才启动文末“共同 W 与逐 Frame 真实变化审计”。该任务当前只登记，
@@ -21,7 +21,8 @@
 
 ## 当前 source-W 检查点
 
-当前 tracked 基线为 `98d25e64`；本轮修改尚在验证，不能作为 release receipt。
+本轮 detector/comparator 源码提交为 `974b033c`；后续 `9815b5cb`、`068707e3` 只同步测试断言与
+跨平台 fixture，不改变生产几何。已推送 `main`，正常 Hook 的 786 项测试通过、2 项跳过；不是发布资格。
 
 - 合格局部完整 Frame 测量不再依赖远处 coverage、全局 phase/rank 或 proposal 已获资格。全部直接
   rank-3 约束仍参与同一 W 投影；两组合法测量只取交集，测量与 placement 消费分别保留。
@@ -35,8 +36,8 @@
 - 67 项 source-W、联合几何与 gold-analysis 专项测试通过。最小弱边界反例先失败后修正：
   退出角色恢复为完整 Grid 区间，远处完全未观察 Frame 的联合范围不再被无权旧线压成单点。
 
-最新已完成的完整 receipt 是弱角色区间修正后的
-`/private/tmp/x5crop-source-w-full-20260907i`，110/110 完成、分析错误 0：
+最新完整 receipt 为 `/private/tmp/x5crop-source-w-clean-20260907j`，绑定干净源码提交 `974b033c`；
+detector/comparator 均匹配 HEAD，全部物理校准登记通过，110/110 完成、分析错误 0：
 
 | 层级 | 结果 |
 |---|---|
@@ -50,17 +51,19 @@
 
 与同源干净基线 `/private/tmp/x5crop-source-w-baseline-20260904` 相比，S041、S050、S098 的 proposal
 从 unsafe 变为 safe，无 safe→unsafe proposal 回归；S047 的 unsafe candidate 被 W 反证撤回，最终决定未变。
-该 receipt 的 development-detail mean 为 4.374 秒，仅作开发归因，不是正式性能资格。
+该 receipt 的 development-detail mean 为 4.338 秒，仅作开发归因，不是正式性能资格。
 
 ## 验证边界与开放风险
 
 - 当前仍为 `development_only_not_release_ready`；80 个 nominal Review 与 74 个不安全 proposal 表明
   检测目标未完成。黄金安全不自动证明当前阻断多余，Review 也不允许隐藏不安全候选。
 - 弱角色区间修正未改变完整黄金的几何安全、phase failure 或终态分布；最小反例验证了真实区间缺陷。
+- `068707e3` 的远端 [Verify](https://github.com/rrriiicccooo/X5-Crop/actions/runs/34110748367) 已通过
+  全部 12 个 OS/Python 矩阵环境；该工程 CI 不替代三目标平台的最终实机发布 receipt。
 - Enclosing-support aperture-center 校准登记已按完整结果更新为 18 个合格 source/task 和精确 digest
   `2aee837e8bc5b552cd1d3ac22690ba718ef3a0e00b13fcfbff743d97005c63ab`。干净基线复算已是 19，source-W
-  变化再使 S047 失去资格；推导区间仍为 `[-0.009H,+0.007H]`，没有改变数值范围。上述 receipt 早于
-  此登记更新；已用唯一 calibration owner 对完整 records 复算通过，但尚需当前身份的端到端复验。
+  变化再使 S047 失去资格；推导区间仍为 `[-0.009H,+0.007H]`，没有改变数值范围。唯一 calibration owner
+  的 records 复算与上述当前身份端到端复验均已通过。
 - 当前 development gold 已用于机制发现，不估计未来生产错误率。当前没有 sealed cohort，且黄金未覆盖
   `xpan`、`120-645`、`135-dual`；如实披露，不冒充已验证或据此建立格式禁用规则。
   独立概率权限的 calibration/sealed 前提与首版确定性能力验收分开。
@@ -72,14 +75,11 @@
 
 ## 精确下一步
 
-1. 在干净提交上取得包含新 calibration identity 的完整黄金复验，核对几何和终态保持、分析错误为零，
-   以及全部物理校准登记一致。
-2. 验收本轮 source-W、预算报告及相关文档，按正常 Hook 提交并推送 `main`；只作开发检查点，
-   不创建发布物，不用 development duration 替代正式性能。
-3. 进入架构第 9.2 节的候选集合可用性分析。复用 `template_selection.py` 的有界竞争、
+1. 进入架构第 9.2 节的候选集合可用性分析。复用 `template_selection.py` 的有界竞争、
    `gold_geometry.py` 的标签 owner 与 `gold_analysis.py` 的集合统计；不建立第二 detector 或黄金池，
-   不为评分增加像素查询、候选笛卡尔积或无界搜索。
-4. 用明确的可用候选缺口和几何根因继续完成 nominal/challenge 能力；最终在同一 release commit 完成
+   不为评分增加像素查询、候选笛卡尔积或无界搜索。明确枚举范围：当前保留的 best/runner 不等于全部
+   搜索空间，保留集全错不能被表述为所有潜在裁切均不可用。
+2. 用明确的可用候选缺口和几何根因继续完成 nominal/challenge 能力；最终在同一 release commit 完成
    全部黄金、正式性能和工程/平台验收。只有此前能力完成后，才执行下列延后审计。
 
 ## 延后任务：共同 W 与逐 Frame 真实变化审计
