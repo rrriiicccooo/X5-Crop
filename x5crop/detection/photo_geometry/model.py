@@ -47,8 +47,12 @@ class QueryPurpose(str, Enum):
     COARSE_STRIP_SHORT = "coarse_strip_short"
     TOP_CORRIDOR = "top_corridor"
     BOTTOM_CORRIDOR = "bottom_corridor"
+    CROSS_BASELINE = "cross_baseline"
     SEQUENCE_BASELINE = "sequence_baseline"
     SEQUENCE_ANCHOR_WINDOW = "sequence_anchor_window"
+
+
+REGISTERED_NORMALIZATION_REVISION = "registered-cross-normalization-baseline-v1"
 
 
 @dataclass(frozen=True)

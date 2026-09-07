@@ -8,6 +8,7 @@ from ..detection.evidence.content_occupancy_model import (
 )
 from ..detection.photo_geometry.model import (
     PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+    REGISTERED_NORMALIZATION_REVISION,
 )
 from .read_models import typed_read_model
 
@@ -25,6 +26,7 @@ def detection_configuration_read_model(
         "frame_physical_spec": typed_read_model(spec.frame),
         "scan_layout": typed_read_model(spec.layout),
         "measurement": {
+            "registered_normalization_revision": REGISTERED_NORMALIZATION_REVISION,
             "base_gray": typed_read_model(configuration.base_gray),
             "scan_canvas": typed_read_model(configuration.scan_canvas),
             "photo_boundary_measurement_spec": typed_read_model(

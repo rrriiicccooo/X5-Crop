@@ -386,6 +386,22 @@ def prepare_template_lane(
         registration_start=len(coarse_measurement_sets),
     )
     measurement_sets = (*coarse_measurement_sets, *precision_measurement_sets)
+    (top_measurement,) = tuple(
+        item for item in precision_measurement_sets
+        if item.query.purpose == QueryPurpose.TOP_CORRIDOR
+    )
+    (bottom_measurement,) = tuple(
+        item for item in precision_measurement_sets
+        if item.query.purpose == QueryPurpose.BOTTOM_CORRIDOR
+    )
+    (sequence_baseline,) = tuple(
+        item for item in precision_measurement_sets
+        if item.query.purpose == QueryPurpose.SEQUENCE_BASELINE
+    )
+    sequence_measurement_sets = tuple(
+        item for item in precision_measurement_sets
+        if item.query.purpose == QueryPurpose.SEQUENCE_ANCHOR_WINDOW
+    )
     transition_by_id: dict[str, SequenceTransitionObservation] = {
         str(item.transition_id): item
         for measurement_set in measurement_sets
@@ -396,28 +412,28 @@ def prepare_template_lane(
         )
     }
     side_regions = _physical_transition_regions(
-        precision_measurement_sets[2:],
+        sequence_measurement_sets,
         reference_trace_px=height_authority.center,
         boundary_axis_scale_px_per_mm=scales.width_axis_px_per_mm,
     )
     cross_height_regions = _physical_cross_height_regions(
-        precision_measurement_sets[2:],
+        sequence_measurement_sets,
         reference_trace_px=height_authority.center,
         boundary_axis_scale_px_per_mm=scales.width_axis_px_per_mm,
     )
     broad_material_regions = _physical_broad_material_regions(
-        precision_measurement_sets[2:],
+        sequence_measurement_sets,
         reference_trace_px=height_authority.center,
         boundary_axis_scale_px_per_mm=scales.width_axis_px_per_mm,
     )
     top_regions = _physical_transition_regions(
-        (precision_measurement_sets[0],),
+        (top_measurement,),
         reference_trace_px=width_authority.center,
         boundary_axis_scale_px_per_mm=scales.height_axis_px_per_mm,
         minimum_independent_support_regions=1,
     )
     bottom_regions = _physical_transition_regions(
-        (precision_measurement_sets[1],),
+        (bottom_measurement,),
         reference_trace_px=width_authority.center,
         boundary_axis_scale_px_per_mm=scales.height_axis_px_per_mm,
         minimum_independent_support_regions=1,
@@ -525,7 +541,7 @@ def prepare_template_lane(
         cross_height_edges,
         transition_by_id,
         registered_trace_lattice=(
-            precision_measurement_sets[2].query.trace_positions_px
+            sequence_baseline.query.trace_positions_px
         ),
         aggregate_basis=(
             BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE
@@ -540,7 +556,7 @@ def prepare_template_lane(
         broad_material_edges,
         transition_by_id,
         registered_trace_lattice=(
-            precision_measurement_sets[2].query.trace_positions_px
+            sequence_baseline.query.trace_positions_px
         ),
         aggregate_basis=(
             BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE
@@ -582,11 +598,6 @@ def prepare_template_lane(
             ),
             key=lambda item: str(item.observation_id),
         )
-    )
-    sequence_measurement_sets = tuple(
-        item
-        for item in measurement_sets
-        if item.query.purpose == QueryPurpose.SEQUENCE_ANCHOR_WINDOW
     )
     intrinsic_authority_edge_ids = frozenset(
         intrinsic_direct_role_authority_bases(
@@ -912,8 +923,8 @@ def prepare_template_lane(
             )
     cross = register_cross_evidence(
         profile=cross_profile,
-        top_measurement=precision_measurement_sets[0],
-        bottom_measurement=precision_measurement_sets[1],
+        top_measurement=top_measurement,
+        bottom_measurement=bottom_measurement,
         width_axis=width_axis,
         height_axis=height_axis,
         height_scale_px_per_mm=scales.height_axis_px_per_mm,
@@ -926,8 +937,8 @@ def prepare_template_lane(
     canonical_height = fixed_height.center
     cross = register_template_local_cross_refinements(
         cross,
-        top_measurement=precision_measurement_sets[0],
-        bottom_measurement=precision_measurement_sets[1],
+        top_measurement=top_measurement,
+        bottom_measurement=bottom_measurement,
         width_axis=width_axis,
         height_axis=height_axis,
         height_scale_px_per_mm=scales.height_axis_px_per_mm,
@@ -990,9 +1001,7 @@ def prepare_template_lane(
         canonical_fixed_height_px=canonical_height,
         lane_reference_trace_px=width_authority.center,
         source_direction=source_direction,
-        registered_trace_coordinates_px=precision_measurement_sets[
-            0
-        ].query.trace_positions_px,
+        registered_trace_coordinates_px=top_measurement.query.trace_positions_px,
         longitudinal_support_domain_groups_px=longitudinal_support_domain_groups_px,
         top_bindings=solver_top,
         bottom_bindings=solver_bottom,

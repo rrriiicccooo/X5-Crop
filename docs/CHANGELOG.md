@@ -23,6 +23,8 @@
   完整测量账本与全局 solver 输入分别计数，局部假设不占用全局边界配额；原 producer 与求解上限不变。
 - 源边或查询范围截断的定位峰不再以可见峰尾取得精确坐标；宽缓材质峰同时检查双尺度实际可观测域。
   完整峰、极性分区和窗口 ownership 保留既有职责，不增加像素读取或放宽测量阈值。
+- Top/bottom 共用预登记的 lane 完整短轴归一化基线，保留原查询窗口与测量阈值；基线不产生边界证据，
+  也不补造源边缺失观测。两轴基线按组顺序消费和释放，完整像素工作及整组缓冲进入原有预算。
 - 端部窄材料带保留内侧边界假设，但不再仅因窄带存在而否定外侧 edge 的独立角色权限；材料可能处于
   aperture 内。W/ordinal、独立证据和后续风险条件继续约束解释，不强选更内侧边界。
 - 唯一且获权的实测窄 separator 可以原子闭合相邻角色，不再额外要求 gap 达到 nominal 下界；既有
@@ -38,7 +40,7 @@
   候选不合并几何或增加独立票数，登记与 refit 不重复，未闭合的纵向歧义继续进入 Review。
 - 纯离散歧义的 primary/runner 分别以自身合法直接约束收紧 proposal 联合包络；runner 不借用 primary
   的角色或不匹配的 source W。歧义、反证与输出资格不变，空可行集明确保留为 unavailable。
-- Enclosing aperture-center 校准按当前唯一 selected pair 的 17 个 source 重登记观测指纹；
+- Enclosing aperture-center 校准按当前唯一 selected pair 的 20 个 source 重登记观测指纹；
   原资格、source 中位数、全体 hull 与向外量化方法不变，当前区间为 `[-0.008H, +0.010H]`。
 - Source W 明确分开测量、placement 消费和自动输出资格。至少两张合格完整 Frame 或全部独立 rank-3
   直接约束可建立测量；两组都成立时只取交集。远处 coverage、全局 rank 缺口或 unresolved proposal 不再
@@ -61,7 +63,8 @@
 
 - Normal report 与 Debug Analysis 只显示同次检测事实，分开 proposal、candidate、正式输出、runner、
   typed failure、calibration identity 和实际工作量，不重新检测或求解。当前 Report revision 为
-  `x5crop_v5_template_report_72`，逐候选记录 Cross 支撑区间、覆盖序号和真实 source extent，不保留旧 schema 兼容层。
+  `x5crop_v5_template_report_73`，登记两轴归一化身份并检查基线无证据、完整范围与工作账本；
+  逐候选记录 Cross 支撑区间、覆盖序号和真实 source extent，不保留旧 schema 兼容层。
 - Cross 每条直接边界保留原始独立区域数；开发校验回链原 query/transition、registered binding 与
   各候选的角色权限。Coarse enclosing track 继续只有外侧几何支撑权限，不冒充照片边界。
 - Source extent 同时绑定 input、Orientation、measurement、全部候选与 final sampling；源截断类别

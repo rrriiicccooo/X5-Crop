@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import numpy as np
 
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.evidence.scan_canvas import observe_scan_canvas
@@ -19,9 +20,11 @@ from x5crop.detection.photo_geometry.coarse_enclosing_model import (
 from x5crop.detection.photo_geometry.measurement_model import (
     PhotoBoundaryCoverageReceipt,
     PhotoBoundaryMeasurementQuery,
+    PhotoBoundaryMeasurementField,
     PhotoBoundaryMeasurementSet,
 )
 from x5crop.detection.photo_geometry.model import BoundaryAxis, QueryPurpose
+from x5crop.detection.photo_geometry.registered_measurement import measure_registered_queries
 from x5crop.detection.photo_geometry.observation_types import BasicAxisProfile
 from x5crop.detection.photo_geometry.search_model import (
     SequenceAnchorDiscoveryDomain,
@@ -182,6 +185,29 @@ def prepared_template_lane() -> PreparedTemplateLane:
         registration_index=1,
         purpose=QueryPurpose.COARSE_STRIP_SHORT,
     )
+    precision_queries = []
+    for index, purpose in enumerate((
+        QueryPurpose.TOP_CORRIDOR, QueryPurpose.BOTTOM_CORRIDOR,
+        QueryPurpose.CROSS_BASELINE, QueryPurpose.SEQUENCE_BASELINE,
+        QueryPurpose.SEQUENCE_ANCHOR_WINDOW,
+    ), start=2):
+        query = runtime_measurement_set("lane:0", registration_index=index, purpose=purpose).query
+        if purpose in {QueryPurpose.TOP_CORRIDOR, QueryPurpose.BOTTOM_CORRIDOR, QueryPurpose.CROSS_BASELINE}:
+            query = replace(query, boundary_axis=BoundaryAxis.Y)
+        if purpose == QueryPurpose.CROSS_BASELINE:
+            query = replace(
+                query, search_intervals_px=(plan.projected_queries.cross_baseline_interval_px,),
+                transition_ownership_intervals_px=(plan.projected_queries.cross_baseline_interval_px,),
+            )
+        precision_queries.append(query)
+    measurement_sets = (
+        coarse_long, coarse_short,
+        *measure_registered_queries(
+            PhotoBoundaryMeasurementField(np.zeros((322, 2320), dtype=np.uint8), "horizontal"),
+            tuple(precision_queries), registration_start=2,
+        ),
+    )
+    coverage = tuple(item.coverage for item in measurement_sets)
     registered = RegisteredTemplateLane(
         lane=lane,
         layout="horizontal",
@@ -232,7 +258,7 @@ def prepared_template_lane() -> PreparedTemplateLane:
             ),
             query_execution_order=("anchor-window:lane:0:conservative",),
         ),
-        measurement_sets=(coarse_long, coarse_short),
+        measurement_sets=measurement_sets,
         side_regions=(),
         cross_height_regions=(),
         cross_height_edges=(),
@@ -253,11 +279,11 @@ def prepared_template_lane() -> PreparedTemplateLane:
         raw_cross_observations=(),
         cross_boundary_family_resolutions=(),
         measurement_work=TemplateMeasurementWorkReceipt(
-            2,
-            2,
-            2,
-            8,
-            (coarse_long.coverage, coarse_short.coverage),
+            len(coverage),
+            sum(item.pixel_query_count for item in coverage),
+            sum(item.complete for item in coverage),
+            max(item.peak_temporary_bytes for item in coverage),
+            coverage,
         ),
         measurement_plan=plan,
     )

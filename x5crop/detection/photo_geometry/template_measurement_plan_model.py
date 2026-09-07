@@ -130,6 +130,7 @@ class TemplateProjectedQueryPlan:
 
     long_extent_px: int
     cross_trace_positions_px: tuple[int, ...]
+    cross_baseline_interval_px: FiniteInterval
     top_core_intervals_px: tuple[FiniteInterval, ...]
     top_measurement_intervals_px: tuple[FiniteInterval, ...]
     bottom_core_intervals_px: tuple[FiniteInterval, ...]
@@ -168,6 +169,8 @@ class TemplateProjectedQueryPlan:
             if any(
                 measured.minimum > core.minimum
                 or measured.maximum < core.maximum
+                or measured.minimum < self.cross_baseline_interval_px.minimum
+                or measured.maximum > self.cross_baseline_interval_px.maximum
                 for core, measured in zip(core_values, measured_values, strict=True)
             ):
                 raise ValueError("projected measurement interval misses its core")
@@ -343,6 +346,10 @@ class TemplateMeasurementPlan:
             or self.calibrated_nominal_grid_prior.format_id
             != self.format_spec.format_id
             or not isinstance(self.projected_queries, TemplateProjectedQueryPlan)
+            or self.projected_queries.cross_baseline_interval_px != FiniteInterval(
+                float(self.lane_authority.work_box.top),
+                float(self.lane_authority.work_box.bottom - 1),
+            )
             or self.template_spec.count != self.count
             or not self.query_intents
             or len(self.query_intents) > MAX_QUERY_INTENTS

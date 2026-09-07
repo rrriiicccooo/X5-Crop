@@ -53,7 +53,11 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
             registration_provenance_ids=("synthetic-source",),
         )
         measured = measure_registered_queries(
-            PhotoBoundaryMeasurementField(source, "horizontal"), (query,),
+            PhotoBoundaryMeasurementField(source, "horizontal"),
+            (query, replace(
+                query, query_id="query:source-edge:baseline", registration_index=1,
+                purpose=QueryPurpose.CROSS_BASELINE,
+            )),
         )[0]
         regions = track_side_transition_regions(
             (measured,), reference_trace_px=450.0,
@@ -94,6 +98,14 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
                 self.assertTrue(bindings[0].full_interval_px.contains(
                     149.5 if mirrored else 49.5, epsilon=1.0e-8,
                 ))
+
+    def test_uniform_sides_do_not_gain_background_role_from_baseline(self) -> None:
+        for mirrored in (False, True):
+            with self.subTest(mirrored=mirrored):
+                _measured, bindings = self._registered_step(
+                    50, mirrored=mirrored, texture=False,
+                )
+                self.assertTrue(all(not binding.role_authorized for binding in bindings))
 
     def test_peak_completeness_uses_localization_not_the_whole_signal_group(self) -> None:
         values = np.full(200, 220, dtype=np.uint8)
@@ -707,15 +719,17 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
                 registration_provenance_ids=(f"corridor:{purpose.value}",),
             )
 
-        cross, baseline, sequence = measure_registered_queries(
+        cross, baseline, sequence, cross_baseline = measure_registered_queries(
             field,
             (
                 query(QueryPurpose.TOP_CORRIDOR, 0),
                 query(QueryPurpose.SEQUENCE_BASELINE, 1),
                 query(QueryPurpose.SEQUENCE_ANCHOR_WINDOW, 2),
+                query(QueryPurpose.CROSS_BASELINE, 3),
             ),
         )
         self.assertEqual(baseline.transitions, ())
+        self.assertEqual(cross_baseline.transitions, ())
 
         cross_by_trace = {
             trace: tuple(

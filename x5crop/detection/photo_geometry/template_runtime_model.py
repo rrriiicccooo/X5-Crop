@@ -24,6 +24,7 @@ from .measurement_model import (
     SequenceTransitionObservation,
 )
 from .model import BoundaryAxis, BoundaryEvidenceState, QueryPurpose
+from .registered_measurement import registered_baseline_query_groups
 from .observation_types import (
     BasicAxisProfile,
     BoundaryEdgeMeasurementBasis,
@@ -204,6 +205,28 @@ class RegisteredTemplateLane:
             range(len(queries))
         ):
             raise ValueError("measurement queries must retain global registration order")
+        baseline_groups = registered_baseline_query_groups(queries)
+        if {baseline.purpose for baseline, _windows in baseline_groups} != {
+            QueryPurpose.CROSS_BASELINE, QueryPurpose.SEQUENCE_BASELINE,
+        }:
+            raise ValueError("registered lane requires both normalization baselines")
+        for baseline, windows in baseline_groups:
+            if baseline.purpose == QueryPurpose.CROSS_BASELINE and (
+                tuple(window.purpose for window in windows) != (
+                    QueryPurpose.TOP_CORRIDOR, QueryPurpose.BOTTOM_CORRIDOR,
+                )
+                or baseline.boundary_axis != self.height_axis
+                or baseline.search_intervals_px != (
+                    self.measurement_plan.projected_queries.cross_baseline_interval_px,
+                ) * len(baseline.trace_positions_px)
+            ):
+                raise ValueError("cross baseline differs from compiled lane authority")
+        if any(
+            item.transitions or item.cross_height_transitions or item.broad_material_transitions
+            for item in self.measurement_sets
+            if item.query.purpose in {QueryPurpose.CROSS_BASELINE, QueryPurpose.SEQUENCE_BASELINE}
+        ):
+            raise ValueError("normalization baseline cannot register boundary evidence")
         coarse_coverage = tuple(
             item.coverage for item in self.measurement_sets[:2]
         )

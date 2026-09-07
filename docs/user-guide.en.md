@@ -63,6 +63,10 @@ support across three longitudinal regions, compatible direction, and a span that
 broad observations are equivalent, the sharp native coordinates remain canonical. A disagreement, a single side, or
 multiple explanations keeps the whole source in review; signal strength does not choose a winner.
 
+Top and bottom use one signal baseline across the lane's full short axis, so each local query window does not independently
+set the scale used to assess edge strength. Boundaries still require complete observations inside their registered windows;
+the baseline creates no boundary evidence and does not treat missing regions beyond the source as background.
+
 Direct top and bottom evidence need not occur on the same sampling trace. They may close one complementary direct pair
 when each side has at least two independent support regions, their union covers the longitudinal domain of every output
 Frame, and direction and fixed H agree. Shared support is still reported as zero. Incomplete coverage, a template-inferred

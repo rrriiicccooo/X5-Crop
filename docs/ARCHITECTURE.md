@@ -232,8 +232,13 @@ direct coarse observation，或输出 count 只是未知 holder-slot 子集时�
 某个 selected placement 是否真正被覆盖，必须在测量后按第 7 节逐 adjacency 证明，不能从“查询已全部
 执行”反推。不能为某个 candidate 重读 TIFF、扩张全图搜索或 winner-specific requery。
 
-同一 trace lattice 只建立一次全局 normalization baseline，再由理论窗口切出局部测量。Baseline
-不产生 transition 或 placement evidence；其像素和临时内存仍完整计入 receipt，不能伪装成免费工作。
+同一轴的 trace lattice 只建立一次 normalization baseline，再由理论窗口切出局部测量。长轴使用完整
+sequence baseline；top/bottom 共用覆盖 lane work box 完整短轴的 `CROSS_BASELINE`，不再分别用各自
+小窗口计算 median/MAD。两组 baseline 都在像素读取前登记；trace、两轴尺度和 lane 必须与窗口一致，
+原窗口的 transition ownership 与源边 kernel 可观测性保持不变。Baseline 不产生任何 transition 或
+placement evidence，也不能把源边未观测区域补成背景；它只提供候选无关的共同信号归一化。
+`registered_normalization_revision` 绑定计划与报告身份。开发报告重建登记合同，拒绝基线缺失、额外
+边界证据、lane 范围漂移或不完整工作账本；不保留旧小窗口归一化路径。
 
 正常片条在 outer、phase/pitch、separator topology、闭环、content 和输出预算均唯一且相容时停止。
 Registered measurement 始终 candidate-independent；每个已唯一绑定的直接 separator 可以在同一次
@@ -1367,7 +1372,7 @@ Enclosing support 本身只证明真实 aperture 位于两条 support 之间，�
 center_offset_ratio = (gold_aperture_center - support_midpoint) / H
 ```
 
-当前 calibration 只纳入 17 个 selected unique pair、且黄金 top/bottom 均为 `directly_visible` 的 source；
+当前 calibration 只纳入 20 个 selected unique pair、且黄金 top/bottom 均为 `directly_visible` 的 source；
 同源 count 先取中位数，再对 source hull 以 `0.001H` 向外量化，得到 `[-0.008H, +0.010H]`。Calibration
 同时绑定 development cohort SHA、eligibility revision 和精确 observation-set SHA；source 数量相同但成员、
 观测值或 detector 权限变化时同样视为 calibration drift。该 authority
@@ -1651,7 +1656,10 @@ candidate-dependent query 或 content-driven placement；概率层也只能消�
 性能合同是 24-source 完整用户路径平均不超过 5 秒；同一均值不超过 3 秒是明确记录但不阻断
 提交、发布或平台 receipt 的 challenge。正式计时子进程同时由外部观察未插桩 peak RSS；该值与
 带 cProfile 的阶段归因 RSS 分开记录。`runtime_peak_temporary_bytes` 只描述 detector 自报的有界
-临时测量缓冲，不代表进程 RSS。Profiler 将完整路径拆成：
+临时测量缓冲，不代表进程 RSS。Cross 与 sequence 两组 baseline 顺序测量，一组全部窗口消费完后释放
+其像素数组，再测量下一组。Receipt 计入整组所有 trace 同时保留的底层数组和处理缓冲，slice view 不
+重复计入底层存储；baseline 像素测量与窗口消费分别计数，不以单 trace 峰值代替整组峰值。
+Profiler 将完整路径拆成：
 
 ```text
 unattributed runtime → TIFF decode → workspace gray → coarse support

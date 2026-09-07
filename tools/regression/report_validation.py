@@ -20,7 +20,11 @@ from x5crop.detection.photo_geometry.output_model import (
 )
 from x5crop.detection.photo_geometry.model import (
     AuthoritySide,
+    BoundaryAxis,
     MINIMUM_INDEPENDENT_SUPPORT_REGIONS,
+    PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+    QueryPurpose,
+    REGISTERED_NORMALIZATION_REVISION,
     SPATIAL_SUPPORT_REGION_COUNT,
     independent_spatial_support_count,
 )
@@ -52,7 +56,9 @@ from x5crop.detection.photo_geometry.template_placement import (
     compile_cross_support_domains_px,
 )
 from x5crop.detection.photo_geometry.template_registration import CrossRegistrationWorkReceipt
-from x5crop.domain import Box, FiniteInterval, ObservationId, WorkspaceExtent
+from x5crop.domain import Box, FiniteInterval, ObservationId, PositiveInterval, WorkspaceExtent
+from x5crop.detection.photo_geometry.measurement_model import PhotoBoundaryMeasurementQuery
+from x5crop.detection.photo_geometry.registered_measurement import registered_baseline_query_groups
 from x5crop.report.read_models import typed_read_model
 from x5crop.formats import OUTPUT_PROTECTION_SPEC
 from x5crop.geometry.affine import AffineCoordinateTransform
@@ -3961,6 +3967,100 @@ def _validate_phase_competition(value: object) -> None:
         raise ValueError("bound-exceeded phase carries a candidate")
 
 
+def _read_measurement_query(value: dict[str, Any]) -> PhotoBoundaryMeasurementQuery:
+    try:
+        return PhotoBoundaryMeasurementQuery(**{
+            **value,
+            "purpose": QueryPurpose(value["purpose"]),
+            "boundary_axis": BoundaryAxis(value["boundary_axis"]),
+            "trace_positions_px": tuple(value["trace_positions_px"]),
+            "search_intervals_px": tuple(FiniteInterval(**item) for item in value["search_intervals_px"]),
+            "transition_ownership_intervals_px": tuple(FiniteInterval(**item) for item in value["transition_ownership_intervals_px"]),
+            "boundary_axis_scale_px_per_mm": PositiveInterval(**value["boundary_axis_scale_px_per_mm"]),
+            "trace_axis_scale_px_per_mm": PositiveInterval(**value["trace_axis_scale_px_per_mm"]),
+            "registration_provenance_ids": tuple(value["registration_provenance_ids"]),
+        })
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError("registered normalization query is invalid") from error
+
+
+def _validate_registered_normalization(record: dict[str, Any]) -> None:
+    development = record["development"]
+    measurement = development["measurement"]
+    domains = {item["domain"]["lane_id"]: item["domain"] for item in measurement["source_lanes"]}
+    for lane in development["lanes"]:
+        lane_id = lane["lane_id"]
+        members = tuple(item for item in measurement["queries"] if item["query"]["lane_id"] == lane_id)
+        queries = tuple(_read_measurement_query(item["query"]) for item in members)
+        by_id = {item["query"]["query_id"]: item for item in members}
+        if len(by_id) != len(members) or tuple(query.registration_index for query in queries) != tuple(range(len(queries))):
+            raise ValueError("registered normalization query order is invalid")
+        groups = registered_baseline_query_groups(queries)
+        if {baseline.purpose for baseline, _windows in groups} != {
+            QueryPurpose.CROSS_BASELINE, QueryPurpose.SEQUENCE_BASELINE,
+        }:
+            raise ValueError("registered lane lost a normalization baseline")
+        for baseline, windows in groups:
+            raw = by_id[baseline.query_id]
+            if any(raw.get(name) != [] or raw.get(count) != 0 for name, count in (
+                ("transitions", "transition_count"),
+                ("cross_height_transitions", "cross_height_transition_count"),
+                ("broad_material_transitions", "broad_material_transition_count"),
+            )):
+                raise ValueError("normalization baseline contains boundary evidence")
+            if baseline.purpose == QueryPurpose.CROSS_BASELINE:
+                domain = domains[lane_id]
+                box = domain["work_box"]
+                interval = FiniteInterval(float(box["top"]), float(box["bottom"] - 1))
+                expected_axis = BoundaryAxis.Y if domain["source_axis_long"] == "x" else BoundaryAxis.X
+                if (
+                    baseline.boundary_axis != expected_axis
+                    or baseline.search_intervals_px != (interval,) * len(baseline.trace_positions_px)
+                    or tuple(window.purpose for window in windows) != (QueryPurpose.TOP_CORRIDOR, QueryPurpose.BOTTOM_CORRIDOR)
+                ):
+                    raise ValueError("cross normalization baseline changed lane authority")
+            spec = PHOTO_BOUNDARY_MEASUREMENT_SPEC
+            scale = baseline.boundary_axis_scale_px_per_mm.maximum
+            kernel = spec.local_window_px(scale) + spec.transition_gap_px(scale)
+            axis_extent = record["measurement"]["source_extent"]["width" if baseline.boundary_axis == BoundaryAxis.X else "height"]
+            # Mandatory retained storage: eight float64 arrays and int32
+            # coordinates for every baseline trace. Broad/scratch buffers
+            # may add to this lower bound; views cannot remove it.
+            retained_minimum = sum(
+                max(0, min(axis_extent - kernel, math.floor(interval.maximum) + 1)
+                    - max(kernel, math.ceil(interval.minimum))) * (8 * 8 + 4)
+                for interval in baseline.search_intervals_px
+            )
+            for query in (baseline, *windows):
+                coverage = by_id[query.query_id]["coverage"]
+                count = sum(max(0, math.floor(interval.maximum) - math.ceil(interval.minimum) + 1)
+                            for interval in query.search_intervals_px)
+                factor = 2 * spec.local_measurement_work_radius_px(scale) + 2 if query is baseline else 1
+                if (
+                    coverage["query_id"] != query.query_id
+                    or coverage["registered_trace_count"] != len(query.trace_positions_px)
+                    or coverage["registered_coordinate_count"] != count
+                    or not 0 <= coverage["completed_coordinate_count"] <= count
+                    or coverage["pixel_query_count"] != coverage["completed_coordinate_count"] * factor
+                    or coverage["peak_temporary_bytes"] < retained_minimum
+                    or coverage["complete"] and (
+                        coverage["completed_coordinate_count"] != count
+                        or coverage["completed_trace_count"] != len(query.trace_positions_px)
+                    )
+                ):
+                    raise ValueError("normalization baseline work receipt is incomplete")
+        work = lane["measurement_work"]
+        receipts = [item["coverage"] for item in members]
+        if (
+            work["coverage_receipts"] != receipts
+            or work["measurement_query_count"] != len(receipts)
+            or work["completed_query_count"] != sum(item["complete"] for item in receipts)
+            or work["pixel_query_count"] != sum(item["pixel_query_count"] for item in receipts)
+            or work["peak_temporary_bytes"] != max(item["peak_temporary_bytes"] for item in receipts)
+        ):
+            raise ValueError("normalization baseline work lost its lane ledger")
+
+
 def _validate_development(record: dict[str, Any]) -> None:
     detail = record["detail_level"]
     development = record["development"]
@@ -3970,6 +4070,7 @@ def _validate_development(record: dict[str, Any]) -> None:
         return
     if detail != "development" or not isinstance(development, dict):
         raise ValueError("development report detail is unavailable")
+    _validate_registered_normalization(record)
     lanes = development.get("lanes")
     production_geometry = record["photo_geometry"]
     production_lanes = production_geometry["lanes"]
@@ -4221,6 +4322,8 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
         or record["schema_revision"] != REPORT_SCHEMA_REVISION
     ):
         raise ValueError("report does not use the current-only schema")
+    if record["configuration"]["measurement"].get("registered_normalization_revision") != REGISTERED_NORMALIZATION_REVISION:
+        raise ValueError("report registered normalization revision is unavailable")
     source_extent = validate_report_source_extent(record)
     _validate_geometry(record, source_extent)
     _validate_gate(record["candidate_gate"], "candidate")

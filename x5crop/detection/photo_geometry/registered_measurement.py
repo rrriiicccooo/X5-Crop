@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import fields, replace
 import math
 
 import numpy as np
@@ -35,6 +35,13 @@ from .registered_transition_measurement import (
 from .physical_identity import physical_observation_id
 
 
+_BASELINE_WINDOWS = (
+    (QueryPurpose.CROSS_BASELINE, frozenset((QueryPurpose.TOP_CORRIDOR, QueryPurpose.BOTTOM_CORRIDOR))),
+    (QueryPurpose.SEQUENCE_BASELINE, frozenset((QueryPurpose.SEQUENCE_ANCHOR_WINDOW,))),
+)
+_BASELINE_PURPOSES = frozenset(purpose for purpose, _windows in _BASELINE_WINDOWS)
+
+
 def make_photo_boundary_measurement_field(
     source_gray: np.ndarray,
     layout: str,
@@ -48,6 +55,8 @@ def _measure_query(
     spec: PhotoBoundaryMeasurementSpec,
     *,
     premeasured: tuple[TraceMeasurement, ...] | None = None,
+    retained_temporary_bytes: int = 0,
+    premeasurement_peak_bytes: int = 0,
 ) -> PhotoBoundaryMeasurementSet:
     registered_coordinate_count = sum(
         max(
@@ -61,7 +70,7 @@ def _measure_query(
     transitions: list[PhotoBoundaryTransition] = []
     cross_height_transitions = ()
     broad_material_transitions = ()
-    peak_temporary = 0
+    peak_temporary = max(retained_temporary_bytes, premeasurement_peak_bytes)
     pixel_query_count = 0
     completed_coordinates = 0
     completed_traces = 0
@@ -113,16 +122,16 @@ def _measure_query(
             pixel_query_count += coordinate_count * (
                 2 * local_radius + 2
                 if premeasured is None
-                or query.purpose == QueryPurpose.SEQUENCE_BASELINE
+                or query.purpose in _BASELINE_PURPOSES
                 else 1
             )
             peak_temporary = max(
                 peak_temporary,
-                measured.temporary_bytes,
+                retained_temporary_bytes + measured.temporary_bytes,
             )
             peaks = (
                 ()
-                if query.purpose == QueryPurpose.SEQUENCE_BASELINE
+                if query.purpose in _BASELINE_PURPOSES
                 else measured_transition_peaks(
                 measured,
                 spec,
@@ -183,7 +192,7 @@ def _measure_query(
             )
             peak_temporary = max(
                 peak_temporary,
-                cross_height_temporary,
+                retained_temporary_bytes + cross_height_temporary,
             )
             (
                 broad_material_transitions,
@@ -195,7 +204,7 @@ def _measure_query(
             )
             peak_temporary = max(
                 peak_temporary,
-                broad_material_temporary,
+                retained_temporary_bytes + broad_material_temporary,
             )
     except Exception:
         receipt = _coverage_receipt(
@@ -299,26 +308,39 @@ def _slice_trace_measurement(
     )
 
 
-def _premeasure_sequence_windows(
+def _trace_storage_bytes(measured: TraceMeasurement) -> int:
+    """Count retained NumPy storage once; slices and broad aliases are views."""
+
+    buffers: dict[int, int] = {}
+    for record in (measured, measured.broad_material):
+        if record is None:
+            continue
+        for field in fields(record):
+            value = getattr(record, field.name)
+            for array in (value if isinstance(value, tuple) else (value,)):
+                if not isinstance(array, np.ndarray):
+                    continue
+                root = array
+                while isinstance(root.base, np.ndarray):
+                    root = root.base
+                buffers[id(root)] = root.nbytes
+    return sum(buffers.values())
+
+
+def _premeasure_registered_windows(
     field: PhotoBoundaryMeasurementField,
     baseline: PhotoBoundaryMeasurementQuery,
     windows: tuple[PhotoBoundaryMeasurementQuery, ...],
     spec: PhotoBoundaryMeasurementSpec,
-) -> dict[str, tuple[TraceMeasurement, ...]]:
+) -> tuple[dict[str, tuple[TraceMeasurement, ...]], int, int]:
     queries = (baseline, *windows)
     first = baseline
-    if any(
-        query.boundary_axis != first.boundary_axis
-        or query.trace_positions_px != first.trace_positions_px
-        or query.boundary_axis_scale_px_per_mm
-        != first.boundary_axis_scale_px_per_mm
-        for query in queries[1:]
-    ):
-        raise ValueError("sequence baseline and windows must share one trace lattice")
     values_by_query: dict[str, list[TraceMeasurement]] = {
         query.query_id: [] for query in queries
     }
     scale = first.boundary_axis_scale_px_per_mm.maximum
+    retained_bytes = 0
+    peak_bytes = 0
     for trace_ordinal, trace in enumerate(first.trace_positions_px):
         values = (
             field.source_gray[trace, :]
@@ -330,8 +352,14 @@ def _premeasure_sequence_windows(
             baseline.search_intervals_px[trace_ordinal],
             scale,
             spec,
-            include_broad_material=True,
+            include_broad_material=baseline.purpose == QueryPurpose.SEQUENCE_BASELINE,
         )
+        retained_bytes += _trace_storage_bytes(measured)
+        # All earlier traces remain live. The per-trace work allowance is
+        # additional to retained storage, conservatively covering overlap
+        # during construction/consumption rather than pretending one trace
+        # is the complete batch. This is not process RSS.
+        peak_bytes = max(peak_bytes, retained_bytes + measured.temporary_bytes)
         values_by_query[baseline.query_id].append(measured)
         for query in windows:
             values_by_query[query.query_id].append(
@@ -340,10 +368,11 @@ def _premeasure_sequence_windows(
                     query.search_intervals_px[trace_ordinal],
                 )
             )
-    return {
-        identity: tuple(values)
-        for identity, values in values_by_query.items()
-    }
+    return (
+        {identity: tuple(values) for identity, values in values_by_query.items()},
+        retained_bytes,
+        peak_bytes,
+    )
 
 
 def _coverage_receipt(
@@ -382,6 +411,39 @@ def _coverage_receipt(
     )
 
 
+def registered_baseline_query_groups(
+    queries: tuple[PhotoBoundaryMeasurementQuery, ...],
+) -> tuple[tuple[PhotoBoundaryMeasurementQuery, tuple[PhotoBoundaryMeasurementQuery, ...]], ...]:
+    """Compile and validate the two fixed, candidate-independent lattices."""
+
+    groups = []
+    for purpose, window_purposes in _BASELINE_WINDOWS:
+        baselines = tuple(query for query in queries if query.purpose == purpose)
+        windows = tuple(query for query in queries if query.purpose in window_purposes)
+        if len(baselines) != (1 if windows else 0):
+            raise ValueError(f"{purpose.value} windows require one registered baseline")
+        if not windows:
+            continue
+        baseline = baselines[0]
+        if any(
+            query.boundary_axis != baseline.boundary_axis
+            or query.lane_id != baseline.lane_id
+            or query.trace_positions_px != baseline.trace_positions_px
+            or query.boundary_axis_scale_px_per_mm != baseline.boundary_axis_scale_px_per_mm
+            or query.trace_axis_scale_px_per_mm != baseline.trace_axis_scale_px_per_mm
+            for query in windows
+        ):
+            raise ValueError("baseline and windows must share one lane and trace lattice")
+        if any(
+            window.minimum < full.minimum or window.maximum > full.maximum
+            for query in windows
+            for window, full in zip(query.search_intervals_px, baseline.search_intervals_px, strict=True)
+        ):
+            raise ValueError("baseline must contain every registered window")
+        groups.append((baseline, windows))
+    return tuple(groups)
+
+
 def measure_registered_queries(
     field: PhotoBoundaryMeasurementField,
     queries: tuple[PhotoBoundaryMeasurementQuery, ...],
@@ -400,34 +462,30 @@ def measure_registered_queries(
         range(registration_start, registration_start + len(queries))
     ):
         raise ValueError("measurement queries must be completely pre-registered")
-    sequence_baselines = tuple(
-        query
-        for query in queries
-        if query.purpose == QueryPurpose.SEQUENCE_BASELINE
-    )
-    sequence_windows = tuple(
-        query
-        for query in queries
-        if query.purpose == QueryPurpose.SEQUENCE_ANCHOR_WINDOW
-    )
-    if len(sequence_baselines) != (1 if sequence_windows else 0):
-        raise ValueError("sequence windows require one registered baseline")
-    premeasured = (
-        {}
-        if not sequence_windows
-        else _premeasure_sequence_windows(
-            field,
-            sequence_baselines[0],
-            sequence_windows,
-            spec,
+    groups = {
+        query.query_id: (baseline, windows)
+        for baseline, windows in registered_baseline_query_groups(queries)
+        for query in (baseline, *windows)
+    }
+    results = {}
+    for query in queries:
+        if query.query_id in results:
+            continue
+        group = groups.get(query.query_id)
+        if group is None:
+            results[query.query_id] = _measure_query(field, query, spec)
+            continue
+        baseline, windows = group
+        premeasured, retained_bytes, peak_bytes = _premeasure_registered_windows(
+            field, baseline, windows, spec,
         )
-    )
-    return tuple(
-        _measure_query(
-            field,
-            query,
-            spec,
-            premeasured=premeasured.get(query.query_id),
-        )
-        for query in queries
-    )
+        for member in sorted((baseline, *windows), key=lambda item: item.registration_index):
+            results[member.query_id] = _measure_query(
+                field, member, spec, premeasured=premeasured[member.query_id],
+                retained_temporary_bytes=retained_bytes,
+                premeasurement_peak_bytes=peak_bytes,
+            )
+        # Each lattice is fully consumed before another is premeasured.
+        # Reports retain scalar/transition facts, never these pixel arrays.
+        del premeasured
+    return tuple(results[query.query_id] for query in queries)

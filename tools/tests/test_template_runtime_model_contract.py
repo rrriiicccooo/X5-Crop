@@ -28,6 +28,7 @@ from x5crop.detection.photo_geometry.template_output import (
 from x5crop.detection.photo_geometry.template_feasible_geometry import project_format_placement
 from x5crop.detection.photo_geometry.model import (
     BoundaryRole,
+    QueryPurpose,
 )
 from x5crop.detection.photo_geometry.output_model import (
     BoundaryProtectionFact,
@@ -160,35 +161,26 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
 
     def test_measurement_queries_are_lane_local(self) -> None:
         prepared = _prepared()
-        measurement = _measurement_set("lane:0", registration_index=2)
+        measurement = _measurement_set("lane:0", registration_index=len(prepared.measurement_sets))
         measurements = (*prepared.measurement_sets, measurement)
+        coverage = tuple(item.coverage for item in measurements)
         valid = replace(
             prepared,
             measurement_sets=measurements,
             measurement_work=TemplateMeasurementWorkReceipt(
-                3,
-                3,
-                3,
-                8,
-                tuple(item.coverage for item in measurements),
+                len(coverage),
+                sum(item.pixel_query_count for item in coverage),
+                sum(item.complete for item in coverage),
+                max(item.peak_temporary_bytes for item in coverage),
+                coverage,
             ),
         )
         self.assertEqual(valid.measurement_sets[-1].query.lane_id, "lane:0")
-        foreign = _measurement_set("lane:foreign", registration_index=2)
+        foreign = replace(measurement, query=replace(measurement.query, lane_id="lane:foreign"))
         with self.assertRaises(ValueError):
             replace(
-                prepared,
+                valid,
                 measurement_sets=(*prepared.measurement_sets, foreign),
-                measurement_work=TemplateMeasurementWorkReceipt(
-                    3,
-                    3,
-                    3,
-                    8,
-                    tuple(
-                        item.coverage
-                        for item in (*prepared.measurement_sets, foreign)
-                    ),
-                ),
             )
 
     def test_unsupported_result_exposes_no_selected_outputs(self) -> None:
@@ -197,6 +189,25 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
         self.assertEqual(result.direct_use_budget_assessments, ())
         with self.assertRaises(TypeError):
             result.assessment_facts["new"] = object()  # type: ignore[index]
+
+    def test_lane_rejects_missing_baseline_even_with_recomputed_ledger(self) -> None:
+        prepared = _prepared()
+        for purpose in (QueryPurpose.CROSS_BASELINE, QueryPurpose.SEQUENCE_BASELINE):
+            measurements = tuple(
+                item for item in prepared.measurement_sets if item.query.purpose != purpose
+            )
+            measurements = tuple(
+                replace(item, query=replace(item.query, registration_index=index))
+                for index, item in enumerate(measurements)
+            )
+            coverage = tuple(item.coverage for item in measurements)
+            work = TemplateMeasurementWorkReceipt(
+                len(coverage), sum(item.pixel_query_count for item in coverage),
+                sum(item.complete for item in coverage),
+                max(item.peak_temporary_bytes for item in coverage), coverage,
+            )
+            with self.subTest(purpose=purpose), self.assertRaisesRegex(ValueError, "baseline"):
+                replace(prepared, measurement_sets=measurements, measurement_work=work)
 
     def test_each_retained_proposal_projects_once_and_counts_partial_failure(self) -> None:
         prepared = _prepared()

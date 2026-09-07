@@ -386,6 +386,8 @@ def registered_lane_measurement_queries(
     scales = lane.scan_canvas.axis_scales
     source_long_axis, source_short_axis = source_axes(layout)
     queries: list[PhotoBoundaryMeasurementQuery] = []
+    if top_corridor.trace_positions_px != bottom_corridor.trace_positions_px:
+        raise ValueError("cross corridors require one baseline trace lattice")
     for corridor, purpose in (
         (top_corridor, QueryPurpose.TOP_CORRIDOR),
         (bottom_corridor, QueryPurpose.BOTTOM_CORRIDOR),
@@ -420,6 +422,22 @@ def registered_lane_measurement_queries(
                 ),
             )
         )
+    cross_baseline = measurement_plan.projected_queries.cross_baseline_interval_px
+    queries.append(
+        replace(
+            queries[0],
+            query_id=f"query:{measurement_plan.plan_identity}:cross-baseline",
+            purpose=QueryPurpose.CROSS_BASELINE,
+            search_intervals_px=(cross_baseline,) * len(top_corridor.trace_positions_px),
+            transition_ownership_intervals_px=(cross_baseline,) * len(top_corridor.trace_positions_px),
+            registration_provenance_ids=(
+                top_corridor.corridor_id,
+                bottom_corridor.corridor_id,
+                intent_ids[MeasurementIntentKind.TOP],
+                intent_ids[MeasurementIntentKind.BOTTOM],
+            ),
+        )
+    )
     short_traces = measurement_plan.projected_queries.sequence_trace_positions_px
     baseline_interval = anchor_domain.support_interval_px
     queries.append(

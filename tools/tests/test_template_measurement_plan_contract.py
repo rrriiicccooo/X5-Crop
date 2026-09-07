@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 
-from x5crop.domain import Box, PositiveInterval
+from x5crop.domain import Box, FiniteInterval, PositiveInterval
 from x5crop.formats import FORMATS, FramePhysicalSpec, format_spec
 from x5crop.detection.evidence.scan_canvas import CanvasAxisScaleIntervals
 from x5crop.detection.photo_geometry.template_measurement_plan import (
@@ -69,6 +70,20 @@ def _plan(
 
 
 class TemplateMeasurementPlanContractTest(unittest.TestCase):
+    def test_cross_baseline_is_compiled_from_the_lane_not_a_selected_window(self) -> None:
+        plan = _plan(box=Box(0, 100, 3600, 2500))
+        projected = plan.projected_queries
+        self.assertEqual(projected.cross_baseline_interval_px, FiniteInterval(100.0, 2499.0))
+        for intervals in (projected.top_measurement_intervals_px, projected.bottom_measurement_intervals_px):
+            self.assertTrue(all(
+                interval.minimum >= 100.0 and interval.maximum <= 2499.0
+                for interval in intervals
+            ))
+        with self.assertRaisesRegex(ValueError, "measurement interval"):
+            replace(projected, cross_baseline_interval_px=FiniteInterval(
+                projected.top_measurement_intervals_px[0].minimum + 1.0, 2499.0,
+            ))
+
     def test_format_dimensions_are_data_not_format_specific_branches(self) -> None:
         one_thirty_five = _plan()
         half = _plan(

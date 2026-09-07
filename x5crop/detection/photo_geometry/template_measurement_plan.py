@@ -14,7 +14,7 @@ from ...formats import (
 )
 from ..evidence.scan_canvas import CanvasAxisScaleIntervals
 from ..source_core import SourceStripValidationDomain
-from .model import PHOTO_BOUNDARY_MEASUREMENT_SPEC
+from .model import PHOTO_BOUNDARY_MEASUREMENT_SPEC, REGISTERED_NORMALIZATION_REVISION
 from .source_geometry import centered_short_axis_authority_px
 from .template_measurement_plan_model import (
     MAX_CROSS_FITTED_OBSERVATIONS,
@@ -177,6 +177,7 @@ def compile_template_measurement_plan(
     )
     plan_identity = _stable_identity(
         "template-plan",
+        REGISTERED_NORMALIZATION_REVISION,
         physical_identity,
         tuple(
             (
@@ -352,6 +353,7 @@ def _project_queries(
     return TemplateProjectedQueryPlan(
         long_extent_px=long_max - long_min,
         cross_trace_positions_px=cross_traces,
+        cross_baseline_interval_px=short_authority,
         top_core_intervals_px=tuple(top for _ in cross_traces),
         top_measurement_intervals_px=tuple(top_measured for _ in cross_traces),
         bottom_core_intervals_px=tuple(bottom for _ in cross_traces),
