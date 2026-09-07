@@ -20,6 +20,7 @@ from tools.regression.gold_analysis import (
     _enclosing_support_aperture_center_calibration,
     _fit_mixed_axis_guard,
     _nominal_pitch_calibration,
+    _retained_placement_summary,
     _round_outward,
     _round_outward_lower,
     _runtime_budget_state,
@@ -534,6 +535,32 @@ class GoldAnalysisContractTest(unittest.TestCase):
             1,
         )
 
+    def test_retained_summary_keeps_runner_when_primary_has_no_placement(
+        self,
+    ) -> None:
+        record = self._analysis_record(
+            "runner-only",
+            source_sha256="c" * 64,
+            role="nominal",
+            decision="needs_review",
+            proposal="safe",
+            candidate="not_available",
+            unsafe_auto=False,
+            physical_frame_id="B1|B2",
+        )
+        record["proposal_generation_state"] = "unavailable"
+        record["proposal_geometry_conformance"] = "not_available"
+        record["retained_placement_gold_labels"][0]["role"] = "runner"
+
+        summary = _retained_placement_summary((record,))
+
+        self.assertEqual(summary["task_set_state_counts"], {"one_safe": 1})
+        self.assertEqual(summary["placement_label_counts"], {"safe": 1})
+        self.assertEqual(summary["at_least_one_safe_task_count"], 1)
+        record["retained_placement_gold_labels"] *= 2
+        with self.assertRaisesRegex(ValueError, "invalid retained placement identities"):
+            _retained_placement_summary((record,))
+
     def test_release_readiness_requires_current_calibration_provenance(
         self,
     ) -> None:
@@ -694,6 +721,8 @@ class GoldAnalysisContractTest(unittest.TestCase):
             ],
             development_source_count=20,
             development_task_count=20,
+            minimum_center_offset_ratio=-0.009,
+            maximum_center_offset_ratio=0.007,
         )
         with patch(
             "tools.regression.gold_analysis."

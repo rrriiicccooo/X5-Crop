@@ -30,20 +30,23 @@ def covered_template_domain_ordinals(
 
 def covers_all_template_domains(
     trace_coordinates_px: tuple[int, ...],
-    domains: tuple[FiniteInterval, ...],
+    domain_groups: tuple[tuple[FiniteInterval, ...], ...],
 ) -> bool:
-    """Whether direct traces occur in every selected Frame domain."""
+    """Whether every retained candidate has direct support in every Frame."""
 
-    return bool(domains) and len(
-        covered_template_domain_ordinals(trace_coordinates_px, domains)
-    ) == len(domains)
+    return bool(domain_groups) and all(
+        bool(domains)
+        and len(covered_template_domain_ordinals(trace_coordinates_px, domains))
+        == len(domains)
+        for domains in domain_groups
+    )
 
 
 def assess_cross_longitudinal_projection(
     *,
     supporting_observation_ids: tuple[ObservationId, ...],
     trace_coordinates_px: tuple[int, ...],
-    domains: tuple[FiniteInterval, ...],
+    domain_groups: tuple[tuple[FiniteInterval, ...], ...],
     source_spanning_continuous: bool,
     require_complete_template_domains: bool = False,
 ) -> CrossLongitudinalProjectionAuthority:
@@ -64,16 +67,25 @@ def assess_cross_longitudinal_projection(
     ):
         raise ValueError("Cross projection needs direct observation identities")
     traces = tuple(sorted(set(trace_coordinates_px)))
-    covered = covered_template_domain_ordinals(traces, domains)
-    required = min(SPATIAL_SUPPORT_REGION_COUNT, len(domains))
-    bracketed = bool(domains) and covered[:1] == (1,) and covered[-1:] == (
-        len(domains),
+    domain_count = len(domain_groups[0]) if domain_groups else 0
+    covered = tuple(
+        covered_template_domain_ordinals(traces, domains)
+        for domains in domain_groups
+    )
+    required = min(SPATIAL_SUPPORT_REGION_COUNT, domain_count)
+    bracketed = bool(domain_groups) and all(
+        ordinals[:1] == (1,) and ordinals[-1:] == (domain_count,)
+        for ordinals in covered
+    )
+    complete = bool(domain_groups) and all(
+        len(ordinals) == domain_count for ordinals in covered
     )
     authority_id = physical_fact_id(
         "cross-longitudinal-projection",
         *(str(identity) for identity in identities),
-        len(domains),
-        *(str(ordinal) for ordinal in covered),
+        domain_count,
+        repr(domain_groups),
+        repr(covered),
     )
 
     basis: CrossLongitudinalProjectionBasis | None = None
@@ -83,17 +95,17 @@ def assess_cross_longitudinal_projection(
             CrossLongitudinalProjectionBasis.SOURCE_SPANNING_CONTINUOUS
         )
         bracketed = True
-    elif not domains:
+    elif not domain_groups:
         failure = (
             CrossLongitudinalProjectionFailureKind
             .TEMPLATE_DOMAINS_UNAVAILABLE
         )
-    elif require_complete_template_domains and len(covered) != len(domains):
+    elif require_complete_template_domains and not complete:
         failure = (
             CrossLongitudinalProjectionFailureKind
             .COMPLETE_TEMPLATE_DOMAIN_SUPPORT_UNAVAILABLE
         )
-    elif len(covered) < required:
+    elif any(len(ordinals) < required for ordinals in covered):
         failure = (
             CrossLongitudinalProjectionFailureKind
             .INDEPENDENT_DOMAIN_SUPPORT_UNAVAILABLE
@@ -103,7 +115,7 @@ def assess_cross_longitudinal_projection(
             CrossLongitudinalProjectionFailureKind
             .TEMPLATE_EXTENT_UNBRACKETED
         )
-    elif len(covered) == len(domains):
+    elif complete:
         basis = CrossLongitudinalProjectionBasis.COMPLETE_TEMPLATE_DOMAINS
     else:
         basis = CrossLongitudinalProjectionBasis.BRACKETED_TEMPLATE_EXTENT
@@ -115,9 +127,10 @@ def assess_cross_longitudinal_projection(
             if basis is not None
             else EvidenceState.UNAVAILABLE
         ),
-        template_domain_count=len(domains),
+        template_domain_count=domain_count,
         required_independent_domain_count=required,
-        supported_domain_ordinals=covered,
+        candidate_support_domains_px=domain_groups,
+        supported_domain_ordinals_by_candidate=covered,
         template_extent_bracketed=bracketed,
         supporting_observation_ids=identities,
         basis=basis,

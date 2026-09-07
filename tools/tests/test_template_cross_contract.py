@@ -141,10 +141,10 @@ class TemplateCrossContractTest(unittest.TestCase):
         aspect_input(
             template=template(count=2),
             fixed_height_px=240.0,
-            longitudinal_support_domains_px=(
+            longitudinal_support_domain_groups_px=((
                 FiniteInterval(0.0, 100.0),
                 FiniteInterval(100.0, 200.0),
-            ),
+            ),),
         )
         with self.assertRaisesRegex(
             ValueError,
@@ -153,10 +153,10 @@ class TemplateCrossContractTest(unittest.TestCase):
             aspect_input(
                 template=template(count=2),
                 fixed_height_px=240.0,
-                longitudinal_support_domains_px=(
+                longitudinal_support_domain_groups_px=((
                     FiniteInterval(0.0, 101.0),
                     FiniteInterval(100.0, 200.0),
-                ),
+                ),),
             )
 
     def test_source_spanning_reaches_both_registered_domain_ends(self) -> None:
@@ -260,7 +260,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(10, 50, 55, 90),
-                longitudinal_support_domains_px=domains,
+                longitudinal_support_domain_groups_px=(domains,),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -301,7 +301,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         )
         self.assertEqual(
             result.best.longitudinal_projection_authority
-            .supported_domain_ordinals,
+            .supported_domain_ordinals_by_candidate[0],
             (1, 2, 3),
         )
 
@@ -318,7 +318,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(230.0, 250.0),
                 registered_trace_coordinates_px=(10, 15, 50, 55, 90),
-                longitudinal_support_domains_px=domains,
+                longitudinal_support_domain_groups_px=(domains,),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -371,7 +371,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(230.0, 250.0),
                 registered_trace_coordinates_px=(10, 15, 50, 90),
-                longitudinal_support_domains_px=domains,
+                longitudinal_support_domain_groups_px=(domains,),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -421,7 +421,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                 fixed_height_px=FiniteInterval(230.0, 250.0),
                 canonical_fixed_height_px=245.0,
                 registered_trace_coordinates_px=(10, 15, 50, 90),
-                longitudinal_support_domains_px=domains,
+                longitudinal_support_domain_groups_px=(domains,),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -463,11 +463,11 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(10, 50, 55, 60),
-                longitudinal_support_domains_px=(
+                longitudinal_support_domain_groups_px=((
                     FiniteInterval(0.0, 20.0),
                     FiniteInterval(40.0, 60.0),
                     FiniteInterval(80.0, 100.0),
-                ),
+                ),),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -552,7 +552,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(239.0, 241.0),
                 registered_trace_coordinates_px=(10, 50, 55, 90),
-                longitudinal_support_domains_px=domains,
+                longitudinal_support_domain_groups_px=(domains,),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -622,11 +622,11 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(10, 50, 55, 90),
-                longitudinal_support_domains_px=(
+                longitudinal_support_domain_groups_px=((
                     FiniteInterval(0.0, 20.0),
                     FiniteInterval(40.0, 60.0),
                     FiniteInterval(80.0, 100.0),
-                ),
+                ),),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -748,10 +748,10 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=2),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(0, 50, 100),
-                longitudinal_support_domains_px=(
+                longitudinal_support_domain_groups_px=((
                     FiniteInterval(-1.0, 10.0),
                     FiniteInterval(40.0, 60.0),
-                ),
+                ),),
                 top_bindings=(top,),
                 bottom_bindings=(wrong_bottom,),
             )
@@ -763,10 +763,10 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=2),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(0, 50, 100),
-                longitudinal_support_domains_px=(
+                longitudinal_support_domain_groups_px=((
                     FiniteInterval(-1.0, 10.0),
                     FiniteInterval(40.0, 60.0),
-                ),
+                ),),
                 top_bindings=(top,),
                 bottom_bindings=(replace(wrong_bottom, role_authorized=True),),
             )
@@ -780,7 +780,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         )
         self.assertEqual(
             supported.best.longitudinal_projection_authority
-            .supported_domain_ordinals,
+            .supported_domain_ordinals_by_candidate[0],
             (1, 2),
         )
 
@@ -796,7 +796,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                 registered_trace_coordinates_px=tuple(
                     index * 40 + 10 for index in range(6)
                 ),
-                longitudinal_support_domains_px=domains,
+                longitudinal_support_domain_groups_px=(domains,),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -829,7 +829,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         assert result.best is not None
         authority = result.best.longitudinal_projection_authority
         self.assertEqual(authority.state, EvidenceState.UNAVAILABLE)
-        self.assertEqual(authority.supported_domain_ordinals, (1, 2, 3))
+        self.assertEqual(authority.supported_domain_ordinals_by_candidate[0], (1, 2, 3))
         self.assertFalse(authority.template_extent_bracketed)
         self.assertEqual(
             authority.failure_kind,
@@ -849,7 +849,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                 registered_trace_coordinates_px=tuple(
                     index * 40 + 10 for index in range(6)
                 ),
-                longitudinal_support_domains_px=domains,
+                longitudinal_support_domain_groups_px=(domains,),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -882,7 +882,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         assert result.best is not None
         authority = result.best.longitudinal_projection_authority
         self.assertEqual(authority.state, EvidenceState.UNAVAILABLE)
-        self.assertEqual(authority.supported_domain_ordinals, (2, 3))
+        self.assertEqual(authority.supported_domain_ordinals_by_candidate[0], (2, 3))
         self.assertEqual(
             authority.failure_kind,
             CrossLongitudinalProjectionFailureKind
@@ -901,7 +901,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                 registered_trace_coordinates_px=tuple(
                     index * 40 + 10 for index in range(6)
                 ),
-                longitudinal_support_domains_px=domains,
+                longitudinal_support_domain_groups_px=(domains,),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -933,7 +933,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             authority.basis,
             CrossLongitudinalProjectionBasis.BRACKETED_TEMPLATE_EXTENT,
         )
-        self.assertEqual(authority.supported_domain_ordinals, (1, 3, 6))
+        self.assertEqual(authority.supported_domain_ordinals_by_candidate[0], (1, 3, 6))
         self.assertTrue(authority.template_extent_bracketed)
 
     def test_two_domain_pair_cannot_own_three_frame_shared_edges(self) -> None:
@@ -942,11 +942,11 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(0, 20, 40, 60, 80, 100),
-                longitudinal_support_domains_px=(
+                longitudinal_support_domain_groups_px=((
                     FiniteInterval(0.0, 20.0),
                     FiniteInterval(40.0, 60.0),
                     FiniteInterval(80.0, 100.0),
-                ),
+                ),),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -1002,7 +1002,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                 canonical_fixed_height_px=245.0,
                 top_bindings=(local_top,),
                 bottom_bindings=(local_bottom,),
-                longitudinal_support_domains_px=domains,
+                longitudinal_support_domain_groups_px=(domains,),
                 registered_trace_coordinates_px=(10, 130),
             )
         )
@@ -1021,7 +1021,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                     replace(local_top, source_spanning_continuous=True),
                 ),
                 bottom_bindings=(local_bottom,),
-                longitudinal_support_domains_px=domains,
+                longitudinal_support_domain_groups_px=(domains,),
                 registered_trace_coordinates_px=(10, 130),
             )
         )
@@ -1279,7 +1279,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             aspect_input(
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
-                longitudinal_support_domains_px=(FiniteInterval(0.0, 100.0),),
+                longitudinal_support_domain_groups_px=((FiniteInterval(0.0, 100.0),),),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -1330,7 +1330,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(),
                 fixed_height_px=FiniteInterval(238.0, 242.0),
                 registered_trace_coordinates_px=(0, 20, 40, 60, 80, 100),
-                longitudinal_support_domains_px=(FiniteInterval(0.0, 100.0),),
+                longitudinal_support_domain_groups_px=((FiniteInterval(0.0, 100.0),),),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -1374,11 +1374,11 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(236.0, 240.0),
                 registered_trace_coordinates_px=registered,
-                longitudinal_support_domains_px=(
+                longitudinal_support_domain_groups_px=((
                     FiniteInterval(-1.0, 21.0),
                     FiniteInterval(39.0, 61.0),
                     FiniteInterval(79.0, 101.0),
-                ),
+                ),),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -1432,7 +1432,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(236.0, 240.0),
                 registered_trace_coordinates_px=registered,
-                longitudinal_support_domains_px=domains,
+                longitudinal_support_domain_groups_px=(domains,),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -1477,11 +1477,11 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(236.0, 240.0),
                 registered_trace_coordinates_px=registered,
-                longitudinal_support_domains_px=(
+                longitudinal_support_domain_groups_px=((
                     FiniteInterval(-1.0, 21.0),
                     FiniteInterval(39.0, 61.0),
                     FiniteInterval(79.0, 101.0),
-                ),
+                ),),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -1524,12 +1524,12 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=4),
                 fixed_height_px=FiniteInterval(236.0, 240.0),
                 registered_trace_coordinates_px=registered,
-                longitudinal_support_domains_px=(
+                longitudinal_support_domain_groups_px=((
                     FiniteInterval(-1.0, 21.0),
                     FiniteInterval(29.0, 51.0),
                     FiniteInterval(59.0, 81.0),
                     FiniteInterval(89.0, 111.0),
-                ),
+                ),),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -1572,11 +1572,11 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(236.0, 240.0),
                 registered_trace_coordinates_px=registered,
-                longitudinal_support_domains_px=(
+                longitudinal_support_domain_groups_px=((
                     FiniteInterval(-1.0, 21.0),
                     FiniteInterval(39.0, 61.0),
                     FiniteInterval(79.0, 101.0),
-                ),
+                ),),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -1618,11 +1618,11 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(236.0, 240.0),
                 registered_trace_coordinates_px=registered,
-                longitudinal_support_domains_px=(
+                longitudinal_support_domain_groups_px=((
                     FiniteInterval(-1.0, 21.0),
                     FiniteInterval(39.0, 61.0),
                     FiniteInterval(79.0, 101.0),
-                ),
+                ),),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -1664,11 +1664,11 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=registered,
-                longitudinal_support_domains_px=(
+                longitudinal_support_domain_groups_px=((
                     FiniteInterval(-1.0, 21.0),
                     FiniteInterval(39.0, 61.0),
                     FiniteInterval(79.0, 101.0),
-                ),
+                ),),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -1719,11 +1719,11 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(236.0, 240.0),
                 registered_trace_coordinates_px=registered,
-                longitudinal_support_domains_px=(
+                longitudinal_support_domain_groups_px=((
                     FiniteInterval(-1.0, 21.0),
                     FiniteInterval(39.0, 61.0),
                     FiniteInterval(79.0, 101.0),
-                ),
+                ),),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -1771,11 +1771,11 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(236.0, 240.0),
                 registered_trace_coordinates_px=registered,
-                longitudinal_support_domains_px=(
+                longitudinal_support_domain_groups_px=((
                     FiniteInterval(-1.0, 21.0),
                     FiniteInterval(39.0, 61.0),
                     FiniteInterval(79.0, 101.0),
-                ),
+                ),),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -1829,7 +1829,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                         template=template(count=4),
                         fixed_height_px=FiniteInterval(236.0, 240.0),
                         registered_trace_coordinates_px=registered,
-                        longitudinal_support_domains_px=domains,
+                        longitudinal_support_domain_groups_px=(domains,),
                         top_bindings=(
                             binding(
                                 BoundaryRole.TOP,
@@ -1871,12 +1871,12 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=4),
                 fixed_height_px=FiniteInterval(236.0, 240.0),
                 registered_trace_coordinates_px=tuple(range(0, 101, 10)),
-                longitudinal_support_domains_px=(
+                longitudinal_support_domain_groups_px=((
                     FiniteInterval(-1.0, 21.0),
                     FiniteInterval(39.0, 61.0),
                     FiniteInterval(79.0, 101.0),
                     FiniteInterval(109.0, 131.0),
-                ),
+                ),),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -1928,7 +1928,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                         template=template(count=3),
                         fixed_height_px=FiniteInterval(236.0, 240.0),
                         registered_trace_coordinates_px=registered,
-                        longitudinal_support_domains_px=domains,
+                        longitudinal_support_domain_groups_px=(domains,),
                         top_bindings=(
                             binding(
                                 BoundaryRole.TOP,
@@ -2133,7 +2133,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             aspect_input(
                 template=template(count=3),
                 fixed_height_px=240.0,
-                longitudinal_support_domains_px=domains,
+                longitudinal_support_domain_groups_px=(domains,),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -2182,7 +2182,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(10, 50, 90),
-                longitudinal_support_domains_px=domains,
+                longitudinal_support_domain_groups_px=(domains,),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -2217,7 +2217,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(10, 50, 90),
-                longitudinal_support_domains_px=domains,
+                longitudinal_support_domain_groups_px=(domains,),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -2247,7 +2247,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(10, 50, 51, 90),
-                longitudinal_support_domains_px=domains,
+                longitudinal_support_domain_groups_px=(domains,),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -2292,7 +2292,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=2),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(10, 50),
-                longitudinal_support_domains_px=domains,
+                longitudinal_support_domain_groups_px=(domains,),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -2325,7 +2325,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(10, 50, 90),
-                longitudinal_support_domains_px=domains,
+                longitudinal_support_domain_groups_px=(domains,),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -2358,7 +2358,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(10, 50, 90),
-                longitudinal_support_domains_px=domains,
+                longitudinal_support_domain_groups_px=(domains,),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -2388,7 +2388,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(10, 50, 90),
-                longitudinal_support_domains_px=domains,
+                longitudinal_support_domain_groups_px=(domains,),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -2416,7 +2416,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(10, 50, 90),
-                longitudinal_support_domains_px=domains,
+                longitudinal_support_domain_groups_px=(domains,),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -2457,7 +2457,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(230.0, 250.0),
                 canonical_fixed_height_px=240.0,
-                longitudinal_support_domains_px=domains,
+                longitudinal_support_domain_groups_px=(domains,),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -2508,7 +2508,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=3),
                 fixed_height_px=FiniteInterval(230.0, 250.0),
                 canonical_fixed_height_px=240.0,
-                longitudinal_support_domains_px=domains,
+                longitudinal_support_domain_groups_px=(domains,),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -2555,7 +2555,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             aspect_input(
                 template=template(count=3),
                 fixed_height_px=240.0,
-                longitudinal_support_domains_px=domains,
+                longitudinal_support_domain_groups_px=(domains,),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -3166,11 +3166,11 @@ class TemplateCrossContractTest(unittest.TestCase):
                 fixed_height_px=FiniteInterval(235.0, 245.0),
                 canonical_fixed_height_px=240.0,
                 registered_trace_coordinates_px=(0, 50, 100),
-                longitudinal_support_domains_px=(
+                longitudinal_support_domain_groups_px=((
                     FiniteInterval(-1.0, 1.0),
                     FiniteInterval(49.0, 51.0),
                     FiniteInterval(99.0, 101.0),
-                ),
+                ),),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,
@@ -3751,12 +3751,12 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(count=4),
                 fixed_height_px=240.0,
                 registered_trace_coordinates_px=(0, 20, 40, 60, 80, 100),
-                longitudinal_support_domains_px=(
+                longitudinal_support_domain_groups_px=((
                     FiniteInterval(5.0, 20.0),
                     FiniteInterval(25.0, 40.0),
                     FiniteInterval(45.0, 60.0),
                     FiniteInterval(65.0, 80.0),
-                ),
+                ),),
                 top_bindings=(
                     binding(
                         BoundaryRole.TOP,

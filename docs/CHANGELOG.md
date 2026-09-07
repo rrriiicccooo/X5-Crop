@@ -25,10 +25,16 @@
   已有校准 Grid 或保留不可用，不能沿用旧 nominal rank 丢弃合法候选或取得满秩权限。
 - 直接与校准 Grid 重拟合共用当前 phase-anchor 残差相容性判定；旧模型的失败或成功不传给新几何，
   local refinement 不稀释或抬高全局均值。原阈值、native binding、总 residual 特征与预算保持不变。
+- 唯一 source-wide material pair 保留 endpoint 已有的像素角色候选，不以间隔解释覆盖原角色。
+  两种解释共用同一 observation/component，继续接受原有全局约束、直接权限和候选竞争检查。
+- 纯离散歧义下，已有 primary/runner 分别补全原有局部边界，并各自投影晚期弱线、保留硬反证；
+  不共享 selected source W，不增加 phase 搜索，不改变歧义、候选顺序或批准条件。
+- Cross 支撑区间在纯离散歧义下分别保留 primary/runner 两组；同一横向边界逐组满足原有覆盖要求。
+  候选不合并几何或增加独立票数，登记与 refit 不重复，未闭合的纵向歧义继续进入 Review。
 - 纯离散歧义的 primary/runner 分别以自身合法直接约束收紧 proposal 联合包络；runner 不借用 primary
   的角色或不匹配的 source W。歧义、反证与输出资格不变，空可行集明确保留为 unavailable。
-- Enclosing aperture-center 校准按当前唯一 selected pair 重登记 18 个 source 的观测指纹；
-  方法、资格和 `[-0.009H, +0.007H]` 区间不变。
+- Enclosing aperture-center 校准按当前唯一 selected pair 的 18 个 source 重登记观测指纹；
+  原资格、source 中位数、全体 hull 与向外量化方法不变，当前区间为 `[-0.008H, +0.010H]`。
 - Source W 明确分开测量、placement 消费和自动输出资格。至少两张合格完整 Frame 或全部独立 rank-3
   直接约束可建立测量；两组都成立时只取交集。远处 coverage、全局 rank 缺口或 unresolved proposal 不再
   抹去合格局部测量，反证与 runner 仍保留。W 不重选 phase/ordinal，不增加独立 rank。
@@ -48,7 +54,10 @@
 
 - Normal report 与 Debug Analysis 只显示同次检测事实，分开 proposal、candidate、正式输出、runner、
   typed failure、calibration identity 和实际工作量，不重新检测或求解。当前 Report revision 为
-  `x5crop_v5_template_report_69`，不保留旧 schema 兼容层。
+  `x5crop_v5_template_report_70`，逐候选记录 Cross 支撑区间和覆盖序号，不保留旧 schema 兼容层。
+- 报告校验接受已有的 `direct_lattice_conflict` 投影失败，继续要求 unavailable authority、
+  完整被投影角色和明确失败原因，不改变 Runtime 或批准条件。
+- 黄金集合统计支持只有 runner 能物化的情况，保留原角色，不伪造 primary 或将缺失几何计作负例。
 - 每条 lane 保留已有 best 与单个 runner 的完整 proposal 或 typed unavailable；每份由同一输出 owner
   物化一次，正式输出复用 primary。新增投影次数与逐 slot 输出评估次数，不扩大候选搜索或自动权限。
 - 每份 proposal 保留同一 owner 的数值预算和 28 项带单位、provenance 与 missingness 的物理特征；

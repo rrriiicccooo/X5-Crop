@@ -950,7 +950,8 @@ def _retained_placement_summary(records: Sequence[dict[str, Any]]) -> dict[str, 
         if (
             len(labels) > 2 or len(set(ids)) != len(ids)
             or any(not isinstance(identity, str) or not identity for identity in ids)
-            or [item["role"] for item in labels] not in ([], ["primary"], ["primary", "runner"])
+            or [item["role"] for item in labels]
+            not in ([], ["primary"], ["runner"], ["primary", "runner"])
         ):
             raise ValueError("invalid retained placement identities")
         counts: Counter[str] = Counter()

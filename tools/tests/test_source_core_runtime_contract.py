@@ -372,6 +372,64 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
 
         _validate_phase_candidate_projection(projection, fit)
 
+    def test_direct_lattice_conflict_projection_requires_unavailable_authority(
+        self,
+    ) -> None:
+        authority = {
+            "state": "unavailable",
+            "facts": [
+                {
+                    "role_index": 0,
+                    "lane_ordinal": 1,
+                    "role": "start",
+                    "observation_id": "boundary-edge:1",
+                    "evidence_group_id": "boundary-edge:1",
+                    "independent_support_region_count": 2,
+                    "bases": [],
+                    "blocking_material_conflict_ids": [],
+                    "state": "unavailable",
+                    "trace_coordinates_px": [0, 10],
+                    "supporting_outer_material_observation_ids": [],
+                }
+            ],
+            "unsupported_role_indices": [0],
+            "reason": "direct role has no independent authority",
+        }
+        projection = {
+            "input_direct_role_authority": authority,
+            "outcome": "direct_lattice_conflict",
+            "basis": None,
+            "projected_out_bindings": [
+                {"role_index": 0, "observation_id": "boundary-edge:1"}
+            ],
+            "retained_direct_constraint_rank": 3,
+            "reason": "validation-only coordinate conflicts with direct lattice",
+        }
+        fit = {"role_bindings": [None]}
+
+        _validate_phase_candidate_projection(projection, fit)
+
+        for field, invalid in (
+            ("basis", "direct_rank_three"),
+            ("reason", None),
+            ("projected_out_bindings", []),
+        ):
+            with self.subTest(field=field):
+                rejected = deepcopy(projection)
+                rejected[field] = invalid
+                with self.assertRaisesRegex(ValueError, "projection contract"):
+                    _validate_phase_candidate_projection(rejected, fit)
+
+        authority["state"] = "supported"
+        authority["unsupported_role_indices"] = []
+        authority["reason"] = None
+        authority["facts"][0]["state"] = "supported"
+        authority["facts"][0]["bases"] = ["source_wide_edge"]
+        authority["facts"][0]["independent_support_region_count"] = 3
+        projection["projected_out_bindings"] = []
+        with self.assertRaisesRegex(ValueError, "projection contract"):
+            _validate_phase_candidate_projection(projection, fit)
+
     def test_scan_canvas_contradiction_is_review_not_runtime_error(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             outcome = self._process_pixels(

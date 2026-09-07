@@ -171,7 +171,8 @@ class CrossLongitudinalProjectionAuthority:
     state: EvidenceState
     template_domain_count: int
     required_independent_domain_count: int
-    supported_domain_ordinals: tuple[int, ...]
+    candidate_support_domains_px: tuple[tuple[FiniteInterval, ...], ...]
+    supported_domain_ordinals_by_candidate: tuple[tuple[int, ...], ...]
     template_extent_bracketed: bool
     supporting_observation_ids: tuple[ObservationId, ...]
     basis: CrossLongitudinalProjectionBasis | None
@@ -186,14 +187,30 @@ class CrossLongitudinalProjectionAuthority:
             or not isinstance(self.template_domain_count, int)
             or self.template_domain_count < 0
             or not isinstance(self.required_independent_domain_count, int)
-            or not 0
-            <= self.required_independent_domain_count
-            <= self.template_domain_count
-            or tuple(sorted(set(self.supported_domain_ordinals)))
-            != self.supported_domain_ordinals
+            or self.required_independent_domain_count
+            != min(3, self.template_domain_count)
+            or len(self.candidate_support_domains_px) > 2
+            or bool(self.candidate_support_domains_px)
+            != bool(self.template_domain_count)
+            or len(self.supported_domain_ordinals_by_candidate)
+            != len(self.candidate_support_domains_px)
             or any(
-                not 1 <= ordinal <= self.template_domain_count
-                for ordinal in self.supported_domain_ordinals
+                len(domains) != self.template_domain_count
+                or any(not isinstance(item, FiniteInterval) for item in domains)
+                or any(
+                    left.maximum > right.minimum
+                    for left, right in zip(domains, domains[1:])
+                )
+                for domains in self.candidate_support_domains_px
+            )
+            or any(
+                tuple(sorted(set(ordinals))) != ordinals
+                or any(
+                    not isinstance(ordinal, int)
+                    or not 1 <= ordinal <= self.template_domain_count
+                    for ordinal in ordinals
+                )
+                for ordinals in self.supported_domain_ordinals_by_candidate
             )
             or not isinstance(self.template_extent_bracketed, bool)
             or not self.supporting_observation_ids
@@ -219,8 +236,13 @@ class CrossLongitudinalProjectionAuthority:
             if (
                 self.basis
                 == CrossLongitudinalProjectionBasis.COMPLETE_TEMPLATE_DOMAINS
-                and self.supported_domain_ordinals
-                != tuple(range(1, self.template_domain_count + 1))
+                and (
+                    not self.candidate_support_domains_px
+                    or any(
+                        ordinals != tuple(range(1, self.template_domain_count + 1))
+                        for ordinals in self.supported_domain_ordinals_by_candidate
+                    )
+                )
             ):
                 raise ValueError(
                     "complete Cross projection must cover every template domain"
@@ -229,12 +251,14 @@ class CrossLongitudinalProjectionAuthority:
                 self.basis
                 == CrossLongitudinalProjectionBasis.BRACKETED_TEMPLATE_EXTENT
                 and (
-                    len(self.supported_domain_ordinals)
-                    < self.required_independent_domain_count
-                    or not self.supported_domain_ordinals
-                    or self.supported_domain_ordinals[0] != 1
-                    or self.supported_domain_ordinals[-1]
-                    != self.template_domain_count
+                    not self.candidate_support_domains_px
+                    or any(
+                        len(ordinals) < self.required_independent_domain_count
+                        or not ordinals
+                        or ordinals[0] != 1
+                        or ordinals[-1] != self.template_domain_count
+                        for ordinals in self.supported_domain_ordinals_by_candidate
+                    )
                 )
             ):
                 raise ValueError(
@@ -274,7 +298,8 @@ def unavailable_cross_longitudinal_projection_authority(
         state=EvidenceState.UNAVAILABLE,
         template_domain_count=0,
         required_independent_domain_count=0,
-        supported_domain_ordinals=(),
+        candidate_support_domains_px=(),
+        supported_domain_ordinals_by_candidate=(),
         template_extent_bracketed=False,
         supporting_observation_ids=identities,
         basis=None,
@@ -710,7 +735,9 @@ class TemplateCrossInput:
     top_bindings: tuple[CrossRoleBinding, ...] = ()
     bottom_bindings: tuple[CrossRoleBinding, ...] = ()
     registered_trace_coordinates_px: tuple[int, ...] = ()
-    longitudinal_support_domains_px: tuple[FiniteInterval, ...] = ()
+    longitudinal_support_domain_groups_px: tuple[
+        tuple[FiniteInterval, ...], ...
+    ] = ()
     boundary_axis: BoundaryAxis = BoundaryAxis.Y
     maximum_registered_runs_per_role: int = 256
     maximum_fitted_observations: int = 256
@@ -771,14 +798,16 @@ class TemplateCrossInput:
             or any(not isinstance(value, int) for value in registered)
         ):
             raise ValueError("cross registered trace domain is invalid")
-        domains = tuple(self.longitudinal_support_domains_px)
-        if domains and (
-            len(domains) != self.template.count
+        groups = self.longitudinal_support_domain_groups_px
+        if len(groups) > 2 or any(
+            not isinstance(domains, tuple)
+            or len(domains) != self.template.count
             or any(not isinstance(item, FiniteInterval) for item in domains)
             or any(
                 left.maximum > right.minimum
                 for left, right in zip(domains, domains[1:])
             )
+            for domains in groups
         ):
             raise ValueError("cross longitudinal support domains are invalid")
         bounds = (

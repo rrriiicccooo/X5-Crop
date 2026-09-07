@@ -35,7 +35,11 @@ from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseFitStatus,
     PhaseRetainedProposalBasis,
 )
-from x5crop.domain import Box, ObservationId
+from x5crop.detection.photo_geometry.template_placement import (
+    compile_cross_support_domains_px,
+)
+from x5crop.domain import Box, FiniteInterval, ObservationId
+from x5crop.report.read_models import typed_read_model
 from x5crop.formats import OUTPUT_PROTECTION_SPEC
 from x5crop.geometry.convex import clip_convex_polygon_to_box
 from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
@@ -127,7 +131,8 @@ _CROSS_LONGITUDINAL_PROJECTION_FIELDS = {
     "state",
     "template_domain_count",
     "required_independent_domain_count",
-    "supported_domain_ordinals",
+    "candidate_support_domains_px",
+    "supported_domain_ordinals_by_candidate",
     "template_extent_bracketed",
     "supporting_observation_ids",
     "basis",
@@ -703,7 +708,8 @@ def _validate_cross_longitudinal_projection_authority(
     state = value["state"]
     domain_count = value["template_domain_count"]
     required = value["required_independent_domain_count"]
-    ordinals = value["supported_domain_ordinals"]
+    groups = value["candidate_support_domains_px"]
+    covered = value["supported_domain_ordinals_by_candidate"]
     basis = value["basis"]
     failure_kind = value["failure_kind"]
     if (
@@ -713,11 +719,29 @@ def _validate_cross_longitudinal_projection_authority(
         or not isinstance(domain_count, int)
         or domain_count < 0
         or not isinstance(required, int)
-        or not 0 <= required <= domain_count
-        or not isinstance(ordinals, list)
-        or any(not isinstance(item, int) for item in ordinals)
-        or ordinals != sorted(set(ordinals))
-        or any(not 1 <= item <= domain_count for item in ordinals)
+        or required != min(3, domain_count)
+        or not isinstance(groups, list)
+        or len(groups) > 2
+        or bool(groups) != bool(domain_count)
+        or not isinstance(covered, list)
+        or len(covered) != len(groups)
+        or any(
+            not isinstance(domains, list)
+            or len(domains) != domain_count
+            or any(not _valid_interval(item) for item in domains)
+            or any(
+                left["maximum"] > right["minimum"]
+                for left, right in zip(domains, domains[1:])
+            )
+            for domains in groups
+        )
+        or any(
+            not isinstance(ordinals, list)
+            or any(not isinstance(item, int) for item in ordinals)
+            or ordinals != sorted(set(ordinals))
+            or any(not 1 <= item <= domain_count for item in ordinals)
+            for ordinals in covered
+        )
         or not isinstance(value["template_extent_bracketed"], bool)
         or not _valid_ids(value["supporting_observation_ids"])
     ):
@@ -742,7 +766,13 @@ def _validate_cross_longitudinal_projection_authority(
         if (
             basis == CrossLongitudinalProjectionBasis
             .COMPLETE_TEMPLATE_DOMAINS.value
-            and ordinals != list(range(1, domain_count + 1))
+            and (
+                not groups
+                or any(
+                    ordinals != list(range(1, domain_count + 1))
+                    for ordinals in covered
+                )
+            )
         ):
             raise ValueError(
                 "complete Cross projection domain coverage is invalid"
@@ -751,10 +781,14 @@ def _validate_cross_longitudinal_projection_authority(
             basis == CrossLongitudinalProjectionBasis
             .BRACKETED_TEMPLATE_EXTENT.value
             and (
-                len(ordinals) < required
-                or not ordinals
-                or ordinals[0] != 1
-                or ordinals[-1] != domain_count
+                not groups
+                or any(
+                    len(ordinals) < required
+                    or not ordinals
+                    or ordinals[0] != 1
+                    or ordinals[-1] != domain_count
+                    for ordinals in covered
+                )
             )
         ):
             raise ValueError(
@@ -764,6 +798,88 @@ def _validate_cross_longitudinal_projection_authority(
         raise ValueError(
             "unavailable Cross longitudinal projection is invalid"
         )
+
+
+def _validate_cross_longitudinal_projection_scope(
+    authority: dict[str, Any],
+    phase_status: str,
+    phase_failure_kind: str | None,
+) -> None:
+    """A populated domain ledger must cover the complete retained phase set."""
+
+    count = len(authority["candidate_support_domains_px"])
+    expected = (
+        1 if phase_status == PhaseFitStatus.RESOLVED.value
+        else 2 if (
+            phase_status == PhaseFitStatus.AMBIGUOUS.value
+            and phase_failure_kind == PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS.value
+        )
+        else 0
+    )
+    # Compilation is all-or-nothing. An invalid retained geometry can leave
+    # no domains, but it cannot reduce a two-candidate obligation to one.
+    if count and count != expected:
+        raise ValueError("Cross projection domain groups changed retained phase scope")
+
+
+def _cross_support_domains_from_phase_report(
+    phase: dict[str, Any],
+) -> list[list[dict[str, float]]]:
+    """Adapt serialized candidate facts to the canonical pure domain owner."""
+
+    if phase["best"] is None:
+        return []
+    if phase["status"] == PhaseFitStatus.RESOLVED.value:
+        fits = (phase["best"],)
+    elif (
+        phase["status"] == PhaseFitStatus.AMBIGUOUS.value
+        and phase["failure_kind"] == PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS.value
+        and phase["runner_up"] is not None
+    ):
+        fits = (phase["best"], phase["runner_up"])
+    else:
+        return []
+    compiled = []
+    for fit in fits:
+        try:
+            template = fit["template"]
+            width = template["frame_width_px"]
+            positions = fit["model_role_positions_px"]
+            direct = tuple(
+                None if binding is None else binding["canonical_position_px"]
+                for binding in fit["role_bindings"]
+            )
+            overlaps = tuple(
+                (item["relation_ordinal"], item["canonical_signed_gap_px"])
+                for item in fit["adjacency_relations"]
+                if item["kind"] == "overlap"
+            )
+            canonical_width = fit["pitch_fit"]["canonical_frame_width_px"]
+            if (
+                not _valid_interval(width)
+                or not _finite_number(canonical_width)
+                or not all(_finite_number(value) for value in positions)
+                or not all(value is None or _finite_number(value) for value in direct)
+            ):
+                raise ValueError("Cross support candidate report is invalid")
+            arguments = dict(
+                count=template["count"],
+                direction=template["direction"],
+                frame_width_px=FiniteInterval(width["minimum"], width["maximum"]),
+                canonical_frame_width_px=canonical_width,
+                model_role_positions_px=tuple(positions),
+                direct_role_positions_px=direct,
+                overlap_signed_gaps_px=overlaps,
+            )
+        except (KeyError, TypeError) as error:
+            raise ValueError("Cross support candidate report is incomplete") from error
+        try:
+            compiled.append(compile_cross_support_domains_px(**arguments))
+        except ValueError:
+            # Match the runtime's all-or-nothing compilation, including a
+            # retained candidate with unmodeled or contradictory overlap.
+            return []
+    return typed_read_model(compiled)
 
 
 def _validate_aperture_aspect_ratio_authority(value: object) -> None:
@@ -3072,6 +3188,11 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             _validate_cross_longitudinal_projection_authority(
                 cross_longitudinal_projection_authority
             )
+            _validate_cross_longitudinal_projection_scope(
+                cross_longitudinal_projection_authority,
+                phase_status,
+                phase_failure_kind,
+            )
         if (
             phase_status not in _PHASE_STATUSES
             or phase_failure_kind not in _PHASE_FAILURE_KINDS
@@ -3396,6 +3517,7 @@ def _validate_phase_candidate_projection(
         "topology_binding_unavailable",
         "calibrated_nominal_grid_unavailable",
         "calibrated_nominal_grid_conflict",
+        "direct_lattice_conflict",
         "nominal_grid_phase_anchor_unavailable",
         "refit_unavailable",
         "discrete_identity_changed",
@@ -3832,6 +3954,20 @@ def _validate_development(record: dict[str, Any]) -> None:
             placement.get("direct_role_aperture_domain_authority")
         )
         _validate_phase_competition(lane["phase_competition"])
+        expected_domains = _cross_support_domains_from_phase_report(
+            lane["phase_competition"]
+        )
+        for cross_fit in (
+            cross_competition.get("best"),
+            cross_competition.get("runner_up"),
+            *(item["cross_fit"] for item in placements),
+        ):
+            if cross_fit is None:
+                continue
+            authority = cross_fit.get("longitudinal_projection_authority")
+            _validate_cross_longitudinal_projection_authority(authority)
+            if authority["candidate_support_domains_px"] != expected_domains:
+                raise ValueError("Cross support domains changed retained candidate geometry")
 
 
 def validate_current_report_record(record: dict[str, Any]) -> None:

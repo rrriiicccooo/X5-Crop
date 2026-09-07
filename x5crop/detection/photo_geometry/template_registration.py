@@ -611,7 +611,7 @@ def register_template_local_cross_refinements(
     lane_reference_trace_px: float,
     fixed_height_px: FiniteInterval,
     canonical_height_px: float,
-    longitudinal_support_domains_px: tuple[FiniteInterval, ...],
+    longitudinal_support_domain_groups_px: tuple[tuple[FiniteInterval, ...], ...],
     maximum_bindings: int = 256,
 ) -> RegisteredCrossEvidence:
     """Refine the missing cross side inside a template-projected local window.
@@ -631,7 +631,7 @@ def register_template_local_cross_refinements(
         raise ValueError("cross refinement height must be positive")
     if not fixed_height_px.contains(canonical_height_px, epsilon=1.0e-9):
         raise ValueError("canonical cross height leaves physical authority")
-    domains = tuple(longitudinal_support_domains_px)
+    domains = tuple(longitudinal_support_domain_groups_px)
     if not domains:
         return registered
 

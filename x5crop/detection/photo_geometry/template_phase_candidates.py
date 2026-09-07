@@ -647,11 +647,16 @@ def _with_separator_role_authority(
                     )
                 observation = replace(
                     observation,
+                    # A narrow material strip can also lie inside an aperture
+                    # edge. Keep its already qualified pixel-role alternative;
+                    # both interpretations retain the same observation/group
+                    # and must survive the existing placement authority checks.
                     qualified_anchor_roles=(
                         tuple(
                             role
                             for role in (BoundaryRole.START, BoundaryRole.END)
                             if role in roles
+                            or role in observation.qualified_anchor_roles
                         )
                         if roles is not None
                         else observation.qualified_anchor_roles

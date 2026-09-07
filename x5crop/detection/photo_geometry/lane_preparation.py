@@ -94,7 +94,7 @@ from .template_pitch import (
     calibrate_template_source_pitch,
     close_separator_phase_hypothesis,
 )
-from .template_placement import resolved_cross_support_domains_px
+from .template_placement import retained_cross_support_domain_groups_px
 from .source_geometry import SourceScanGeometry
 from .transition_tracking import (
     track_broad_material_transition_regions,
@@ -895,13 +895,13 @@ def prepare_template_lane(
             ),
         ),
     )
-    longitudinal_support_domains_px = ()
-    if phase.status == PhaseFitStatus.RESOLVED and phase.best is not None:
-        try:
-            longitudinal_support_domains_px = (
-                resolved_cross_support_domains_px(phase.best)
-            )
-        except ValueError as error:
+    longitudinal_support_domain_groups_px = ()
+    try:
+        longitudinal_support_domain_groups_px = (
+            retained_cross_support_domain_groups_px(phase)
+        )
+    except ValueError as error:
+        if phase.status == PhaseFitStatus.RESOLVED:
             phase = replace(
                 phase,
                 status=PhaseFitStatus.UNRESOLVED,
@@ -933,7 +933,7 @@ def prepare_template_lane(
         lane_reference_trace_px=width_authority.center,
         fixed_height_px=fixed_height,
         canonical_height_px=canonical_height,
-        longitudinal_support_domains_px=longitudinal_support_domains_px,
+        longitudinal_support_domain_groups_px=longitudinal_support_domain_groups_px,
         maximum_bindings=measurement_plan.cross_bounds.max_fitted_observations,
     )
     # Coarse measurement happens before sequence scale calibration. Direction
@@ -991,7 +991,7 @@ def prepare_template_lane(
         registered_trace_coordinates_px=precision_measurement_sets[
             0
         ].query.trace_positions_px,
-        longitudinal_support_domains_px=longitudinal_support_domains_px,
+        longitudinal_support_domain_groups_px=longitudinal_support_domain_groups_px,
         top_bindings=top_bindings,
         bottom_bindings=bottom_bindings,
         boundary_axis=height_axis,

@@ -800,7 +800,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         self.assertEqual(risk.aperture_authority_state, EvidenceState.SUPPORTED)
         self.assertEqual(
             risk.center_offset_interval_px,
-            FiniteInterval(-2.0, 1.68),
+            FiniteInterval(-1.92, 2.0),
         )
         self.assertEqual(risk.maximum_center_shift_px, 2.0)
         self.assertLess(risk.top_expansion_px, 13.0)

@@ -84,7 +84,7 @@ def _candidate(
     reference_trace_px: float,
     registered_traces: tuple[int, ...],
     minimum_shared_trace_support: int,
-    longitudinal_support_domains_px: tuple[FiniteInterval, ...],
+    longitudinal_support_domain_groups_px: tuple[tuple[FiniteInterval, ...], ...],
 ) -> EnclosingSupportCandidate | None:
     if top.role != BoundaryRole.TOP or bottom.role != BoundaryRole.BOTTOM:
         return None
@@ -158,7 +158,7 @@ def _candidate(
             bottom.observation_id,
         ),
         trace_coordinates_px=traces,
-        domains=longitudinal_support_domains_px,
+        domain_groups=longitudinal_support_domain_groups_px,
         source_spanning_continuous=source_spanning,
     )
     connected = (
@@ -260,7 +260,7 @@ def fit_enclosing_support(
     top_bindings: Sequence[CrossRoleBinding],
     bottom_bindings: Sequence[CrossRoleBinding],
     registered_trace_coordinates_px: tuple[int, ...],
-    longitudinal_support_domains_px: tuple[FiniteInterval, ...],
+    longitudinal_support_domain_groups_px: tuple[tuple[FiniteInterval, ...], ...],
     minimum_shared_trace_support: int,
     maximum_evaluated_candidates: int,
 ) -> SupportFitCompetition:
@@ -305,7 +305,7 @@ def fit_enclosing_support(
                 reference_trace_px=reference_trace_px,
                 registered_traces=registered_trace_coordinates_px,
                 minimum_shared_trace_support=minimum_shared_trace_support,
-                longitudinal_support_domains_px=longitudinal_support_domains_px,
+                longitudinal_support_domain_groups_px=longitudinal_support_domain_groups_px,
             )
             if candidate is not None:
                 candidates.append(candidate)

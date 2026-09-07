@@ -80,8 +80,12 @@ Fit compatibility uses the current model and direct anchors, not an earlier resi
 do not alter the global residual calculation.
 A narrow material strip at a film-strip end can lie inside or outside the photo. Existing evidence for both edges is retained;
 the strip alone does not force selection of the inner edge.
-When discrete positions remain ambiguous, each review footprint still obeys its own jointly supported direct coordinates;
-this does not remove the Review requirement.
+Narrow material at a photo edge also preserves existing boundary-role candidates; possible interpretations are checked
+against the whole-strip constraints.
+When discrete positions remain ambiguous, each candidate's local boundaries are checked independently, and each review
+footprint obeys its own jointly supported direct coordinates; this does not remove the Review requirement.
+Shared cross-axis boundaries must meet the existing coverage requirements for each candidate's photo regions independently;
+additional candidates do not add evidence strength.
 Runtime acceptability scoring is not yet enabled; this is a current selection limit, not a requirement to prove one uniquely true crop.
 Reports retain each lane's existing primary and single runner crop footprint, or the specific reason it could not be generated.
 Development gold analysis evaluates each footprint independently, allows multiple safe results, and separates unsafe from

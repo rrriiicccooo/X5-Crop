@@ -973,10 +973,12 @@ def axis_authority_summaries(
         )
         if authority is None:
             continue
-        domain_coverage = (
-            f"D{len(authority.supported_domain_ordinals)}/"
-            f"{authority.template_domain_count}"
-        )
+        domain_coverage = " & ".join(
+            f"C{index}:D{len(ordinals)}/{authority.template_domain_count}"
+            for index, ordinals in enumerate(
+                authority.supported_domain_ordinals_by_candidate, start=1
+            )
+        ) or "D0/0"
         if authority.state.value == "supported":
             assert authority.basis is not None
             outcome = authority.basis.value.upper()

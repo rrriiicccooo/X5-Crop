@@ -204,8 +204,8 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             fixed_height=height,
             canonical_height_px=canonical_height,
             source_direction=inputs.source_direction,
-            longitudinal_support_domains_px=(
-                inputs.longitudinal_support_domains_px
+            longitudinal_support_domain_groups_px=(
+                inputs.longitudinal_support_domain_groups_px
             ),
             height_inference_basis=basis,
         )
@@ -386,8 +386,8 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                         registered_trace_coordinates_px=(
                             registered_trace_coordinates
                         ),
-                        longitudinal_support_domains_px=(
-                            inputs.longitudinal_support_domains_px
+                        longitudinal_support_domain_groups_px=(
+                            inputs.longitudinal_support_domain_groups_px
                         ),
                     )
                     for candidate in retained_pairs
@@ -408,8 +408,8 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                 canonical_height_px=canonical_height,
                 height_inference_basis=basis,
                 source_direction=inputs.source_direction,
-                longitudinal_support_domains_px=(
-                    inputs.longitudinal_support_domains_px
+                longitudinal_support_domain_groups_px=(
+                    inputs.longitudinal_support_domain_groups_px
                 ),
             )
             if candidate is None:
@@ -419,8 +419,8 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                 template=inputs.template,
                 lane_reference_trace_px=inputs.lane_reference_trace_px,
                 registered_trace_coordinates_px=registered_trace_coordinates,
-                longitudinal_support_domains_px=(
-                    inputs.longitudinal_support_domains_px
+                longitudinal_support_domain_groups_px=(
+                    inputs.longitudinal_support_domain_groups_px
                 ),
             )
             if any(
@@ -475,7 +475,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             top_bindings=support_top,
             bottom_bindings=support_bottom,
             registered_trace_coordinates_px=registered_trace_coordinates,
-            longitudinal_support_domains_px=inputs.longitudinal_support_domains_px,
+            longitudinal_support_domain_groups_px=inputs.longitudinal_support_domain_groups_px,
             minimum_shared_trace_support=inputs.minimum_shared_trace_support,
             maximum_evaluated_candidates=inputs.maximum_evaluated_fits,
         )
@@ -659,8 +659,8 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                     fixed_height=fixed_height,
                     canonical_height_px=float(inputs.canonical_fixed_height_px),
                     minimum_shared_trace_support=inputs.minimum_shared_trace_support,
-                    longitudinal_support_domains_px=(
-                        inputs.longitudinal_support_domains_px
+                    longitudinal_support_domain_groups_px=(
+                        inputs.longitudinal_support_domain_groups_px
                     ),
                     source_direction=inputs.source_direction,
                 )
@@ -767,7 +767,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         if item.role_authorized
         and _covers_template_domains(
             item,
-            inputs.longitudinal_support_domains_px,
+            inputs.longitudinal_support_domain_groups_px,
         )
     )
     template_spanning_bottom = tuple(
@@ -776,7 +776,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         if item.role_authorized
         and _covers_template_domains(
             item,
-            inputs.longitudinal_support_domains_px,
+            inputs.longitudinal_support_domain_groups_px,
         )
     )
     role_authorized_direct_pairs = tuple(
@@ -820,14 +820,14 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                 candidate.top.observation_id in spanning_ids
                 and _covers_template_domains(
                     candidate.bottom,
-                    inputs.longitudinal_support_domains_px,
+                    inputs.longitudinal_support_domain_groups_px,
                 )
             )
             or (
                 candidate.bottom.observation_id in spanning_ids
                 and _covers_template_domains(
                     candidate.top,
-                    inputs.longitudinal_support_domains_px,
+                    inputs.longitudinal_support_domain_groups_px,
                 )
             )
         ]
@@ -1079,8 +1079,8 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             template=inputs.template,
             lane_reference_trace_px=inputs.lane_reference_trace_px,
             registered_trace_coordinates_px=registered_trace_coordinates,
-            longitudinal_support_domains_px=(
-                inputs.longitudinal_support_domains_px
+            longitudinal_support_domain_groups_px=(
+                inputs.longitudinal_support_domain_groups_px
             ),
         )
         for group in groups
@@ -1141,13 +1141,13 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             top_binding.source_spanning_continuous
             and _covers_template_domains(
                 bottom_binding,
-                inputs.longitudinal_support_domains_px,
+                inputs.longitudinal_support_domain_groups_px,
             )
         ) or (
             bottom_binding.source_spanning_continuous
             and _covers_template_domains(
                 top_binding,
-                inputs.longitudinal_support_domains_px,
+                inputs.longitudinal_support_domain_groups_px,
             )
         )
 

@@ -522,7 +522,15 @@ def placement_cross_longitudinal_authority(
         state=EvidenceState.SUPPORTED,
         template_domain_count=domain_count,
         required_independent_domain_count=min(3, domain_count),
-        supported_domain_ordinals=tuple(range(1, domain_count + 1)),
+        candidate_support_domains_px=(
+            tuple(
+                FiniteInterval(float(index * 100), float((index + 1) * 100))
+                for index in range(domain_count)
+            ),
+        ),
+        supported_domain_ordinals_by_candidate=(
+            tuple(range(1, domain_count + 1)),
+        ),
         template_extent_bracketed=True,
         supporting_observation_ids=observation_ids,
         basis=CrossLongitudinalProjectionBasis.COMPLETE_TEMPLATE_DOMAINS,

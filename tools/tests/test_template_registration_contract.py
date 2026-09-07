@@ -298,11 +298,11 @@ class TemplateRegistrationContractTest(unittest.TestCase):
             lane_reference_trace_px=25.0,
             fixed_height_px=FiniteInterval(79.0, 81.0),
             canonical_height_px=80.0,
-            longitudinal_support_domains_px=(
+            longitudinal_support_domain_groups_px=((
                 FiniteInterval(0.0, 15.0),
                 FiniteInterval(15.1, 35.0),
                 FiniteInterval(35.1, 50.0),
-            ),
+            ),),
             maximum_bindings=8,
         )
 
@@ -364,11 +364,11 @@ class TemplateRegistrationContractTest(unittest.TestCase):
             lane_reference_trace_px=25.0,
             fixed_height_px=FiniteInterval(79.0, 81.0),
             canonical_height_px=80.0,
-            longitudinal_support_domains_px=(
+            longitudinal_support_domain_groups_px=((
                 FiniteInterval(0.0, 15.0),
                 FiniteInterval(15.1, 35.0),
                 FiniteInterval(35.1, 50.0),
-            ),
+            ),),
             maximum_bindings=8,
         )
 

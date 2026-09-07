@@ -1501,8 +1501,18 @@ def _with_local_role_refinement(
         tuple[int, ObservationId]
     ] = frozenset(),
 ) -> PhaseFitResult:
-    if result.status != PhaseFitStatus.RESOLVED or result.best is None:
+    ambiguous = (
+        result.status == PhaseFitStatus.AMBIGUOUS
+        and result.failure_kind == PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS
+        and result.runner_up is not None
+    )
+    if (
+        result.best is None
+        or result.status != PhaseFitStatus.RESOLVED and not ambiguous
+    ):
         return result
+    if ambiguous and frame_width_authority_px is not None:
+        raise ValueError("ambiguous local roles cannot share selected source W")
     authority_ids = (
         frozenset(
             intrinsic_direct_role_authority_bases(
@@ -1513,31 +1523,47 @@ def _with_local_role_refinement(
         if sequence_measurement_sets
         else frozenset()
     )
-    refinement = _refine_local_role_bindings(
-        result.best,
-        observations,
-        separator_bands,
-        intrinsic_coordinate_authority_ids=authority_ids,
-        frame_width_authority_px=frame_width_authority_px,
-        excluded_role_bindings=excluded_role_bindings,
+    candidates = (
+        (result.best, result.runner_up)
+        if ambiguous
+        else (result.best,)
+    )
+    refinements = tuple(
+        _refine_local_role_bindings(
+            candidate,
+            observations,
+            separator_bands,
+            intrinsic_coordinate_authority_ids=authority_ids,
+            frame_width_authority_px=frame_width_authority_px,
+            excluded_role_bindings=excluded_role_bindings,
+        )
+        for candidate in candidates
+        if candidate is not None
     )
     receipt = replace(
         result.receipt,
         fit_pass_count=(
-            result.receipt.fit_pass_count + int(additional_fit_pass)
+            result.receipt.fit_pass_count
+            + int(additional_fit_pass)
+            + len(refinements) - 1
         ),
         local_refinement_lookup_count=(
             result.receipt.local_refinement_lookup_count
-            + refinement.role_lookup_count
+            + sum(item.role_lookup_count for item in refinements)
         ),
         local_refinement_binding_count=(
             result.receipt.local_refinement_binding_count
-            + refinement.binding_count
+            + sum(item.binding_count for item in refinements)
         ),
-        inferred_role_count=len(refinement.fit.unbound_role_indices),
+        inferred_role_count=len(refinements[0].fit.unbound_role_indices),
     )
     receipt.validate_bounds()
-    return replace(result, best=refinement.fit, receipt=receipt)
+    return replace(
+        result,
+        best=refinements[0].fit,
+        runner_up=refinements[1].fit if ambiguous else result.runner_up,
+        receipt=receipt,
+    )
 
 
 def _refine_selected_roles_with_candidate_elimination(
@@ -1672,20 +1698,20 @@ def _eliminated_candidate_role_bindings(
     )
 
 
-def _project_selected_late_local_refinements(
-    result: PhaseFitResult,
+def _project_late_local_candidate(
+    fit: SequenceFit,
     phase_input: TemplatePhaseInput,
     *,
     source_frame_width_authority: SourceFrameWidthAuthority | None = None,
     allow_direct_rank: bool = False,
-) -> PhaseFitResult:
-    """Yield unsupported late local bindings back to the selected lattice.
+) -> tuple[SequenceFit | None, PhaseCandidateAuthorityProjection | None]:
+    """Yield unsupported late local bindings back to this candidate's lattice.
 
     Candidate projection runs before local relation analysis.  Local
     refinement must remain free to bind registered lines while topology is
     being derived, but a short line that still lacks coordinate authority
     after that analysis cannot become output geometry merely because it was
-    added later.  Reuse the same bounded projection owner on the selected
+    added later.  Reuse the same bounded projection owner on this candidate's
     discrete identity whether its remaining coordinates close a direct-rank
     lattice or require the calibrated Grid.  The line remains typed projection
     provenance and counterevidence; it cannot acquire authority from the time
@@ -1693,17 +1719,15 @@ def _project_selected_late_local_refinements(
     """
 
     if (
-        result.status != PhaseFitStatus.RESOLVED
-        or result.best is None
-        or not phase_input.sequence_measurement_sets
+        not phase_input.sequence_measurement_sets
         or (
-            result.best.calibrated_nominal_grid_fit_state is None
+            fit.calibrated_nominal_grid_fit_state is None
             and not allow_direct_rank
         )
     ):
-        return result
+        return fit, None
     authority = assess_direct_role_binding_authority(
-        result.best,
+        fit,
         phase_input.observations,
         phase_input.separator_bands,
         phase_input.sequence_measurement_sets,
@@ -1715,10 +1739,21 @@ def _project_selected_late_local_refinements(
             else source_frame_width_authority.width_px
         ),
     )
+    if authority.state == EvidenceState.CONTRADICTED:
+        return None, PhaseCandidateAuthorityProjection(
+            input_direct_role_authority=authority,
+            outcome=PhaseCandidateProjectionOutcome.DIRECT_ROLE_CONTRADICTION,
+            basis=None,
+            projected_out_bindings=(),
+            retained_direct_constraint_rank=direct_role_constraint_rank(
+                fit, authority.supported_role_indices,
+            ),
+            reason=authority.reason or "direct-role evidence is contradicted",
+        )
     if authority.state != EvidenceState.UNAVAILABLE:
-        return result
+        return fit, None
     unsupported_bindings = tuple(
-        result.best.role_bindings[role_index]
+        fit.role_bindings[role_index]
         for role_index in authority.unsupported_role_indices
     )
     if not unsupported_bindings or any(
@@ -1726,7 +1761,7 @@ def _project_selected_late_local_refinements(
         or binding.use != SequenceBindingUse.LOCAL_REFINEMENT
         for binding in unsupported_bindings
     ):
-        return result
+        return fit, None
 
     template = phase_input.template
     phase_separator_bands = normal_separator_material_bands(
@@ -1772,57 +1807,111 @@ def _project_selected_late_local_refinements(
         )
     )
     projected, projection = project_candidate_to_authorized_direct_roles(
-        _BoundFit(result.best, True),
+        _BoundFit(fit, True),
         authority,
         direct,
         separator_pairs,
         ordered_template_roles(template.count),
         template,
-        result.best.adjacency_relations,
+        fit.adjacency_relations,
         pitch,
         phase_input.phase_authority_px,
         fit_residual_limit_px,
         phase_input.calibrated_nominal_grid_prior,
         frozenset(
             (role_index, binding.observation_id)
-            for role_index, binding in enumerate(result.best.role_bindings)
+            for role_index, binding in enumerate(fit.role_bindings)
             if binding is not None
             and binding.use == SequenceBindingUse.PHASE_ANCHOR
         ),
     )
-    nominal_solve = projection.outcome in {
-        PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID,
-        PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID_CONFLICT,
-    }
+    return None if projected is None else projected.fit, projection
+
+
+def _project_retained_late_local_refinements(
+    result: PhaseFitResult,
+    phase_input: TemplatePhaseInput,
+    *,
+    source_frame_width_authority: SourceFrameWidthAuthority | None = None,
+    allow_direct_rank: bool = False,
+) -> PhaseFitResult:
+    """Project each retained fit without turning discrete ambiguity into a winner."""
+
+    ambiguous = (
+        result.status == PhaseFitStatus.AMBIGUOUS
+        and result.failure_kind == PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS
+        and result.runner_up is not None
+    )
+    if (
+        result.best is None
+        or result.status != PhaseFitStatus.RESOLVED and not ambiguous
+    ):
+        return result
+    if ambiguous and source_frame_width_authority is not None:
+        raise ValueError("ambiguous local projection cannot share selected source W")
+    candidates = (
+        (result.best, result.runner_up)
+        if ambiguous
+        else (result.best,)
+    )
+    records = tuple(
+        _project_late_local_candidate(
+            candidate,
+            phase_input,
+            source_frame_width_authority=source_frame_width_authority,
+            allow_direct_rank=allow_direct_rank,
+        )
+        for candidate in candidates
+        if candidate is not None
+    )
+    projections = tuple(
+        projection for _fit, projection in records if projection is not None
+    )
+    if not projections:
+        return result
+    retained_fits = tuple(
+        original if projected is None else projected
+        for original, (projected, _projection) in zip(
+            candidates, records, strict=True
+        )
+    )
+    projected, projection = records[0]
+    nominal_solve_count = sum(
+        item.outcome in {
+            PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID,
+            PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID_CONFLICT,
+        }
+        for item in projections
+    )
     receipt = replace(
         result.receipt,
         selected_direct_role_projection_evaluation_count=(
             result.receipt.selected_direct_role_projection_evaluation_count
-            + 1
+            + len(projections)
         ),
         selected_direct_role_projection_binding_count=(
             result.receipt.selected_direct_role_projection_binding_count
-            + len(projection.projected_out_bindings)
+            + sum(len(item.projected_out_bindings) for item in projections)
         ),
         selected_nominal_grid_solve_count=(
             result.receipt.selected_nominal_grid_solve_count
-            + int(nominal_solve)
+            + nominal_solve_count
         ),
         selected_nominal_grid_solve_success_count=(
             result.receipt.selected_nominal_grid_solve_success_count
-            + int(
-                projection.outcome
+            + sum(
+                item.outcome
                 == PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID
+                for item in projections
             )
         ),
         inferred_role_count=(
-            result.receipt.inferred_role_count
-            if projected is None
-            else len(projected.fit.unbound_role_indices)
+            len(retained_fits[0].unbound_role_indices)
         ),
     )
     receipt.validate_bounds()
-    if projected is None:
+    if projected is None and not ambiguous:
+        assert projection is not None
         return replace(
             result,
             status=PhaseFitStatus.UNRESOLVED,
@@ -1834,8 +1923,16 @@ def _project_selected_late_local_refinements(
         )
     return replace(
         result,
-        best=projected.fit,
-        best_phase_candidate_authority_projection=projection,
+        best=retained_fits[0],
+        runner_up=retained_fits[1] if ambiguous else result.runner_up,
+        best_phase_candidate_authority_projection=(
+            projection or result.best_phase_candidate_authority_projection
+        ),
+        runner_phase_candidate_authority_projection=(
+            records[1][1] or result.runner_phase_candidate_authority_projection
+            if ambiguous
+            else result.runner_phase_candidate_authority_projection
+        ),
         receipt=receipt,
         global_lattice_authority=None,
         calibrated_nominal_grid_evidence=None,
@@ -2342,6 +2439,21 @@ def fit_template_phase_candidate_with_adjacency_relations(
         max_observations=max_observations,
     )
     if normal.status != PhaseFitStatus.RESOLVED or normal.best is None:
+        # Discrete identity ambiguity does not erase a positioned candidate's
+        # own local pixels. Complete only the two already retained fits, then
+        # remove any newly attached coordinates lacking their own authority.
+        # Their order, ambiguity and absence of a winner remain unchanged.
+        normal = _with_local_role_refinement(
+            normal,
+            observations,
+            separator_bands,
+            phase_input.sequence_measurement_sets,
+        )
+        normal = _project_retained_late_local_refinements(
+            normal,
+            phase_input,
+            allow_direct_rank=True,
+        )
         assessed = _attach_selected_candidate_authorities(
             normal,
             phase_input,
@@ -2437,7 +2549,7 @@ def fit_template_phase_candidate_with_adjacency_relations(
                 ),
             ),
         )
-        measured = _project_selected_late_local_refinements(
+        measured = _project_retained_late_local_refinements(
             measured,
             phase_input,
         )
@@ -2496,7 +2608,7 @@ def fit_template_phase_candidate_with_adjacency_relations(
             analysis.evaluated_adjacency_count
         ),
     )
-    adjusted = _project_selected_late_local_refinements(
+    adjusted = _project_retained_late_local_refinements(
         adjusted,
         phase_input,
     )
@@ -2541,7 +2653,7 @@ def finalize_template_phase_candidate(
         != PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE
     ):
         return result
-    projected = _project_selected_late_local_refinements(
+    projected = _project_retained_late_local_refinements(
         candidate.result,
         phase_input,
         source_frame_width_authority=source_frame_width_authority,

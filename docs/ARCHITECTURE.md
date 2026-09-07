@@ -467,12 +467,19 @@ Debug。投影出去的弱线仍是 counterevidence：它的完整位置区间�
 相交；不相交时，校准 Grid 路径产生 `calibrated_nominal_grid_conflict`，direct-rank 路径产生
 `direct_lattice_conflict`，不能以“没有坐标权限”为由静默删除。反过来，已经获得坐标权限的
 `LOCAL_REFINEMENT` 在 direct-rank 重拟合后仍须保留 native binding 和完整区间，不能因它不增加 global
-rank 而消失。Local relation 或 source-W pass 较晚追加 binding 时，selected lattice 仍由同一个
-`PhaseCandidateAuthorityProjection` owner 再评估一次；direct-rank 路径先让独立 source W 尝试闭合
+rank 而消失。Local relation 或 source-W pass 较晚追加 binding 时，当前 lattice 仍由同一个
+`PhaseCandidateAuthorityProjection` owner 再评估；已选定 candidate 的 direct-rank 路径先让独立 source W 尝试闭合
 opposite，只有该权限仍不可用时才投影晚期弱线，不提前删除可能获得 source-W 权限的 native edge。整个
 过程不新增查询、候选或 detector。若所有
 解释都终止，最佳原 candidate 只作为诊断几何保留，并以 projection outcome 说明首个缺口，不得退回
 residual、support 或 Grid 强选。
+
+纯 `discrete_phase_ambiguous` 不再跳过已保留 primary/runner 的局部边界补全。两份 fit 分别调用同一个
+local owner，只补原本未绑定的角色，不改变已有 binding、全局 anchor 或候选顺序；各自使用 template W，
+不能共享 selected source W。新增弱线分别进入原投影 owner，保留相同 template/ordinal/phase-anchor ceiling
+及退出线的完整区间反证；新增 material 硬反证写入该候选的 `direct_role_contradiction`，不能沿用旧的
+eligible projection。候选级失败、direct-role 与 global-lattice 事实仍按各自 binding 计算，整体保持原有
+歧义、空 winner 和 Review，不在这一流程中晋升 runner 或重新排序。
 
 | bounded candidate 事实 | projection outcome | 离散竞争结果 |
 |---|---|---|
@@ -497,7 +504,7 @@ global rank；其 immutable evidence identity 只包含 relation family、ordina
 signed-gap interval，不包含随共享
 W/pitch 重算的 derived delta/kind。整个 projection 只消费已登记 evidence，候选数、角色数与重拟合次数均受
 原 template 上界约束，不增加 TIFF 读取或第二 detector。当前完整路径最多 6 次 fit pass，覆盖 provisional、
-source pitch、base relation、direct separator refit 与 selected source-W refinement；超界产生
+source pitch、base relation、direct separator refit、双候选 local completion 与 selected source-W refinement；超界产生
 `producer_bound_exceeded`，不能截断或静默跳过。
 
 | 直接约束状态 | 连续参数结果 | 离散选择结果 |
@@ -654,7 +661,11 @@ material role authority 的唯一 owner。它先把共享任一 physical edge �
 | 唯一 source-wide pair 的 endpoint 同时参加另一 pair，且其独立 role hint 与 material role 相反 | `contradicted / endpoint_role_conflict`；不得让同一 physical edge 同时承担相反 separator role |
 
 孤立 endpoint 的单条方向 hint 弱于唯一 source-wide material pair，不能单独推翻它；只有另一 pair 形成的
-真实 fork 才构成上述冲突。所有 partial-height band 仍留在同一个 component 中供 provenance、反证与一次
+真实 fork 才构成上述冲突。Material pair 也不能抹去 endpoint 已有的像素角色候选：窄材料带可能处于
+aperture 边缘内部。Phase 保留原角色与 material 所授角色的并集，再由既有全局约束与候选竞争判断；
+两种解释仍是同一 observation/component，不能重复计为独立票数或 rank，也不借此增加坐标权限。原角色不能借 material
+的相反角色权限获得 native coordinate；最终仍须通过自身的 direct-role ledger。
+所有 partial-height band 仍留在同一个 component 中供 provenance、反证与一次
 相关权限传递使用，但不能创造第二份 phase/rank authority。该 owner 不读取新像素、不选择 ordinal、
 placement 或 winner，也不按强度分数消解多解。
 
@@ -1067,8 +1078,23 @@ observation、fixed H、runner 或最终 Gate：
 局部 line 会用彼此不共同支持的尾部自证整条 template。`complementary_domains` 仍须两侧各自拥有至少两个
 独立区域，并由两侧 direct trace 的完整并集逐 domain 覆盖 template。
 
-Normal report 与 Debug 必须显示 state、basis、已覆盖/总 domain、首尾 bracket 和 typed failure。以上判断
-只消费已经登记的 trace/domain，不新增 TIFF query、候选、score 或 selected-placement requery。
+纵向 resolved 编译一组 Frame domain；仅有纯离散歧义、且 primary/runner 均存在时，分别编译两组。
+每组保持用户 count 指定的 N 个有序区间，并独立执行已有 Overlap midpoint 支撑分割；任一组无法编译时，
+不能静默丢弃该候选后授权另一组。其它 unresolved 状态不产生 domain 权限。
+
+同一 Cross fit 必须分别满足每组原有的完整覆盖、独立域数量与首尾 bracket 条件。共享 trace 的
+“3 域，或 2 域且一侧完整”表达式逐组成立后才允许合并其它 direct trace；每组可以由不同的合法分支成立。
+单侧 anchor 的完整覆盖例外要求同一个 binding 覆盖所有组。两个候选不是额外独立证据：不得把两组
+合计为 2N 个域，不合并候选几何，也不对覆盖序号取并集或交集代替逐组判断。连续 group 的域支持数取
+各组最小值，与原始空间支持数仍按原合同归约。Cross 登记和 refit 仍只执行一次，不因候选数增加查询、
+拟合或 pair 上限；对已有 trace 的域判断最多两组，不改变纵向候选顺序、歧义或 Gate。
+
+Normal report 与 Debug 必须显示 state、basis、逐候选已覆盖/总 domain、联合首尾 bracket 和 typed failure。
+Authority 同时保留每组实际区间与覆盖序号，其 identity 绑定分组区间；序号完整不能代替几何身份。
+Normal 校验要求非空域组数量与 phase 状态对应；development 校验经同一纯 canonical-support owner，
+从 retained SequenceFit 的 native/inferred 坐标、共同 W 与 Overlap 事实重建域并逐组核对，不能成对删组
+或更改区间。此检查不测量、拟合或建立新几何路径。
+以上判断只消费已经登记的 trace/domain，不新增 TIFF query、候选、score 或 selected-placement requery。
 
 ### 8.2 `ENCLOSING_SUPPORT_PAIR`
 
@@ -1167,6 +1193,7 @@ footprint、typed generation failure 与带 physical frame ID 的逐帧诊断。
 的同源任务混成一个答案；多正例不归一化，unavailable 不产生负例。可用但有 placement 歧义的统计只消费
 明确的 discrete phase ambiguity 或 non-equivalent Cross fits，不将 coverage 缺口或所有 Review 算作歧义。
 集合物化本身不增加评分、准入权限、content requery 或自动输出，只建立特征/排序可复核的输入与标签。
+Primary 尚无 placement identity 而 runner 已能物化时，集合保留 runner 的原角色，不伪造 primary，也不丢弃该候选。
 
 候选特征由 `template_acceptability_features.py` 独占，冻结为
 `x5crop_placement_acceptability_features_v1` 的 28 个非负数值字段，定义、顺序、单位和来源字段由
@@ -1315,7 +1342,7 @@ center_offset_ratio = (gold_aperture_center - support_midpoint) / H
 ```
 
 当前 calibration 只纳入 18 个 selected unique pair、且黄金 top/bottom 均为 `directly_visible` 的 source；
-同源 count 先取中位数，再对 source hull 以 `0.001H` 向外量化，得到 `[-0.009H, +0.007H]`。Calibration
+同源 count 先取中位数，再对 source hull 以 `0.001H` 向外量化，得到 `[-0.008H, +0.010H]`。Calibration
 同时绑定 development cohort SHA、eligibility revision 和精确 observation-set SHA；source 数量相同但成员、
 观测值或 detector 权限变化时同样视为 calibration drift。该 authority
 为 rank 0 correlated inference：不把 support 变成 direct aperture、不增加 constraint rank、不参与 pair 或
@@ -1581,6 +1608,8 @@ domain pixels / peak temporary bytes
 离散歧义下最多保留两份 placement；primary 复用已有 lattice authority，runner 最多追加一次只读的
 direct-role 与 global-lattice 评估，受同一 placement 上界约束。不新增像素 query、phase 搜索或 footprint
 projection；每份 proposal 的 projection 和 output evaluation 仍由原 receipt 逐次计数。
+两个已有 phase fit 的 local completion 各记录一次 `H × R` lookup 和实际新增 binding，第二次消耗一份
+既有 fit-pass 预算；晚期弱线 projection/nominal solve 按各候选实际调用计数，不扩大 6-pass 上限。
 
 任何上界不足都显式产生 `producer_bound_exceeded`，不得 silent first-N。像素工作上限为
 `128 × source_pixels`，峰值临时内存上限为 `10 × source_pixels + 32 MiB`。不得恢复通用 DP、

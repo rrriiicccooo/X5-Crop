@@ -32,7 +32,12 @@ from .template_model import (
     SequenceRoleLineEvidence,
     TemplateSpec,
 )
-from .template_phase_model import GlobalLatticeAuthority
+from .template_phase_model import (
+    GlobalLatticeAuthority,
+    PhaseFailureKind,
+    PhaseFitResult,
+    PhaseFitStatus,
+)
 
 
 _ROLES = (
@@ -265,6 +270,24 @@ def _shift_sequence_line_evidence(
     )
 
 
+def _canonical_sequence_pair_positions(
+    start: float,
+    end: float,
+    *,
+    start_direct: bool,
+    end_direct: bool,
+    width: float,
+    direction: int,
+) -> tuple[float, float]:
+    """Keep native edges; correlate only a missing opposite with the same W."""
+
+    if start_direct and not end_direct:
+        end = start + width * direction
+    elif end_direct and not start_direct:
+        start = end - width * direction
+    return start, end
+
+
 def _sequence_pair(
     sequence: SequenceFit,
     template: TemplateSpec,
@@ -277,6 +300,14 @@ def _sequence_pair(
     end = _sequence_boundary(sequence, template, end_index)
     start_direct = start.source == PositionSource.OBSERVED_TRANSITION
     end_direct = end.source == PositionSource.OBSERVED_TRANSITION
+    start_canonical, end_canonical = _canonical_sequence_pair_positions(
+        start.canonical,
+        end.canonical,
+        start_direct=start_direct,
+        end_direct=end_direct,
+        width=width,
+        direction=template.direction,
+    )
     measured_width = sequence.pitch_fit.frame_width_px
     if start_direct and not end_direct:
         inferred_interval = _advance(
@@ -284,10 +315,9 @@ def _sequence_pair(
             measured_width,
             template.direction,
         )
-        inferred_canonical = start.canonical + width * template.direction
         end = _ResolvedBoundary(
             role=end.role,
-            canonical=inferred_canonical,
+            canonical=end_canonical,
             full_interval=inferred_interval,
             observation_ids=end.observation_ids,
             source=end.source,
@@ -303,10 +333,9 @@ def _sequence_pair(
             measured_width,
             template.direction,
         )
-        inferred_canonical = end.canonical - width * template.direction
         start = _ResolvedBoundary(
             role=start.role,
-            canonical=inferred_canonical,
+            canonical=start_canonical,
             full_interval=inferred_interval,
             observation_ids=start.observation_ids,
             source=start.source,
@@ -393,24 +422,114 @@ def resolved_sequence_support_domains_px(
     )
 
 
+def retained_cross_support_domain_groups_px(
+    phase: PhaseFitResult,
+) -> tuple[tuple[FiniteInterval, ...], ...]:
+    """Compile each positioned candidate without choosing or merging fits.
+
+    A pure discrete ambiguity retains two independent domain requirements.
+    Other unresolved states do not establish a complete placement extent.
+    Failure in either group must not silently reduce the requirements to one.
+    """
+
+    if phase.best is None:
+        return ()
+    if phase.status == PhaseFitStatus.RESOLVED:
+        fits = (phase.best,)
+    elif (
+        phase.status == PhaseFitStatus.AMBIGUOUS
+        and phase.failure_kind == PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS
+        and phase.runner_up is not None
+    ):
+        fits = (phase.best, phase.runner_up)
+    else:
+        return ()
+    return tuple(resolved_cross_support_domains_px(fit) for fit in fits)
+
+
 def resolved_cross_support_domains_px(
     sequence: SequenceFit,
 ) -> tuple[FiniteInterval, ...]:
-    """Partition explicit overlap into disjoint short-axis support domains.
+    """Compile support domains from the same candidate's canonical facts."""
+
+    return compile_cross_support_domains_px(
+        count=sequence.template.count,
+        direction=sequence.template.direction,
+        frame_width_px=FiniteInterval(
+            sequence.template.frame_width_px.minimum,
+            sequence.template.frame_width_px.maximum,
+        ),
+        canonical_frame_width_px=sequence.pitch_fit.canonical_frame_width_px,
+        model_role_positions_px=sequence.model_role_positions_px,
+        direct_role_positions_px=tuple(
+            None if binding is None else binding.canonical_position_px
+            for binding in sequence.role_bindings
+        ),
+        overlap_signed_gaps_px=tuple(
+            (relation.relation_ordinal, relation.canonical_signed_gap_px)
+            for relation in sequence.adjacency_relations
+            if isinstance(relation, OverlapRelation)
+        ),
+    )
+
+
+def compile_cross_support_domains_px(
+    *,
+    count: int,
+    direction: int,
+    frame_width_px: FiniteInterval,
+    canonical_frame_width_px: float,
+    model_role_positions_px: tuple[float, ...],
+    direct_role_positions_px: tuple[float | None, ...],
+    overlap_signed_gaps_px: tuple[tuple[int, float], ...],
+) -> tuple[FiniteInterval, ...]:
+    """Compile native/inferred domains and partition proven overlap once.
 
     Output geometry keeps both physical Frame domains.  Cross-axis evidence,
     however, must not count one trace in their shared area as two independent
     Frame regions.  A proven overlap is therefore split at its midpoint only
     for support accounting.  Any unmodeled or geometrically inconsistent
-    overlap remains a fixed-template mismatch.
+    overlap remains a fixed-template mismatch. This pure projection also lets
+    the external report validator bind its ledger to serialized candidate facts
+    without fitting, measuring, or implementing another geometric rule.
     """
 
-    domains = list(resolved_sequence_support_domains_px(sequence))
-    overlaps = {
-        relation.relation_ordinal: relation
-        for relation in sequence.adjacency_relations
-        if isinstance(relation, OverlapRelation)
-    }
+    if (
+        count <= 0
+        or direction not in (-1, 1)
+        or len(model_role_positions_px) != 2 * count
+        or len(direct_role_positions_px) != 2 * count
+        or not any(value is not None for value in direct_role_positions_px)
+        or any(not math.isfinite(value) for value in model_role_positions_px)
+        or any(
+            value is not None and not math.isfinite(value)
+            for value in direct_role_positions_px
+        )
+        or not math.isfinite(canonical_frame_width_px)
+        or not frame_width_px.contains(canonical_frame_width_px, epsilon=_EPSILON)
+    ):
+        raise ValueError("cross support candidate coordinates are invalid")
+    overlaps = dict(overlap_signed_gaps_px)
+    if len(overlaps) != len(overlap_signed_gaps_px) or any(
+        not 1 <= ordinal < count or not math.isfinite(gap) or gap >= 0.0
+        for ordinal, gap in overlaps.items()
+    ):
+        raise ValueError("cross support overlap identities are invalid")
+    domains = []
+    for ordinal in range(count):
+        start_index = 2 * ordinal
+        end_index = start_index + 1
+        direct_start = direct_role_positions_px[start_index]
+        direct_end = direct_role_positions_px[end_index]
+        start, end = _canonical_sequence_pair_positions(
+            model_role_positions_px[start_index] if direct_start is None else direct_start,
+            model_role_positions_px[end_index] if direct_end is None else direct_end,
+            start_direct=direct_start is not None,
+            end_direct=direct_end is not None,
+            width=canonical_frame_width_px,
+            direction=direction,
+        )
+        domains.append(FiniteInterval(min(start, end), max(start, end)))
     for ordinal, (left, right) in enumerate(
         zip(domains, domains[1:]),
         start=1,
@@ -418,19 +537,19 @@ def resolved_cross_support_domains_px(
         overlap_minimum = max(left.minimum, right.minimum)
         overlap_maximum = min(left.maximum, right.maximum)
         overlap_px = max(0.0, overlap_maximum - overlap_minimum)
-        relation = overlaps.get(ordinal)
-        if (overlap_px > _EPSILON) != (relation is not None):
+        signed_gap = overlaps.get(ordinal)
+        if (overlap_px > _EPSILON) != (signed_gap is not None):
             raise ValueError(
                 "realized Frame overlap lacks one explicit OverlapRelation"
             )
-        if relation is None:
+        if signed_gap is None:
             continue
-        if abs(overlap_px + relation.canonical_signed_gap_px) > _EPSILON:
+        if abs(overlap_px + signed_gap) > _EPSILON:
             raise ValueError(
                 "realized Frame overlap contradicts its signed gap"
             )
         split = (overlap_minimum + overlap_maximum) / 2.0
-        if sequence.template.direction > 0:
+        if direction > 0:
             domains[ordinal - 1] = FiniteInterval(left.minimum, split)
             domains[ordinal] = FiniteInterval(split, right.maximum)
         else:
