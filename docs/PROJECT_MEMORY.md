@@ -21,11 +21,18 @@
 
 ## 当前源码与已验证事实
 
-当前 Runtime 与验证基座为 `8b88ecee30fdd08f0e1a317b7099daf90adf7a1d`，已正常推送 `main`。
-正常 pre-push Hook 的 877 项工程测试通过、2 项按既定条件跳过；
-[Verify](https://github.com/rrriiicccooo/X5-Crop/actions/runs/34165001268)
+当前 Runtime 与验证基座为 `359eea71081363da4b93f414f1320107ca185963`，已正常推送 `main`。
+正常 pre-push Hook 的 881 项工程测试通过、2 项按既定条件跳过；
+[Verify](https://github.com/rrriiicccooo/X5-Crop/actions/runs/34167728643)
 的 12 个 OS/Python 矩阵任务全部通过。工程 CI 不替代最终三目标实机发布 receipt。
 
+- 已按原共享域合同闭合的直接 Cross pair，不因某侧新增 source-spanning 连续性而降为单侧 H 推导。
+  候选选择、外侧反证和最终授权复用同一 pair proof，删除重复判定；局部互补 closure 不能在选择时
+  被排除，却又冒充完整方案免除反证。多个合法 pair 仍保持竞争，不按支持数或外侧顺序强选。
+  新增测试覆盖两侧翻转、2/4 个共享域、1/2 个局部重合 trace、合法竞争与完整连续 pair；
+  旧提交在 4 个测试中的 9 个子用例失败，新提交通过。未修改阈值、搜索上界或 Gate。
+- S089/S091 从 enclosing support 改为直接 aperture pair，仍为安全 auto，不计新增覆盖。
+  S038 仍有两个合法 aperture pair，最终使用唯一 enclosing support，但逐侧预算仍阻断 auto。
 - Top/bottom 共用预登记的完整 lane 短轴 `CROSS_BASELINE`，替代各查询小窗口独立 median/MAD。
   Sequence 仍使用原完整长轴基线；没有新增物理 intent、测量阈值、solver pass、Gate 或 reference 权限。
   两组窗口保留原 ownership 与源边 kernel 可观测性；基线不产生任何 transition 或 placement evidence。
@@ -47,17 +54,17 @@
   未观测背景不能补造；此前平台分区实验未合入，详见开放风险。
 - 纯离散歧义的 primary/runner 分别补全局部边界、投影弱线和约束自身联合包络，
   不共享 selected W、不重新排序、不扩大 6-pass 上界；原有 unavailable 与硬反证继续保留。
-- Enclosing aperture-center calibration v7 使用原资格、同源中位数、全体 hull 与 `0.001H` 向外量化。
-  本轮 selected unique pair 的 source 从 17 变为 20：新增 S028/S038/S074/S089/S092，
-  移除 S042/S073；共同 15 项中仅 S008 的 support midpoint 由 1433.504671 变为 1433.419661 px。
+- Enclosing aperture-center calibration v8 使用原资格、同源中位数、全体 hull 与 `0.001H` 向外量化。
+  S089/S091 改用直接 aperture pair 后，selected unique enclosing pair 的 source 从 20 变为 18；
+  没有新增来源，其余 18 份观测逐项不变。原始 hull 仍为 `[-0.007785885H, +0.009195549H]`。
   区间仍为 `[-0.008H, +0.010H]`，没有为更高通过率缩窄区间；精确 observation-set SHA 为
-  `b3af27b93ef13bd0696c78d50ee4b68d408ea833a2a3b5d99b53a44e9298071e`。
+  `8c81d4f6394431bcc1c10541a181ce9020c8378dcfb57500a0fc509119505d86`。
   最终全量重新派生与登记一致；登记不改变 pair 选择、采样 geometry 或 5% 阈值。
 
 ## 完整黄金与性能证据
 
 最新完整开发 receipt：
-`/private/tmp/x5crop-cross-baseline-final-full-gold-20260908a`。
+`/private/tmp/x5crop-spanning-pair-final-full-gold-20260908a`。
 110/110 完成、分析错误 0、全部物理校准登记一致：
 
 | 层级 | 结果 |
@@ -72,43 +79,54 @@
 | 全部保留候选不安全 | 69 个任务 |
 | 安全候选且有明确 placement 歧义 | 7 个任务 |
 
-与上一版 `/private/tmp/x5crop-local-cross-stage-projection-full-gold-20260908a` 相比：
-新增安全 auto 为 S004/S065/S069/S078/S082；S038/S064/S067 退回 Review，净增 2 项。
-不能把净增当作没有退步。Final 与本轮 probe 的 110 个决定、proposal/candidate 安全标签和
-逐 Frame 黄金几何诊断一致。安全歧义任务为 S005/S015/S029/S034/S035/S048/S067。
+与上一版 `/private/tmp/x5crop-cross-baseline-final-full-gold-20260908a` 相比，110 个决定和
+proposal/candidate 安全标签不变，自动覆盖没有增加。S002/S006/S019/S070/S089/S091 的部分
+保留几何或 Cross facts 改变；S002 从 resolved 变为 `non_equivalent_fits`，S019 的 Cross failure
+也改为该歧义，均保持 primary unsafe、整张 Review。安全歧义任务仍为 S005/S015/S029/S034/S035/S048/S067。
+本轮重新登记前后的全量 receipt 已核对：110 个决定、安全标签和逐 Frame 黄金几何诊断完全一致。
 
-43 份安全候选中 29 项预算 passed / 14 failed；143 份不安全候选中 28 passed / 115 failed。
+43 份安全候选中 29 项预算 passed / 14 failed；143 份不安全候选中 30 passed / 113 failed。
 数值预算不能单独代替黄金安全，也不能据此整体关闭风险检查。
 
-黄金 receipt 生成于提交前，header 记录基座 `f1e4324b` 与当时的工作树身份，
-不是干净 release receipt。已核对以下运行源指纹与提交 `8b88ecee` 一致：
+黄金运行开始于提交前，header 记录基座 `dae97a36` 与当时的工作树身份，
+不是干净 release receipt。已核对以下运行源指纹与提交 `359eea71` 一致：
 
-- detector：`0eb4691e262857bb001b4375e8e6508584c927802f565a2c2cfeab6e39386da3`
+- detector：`a17e05d79c8c94b0628617eb1771ae01dabdf3021ffa422fb8b2cdd8045c3e76`
 - comparator：`e70cd52ec25caa85969fd617cef1266cce3cbdd837501a3d84325f52411701b4`
 - cohort：`c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`
 
-干净 `8b88ecee` 的正式 `tools/verify performance` receipt：
-`build/v5-performance/performance_receipt.json`。24-source 完整用户路径均值 **3.588597 秒**，
-5 秒 Gate 通过，3 秒挑战未达成；p95 为 6.236651 秒，最慢 S091 为 6.557221 秒。
-未插桩进程峰值 RSS 最大 1,208,647,680 bytes。
-此结果只证明该提交、当前机器、冻结依赖和本次决定分布；S038 从 auto 变为 Review 减少了正式裁切输出，
-不能把相对上一版 3.825251 秒的均值下降全部归因为检测优化。新黄金 development-detail mean 为
-3.987565 秒，不替代正式性能。
+干净 `359eea71` 的正式 `tools/verify performance` receipt：
+`build/v5-performance/performance_receipt.json`。24-source 完整用户路径均值 **3.654182 秒**，
+5 秒 Gate 通过，3 秒挑战未达成；p95 为 6.311194 秒，最慢 S091 为 6.675872 秒。
+未插桩进程峰值 RSS 最大 1,209,335,808 bytes。
+此结果只证明该提交、当前机器、冻结依赖和本次决定分布；相对上一版 3.588597 秒没有性能提升声明。
+新黄金 development-detail mean 为 4.023232 秒，不替代正式性能。
 
 ## 开放风险与精确下一步
 
-1. 先以正式完整 flow 对照本轮三个退步样片，区分测量、角色、选对与预算职责：
-   S038 的 primary/candidate 仍安全，但由 enclosing support 输出，多个 top/bottom 最坏外扩超过
-   1.2 mm，最大约 1.512 mm；同状态 alignment padding 仍通过。S064 新 primary 不安全，
-   三格 outward cross_low 超限，并有 aperture-aspect-ratio conflict；S067 primary 安全但出现
-   `non_equivalent_fits`，runner 第 1 格 sequence_start 不安全。不能为恢复旧 auto 回退共同基线、
-   强选旧线或放宽 Gate。需要逐 trace 比较基线前后 material 与角色，再核对 selected pair 的物理权限。
-2. S002 从安全 primary 变为 unsafe Review，当前唯一新增包含失败为第 1 格 sequence_end 的角点。
-   当前 top/bottom 在黄金轴上的外扩仍约 40 px，不能简单归因于 bottom 直接内切；
-   第 1 格 END 中心外扩由约 5.762 降到 1.876 px。正式报告为
+1. 共同基线前后的 S038/S064/S067 已分别通过正式完整 flow 生成报告并校验，不能为恢复旧 auto
+   回退共同基线、强选旧线或放宽 Gate。下一步继续区分支撑、角色、选对与预算：
+
+   - S038：新增 source-spanning TOP 仍与两条 BOTTOM 满足原共享域合同。权限不一致已修复，
+     但两个合法 pair 仍竞争；不能仅凭支持数保留旧 pair。Primary/candidate 安全，唯一 enclosing
+     support 的最大逐侧外扩约 1.512 mm 超过 1.2 mm；正式报告为
+     `/private/tmp/x5crop-S038-spanning-pair-final-report-20260908a/x5_crop_report.jsonl`，仍仅预算阻断。
+     下一步核查两个 BOTTOM 的原始物理角色及各自完整 footprint，不能把合法 runner 隐藏掉。
+   - S064：原互补配对没有共同 trace；新 BOTTOM 增强后与 TOP 共享 11 个 trace，但全部位于
+     第一个 selected domain，切换为 `shared_traces` 后不能获得完整投影权限。单侧 H 推导使
+     三格 cross_low 外扩超限，primary unsafe。下一步为支撑模式切换构造精确正反例，核对原始
+     独立区域与 selected-domain 权限，不直接把两个 mode 合并或增加回退。
+   - S067：两条 TOP 原已存在，新 BOTTOM 的完整覆盖让第二个 TOP/BOTTOM 配对满足原
+     “两共享域且一侧全覆盖”条件。两条 TOP 的全体 union refit 未成立，不能因同属 family
+     就合并 identity；primary safe、runner 第 1 格 sequence_start unsafe，仍为
+     `non_equivalent_fits`。下一步核对真实 side-track 连通性、方向变化与物理 identity。
+2. S002 在共同基线改动时从安全 primary 变为 unsafe，新增包含失败为第 1 格 sequence_end 的角点。
+   当时 top/bottom 在黄金轴上的外扩仍约 40 px，不能简单归因于 bottom 直接内切；
+   第 1 格 END 中心外扩由约 5.762 降到 1.876 px。该轮正式报告为
    `/private/tmp/x5crop-S002-cross-baseline-report-20260908a/x5_crop_report.jsonl`。
-   当前 raw 29／local 23／solver 6，拟合 31；旧为 574／503／71，拟合 576。
-   下一步回链 Cross 变化如何影响同状态直线、角点与纵向联合保护，不能只看中心边距。
+   该报告 raw 29／local 23／solver 6，拟合 31；基线改动前为 574／503／71，拟合 576。
+   本轮全量中 Cross 新增 `non_equivalent_fits`，primary 仍 unsafe；下一步从最新保留几何回链
+   Cross 变化如何影响同状态直线、角点与纵向联合保护，不能把旧报告或中心边距当作当前完整结论。
 3. S106 当前正式报告为
    `/private/tmp/x5crop-S106-cross-baseline-final-report-20260908a/x5_crop_report.jsonl`。
    raw 26／local 21／solver 5，拟合 28；内侧 BOTTOM 的 line 20 恢复 11 点、trace 5134–6927、
