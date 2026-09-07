@@ -22,6 +22,8 @@
   aperture 内。W/ordinal、独立证据和后续风险条件继续约束解释，不强选更内侧边界。
 - 纯离散歧义的 primary/runner 分别以自身合法直接约束收紧 proposal 联合包络；runner 不借用 primary
   的角色或不匹配的 source W。歧义、反证与输出资格不变，空可行集明确保留为 unavailable。
+- Enclosing aperture-center 校准按当前唯一 selected pair 重登记 17 个 source 的观测指纹；
+  方法、资格和 `[-0.009H, +0.007H]` 区间不变。
 - Source W 明确分开测量、placement 消费和自动输出资格。至少两张合格完整 Frame 或全部独立 rank-3
   直接约束可建立测量；两组都成立时只取交集。远处 coverage、全局 rank 缺口或 unresolved proposal 不再
   抹去合格局部测量，反证与 runner 仍保留。W 不重选 phase/ordinal，不增加独立 rank。
