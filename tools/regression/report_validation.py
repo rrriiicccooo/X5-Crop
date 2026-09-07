@@ -12,6 +12,14 @@ from x5crop.detection.photo_geometry.coarse_strip_support import (
     CoarseSupportAuthority,
 )
 from x5crop.detection.photo_geometry.output_model import FootprintSaturationKind
+from x5crop.detection.photo_geometry.template_acceptability_features import (
+    PLACEMENT_FEATURE_DEFINITIONS,
+    PLACEMENT_FEATURE_SCHEMA,
+    PlacementAcceptabilityFeatures,
+    PlacementFeature,
+    PlacementFeatureMissingReason,
+    PlacementFeatureUnit,
+)
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossFailureKind,
     CrossFitStatus,
@@ -27,7 +35,7 @@ from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseFitStatus,
     PhaseRetainedProposalBasis,
 )
-from x5crop.domain import Box
+from x5crop.domain import Box, ObservationId
 from x5crop.formats import OUTPUT_PROTECTION_SPEC
 from x5crop.geometry.convex import clip_convex_polygon_to_box
 from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
@@ -63,6 +71,8 @@ _PLACEMENT_PROPOSAL_FIELDS = {
     "state",
     "placement_id",
     "output_footprints",
+    "direct_use_budget_assessments",
+    "acceptability_features",
     "failure",
 }
 _SOURCE_PROPOSAL_FIELDS = {
@@ -2310,10 +2320,246 @@ def _valid_failure(value: object) -> bool:
     )
 
 
+def _validate_direct_use_budgets(
+    budgets: object,
+    outputs: list[dict[str, Any]],
+    source_geometry: object,
+) -> None:
+    if (
+        not isinstance(budgets, list)
+        or any(not isinstance(item, dict) for item in budgets)
+        or [item.get("geometry_id") for item in budgets]
+        != [item["geometry_id"] for item in outputs]
+    ):
+        raise ValueError("budget does not cover proposal output")
+    outputs_by_id = {item["geometry_id"]: item for item in outputs}
+    for budget in budgets:
+        if (
+            not isinstance(budget, dict)
+            or set(budget) != _DIRECT_USE_BUDGET_FIELDS
+        ):
+            raise ValueError("direct-use budget summary is invalid")
+        edges = budget.get("edge_assessments")
+        if (
+            budget.get("boundary_use")
+            not in {"aperture_pair", "enclosing_support_pair"}
+            or budget.get("state") not in {"supported", "contradicted"}
+            or not isinstance(edges, list)
+            or any(
+                not isinstance(edge, dict)
+                or set(edge) != _DIRECT_USE_EDGE_FIELDS
+                for edge in edges
+            )
+            or tuple(edge["role"] for edge in edges)
+            != ("start", "end", "top", "bottom")
+        ):
+            raise ValueError("direct-use budget summary is invalid")
+        if any(
+            not _finite_number(edge[key]) or float(edge[key]) < 0.0
+            for edge in edges
+            for key in ("expansion_px", "expansion_mm", "limit_mm")
+        ) or any(
+            edge["limit_applies"] is not True
+            or edge["within_limit"]
+            != (float(edge["expansion_mm"]) <= float(edge["limit_mm"]))
+            for edge in edges
+        ):
+            raise ValueError("direct-use edge budget is invalid")
+        support = budget["boundary_use"] == "enclosing_support_pair"
+        support_fields_present = (
+            _finite_number(budget["enclosing_support_height_ratio"])
+            and isinstance(
+                budget["enclosing_support_within_limit"], bool
+            )
+            and _finite_number(
+                budget["maximum_same_state_cross_alignment_padding_mm"]
+            )
+            and isinstance(
+                budget[
+                    "maximum_same_state_cross_alignment_padding_within_limit"
+                ],
+                bool,
+            )
+        )
+        if support != support_fields_present:
+            raise ValueError("enclosing-support budget is invalid")
+        if not support and any(
+            budget[key] is not None
+            for key in (
+                "enclosing_support_height_ratio",
+                "enclosing_support_within_limit",
+                "maximum_same_state_cross_alignment_padding_mm",
+                "maximum_same_state_cross_alignment_padding_within_limit",
+            )
+        ):
+            raise ValueError("aperture budget carries support fields")
+        if support:
+            output = outputs_by_id.get(budget["geometry_id"])
+            height_state = (
+                None
+                if not isinstance(source_geometry, dict)
+                else source_geometry.get("height_state")
+            )
+            height_vertices = (
+                None
+                if not isinstance(height_state, dict)
+                else height_state.get("vertices")
+            )
+            if (
+                not isinstance(output, dict)
+                or not isinstance(height_vertices, list)
+                or not height_vertices
+                or any(
+                    not isinstance(vertex, list)
+                    or len(vertex) != 2
+                    or not _finite_number(vertex[0])
+                    or float(vertex[0]) <= 0.0
+                    for vertex in height_vertices
+                )
+            ):
+                raise ValueError("same-state cross padding source is invalid")
+            aperture_risk = output.get(
+                "enclosing_support_aperture_risk"
+            )
+            edge_by_role = {edge["role"]: edge for edge in edges}
+            if (
+                not isinstance(aperture_risk, dict)
+                or abs(
+                    float(edge_by_role["top"]["expansion_px"])
+                    - float(aperture_risk["top_expansion_px"])
+                )
+                > 1.0e-8
+                or abs(
+                    float(edge_by_role["bottom"]["expansion_px"])
+                    - float(aperture_risk["bottom_expansion_px"])
+                )
+                > 1.0e-8
+            ):
+                raise ValueError(
+                    "enclosing-support aperture risk budget is invalid"
+                )
+            cross_limit = min(
+                float(edge["limit_mm"])
+                for edge in edges
+                if edge["role"] in {"top", "bottom"}
+            )
+            padding_px = output.get(
+                "maximum_same_state_cross_alignment_padding_px"
+            )
+            if not _finite_number(padding_px) or float(padding_px) < 0.0:
+                raise ValueError("same-state cross padding is invalid")
+            expected_padding_mm = float(padding_px) / min(
+                float(vertex[0]) for vertex in height_vertices
+            )
+            if (
+                float(budget["enclosing_support_height_ratio"]) <= 1.0
+                or budget["enclosing_support_within_limit"]
+                != (
+                    float(budget["enclosing_support_height_ratio"])
+                    <= OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio
+                )
+                or abs(
+                    float(
+                        budget[
+                            "maximum_same_state_cross_alignment_padding_mm"
+                        ]
+                    )
+                    - expected_padding_mm
+                )
+                > 1.0e-8
+                or float(
+                    budget[
+                        "maximum_same_state_cross_alignment_padding_mm"
+                    ]
+                )
+                < 0.0
+                or budget[
+                    "maximum_same_state_cross_alignment_padding_within_limit"
+                ]
+                != (
+                    float(
+                        budget[
+                            "maximum_same_state_cross_alignment_padding_mm"
+                        ]
+                    )
+                    <= cross_limit
+                )
+            ):
+                raise ValueError("support cross-alignment budget is invalid")
+        supported = all(edge["within_limit"] for edge in edges) and (
+            budget["enclosing_support_within_limit"] is not False
+        ) and (
+            budget[
+                "maximum_same_state_cross_alignment_padding_within_limit"
+            ]
+            is not False
+        )
+        if (budget["state"] == "supported") != supported:
+            raise ValueError("direct-use budget state is invalid")
+
+
+def validate_placement_feature_record(
+    value: object,
+    *,
+    placement_id: str,
+    lane_id: str,
+    output_geometry_ids: list[str],
+) -> PlacementAcceptabilityFeatures:
+    """Validate the frozen feature contract without re-running geometry."""
+
+    if (
+        not isinstance(value, dict)
+        or set(value) != {
+            "schema_id", "placement_id", "lane_id", "source_geometry_id", "template_id",
+            "output_geometry_ids", "observation_ids", "evidence_group_ids", "values",
+        }
+        or value["schema_id"] != PLACEMENT_FEATURE_SCHEMA
+        or value["placement_id"] != placement_id
+        or value["lane_id"] != lane_id
+        or value["output_geometry_ids"] != output_geometry_ids
+        or any(not isinstance(value[key], str) or not value[key] for key in ("source_geometry_id", "template_id"))
+        or any(
+            not isinstance(value[key], list)
+            or any(not isinstance(item, str) or not item for item in value[key])
+            for key in ("output_geometry_ids", "observation_ids", "evidence_group_ids")
+        )
+        or not isinstance(value["values"], list)
+        or any(
+            not isinstance(item, dict)
+            or set(item) != {"name", "unit", "value", "missing_reason", "source_fields"}
+            or not isinstance(item["source_fields"], list)
+            for item in value["values"]
+        )
+    ):
+        raise ValueError("placement acceptability feature record is invalid")
+    try:
+        features = tuple(
+            PlacementFeature(
+                item["name"], PlacementFeatureUnit(item["unit"]), item["value"],
+                None if item["missing_reason"] is None else PlacementFeatureMissingReason(item["missing_reason"]),
+                tuple(item["source_fields"]),
+            )
+            for item in value["values"]
+        )
+        return PlacementAcceptabilityFeatures(
+            placement_id=placement_id,
+            lane_id=lane_id,
+            source_geometry_id=value["source_geometry_id"],
+            template_id=value["template_id"],
+            output_geometry_ids=tuple(output_geometry_ids),
+            observation_ids=tuple(ObservationId(item) for item in value["observation_ids"]),
+            evidence_group_ids=tuple(ObservationId(item) for item in value["evidence_group_ids"]),
+            values=features,
+        )
+    except (TypeError, ValueError) as error:
+        raise ValueError("placement acceptability feature record is invalid") from error
+
+
 def _validate_placement_proposal(
     value: object,
     *,
     lane_id: str,
+    source_geometry: object,
 ) -> list[dict[str, Any]]:
     if (
         not isinstance(value, dict)
@@ -2346,6 +2592,15 @@ def _validate_placement_proposal(
         output["envelope"]["lane_ordinal"] for output in outputs
     ) != tuple(range(1, len(outputs) + 1)):
         raise ValueError("proposal outputs do not cover contiguous lane slots")
+    _validate_direct_use_budgets(value["direct_use_budget_assessments"], outputs, source_geometry)
+    if value["placement_id"] is None:
+        if value["acceptability_features"] is not None:
+            raise ValueError("absent placement cannot have acceptability features")
+    else:
+        validate_placement_feature_record(
+            value["acceptability_features"], placement_id=value["placement_id"],
+            lane_id=lane_id, output_geometry_ids=[item["geometry_id"] for item in outputs],
+        )
     return outputs
 
 
@@ -2677,6 +2932,7 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         proposal_outputs = _validate_placement_proposal(
             lane.get("placement_proposal"),
             lane_id=lane_id,
+            source_geometry=lane.get("source_scan_geometry"),
         )
         proposal = lane["placement_proposal"]
         alternatives = lane.get("alternative_placement_proposals")
@@ -2691,7 +2947,9 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             identity["lane_id"] == lane_id for identity in geometry["slot_identities"]
         )
         for alternative in alternatives:
-            alternative_outputs = _validate_placement_proposal(alternative, lane_id=lane_id)
+            alternative_outputs = _validate_placement_proposal(
+                alternative, lane_id=lane_id, source_geometry=lane.get("source_scan_geometry"),
+            )
             if (
                 alternative["placement_id"] != runner_id
                 or alternative["placement_id"] == proposal["placement_id"]
@@ -3030,170 +3288,7 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             selected_placement_id=lane.get("selected_placement_id"),
             output_geometry_ids=set(outputs_by_id),
         )
-        for budget in budgets:
-            if (
-                not isinstance(budget, dict)
-                or set(budget) != _DIRECT_USE_BUDGET_FIELDS
-            ):
-                raise ValueError("direct-use budget summary is invalid")
-            edges = budget.get("edge_assessments")
-            if (
-                budget.get("boundary_use")
-                not in {"aperture_pair", "enclosing_support_pair"}
-                or budget.get("state") not in {"supported", "contradicted"}
-                or not isinstance(edges, list)
-                or any(
-                    not isinstance(edge, dict)
-                    or set(edge) != _DIRECT_USE_EDGE_FIELDS
-                    for edge in edges
-                )
-                or tuple(edge["role"] for edge in edges)
-                != ("start", "end", "top", "bottom")
-            ):
-                raise ValueError("direct-use budget summary is invalid")
-            if any(
-                not _finite_number(edge[key]) or float(edge[key]) < 0.0
-                for edge in edges
-                for key in ("expansion_px", "expansion_mm", "limit_mm")
-            ) or any(
-                edge["limit_applies"] is not True
-                or edge["within_limit"]
-                != (float(edge["expansion_mm"]) <= float(edge["limit_mm"]))
-                for edge in edges
-            ):
-                raise ValueError("direct-use edge budget is invalid")
-            support = budget["boundary_use"] == "enclosing_support_pair"
-            support_fields_present = (
-                _finite_number(budget["enclosing_support_height_ratio"])
-                and isinstance(
-                    budget["enclosing_support_within_limit"], bool
-                )
-                and _finite_number(
-                    budget["maximum_same_state_cross_alignment_padding_mm"]
-                )
-                and isinstance(
-                    budget[
-                        "maximum_same_state_cross_alignment_padding_within_limit"
-                    ],
-                    bool,
-                )
-            )
-            if support != support_fields_present:
-                raise ValueError("enclosing-support budget is invalid")
-            if not support and any(
-                budget[key] is not None
-                for key in (
-                    "enclosing_support_height_ratio",
-                    "enclosing_support_within_limit",
-                    "maximum_same_state_cross_alignment_padding_mm",
-                    "maximum_same_state_cross_alignment_padding_within_limit",
-                )
-            ):
-                raise ValueError("aperture budget carries support fields")
-            if support:
-                output = outputs_by_id.get(budget["geometry_id"])
-                source_geometry = lane.get("source_scan_geometry")
-                height_state = (
-                    None
-                    if not isinstance(source_geometry, dict)
-                    else source_geometry.get("height_state")
-                )
-                height_vertices = (
-                    None
-                    if not isinstance(height_state, dict)
-                    else height_state.get("vertices")
-                )
-                if (
-                    not isinstance(output, dict)
-                    or not isinstance(height_vertices, list)
-                    or not height_vertices
-                    or any(
-                        not isinstance(vertex, list)
-                        or len(vertex) != 2
-                        or not _finite_number(vertex[0])
-                        or float(vertex[0]) <= 0.0
-                        for vertex in height_vertices
-                    )
-                ):
-                    raise ValueError("same-state cross padding source is invalid")
-                aperture_risk = output.get(
-                    "enclosing_support_aperture_risk"
-                )
-                edge_by_role = {edge["role"]: edge for edge in edges}
-                if (
-                    not isinstance(aperture_risk, dict)
-                    or abs(
-                        float(edge_by_role["top"]["expansion_px"])
-                        - float(aperture_risk["top_expansion_px"])
-                    )
-                    > 1.0e-8
-                    or abs(
-                        float(edge_by_role["bottom"]["expansion_px"])
-                        - float(aperture_risk["bottom_expansion_px"])
-                    )
-                    > 1.0e-8
-                ):
-                    raise ValueError(
-                        "enclosing-support aperture risk budget is invalid"
-                    )
-                cross_limit = min(
-                    float(edge["limit_mm"])
-                    for edge in edges
-                    if edge["role"] in {"top", "bottom"}
-                )
-                padding_px = output.get(
-                    "maximum_same_state_cross_alignment_padding_px"
-                )
-                if not _finite_number(padding_px) or float(padding_px) < 0.0:
-                    raise ValueError("same-state cross padding is invalid")
-                expected_padding_mm = float(padding_px) / min(
-                    float(vertex[0]) for vertex in height_vertices
-                )
-                if (
-                    float(budget["enclosing_support_height_ratio"]) <= 1.0
-                    or budget["enclosing_support_within_limit"]
-                    != (
-                        float(budget["enclosing_support_height_ratio"])
-                        <= OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio
-                    )
-                    or abs(
-                        float(
-                            budget[
-                                "maximum_same_state_cross_alignment_padding_mm"
-                            ]
-                        )
-                        - expected_padding_mm
-                    )
-                    > 1.0e-8
-                    or float(
-                        budget[
-                            "maximum_same_state_cross_alignment_padding_mm"
-                        ]
-                    )
-                    < 0.0
-                    or budget[
-                        "maximum_same_state_cross_alignment_padding_within_limit"
-                    ]
-                    != (
-                        float(
-                            budget[
-                                "maximum_same_state_cross_alignment_padding_mm"
-                            ]
-                        )
-                        <= cross_limit
-                    )
-                ):
-                    raise ValueError("support cross-alignment budget is invalid")
-            supported = all(edge["within_limit"] for edge in edges) and (
-                budget["enclosing_support_within_limit"] is not False
-            ) and (
-                budget[
-                    "maximum_same_state_cross_alignment_padding_within_limit"
-                ]
-                is not False
-            )
-            if (budget["state"] == "supported") != supported:
-                raise ValueError("direct-use budget state is invalid")
+        _validate_direct_use_budgets(budgets, outputs, lane.get("source_scan_geometry"))
         for output in outputs:
             validate_output_footprint_authority(output)
         protected_contact_sides = {
@@ -3226,6 +3321,7 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             proposal["state"] != "generated"
             or proposal["placement_id"] != selected
             or proposal_outputs != outputs
+            or proposal["direct_use_budget_assessments"] != budgets
         ):
             raise ValueError("selected output does not reuse the proposal")
         lane_selected_ids.append(selected)
@@ -3670,12 +3766,25 @@ def _validate_development(record: dict[str, Any]) -> None:
             or isinstance(evaluated, bool)
             or evaluated < sum(len(item["output_footprints"]) for item in retained)
             or evaluated > sum(len(item["frames"]) for item in placements)
+            or type(work.get("proposal_budget_evaluation_count")) is not int
+            or work["proposal_budget_evaluation_count"]
+            != sum(len(item["direct_use_budget_assessments"]) for item in retained)
+            or type(work.get("placement_feature_evaluation_count")) is not int
+            or work["placement_feature_evaluation_count"]
+            != len(placements) * len(PLACEMENT_FEATURE_DEFINITIONS)
         ):
             raise ValueError("retained proposal work or membership is invalid")
         for proposal in retained:
             fit = next(item for item in placements if item["placement_id"] == proposal["placement_id"])
             if proposal["state"] == "generated" and len(proposal["output_footprints"]) != len(fit["frames"]):
                 raise ValueError("retained proposal does not cover its placement")
+            if (
+                proposal["acceptability_features"]["source_geometry_id"]
+                != fit["source_scan_geometry"]["geometry_id"]
+                or proposal["acceptability_features"]["template_id"]
+                != fit["sequence_fit"]["template"]["template_id"]
+            ):
+                raise ValueError("retained proposal feature provenance changed")
         cross_competition = lane["cross_competition"]
         retained_cross = cross_competition.get(
             "retained_proposal_basis"

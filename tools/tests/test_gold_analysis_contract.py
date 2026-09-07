@@ -10,6 +10,8 @@ import unittest
 from unittest.mock import patch
 
 from tools.regression.accuracy import DEVELOPMENT_GOLD_COHORT_PATH
+from tools.tests.template_runtime_test_support import retained_proposal_fixture
+from x5crop.report.read_models import typed_read_model
 from tools.regression.gold_analysis import (
     ANALYSIS_RECORD_SCHEMA,
     RETAINED_PLACEMENT_SCOPE,
@@ -181,6 +183,7 @@ class GoldAnalysisContractTest(unittest.TestCase):
         )
         frame_unsafe = candidate == "unsafe"
         proposal_frame_unsafe = proposal == "unsafe"
+        retained_proposal = typed_read_model(retained_proposal_fixture("placement:primary"))
         source_placement_state = (
             "unavailable" if candidate == "not_available" else "supported"
         )
@@ -245,7 +248,10 @@ class GoldAnalysisContractTest(unittest.TestCase):
                 "placement_id": "placement:primary", "lane_id": "lane:0",
                 "role": "primary", "generation_state": "generated",
                 "generation_failure": None,
-                "output_footprints": [{"required_source_footprint": []}],
+                "output_footprints": retained_proposal["output_footprints"],
+                "direct_use_budget_assessments": retained_proposal["direct_use_budget_assessments"],
+                "budget_state": _runtime_budget_state(retained_proposal["direct_use_budget_assessments"], expected_count=1),
+                "acceptability_features": retained_proposal["acceptability_features"],
                 "geometry_conformance": proposal,
                 "geometry_failure": "unsafe" if proposal_frame_unsafe else None,
                 "frame_diagnostics": [],

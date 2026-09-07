@@ -22,6 +22,7 @@ from .measurement_model import PhotoBoundaryMeasurementField
 from .output_model import OutputFootprint, OutputSlotIdentity
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import CrossFitStatus
+from .template_acceptability_features import build_placement_acceptability_features
 from .template_feasible_geometry import project_format_placement
 from .template_enclosing_support_aperture import (
     not_applicable_enclosing_support_aperture_authority,
@@ -172,7 +173,7 @@ def _materialize_placement_proposal(
     prepared: PreparedTemplateLane,
     placement: FormatPlacement,
     *,
-    layout,
+    layout: str,
 ) -> tuple[TemplatePlacementProposal, int]:
     """Project one existing placement once, without granting output authority."""
 
@@ -195,6 +196,12 @@ def _materialize_placement_proposal(
     except ValueError as error:
         outputs = []
         failure = failure_fact(GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE, detail=str(error))
+    complete_outputs = tuple(outputs)
+    budgets = tuple(
+        template_direct_use_budget_assessment(placement, output)
+        for output in complete_outputs
+    )
+    features = build_placement_acceptability_features(placement, complete_outputs, budgets)
     return (
         TemplatePlacementProposal(
             lane_id=prepared.lane.domain.lane_id,
@@ -203,7 +210,9 @@ def _materialize_placement_proposal(
                 if failure is None else TemplateProposalState.UNAVAILABLE
             ),
             placement_id=placement.placement_id,
-            output_footprints=tuple(outputs),
+            output_footprints=complete_outputs,
+            direct_use_budget_assessments=budgets,
+            acceptability_features=features,
             failure=failure,
         ),
         evaluations,
@@ -355,6 +364,8 @@ def reconstruct_photo_geometry(
                 state=TemplateProposalState.UNAVAILABLE,
                 placement_id=None,
                 output_footprints=(),
+                direct_use_budget_assessments=(),
+                acceptability_features=None,
                 failure=competition.failure or failure_fact(GateGap.COMPLETE_PLACEMENT_UNAVAILABLE),
             )
         alternatives = ()
@@ -437,13 +448,7 @@ def reconstruct_photo_geometry(
         output_footprints = ()
         if selected is not None:
             output_footprints = values.proposal.output_footprints
-        budgets = tuple(
-            template_direct_use_budget_assessment(
-                selected, output
-            )
-            for output in output_footprints
-            if selected is not None
-        )
+        budgets = values.proposal.direct_use_budget_assessments if selected is not None else ()
         nominal_grid_authority = assess_calibrated_nominal_grid_authority(
             lane.phase_competition.calibrated_nominal_grid_evidence,
             placement_id=(
@@ -502,6 +507,15 @@ def reconstruct_photo_geometry(
                     content_evaluation_count=int(content_assessment is not None),
                     proposal_projection_count=len(competition.placements),
                     proposal_output_evaluation_count=values.proposal_output_evaluation_count,
+                    proposal_budget_evaluation_count=sum(
+                        len(item.direct_use_budget_assessments)
+                        for item in (values.proposal, *values.alternatives)
+                    ),
+                    placement_feature_evaluation_count=sum(
+                        len(item.acceptability_features.values)
+                        for item in (values.proposal, *values.alternatives)
+                        if item.acceptability_features is not None
+                    ),
                     peak_temporary_bytes=max(
                         lane.measurement_work.peak_temporary_bytes,
                         phase_receipt.peak_temporary_bytes,

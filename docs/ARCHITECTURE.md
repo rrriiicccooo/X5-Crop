@@ -1148,10 +1148,24 @@ footprint、typed generation failure 与带 physical frame ID 的逐帧诊断。
 明确的 discrete phase ambiguity 或 non-equivalent Cross fits，不将 coverage 缺口或所有 Review 算作歧义。
 该阶段不增加评分、准入权限、content requery 或自动输出，只建立后续特征/排序可复核的输入与标签。
 
-下一机制复用 `template_selection.py` 的有界竞争与选择职责，黄金标签仍由
+候选特征由 `template_acceptability_features.py` 独占，冻结为
+`x5crop_placement_acceptability_features_v1` 的 28 个非负数值字段，定义、顺序、单位和来源字段由
+`PLACEMENT_FEATURE_DEFINITIONS` 统一登记。它只读取同一 placement 的锚点/角色账本、W/H/pitch、
+residual、Cross 支持、Contact/Overlap、direction、saturation 与输出预算；独立锚点按 evidence group
+去重，不能把 best 的角色权限或 coverage 复制到 runner。Observation、evidence group、template、source
+geometry 和 output identity 保留为 provenance，不编码为数值特征；sample ID、文件名、黄金与 cohort
+不在提取函数输入中。比例量按当前模板 count、尺度或实际跨度归一化，不构造逐 Frame 尺寸自由度。
+`not_applicable`、`evidence_unavailable` 与 `proposal_unavailable` 分开保留；缺失值是 `None`，不是测量值 0。
+
+每份已生成 proposal 使用 `template_direct_use_budget_assessment` 评价一次数值预算，正式 candidate 复用
+对应 primary 的原结果；未生成时预算为空。Feature 只读取该结果，不重算预算、几何或像素。工作量 receipt
+分别记录实际逐 slot 预算评价次数与 `28 × retained placement count` 个特征值；已有有界 slot/角色账本只做
+线性归约，不新增搜索。Gold 逐候选保留这些同次事实，并单独汇总黄金标签与 proposal 数值预算的对应关系；
+原 selected-candidate 预算与 CandidateGate 阻断统计仍是独立层级。
+
+开发排序继续复用 `template_selection.py` 的有界竞争身份，黄金标签仍由
 `tools/regression/gold_geometry.py` 独占，集合分析由现有 `gold_analysis.py` 扩展，不另建 detector 或黄金池。
-先冻结候选 identity 与最终 footprint，再记录既有 evidence 中的 anchor、角色来源、W/H/pitch 偏差、
-residual、coverage、material/topology、预算及缺失状态。开发排序与标签不反写当前 Runtime Gate；正式
+开发排序与标签不反写当前 Runtime Gate；正式
 可用性 assessment 最终仍沿 `CandidateGate → DecisionGate` 单向消费，不建立第二个终态 owner。
 
 准入前必须冻结以下 versioned schema 与 artifact：
@@ -1525,6 +1539,7 @@ local adjacency evaluations
 cross runs / fits
 placement / boundary / content evaluations
 retained placement projections / output-footprint evaluations
+retained proposal budget evaluations / placement feature values
 probability candidates / features / OOD evaluations（仅在第 9.2 节获准启用后）
 domain pixels / peak temporary bytes
 ```
@@ -1600,6 +1615,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/interval_math.py`、`template_cross*.py`、`template_cross_support.py` | 共享 interval 运算、source H 校准、局部 top/bottom 方向闭合、typed producer bound 与 enclosing support；其中 `template_cross_longitudinal.py` 独占 Cross line 从已观测长轴范围投影到完整 template 的 typed authority |
 | `photo_geometry/template_enclosing_support_aperture.py` | selected unique enclosing support 内的黄金校准 aperture-center authority、精确 observation-set provenance、物理 containment 交集与 typed conflict；rank 0，不选 geometry |
 | `photo_geometry/template_placement.py`、`template_selection.py` | source-axis frame 的一次 compose、显式 overlap 的 cross-support 去重，以及 proposal 之后的离散 eligibility/winner/runner |
+| `photo_geometry/template_acceptability_features.py` | 已有 placement 的冻结数值特征、单位、missingness 与 provenance；不求解几何、计算预算、评分或批准 |
 | `photo_geometry/template_holder_fill.py` | selected PhotoGroupOuter 与 W-only fill assessment |
 | `photo_geometry/content_*.py` | 最终 post-bleed polygon 上的二维 negative veto |
 | `photo_geometry/template_feasible_geometry.py` | 任一已 compose placement 的低维联合可行集合与 footprint projection；resolved global-lattice direct constraint 在此唯一参与联合投影，不决定 eligibility |

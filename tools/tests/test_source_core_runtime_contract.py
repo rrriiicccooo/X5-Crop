@@ -528,7 +528,10 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 ],
             )
             validate_current_report_record(analysis_outcome.result)
-            for field in ("proposal_projection_count", "proposal_output_evaluation_count"):
+            for field in (
+                "proposal_projection_count", "proposal_output_evaluation_count",
+                "proposal_budget_evaluation_count", "placement_feature_evaluation_count",
+            ):
                 invalid = deepcopy(analysis_outcome.result)
                 invalid["development"]["lanes"][0]["work"][field] += 100
                 with self.subTest(field=field), self.assertRaises(ValueError):

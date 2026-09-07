@@ -366,6 +366,8 @@ def development_report_facts(
                     "proposal_output_evaluation_count": (
                         lane.work.proposal_output_evaluation_count
                     ),
+                    "proposal_budget_evaluation_count": lane.work.proposal_budget_evaluation_count,
+                    "placement_feature_evaluation_count": lane.work.placement_feature_evaluation_count,
                     "domain_pixels": (
                         lane.prepared.lane.domain.work_box.width
                         * lane.prepared.lane.domain.work_box.height

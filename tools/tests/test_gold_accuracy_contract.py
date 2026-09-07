@@ -22,6 +22,8 @@ from tools.regression.accuracy import (
     validate_release_gold_task_result,
 )
 from tools.regression.gold_cohort import build_gold_cohort_records
+from tools.tests.template_runtime_test_support import retained_proposal_fixture
+from x5crop.report.read_models import typed_read_model
 from tools.regression.gold_analysis import (
     RETAINED_PLACEMENT_SCOPE,
     _retained_placement_gold_labels,
@@ -734,17 +736,13 @@ class GoldAccuracyContractTest(unittest.TestCase):
     def test_retained_placements_allow_multiple_gold_positives_and_unknown(self) -> None:
         gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
         record = {
-            "sample_id": "retained-set", "format_id": "120-66",
+            "sample_id": "retained-set", "format_id": "120-66", "count": 1,
             "confirmed_geometry": _directional_geometry(gold),
         }
-        primary = {
-            "placement_id": "best", "lane_id": "lane:0", "state": "generated",
-            "failure": None, "output_footprints": [_output(gold)],
-        }
-        runner = {
-            **primary, "placement_id": "runner",
-            "output_footprints": [_output([[-1.0, -1.0], [561.0, -1.0], [561.0, 561.0], [-1.0, 561.0]])],
-        }
+        primary = typed_read_model(retained_proposal_fixture("best"))
+        primary["output_footprints"][0]["required_source_footprint"] = gold
+        runner = typed_read_model(retained_proposal_fixture("runner"))
+        runner["output_footprints"][0]["required_source_footprint"] = [[-1.0, -1.0], [561.0, -1.0], [561.0, 561.0], [-1.0, 561.0]]
         lane = {"placement_proposal": primary, "alternative_placement_proposals": [runner]}
         labels = _retained_placement_gold_labels(record, lane)
         self.assertEqual([item["geometry_conformance"] for item in labels], ["safe", "safe"])
@@ -767,8 +765,8 @@ class GoldAccuracyContractTest(unittest.TestCase):
         self.assertEqual(_retained_placement_summary([analysis])["safe_with_placement_ambiguity_task_ids"], [])
         analysis["cross_failure_kind"] = "non_equivalent_fits"
         self.assertEqual(_retained_placement_summary([analysis])["safe_with_placement_ambiguity_task_ids"], ["retained-set"])
-        primary["output_footprints"] = [_output([[10.0, 0.0], [560.0, 0.0], [560.0, 560.0], [10.0, 560.0]])]
-        runner.update(state="unavailable", output_footprints=[], failure={"gap": "output_footprint_unavailable"})
+        primary["output_footprints"][0]["required_source_footprint"] = [[10.0, 0.0], [560.0, 0.0], [560.0, 560.0], [10.0, 560.0]]
+        runner.update(typed_read_model(retained_proposal_fixture("runner", generated=False)))
         analysis["retained_placement_gold_labels"] = _retained_placement_gold_labels(record, lane)
         summary = _retained_placement_summary([analysis])
         self.assertEqual(summary["task_set_state_counts"], {"unknown_with_unavailable": 1})

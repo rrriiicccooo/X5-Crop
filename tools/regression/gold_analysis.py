@@ -49,11 +49,11 @@ from .gold_geometry import (
     validate_proposal_coverage,
     validate_selected_candidate_coverage,
 )
-from .report_validation import validate_current_report_record
+from .report_validation import validate_current_report_record, validate_placement_feature_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v19"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v22"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v20"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v23"
 RETAINED_PLACEMENT_SCOPE = "retained_best_and_single_runner"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
@@ -921,6 +921,11 @@ def _retained_placement_gold_labels(
             "generation_state": proposal["state"],
             "generation_failure": proposal["failure"],
             "output_footprints": proposal["output_footprints"],
+            "direct_use_budget_assessments": proposal["direct_use_budget_assessments"],
+            "budget_state": _runtime_budget_state(
+                proposal["direct_use_budget_assessments"], expected_count=record["count"],
+            ),
+            "acceptability_features": proposal["acceptability_features"],
             "geometry_conformance": diagnostic["geometry_conformance"],
             "geometry_failure": diagnostic["geometry_failure"],
             "frame_diagnostics": _frame_diagnostics_with_physical_identity(
@@ -935,6 +940,7 @@ def _retained_placement_summary(records: Sequence[dict[str, Any]]) -> dict[str, 
 
     states: Counter[str] = Counter()
     label_counts: Counter[str] = Counter()
+    budget_matrix: dict[str, Counter[str]] = defaultdict(Counter)
     safe_ambiguity_tasks = []
     for record in records:
         if record["retained_placement_scope"] != RETAINED_PLACEMENT_SCOPE:
@@ -960,9 +966,17 @@ def _retained_placement_summary(records: Sequence[dict[str, Any]]) -> dict[str, 
                 or len(item["output_footprints"]) != (
                     0 if conformance == "not_available" else record["count"]
                 )
+                or item["budget_state"] != _runtime_budget_state(
+                    item["direct_use_budget_assessments"], expected_count=record["count"],
+                )
             ):
                 raise ValueError("invalid retained placement gold label")
             counts[conformance] += 1
+            budget_matrix[conformance][item["budget_state"]] += 1
+            validate_placement_feature_record(
+                item["acceptability_features"], placement_id=item["placement_id"], lane_id=item["lane_id"],
+                output_geometry_ids=[output["geometry_id"] for output in item["output_footprints"]],
+            )
         state = (
             "no_retained_placement" if not labels
             else "multiple_safe" if counts["safe"] > 1
@@ -987,6 +1001,9 @@ def _retained_placement_summary(records: Sequence[dict[str, Any]]) -> dict[str, 
         "completed_task_count": len(records),
         "task_set_state_counts": dict(sorted(states.items())),
         "placement_label_counts": dict(sorted(label_counts.items())),
+        "placement_budget_conformance_matrix": {
+            state: dict(sorted(counts.items())) for state, counts in sorted(budget_matrix.items())
+        },
         "at_least_one_safe_task_count": states["one_safe"] + states["multiple_safe"],
         "safe_with_placement_ambiguity_task_ids": sorted(safe_ambiguity_tasks),
     }

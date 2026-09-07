@@ -76,7 +76,9 @@ gap, missing authority, inability to reliably choose among legal answers, or an 
 Acceptability scoring is not yet enabled; this is a current selection limit, not a requirement to prove one uniquely true crop.
 Reports retain each lane's existing primary and single runner crop footprint, or the specific reason it could not be generated.
 Development gold analysis evaluates each footprint independently, allows multiple safe results, and separates unsafe from
-unavailable geometry. These records do not change automatic approval conditions. Contact and
+unavailable geometry. Each retained crop also records its numeric budget and physical features with units, provenance,
+and explicit missing reasons. Numeric budget assessment remains separate from final approval conditions.
+These records do not change automatic approval conditions. Contact and
 overlap are challenge cases, not predetermined outcomes: the standard detector and Gate may
 approve them when direct-use admission is satisfied, while safe review remains correct when evidence is insufficient. V5 does
 not enable a second detector or a separate bleed budget for them. A proven relation adds topology protection only to

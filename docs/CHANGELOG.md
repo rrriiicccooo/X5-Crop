@@ -37,13 +37,16 @@
 
 - Normal report 与 Debug Analysis 只显示同次检测事实，分开 proposal、candidate、正式输出、runner、
   typed failure、calibration identity 和实际工作量，不重新检测或求解。当前 Report revision 为
-  `x5crop_v5_template_report_68`，不保留旧 schema 兼容层。
+  `x5crop_v5_template_report_69`，不保留旧 schema 兼容层。
 - 每条 lane 保留已有 best 与单个 runner 的完整 proposal 或 typed unavailable；每份由同一输出 owner
   物化一次，正式输出复用 primary。新增投影次数与逐 slot 输出评估次数，不扩大候选搜索或自动权限。
+- 每份 proposal 保留同一 owner 的数值预算和 28 项带单位、provenance 与 missingness 的物理特征；
+  正式 candidate 复用 primary 预算，不重复计算。缺失不记为 0；锚点按独立 evidence group 去重。
 - Development gold 分开比较 proposal、candidate 与 approved output。Runtime 的实际数值预算评估和
   CandidateGate 的预算阻断分开统计；未评估不能冒充通过。比例 H 的预算诊断只记录实际消费和阻断事实。
   每份保留候选独立记录最终 footprint 与方向性黄金标签，允许多份同时安全；无法生成不算不安全负例。
-  集合统计区分单份安全、多份安全、全部保留候选不安全和存在未能评价的候选。Gold record / summary 为 v19 / v22。
+  集合统计区分单份安全、多份安全、全部保留候选不安全和存在未能评价的候选，并对照每份 proposal 的
+  数值预算。Gold record / summary 为 v20 / v23。
 - 人工 reference 只来自原图坐标中的用户确认或独立外部测量，绑定 source SHA；模型与自动工具只产生
   proposal。Comparator 对原图黄金执行一次冻结 affine 变换，源截断 polygon 使用人工边界半平面判断。
 - `--gate report` 完整保存开发错误与危险 auto；成功退出只表示诊断完成。`--gate release` 与

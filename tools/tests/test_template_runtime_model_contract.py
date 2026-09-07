@@ -17,6 +17,15 @@ from tools.tests.template_test_support import (
 )
 from x5crop.detection.gate_checks import GateGap, TypedAssessment, failure_fact
 from x5crop.detection.photo_geometry.detector import _materialize_placement_proposal
+from x5crop.detection.photo_geometry.template_acceptability_features import (
+    PLACEMENT_FEATURE_DEFINITIONS,
+    build_placement_acceptability_features,
+)
+from x5crop.detection.photo_geometry.template_output import (
+    output_footprint_from_template_placement,
+    template_direct_use_budget_assessment,
+)
+from x5crop.detection.photo_geometry.template_feasible_geometry import project_format_placement
 from x5crop.detection.photo_geometry.model import (
     BoundaryRole,
 )
@@ -68,6 +77,8 @@ def _unresolved_result() -> PhotoGeometryDetectionResult:
         state=TemplateProposalState.UNAVAILABLE,
         placement_id=None,
         output_footprints=(),
+        direct_use_budget_assessments=(),
+        acceptability_features=None,
         failure=failure_fact(GateGap.PHASE_ANCHOR_UNAVAILABLE),
     )
     reconstruction = TemplateLaneReconstruction(
@@ -91,7 +102,7 @@ def _unresolved_result() -> PhotoGeometryDetectionResult:
         direct_use_budget_assessments=(),
         holder_fill_assessment=None,
         content_veto_facts=(),
-        work=TemplatePlacementWorkReceipt(0, 0, 0, 0, 0, 0),
+        work=TemplatePlacementWorkReceipt(0, 0, 0, 0, 0, 0, 0, 0),
     )
     selection = TemplateSourceSelection(
         lane_ids=("lane:0",),
@@ -194,11 +205,12 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
             template, placement_sequence(template),
             placement_cross(template, direction=placement_direction()), lane_id="lane:0",
         )
-        base = _output_footprint()
-        outputs = tuple(replace(
-            base, geometry_id=f"geometry:{ordinal}",
-            envelope=replace(base.envelope, placement_id=placement.placement_id, lane_ordinal=ordinal),
-        ) for ordinal in (1, 2))
+        projection = project_format_placement(placement)
+        outputs = tuple(
+            output_footprint_from_template_placement(
+                placement, projection, lane=prepared.lane, lane_ordinal=ordinal, layout="horizontal",
+            ) for ordinal in (1, 2)
+        )
         for failure_at in (None, 0, 2):
             with self.subTest(failure_at=failure_at), patch(
                 "x5crop.detection.photo_geometry.detector.project_format_placement",
@@ -206,7 +218,10 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
             ) as project, patch(
                 "x5crop.detection.photo_geometry.detector.output_footprint_from_template_placement",
                 side_effect=(outputs[0], ValueError("slot unavailable")) if failure_at == 2 else outputs,
-            ) as footprint:
+            ) as footprint, patch(
+                "x5crop.detection.photo_geometry.detector.template_direct_use_budget_assessment",
+                wraps=template_direct_use_budget_assessment,
+            ) as budget:
                 proposal, evaluations = _materialize_placement_proposal(prepared, placement, layout="horizontal")
                 project.assert_called_once_with(placement)
                 self.assertEqual(evaluations, 0 if failure_at == 0 else 2)
@@ -214,6 +229,8 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
                 self.assertEqual(proposal.placement_id, placement.placement_id)
                 self.assertEqual(proposal.output_footprints, outputs if failure_at is None else ())
                 self.assertEqual(proposal.state, TemplateProposalState.GENERATED if failure_at is None else TemplateProposalState.UNAVAILABLE)
+                self.assertEqual(budget.call_count, len(proposal.output_footprints))
+                self.assertEqual(len(proposal.acceptability_features.values), len(PLACEMENT_FEATURE_DEFINITIONS))
 
     def test_generated_proposal_survives_withheld_eligibility(self) -> None:
         prepared = _prepared()
@@ -224,20 +241,19 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
             placement_cross(template, direction=placement_direction()),
             lane_id="lane:0",
         )
-        base_output = _output_footprint()
-        output = replace(
-            base_output,
-            envelope=replace(
-                base_output.envelope,
-                placement_id=placement.placement_id,
-            ),
+        output = output_footprint_from_template_placement(
+            placement, project_format_placement(placement),
+            lane=prepared.lane, lane_ordinal=1, layout="horizontal",
         )
         failure = failure_fact(GateGap.PLACEMENT_UNRESOLVED)
+        budgets = (template_direct_use_budget_assessment(placement, output),)
         proposal = TemplatePlacementProposal(
             lane_id="lane:0",
             state=TemplateProposalState.GENERATED,
             placement_id=placement.placement_id,
             output_footprints=(output,),
+            direct_use_budget_assessments=budgets,
+            acceptability_features=build_placement_acceptability_features(placement, (output,), budgets),
             failure=None,
         )
         reconstruction = TemplateLaneReconstruction(
@@ -267,7 +283,7 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
             direct_use_budget_assessments=(),
             holder_fill_assessment=None,
             content_veto_facts=(),
-            work=TemplatePlacementWorkReceipt(1, 4, 0, 0, 1, 1),
+            work=TemplatePlacementWorkReceipt(1, 4, 0, 0, 1, 1, 1, len(PLACEMENT_FEATURE_DEFINITIONS)),
         )
         result = PhotoGeometryDetectionResult(
             resolved_output_slots=None,
@@ -303,7 +319,12 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
 
         runner = replace(placement, placement_id="placement:runner")
         runner_output = replace(output, envelope=replace(output.envelope, placement_id=runner.placement_id))
-        runner_proposal = replace(proposal, placement_id=runner.placement_id, output_footprints=(runner_output,))
+        runner_budgets = (template_direct_use_budget_assessment(runner, runner_output),)
+        runner_proposal = replace(
+            proposal, placement_id=runner.placement_id, output_footprints=(runner_output,),
+            direct_use_budget_assessments=runner_budgets,
+            acceptability_features=build_placement_acceptability_features(runner, (runner_output,), runner_budgets),
+        )
         retained = replace(
             reconstruction,
             placement_competition=replace(
@@ -311,7 +332,10 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
                 placements=(placement, runner), runner_up_placement_id=runner.placement_id,
             ),
             alternative_placement_proposals=(runner_proposal,),
-            work=replace(reconstruction.work, proposal_projection_count=2, proposal_output_evaluation_count=2),
+            work=replace(
+                reconstruction.work, proposal_projection_count=2, proposal_output_evaluation_count=2,
+                proposal_budget_evaluation_count=2, placement_feature_evaluation_count=2 * len(PLACEMENT_FEATURE_DEFINITIONS),
+            ),
         )
         self.assertEqual(retained.output_footprints, ())
         self.assertIs(retained.placement_proposal, proposal)
@@ -323,11 +347,19 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
             replace(retained, work=replace(retained.work, proposal_projection_count=1))
         with self.assertRaisesRegex(ValueError, "work exceeds"):
             replace(retained, work=replace(retained.work, proposal_output_evaluation_count=3))
+        for field in ("proposal_budget_evaluation_count", "placement_feature_evaluation_count"):
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "work exceeds"):
+                replace(retained, work=replace(retained.work, **{field: getattr(retained.work, field) + 1}))
         unavailable_runner = replace(
             runner_proposal, state=TemplateProposalState.UNAVAILABLE,
             output_footprints=(), failure=failure_fact(GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE),
+            direct_use_budget_assessments=(),
+            acceptability_features=build_placement_acceptability_features(runner, (), ()),
         )
-        replace(retained, alternative_placement_proposals=(unavailable_runner,))
+        replace(
+            retained, alternative_placement_proposals=(unavailable_runner,),
+            work=replace(retained.work, proposal_budget_evaluation_count=1),
+        )
 
     def test_unresolved_lane_retains_nominal_grid_counterevidence(self) -> None:
         prepared = _prepared()
@@ -348,6 +380,8 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
                 state=TemplateProposalState.UNAVAILABLE,
                 placement_id=None,
                 output_footprints=(),
+                direct_use_budget_assessments=(),
+                acceptability_features=None,
                 failure=failure_fact(GateGap.PLACEMENT_UNRESOLVED),
             ),
             alternative_placement_proposals=(),
@@ -370,7 +404,7 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
             direct_use_budget_assessments=(),
             holder_fill_assessment=None,
             content_veto_facts=(),
-            work=TemplatePlacementWorkReceipt(0, 0, 0, 0, 0, 0),
+            work=TemplatePlacementWorkReceipt(0, 0, 0, 0, 0, 0, 0, 0),
         )
 
         self.assertEqual(
@@ -398,6 +432,8 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
                     state=TemplateProposalState.UNAVAILABLE,
                     placement_id=None,
                     output_footprints=(),
+                    direct_use_budget_assessments=(),
+                    acceptability_features=None,
                     failure=failure_fact(GateGap.PLACEMENT_UNRESOLVED),
                 ),
                 alternative_placement_proposals=(),
@@ -416,7 +452,7 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
                 direct_use_budget_assessments=(),
                 holder_fill_assessment=None,
                 content_veto_facts=(),
-                work=TemplatePlacementWorkReceipt(0, 0, 0, 0, 0, 0),
+                work=TemplatePlacementWorkReceipt(0, 0, 0, 0, 0, 0, 0, 0),
             )
 
     def test_source_selection_rejects_partial_authority(self) -> None:

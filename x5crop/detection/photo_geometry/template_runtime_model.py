@@ -56,6 +56,10 @@ from .template_enclosing_support_aperture import (
     EnclosingSupportApertureAuthority,
 )
 from .template_frame_width import SourceFrameWidthAuthority
+from .template_acceptability_features import (
+    PLACEMENT_FEATURE_DEFINITIONS,
+    PlacementAcceptabilityFeatures,
+)
 from .template_holder_fill import HolderFillAssessment
 from .template_model import SourceFrameWidthAuthorityBasis, TemplateSpec
 from .template_measurement_plan_model import TemplateMeasurementPlan
@@ -659,6 +663,8 @@ class TemplatePlacementProposal:
     state: TemplateProposalState
     placement_id: str | None
     output_footprints: tuple[OutputFootprint, ...]
+    direct_use_budget_assessments: tuple[DirectUseBudgetAssessment, ...]
+    acceptability_features: PlacementAcceptabilityFeatures | None
     failure: DetectionFailureFact | None
 
     def __post_init__(self) -> None:
@@ -693,6 +699,18 @@ class TemplatePlacementProposal:
             self.failure, DetectionFailureFact
         ):
             raise ValueError("unavailable template proposal requires one failure")
+        if tuple(item.geometry_id for item in self.direct_use_budget_assessments) != tuple(
+            item.geometry_id for item in self.output_footprints
+        ):
+            raise ValueError("proposal budget must cover exactly its output footprints")
+        features = self.acceptability_features
+        if (self.placement_id is None) != (features is None) or features is not None and (
+            not isinstance(features, PlacementAcceptabilityFeatures)
+            or features.placement_id != self.placement_id
+            or features.lane_id != self.lane_id
+            or features.output_geometry_ids != tuple(item.geometry_id for item in self.output_footprints)
+        ):
+            raise ValueError("proposal features must describe its retained placement")
 
 
 @dataclass(frozen=True)
@@ -743,6 +761,8 @@ class TemplatePlacementWorkReceipt:
     peak_temporary_bytes: int
     proposal_projection_count: int
     proposal_output_evaluation_count: int
+    proposal_budget_evaluation_count: int
+    placement_feature_evaluation_count: int
     bound_exceeded: bool = False
 
     def __post_init__(self) -> None:
@@ -753,6 +773,8 @@ class TemplatePlacementWorkReceipt:
             self.peak_temporary_bytes,
             self.proposal_projection_count,
             self.proposal_output_evaluation_count,
+            self.proposal_budget_evaluation_count,
+            self.placement_feature_evaluation_count,
         )
         if any(type(value) is not int or value < 0 for value in values):
             raise ValueError("template placement work values must be non-negative")
@@ -823,6 +845,10 @@ class TemplateLaneReconstruction:
             < sum(len(item.output_footprints) for item in retained)
             or self.work.proposal_output_evaluation_count
             > sum(item.output_slot_count for item in placements)
+            or self.work.proposal_budget_evaluation_count
+            != sum(len(item.direct_use_budget_assessments) for item in retained)
+            or self.work.placement_feature_evaluation_count
+            != len(placements) * len(PLACEMENT_FEATURE_DEFINITIONS)
         ):
             raise ValueError("retained proposal work exceeds its placement bounds")
         selected_id = self.placement_competition.selected_placement_id
@@ -846,6 +872,7 @@ class TemplateLaneReconstruction:
             proposal.state != TemplateProposalState.GENERATED
             or proposal.placement_id != selected_id
             or proposal.output_footprints != self.output_footprints
+            or proposal.direct_use_budget_assessments != self.direct_use_budget_assessments
         ):
             raise ValueError("selected placement must reuse the primary proposal")
         if self.selected_placement is None:

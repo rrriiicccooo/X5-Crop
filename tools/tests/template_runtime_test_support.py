@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.evidence.scan_canvas import observe_scan_canvas
 from x5crop.detection.photo_geometry.coarse_strip_support import (
@@ -53,6 +55,35 @@ from x5crop.detection.source_core import (
 from x5crop.domain import Box, EvidenceState, FiniteInterval, PositiveInterval
 from x5crop.formats import FramePhysicalSpec
 from tools.tests.template_test_support import unavailable_nominal_grid_prior
+
+
+def retained_proposal_fixture(placement_id: str, *, generated: bool = True):
+    """One synthetic proposal through the production projection/output owners."""
+
+    from tools.tests.template_test_support import (
+        placement_compose, placement_cross, placement_direction,
+        placement_sequence, placement_template,
+    )
+    from x5crop.detection.gate_checks import GateGap, failure_fact
+    from x5crop.detection.photo_geometry.detector import _materialize_placement_proposal
+    from x5crop.detection.photo_geometry.template_acceptability_features import build_placement_acceptability_features
+    from x5crop.detection.photo_geometry.template_runtime_model import TemplateProposalState
+
+    prepared = prepared_template_lane()
+    template = placement_template(1)
+    placement = replace(placement_compose(
+        template, placement_sequence(template),
+        placement_cross(template, direction=placement_direction()), lane_id="lane:0",
+    ), placement_id=placement_id)
+    proposal, _ = _materialize_placement_proposal(prepared, placement, layout="horizontal")
+    if generated:
+        return proposal
+    return replace(
+        proposal, state=TemplateProposalState.UNAVAILABLE, output_footprints=(),
+        direct_use_budget_assessments=(),
+        acceptability_features=build_placement_acceptability_features(placement, (), ()),
+        failure=failure_fact(GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE),
+    )
 
 
 def runtime_lane() -> SourceLaneEvidence:
