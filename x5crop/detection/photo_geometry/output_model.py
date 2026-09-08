@@ -15,6 +15,7 @@ from ...geometry.convex import (
     signed_area,
 )
 from .line_observations import SourceCoordinateLine
+from .template_model import SequenceRoleLineEvidence
 from .model import (
     AuthoritySide,
     BoundaryRole,
@@ -67,10 +68,10 @@ class FrameBoundaryGeometry:
     reference_trace_px: float
     canonical_position_px: float
     full_position_interval_px: FiniteInterval
-    local_outward_departure_px: float
     position_source: PositionSource
     position_observation_ids: tuple[ObservationId, ...]
     named_position_inference: str | None
+    line_evidence: SequenceRoleLineEvidence | None = None
 
     def __post_init__(self) -> None:
         if not self.full_position_interval_px.contains(
@@ -82,11 +83,11 @@ class FrameBoundaryGeometry:
             )
         if not math.isfinite(self.reference_trace_px):
             raise ValueError("frame boundary reference trace must be finite")
-        if (
-            not math.isfinite(self.local_outward_departure_px)
-            or self.local_outward_departure_px < 0.0
+        if self.line_evidence is not None and (
+            self.role not in {BoundaryRole.START, BoundaryRole.END}
+            or self.line_evidence.observation_id not in self.position_observation_ids
         ):
-            raise ValueError("frame boundary departure must be non-negative")
+            raise ValueError("sequence protection line lost its boundary provenance")
         observed = self.position_source == PositionSource.OBSERVED_TRANSITION
         if observed:
             if (

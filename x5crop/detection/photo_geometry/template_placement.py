@@ -272,6 +272,10 @@ def _shift_sequence_line_evidence(
         fit_direction_interval_degrees=(
             evidence.fit_direction_interval_degrees
         ),
+        physical_line_region=evidence.physical_line_region,
+        physical_position_offset_px=_advance(
+            evidence.physical_position_offset_px, width_px, direction,
+        ),
     )
 
 
@@ -627,7 +631,6 @@ def _boundary_geometry(
     *,
     reference_trace_px: float,
     support_projection_px: FiniteInterval,
-    local_outward_departure_px: float = 0.0,
     width_axis: BoundaryAxis,
     height_axis: BoundaryAxis,
 ) -> FrameBoundaryGeometry:
@@ -647,80 +650,11 @@ def _boundary_geometry(
         reference_trace_px=reference_trace_px,
         canonical_position_px=resolved.canonical,
         full_position_interval_px=resolved.full_interval,
-        local_outward_departure_px=local_outward_departure_px,
         position_source=resolved.source,
         position_observation_ids=resolved.observation_ids,
         named_position_inference=resolved.inference,
+        line_evidence=resolved.line_evidence,
     )
-
-
-def _aperture_corner_outward_departure_px(
-    cross: CrossFit,
-    cross_support_px: FiniteInterval,
-) -> float:
-    """Contain aperture corners without creating a placement frame axis.
-
-    A resolved direct top/bottom aperture pair proves the local orientation of
-    the fixed-H photo region.  Its fit interval may therefore enlarge the two
-    source-axis side bounds by the half-height corner departure.  Enclosing
-    support and one-sided inference do not prove that relation and contribute
-    nothing here.
-    """
-
-    if (
-        cross.boundary_use != OutputBoundaryUse.APERTURE_PAIR
-        or not cross.direct_pair
-        or len(cross.direct_bindings) != 2
-    ):
-        return 0.0
-    directions = tuple(
-        item.fit_direction_interval_degrees
-        for item in cross.direct_bindings
-        if item.fit_direction_interval_degrees is not None
-    )
-    if not directions:
-        return 0.0
-    maximum_slope = max(
-        abs(math.tan(math.radians(angle)))
-        for interval in directions
-        for angle in (interval.minimum, interval.maximum)
-    )
-    return maximum_slope * cross_support_px.width / 2.0
-
-
-def _sequence_line_outward_departure_px(
-    boundary: _ResolvedBoundary,
-    cross_support_px: FiniteInterval,
-    direction: int,
-) -> float:
-    """Protect only fitted-line extent not already owned by full position."""
-
-    evidence = boundary.line_evidence
-    if evidence is None:
-        return 0.0
-    projected = tuple(
-        position
-        - math.tan(math.radians(angle))
-        * (trace - evidence.reference_trace_px)
-        for position in (
-            evidence.fit_position_interval_px.minimum,
-            evidence.fit_position_interval_px.maximum,
-        )
-        for angle in (
-            evidence.fit_direction_interval_degrees.minimum,
-            evidence.fit_direction_interval_degrees.maximum,
-        )
-        for trace in (
-            cross_support_px.minimum,
-            cross_support_px.maximum,
-        )
-    )
-    outward_is_positive = (
-        boundary.role == BoundaryRole.END
-    ) == (direction > 0)
-    if outward_is_positive:
-        return max(0.0, max(projected) - boundary.full_interval.maximum)
-    return max(0.0, boundary.full_interval.minimum - min(projected))
 
 
 def _aperture_center_shift_px(
@@ -837,22 +771,10 @@ def compose_format_placement(
                 frame_bottom.full_interval.maximum,
             ),
         )
-        aperture_side_departure = _aperture_corner_outward_departure_px(
-            cross_fit,
-            frame_cross_support,
-        )
         start_geometry = _boundary_geometry(
             start,
             reference_trace_px=frame_cross_support.center,
             support_projection_px=frame_cross_support,
-            local_outward_departure_px=max(
-                aperture_side_departure,
-                _sequence_line_outward_departure_px(
-                    start,
-                    frame_cross_support,
-                    template.direction,
-                ),
-            ),
             width_axis=width_axis,
             height_axis=height_axis,
         )
@@ -860,14 +782,6 @@ def compose_format_placement(
             end,
             reference_trace_px=frame_cross_support.center,
             support_projection_px=frame_cross_support,
-            local_outward_departure_px=max(
-                aperture_side_departure,
-                _sequence_line_outward_departure_px(
-                    end,
-                    frame_cross_support,
-                    template.direction,
-                ),
-            ),
             width_axis=width_axis,
             height_axis=height_axis,
         )

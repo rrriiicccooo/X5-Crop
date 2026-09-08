@@ -26,6 +26,9 @@
 - Sequence 边界的完整 reference 位置保留同一组 raw physical 测量允许的全部直线状态，
   修复统计定位峰较窄或不对称时遗漏可行位置的问题。联合位置/斜率保留在测量事实中；
   canonical、拟合代表、角色资格与原角度上限不变，残差恢复不能重获方向权限。
+- Aperture 裁切保护继续传播同一物理直线的位置/斜率关系，并闭合长短轴外扩对角点的相互影响；
+  新进入保护范围的原始端点保留完整区间。Mandatory 与 requested 分别计算，bleed 不重复，
+  原 5% 预算、候选数与像素查询上限不变。
 - 晚期弱线投影使用完整 registered 身份账本，修复低采样占比但已有坐标权限的局部边被误报为
   unknown edge 的错误；phase seed 门槛、原全局 anchor、独立 rank 与弱线反证保持不变。
 - Top/bottom 共用预登记的 lane 完整短轴归一化基线，保留原查询窗口与测量阈值；基线不产生边界证据，
@@ -49,7 +52,7 @@
   完整 pair 仍作为合法方案参与竞争，多个完整方案保持歧义。
 - 纯离散歧义的 primary/runner 分别以自身合法直接约束收紧 proposal 联合包络；runner 不借用 primary
   的角色或不匹配的 source W。歧义、反证与输出资格不变，空可行集明确保留为 unavailable。
-- Enclosing aperture-center 校准按当前唯一 selected pair 的 17 个 source 重登记观测指纹；
+- Enclosing aperture-center 校准按当前唯一 selected pair 的 18 个 source 重登记观测指纹；
   原资格、source 中位数、全体 hull 与向外量化方法不变，当前区间为 `[-0.008H, +0.010H]`。
 - Source W 明确分开测量、placement 消费和自动输出资格。至少两张合格完整 Frame 或全部独立 rank-3
   直接约束可建立测量；两组都成立时只取交集。远处 coverage、全局 rank 缺口或 unresolved proposal 不再

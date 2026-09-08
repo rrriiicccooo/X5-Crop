@@ -771,6 +771,70 @@ def _validate_sequence_physical_line_regions(
                 raise ValueError("sequence full position discards a physical line state")
 
 
+def _validate_sequence_output_line_provenance(lane: dict[str, Any]) -> None:
+    """Output protection consumes the registered line, with one named W shift."""
+    observations = {
+        edge["observation_id"]: edge
+        for field in ("sequence_edges", "cross_height_edges", "broad_material_edges")
+        for edge in lane["observations"][field]
+    }
+
+    def validate_fit(fit: dict[str, Any]) -> None:
+        for binding in fit["role_bindings"]:
+            if binding is None:
+                continue
+            edge = observations.get(binding["observation_id"])
+            if edge is None:
+                raise ValueError("sequence output line lost its registered observation")
+            expected = None if edge["fit_direction_interval_degrees"] is None else {
+                "observation_id": edge["observation_id"],
+                "reference_trace_px": edge["reference_trace_px"],
+                "fit_position_interval_px": edge["fit_position_interval_px"],
+                "fit_direction_interval_degrees": edge["fit_direction_interval_degrees"],
+                "physical_line_region": edge["physical_line_region"],
+                "physical_position_offset_px": {"minimum": 0.0, "maximum": 0.0},
+            }
+            if binding.get("line_evidence") != expected:
+                raise ValueError("sequence output line changed its registered physical family")
+
+    phase = lane["phase_competition"]
+    for fit in (phase["best"], phase["runner_up"]):
+        if fit is not None:
+            validate_fit(fit)
+    for placement in lane["placement_competition"]["placements"]:
+        fit = placement["sequence_fit"]
+        validate_fit(fit)
+        bindings = fit["role_bindings"]
+        width = fit["pitch_fit"]["frame_width_px"]
+        direction = fit["template"]["direction"]
+        for ordinal, frame in enumerate(placement["frames"]):
+            for index, role in enumerate(("start", "end")):
+                binding = bindings[2 * ordinal + index]
+                inferred = binding is None
+                if inferred:
+                    binding = bindings[2 * ordinal + 1 - index]
+                expected = None if binding is None else binding["line_evidence"]
+                if expected is not None and inferred:
+                    sign = direction if role == "end" else -direction
+                    shifts = (sign * width["minimum"], sign * width["maximum"])
+                    expected = dict(expected)
+                    for field in ("fit_position_interval_px", "physical_position_offset_px"):
+                        interval = expected[field]
+                        expected[field] = {
+                            "minimum": interval["minimum"] + min(shifts),
+                            "maximum": interval["maximum"] + max(shifts),
+                        }
+                boundary = frame[role]
+                if (
+                    "line_evidence" not in boundary
+                    or "local_outward_departure_px" in boundary
+                    or boundary["line_evidence"] != expected
+                ):
+                    raise ValueError("frame protection lost its native line or counted W twice")
+            if any(frame[role].get("line_evidence") is not None for role in ("top", "bottom")):
+                raise ValueError("cross output boundary acquired sequence line evidence")
+
+
 def _validate_cross_direct_support_regions(lane: dict[str, Any]) -> None:
     """Check original per-line support independently of selected-domain counts."""
 
@@ -4309,6 +4373,7 @@ def _validate_development(record: dict[str, Any]) -> None:
         _validate_sequence_physical_line_regions(
             lane, development["measurement"]["queries"]
         )
+        _validate_sequence_output_line_provenance(lane)
         if cross_competition["receipt"]["fitted_observation_count"] != sum(
             item["independent_support_region_count"] >= MINIMUM_INDEPENDENT_SUPPORT_REGIONS
             for item in registered_cross.values()

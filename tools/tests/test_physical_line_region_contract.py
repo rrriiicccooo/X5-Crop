@@ -8,16 +8,21 @@ import unittest
 import numpy as np
 from scipy.optimize import linprog
 
-from tools.regression.report_validation import _validate_sequence_physical_line_regions
+from tools.regression.report_validation import (
+    _validate_sequence_output_line_provenance,
+    _validate_sequence_physical_line_regions,
+)
 from x5crop.report.read_models import typed_read_model
 from x5crop.domain import FiniteInterval, ObservationId, PositiveInterval
 from x5crop.detection.photo_geometry.measurement_model import PhotoBoundaryTransition
 from x5crop.detection.photo_geometry.measurement_points import TransitionPoint
 from x5crop.detection.photo_geometry.robust_line_fit import (
     physical_line_region as compile_physical_line_region,
+    physical_line_region_at_positions,
     physical_slope_interval,
 )
 from x5crop.detection.photo_geometry.observations import build_sequence_edge_observations
+from x5crop.detection.photo_geometry.line_observations import PhysicalLineRegion
 from x5crop.detection.photo_geometry.observation_types import (
     BasicAxisProfile, BoundaryEdgeMeasurementBasis, ProfileRun,
 )
@@ -62,6 +67,72 @@ def physical_line_region(points, maximum_slope, reference_trace_px):
 
 
 class PhysicalLineRegionContractTest(unittest.TestCase):
+    def test_output_line_provenance_rejects_family_and_width_substitution(self) -> None:
+        edge = {
+            "observation_id": "registered-line",
+            "reference_trace_px": 50.0,
+            "fit_position_interval_px": {"minimum": 99.0, "maximum": 101.0},
+            "fit_direction_interval_degrees": {"minimum": -1.0, "maximum": 1.0},
+            "physical_line_region": {
+                "reference_trace_px": 50.0,
+                "vertices": [[99.0, 0.0], [100.0, 0.02], [101.0, 0.0]],
+            },
+        }
+        for direction in (-1, 1):
+            evidence = {**deepcopy(edge), "physical_position_offset_px": {
+                "minimum": 0.0, "maximum": 0.0,
+            }}
+            binding = {"observation_id": edge["observation_id"], "line_evidence": evidence}
+            fit = {"role_bindings": [binding, None],
+                   "pitch_fit": {"frame_width_px": {"minimum": 90.0, "maximum": 110.0}},
+                   "template": {"direction": direction}}
+            inferred = deepcopy(evidence)
+            shifts = sorted((90.0 * direction, 110.0 * direction))
+            for field in ("fit_position_interval_px", "physical_position_offset_px"):
+                inferred[field]["minimum"] += shifts[0]
+                inferred[field]["maximum"] += shifts[1]
+            lane = {
+                "observations": {"sequence_edges": [edge], "cross_height_edges": [],
+                                 "broad_material_edges": []},
+                "phase_competition": {"best": fit, "runner_up": None},
+                "placement_competition": {"placements": [{"sequence_fit": fit, "frames": [{
+                    "start": {"line_evidence": evidence}, "end": {"line_evidence": inferred},
+                    "top": {"line_evidence": None}, "bottom": {"line_evidence": None},
+                }]}]},
+            }
+            _validate_sequence_output_line_provenance(lane)
+            for mutation in ("raw_family", "width_twice", "fixed_departure"):
+                changed = deepcopy(lane)
+                frame = changed["placement_competition"]["placements"][0]["frames"][0]
+                if mutation == "raw_family":
+                    frame["end"]["line_evidence"]["physical_line_region"]["vertices"].pop()
+                elif mutation == "width_twice":
+                    frame["end"]["line_evidence"]["physical_position_offset_px"]["maximum"] += 90.0
+                else:
+                    frame["start"]["local_outward_departure_px"] = 0.0
+                with self.subTest(direction=direction, mutation=mutation), self.assertRaises(ValueError):
+                    _validate_sequence_output_line_provenance(changed)
+
+    def test_position_offset_and_reachable_slice_keep_correlated_slopes(self) -> None:
+        raw = PhysicalLineRegion(260.0, ((190.0, 0.0), (200.0, -0.04),
+                                         (210.0, 0.0), (200.0, 0.04)))
+        clipped = physical_line_region_at_positions(raw, FiniteInterval.exact(0.0),
+                                                     FiniteInterval.exact(200.0))
+        self.assertIsNotNone(clipped)
+        assert clipped is not None
+        self.assertAlmostEqual(clipped.project(510.0).maximum, 210.0)
+        self.assertAlmostEqual(clipped.project(10.0).minimum, 190.0)
+        # At the outermost reachable shifted position only p=210,W=110
+        # survives; the independent slope maximum cannot accompany it.
+        shifted = physical_line_region_at_positions(raw, FiniteInterval(90.0, 110.0),
+                                                     FiniteInterval.exact(320.0))
+        self.assertIsNotNone(shifted)
+        assert shifted is not None
+        self.assertEqual(shifted.project(510.0), FiniteInterval.exact(320.0))
+        self.assertIsNone(physical_line_region_at_positions(
+            raw, FiniteInterval.exact(0.0), FiniteInterval(300.0, 400.0),
+        ))
+
     def test_sequence_full_position_retains_asymmetric_physical_states(self) -> None:
         points = _points((0, 50, 100), ((99.0, 120.0),) * 3)
         transitions = tuple(

@@ -68,7 +68,6 @@ def make_frame(
             reference_trace_px=15.0,
             canonical_position_px=position,
             full_position_interval_px=FiniteInterval.exact(position),
-            local_outward_departure_px=0.0,
             position_source=PositionSource.OBSERVED_TRANSITION,
             position_observation_ids=(
                 ObservationId(f"boundary:{role.value}:{position}"),

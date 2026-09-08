@@ -1188,11 +1188,10 @@ Enclosing pair 以 source 已闭合的 `fixed_height_px` 与 canonical H 检查�
 - first/last、separator、top/bottom 和总跨度闭环；
 - 双 lane 的共享尺度与 slot identity 相容。
 
-直接绑定的 sequence start/end 把自己的 native coordinate、full interval 与稳定直线拟合交给最终
-placement；Grid coordinate 只保留为模型诊断。Placement 仍保持 source-axis，不沿拟合直线旋转 frame；
-安全层只计算该直线在当前 frame 短轴 support 上超过 full interval 的向外部分，已覆盖的 residual 不重复
-相加。只有一侧直接可见时，固定 W 推导 opposite，并平移同一条直线证据；两侧都直接可见时各自保留
-独立 observation，不把远处 model residual 复制到本 Frame。
+直接绑定的 sequence start/end 把自己的 native coordinate、full interval、统计 fit 与完整物理线族交给
+最终 placement；Grid coordinate 只保留为模型诊断。Placement 仍保持 source-axis，不沿拟合直线旋转
+frame；实际可达位置与两轴保护的消费合同见第 10 节。只有一侧直接可见时，固定 W 推导 opposite，
+并平移同一条直线证据；两侧都直接可见时各自保留独立 observation，不把远处 model residual 复制到本 Frame。
 
 ### 9.1 当前选择合同
 
@@ -1347,12 +1346,29 @@ selected placement
 `PlacementFeasibleSet` 保留同一 observation bindings、ordinal topology、boundary use 和 placement
 identity 下仍合法的 W、未观察 Grid role、local delta 与 cross 联合状态；直接 sequence role 从自己的
 native interval 投影，不能被全局 Grid 拉回。直接 enclosing pair 额外保留自己的 same-state slope。
-每个 frame 的边界极值从这个低维联合集合求出，再加入未被 full interval 覆盖的 line outward
+每个 frame 的边界极值从这个低维联合集合求出，再加入相对实际可行位置仍需保护的 line outward
 departure；不把同一 residual 重复相加，不吸收 runner-up，也不重新读取像素。
 由一侧直接边与共同 W 推导 opposite 时，输出保护用的直线位置区间与 full position 必须传播同一份
 有符号完整 W interval，保留原 observation identity、reference trace 与方向区间。不能用只平移 canonical W
 的直线减去包含完整 W 的位置区间，否则 W 的不确定性会抵消仍需保护的方向 departure。完整 W 只在
 联合位置中计入一次，已由原直接边 full interval 覆盖的 departure 不再重复添加。
+
+Sequence 输出保留原 `physical_line_region` 的联合位置/斜率，按该 frame 全部实际
+`JointFrameState` 的对应 native 位置范围裁切；有符号 W 只作为同一线族的位置位移。
+统计 fit 仍是代表，不能替代物理线族；非空物理线族与可达位置裁空时明确报错，不能退回较窄的 fit。
+Report 同时校验 registered observation、phase binding、frame line 与这一次 W 位移的完整来源。
+
+`APERTURE_PAIR` 的两轴保护相互影响：短轴外扩会增加 sequence 斜线在角点处的位移，
+长轴外扩也会增加 top/bottom 的位移。先在原完整 frame span 求逐边 signed departure，
+保留已经由位置包络覆盖的负余量。令基础长、短轴最大保护量为 `rx, ry`，对应线族最大绝对斜率为
+`M, N`，以 `dx=(rx+M*ry)/(1-M*N)`、`dy=(ry+N*rx)/(1-M*N)` 闭合保护上界；
+要求 `M*N<1`。逐边只消费自己的 departure、斜率和另一轴上界，不能把方向余量抵消掉。
+Mandatory 与含 bleed/topology 的 requested 分别闭合，产品 bleed 只计入一次，原 5% 预算不变。
+
+同一 frame 的全部可行 reference 状态共享原始 Cross trace 准入账本，包含中间状态的完整跨度。
+外扩后新进入保护范围的 raw endpoint 保留其完整位置区间，并对全部状态重新求保护；每次继续都必须
+新增一个已登记 endpoint，最多执行 `N_endpoint+1` 轮。该过程不增加 pixel query、candidate、
+几何求解器或数值收敛迭代。Enclosing support 仍使用下述同状态 support 合同。
 
 产品 bleed：
 

@@ -10,6 +10,7 @@ import numpy as np
 from scipy.optimize import least_squares
 
 from ...domain import FiniteInterval
+from ...geometry.convex import convex_hull
 from .measurement_points import TransitionPoint
 from .line_observations import PhysicalLineRegion, RobustLineFitReceipt
 from .model import PhotoBoundaryMeasurementSpec
@@ -107,6 +108,33 @@ def physical_line_region(
         if not vertices:
             return None
     return PhysicalLineRegion(reference_trace_px, vertices)
+
+
+def physical_line_region_at_positions(
+    region: PhysicalLineRegion,
+    offset: FiniteInterval,
+    positions: FiniteInterval,
+) -> PhysicalLineRegion | None:
+    """Project a bounded position offset, then restrict its reachable reference.
+
+    The offset is a protective Minkowski envelope, not an independent width
+    measurement. Clipping retains position/slope correlation and legal point
+    or segment degeneracies without an additional LP.
+    """
+    if offset.width == 0.0:
+        vertices = tuple((p + offset.minimum, m) for p, m in region.vertices)
+    elif len({m for _, m in region.vertices}) == 1:
+        slope = region.vertices[0][1]
+        vertices = ((min(p for p, _ in region.vertices) + offset.minimum, slope),
+                    (max(p for p, _ in region.vertices) + offset.maximum, slope))
+    else:
+        vertices = convex_hull(tuple(
+            (p + value, m) for p, m in region.vertices
+            for value in (offset.minimum, offset.maximum)
+        ))
+    vertices = _clip_line_region(vertices, 1.0, 0.0, positions.maximum)
+    vertices = _clip_line_region(vertices, -1.0, 0.0, -positions.minimum)
+    return PhysicalLineRegion(region.reference_trace_px, vertices) if vertices else None
 
 
 def physical_slope_interval(

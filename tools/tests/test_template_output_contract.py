@@ -53,6 +53,7 @@ from x5crop.detection.photo_geometry.template_nominal_grid_authority import (
     assess_calibrated_nominal_grid_authority,
 )
 from x5crop.detection.photo_geometry.template_output import (
+    _footprint,
     output_footprint_from_template_placement,
     template_direct_use_budget_assessment,
 )
@@ -66,6 +67,7 @@ from x5crop.detection.photo_geometry.template_enclosing_support_aperture import 
 from x5crop.detection.photo_geometry.template_placement import (
     resolved_cross_support_domains_px,
 )
+from x5crop.detection.photo_geometry.line_observations import PhysicalLineRegion
 from x5crop.detection.photo_geometry.template_model import (
     ContactRelation,
     OverlapRelation,
@@ -1358,11 +1360,9 @@ class TemplateOutputContractTest(unittest.TestCase):
             if item.role == BoundaryRole.END
         )
 
-        self.assertGreater(placement.frames[0].end.local_outward_departure_px, 2.0)
-        self.assertAlmostEqual(
-            end.local_boundary_residual_px,
-            placement.frames[0].end.local_outward_departure_px + 1.0,
-        )
+        self.assertGreater(end.local_boundary_residual_px, 3.0)
+        self.assertGreaterEqual(max(x for x, _ in output.mandatory_source_footprint),
+                                200.0 + math.tan(math.radians(1.0)) * 120.0 + 1.0)
         self.assertTrue(
             all(
                 frame.start.line.normal_x == 1.0
@@ -1376,8 +1376,15 @@ class TemplateOutputContractTest(unittest.TestCase):
     def test_sequence_line_extent_already_in_full_interval_is_not_added_twice(
         self,
     ) -> None:
-        template = _template(1)
+        template = replace(_template(1), frame_width_px=FiniteInterval(100.0, 104.0))
         sequence = _sequence(template)
+        # Fix the representative width at 100 while allowing the native END
+        # range to remain reachable under W; an exact W would exclude 204.
+        sequence = replace(sequence, role_bindings=(sequence.role_bindings[0], replace(
+            sequence.role_bindings[1], canonical_position_px=200.0,
+            fit_position_interval_px=FiniteInterval.exact(200.0),
+            full_position_interval_px=FiniteInterval.exact(200.0),
+        )))
         bindings = list(sequence.role_bindings)
         binding = bindings[1]
         assert binding is not None
@@ -1386,11 +1393,15 @@ class TemplateOutputContractTest(unittest.TestCase):
             full_position_interval_px=FiniteInterval(200.0, 204.0),
         )
         sequence = replace(sequence, role_bindings=tuple(bindings))
-        baseline = _compose(
-            template,
-            sequence,
-            _cross(template, direction=_direction()),
-        ).frames[0].end.local_outward_departure_px
+        cross = _cross(template)
+        cross = replace(cross, direct_bindings=tuple(replace(
+            binding, fit_direction_interval_degrees=FiniteInterval.exact(0.0),
+            full_direction_interval_degrees=FiniteInterval.exact(0.0),
+            observed_direction_interval_degrees=FiniteInterval.exact(0.0),
+        ) for binding in cross.direct_bindings))
+        baseline_placement = _compose(template, sequence, cross)
+        baseline = _footprint(baseline_placement, baseline_placement.frames[0],
+                              project_format_placement(baseline_placement), apply_residual=True)
         bindings = list(sequence.role_bindings)
         binding = bindings[1]
         assert binding is not None
@@ -1407,13 +1418,12 @@ class TemplateOutputContractTest(unittest.TestCase):
         placement = _compose(
             template,
             sequence,
-            _cross(template, direction=_direction()),
+            cross,
         )
 
-        self.assertAlmostEqual(
-            placement.frames[0].end.local_outward_departure_px,
-            baseline,
-        )
+        actual = _footprint(placement, placement.frames[0],
+                            project_format_placement(placement), apply_residual=True)
+        self.assertEqual(actual, baseline)
 
     def test_inferred_fixed_width_edge_inherits_shifted_line_safety(self) -> None:
         template = _template(1)
@@ -1441,10 +1451,10 @@ class TemplateOutputContractTest(unittest.TestCase):
             placement.frames[0].end.position_source.value,
             "inferred_sequence",
         )
-        self.assertGreater(
-            placement.frames[0].end.local_outward_departure_px,
-            2.0,
-        )
+        mandatory = _footprint(placement, placement.frames[0],
+                               project_format_placement(placement), apply_residual=True)
+        self.assertGreaterEqual(max(x for x, _ in mandatory),
+                                200.0 + math.tan(math.radians(1.0)) * 120.0 + 1.0)
 
     def test_inferred_edge_keeps_width_and_direction_at_the_same_corner(
         self,
@@ -1514,11 +1524,6 @@ class TemplateOutputContractTest(unittest.TestCase):
                             if missing_index == 0
                             else placement.frames[0].end
                         )
-                        expected_departure = max(
-                            0.0,
-                            abs(math.tan(math.radians(angle))) * 120.0
-                            - full_padding,
-                        )
                         actual = tuple(
                             point[0] for point in output.mandatory_source_footprint
                         )
@@ -1526,13 +1531,12 @@ class TemplateOutputContractTest(unittest.TestCase):
                             self.assertLessEqual(min(actual), min(corners))
                         else:
                             self.assertGreaterEqual(max(actual), max(corners))
-                        self.assertAlmostEqual(
-                            boundary.local_outward_departure_px,
-                            max(
-                                expected_departure,
-                                math.tan(math.radians(0.2)) * 120.0,
-                            ),
-                        )
+                        # Raster and small angular feedback cannot add W a
+                        # second time.  Here their complete bound is <2 px.
+                        if missing_index == 0:
+                            self.assertGreater(min(actual), min(min(corners), boundary.full_position_interval_px.minimum) - 2.0)
+                        else:
+                            self.assertLess(max(actual), max(max(corners), boundary.full_position_interval_px.maximum) + 2.0)
 
     def test_cross_position_and_trace_residual_share_one_state(self) -> None:
         template = _template(1)
@@ -1591,6 +1595,146 @@ class TemplateOutputContractTest(unittest.TestCase):
         self.assertAlmostEqual(protection.measurement_expansion_px, 2.0)
         self.assertAlmostEqual(protection.local_boundary_residual_px, 3.0)
         self.assertAlmostEqual(protection.joint_expansion_px, 5.5)
+
+    def test_two_axis_line_protection_contains_their_joint_corner(self) -> None:
+        template = replace(
+            _template(1),
+            frame_width_px=FiniteInterval.exact(3000.0),
+            pitch_px=FiniteInterval.exact(3120.0),
+            frame_height_px=FiniteInterval.exact(2000.0),
+            phase_lattice_authority=replace(_template(1).phase_lattice_authority, period_px=3120.0),
+        )
+        slope = 0.05
+        angle = math.degrees(math.atan(slope))
+        sequence = _sequence(template)
+        bindings = tuple(
+            replace(
+                binding,
+                line_evidence=SequenceRoleLineEvidence(
+                    observation_id=binding.observation_id,
+                    reference_trace_px=1000.0,
+                    fit_position_interval_px=binding.fit_position_interval_px,
+                    fit_direction_interval_degrees=FiniteInterval.exact(-angle),
+                ),
+            )
+            for binding in sequence.role_bindings
+        )
+        sequence = replace(sequence, role_bindings=bindings)
+        cross = _cross(template, lane_reference=1500.0)
+        cross = replace(
+            cross,
+            fixed_height_px=FiniteInterval.exact(2000.0),
+            top_canonical_px=0.0,
+            bottom_canonical_px=2000.0,
+            top_fit_interval_px=FiniteInterval.exact(0.0),
+            bottom_fit_interval_px=FiniteInterval.exact(2000.0),
+            top_full_interval_px=FiniteInterval.exact(0.0),
+            bottom_full_interval_px=FiniteInterval.exact(2000.0),
+            direct_bindings=tuple(
+                replace(
+                    binding,
+                    coordinate_interval_px=FiniteInterval.exact(position),
+                    fit_interval_px=FiniteInterval.exact(position),
+                    full_interval_px=FiniteInterval.exact(position),
+                    canonical_direction_degrees=angle,
+                    fit_direction_interval_degrees=FiniteInterval.exact(angle),
+                    full_direction_interval_degrees=FiniteInterval.exact(angle),
+                    observed_direction_interval_degrees=FiniteInterval.exact(angle),
+                )
+                for binding, position in zip(cross.direct_bindings, (0.0, 2000.0), strict=True)
+            ),
+        )
+        placement = _compose(template, sequence, cross)
+        projection = project_format_placement(placement)
+        mandatory = _footprint(
+            placement, placement.frames[0], projection, apply_residual=True,
+        )
+        # x=3100+.05(y-1000), y=2000+.05(x-1500).  Independent
+        # projections at the original spans miss their actual intersection.
+        right = (3100.0 - slope * 1000.0 + slope * (2000.0 - slope * 1500.0)) / (1.0 - slope * slope)
+        bottom = 2000.0 + slope * (right - 1500.0)
+        self.assertGreaterEqual(max(x for x, _ in mandatory), right)
+        self.assertGreaterEqual(max(y for _, y in mandatory), bottom)
+        requested = _footprint(placement, placement.frames[0], projection,
+                               apply_residual=True, apply_bleed=True)
+        sequence_bleed = OUTPUT_PROTECTION_SPEC.sequence_bleed_mm(36.0) * 3000.0 / 36.0
+        cross_bleed = OUTPUT_PROTECTION_SPEC.cross_bleed_mm * 2000.0 / 24.0
+        right = (3100.0 + sequence_bleed + 1.0 - slope * 1000.0
+                 + slope * (2000.0 + cross_bleed + 1.0 - slope * 1500.0)) / (1.0 - slope * slope)
+        bottom = 2000.0 + cross_bleed + 1.0 + slope * (right - 1500.0)
+        self.assertGreaterEqual(max(x for x, _ in requested), right)
+        self.assertGreaterEqual(max(y for _, y in requested), bottom)
+
+    def test_raw_joint_line_is_projected_at_reachable_native_reference(self) -> None:
+        template = _template(1)
+        sequence = _sequence(template)
+        end = sequence.role_bindings[1]
+        assert end is not None
+        end = replace(end, full_position_interval_px=FiniteInterval(190.0, 210.0),
+                      line_evidence=SequenceRoleLineEvidence(
+                          end.observation_id, 130.0, FiniteInterval.exact(200.0), FiniteInterval.exact(0.0),
+                          PhysicalLineRegion(130.0, ((190.0, 0.0), (200.0, -0.04),
+                                                    (210.0, 0.0), (200.0, 0.04))),
+                      ))
+        sequence = replace(sequence, role_bindings=(sequence.role_bindings[0], end))
+        cross = _cross(template)
+        cross = replace(cross, direct_bindings=tuple(replace(
+            binding, fit_direction_interval_degrees=FiniteInterval.exact(0.0),
+            full_direction_interval_degrees=FiniteInterval.exact(0.0),
+            observed_direction_interval_degrees=FiniteInterval.exact(0.0),
+        ) for binding in cross.direct_bindings))
+        placement = _compose(template, sequence, cross)
+        projection = project_format_placement(placement)
+        mandatory = _footprint(placement, placement.frames[0], projection, apply_residual=True)
+        # Native START=100 and W=100 make END=200; all raw slopes at
+        # that slice remain. The impossible p=210,slope=.04 is not exported.
+        self.assertAlmostEqual(max(x for x, _ in mandatory), 200.0 + 1.0 + 0.04 * 121.0)
+
+    def test_raw_trace_protects_interior_reference_states_and_new_span(self) -> None:
+        for interior in (True, False):
+            with self.subTest(interior=interior):
+                template = _template(1)
+                sequence = _sequence(template)
+                start, end = sequence.role_bindings
+                assert start is not None and end is not None
+                if interior:
+                    start = replace(start, full_position_interval_px=FiniteInterval(0.0, 1000.0))
+                    end = replace(end, full_position_interval_px=FiniteInterval(100.0, 1100.0))
+                    trace = 550
+                else:
+                    end = replace(end, line_evidence=SequenceRoleLineEvidence(
+                        end.observation_id, 130.0, FiniteInterval.exact(200.0), FiniteInterval.exact(-1.0),
+                    ))
+                    trace = 202
+                sequence = replace(sequence, role_bindings=(start, end))
+                cross = _cross(template)
+                top, bottom = tuple(replace(
+                    binding, fit_direction_interval_degrees=FiniteInterval.exact(0.0),
+                    full_direction_interval_degrees=FiniteInterval.exact(0.0),
+                    observed_direction_interval_degrees=FiniteInterval.exact(0.0),
+                ) for binding in cross.direct_bindings)
+                top = replace(top, trace_coordinates_px=(trace,),
+                              trace_position_intervals_px=(FiniteInterval.exact(-10.0),))
+                cross = replace(cross, direct_bindings=(top, bottom))
+                placement = _compose(template, sequence, cross)
+                projection = project_format_placement(placement)
+                mandatory = _footprint(placement, placement.frames[0], projection, apply_residual=True)
+                self.assertLessEqual(min(y for _, y in mandatory), -11.0)
+
+    def test_empty_native_physical_slice_cannot_fall_back_to_statistical_fit(self) -> None:
+        template = _template(1)
+        sequence = _sequence(template)
+        start = sequence.role_bindings[0]
+        assert start is not None
+        start = replace(start, full_position_interval_px=FiniteInterval(90.0, 100.0),
+                        line_evidence=SequenceRoleLineEvidence(
+                            start.observation_id, 130.0, FiniteInterval.exact(100.0), FiniteInterval.exact(0.0),
+                            PhysicalLineRegion(130.0, ((90.0, 0.0),)),
+                        ))
+        sequence = replace(sequence, role_bindings=(start, sequence.role_bindings[1]))
+        placement = _compose(template, sequence, _cross(template))
+        with self.assertRaisesRegex(ValueError, "physical line contradicts native reachable"):
+            _footprint(placement, placement.frames[0], project_format_placement(placement), apply_residual=True)
 
     def test_native_direct_interval_is_retained_before_bleed(self) -> None:
         template = replace(
@@ -1727,10 +1871,8 @@ class TemplateOutputContractTest(unittest.TestCase):
             (BoundaryRole.START, placement.frames[2].start),
             (BoundaryRole.END, placement.frames[2].end),
         ):
-            self.assertAlmostEqual(
-                protections[role].local_boundary_residual_px,
-                boundary.local_outward_departure_px + 1.0,
-            )
+            self.assertIsNone(boundary.line_evidence)
+            self.assertLess(protections[role].local_boundary_residual_px, 2.0)
 
     def test_selected_frame_residual_still_obeys_five_percent_limit(self) -> None:
         template = replace(

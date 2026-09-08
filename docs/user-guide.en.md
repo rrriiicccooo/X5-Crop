@@ -128,7 +128,9 @@ top/bottom = 0.25 mm
 ```
 
 Measurement uncertainty, local residual, and bleed share a maximum 5% W/H outward budget per side. Sides cannot
-borrow budget from one another. This is a model-risk budget, not a direct measurement of true boundary error.
+borrow budget from one another. Photo-aperture protection includes slanted-edge displacement at all four corners
+and the interaction between expansion along the two axes. The complete protection and bleed share each side's budget.
+This is a model-risk budget, not a direct measurement of true boundary error.
 Development gold separately checks directional containment and actual five-percent expansion against human baselines;
 the detector need not reproduce each annotated line. Source-truncated frames are compared against the actual confirmed,
 clipped polygon. Per-side diagnostics agree with full containment and do not require nonexistent content outside the TIFF.

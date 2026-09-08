@@ -223,6 +223,7 @@ def _facts(
                         fit_direction_interval_degrees=(
                             observation.fit_direction_interval_degrees
                         ),
+                        physical_line_region=observation.physical_line_region,
                     )
                     if observation.fit_direction_interval_degrees is not None
                     else None

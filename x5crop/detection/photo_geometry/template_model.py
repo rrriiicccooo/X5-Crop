@@ -14,6 +14,7 @@ from enum import Enum
 import math
 from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
 from .template_nominal_grid_model import CalibratedNominalGridFitState
+from .line_observations import PhysicalLineRegion
 
 
 MAX_TEMPLATE_FIT_PASSES = 6
@@ -1104,12 +1105,14 @@ def realize_adjacency_relations_at_role_positions(
 
 @dataclass(frozen=True)
 class SequenceRoleLineEvidence:
-    """One bound sequence edge's fitted line, retained for output safety only."""
+    """One bound edge's line families, retained for output protection only."""
 
     observation_id: ObservationId
     reference_trace_px: float
     fit_position_interval_px: FiniteInterval
     fit_direction_interval_degrees: FiniteInterval
+    physical_line_region: PhysicalLineRegion | None = None
+    physical_position_offset_px: FiniteInterval = FiniteInterval.exact(0.0)
 
     def __post_init__(self) -> None:
         if (
@@ -1119,6 +1122,11 @@ class SequenceRoleLineEvidence:
             or not isinstance(
                 self.fit_direction_interval_degrees,
                 FiniteInterval,
+            )
+            or not isinstance(self.physical_position_offset_px, FiniteInterval)
+            or (
+                self.physical_line_region is not None
+                and self.physical_line_region.reference_trace_px != self.reference_trace_px
             )
         ):
             raise ValueError("sequence role line evidence is invalid")
