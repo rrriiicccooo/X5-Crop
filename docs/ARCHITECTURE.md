@@ -278,6 +278,19 @@ Registered measurement 一次生成 role-free、候选无关、数量有界的�
 保存局部转变的位置区间、方向区间、极性、内外背景关系、空间支持和唯一 observation ID。Raw edge
 不知道自己属于哪一格或哪个角色；模板只能在位置与职责相容后绑定它。
 
+同一 retained transition family 的 `physical_position_interval_px` 是完整物理直线集合的约束，
+不是粗 discovery corridor，也不能用更窄的 localization 峰替代。`robust_line_fit.py` 以
+`L_i <= p + slope * (trace_i - reference) <= U_i` 和原最大可测角构造 `PhysicalLineRegion`，
+保留 reference 位置与斜率的联合顶点；单点和线段是合法退化集合，只有空集表示不能直线闭合。
+统计 canonical/fit 继续作为拟合代表；full position 必须同时包含原 residual/localization 保护与
+该联合集合在 reference 上的完整投影，不能保留某个方向却删除其可行位置。
+原 `line_connection_allowance` 不扩 raw physical 约束，不把空集改成闭合；残差恢复分支仍无方向
+权限，也不产生 physical region。一个 region 仍只是一份相关测量，不增加角色权限或独立 rank。
+实现从一条原始 interval 与原 slope 上限得到有界初始矩形，顺序裁剪全部 `2N` 半平面；
+每边最多 `2N+4` 顶点，时间 `O(N²)`、存储 `O(N)`，与原斜率可行性检查同阶，不增加 query、
+TIFF 读取、候选或 LP。闭区间比较仅沿用 `1e-9 px` 数值容差，防止大坐标相消丢掉相切顶点。
+开发报告保留 joint region 并从原始 transition 重建验证，不能用两个独立边际区间替换它。
+
 同一份 registered 灰度窄带一次产生 gradient、tone、texture、polarity 与纵向一致性等 typed
 measurement。它们共同描述同一个 observation，可以互相加强、否定或形成 missing/conflict；不能把增强图、
 另一套阈值或另一次读取包装成平行 detector，再按最高分挑赢家。
@@ -491,6 +504,11 @@ opposite，只有该权限仍不可用时才投影晚期弱线，不提前删除
 过程不新增查询、候选或 detector。若所有
 解释都终止，最佳原 candidate 只作为诊断几何保留，并以 projection outcome 说明首个缺口，不得退回
 residual、support 或 Grid 强选。
+
+投影 owner 的身份账本包含全部 registered facts；初始 phase seed 的 `support_fraction >= 0.35`
+筛选仍只决定搜索资格。已经绑定且由 typed authority 获权的局部坐标，即使采样占比低于该门槛，
+也不能被误报为 unknown edge。Grid 约束继续只消费原 `PHASE_ANCHOR`，direct-rank 重拟合后沿用
+原局部绑定恢复 owner；完整账本外的身份仍是错误，未获权弱线及其完整区间反证照常保留。
 
 纯 `discrete_phase_ambiguous` 不再跳过已保留 primary/runner 的局部边界补全。两份 fit 分别调用同一个
 local owner，只补原本未绑定的角色，不改变已有 binding、全局 anchor 或候选顺序；各自使用 template W，

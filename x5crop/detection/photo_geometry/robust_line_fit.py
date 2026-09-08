@@ -11,7 +11,7 @@ from scipy.optimize import least_squares
 
 from ...domain import FiniteInterval
 from .measurement_points import TransitionPoint
-from .line_observations import RobustLineFitReceipt
+from .line_observations import PhysicalLineRegion, RobustLineFitReceipt
 from .model import PhotoBoundaryMeasurementSpec
 
 
@@ -22,6 +22,91 @@ class TransitionLineFit:
     residuals: np.ndarray
     selected_points: tuple[TransitionPoint, ...]
     receipt: RobustLineFitReceipt
+
+
+def _clip_line_region(
+    vertices: tuple[tuple[float, float], ...],
+    position_coefficient: float,
+    slope_coefficient: float,
+    limit: float,
+) -> tuple[tuple[float, float], ...]:
+    """Intersect a bounded line-parameter region with one closed half-plane."""
+
+    if not vertices:
+        return ()
+    result: list[tuple[float, float]] = []
+
+    def append(point: tuple[float, float]) -> None:
+        if not result or point != result[-1]:
+            result.append(point)
+
+    def distance(point: tuple[float, float]) -> float:
+        value = (
+            position_coefficient * point[0]
+            + slope_coefficient * point[1]
+            - limit
+        )
+        # The existing coordinate contract admits 1e-9 px arithmetic error.
+        # Keep a closed-set vertex when cancellation lands on its boundary.
+        return 0.0 if abs(value) <= 1.0e-9 else value
+
+    previous = vertices[-1]
+    previous_value = distance(previous)
+    for current in vertices:
+        current_value = distance(current)
+        if (previous_value <= 0.0) != (current_value <= 0.0):
+            fraction = previous_value / (previous_value - current_value)
+            append((
+                previous[0] + fraction * (current[0] - previous[0]),
+                previous[1] + fraction * (current[1] - previous[1]),
+            ))
+        if current_value <= 0.0:
+            append(current)
+        previous = current
+        previous_value = current_value
+    if len(result) > 1 and result[0] == result[-1]:
+        result.pop()
+    return tuple(result)
+
+
+def physical_line_region(
+    trace_intervals: tuple[tuple[float, FiniteInterval], ...],
+    maximum_slope: float,
+    reference_trace_px: float,
+) -> PhysicalLineRegion | None:
+    """Retain all raw-physical straight-line states without another fit or LP.
+
+    The first trace and the existing slope cap provide a bounded superset.
+    Each of the 2N closed half-planes adds at most one vertex: O(N**2)
+    work and O(N) storage, including valid point and segment degeneracies.
+    Connection allowance does not make an infeasible physical family close.
+    """
+
+    if (
+        not trace_intervals
+        or not math.isfinite(maximum_slope)
+        or maximum_slope <= 0.0
+        or not math.isfinite(reference_trace_px)
+        or any(not math.isfinite(trace) for trace, _ in trace_intervals)
+    ):
+        raise ValueError("physical line inputs are invalid")
+    first_trace, interval = trace_intervals[0]
+    allowance = maximum_slope * abs(first_trace - reference_trace_px)
+    minimum = interval.minimum - allowance
+    maximum = interval.maximum + allowance
+    vertices = (
+        (minimum, -maximum_slope),
+        (maximum, -maximum_slope),
+        (maximum, maximum_slope),
+        (minimum, maximum_slope),
+    )
+    for trace, interval in trace_intervals:
+        distance = trace - reference_trace_px
+        vertices = _clip_line_region(vertices, 1.0, distance, interval.maximum)
+        vertices = _clip_line_region(vertices, -1.0, -distance, -interval.minimum)
+        if not vertices:
+            return None
+    return PhysicalLineRegion(reference_trace_px, vertices)
 
 
 def physical_slope_interval(

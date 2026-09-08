@@ -59,6 +59,7 @@ from x5crop.detection.photo_geometry.template_registration import CrossRegistrat
 from x5crop.domain import Box, FiniteInterval, ObservationId, PositiveInterval, WorkspaceExtent
 from x5crop.detection.photo_geometry.measurement_model import PhotoBoundaryMeasurementQuery
 from x5crop.detection.photo_geometry.registered_measurement import registered_baseline_query_groups
+from x5crop.detection.photo_geometry.robust_line_fit import physical_line_region
 from x5crop.report.read_models import typed_read_model
 from x5crop.formats import OUTPUT_PROTECTION_SPEC
 from x5crop.geometry.affine import AffineCoordinateTransform
@@ -715,6 +716,59 @@ def _interval_contains(
         <= float(value)
         <= float(interval["maximum"]) + epsilon
     )
+
+
+def _validate_sequence_physical_line_regions(
+    lane: dict[str, Any], queries: list[dict[str, Any]],
+) -> None:
+    """Rebuild joint line states from the same registered raw family."""
+
+    transitions: dict[str, dict[str, Any]] = {}
+    for query in queries:
+        if query["query"]["lane_id"] != lane["lane_id"]:
+            continue
+        for field in ("transitions", "cross_height_transitions", "broad_material_transitions"):
+            for transition in query[field]:
+                identity = transition["transition_id"]
+                if identity in transitions and transitions[identity] != transition:
+                    raise ValueError("sequence raw transition identity is inconsistent")
+                transitions[identity] = transition
+    maximum_slope = math.tan(math.radians(
+        PHOTO_BOUNDARY_MEASUREMENT_SPEC.maximum_measurable_line_angle_degrees
+    ))
+    for field in ("sequence_edges", "cross_height_edges", "broad_material_edges"):
+        for edge in lane["observations"][field]:
+            if "physical_line_region" not in edge:
+                raise ValueError("sequence edge lacks its physical line state")
+            region = edge["physical_line_region"]
+            if edge["canonical_direction_degrees"] is None:
+                if region is not None:
+                    raise ValueError("undirected sequence edge cannot regain a physical line")
+                continue
+            identities = edge["transition_ids"]
+            if not identities or len(set(identities)) != len(identities):
+                raise ValueError("physical line has invalid transition identities")
+            trace_intervals: list[tuple[float, FiniteInterval]] = []
+            for identity in identities:
+                transition = transitions.get(identity)
+                if transition is None or not _valid_interval(transition["physical_position_interval_px"]):
+                    raise ValueError("physical line leaves its registered transition family")
+                interval = transition["physical_position_interval_px"]
+                trace_intervals.append((
+                    float(transition["trace_coordinate_px"]),
+                    FiniteInterval(interval["minimum"], interval["maximum"]),
+                ))
+            if [trace for trace, _ in trace_intervals] != edge["trace_coordinates_px"]:
+                raise ValueError("physical line trace provenance changed")
+            expected = physical_line_region(
+                tuple(trace_intervals), maximum_slope, edge["reference_trace_px"],
+            )
+            if expected is None or typed_read_model(expected) != region:
+                raise ValueError("physical line region changed the raw joint feasible set")
+            projection = expected.project(edge["reference_trace_px"])
+            if not all(_interval_contains(edge["full_position_interval_px"], value)
+                       for value in (projection.minimum, projection.maximum)):
+                raise ValueError("sequence full position discards a physical line state")
 
 
 def _validate_cross_direct_support_regions(lane: dict[str, Any]) -> None:
@@ -4250,6 +4304,9 @@ def _validate_development(record: dict[str, Any]) -> None:
             lane["phase_competition"]
         )
         registered_cross = _validate_cross_measurement_support(
+            lane, development["measurement"]["queries"]
+        )
+        _validate_sequence_physical_line_regions(
             lane, development["measurement"]["queries"]
         )
         if cross_competition["receipt"]["fitted_observation_count"] != sum(

@@ -6,6 +6,7 @@ from enum import Enum
 import math
 
 from ...domain import EvidenceState, FiniteInterval, ObservationId
+from .line_observations import PhysicalLineRegion
 from .model import (
     BoundaryEvidenceState,
     BoundaryRole,
@@ -98,6 +99,7 @@ class BoundaryEdgeObservation:
     aggregate_support_id: ObservationId | None = None
     qualified_anchor_roles: tuple[BoundaryRole, ...] = ()
     evidence_state: BoundaryEvidenceState = BoundaryEvidenceState.SUPPORT
+    physical_line_region: PhysicalLineRegion | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -164,6 +166,21 @@ class BoundaryEdgeObservation:
                 )
             )
             or self.evidence_state != BoundaryEvidenceState.SUPPORT
+            or (
+                self.physical_line_region is not None
+                and (
+                    self.canonical_direction_degrees is None
+                    or self.physical_line_region.reference_trace_px != self.reference_trace_px
+                    or not self.full_position_interval_px.contains(
+                        self.physical_line_region.project(self.reference_trace_px).minimum,
+                        epsilon=1.0e-9,
+                    )
+                    or not self.full_position_interval_px.contains(
+                        self.physical_line_region.project(self.reference_trace_px).maximum,
+                        epsilon=1.0e-9,
+                    )
+                )
+            )
             or len(set(self.qualified_anchor_roles))
             != len(self.qualified_anchor_roles)
             or any(

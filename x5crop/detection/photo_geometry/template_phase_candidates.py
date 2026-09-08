@@ -2181,7 +2181,7 @@ def _fit_calibrated_nominal_grid_candidate(
     *,
     prior: CalibratedNominalGridPrior,
     retained_facts: tuple[DirectRoleAuthorityFact, ...],
-    direct: tuple[_AnchorFact, ...],
+    registered_facts: tuple[_AnchorFact, ...],
     template: TemplateSpec,
     relations: tuple[AdjacencyRelation, ...],
     phase_authority: FiniteInterval | None,
@@ -2190,8 +2190,8 @@ def _fit_calibrated_nominal_grid_candidate(
     """Refit one existing discrete mapping against the calibrated Grid."""
 
     retained_ids = {item.observation_id for item in retained_facts}
-    direct_by_id = {item.observation_id: item for item in direct}
-    if not retained_ids or any(identity not in direct_by_id for identity in retained_ids):
+    registered_by_id = {item.observation_id: item for item in registered_facts}
+    if not retained_ids or any(identity not in registered_by_id for identity in retained_ids):
         return None
     phase_facts = tuple(
         item
@@ -2206,8 +2206,8 @@ def _fit_calibrated_nominal_grid_candidate(
         NominalGridRoleConstraint(
             role_index=item.role_index,
             observation_id=item.observation_id,
-            coordinate_px=direct_by_id[item.observation_id].coordinate_px,
-            full_interval_px=direct_by_id[item.observation_id].full_interval_px,
+            coordinate_px=registered_by_id[item.observation_id].coordinate_px,
+            full_interval_px=registered_by_id[item.observation_id].full_interval_px,
         )
         for item in phase_facts
     )
@@ -2277,7 +2277,7 @@ def _fit_calibrated_nominal_grid_candidate(
             or binding.use != SequenceBindingUse.PHASE_ANCHOR
         ):
             continue
-        anchor = direct_by_id[fact.observation_id]
+        anchor = registered_by_id[fact.observation_id]
         location = (fact.role_index + 1) // 2
         support_by_location[location] = max(
             support_by_location.get(location, 0.0),
@@ -2333,7 +2333,10 @@ def _fit_calibrated_nominal_grid_candidate(
         adjacency_relations=relations,
         contradicted_observation_count=max(
             0,
-            len(direct) - len(bound_direct_ids),
+            sum(
+                item.direct and item.observation_id not in bound_direct_ids
+                for item in registered_facts
+            ),
         ),
         residual_sum_px=sum(
             abs(binding.canonical_position_px - canonical)
@@ -2441,7 +2444,7 @@ def _restore_authorized_local_bindings(
 def project_candidate_to_authorized_direct_roles(
     candidate: _BoundFit,
     authority: DirectRoleBindingAuthority,
-    direct: tuple[_AnchorFact, ...],
+    registered_facts: tuple[_AnchorFact, ...],
     separator_pairs: tuple[tuple[_AnchorFact, _AnchorFact], ...],
     roles: tuple[TemplateRole, ...],
     template: TemplateSpec,
@@ -2454,12 +2457,16 @@ def project_candidate_to_authorized_direct_roles(
         frozenset[tuple[int, ObservationId]] | None
     ) = None,
 ) -> tuple[_BoundFit | None, PhaseCandidateAuthorityProjection]:
-    """Remove only unavailable coordinates, then refit one fixed mapping."""
+    """Project one mapping with its complete identity ledger and fixed seed scope."""
 
     if not isinstance(candidate, _BoundFit):
         raise TypeError("direct-role projection requires one bounded candidate")
     if not isinstance(authority, DirectRoleBindingAuthority):
         raise TypeError("direct-role projection requires typed authority")
+    # Sparse, already-bound local coordinates can have typed role authority
+    # without qualifying to seed a phase search.  Keep their identities while
+    # preserving the original seed filter and phase-anchor ceiling.
+    direct = tuple(item for item in registered_facts if item.direct)
     retained_indices = authority.supported_role_indices
     retained_rank = direct_role_constraint_rank(
         candidate.fit,
@@ -2557,8 +2564,8 @@ def project_candidate_to_authorized_direct_roles(
         )
     )
     retained_ids = {item.observation_id for item in retained_facts}
-    direct_by_id = {item.observation_id: item for item in direct}
-    if any(identity not in direct_by_id for identity in retained_ids):
+    registered_ids = {item.observation_id for item in registered_facts}
+    if not retained_ids.issubset(registered_ids):
         raise ValueError("authorized projection references an unknown direct edge")
     retained_direct = tuple(
         item for item in direct if item.observation_id in retained_ids
@@ -2626,7 +2633,7 @@ def project_candidate_to_authorized_direct_roles(
             candidate,
             prior=calibrated_nominal_grid_prior,
             retained_facts=retained_facts,
-            direct=direct,
+            registered_facts=registered_facts,
             template=template,
             relations=relations,
             phase_authority=phase_authority,

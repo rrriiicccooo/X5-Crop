@@ -2672,6 +2672,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             frame_width_px=PositiveInterval(98.0, 102.0),
         )
         direction = FiniteInterval.exact(0.0)
+        registered_traces = tuple(range(0, 101, 10))
 
         def local(
             identity: str,
@@ -2680,8 +2681,8 @@ class TemplatePhaseContractTest(unittest.TestCase):
             *,
             source_wide: bool = False,
         ) -> BoundaryEdgeObservation:
-            traces = (0, 10, 20) if source_wide else (10, 20)
-            support = 1.0 if source_wide else 2.0 / 3.0
+            traces = (0, 50, 100) if source_wide else (40, 80)
+            support = len(traces) / len(registered_traces)
             return replace(
                 edge(identity, coordinate),
                 qualified_anchor_roles=(role,),
@@ -2700,11 +2701,16 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 ),
             )
 
-        anchor = local(
-            "late-projection:anchor:start:1",
-            100.0,
-            BoundaryRole.START,
-            source_wide=True,
+        anchor = replace(
+            local(
+                "late-projection:anchor:start:1",
+                100.0,
+                BoundaryRole.START,
+                source_wide=True,
+            ),
+            trace_coordinates_px=registered_traces,
+            support_fraction=1.0,
+            continuous_support_fraction=1.0,
         )
         weak_edges = (
             replace(
@@ -2743,6 +2749,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                     phase_sequence_measurement(
                         "late-selected-grid-projection",
                         FiniteInterval(0.0, 360.0),
+                        trace_positions_px=registered_traces,
                     ),
                 ),
             )
@@ -2750,6 +2757,10 @@ class TemplatePhaseContractTest(unittest.TestCase):
 
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
         assert result.best is not None
+        self.assertFalse(_facts((weak_edges[0],))[0].direct)
+        self.assertEqual(result.best.role_bindings[1].use, SequenceBindingUse.LOCAL_REFINEMENT)
+        self.assertEqual(result.best.pitch_fit.observation_ids, (anchor.observation_id,))
+        self.assertEqual(result.best.calibrated_nominal_grid_fit_state.retained_direct_constraint_rank, 1)
         self.assertEqual(
             result.best.binding_observation_ids,
             (
@@ -2783,6 +2794,13 @@ class TemplatePhaseContractTest(unittest.TestCase):
             result.direct_role_binding_authority.state,
             EvidenceState.SUPPORTED,
         )
+        with self.assertRaisesRegex(ValueError, "unknown direct edge"):
+            project_candidate_to_authorized_direct_roles(
+                _BoundFit(result.best, True), result.direct_role_binding_authority,
+                _facts((anchor,)), (), spec.roles, spec,
+                result.best.adjacency_relations, result.best.pitch_fit.pitch_interval_px,
+                FiniteInterval.exact(100.0), None, calibrated_nominal_grid_prior(spec),
+            )
         self.assertEqual(
             result.receipt.selected_direct_role_projection_evaluation_count,
             1,
@@ -2821,6 +2839,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
                     phase_sequence_measurement(
                         "late-selected-grid-validation-conflict",
                         FiniteInterval(0.0, 360.0),
+                        trace_positions_px=registered_traces,
                     ),
                 ),
             )

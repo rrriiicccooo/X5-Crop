@@ -947,7 +947,7 @@ def fit_template_phase(
         projected, projection = project_candidate_to_authorized_direct_roles(
             candidate,
             candidate_authorities[index],
-            direct,
+            facts,
             separator_pairs,
             roles,
             template,
@@ -1809,7 +1809,7 @@ def _project_late_local_candidate(
     projected, projection = project_candidate_to_authorized_direct_roles(
         _BoundFit(fit, True),
         authority,
-        direct,
+        facts,
         separator_pairs,
         ordered_template_roles(template.count),
         template,

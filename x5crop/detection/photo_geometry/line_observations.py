@@ -11,6 +11,39 @@ from .model import BoundaryAxis, BoundaryRole, SPATIAL_SUPPORT_REGION_COUNT
 
 
 @dataclass(frozen=True)
+class PhysicalLineRegion:
+    """Joint reference-position/slope states of one measured transition family.
+
+    Vertices may describe a polygon, a segment, or a single line state.
+    Position and slope are never independently recombined for projection.
+    """
+
+    reference_trace_px: float
+    vertices: tuple[tuple[float, float], ...]
+
+    def __post_init__(self) -> None:
+        if (
+            not math.isfinite(self.reference_trace_px)
+            or not self.vertices
+            or any(
+                len(vertex) != 2
+                or any(not math.isfinite(value) for value in vertex)
+                for vertex in self.vertices
+            )
+        ):
+            raise ValueError("physical line region is invalid")
+
+    def project(self, trace_px: float) -> FiniteInterval:
+        if not math.isfinite(trace_px):
+            raise ValueError("physical line projection trace must be finite")
+        distance = trace_px - self.reference_trace_px
+        positions = tuple(
+            position + slope * distance for position, slope in self.vertices
+        )
+        return FiniteInterval(min(positions), max(positions))
+
+
+@dataclass(frozen=True)
 class SourceCoordinateLine:
     """Normalized line ``normal_x*x + normal_y*y = offset``."""
 

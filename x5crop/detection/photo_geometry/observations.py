@@ -92,6 +92,7 @@ def build_sequence_edge_observations(
                 ),
                 measurement_basis=measurement_basis,
                 qualified_anchor_roles=run.qualified_anchor_roles,
+                physical_line_region=line.physical_line_region,
             )
         )
     return tuple(

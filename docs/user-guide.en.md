@@ -152,7 +152,11 @@ retained; reliable content crossing the final crop boundary blocks automatic out
 grazes do not independently move a boundary or select another placement.
 
 When one edge and the common width infer the opposite edge, the crop protects corner displacement from width
-uncertainty and edge slope together. Displacement already covered by the position interval is not added twice;
+uncertainty and edge slope together. The full boundary-position range retains the positions allowed by the same
+measurements; the statistical centre and narrow fit interval do not exclude those possible positions.
+Local boundaries with established coordinate support remain available when other weak boundaries are reassessed,
+preventing detection from stopping because their measurement identities were lost.
+Displacement already covered by the position interval is not added twice;
 the complete protection remains subject to the existing 5% budget on each side.
 
 Deskew is optional cleanup after automatic approval and never participates in detection or the Gate. `--deskew auto`

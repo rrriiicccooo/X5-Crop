@@ -10,6 +10,7 @@ import numpy as np
 from ...domain import FiniteInterval, ObservationId
 from .measurement_points import TransitionPoint
 from .measurement_model import SequenceTransitionObservation
+from .line_observations import PhysicalLineRegion
 from .model import (
     BoundaryRole,
     MINIMUM_INDEPENDENT_SUPPORT_REGIONS,
@@ -21,6 +22,7 @@ from .observation_types import ProfileRun
 from .robust_line_fit import (
     TransitionLineFit,
     fit_transition_line,
+    physical_line_region,
     physical_slope_interval,
 )
 from .trace_support import (
@@ -73,6 +75,7 @@ class SequenceRunLineMeasurement:
     support_fraction: float
     continuous_support_fraction: float
     fit_residual_px: float
+    physical_line_region: PhysicalLineRegion | None
 
     def __post_init__(self) -> None:
         if (
@@ -125,6 +128,10 @@ class SequenceRunLineMeasurement:
             or not 0.0 <= self.continuous_support_fraction <= 1.0
             or not math.isfinite(self.fit_residual_px)
             or self.fit_residual_px < 0.0
+            or (
+                self.physical_line_region is not None
+                and self.canonical_direction_degrees is None
+            )
         ):
             raise ValueError("sequence run line measurement is invalid")
 
@@ -336,11 +343,22 @@ def sequence_run_line_measurement(
     canonical_position = (
         fitted.slope * reference_trace_px + fitted.intercept
     )
+    physical_region = None
     if residual_recovered:
         canonical_direction = None
         fit_direction = None
         full_direction = None
     else:
+        physical_region = physical_line_region(
+            tuple(
+                (point.trace, point.transition.physical_position_interval_px)
+                for point in retained
+            ),
+            math.tan(math.radians(spec.maximum_measurable_line_angle_degrees)),
+            reference_trace_px,
+        )
+        if physical_region is None:
+            raise ValueError("physical line closure disagrees with its slope interval")
         canonical_direction, fit_direction, full_direction = _direction_from_fit(
             fitted,
             physical_slopes,
@@ -348,6 +366,9 @@ def sequence_run_line_measurement(
         )
     selected_traces = tuple(
         int(point.transition.trace_coordinate_px) for point in retained
+    )
+    physical_position = (
+        None if physical_region is None else physical_region.project(reference_trace_px)
     )
     return SequenceRunLineMeasurement(
         reference_trace_px=reference_trace_px,
@@ -357,8 +378,10 @@ def sequence_run_line_measurement(
             canonical_position + fit_uncertainty,
         ),
         full_position_interval_px=FiniteInterval(
-            canonical_position - full_uncertainty,
-            canonical_position + full_uncertainty,
+            min(canonical_position - full_uncertainty,
+                physical_position.minimum if physical_position is not None else math.inf),
+            max(canonical_position + full_uncertainty,
+                physical_position.maximum if physical_position is not None else -math.inf),
         ),
         canonical_direction_degrees=canonical_direction,
         fit_direction_interval_degrees=fit_direction,
@@ -376,6 +399,7 @@ def sequence_run_line_measurement(
             spec=spec,
         ),
         fit_residual_px=run.fit_residual_px,
+        physical_line_region=physical_region,
     )
 
 
