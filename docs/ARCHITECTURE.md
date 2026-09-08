@@ -1331,6 +1331,10 @@ identity 下仍合法的 W、未观察 Grid role、local delta 与 cross 联合�
 native interval 投影，不能被全局 Grid 拉回。直接 enclosing pair 额外保留自己的 same-state slope。
 每个 frame 的边界极值从这个低维联合集合求出，再加入未被 full interval 覆盖的 line outward
 departure；不把同一 residual 重复相加，不吸收 runner-up，也不重新读取像素。
+由一侧直接边与共同 W 推导 opposite 时，输出保护用的直线位置区间与 full position 必须传播同一份
+有符号完整 W interval，保留原 observation identity、reference trace 与方向区间。不能用只平移 canonical W
+的直线减去包含完整 W 的位置区间，否则 W 的不确定性会抵消仍需保护的方向 departure。完整 W 只在
+联合位置中计入一次，已由原直接边 full interval 覆盖的 departure 不再重复添加。
 
 产品 bleed：
 

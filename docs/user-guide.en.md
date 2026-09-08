@@ -151,6 +151,10 @@ Two-dimensional content is a conservative veto on the final post-bleed polygon. 
 retained; reliable content crossing the final crop boundary blocks automatic output. Dust, aliasing, and tiny corner
 grazes do not independently move a boundary or select another placement.
 
+When one edge and the common width infer the opposite edge, the crop protects corner displacement from width
+uncertainty and edge slope together. Displacement already covered by the position interval is not added twice;
+the complete protection remains subject to the existing 5% budget on each side.
+
 Deskew is optional cleanup after automatic approval and never participates in detection or the Gate. `--deskew auto`
 rotates only when both sides support one stable small angle; missing, conflicting, or excessive evidence preserves the
 source orientation. `--deskew off` skips observation. When rotation is applied, the source and already-safe polygons use

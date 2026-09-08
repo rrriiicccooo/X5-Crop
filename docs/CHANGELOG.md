@@ -58,6 +58,8 @@
   Review proposal；它不冒充 approved sampling geometry。概率可接受性评分目前仅有开发合同，尚未接入 Runtime。
 - 输出以同一联合状态传播 uncertainty、residual、bleed 与 topology protection，逐侧共用原有 5% 预算。
   真实 TIFF 截断与内部 lane 越界分开；不通过裁小请求、扩大 bleed 或混合互斥状态获得批准。
+- 单边与共同 W 推导 opposite 时，输出保护直线与位置区间使用同一份完整 W，修复宽度不确定性
+  抵消方向保护、遗漏联合角点的情况；已覆盖的局部偏移不重复添加，直接边、测量、基础 bleed 与 Gate 不变。
 - 真实 TIFF 外缘统一为首末像素的单元边界，恒等采样完整保留首末行列；只改变源域交集，
   不普遍外扩照片边界。连续 polygon 与整数采样 box 分开表示，内部 lane 仍按原权限阻断。
 - Deskew 仅整理已批准结果，不参与 placement 或黄金判定。正式 TIFF 保持 16-bit RGB、ICC、resolution、
@@ -67,7 +69,8 @@
 
 - Normal report 与 Debug Analysis 只显示同次检测事实，分开 proposal、candidate、正式输出、runner、
   typed failure、calibration identity 和实际工作量，不重新检测或求解。当前 Report revision 为
-  `x5crop_v5_template_report_73`，登记两轴归一化身份并检查基线无证据、完整范围与工作账本；
+  `x5crop_v5_template_report_74`，推导边保留共同 W 与方向的联合角点保护；
+  登记两轴归一化身份并检查基线无证据、完整范围与工作账本；
   逐候选记录 Cross 支撑区间、覆盖序号和真实 source extent，不保留旧 schema 兼容层。
 - Cross 每条直接边界保留原始独立区域数；开发校验回链原 query/transition、registered binding 与
   各候选的角色权限。Coarse enclosing track 继续只有外侧几何支撑权限，不冒充照片边界。

@@ -1446,6 +1446,94 @@ class TemplateOutputContractTest(unittest.TestCase):
             2.0,
         )
 
+    def test_inferred_edge_keeps_width_and_direction_at_the_same_corner(
+        self,
+    ) -> None:
+        for missing_index in (0, 1):
+            for angle in (-2.0, 2.0):
+                for full_padding in (0.0, 2.0, 6.0):
+                    with self.subTest(
+                        missing=missing_index,
+                        angle=angle,
+                        full_padding=full_padding,
+                    ):
+                        template = replace(
+                            _template(1),
+                            frame_width_px=FiniteInterval(90.0, 110.0),
+                        )
+                        sequence = _sequence(template, missing=(missing_index,))
+                        bindings = list(sequence.role_bindings)
+                        direct_index = 1 - missing_index
+                        direct = bindings[direct_index]
+                        assert direct is not None
+                        coordinate = direct.canonical_position_px
+                        bindings[direct_index] = replace(
+                            direct,
+                            full_position_interval_px=FiniteInterval(
+                                coordinate - full_padding,
+                                coordinate + full_padding,
+                            ),
+                            line_evidence=SequenceRoleLineEvidence(
+                                observation_id=direct.observation_id,
+                                reference_trace_px=130.0,
+                                fit_position_interval_px=FiniteInterval.exact(
+                                    coordinate
+                                ),
+                                fit_direction_interval_degrees=(
+                                    FiniteInterval.exact(angle)
+                                ),
+                            ),
+                        )
+                        sequence = replace(sequence, role_bindings=tuple(bindings))
+                        placement = _compose(
+                            template,
+                            sequence,
+                            _cross(template, direction=_direction()),
+                        )
+                        output = output_footprint_from_template_placement(
+                            placement,
+                            project_format_placement(placement),
+                            lane=_lane(),
+                            lane_ordinal=1,
+                            layout="horizontal",
+                        )
+                        # Each physical corner uses one W and one observed
+                        # direction together. Width uncertainty cannot consume
+                        # the line's additional departure from its own full
+                        # position interval.
+                        sign = -1 if missing_index == 0 else 1
+                        corners = tuple(
+                            coordinate
+                            + sign * width
+                            - math.tan(math.radians(angle)) * (trace - 130.0)
+                            for width in (90.0, 110.0)
+                            for trace in (10.0, 250.0)
+                        )
+                        boundary = (
+                            placement.frames[0].start
+                            if missing_index == 0
+                            else placement.frames[0].end
+                        )
+                        expected_departure = max(
+                            0.0,
+                            abs(math.tan(math.radians(angle))) * 120.0
+                            - full_padding,
+                        )
+                        actual = tuple(
+                            point[0] for point in output.mandatory_source_footprint
+                        )
+                        if missing_index == 0:
+                            self.assertLessEqual(min(actual), min(corners))
+                        else:
+                            self.assertGreaterEqual(max(actual), max(corners))
+                        self.assertAlmostEqual(
+                            boundary.local_outward_departure_px,
+                            max(
+                                expected_departure,
+                                math.tan(math.radians(0.2)) * 120.0,
+                            ),
+                        )
+
     def test_cross_position_and_trace_residual_share_one_state(self) -> None:
         template = _template(1)
         cross = _cross(template, direction=_direction())

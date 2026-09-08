@@ -253,16 +253,21 @@ def _sequence_boundary(
 
 def _shift_sequence_line_evidence(
     evidence: SequenceRoleLineEvidence | None,
-    delta_px: float,
+    width_px: FiniteInterval,
+    direction: int,
 ) -> SequenceRoleLineEvidence | None:
     if evidence is None:
         return None
+    # The inferred full position and fitted line must share the same W
+    # interval. A canonical-only shift would let W uncertainty cancel line
+    # departure when their outward extrema are compared later.
     return SequenceRoleLineEvidence(
         observation_id=evidence.observation_id,
         reference_trace_px=evidence.reference_trace_px,
-        fit_position_interval_px=FiniteInterval(
-            evidence.fit_position_interval_px.minimum + delta_px,
-            evidence.fit_position_interval_px.maximum + delta_px,
+        fit_position_interval_px=_advance(
+            evidence.fit_position_interval_px,
+            width_px,
+            direction,
         ),
         fit_direction_interval_degrees=(
             evidence.fit_direction_interval_degrees
@@ -324,7 +329,8 @@ def _sequence_pair(
             inference="end_from_observed_start_and_correlated_source_frame_width",
             line_evidence=_shift_sequence_line_evidence(
                 start.line_evidence,
-                width * template.direction,
+                measured_width,
+                template.direction,
             ),
         )
     elif end_direct and not start_direct:
@@ -342,7 +348,8 @@ def _sequence_pair(
             inference="start_from_observed_end_and_correlated_source_frame_width",
             line_evidence=_shift_sequence_line_evidence(
                 end.line_evidence,
-                -width * template.direction,
+                measured_width,
+                -template.direction,
             ),
         )
     return start, end
