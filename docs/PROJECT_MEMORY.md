@@ -32,11 +32,15 @@
 
 ## 当前源码与已验证事实
 
-已提交基座为 `0e16bc5d69320f93c123ba12bbfe3ab09aa09cd3`，当前 Cross 修改尚待提交。
-下述工程与 CI 证据属于此前 Runtime 基座 `fb6c6444756bb067fa0d928af4cf7905f326b99a`，不覆盖本轮修改。
-正常 pre-push Hook 的 893 项工程测试通过、2 项按既定条件跳过；
-[Verify](https://github.com/rrriiicccooo/X5-Crop/actions/runs/34201416166)
-的 12 个 OS/Python 矩阵任务全部通过。工程 CI 不替代最终三目标实机发布 receipt。
+当前 Runtime 为 `4e2115bcd21a380214c11bbb661bdfef0744f6d9`，已正常推送 main。
+冻结依赖下正常 pre-push Hook 的 903 项工程测试通过、2 项按既定条件跳过；
+[Verify](https://github.com/rrriiicccooo/X5-Crop/actions/runs/34227900888) 已通过。
+工程 CI 不替代最终三目标实机发布 receipt。
+
+共享 Python 的 SciPy/tifffile 在本轮期间已升级，首次 push 被冻结依赖检查正确阻断。
+当前验证使用临时独立环境 `/private/tmp/x5crop-frozen-20260908`：SciPy1.18.0、tifffile2026.8.16，
+其它依赖按既有冻结版本复用；全部 dependency check 通过，系统共享包未修改。后续命令在 PATH 前置
+该环境 bin；不要直接用当前共享 python3 冒充冻结环境。本轮此前黄金需以冻结环境完整复验结果为准。
 
 - Sequence full reference position 同时包含原 residual/localization 保护与同一 raw physical family
   的完整位置投影；`PhysicalLineRegion` 保留位置/斜率联合顶点，原角度上限、角色资格与 rank 不变。
@@ -48,7 +52,7 @@
   同时保留 `(top,bottom,slope)` 全部三维顶点，避免投影位置后丢失可达斜率。
   四个独立输出反例的原始端点漏包均归零；requested-only 端点不污染 mandatory。
   Cross、registration、联合输出等 191 项专项通过，extent 修正后的 106 项 Cross 测试通过。
-  当前完整工程 Hook 与正式性能仍待执行。
+  当前完整工程 Hook 与正式性能均已通过；全部 nominal 自动通过仍未达成。
 - 晚期弱线投影消费完整 registered 身份账本，seed 搜索仍用原 `support_fraction >= 0.35` 子集。
   S110 的获权稀疏局部边不再被误报 unknown edge，正式 CLI 与 revision 75 校验通过；
   真实弱线反证仍保留，最终为 `direct_lattice_conflict` Review。
@@ -85,15 +89,16 @@
   未观测背景不能补造；此前平台分区实验未合入，详见开放风险。
 - 纯离散歧义的 primary/runner 分别补全局部边界、投影弱线和约束自身联合包络，
   不共享 selected W、不重新排序、不扩大 6-pass 上界；原有 unavailable 与硬反证继续保留。
-- Enclosing aperture-center calibration v11 使用原资格、同源中位数、全体 hull 与 `0.001H` 向外量化。
+- Enclosing aperture-center calibration v12 使用原资格、同源中位数、全体 hull 与 `0.001H` 向外量化。
   当前 selected support 集合为 22 source / 22 task；原始 hull 仍为 `[-0.007785885H, +0.009195549H]`。
   区间仍为 `[-0.008H, +0.010H]`，没有为更高通过率缩窄区间；精确 observation-set SHA 为
-  `ffd0c8ff543a6799a701f279ea4165eaeb2b9bfc0c845584e0bb624530896213`。
-  来自本轮完整黄金派生；登记后的最终全量复验一致，全部物理校准通过。登记不改变 pair 选择、采样 geometry 或 5% 阈值。
+  `754fc1d473c694eea389ccaf673de678c547f8c2b007f27ebd5fad66c391798d`。
+  来自冻结环境完整黄金派生；非冻结环境的5个中点相差最多约7.6e-9px，但原始hull与校准区间不变。
+  精确身份按冻结环境重新登记，未放松核对；登记后全量复验尚待完成。登记不改变 pair 选择、采样 geometry 或 5% 阈值。
 
 ## 完整黄金与性能证据
 
-本轮最终完整开发 receipt：`Test/gold_analysis/cross_complete_support_final_20260908`，绑定未提交源码。
+本轮非冻结环境完整开发 receipt：`Test/gold_analysis/cross_complete_support_final_20260908`，绑定提交前源码。
 110/110 完成、分析错误 0、全部 current report 和物理校准通过；登记前后质量与决定逐项不变。
 
 | 层级 | 结果 |
@@ -126,21 +131,23 @@ S086 新增安全 auto，S021 改为 Review；S043 最佳方案的合格短轴�
 人工确认照片的 frame ordinal，空白 slot 不虚构照片，也不减少用户要求的输出 slot 数。短轴合格不能
 替代整组四边合格。数值预算不能单独代替实际质量，也不能据此整体关闭风险检查。
 
-本轮尚未绑定干净提交，不构成完整发布资格；cohort 不变：
+冻结环境、干净 `4e2115bc` 的完整复验已完成，输出
+`Test/gold_analysis/cross_complete_support_frozen_4e2115bc`。110/110完成、分析错误0，四项质量统计与前轮
+逐项一致；唯一未通过的是上述校准精确身份，v12登记后的复验尚待完成。Cohort 不变：
 `c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`。
 Detector 指纹为 `08669362b1042c8adf7dffda3394a3080d8dd6b0ae3ca398c3f2bf53ffee8e04`；comparator 为
 `a49ea7bff6a1f24a53e7571ae977673bd58905bc502c8c897f017c201b541609`。
 
-干净 `fb6c6444` 的正式 `tools/verify performance` receipt：
-`build/v5-performance/performance_receipt.json`。24-source 完整用户路径均值 **4.023341 秒**，
-5 秒 Gate 通过，3 秒挑战未达成；p95 为 6.707902 秒，最慢 S091 为 7.168600 秒。
-未插桩进程峰值 RSS 最大 1,224,867,840 bytes；决定为 3 auto / 21 Review。
-此结果只证明该提交、当前机器、冻结依赖和本次决定分布；比上一版 3.639154 秒更慢，不能声称性能改善。
-本轮黄金 development-detail mean 为 4.586740 秒，不替代正式性能；本轮正式性能尚待干净提交后执行。
+干净 `4e2115bc`、冻结依赖下正式 `tools/verify performance` receipt：
+`build/v5-performance/performance_receipt.json`。24-source 完整用户路径均值 **3.789557 秒**，
+5 秒 Gate 通过，3 秒挑战未达成；p95 为 6.853605 秒，最慢 S091 为 6.941309 秒。
+未插桩进程峰值 RSS 最大 1,226,457,088 bytes；决定为 2 auto / 22 Review。
+此结果只证明该提交、当前机器、冻结依赖和本次决定分布。此前4.023341秒批次有3个auto，且SciPy来自
+不同包提供者，不能把均值下降全部算作算法提速。Development-detail 时间不替代正式性能。
 
 ## 开放风险与精确下一步
 
-先完成当前校准后的完整黄金、正常 Hook/CI 和正式性能，再继续无合格短轴方案。
+先完成v12冻结环境完整黄金复验并同步检查点，再继续无合格短轴方案；Cross修正的Hook/CI与正式性能已通过。
 S006 的同一获权 pair 已按完整支撑用途输出，两份方案全部六格短轴合格，runner 整组合格；primary
 仍有第六格长轴问题，整张 Review。该结果来自正式流，不再是只读对照。
 S005 尾段 TOP :1 可分别与 :2 或 :6 完整 refit（73/73、15/15），两种 raw 无 allowance 直线域都非空；
@@ -149,6 +156,8 @@ S005 尾段 TOP :1 可分别与 :2 或 :6 完整 refit（73/73、15/15），两�
 后前三格 bottom 超过 5%。下一步研究保留完整 provenance 的多族方案及归属反证，不能强行唯一合并。
 S018 bottom :67 的 raw2835..19845 未包围头尾；左侧 :66/:73 均多重归属，完整 refit 分别丢弃
 8/1 个 transition，不能选择性删除恢复；末 query20115 没有 raw transition。
+S012 F1 top 外扩110.642px、上限107.399px，主要来自coarse首raw4995之前的域外方向保护；仅相容的
+TOP :21 两条宽区间不收紧任何共同直线状态，且有22种其它归属。不能以它延长coarse实测域并取消保护。
 S021 方案仍黄金合格，但改变支撑用途后不再把外框当作 source H，内部预算阻断；留待生成问题后处理，
 不能为恢复旧 auto 让外框重新冒充照片 H。S028/S093 长轴审计与 S065 候选完成不对称暂时冻结。
 以下 S038/S064 的只读诊断已完成，尚无可合入修复。
