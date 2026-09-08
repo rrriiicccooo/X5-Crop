@@ -6,6 +6,9 @@
 
 ## 当前目标与执行顺序
 
+- 产品目标是完整、留边不过分、能够直接使用的照片：包含人工确认区域和倾斜四角，真实源外内容除外；
+  每侧实际照片 W/H 的 5% 是质量上限，正常输出保持小幅留边。内部误差预算只是风险代理，
+  必须同时检查误拒合格方案与漏判不合格方案；不能直接取消、放宽阈值或扩大 bleed。
 - 当前 96 个 development nominal 全部正确 `approved_auto`，全部角色 `unsafe_approved_auto = 0`；
   challenge 尽量安全自动通过，安全 Review 不掩盖能力缺口。发布前全部要求绑定同一 release commit。
   中间开发可暴露危险 auto，但必须保存具体边界与根因并明确不可发布；release commit 才是硬性归零验收。
@@ -13,8 +16,10 @@
   人工黄金、真实反证或逐侧预算，不通过事后修框、合并互斥候选或扩大 bleed 获得批准。
 - 正式 24-source 完整用户路径平均耗时 `<= 5s`，持续争取 `<= 3s`；工程、黄金、正式性能、
   TIFF/metadata、安装、三目标平台、打包和 Hook/CI 分别验证。
-- 执行顺序：保留可评价的完整 proposal，优先修复不安全方案的通用几何根因，再处理安全方案的错误
-  权限阻断与可用性选择。目标是最终裁切直接可用，不要求逐线复原唯一真实边界；精确合同见架构第 9、14 节。
+- 每轮分别报告生成合格方案的任务数、可靠自动交付数、错误自动交付数。当前优先修复无合格方案的
+  69 个任务；已有合格方案但 Review 的 22 个任务处理误阻断和可靠选择。多个解释或多个合格方案不应
+  永久阻断输出，有充分可用性依据即可选择，不要求唯一真实边界；精确合同见架构第 9、14 节。
+  扩大保护或增加 Review 本身不算产品目标进展。
 - Source-W、有界候选集合、typed features 与首轮离线开发排序已验证。首轮排序没有改善选择，
   不具备接入 Runtime 的依据；继续核查风险代理的物理职责与不安全候选生成根因。
   不要求全部 nominal 先通过才开发评分；排序不是概率，概率自动权限另需独立校准与准入证据。
@@ -23,15 +28,18 @@
 
 ## 当前源码与已验证事实
 
-当前 Runtime 与验证基座为 `36d18f8dbb968710e5eedf7772421952174232c6`，已正常推送 `main`。
-正常 pre-push Hook 的 887 项工程测试通过、2 项按既定条件跳过；
-[Verify](https://github.com/rrriiicccooo/X5-Crop/actions/runs/34191642141)
+当前 Runtime 与验证基座为 `fb6c6444756bb067fa0d928af4cf7905f326b99a`，已正常推送 `main`。
+正常 pre-push Hook 的 893 项工程测试通过、2 项按既定条件跳过；
+[Verify](https://github.com/rrriiicccooo/X5-Crop/actions/runs/34201416166)
 的 12 个 OS/Python 矩阵任务全部通过。工程 CI 不替代最终三目标实机发布 receipt。
 
 - Sequence full reference position 同时包含原 residual/localization 保护与同一 raw physical family
   的完整位置投影；`PhysicalLineRegion` 保留位置/斜率联合顶点，原角度上限、角色资格与 rank 不变。
   最小不对称反例、退化点/线段、大坐标相切与 288 次独立 LP 投影对照通过。
-  目前只闭合 measurement 层，不能声称完整联合角点已经传播到最终输出。
+  输出继续保留同一线族；aperture 按实际 native 可达范围裁切，并解析闭合两轴角点保护。
+  原始端点准入按整帧所有状态共享，有限轮次不新增 query/候选/通用 solver；mandatory/requested 分开。
+  删除旧 fixed-span aperture 分支，线族准备提升到 frame 级，requested 保护复用；98 次逐帧结果
+  对照完全一致，67 项专项测试通过。Enclosing 仍有已证实的小角点缺口，不能声称全部路径已闭合。
 - 晚期弱线投影消费完整 registered 身份账本，seed 搜索仍用原 `support_fraction >= 0.35` 子集。
   S110 的获权稀疏局部边不再被误报 unknown edge，正式 CLI 与 revision 75 校验通过；
   真实弱线反证仍保留，最终为 `direct_lattice_conflict` Review。
@@ -56,7 +64,8 @@
   slice view 不重复计底层数组。该 detector 缓冲预算不冒充进程 RSS，像素与内存上限均未放宽。
 - 单区域片段仍保留在完整 family 账本，完整并集达到原两区域要求才可获权；全局 solver 只消费获权线。
   不按 selected Frame 覆盖数抬高独立证据，不选择性合并较有利子集，也不删除新增测量。
-- Report revision 为 `x5crop_v5_template_report_75`，gold record / summary 为 v20 / v23。
+- Report revision 为 `x5crop_v5_template_report_76`，gold record / summary 为 v20 / v23。
+  registered observation → phase binding → frame line 的完整物理来源与唯一有符号 W 位移被独立校验。
   `registered_normalization_revision` 绑定计划与报告。Runtime 与开发校验共用基线登记合同；
   缺失基线、虚构基线边界、lane 范围漂移、漏计像素或整组内存，即使重算总账也不能通过。
   原有 raw／角色／solver 回链、逐候选 Cross 支撑区间与 source extent 校验继续保留。
@@ -67,61 +76,63 @@
   未观测背景不能补造；此前平台分区实验未合入，详见开放风险。
 - 纯离散歧义的 primary/runner 分别补全局部边界、投影弱线和约束自身联合包络，
   不共享 selected W、不重新排序、不扩大 6-pass 上界；原有 unavailable 与硬反证继续保留。
-- Enclosing aperture-center calibration v9 使用原资格、同源中位数、全体 hull 与 `0.001H` 向外量化。
-  S008 的 phase 转为 unresolved 后，不再满足 selected unique pair 资格，source 从 18 变为 17；
-  没有新增来源，其余 17 份观测逐项不变。原始 hull 仍为 `[-0.007785885H, +0.009195549H]`。
+- Enclosing aperture-center calibration v10 使用原资格、同源中位数、全体 hull 与 `0.001H` 向外量化。
+  S049 的完整保护通过原 content 检查后新增为 eligible observation，source 从 17 变为 18；
+  原 17 份观测逐项不变。原始 hull 仍为 `[-0.007785885H, +0.009195549H]`。
   区间仍为 `[-0.008H, +0.010H]`，没有为更高通过率缩窄区间；精确 observation-set SHA 为
-  `fc48b85367e5bb47a476bffc06833bf55070c2a18224253a9f731a5ad5f8251c`。
+  `01e511faf031b04df64819e9f83e10d1f906376af95fafea25c1247bdfc8eede`。
   最终全量重新派生与登记一致；登记不改变 pair 选择、采样 geometry 或 5% 阈值。
 
 ## 完整黄金与性能证据
 
 最新完整开发 receipt：
-`/private/tmp/x5crop-physical-line-position-final-full-gold-20260908h`。
+`/private/tmp/x5crop-coupled-protection-final-full-gold-20260908p`。
 110/110 完成、分析错误 0、全部物理校准登记一致：
 
 | 层级 | 结果 |
 |---|---|
-| Primary proposal | 40 safe / 69 unsafe / 1 unavailable |
-| Candidate | 28 safe / 8 unsafe / 74 unavailable |
-| 最终决定 | 20 safe auto / 0 unsafe auto / 90 Review |
-| Nominal | 20 safe auto / 76 Review |
-| Challenge | 14 Review，尚无安全 auto |
-| 保留候选集合 | 188 份；46 safe / 142 unsafe |
-| 每任务至少一份安全 | 43；40 个单份安全、3 个多份安全 |
-| 全部保留候选不安全 | 67 个任务 |
-| 安全候选且有明确 placement 歧义 | 10 个任务 |
+| Primary proposal | 39 safe / 70 unsafe / 1 unavailable |
+| Candidate | 26 safe / 11 unsafe / 73 unavailable |
+| 最终决定 | 19 safe auto / 0 unsafe auto / 91 Review |
+| Nominal（96 任务） | 39 生成合格方案 / 19 安全自动交付 / 0 错误自动交付 |
+| Challenge（14 任务） | 2 生成合格方案 / 0 安全自动交付 / 0 错误自动交付 |
+| 保留候选集合 | 188 份；44 safe / 144 unsafe |
+| 每任务至少一份安全 | 41；38 个单份安全、3 个多份安全 |
+| 无合格方案 | 69 个任务：nominal 57 / challenge 12 |
+| 已有合格方案仍 Review | 22 个任务：nominal 20 / challenge 2 |
+| 安全候选且有明确 placement 歧义 | 11 个任务 |
 
 Primary 实际生成 109/110；S051 的 primary 因 `phase_template_mismatch` 不可用，但仍保留一份
 generated runner，黄金为 unsafe（第 1 格外扩超限）。因此全部 110 个任务仍有可评价的保留方案，
 不能把 primary unavailable 说成整张无方案，也不能沿用早先 110/110 primary generated 的结论。
 
-与上一版 `/private/tmp/x5crop-correlated-line-width-full-gold-20260908c` 相比，S002/S024 的 primary
-由 unsafe 变为 safe；S065 从 safe auto 变为 phase ambiguous Review，尚无新增 auto。
-S008 转为 `adjacency_topology_unresolved`，S018 转为 `discrete_phase_ambiguous`；
-S110 保留真实 `direct_lattice_conflict`，不再发生 CLI 错误。
-安全歧义任务为 S002/S005/S015/S024/S029/S034/S035/S048/S065/S067。
+与上一版 `/private/tmp/x5crop-physical-line-position-final-full-gold-20260908h` 相比，S086 的 primary
+由 unsafe 变为 safe；S028/S093 因首帧 START 外扩超限由 safe 变为 unsafe。
+S059 的方案仍合格，但内部预算超限导致 safe auto → Review。所有 phase/Cross failure identity 未变。
+安全歧义任务为 S002/S005/S015/S024/S029/S034/S035/S048/S065/S067/S086。
 
-46 份安全候选中 31 项预算 passed / 15 failed；142 份不安全候选中 27 passed / 115 failed。
-数值预算不能单独代替黄金安全，也不能据此整体关闭风险检查。
+44 份安全候选中 31 项预算 passed / 13 failed；144 份不安全候选中 19 passed / 125 failed。
+这些是候选计数，不能当作任务数。数值预算不能单独代替实际质量，也不能据此整体关闭风险检查。
 
-黄金运行开始于提交前，header 记录基座 `ffdbda76` 与当时的工作树身份，
-不是干净 release receipt。已核对以下运行源指纹与提交 `36d18f8d` 一致：
+黄金运行开始于提交前，header 记录基座 `8c3a5354` 与当时的工作树身份，
+不是干净 release receipt。已核对以下运行源指纹与提交 `fb6c6444` 一致：
 
-- detector：`f8b573b74cb23416a8c176ea64c2ada70183f2291b46e549dc27d808780a5253`
-- comparator：`27668cff96dba524c4000232d213ad7c5020694225fe21d7840ca8f996d3af40`
+- detector：`ea28fe0f0a8d023dcd9caa7fef1ca857b99ee37e3ffa6dda7cb4e83c65ffdd9f`
+- comparator：`0bebd874f8e38bb69d3bf6c2267fe8730b80afb514f5dc1991033f95d668c703`
 - cohort：`c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`
 
-干净 `36d18f8d` 的正式 `tools/verify performance` receipt：
-`build/v5-performance/performance_receipt.json`。24-source 完整用户路径均值 **3.639154 秒**，
-5 秒 Gate 通过，3 秒挑战未达成；p95 为 6.306241 秒，最慢 S091 为 6.664384 秒。
-未插桩进程峰值 RSS 最大 1,223,360,512 bytes；决定为 3 auto / 21 Review。
-此结果只证明该提交、当前机器、冻结依赖和本次决定分布；没有相对上一版 3.606401 秒的性能提升声明。
-新黄金 development-detail mean 为 4.339720 秒，不替代正式性能。
+干净 `fb6c6444` 的正式 `tools/verify performance` receipt：
+`build/v5-performance/performance_receipt.json`。24-source 完整用户路径均值 **4.023341 秒**，
+5 秒 Gate 通过，3 秒挑战未达成；p95 为 6.707902 秒，最慢 S091 为 7.168600 秒。
+未插桩进程峰值 RSS 最大 1,224,867,840 bytes；决定为 3 auto / 21 Review。
+此结果只证明该提交、当前机器、冻结依赖和本次决定分布；比上一版 3.639154 秒更慢，不能声称性能改善。
+新黄金 development-detail mean 为 4.474013 秒，不替代正式性能。
 
 ## 开放风险与精确下一步
 
-下一机制优先接续 raw physical 联合位置/方向到角点保护链；S065 的候选完成不对称同步保留为待修根因。
+按产品质量优先修复无合格方案：S006 稳定外侧 Cross 被当作 aperture，预算漏掉 canonical 自身的偏移；
+S028/S093 审计新保护是否合并了不可能的极值。已有合格的 S025/S059 等核对风险代理误阻断，
+S065 的候选完成不对称继续修复。已确认的 enclosing 小角点缺口保留，但不把继续扩大保护当作质量改进。
 以下 S038/S064 的只读诊断已完成，尚无可合入修复。
 这些诊断未修改生产代码；完整黄金与正式性能仍使用上节 receipt，不能把单样片诊断当作新全量验收。
 
@@ -148,7 +159,7 @@ S110 保留真实 `direct_lattice_conflict`，不再发生 CLI 错误。
    - S067：两条 TOP 原已存在，新 BOTTOM 的完整覆盖让第二个 TOP/BOTTOM 配对满足原
      “两共享域且一侧全覆盖”条件。两条 TOP 的全体 union refit 未成立，不能因同属 family
      就合并 identity；primary safe、runner 第 1 格 sequence_start unsafe，仍为
-     `non_equivalent_fits`。当前 20 个安全 auto 均不依赖互补支撑分支，该分支仍影响 S067 的竞争；
+     `non_equivalent_fits`。当前 19 个安全 auto 均不依赖互补支撑分支，该分支仍影响 S067 的竞争；
      收紧分支也可能删除竞争者并改变最终决定，不能把“收紧”本身当作安全证明。
      下一步核对真实 side-track 连通性、方向变化与物理 identity。
 2. S002 的 START full reference 位置已从 `[167.833295,197.588524]` 修为
@@ -157,15 +168,14 @@ S110 保留真实 `direct_lattice_conflict`，不再发生 CLI 错误。
    `/private/tmp/x5crop-S002-physical-line-position-20260908e/x5_crop_report.jsonl`。
    第 1 格 END 仍由 START 与共同 W 推导；前两区域有宽缓材料峰，第三区域没有获权峰，
    不能降低区域门槛补造 END。原只读证据见 `/private/tmp/x5crop-S002-broad-region-assay-20260908b.log`。
-   下一步是 measurement 到输出的联合角点：raw region 尚未进入 `SequenceRoleLineEvidence`，
-   当前 fixed-span 方向 padding 不闭合两轴相互推动。例如
-   `x=3000+0.05(y-1000)`、`y=2000+0.05(x-1500)` 的真实角点为
-   `(3053.884712,2077.694236)`，固定 span 分别投影只有 `(3050,2075)`。
-   优先验证有界二维线族顶点交点的保守保护包络；分母 `1-m*n` 必须在完整参数乘积上同号。
-   raw region 只能按实际 native/单侧 W/无直接边分支的合法可达范围裁剪，不能用 Grid 范围删除
-   native 状态；外包络不能冒充 same-state W/H、rank 或 enclosing 风险证据。
-   方向、residual、pixel-center、bleed 与 topology 位移须各计一次，域外 residual 仍需独立闭合。
-   不新增通用搜索器或未经证明的 LP 工作量，也不提前开展逐 Frame W 审计。
+   Aperture 的 raw region 与两轴闭合已接入当前输出，合同见架构第 10 节，不再重复固定 span 计划。
+   Enclosing 的 S059 有独立合法角点 witness：保留既有 pixel/bleed 后 END 仍少约 0.739 px，
+   证据为 `/private/tmp/x5crop-S059-enclosing-native-audit-20260908p/native_corner_witness.json`。
+   同例新增 115.792 px 的方向保护有合法 raw/W witness，不能收窄 family 恢复 auto。
+   S028 新增 37.298 px 也有合法 raw/W witness；原生裁剪为 no-op，精确同状态角点最多只节省
+   1.054 px，远少于恢复黄金所需 13.722 px。证据为
+   `/private/tmp/x5crop-S028-enclosing-native-audit-20260908q/native_geometry_audit.json`。
+   后续区分真实测量歧义和保守包络余量；不能因为较窄旧输出碰巧黄金合格就丢弃物理反例。
    S065 的独立只读探针另确认两候选都能由各自第 1/2 格量到 W
    `[2422.313133,2475.879781]`，并从同一 registered separator 分别推导 wide adjacency 1。
    当前 best 已完成、runner 未完成，且 best W 窄化后的 source geometry/ratio-H/Cross 被共享；
@@ -173,6 +183,14 @@ S110 保留真实 `direct_lattice_conflict`，不再发生 CLI 错误。
    后续应收敛唯一候选完成 owner，各自消费原共享扫描基座与自己的 W/adjacency/条件 Cross，
    删除 detector 临时重算 runner 权限；保留原候选顺序、竞争与真实 6-pass 工作量。
    两个 W 数值相同不等于 authority 可互换，单边完成失败不得删除候选后批准另一边。
+   S006 的两个保留方案都没有合格最终框：第 2 格 bottom 实际外扩 120.381 px（5.744%），
+   内部仅计入 64.899 px；主要漏项是 canonical 自身已经外移 55.197 px，scale 阈值仅差 0.539 px。
+   所选 TOP `:2` / BOTTOM `:23` 是强白底—暗边外缘，BOTTOM 的 53 条 physical intervals 均不含
+   对应黄金；near-gold 弱线没有形成满足原门槛的完整独立支持。第 2 格 mandatory 的最大端点
+   为 transition `:434`、trace 5805、physical `[2504.5,2533.5]`，不能为贴近黄金删除。
+   正式 report76 为 `/private/tmp/x5crop-S006-captured-flow-20260909b/x5_crop_report.jsonl`。
+   下一步检查材料层次与 aperture/enclosing 身份，以及预算对 canonical 偏差的盲区；只调 runner 排序
+   或比例 scale 不会使这两个方案合格。
 3. S106 当前正式报告为
    `/private/tmp/x5crop-S106-cross-baseline-final-report-20260908a/x5_crop_report.jsonl`。
    raw 26／local 21／solver 5，拟合 28；内侧 BOTTOM 的 line 20 恢复 11 点、trace 5134–6927、
