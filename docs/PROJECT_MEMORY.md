@@ -20,7 +20,7 @@
   高度，明确区分照片边与外框支撑。冻结无关长轴算法调整，使用当前 W 和各格长轴范围；只处理妨碍
   Cross 正确性验证的必要依赖，不要求两轴完全解耦。
 - 每轮分别报告短轴质量改善、整组合格方案任务数、可靠自动交付数、错误自动交付数，并保留端到端与
-  性能验证。当前先修复没有合格短轴方案的 35 个任务，再处理已有合格方案的可靠选择与误阻断。
+  性能验证。当前先修复没有合格短轴方案的 34 个任务，再处理已有合格方案的可靠选择与误阻断。
   整组仍有 68 个任务无合格方案，另有 23 个已有合格方案但 Review。多个解释或多个合格方案不应永久
   阻断输出，有充分可用性依据即可选择，不要求唯一真实边界；精确合同见架构第 9、14 节。
   补齐外框、扩大保护、增加 Review 或 Cross 变为 resolved，本身均不算产品质量进展。
@@ -32,9 +32,8 @@
 
 ## 当前源码与已验证事实
 
-当前 Runtime 为 `f6eff660746d9813d98c6bcd45a1e93712a80ef4`，已正常推送 main；
-Cross 行为修正为 `4e2115bc`，后续提交只更新冻结校准身份。
-冻结依赖下正常 pre-push Hook 的 903 项工程测试通过、2 项按既定条件跳过；
+本次 Runtime 补全已有 Cross 备选的保留条件，待正常提交、Hook 与正式性能验证。
+此前冻结依赖下正常 pre-push Hook 的 903 项工程测试通过、2 项按既定条件跳过；
 [Verify](https://github.com/rrriiicccooo/X5-Crop/actions/runs/34230499524) 已通过。
 工程 CI 不替代最终三目标实机发布 receipt。
 
@@ -99,9 +98,10 @@ Cross 行为修正为 `4e2115bc`，后续提交只更新冻结校准身份。
 
 ## 完整黄金与性能证据
 
-本轮最终完整开发 receipt：`Test/gold_analysis/cross_complete_support_frozen_final_20260908`，
-冻结环境、干净 `f6eff660`，detector/comparator 均匹配 HEAD。
-110/110 完成、分析错误 0、全部 current report 和物理校准通过；登记前后质量与决定逐项不变。
+最新完整开发 receipt：`Test/gold_analysis/cross_runner_vacancy_full_20260908`，使用冻结环境。
+运行时 HEAD 为 `14137012`，detector 为本次待提交改动，comparator 匹配 HEAD；不是 release receipt。
+110/110 完成、分析错误 0、全部 current report 和物理校准通过。相对上一轮冻结结果，只新增 S101
+一份短轴全部合格的备选；其长轴仍不合格，决定不变，其他任务的短轴合格格数均未退步。
 
 | 层级 | 结果 |
 |---|---|
@@ -110,9 +110,9 @@ Cross 行为修正为 `4e2115bc`，后续提交只更新冻结校准身份。
 | 最终决定 | 19 safe auto / 0 unsafe auto / 91 Review |
 | Nominal（96 任务） | 39 生成合格方案 / 19 安全自动交付 / 0 错误自动交付 |
 | Challenge（14 任务） | 3 生成合格方案 / 0 安全自动交付 / 0 错误自动交付 |
-| 短轴合格方案 | 75 个任务：nominal 68 / challenge 7 |
-| 无合格短轴方案 | 35 个任务：nominal 28 / challenge 7 |
-| 保留候选集合 | 188 份；45 safe / 143 unsafe |
+| 短轴合格方案 | 76 个任务：nominal 69 / challenge 7 |
+| 无合格短轴方案 | 34 个任务：nominal 27 / challenge 7 |
+| 保留候选集合 | 189 份；45 safe / 144 unsafe |
 | 每任务至少一份安全 | 42 |
 | 无合格方案 | 68 个任务：nominal 57 / challenge 11 |
 | 已有合格方案仍 Review | 23 个任务：nominal 20 / challenge 3 |
@@ -121,8 +121,8 @@ Primary 实际生成 109/110；S051 的 primary 因 `phase_template_mismatch` �
 generated runner，黄金为 unsafe（第 1 格外扩超限）。因此全部 110 个任务仍有可评价的保留方案，
 不能把 primary unavailable 说成整张无方案，也不能沿用早先 110/110 primary generated 的结论。
 
-对照基线为 `Test/gold_analysis/current_0e16bc5`：短轴合格 71→75，整组合格 41→42，安全 auto 19→19，
-错误 auto 0→0。短轴新增 S006/S007/S011/S039/S056，丢失 S005；整组新增 S006/S056、丢失 S005。
+对照基线为 `Test/gold_analysis/current_0e16bc5`：短轴合格 71→76，整组合格 41→42，安全 auto 19→19，
+错误 auto 0→0。短轴新增 S006/S007/S011/S039/S056/S101，丢失 S005；整组新增 S006/S056、丢失 S005。
 S086 新增安全 auto，S021 改为 Review；S043 最佳方案的合格短轴格数减少一格。固定同一 placement 的
 2×2 对照证明：仅恢复旧投影遗漏的合法三维状态，F5 top 外扩即从149.417增至159.262px，超过
 153.205px上限；新完整闭合后为163.301px。该状态满足全部raw约束，不能缩小包络恢复旧结果。
@@ -135,7 +135,7 @@ S086 新增安全 auto，S021 改为 Review；S043 最佳方案的合格短轴�
 
 最终 receipt 的 cohort 不变：
 `c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`。
-Detector 指纹为 `2c0c3da321039cd782ebc46e86b751827ccba4d5a95fe4f341eb874108ed886c`；comparator 为
+Detector 指纹为 `de53b3d7969b577d3b8bf8845082a9bd78dbbbda9ad7816103eab2a5eabeb4ae`；comparator 为
 `a49ea7bff6a1f24a53e7571ae977673bd58905bc502c8c897f017c201b541609`。
 
 干净 `4e2115bc`、冻结依赖下正式 `tools/verify performance` receipt：
@@ -147,13 +147,19 @@ Detector 指纹为 `2c0c3da321039cd782ebc46e86b751827ccba4d5a95fe4f341eb874108ed
 
 ## 开放风险与精确下一步
 
-继续无合格短轴方案；冻结黄金、正常Hook、Cross修正的CI与正式性能已通过，尚不满足发布目标。
+继续无合格短轴方案；本次冻结黄金已完成，Hook、CI与正式性能待验证，尚不满足发布目标。
 S006 的同一获权 pair 已按完整支撑用途输出，两份方案全部六格短轴合格，runner 整组合格；primary
 仍有第六格长轴问题，整张 Review。该结果来自正式流，不再是只读对照。
+S101 的长轴备选因固定模板宽度矛盾无法组成placement，现行空缺位置继续检查已有Cross备选。
+新备选12格短轴全部合格；F1/F3/F4/F10长轴仍超限，仍Review。没有新增检测或拟合，保留两份上限，
+最多尝试三种既有组合；原phase失败、自有W约束和自动批准条件不变。
 S005 尾段 TOP :1 可分别与 :2 或 :6 完整 refit（73/73、15/15），两种 raw 无 allowance 直线域都非空；
 三者共同域为空。:6 未获 aperture 角色，但它仍是两区域合法物理 anchor，不能按黄金答案丢弃。
 当前 :2 没有 source-spanning，raw405..18495 未包围完整候选，因此正确拒绝支撑用途；退回 aperture
 后前三格 bottom 超过 5%。下一步研究保留完整 provenance 的多族方案及归属反证，不能强行唯一合并。
+只读生成完整1+2假设后，六格短轴均合格且primary整组合格，但当前身份歧义未解除。
+2+1的73条raw虽相邻连续，接缝最近两点距离仅差0.5px，原1px最近邻条件正确保持歧义。
+同梯度极性可分开该接缝，却不能替代材料身份；实际正梯度点也有窗口亮度下降反例，未加入极性硬门槛。
 S018 bottom :67 的 raw2835..19845 未包围头尾；左侧 :66/:73 均多重归属，完整 refit 分别丢弃
 8/1 个 transition，不能选择性删除恢复；末 query20115 没有 raw transition。
 S012 F1 top 外扩110.642px、上限107.399px，主要来自coarse首raw4995之前的域外方向保护；仅相容的
@@ -176,6 +182,12 @@ S031/S032后段TOP内切最大12.939/38.605px，已选raw本身全部被输出�
 不改变同trace身份、raw物理域、角色准入或预算。
 将coarse sharp view从5条扩展到全部9条已测trace的只读检查亦未证明收益：S012 F1 TOP外扩反增到
 113.608px；S013失去完整pair；S027超出当前联合投影顶点上界。未接入Runtime或放宽上界。
+S097 的BOTTOM外扩120.986–162.771px主要来自完整H半区间133.840px，而非canonical H过大。
+已选TOP有109条raw，但仅49条physical interval与人工边相交；BOTTOM没有获权完整族，source W
+独立权限也不可用。不得收窄H区间或删除原保护来恢复通过。
+S016 将材质窗口移到physical interval外侧的只读实验仍无整组短轴合格方案；相邻两阶跃反例会让
+新窗口跨入另一条边，在平坦材质中制造相反texture偏好。未替换现有测量字段，后续必须先证明
+邻边隔离与真实材质可观测性，不能按单张改善普遍修改。
 S061 的正短轴外扩与 inward flags不矛盾：F1约2374px长轴头部缺失触发真实斜角半平面失败，
 属于必要长轴依赖；同时四格BOTTOM仍外扩超限，不能计为短轴合格，也不修改比较器消除角点失败。
 S021 方案仍黄金合格，但改变支撑用途后不再把外框当作 source H，内部预算阻断；留待生成问题后处理，

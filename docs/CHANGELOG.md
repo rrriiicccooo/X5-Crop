@@ -57,6 +57,8 @@
   完整 pair 仍作为合法方案参与竞争，多个完整方案保持歧义。
 - 纯离散歧义的 primary/runner 分别以自身合法直接约束收紧 proposal 联合包络；runner 不借用 primary
   的角色或不匹配的 source W。歧义、反证与输出资格不变，空可行集明确保留为 unavailable。
+- 已有长轴备选无法组成不同裁切方案时，仍保留可用的短轴备选；每条 lane 继续最多保留首选与单个备选，
+  原长轴约束、失败原因与自动批准条件不变。
 - Enclosing aperture-center 校准按当前唯一 selected pair 的 18 个 source 重登记观测指纹；
   原资格、source 中位数、全体 hull 与向外量化方法不变，当前区间为 `[-0.008H, +0.010H]`。
 - Source W 明确分开测量、placement 消费和自动输出资格。至少两张合格完整 Frame 或全部独立 rank-3

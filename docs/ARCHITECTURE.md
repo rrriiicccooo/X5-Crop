@@ -1249,7 +1249,10 @@ footprint，不读取 Runtime 决定来制造正例。内部预算等风险代�
 全部永久硬化后再期待评分提高覆盖，也不能未经验证整体关闭它们。
 
 第一阶段的集合范围固定为每条 lane 已组成的 best 与单个 runner，最多两个 placement，不是整个 phase/cross
-搜索空间。原有 runner 优先顺序不变，不生成轴组合或新增候选。每个 placement 由同一 production projection
+搜索空间。先尝试已有 phase runner；只有它无法组成 placement 或与 primary 相同时，才用 primary phase
+与已有 Cross runner 填充空缺的备选位置。两种路径各用对应 phase 的原有约束，不能借用另一 phase 的
+source W，也不清除原失败。最多尝试 primary 与两种既有备选组合，保留数仍不超过两个；不展开
+phase/cross 笛卡尔积。每个 placement 由同一 production projection
 与 output owner 恰好物化一次完整 footprint 或 typed unavailable；primary 与 alternative 分开保存，选中输出
 直接复用 primary。报告和黄金分析只读取这些同次 runtime facts，不重新求解几何。物化次数与实际逐 slot
 输出评估次数进入工作量 receipt，分别不超过 2 与两份已有 placement 的 slot 总数。

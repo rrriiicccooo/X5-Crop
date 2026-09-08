@@ -141,3 +141,30 @@ class ConditionalPlacementContractTest(unittest.TestCase):
         self.assertIsNone(result[1].global_lattice_authority)
         direct.assert_not_called()
         lattice.assert_not_called()
+
+    def test_unusable_phase_runner_preserves_existing_cross_alternative(self) -> None:
+        self.phase.status = PhaseFitStatus.UNRESOLVED
+        self.phase.failure_kind = PhaseFailureKind.FIXED_TEMPLATE_MISMATCH
+        cross_runner = object()
+        self.prepared.cross_competition.runner_up = cross_runner
+        primary = SimpleNamespace(placement_id="primary")
+        alternative = SimpleNamespace(placement_id="cross-alternative")
+        for phase_placement in (None, primary):
+            with self.subTest(phase_placement=phase_placement), patch(
+                "x5crop.detection.photo_geometry.detector._compose",
+                side_effect=(primary, phase_placement, alternative),
+            ) as compose:
+                result = _placements(self.prepared, source_geometry=object())
+            self.assertEqual(result, (primary, alternative))
+            self.assertEqual(compose.call_count, 3)
+            self.assertIs(compose.call_args.kwargs["sequence_fit"], self.phase.best)
+            self.assertIs(compose.call_args.kwargs["cross_fit"], cross_runner)
+            self.assertIsNone(compose.call_args.kwargs["global_lattice_authority"])
+            self.assertEqual(self.phase.status, PhaseFitStatus.UNRESOLVED)
+            self.assertEqual(self.phase.failure_kind, PhaseFailureKind.FIXED_TEMPLATE_MISMATCH)
+
+    def test_composable_phase_runner_keeps_the_single_alternative_slot(self) -> None:
+        self.prepared.cross_competition.runner_up = object()
+        result, _, _ = self.route()
+        self.assertIs(result[1].sequence_fit, self.phase.runner_up)
+        self.assertIs(result[1].cross_fit, self.prepared.cross_competition.best)

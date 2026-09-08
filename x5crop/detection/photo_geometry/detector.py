@@ -215,7 +215,12 @@ def _placements(
             cross_fit=cross.best,
             source_geometry=source_geometry,
         )
-    elif cross.runner_up is not None:
+    if best is not None and runner is not None and best.placement_id == runner.placement_id:
+        runner = None
+    # An axis-level runner need not compose into a distinct source placement.
+    # The vacant proposal slot can still use the other existing Cross fit,
+    # with the primary phase's own constraints and unchanged eligibility.
+    if runner is None and cross.runner_up is not None:
         runner = _compose(
             prepared,
             sequence_fit=phase.best,
