@@ -32,9 +32,9 @@
 
 ## 当前源码与已验证事实
 
-本次 Runtime 补全已有 Cross 备选的保留条件，待正常提交、Hook 与正式性能验证。
-此前冻结依赖下正常 pre-push Hook 的 903 项工程测试通过、2 项按既定条件跳过；
-[Verify](https://github.com/rrriiicccooo/X5-Crop/actions/runs/34230499524) 已通过。
+当前 Runtime 为 `c30a7ef6421d95e9d8459cde02bc18f6bf7fff9b`，补全已有 Cross 备选的保留条件，
+已正常推送 main。冻结依赖下正常 pre-push Hook 的 905 项工程测试通过、2 项按既定条件跳过；
+[Verify](https://github.com/rrriiicccooo/X5-Crop/actions/runs/34243272968) 的12个环境组合均已通过。
 工程 CI 不替代最终三目标实机发布 receipt。
 
 共享 Python 的 SciPy/tifffile 在本轮期间已升级，首次 push 被冻结依赖检查正确阻断。
@@ -99,7 +99,8 @@
 ## 完整黄金与性能证据
 
 最新完整开发 receipt：`Test/gold_analysis/cross_runner_vacancy_full_20260908`，使用冻结环境。
-运行时 HEAD 为 `14137012`，detector 为本次待提交改动，comparator 匹配 HEAD；不是 release receipt。
+运行时 HEAD 为 `14137012`，detector 含本次改动；提交后已独立核对detector/comparator/cohort
+指纹与 `c30a7ef6` 完全一致，原receipt身份未改写。该结果不是 release receipt。
 110/110 完成、分析错误 0、全部 current report 和物理校准通过。相对上一轮冻结结果，只新增 S101
 一份短轴全部合格的备选；其长轴仍不合格，决定不变，其他任务的短轴合格格数均未退步。
 
@@ -138,16 +139,16 @@ S086 新增安全 auto，S021 改为 Review；S043 最佳方案的合格短轴�
 Detector 指纹为 `de53b3d7969b577d3b8bf8845082a9bd78dbbbda9ad7816103eab2a5eabeb4ae`；comparator 为
 `a49ea7bff6a1f24a53e7571ae977673bd58905bc502c8c897f017c201b541609`。
 
-干净 `4e2115bc`、冻结依赖下正式 `tools/verify performance` receipt：
-`build/v5-performance/performance_receipt.json`。24-source 完整用户路径均值 **3.789557 秒**，
-5 秒 Gate 通过，3 秒挑战未达成；p95 为 6.853605 秒，最慢 S091 为 6.941309 秒。
-未插桩进程峰值 RSS 最大 1,226,457,088 bytes；决定为 2 auto / 22 Review。
-此结果只证明该提交、当前机器、冻结依赖和本次决定分布。此前4.023341秒批次有3个auto，且SciPy来自
-不同包提供者，不能把均值下降全部算作算法提速。Development-detail 时间不替代正式性能。
+干净 `c30a7ef6`、冻结依赖下正式 `tools/verify performance` receipt：
+`build/v5-performance/performance_receipt.json`。24-source 完整用户路径均值 **3.673461 秒**，
+5 秒 Gate 通过，3 秒挑战未达成；p95 为 6.774239 秒，最慢 S091 为 6.921265 秒。
+未插桩进程峰值 RSS 最大 1,225,981,952 bytes；决定为 2 auto / 22 Review。
+此结果只证明该提交、当前机器、冻结依赖和本次决定分布；与此前3.789557秒的差异不单独证明
+算法提速。Development-detail 时间不替代正式性能。
 
 ## 开放风险与精确下一步
 
-继续无合格短轴方案；本次冻结黄金已完成，Hook、CI与正式性能待验证，尚不满足发布目标。
+继续无合格短轴方案；本次冻结黄金、正常Hook、CI与正式性能均已通过，尚不满足发布目标。
 S006 的同一获权 pair 已按完整支撑用途输出，两份方案全部六格短轴合格，runner 整组合格；primary
 仍有第六格长轴问题，整张 Review。该结果来自正式流，不再是只读对照。
 S101 的长轴备选因固定模板宽度矛盾无法组成placement，现行空缺位置继续检查已有Cross备选。
