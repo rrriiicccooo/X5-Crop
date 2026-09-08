@@ -23,11 +23,14 @@
 
 ## 当前源码与已验证事实
 
-当前 Runtime 与验证基座为 `359eea71081363da4b93f414f1320107ca185963`，已正常推送 `main`。
-正常 pre-push Hook 的 881 项工程测试通过、2 项按既定条件跳过；
-[Verify](https://github.com/rrriiicccooo/X5-Crop/actions/runs/34167728643)
+当前 Runtime 与验证基座为 `1545424148a76f58273b4be684a616610cc131f1`，已正常推送 `main`。
+正常 pre-push Hook 的 882 项工程测试通过、2 项按既定条件跳过；
+[Verify](https://github.com/rrriiicccooo/X5-Crop/actions/runs/34188247068)
 的 12 个 OS/Python 矩阵任务全部通过。工程 CI 不替代最终三目标实机发布 receipt。
 
+- 单侧直接边推导 opposite 时，输出直线证据和 full position 同时传播完整有符号 W interval，
+  避免 W 不确定性抵消真实角点方向 departure。没有新增像素查询、候选、权限或 bleed；
+  最小反例覆盖缺失 START/END、正负斜率与三种原始 full 余量，旧代码 8 个子用例失败，现均通过。
 - 已按原共享域合同闭合的直接 Cross pair，不因某侧新增 source-spanning 连续性而降为单侧 H 推导。
   候选选择、外侧反证和最终授权复用同一 pair proof，删除重复判定；局部互补 closure 不能在选择时
   被排除，却又冒充完整方案免除反证。多个合法 pair 仍保持竞争，不按支持数或外侧顺序强选。
@@ -45,7 +48,7 @@
   slice view 不重复计底层数组。该 detector 缓冲预算不冒充进程 RSS，像素与内存上限均未放宽。
 - 单区域片段仍保留在完整 family 账本，完整并集达到原两区域要求才可获权；全局 solver 只消费获权线。
   不按 selected Frame 覆盖数抬高独立证据，不选择性合并较有利子集，也不删除新增测量。
-- Report revision 为 `x5crop_v5_template_report_73`，gold record / summary 为 v20 / v23。
+- Report revision 为 `x5crop_v5_template_report_74`，gold record / summary 为 v20 / v23。
   `registered_normalization_revision` 绑定计划与报告。Runtime 与开发校验共用基线登记合同；
   缺失基线、虚构基线边界、lane 范围漂移、漏计像素或整组内存，即使重算总账也不能通过。
   原有 raw／角色／solver 回链、逐候选 Cross 支撑区间与 source extent 校验继续保留。
@@ -66,7 +69,7 @@
 ## 完整黄金与性能证据
 
 最新完整开发 receipt：
-`/private/tmp/x5crop-spanning-pair-final-full-gold-20260908a`。
+`/private/tmp/x5crop-correlated-line-width-full-gold-20260908c`。
 110/110 完成、分析错误 0、全部物理校准登记一致：
 
 | 层级 | 结果 |
@@ -85,32 +88,31 @@ Primary 实际生成 109/110；S051 的 primary 因 `phase_template_mismatch` �
 generated runner，黄金为 unsafe（第 1 格外扩超限）。因此全部 110 个任务仍有可评价的保留方案，
 不能把 primary unavailable 说成整张无方案，也不能沿用早先 110/110 primary generated 的结论。
 
-与上一版 `/private/tmp/x5crop-cross-baseline-final-full-gold-20260908a` 相比，110 个决定和
-proposal/candidate 安全标签不变，自动覆盖没有增加。S002/S006/S019/S070/S089/S091 的部分
-保留几何或 Cross facts 改变；S002 从 resolved 变为 `non_equivalent_fits`，S019 的 Cross failure
-也改为该歧义，均保持 primary unsafe、整张 Review。安全歧义任务仍为 S005/S015/S029/S034/S035/S048/S067。
-本轮重新登记前后的全量 receipt 已核对：110 个决定、安全标签和逐 Frame 黄金几何诊断完全一致。
+与上一版 `/private/tmp/x5crop-spanning-pair-final-full-gold-20260908a` 相比，110 个决定和
+proposal/candidate 安全标签不变，自动覆盖没有增加。21 个任务的部分保留几何/保护事实改变，
+共 29 个保留 Frame 的 footprint 改变；S108 的不安全 primary 预算从 passed 变为 failed。
+S002 没有改变，仍为 primary unsafe、整张 Review。安全歧义任务仍为 S005/S015/S029/S034/S035/S048/S067。
 
-43 份安全候选中 29 项预算 passed / 14 failed；143 份不安全候选中 30 passed / 113 failed。
+43 份安全候选中 29 项预算 passed / 14 failed；143 份不安全候选中 29 passed / 114 failed。
 数值预算不能单独代替黄金安全，也不能据此整体关闭风险检查。
 
-黄金运行开始于提交前，header 记录基座 `dae97a36` 与当时的工作树身份，
-不是干净 release receipt。已核对以下运行源指纹与提交 `359eea71` 一致：
+黄金运行开始于提交前，header 记录基座 `19855cc2` 与当时的工作树身份，
+不是干净 release receipt。已核对以下运行源指纹与提交 `15454241` 一致：
 
-- detector：`a17e05d79c8c94b0628617eb1771ae01dabdf3021ffa422fb8b2cdd8045c3e76`
+- detector：`ed4f2a1350c3a85f650ffec1cff786ecbe3842c803b904e3ec19bcfa2445299c`
 - comparator：`e70cd52ec25caa85969fd617cef1266cce3cbdd837501a3d84325f52411701b4`
 - cohort：`c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`
 
-干净 `359eea71` 的正式 `tools/verify performance` receipt：
-`build/v5-performance/performance_receipt.json`。24-source 完整用户路径均值 **3.654182 秒**，
-5 秒 Gate 通过，3 秒挑战未达成；p95 为 6.311194 秒，最慢 S091 为 6.675872 秒。
-未插桩进程峰值 RSS 最大 1,209,335,808 bytes。
-此结果只证明该提交、当前机器、冻结依赖和本次决定分布；相对上一版 3.588597 秒没有性能提升声明。
-新黄金 development-detail mean 为 4.023232 秒，不替代正式性能。
+干净 `15454241` 的正式 `tools/verify performance` receipt：
+`build/v5-performance/performance_receipt.json`。24-source 完整用户路径均值 **3.606401 秒**，
+5 秒 Gate 通过，3 秒挑战未达成；p95 为 6.291406 秒，最慢 S091 为 6.597218 秒。
+未插桩进程峰值 RSS 最大 1,226,424,320 bytes；决定为 3 auto / 21 Review。
+此结果只证明该提交、当前机器、冻结依赖和本次决定分布；相对上一版 3.654182 秒没有性能提升声明。
+新黄金 development-detail mean 为 4.322093 秒，不替代正式性能。
 
 ## 开放风险与精确下一步
 
-下一机制优先接续 S002 的 END 测量到联合角点保护链；以下 S038/S064 的只读诊断已完成，尚无可合入修复。
+下一机制优先接续 S002 的 raw physical 联合位置/方向到角点保护链；以下 S038/S064 的只读诊断已完成，尚无可合入修复。
 这些诊断未修改生产代码；完整黄金与正式性能仍使用上节 receipt，不能把单样片诊断当作新全量验收。
 
 1. 共同基线前后的 S038/S064/S067 已分别通过正式完整 flow 生成报告并校验，不能为恢复旧 auto
@@ -131,6 +133,8 @@ proposal/candidate 安全标签不变，自动覆盖没有增加。S002/S006/S01
      三格 cross_low 外扩超限，primary unsafe。最小反例已复现同一 pair 增加 trace 后投影权限先下降、
      再恢复；这证明分支合同不一致，未证明原互补授权更可靠。下一步先定义可保持的物理支撑合同，
      同时检查新增证据、真实反证与候选竞争；不能直接合并两个 mode、增加回退或按旧 auto 反调条件。
+     现有 `test_two_shared_domains_cannot_export_complementary_tails` 只断言权限政策，没有输出 polygon、
+     真实边界或最终 Gate，不能把它当作独立几何反例。旧互补授权过宽与新共享条件过严均待物理证明。
    - S067：两条 TOP 原已存在，新 BOTTOM 的完整覆盖让第二个 TOP/BOTTOM 配对满足原
      “两共享域且一侧全覆盖”条件。两条 TOP 的全体 union refit 未成立，不能因同属 family
      就合并 identity；primary safe、runner 第 1 格 sequence_start unsafe，仍为
@@ -142,14 +146,22 @@ proposal/candidate 安全标签不变，自动覆盖没有增加。S002/S006/S01
    第 1 格 END 中心外扩由约 5.762 降到 1.876 px。该轮正式报告为
    `/private/tmp/x5crop-S002-cross-baseline-report-20260908a/x5_crop_report.jsonl`。
    该报告 raw 29／local 23／solver 6，拟合 31；基线改动前为 574／503／71，拟合 576。
-   当前正式复现为 `/private/tmp/x5crop-S002-current-corner-debug-20260908b/x5_crop_report.jsonl`，
-   已通过当前报告校验。第 1 格 END 没有直接边界绑定，而由 START 与共同 W 推导；required 右界为
+   本轮修复前正式复现为 `/private/tmp/x5crop-S002-joint-direction-baseline-20260908c/x5_crop_report.jsonl`，
+   通过当时 revision 73 校验；当前 revision 74 结果见上节完整黄金 receipt。第 1 格 END 没有直接边界绑定，
+   而由 START 与共同 W 推导；required 右界为
    x=3336.693486，Cross 仍 `non_equivalent_fits`。不能只用 bottom 变化解释 END 的角点失败。
    注册测量的只读插桩保持正式决定与几何完全相同：前两个区域在 x≈3327–3345 附近保留宽缓材料峰，
    第三区域相同位置可观测但 material supported=false、background=0，没有相应峰；证据见
    `/private/tmp/x5crop-S002-broad-region-assay-20260908b.log`。局部存在峰不等于已有获权 END。
-   下一步回链这些峰的跨区域关联、登记与角色绑定，以及相关 W/方向如何传播到最终角点；
-   先建立通用正反例，再决定修复 owner，不降低门槛、拼接有利片段或扩大 bleed。
+   完整 W 传播已修复，但该样片 START 的统计直线投影本已落在 full 位置内，故本轮不改变输出。
+   新的无黄金反例确认 `sequence_direction_measurement.py` 的 full position 只使用 residual 与
+   localization，而 full direction 含 raw physical slope。三条 trace 的 localization `[99,101]`、
+   physical `[99,120]` 可容许直线 x=119，却只输出位置 `[97,103]`；方向允许、对应位置被删除。
+   S002 的十条 raw physical interval 在原 4° 上限内允许 reference=1398 位置
+   `[154.575926,203.802469]`，现 full 为 `[167.833295,197.588524]`；固定 canonical slope 也会遗漏
+   联合状态。下一步明确同一 retained family 的完整物理集合合同，在现有 measurement owner 保留
+   联合位置/斜率并投影到 frame 支撑端点；同时覆盖单侧 W 推导，不能只扩参考点区间、独立相乘
+   full 边际区间或增加每 edge 多次 LP 的未经验证成本。残差恢复而无获权方向的分支保持独立语义。
 3. S106 当前正式报告为
    `/private/tmp/x5crop-S106-cross-baseline-final-report-20260908a/x5_crop_report.jsonl`。
    raw 26／local 21／solver 5，拟合 28；内侧 BOTTOM 的 line 20 恢复 11 点、trace 5134–6927、
