@@ -13,6 +13,8 @@
   人工黄金、真实反证或逐侧预算，不通过事后修框、合并互斥候选或扩大 bleed 获得批准。
 - 正式 24-source 完整用户路径平均耗时 `<= 5s`，持续争取 `<= 3s`；工程、黄金、正式性能、
   TIFF/metadata、安装、三目标平台、打包和 Hook/CI 分别验证。
+- 执行顺序：保留可评价的完整 proposal，优先修复不安全方案的通用几何根因，再处理安全方案的错误
+  权限阻断与可用性选择。目标是最终裁切直接可用，不要求逐线复原唯一真实边界；精确合同见架构第 9、14 节。
 - Source-W、有界候选集合、typed features 与首轮离线开发排序已验证。首轮排序没有改善选择，
   不具备接入 Runtime 的依据；继续核查风险代理的物理职责与不安全候选生成根因。
   不要求全部 nominal 先通过才开发评分；排序不是概率，概率自动权限另需独立校准与准入证据。
@@ -79,6 +81,10 @@
 | 全部保留候选不安全 | 69 个任务 |
 | 安全候选且有明确 placement 歧义 | 7 个任务 |
 
+Primary 实际生成 109/110；S051 的 primary 因 `phase_template_mismatch` 不可用，但仍保留一份
+generated runner，黄金为 unsafe（第 1 格外扩超限）。因此全部 110 个任务仍有可评价的保留方案，
+不能把 primary unavailable 说成整张无方案，也不能沿用早先 110/110 primary generated 的结论。
+
 与上一版 `/private/tmp/x5crop-cross-baseline-final-full-gold-20260908a` 相比，110 个决定和
 proposal/candidate 安全标签不变，自动覆盖没有增加。S002/S006/S019/S070/S089/S091 的部分
 保留几何或 Cross facts 改变；S002 从 resolved 变为 `non_equivalent_fits`，S019 的 Cross failure
@@ -104,29 +110,46 @@ proposal/candidate 安全标签不变，自动覆盖没有增加。S002/S006/S01
 
 ## 开放风险与精确下一步
 
+下一机制优先接续 S002 的 END 测量到联合角点保护链；以下 S038/S064 的只读诊断已完成，尚无可合入修复。
+这些诊断未修改生产代码；完整黄金与正式性能仍使用上节 receipt，不能把单样片诊断当作新全量验收。
+
 1. 共同基线前后的 S038/S064/S067 已分别通过正式完整 flow 生成报告并校验，不能为恢复旧 auto
-   回退共同基线、强选旧线或放宽 Gate。下一步继续区分支撑、角色、选对与预算：
+   回退共同基线、强选旧线或放宽 Gate。当前已区分的支撑、角色、选对与预算问题：
 
    - S038：新增 source-spanning TOP 仍与两条 BOTTOM 满足原共享域合同。权限不一致已修复，
      但两个合法 pair 仍竞争；不能仅凭支持数保留旧 pair。Primary/candidate 安全，唯一 enclosing
      support 的最大逐侧外扩约 1.512 mm 超过 1.2 mm；正式报告为
      `/private/tmp/x5crop-S038-spanning-pair-final-report-20260908a/x5_crop_report.jsonl`，仍仅预算阻断。
-     下一步核查两个 BOTTOM 的原始物理角色及各自完整 footprint，不能把合法 runner 隐藏掉。
+     两组配对的只读完整 footprint 对照已完成：BOTTOM line 27 的方案第 5/6 格外扩超限，line 31
+     的方案黄金安全；对照见 `/private/tmp/x5crop-S038-all-pair-assay-20260908b.log`，不是 Runtime 选边。
+     局部 BOTTOM 的外侧背景支撑也覆盖两个原查询区域，不能用“只有一区域”删除它。
+     内容格点虽跨过其 canonical 线，计入完整位置和方向区间后仍不足以否定整组可能边界；
+     现有 content veto 只检查最终 post-bleed 输出，不拥有 native boundary identity 筛选权限。
+     下一步需独立物理证据或经验证的可用性选择，不能按黄金答案、单条中心线或支持数删竞争者。
    - S064：原互补配对没有共同 trace；新 BOTTOM 增强后与 TOP 共享 11 个 trace，但全部位于
      第一个 selected domain，切换为 `shared_traces` 后不能获得完整投影权限。单侧 H 推导使
-     三格 cross_low 外扩超限，primary unsafe。下一步为支撑模式切换构造精确正反例，核对原始
-     独立区域与 selected-domain 权限，不直接把两个 mode 合并或增加回退。
+     三格 cross_low 外扩超限，primary unsafe。最小反例已复现同一 pair 增加 trace 后投影权限先下降、
+     再恢复；这证明分支合同不一致，未证明原互补授权更可靠。下一步先定义可保持的物理支撑合同，
+     同时检查新增证据、真实反证与候选竞争；不能直接合并两个 mode、增加回退或按旧 auto 反调条件。
    - S067：两条 TOP 原已存在，新 BOTTOM 的完整覆盖让第二个 TOP/BOTTOM 配对满足原
      “两共享域且一侧全覆盖”条件。两条 TOP 的全体 union refit 未成立，不能因同属 family
      就合并 identity；primary safe、runner 第 1 格 sequence_start unsafe，仍为
-     `non_equivalent_fits`。下一步核对真实 side-track 连通性、方向变化与物理 identity。
+     `non_equivalent_fits`。当前 21 个安全 auto 均不依赖互补支撑分支，该分支仍影响 S067 的竞争；
+     收紧分支也可能删除竞争者并改变最终决定，不能把“收紧”本身当作安全证明。
+     下一步核对真实 side-track 连通性、方向变化与物理 identity。
 2. S002 在共同基线改动时从安全 primary 变为 unsafe，新增包含失败为第 1 格 sequence_end 的角点。
    当时 top/bottom 在黄金轴上的外扩仍约 40 px，不能简单归因于 bottom 直接内切；
    第 1 格 END 中心外扩由约 5.762 降到 1.876 px。该轮正式报告为
    `/private/tmp/x5crop-S002-cross-baseline-report-20260908a/x5_crop_report.jsonl`。
    该报告 raw 29／local 23／solver 6，拟合 31；基线改动前为 574／503／71，拟合 576。
-   本轮全量中 Cross 新增 `non_equivalent_fits`，primary 仍 unsafe；下一步从最新保留几何回链
-   Cross 变化如何影响同状态直线、角点与纵向联合保护，不能把旧报告或中心边距当作当前完整结论。
+   当前正式复现为 `/private/tmp/x5crop-S002-current-corner-debug-20260908b/x5_crop_report.jsonl`，
+   已通过当前报告校验。第 1 格 END 没有直接边界绑定，而由 START 与共同 W 推导；required 右界为
+   x=3336.693486，Cross 仍 `non_equivalent_fits`。不能只用 bottom 变化解释 END 的角点失败。
+   注册测量的只读插桩保持正式决定与几何完全相同：前两个区域在 x≈3327–3345 附近保留宽缓材料峰，
+   第三区域相同位置可观测但 material supported=false、background=0，没有相应峰；证据见
+   `/private/tmp/x5crop-S002-broad-region-assay-20260908b.log`。局部存在峰不等于已有获权 END。
+   下一步回链这些峰的跨区域关联、登记与角色绑定，以及相关 W/方向如何传播到最终角点；
+   先建立通用正反例，再决定修复 owner，不降低门槛、拼接有利片段或扩大 bleed。
 3. S106 当前正式报告为
    `/private/tmp/x5crop-S106-cross-baseline-final-report-20260908a/x5_crop_report.jsonl`。
    raw 26／local 21／solver 5，拟合 28；内侧 BOTTOM 的 line 20 恢复 11 点、trace 5134–6927、
@@ -150,8 +173,12 @@ proposal/candidate 安全标签不变，自动覆盖没有增加。S002/S006/S01
    （130、3784、7177、10570、14141）的原／新峰区间、`_unique_nearest` 与物理直线可行性。
 6. S069 本轮已安全 auto；其旧 transition 1330 的 exact-union 无解证书仍是反例线索，
    不再将旧失败视为当前状态。证据为 `/private/tmp/x5crop-family-S069-20260908.jsonl`。
+   S051 的 primary 生成缺口及 unsafe runner 仍需回链 `phase_template_mismatch` 与保留方案的外扩，
+   不能为补齐 primary 数量晋升 runner 或删除失败身份。生成层优先处理上节 69 个全部保留方案不安全的任务。
    首轮离线 ridge 排序 `/private/tmp/x5crop-placement-ranking-20260907a/placement_ranking.json`
    仍绑定旧 `38178c4a`，折外由 36 safe 降到 34，未接入 Runtime，不是当前集合重训结果。
+   可用性选择仍在当前 nominal 计划内，不以全部 nominal 自动通过为开发前置条件；后续在当前源码绑定
+   的有界集合上审计风险特征与多正例选择，正式概率权限另需独立 calibration、OOD 与拒绝验收。
 7. 当前仍为 `development_only_not_release_ready`。没有 sealed cohort，黄金未覆盖
    `xpan`、`120-645`、`135-dual`；不冒充未来生产错误率或建立格式禁用规则。
    最终同一 release commit 的全部黄金、性能、工程、TIFF/安装、平台与打包验收仍待完成。
