@@ -22,6 +22,7 @@ from .template_model import (
     SeparatorRelationKind,
 )
 from .template_cross_model import CrossHeightProjectionBasis
+from .robust_line_fit import _clip_line_region
 from .template_phase_model import GlobalLatticeConstraintKind
 from .template_placement import FormatPlacement
 
@@ -608,9 +609,16 @@ def _aperture_cross_vertices(
     )
 
 
-def _support_system(
+def _support_cross_vertices(
     placement: FormatPlacement,
-) -> _FeasibleSystem:
+) -> tuple[tuple[tuple[float, float, float], ...], int]:
+    """Retain the complete (top, bottom, shared slope) polytope.
+
+    Each boundary is a clipped (position, slope) polygon. Between consecutive
+    polygon vertex slopes, both position limits are affine, so their shared
+    slope product has vertices only at those breakpoints. Projecting just two
+    positions and retaining an arbitrary LP solution would lose slope fibers.
+    """
     support = placement.cross_fit.enclosing_support_pair
     if support is None:
         raise ValueError("enclosing output requires its direct support pair")
@@ -644,91 +652,62 @@ def _support_system(
             math.tan(math.radians(shared_direction.maximum)),
         ),
     )
-    top_reference = _LinearExpression(np.asarray((1.0, 0.0, 0.0)), 0.0)
-    bottom_reference = _LinearExpression(np.asarray((0.0, 1.0, 0.0)), 0.0)
-    span = _LinearExpression(np.asarray((-1.0, 1.0, 0.0)), 0.0)
-    constraints: list[tuple[_LinearExpression, FiniteInterval]] = [
-        (top_reference, support.top_full_interval_px),
-        (bottom_reference, support.bottom_full_interval_px),
-        (span, support.observed_span_px),
-    ]
-    for trace, top_interval, bottom_interval in zip(
-        support.trace_coordinates_px,
-        support.top_trace_intervals_px,
-        support.bottom_trace_intervals_px,
-        strict=True,
+    # This observed span is the difference of the two native intervals. It
+    # adds no coupling beyond them; reject a changed contract rather than
+    # silently dropping an independent span constraint.
+    if (
+        abs(support.observed_span_px.minimum - (bounds[1][0] - bounds[0][1])) > 1.0e-9
+        or abs(support.observed_span_px.maximum - (bounds[1][1] - bounds[0][0])) > 1.0e-9
     ):
-        distance = float(trace) - support.reference_trace_px
-        top_feasible = FiniteInterval(
-            top_interval.minimum
-            - support.top_straight_model_residual_px,
-            top_interval.maximum
-            + support.top_straight_model_residual_px,
-        )
-        bottom_feasible = FiniteInterval(
-            bottom_interval.minimum
-            - support.bottom_straight_model_residual_px,
-            bottom_interval.maximum
-            + support.bottom_straight_model_residual_px,
-        )
-        constraints.extend(
-            (
-                (
-                    _LinearExpression(
-                        np.asarray((1.0, 0.0, distance)),
-                        0.0,
-                    ),
-                    top_feasible,
-                ),
-                (
-                    _LinearExpression(
-                        np.asarray((0.0, 1.0, distance)),
-                        0.0,
-                    ),
-                    bottom_feasible,
-                ),
-            )
-        )
-    return _FeasibleSystem(bounds, _constraints(tuple(constraints)))
+        raise ValueError("enclosing support span differs from its native intervals")
+    polygons = []
+    for position, intervals, residual in (
+        (bounds[0], support.top_trace_intervals_px, support.top_straight_model_residual_px),
+        (bounds[1], support.bottom_trace_intervals_px, support.bottom_straight_model_residual_px),
+    ):
+        vertices = tuple(dict.fromkeys((
+            (position[0], bounds[2][0]), (position[1], bounds[2][0]),
+            (position[1], bounds[2][1]), (position[0], bounds[2][1]),
+        )))
+        for trace, interval in zip(support.trace_coordinates_px, intervals, strict=True):
+            distance = float(trace) - support.reference_trace_px
+            vertices = _clip_line_region(vertices, 1.0, distance, interval.maximum + residual)
+            vertices = _clip_line_region(vertices, -1.0, -distance, residual - interval.minimum)
+        if not vertices:
+            raise ValueError("selected placement has no joint feasible state")
+        polygons.append(vertices)
+    minimum_slope = max(min(m for _, m in polygon) for polygon in polygons)
+    maximum_slope = min(max(m for _, m in polygon) for polygon in polygons)
+    if minimum_slope > maximum_slope:
+        raise ValueError("selected placement has no joint feasible state")
+    slopes = sorted({
+        minimum_slope, maximum_slope,
+        *(m for polygon in polygons for _, m in polygon
+          if minimum_slope <= m <= maximum_slope),
+    })
+    if len(slopes) * 4 > _MAX_SUPPORT_EVALUATIONS:
+        raise ValueError("joint feasible projection exceeded its work bound")
 
+    def positions_at_slope(polygon, slope):
+        positions = []
+        for (p0, m0), (p1, m1) in zip(polygon, (*polygon[1:], polygon[0]), strict=True):
+            if m0 == slope:
+                positions.append(p0)
+            if min(m0, m1) < slope < max(m0, m1):
+                positions.append(p0 + (p1 - p0) * (slope - m0) / (m1 - m0))
+        if not positions:
+            raise ValueError("support slope slice has no feasible position")
+        return min(positions), max(positions)
 
-def _support_cross_states(
-    placement: FormatPlacement,
-    system: _FeasibleSystem,
-    target_trace_px: float,
-) -> tuple[tuple[tuple[float, float, float], ...], int]:
-    support = placement.cross_fit.enclosing_support_pair
-    if support is None:
-        raise ValueError("support projection lost its direct authority")
-    distance = target_trace_px - support.reference_trace_px
-    top_at_target = _LinearExpression(
-        np.asarray((1.0, 0.0, distance)),
-        0.0,
-    )
-    bottom_at_target = _LinearExpression(
-        np.asarray((0.0, 1.0, distance)),
-        0.0,
-    )
-    solutions, evaluations = _project_pair_solutions(
-        system,
-        top_at_target,
-        bottom_at_target,
-    )
-    unique = {
-        tuple(round(float(value), 12) for value in solution): solution
-        for solution in solutions
-    }
-    return (
-        tuple(
-            (
-                top_at_target.value(solution),
-                bottom_at_target.value(solution),
-                float(solution[2]),
-            )
-            for solution in unique.values()
-        ),
-        evaluations,
-    )
+    states = tuple(dict.fromkeys(
+        (top, bottom, slope)
+        for slope in slopes
+        for top in positions_at_slope(polygons[0], slope)
+        for bottom in positions_at_slope(polygons[1], slope)
+    ))
+    if len(states) > _MAX_PROJECTED_VERTICES:
+        raise ValueError("joint feasible projection exceeded its vertex bound")
+    return states, 4 * len(slopes)
 
 
 def project_format_placement(
@@ -750,20 +729,15 @@ def project_format_placement(
         else tuple(item.constraint_id for item in authority.constraints)
     )
     sequence_system, roles = _sequence_system(placement)
-    support_system = (
-        _support_system(placement)
-        if placement.cross_fit.boundary_use
-        == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
-        else None
-    )
-    if support_system is None:
+    enclosing = placement.cross_fit.boundary_use == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
+    if not enclosing:
         cross_vertices, evaluation_count = _aperture_cross_vertices(placement)
         aperture_states = tuple(
             (top, bottom, None)
             for top, bottom in cross_vertices
         )
     else:
-        evaluation_count = 0
+        support_vertices, evaluation_count = _support_cross_vertices(placement)
         aperture_states = ()
     frames: list[tuple[JointFrameState, ...]] = []
     for ordinal in range(placement.output_slot_count):
@@ -785,7 +759,7 @@ def project_format_placement(
             direct_positions, evaluations = direct_solutions
             sequence_solutions = direct_positions
         evaluation_count += evaluations
-        if support_system is None:
+        if not enclosing:
             cross_shift = (
                 placement.frames[ordinal].top.canonical_position_px
                 - placement.cross_fit.top_canonical_px
@@ -795,12 +769,13 @@ def project_format_placement(
                 for top, bottom, support_slope in aperture_states
             )
         else:
-            cross_states, evaluations = _support_cross_states(
-                placement,
-                support_system,
-                placement.frames[ordinal].top.reference_trace_px,
+            support = placement.cross_fit.enclosing_support_pair
+            assert support is not None
+            distance = placement.frames[ordinal].top.reference_trace_px - support.reference_trace_px
+            cross_states = tuple(
+                (top + slope * distance, bottom + slope * distance, slope)
+                for top, bottom, slope in support_vertices
             )
-            evaluation_count += evaluations
         states = []
         for start, end in sequence_solutions:
             states.extend(

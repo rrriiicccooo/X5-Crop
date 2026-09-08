@@ -1035,8 +1035,13 @@ Cross registration 是同角色边界 family identity 的唯一 owner。Transiti
 fragment；初次拟合允许一个独立区域内至少两条不同 trace 成线，保留原始区域数与角色假设，其余梯度、
 材质、方向和残差条件不变。照片边界角色授权仍要求至少两个原查询空间区域及正确外侧背景；单区域假设
 不能移动裁切边、成为外侧角色反证或阻止缺边精修。Selected domain 的数量不能提升原始实测区域数。
-Registration 把投影坐标与完整方向区间相容的同角色 observation 组成有界 component，再对
-该 component 的完整 transition 并集只重拟合一次，继续要求至少两个独立区域：
+Registration 把投影坐标与完整方向区间相容的同角色 observation 组成有界 component。先用全部 raw
+物理区间、原 bend allowance 与方向上限检查完整 component 的直线可行域；非空时保持整组。
+只有整组物理不相容时，才以原有至少两区域的 observation 建立相容 anchor group；单区域 fragment
+只在与一个固定 anchor group 相容时加入该组，多组相容或无组相容的 fragment 全部保留为剩余组。
+每组一次提交全部 transition 并集重拟合；任何失败都保留该组全部原 observation，不能按拟合效果挑子集。
+Anchor 分组不读取背景角色授权，不新增查询或测量阈值。每条 observation 恰有一个去向，原先完整
+refit 成功的 component 不会被拆分；最终合并继续要求至少两个独立区域：
 
 | registration 事实 | 结果 |
 |---|---|
@@ -1045,7 +1050,10 @@ Registration 把投影坐标与完整方向区间相容的同角色 observation 
 | 只有一个 observation | 不建立多余 family record |
 
 Raster trace 不连续不等于物理边界不同；完整并集重拟合能够成立时，跨 domain fragment 仍可属于同一条线。
-反过来，坐标邻近、方向相似、support 更多或 residual 更小都不能选择性合并其中一部分。Selection 不再
+坐标邻近、方向相似、support 更多或 residual 更小都不能选择性丢弃组员。每侧原 registered run 数为 R 时，
+family 相容域计算不超过 `R(R+1)`，以 `family_compatibility_evaluation_count` 保留真实次数；
+每次裁剪的工作量为 raw 并集规模的平方上界，缓存只保存 observation 索引组合与布尔结果。
+Selection 不再
 拥有 broader/local containment 或 dominance 逻辑，只消费 registration 的 canonical identity。TOP 与
 BOTTOM 是两个独立 registered-run producer，各自使用同一编译合同与每角色 512 条上限；一侧的局部
 fragment 不能占用另一侧配额，总工作量只由两侧 receipt 求和。任一侧单独超界即产生
@@ -1152,19 +1160,24 @@ Normal 校验要求非空域组数量与 phase 状态对应；development 校验
 
 ### 8.2 `ENCLOSING_SUPPORT_PAIR`
 
-当 aperture 未唯一成立时，可以使用一对直接外侧支撑作为完整输出 top/bottom。Pair 的 observation basis
+可以使用一对直接外侧支撑作为完整输出 top/bottom。Pair 的 observation basis
 可以是 sharp transition，也可以是第 6.3 节闭合的 broad material；两种 basis 使用同一输出权限和预算，
 但不能把多种非等价解释按强弱评分。它必须同时满足：
 
 - 两侧共享相容的 registered spatial support 和局部方向；
 - 两侧均 source-spanning，或覆盖 3 个独立支持区域和 `min(3, count)` 个长轴 frame domain；
+- 未取得 source-spanning 权限的每一侧，其原始 trace 范围还必须分别包围每组候选的完整长轴 extent；
+  只命中末张照片前段或只由两侧并集包围范围，不能取得未观察尾段的直接外框输出权限；
 - broad basis 额外要求两侧 outward background、共同 polarity 和唯一 pair；
 - 直接 span 完整包含 canonical fixed H；
 - `H < support_span <= 1.1H`；
 - 完整位于 lane/source authority；
-- 只有一个合法 pair。
+- Pair 身份已经唯一闭合：来自原 direct aperture 竞争的唯一获权 pair，或独立 support 搜索的唯一合法 pair。
 
-两侧 `boundary_use` 必须一致，禁止 aperture/support 混用。两侧直接闭环且唯一的 aperture 优先；
+两侧 `boundary_use` 必须一致，禁止 aperture/support 混用。原 direct aperture 竞争已通过全部权限、反证、
+覆盖与方向检查后，若同一对 observation 同时满足上述完整 support 合同，则以原直接支撑线输出，
+记录 `authoritative_pair_enclosing_use`；它不重选 pair，不替换 native 坐标，也不声称全局只有一个
+外框解释。背景角色已获权不禁止该同一 pair 同时作为包围边界。不同 ID 的外框不得取代原唯一获权 aperture。
 若 aperture 只有单侧 direct anchor、另一侧依赖固定 H 推导，或者仍有多个离散 aperture 解，则
 唯一且直接证明的 enclosing pair 可以成为更强的输出 authority。Enclosing pair 不声称自己是
 照片 aperture，只证明它完整包住可接受的照片区域。
@@ -1430,6 +1443,17 @@ placement 选择，也不修改 output polygon。每个 `JointFrameState` 将该
 cross 预算，但不改变正式采样 geometry。
 
 Support 的共享斜率属于同一个 `JointFrameState`，已经进入该状态的 boundary line 与联合 footprint。
+完整状态保留 `(top, bottom, slope)` 三维可行集合；不能只投影两个位置后保留任意一个斜率解。
+两侧各自在 native 位置、共同方向与原 shared raw 区间加既有 straight residual 内裁出完整直线参数多边形，
+合并全部斜率断点并逐断点保留两侧位置端点的同斜率组合。每个 placement 只计算一次，再仿射平移到
+各 Frame 的 reference；原 32 状态与 64 极值计算上限不变，超界保持不可用。
+每侧 N 个 shared raw interval 的半平面裁剪为 `O(N²)` 工作、`O(N)` 临时空间，不新增 TIFF query。
+Enclosing 风险距离使用短轴坐标单位，与 source-axis H 一致；法向距离除以对应短轴法向分量，避免
+归一化造成区间内部最大风险遗漏。完整包络与逐侧风险均保留完整三维顶点，预算上限不变。
+外框与 aperture 共用第 10 节的有界保护闭合及原始端点准入账本。外框先以完整状态的实际支撑高度建立
+跨轴保护范围；同一斜率造成的角点位移只进入范围上界，不重复加到上下边保护。方向剩余项只在原实测
+trace 域外计算。Mandatory 与 requested 独立纳入新进入范围的 raw 端点，最多原端点数加一次检查；
+风险和同状态对齐预算直接使用 requested 的同一份保护结果，不再另算较小范围。
 局部 residual 只保留实测 trace 相对这条同状态直线的 outward departure；超出实测 trace 域时，也只传播
 `observed_direction - state_slope` 的方向差。不得把绝对斜率再作为 residual 加一次，或用目标 trace 的
 水平位置与其它 trace 直接比较。`BoundaryProtectionFact.local_boundary_residual_px` 与

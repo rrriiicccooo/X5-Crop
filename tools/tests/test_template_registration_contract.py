@@ -19,6 +19,7 @@ from x5crop.domain import (
 )
 from x5crop.formats import FramePhysicalSpec
 from x5crop.detection.photo_geometry.model import BoundaryAxis, BoundaryRole
+from x5crop.detection.photo_geometry.measurement_model import PhotoBoundaryMeasurementSet
 from x5crop.detection.photo_geometry.observation_types import (
     BasicAxisProfile,
     ProfileRun,
@@ -172,27 +173,32 @@ class TemplateRegistrationContractTest(unittest.TestCase):
         measurement = make_side_measurement_set(
             tuple((coordinate,) for coordinate in coordinates_px)
         )
-        transitions_by_ordinal = {
-            item.trace_ordinal: item for item in measurement.transitions
-        }
+        return TemplateRegistrationContractTest._register_top_transition_groups(
+            measurement,
+            tuple(tuple(ObservationId(f"transition:{index}:0") for index in group)
+                  for group in groups),
+        )
+
+    @staticmethod
+    def _register_top_transition_groups(
+        measurement: PhotoBoundaryMeasurementSet,
+        groups: tuple[tuple[ObservationId, ...], ...],
+    ) -> RegisteredCrossEvidence:
+        transitions = {item.transition_id: item for item in measurement.transitions}
         runs = tuple(
             ProfileRun(
                 run_id=f"top-family:{group_ordinal}",
                 coordinate_interval_px=FiniteInterval(
-                    min(coordinates_px[index] for index in group) - 0.25,
-                    max(coordinates_px[index] for index in group) + 0.25,
+                    min(transitions[identity].canonical_coordinate_px for identity in group) - 0.25,
+                    max(transitions[identity].canonical_coordinate_px for identity in group) + 0.25,
                 ),
-                transition_ids=tuple(
-                    transitions_by_ordinal[index].transition_id
-                    for index in group
-                ),
+                transition_ids=group,
                 trace_coordinates_px=tuple(
-                    transitions_by_ordinal[index].trace_coordinate_px
-                    for index in group
+                    transitions[identity].trace_coordinate_px for identity in group
                 ),
                 role_hint=BoundaryRole.TOP,
                 qualified_anchor_roles=(BoundaryRole.TOP,),
-                support_fraction=len(group) / len(coordinates_px),
+                support_fraction=len(group) / len(measurement.query.trace_positions_px),
                 continuous_support_fraction=0.5,
                 fit_residual_px=0.0,
                 evidence_strength=10.0,
@@ -204,7 +210,7 @@ class TemplateRegistrationContractTest(unittest.TestCase):
             "cross",
             200,
             measurement.query.trace_positions_px,
-            runs,
+            tuple(sorted(runs, key=lambda item: (item.coordinate_interval_px.center, item.run_id))),
         )
         return register_cross_evidence(
             profile=profile,
@@ -213,8 +219,69 @@ class TemplateRegistrationContractTest(unittest.TestCase):
             width_axis=BoundaryAxis.Y,
             height_axis=BoundaryAxis.X,
             height_scale_px_per_mm=PositiveInterval.exact(10.0),
-            lane_reference_trace_px=55.0,
+            lane_reference_trace_px=(
+                measurement.query.trace_positions_px[0]
+                + measurement.query.trace_positions_px[-1]
+            ) / 2.0,
         )
+
+    @staticmethod
+    def _separated_track_measurement(coordinates: tuple[float, ...]) -> PhotoBoundaryMeasurementSet:
+        measurement = make_side_measurement_set((coordinates,) * 9)
+        traces = (0, 1, 2, 500, 501, 502, 1000, 1001, 1002)
+        return replace(
+            measurement, query=replace(measurement.query, trace_positions_px=traces),
+            transitions=tuple(replace(item, trace_coordinate_px=traces[item.trace_ordinal])
+                              for item in measurement.transitions),
+        )
+
+    def test_incompatible_local_track_does_not_block_one_complete_cross_family(self) -> None:
+        measurement = self._separated_track_measurement((100.0, 120.0))
+        groups = (
+            tuple(ObservationId(f"transition:{index}:0") for index in range(3, 9)),
+            tuple(ObservationId(f"transition:{index}:0") for index in range(3)),
+            tuple(ObservationId(f"transition:{index}:1") for index in range(2)),
+        )
+        registered = self._register_top_transition_groups(measurement, groups)
+        self.assertEqual(len(registered.observations), 2)
+        complete = next(item for item in registered.observations if len(item.transition_ids) == 9)
+        self.assertEqual(complete.independent_support_region_count, 3)
+        self.assertEqual(complete.trace_coordinates_px, measurement.query.trace_positions_px)
+        self.assertEqual(set(complete.transition_ids), set(groups[0] + groups[1]))
+        other = next(item for item in registered.observations if item != complete)
+        self.assertEqual(set(other.transition_ids), set(groups[2]))
+        self.assertEqual(other.independent_support_region_count, 1)
+        self.assertGreater(registered.work_receipt.family_compatibility_evaluation_count, 0)
+        self.assertEqual(set().union(*(set(item.transition_ids) for item in registered.observations)),
+                         set().union(*map(set, groups)))
+
+    def test_fragment_compatible_with_two_cross_anchors_remains_independent(self) -> None:
+        measurement = self._separated_track_measurement((100.0, 101.5, 103.0))
+        groups = (
+            tuple(ObservationId(f"transition:{index}:0") for index in range(3, 9)),
+            tuple(ObservationId(f"transition:{index}:2") for index in range(3, 9)),
+            tuple(ObservationId(f"transition:{index}:1") for index in range(3)),
+        )
+        registered = self._register_top_transition_groups(measurement, groups)
+        self.assertEqual({frozenset(item.transition_ids) for item in registered.observations},
+                         set(map(frozenset, groups)))
+        self.assertEqual(sorted(item.independent_support_region_count
+                                for item in registered.observations), [1, 2, 2])
+
+    def test_unique_cross_fragments_cannot_be_cherry_picked_after_union_failure(self) -> None:
+        measurement = self._separated_track_measurement((98.0, 100.0, 102.0))
+        groups = (
+            tuple(ObservationId(f"transition:{index}:1") for index in range(3, 9)),
+            tuple(ObservationId(f"transition:{index}:0") for index in range(3)),
+            tuple(ObservationId(f"transition:{index}:2") for index in range(3)),
+        )
+        registered = self._register_top_transition_groups(measurement, groups)
+        self.assertEqual({frozenset(item.transition_ids) for item in registered.observations},
+                         set(map(frozenset, groups)))
+        self.assertEqual(len(registered.family_resolutions), 1)
+        family = registered.family_resolutions[0]
+        self.assertEqual(family.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(set(family.member_transition_ids), set().union(*map(set, groups)))
 
     def test_cross_family_merges_disconnected_complete_union(self) -> None:
         registered = self._registered_top_families(
@@ -271,7 +338,7 @@ class TemplateRegistrationContractTest(unittest.TestCase):
         ))
         self.assertTrue(all(not item.role_authorized for item in registered.top_bindings))
         self.assertEqual(project_cross_solver_bindings(registered.top_bindings), ())
-        self.assertEqual(registered.work_receipt, CrossRegistrationWorkReceipt(3, 2, 2))
+        self.assertEqual(registered.work_receipt, CrossRegistrationWorkReceipt(3, 2, 2, 1))
         family = registered.family_resolutions[0]
         self.assertEqual(family.state, EvidenceState.UNAVAILABLE)
         self.assertEqual(

@@ -22,6 +22,7 @@ from .template_feasible_geometry import (
 from .template_model import ContactRelation, OverlapRelation
 from .model import (
     AuthoritySide,
+    BoundaryAxis,
     BoundaryRole,
 )
 from .output_model import (
@@ -85,9 +86,7 @@ def _state_footprint(
     points: list[tuple[float, float]] = []
     if apply_residual:
         if residuals is None:
-            if placement.cross_fit.boundary_use == OutputBoundaryUse.APERTURE_PAIR:
-                raise ValueError("aperture protection requires the complete frame reference set")
-            residuals = _support_state_residuals(placement, frame, state)
+            raise ValueError("boundary protection requires the complete frame reference set")
         bleeds = (
             _state_bleed_px(
                 placement,
@@ -193,8 +192,7 @@ def _footprint(
 
 def _maximum_same_state_cross_alignment_padding_px(
     placement: FormatPlacement,
-    frame: TemplateFrame,
-    projection: FeasiblePlacementProjection,
+    protected_states: tuple[dict[BoundaryRole, float], ...],
 ) -> float | None:
     """Bound added top+bottom line padding in one feasible support state."""
 
@@ -205,10 +203,7 @@ def _maximum_same_state_cross_alignment_padding_px(
         return None
     return max(
         residuals[BoundaryRole.TOP] + residuals[BoundaryRole.BOTTOM]
-        for state in projection.frame_states[frame.lane_ordinal - 1]
-        for residuals in (
-            _support_state_residuals(placement, frame, state),
-        )
+        for residuals in protected_states
     )
 
 
@@ -217,13 +212,19 @@ def _line_outward_expansion_px(
     role: BoundaryRole,
     footprint: ConvexPolygon,
 ) -> float:
+    """Measure cross expansion in the same source-axis units as H."""
     projections = tuple(
         line.normal_x * x + line.normal_y * y for x, y in footprint
     )
+    cross_normal = abs(
+        line.normal_y
+        if line.source_axis_long == BoundaryAxis.X
+        else line.normal_x
+    )
     if role == BoundaryRole.TOP:
-        return max(0.0, line.offset_px - min(projections))
+        return max(0.0, line.offset_px - min(projections)) / cross_normal
     if role == BoundaryRole.BOTTOM:
-        return max(0.0, max(projections) - line.offset_px)
+        return max(0.0, max(projections) - line.offset_px) / cross_normal
     raise ValueError("aperture risk requires one cross role")
 
 
@@ -231,6 +232,7 @@ def _enclosing_support_aperture_risk(
     placement: FormatPlacement,
     frame: TemplateFrame,
     projection: FeasiblePlacementProjection,
+    protected_states: tuple[dict[BoundaryRole, float], ...],
 ) -> EnclosingSupportApertureRisk | None:
     """Bound output against every authorized same-state aperture center."""
 
@@ -255,7 +257,7 @@ def _enclosing_support_aperture_risk(
     bottom_expansion = 0.0
     offset_minimum = math.inf
     offset_maximum = -math.inf
-    for state in states:
+    for state, residuals in zip(states, protected_states, strict=True):
         span = (
             state.bottom_at_lane_reference_px
             - state.top_at_lane_reference_px
@@ -280,6 +282,7 @@ def _enclosing_support_aperture_risk(
             state,
             apply_residual=True,
             apply_bleed=True,
+            residuals=residuals,
         )
         slope = state.enclosing_support_slope
         if slope is None:
@@ -345,68 +348,11 @@ def _canonical_boundaries(
     }
 
 
-def _support_state_residuals(
-    placement: FormatPlacement,
-    frame: TemplateFrame,
-    state: JointFrameState,
-) -> dict[BoundaryRole, float]:
-    """Protect one enclosing state without counting its shared slope twice."""
-
-    cross_span = FiniteInterval(
-        frame.top.full_position_interval_px.minimum,
-        frame.bottom.full_position_interval_px.maximum,
-    )
-    result: dict[BoundaryRole, float] = {
-        BoundaryRole.START: (
-            max(0.0, _sequence_line_protection(frame.start, state.sequence_start_px,
-                                      cross_span, placement.sequence_fit.template.direction)[0])
-            + PIXEL_CENTER_EXTENT_PX
-        ),
-        BoundaryRole.END: (
-            max(0.0, _sequence_line_protection(frame.end, state.sequence_end_px,
-                                      cross_span, placement.sequence_fit.template.direction)[0])
-            + PIXEL_CENTER_EXTENT_PX
-        ),
-        BoundaryRole.TOP: (
-            _support_cross_outward_departure_px(
-                placement,
-                frame,
-                state,
-                BoundaryRole.TOP,
-            )
-            + PIXEL_CENTER_EXTENT_PX
-        ),
-        BoundaryRole.BOTTOM: (
-            _support_cross_outward_departure_px(
-                placement,
-                frame,
-                state,
-                BoundaryRole.BOTTOM,
-            )
-            + PIXEL_CENTER_EXTENT_PX
-        ),
-    }
-    return result
-
-
 def _maximum_abs_slope(direction: FiniteInterval | None) -> float:
     return 0.0 if direction is None else max(
         abs(math.tan(math.radians(angle)))
         for angle in (direction.minimum, direction.maximum)
     )
-
-
-def _sequence_line_protection(
-    boundary: FrameBoundaryGeometry,
-    state_position: float,
-    cross_span: FiniteInterval,
-    direction: int,
-    reachable_positions: FiniteInterval | None = None,
-) -> tuple[float, float]:
-    positions, slope = _sequence_line_extent(boundary, cross_span, reachable_positions)
-    if positions is None:
-        return 0.0, 0.0
-    return _sequence_outward_departure(boundary.role, positions, state_position, direction), slope
 
 
 def _sequence_outward_departure(
@@ -485,7 +431,7 @@ def _frame_boundary_residuals(
     *,
     apply_bleed: bool,
 ) -> tuple[dict[BoundaryRole, float], ...]:
-    """Close an aperture's protective spans without another geometry solver.
+    """Close protective spans without another geometry solver.
 
     The line-family support is Lipschitz in the other axis's expansion.
     Solve that two-variable outer bound analytically. Raw trace admission is
@@ -493,9 +439,8 @@ def _frame_boundary_residuals(
     further pass must admit a new registered endpoint; no numerical fixed-point
     iteration or pixel query is involved.
     """
-    if placement.cross_fit.boundary_use != OutputBoundaryUse.APERTURE_PAIR:
-        return tuple(_support_state_residuals(placement, frame, state) for state in states)
     cross = placement.cross_fit
+    enclosing = cross.boundary_use == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
     direction = placement.sequence_fit.template.direction
     sequence_span = FiniteInterval(
         min(frame.start.full_position_interval_px.minimum, frame.end.full_position_interval_px.minimum),
@@ -503,6 +448,14 @@ def _frame_boundary_residuals(
     )
     cross_span = FiniteInterval(frame.top.full_position_interval_px.minimum,
                               frame.bottom.full_position_interval_px.maximum)
+    if enclosing:
+        cross_positions = tuple(
+            position + float(state.enclosing_support_slope) * (trace - frame.top.reference_trace_px)
+            for state in states
+            for position in (state.top_at_lane_reference_px, state.bottom_at_lane_reference_px)
+            for trace in (sequence_span.minimum, sequence_span.maximum)
+        )
+        cross_span = FiniteInterval(min(cross_positions), max(cross_positions))
     reachable_positions = {
         BoundaryRole.START: FiniteInterval(min(state.sequence_start_px for state in states),
                                           max(state.sequence_start_px for state in states)),
@@ -518,7 +471,7 @@ def _frame_boundary_residuals(
     orientation_slope = (
         max((_maximum_abs_slope(binding.fit_direction_interval_degrees)
              for binding in cross.direct_bindings), default=0.0)
-        if cross.direct_pair and len(cross.direct_bindings) == 2 else 0.0
+        if not enclosing and cross.direct_pair and len(cross.direct_bindings) == 2 else 0.0
     )
     sequence_extents = {
         boundary.role: _sequence_line_extent(
@@ -526,7 +479,7 @@ def _frame_boundary_residuals(
         )
         for boundary in (frame.start, frame.end)
     }
-    cross_positions = {
+    cross_positions = {} if enclosing else {
         role: _aperture_binding_positions(
             binding, lane_reference_trace_px=cross.lane_reference_trace_px,
             support=sequence_span, line_projection_basis=cross.line_projection_basis,
@@ -564,8 +517,19 @@ def _frame_boundary_residuals(
             source_position = (state.top_at_lane_reference_px if binding.role == BoundaryRole.TOP
                                else state.bottom_at_lane_reference_px)
             sources[role] = source_position
-            positions = cross_positions[role]
-            if positions:
+            if enclosing:
+                state_slope = float(state.enclosing_support_slope)
+                departure = _support_cross_outward_departure_px(placement, frame, state, role, sequence_span)
+                extrapolation = _support_direction_departure_px(binding, state_slope, sequence_span)
+                signed_departures[role] = departure
+                base[role] += departure + extrapolation
+                observed = binding.observed_direction_interval_degrees
+                state_slopes[role] = 0.0 if observed is None else max(
+                    abs(math.tan(math.radians(angle)) - state_slope)
+                    for angle in (observed.minimum, observed.maximum)
+                )
+            elif cross_positions[role]:
+                positions = cross_positions[role]
                 departure = (source_position - min(positions) if role == BoundaryRole.TOP
                              else max(positions) - source_position)
                 signed_departures[role] = departure
@@ -583,22 +547,50 @@ def _frame_boundary_residuals(
                 for role, binding in bindings.items()}
     endpoint_count = sum(len(binding.trace_position_intervals_px) for binding in bindings.values())
     for _ in range(endpoint_count + 1):
-        expansions = []
-        for base, slope, signed, extras in zip(bases, slopes, departures, optional, strict=True):
-            rx = max(base[BoundaryRole.START], base[BoundaryRole.END])
-            ry = max(base[BoundaryRole.TOP], base[BoundaryRole.BOTTOM])
-            m = max(slope[BoundaryRole.START], slope[BoundaryRole.END])
-            n = max(slope[BoundaryRole.TOP], slope[BoundaryRole.BOTTOM])
+        support_closure = None
+        if enclosing:
+            # One outer span covers the convex interior as well as retained
+            # vertices. Holding this span fixed keeps same-state raw and
+            # extrapolation protection piecewise linear in (top, bottom, m).
+            rx = max(base[role] for base in bases for role in (BoundaryRole.START, BoundaryRole.END))
+            ry = max(base[role] for base in bases for role in (BoundaryRole.TOP, BoundaryRole.BOTTOM))
+            m = max(slope[role] for slope in slopes for role in (BoundaryRole.START, BoundaryRole.END))
+            n = max(abs(float(state.enclosing_support_slope)) + slope[role]
+                    for state, slope in zip(states, slopes, strict=True)
+                    for role in (BoundaryRole.TOP, BoundaryRole.BOTTOM))
             denominator = 1.0 - m * n
             if denominator <= 0.0:
-                raise ValueError("aperture protection has no bounded two-axis closure")
-            dx = (rx + m * ry) / denominator
-            dy = (ry + n * rx) / denominator
-            expansions.append({role: PIXEL_CENTER_EXTENT_PX + extras[role] + max(
+                raise ValueError("support protection has no bounded two-axis closure")
+            support_closure = ((rx + m * ry) / denominator, (ry + n * rx) / denominator)
+        expansions = []
+        for state, base, slope, signed, extras in zip(states, bases, slopes, departures, optional, strict=True):
+            if support_closure is None:
+                rx = max(base[BoundaryRole.START], base[BoundaryRole.END])
+                ry = max(base[BoundaryRole.TOP], base[BoundaryRole.BOTTOM])
+                m = max(slope[BoundaryRole.START], slope[BoundaryRole.END])
+                n = max(slope[BoundaryRole.TOP], slope[BoundaryRole.BOTTOM])
+                denominator = 1.0 - m * n
+                if denominator <= 0.0:
+                    raise ValueError("aperture protection has no bounded two-axis closure")
+                dx = (rx + m * ry) / denominator
+                dy = (ry + n * rx) / denominator
+            else:
+                dx, dy = support_closure
+            expansion = {role: PIXEL_CENTER_EXTENT_PX + extras[role] + max(
                 0.0, signed[role] + slope[role] * (
                     dy if role in {BoundaryRole.START, BoundaryRole.END} else dx
                 ),
-            ) for role in _ROLES})
+            ) for role in _ROLES}
+            if enclosing:
+                # Shared slope already rotates the output line. Only the
+                # observed direction outside its measured trace domain adds
+                # intercept protection; in-domain slope is never added twice.
+                expanded_support = FiniteInterval(sequence_span.minimum - dx, sequence_span.maximum + dx)
+                for role, binding in bindings.items():
+                    expansion[role] = PIXEL_CENTER_EXTENT_PX + extras[role] + signed[role] + _support_direction_departure_px(
+                        binding, float(state.enclosing_support_slope), expanded_support,
+                    )
+            expansions.append(expansion)
         endpoints = tuple(
             value for state, expansion in zip(states, expansions, strict=True)
             for value in (state.sequence_start_px - direction * expansion[BoundaryRole.START],
@@ -614,11 +606,16 @@ def _frame_boundary_residuals(
                     continue
                 admitted[role].add(index)
                 added = True
-                for base, signed, extras, sources in zip(bases, departures, optional, source_positions, strict=True):
-                    departure = (sources[role] - interval.minimum if role == BoundaryRole.TOP
-                                 else interval.maximum - sources[role])
+                for state, base, signed, extras, sources in zip(states, bases, departures, optional, source_positions, strict=True):
+                    source_position = sources[role]
+                    if enclosing:
+                        source_position += float(state.enclosing_support_slope) * (float(trace) - frame.top.reference_trace_px)
+                    departure = (source_position - interval.minimum if role == BoundaryRole.TOP
+                                 else interval.maximum - source_position)
                     signed[role] = max(signed[role], departure)
                     base[role] = PIXEL_CENTER_EXTENT_PX + extras[role] + max(0.0, signed[role])
+                    if enclosing:
+                        base[role] += _support_direction_departure_px(binding, float(state.enclosing_support_slope), sequence_span)
         if not added:
             return tuple({role: expansion[role] - extras[role] for role in _ROLES}
                          for expansion, extras in zip(expansions, optional, strict=True))
@@ -630,6 +627,7 @@ def _support_cross_outward_departure_px(
     frame: TemplateFrame,
     state: JointFrameState,
     role: BoundaryRole,
+    support: FiniteInterval,
 ) -> float:
     """Retain measured support residuals relative to its same-state slope."""
 
@@ -640,11 +638,6 @@ def _support_cross_outward_departure_px(
         if role == BoundaryRole.TOP
         else state.bottom_at_lane_reference_px
     )
-    support = (
-        frame.top.line.support_projection_px
-        if role == BoundaryRole.TOP
-        else frame.bottom.line.support_projection_px
-    )
     target_trace_px = (
         frame.top.reference_trace_px
         if role == BoundaryRole.TOP
@@ -654,7 +647,6 @@ def _support_cross_outward_departure_px(
     if state_slope is None:
         raise ValueError("enclosing support state lost its shared slope")
     raw_departure = 0.0
-    covered_traces: list[float] = []
     trace_coordinates = (
         binding.trace_coordinates_px
         if binding.trace_position_intervals_px
@@ -677,30 +669,24 @@ def _support_cross_outward_departure_px(
             else interval.maximum - state_position_at_trace
         )
         raw_departure = max(raw_departure, departure)
-        covered_traces.append(trace_px)
+    return max(0.0, raw_departure)
 
+
+def _support_direction_departure_px(
+    binding: CrossRoleBinding,
+    state_slope: float,
+    support: FiniteInterval,
+) -> float:
+    """Protect only extrapolation beyond the original measured trace domain."""
     direction_uncertainty = binding.observed_direction_interval_degrees
     if direction_uncertainty is None:
-        return max(0.0, raw_departure)
-    if binding.trace_coordinates_px:
-        lower = float(binding.trace_coordinates_px[0])
-        upper = float(binding.trace_coordinates_px[-1])
-        extrapolation_deltas = tuple(
-            endpoint - min(max(endpoint, lower), upper)
-            for endpoint in (support.minimum, support.maximum)
-        )
-    elif covered_traces:
-        lower = min(covered_traces)
-        upper = max(covered_traces)
-        extrapolation_deltas = tuple(
-            endpoint - min(max(endpoint, lower), upper)
-            for endpoint in (support.minimum, support.maximum)
-        )
-    else:
-        extrapolation_deltas = tuple(
-            endpoint - target_trace_px
-            for endpoint in (support.minimum, support.maximum)
-        )
+        return 0.0
+    lower = float(binding.trace_coordinates_px[0])
+    upper = float(binding.trace_coordinates_px[-1])
+    extrapolation_deltas = tuple(
+        endpoint - min(max(endpoint, lower), upper)
+        for endpoint in (support.minimum, support.maximum)
+    )
     # The selected support line already carries one feasible shared slope.
     # Only the observed direction's departure from that same state remains as
     # extrapolation protection.  Adding the absolute slope here would count it
@@ -715,10 +701,10 @@ def _support_cross_outward_departure_px(
     )
     direction_departure = (
         max(0.0, -min(shifts, default=0.0))
-        if role == BoundaryRole.TOP
+        if binding.role == BoundaryRole.TOP
         else max(0.0, max(shifts, default=0.0))
     )
-    return max(0.0, raw_departure + direction_departure)
+    return direction_departure
 
 
 def _aperture_binding_positions(
@@ -1097,14 +1083,14 @@ def output_footprint_from_template_placement(
     maximum_same_state_cross_alignment_padding_px = (
         _maximum_same_state_cross_alignment_padding_px(
             placement,
-            frame,
-            projection,
+            requested_protection,
         )
     )
     enclosing_support_aperture_risk = _enclosing_support_aperture_risk(
         placement,
         frame,
         projection,
+        requested_protection,
     )
     return OutputFootprint(
         geometry_id=run_local_id(

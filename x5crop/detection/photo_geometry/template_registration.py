@@ -17,6 +17,7 @@ from .model import (
 )
 from .observation_types import BasicAxisProfile, ProfileRun
 from .line_observations import PhotoBoundaryObservation
+from .robust_line_fit import physical_line_region
 from .physical_identity import physical_fact_id
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import (
@@ -57,13 +58,16 @@ class CrossRegistrationWorkReceipt:
     fit_attempt_count: int
     raw_observation_count: int
     local_fragment_count: int
+    family_compatibility_evaluation_count: int = 0
 
     def __post_init__(self) -> None:
         if (
             any(type(value) is not int for value in (
                 self.fit_attempt_count, self.raw_observation_count, self.local_fragment_count,
+                self.family_compatibility_evaluation_count,
             ))
             or not 0 <= self.local_fragment_count <= self.raw_observation_count <= self.fit_attempt_count
+            or self.family_compatibility_evaluation_count < 0
         ):
             raise ValueError("cross registration work receipt is invalid")
 
@@ -114,6 +118,7 @@ class RegisteredCrossEvidence:
     registered_top_run_count: int | None = None
     registered_bottom_run_count: int | None = None
     family_resolutions: tuple[CrossBoundaryFamilyResolution, ...] = ()
+    family_compatibility_evaluation_count: int = 0
 
     @property
     def work_receipt(self) -> CrossRegistrationWorkReceipt:
@@ -123,6 +128,9 @@ class RegisteredCrossEvidence:
             local_fragment_count=sum(
                 item.independent_support_region_count < MINIMUM_INDEPENDENT_SUPPORT_REGIONS
                 for item in self.observations
+            ),
+            family_compatibility_evaluation_count=(
+                self.family_compatibility_evaluation_count
             ),
         )
 
@@ -156,6 +164,11 @@ class RegisteredCrossEvidence:
             or registered_top_run_count < 0
             or not isinstance(registered_bottom_run_count, int)
             or registered_bottom_run_count < 0
+            or type(self.family_compatibility_evaluation_count) is not int
+            or not 0 <= self.family_compatibility_evaluation_count <= sum(
+                count * (count + 1)
+                for count in (registered_top_run_count, registered_bottom_run_count)
+            )
         ):
             raise ValueError("cross registration receipt is invalid")
         object.__setattr__(
@@ -375,6 +388,106 @@ def _cross_family_components(
     return tuple(components)
 
 
+def _partition_cross_families(
+    values: tuple[PhotoBoundaryObservation, ...],
+    components: tuple[tuple[int, ...], ...],
+    *,
+    measurement: PhotoBoundaryMeasurementSet,
+    height_scale_px_per_mm: PositiveInterval,
+) -> tuple[tuple[tuple[int, ...], ...], int]:
+    """Separate incompatible physical tracks before complete-union refitting.
+
+    A successful old union fit is a witness for the first feasibility check,
+    so an already coherent family is never split. In an inconsistent broad
+    component, a local fragment can join only one independently measured line
+    group. Ambiguous fragments remain in their own complete ledger. No fit
+    residual, role preference or favorable subset selects family members.
+    """
+    by_id = {item.transition_id: item for item in measurement.transitions}
+    reference = (
+        measurement.query.trace_positions_px[0]
+        + measurement.query.trace_positions_px[-1]
+    ) / 2.0
+    # Match the original fitter's admitted bend and angular arithmetic error.
+    allowance = (
+        PHOTO_BOUNDARY_MEASUREMENT_SPEC.inlier_minimum_threshold_mm
+        * height_scale_px_per_mm.maximum
+    )
+    maximum_slope = math.tan(math.radians(
+        PHOTO_BOUNDARY_MEASUREMENT_SPEC.maximum_measurable_line_angle_degrees
+        + 1.0e-9
+    ))
+    cache: dict[tuple[int, ...], bool] = {}
+
+    def compatible(members: tuple[int, ...]) -> bool:
+        key = tuple(sorted(members))
+        if key not in cache:
+            identities = tuple(sorted({
+                identity for index in members for identity in values[index].transition_ids
+            }, key=str))
+            intervals = tuple(
+                (float(by_id[identity].trace_coordinate_px), FiniteInterval(
+                    by_id[identity].physical_position_interval_px.minimum - allowance,
+                    by_id[identity].physical_position_interval_px.maximum + allowance,
+                ))
+                for identity in identities
+            )
+            cache[key] = physical_line_region(intervals, maximum_slope, reference) is not None
+        return cache[key]
+
+    result: list[tuple[int, ...]] = []
+    for component in components:
+        if len(component) == 1 or compatible(component):
+            result.append(component)
+            continue
+        anchors = tuple(index for index in component if (
+            values[index].independent_support_region_count >= MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+        ))
+        if not anchors:
+            result.append(component)
+            continue
+        links = {index: set() for index in anchors}
+        for offset, left in enumerate(anchors):
+            for right in anchors[offset + 1:]:
+                if compatible((left, right)):
+                    links[left].add(right)
+                    links[right].add(left)
+        groups: list[tuple[int, ...]] = []
+        remaining = set(anchors)
+        while remaining:
+            pending = [min(remaining)]
+            members: set[int] = set()
+            while pending:
+                index = pending.pop()
+                if index not in members:
+                    members.add(index)
+                    pending.extend(links[index] - members)
+            remaining.difference_update(members)
+            group = tuple(sorted(members))
+            # Pairwise compatibility is not transitive. A connected anchor
+            # group must also have a common line; otherwise keep each anchor.
+            groups.extend((group,) if compatible(group) else ((index,) for index in group))
+        assigned = [list(group) for group in groups]
+        residual = []
+        for fragment in component:
+            if fragment in anchors:
+                continue
+            matches = [index for index, group in enumerate(groups)
+                       if compatible((*group, fragment))]
+            if len(matches) == 1:
+                assigned[matches[0]].append(fragment)
+            else:
+                residual.append(fragment)
+        result.extend(tuple(sorted(group)) for group in assigned)
+        if residual:
+            result.append(tuple(residual))
+    if len(cache) > len(values) * (len(values) + 1):
+        raise AssertionError("cross family compatibility exceeded its quadratic bound")
+    if sorted(index for group in result for index in group) != list(range(len(values))):
+        raise AssertionError("cross family partition lost or duplicated an observation")
+    return tuple(result), len(cache)
+
+
 def _merge_registered_cross_families(
     values: tuple[PhotoBoundaryObservation, ...],
     *,
@@ -386,6 +499,7 @@ def _merge_registered_cross_families(
     tuple[PhotoBoundaryObservation, ...],
     int,
     tuple[CrossBoundaryFamilyResolution, ...],
+    int,
 ]:
     """Merge only a complete transition union that refits as one line.
 
@@ -396,7 +510,7 @@ def _merge_registered_cross_families(
     """
 
     if len(values) < 2:
-        return values, 0, ()
+        return values, 0, (), 0
     fit_cache: dict[tuple[str, ...], PhotoBoundaryObservation | None] = {}
     attempts = 0
 
@@ -432,6 +546,10 @@ def _merge_registered_cross_families(
     components = _cross_family_components(
         values,
         measurement=measurement,
+        height_scale_px_per_mm=height_scale_px_per_mm,
+    )
+    components, compatibility_count = _partition_cross_families(
+        values, components, measurement=measurement,
         height_scale_px_per_mm=height_scale_px_per_mm,
     )
 
@@ -493,7 +611,7 @@ def _merge_registered_cross_families(
                     failure_kind=None,
                 )
             )
-    return tuple(merged), attempts, tuple(resolutions)
+    return tuple(merged), attempts, tuple(resolutions), compatibility_count
 
 
 def register_cross_evidence(
@@ -564,11 +682,12 @@ def register_cross_evidence(
         observations_by_role[run.role_hint].setdefault(key, observation)
     merged_observations: list[PhotoBoundaryObservation] = []
     family_resolutions: list[CrossBoundaryFamilyResolution] = []
+    family_compatibility_count = 0
     for role, measurement in (
         (BoundaryRole.TOP, top_measurement),
         (BoundaryRole.BOTTOM, bottom_measurement),
     ):
-        values, attempts, resolutions = _merge_registered_cross_families(
+        values, attempts, resolutions, compatibility_count = _merge_registered_cross_families(
             tuple(observations_by_role[role].values()),
             measurement=measurement,
             role=role,
@@ -576,6 +695,7 @@ def register_cross_evidence(
             height_scale_px_per_mm=height_scale_px_per_mm,
         )
         fit_attempt_count += attempts
+        family_compatibility_count += compatibility_count
         merged_observations.extend(values)
         family_resolutions.extend(resolutions)
     registered = {
@@ -623,6 +743,7 @@ def register_cross_evidence(
         family_resolutions=tuple(
             sorted(family_resolutions, key=lambda item: item.family_id)
         ),
+        family_compatibility_evaluation_count=family_compatibility_count,
     )
 
 
@@ -862,4 +983,7 @@ def register_template_local_cross_refinements(
         registered_top_run_count=registered.registered_top_run_count,
         registered_bottom_run_count=registered.registered_bottom_run_count,
         family_resolutions=registered.family_resolutions,
+        family_compatibility_evaluation_count=(
+            registered.family_compatibility_evaluation_count
+        ),
     )

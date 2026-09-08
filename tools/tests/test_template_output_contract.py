@@ -32,6 +32,7 @@ from x5crop.detection.evidence.scan_canvas import (
 )
 from x5crop.detection.photo_geometry.model import (
     AuthoritySide,
+    BoundaryAxis,
     BoundaryRole,
 )
 from x5crop.detection.photo_geometry.output_model import (
@@ -54,6 +55,7 @@ from x5crop.detection.photo_geometry.template_nominal_grid_authority import (
 )
 from x5crop.detection.photo_geometry.template_output import (
     _footprint,
+    _line_outward_expansion_px,
     output_footprint_from_template_placement,
     template_direct_use_budget_assessment,
 )
@@ -67,7 +69,7 @@ from x5crop.detection.photo_geometry.template_enclosing_support_aperture import 
 from x5crop.detection.photo_geometry.template_placement import (
     resolved_cross_support_domains_px,
 )
-from x5crop.detection.photo_geometry.line_observations import PhysicalLineRegion
+from x5crop.detection.photo_geometry.line_observations import PhysicalLineRegion, SourceCoordinateLine
 from x5crop.detection.photo_geometry.template_model import (
     ContactRelation,
     OverlapRelation,
@@ -234,12 +236,20 @@ def _overlap_placement():
 def _enclosing_support_placement(
     *,
     frame_count: int = 1,
+    frame_width_px: float = 100.0,
     support_span_px: float = 250.0,
     support_position_uncertainty_px: float = 0.0,
     support_slope: float = 0.0,
     observed_direction_half_width_degrees: float = 0.0,
 ):
     template = _template(frame_count)
+    if frame_width_px != 100.0:
+        template = replace(
+            template,
+            frame_width_px=FiniteInterval.exact(frame_width_px),
+            pitch_px=FiniteInterval.exact(frame_width_px + 20.0),
+            phase_lattice_authority=replace(template.phase_lattice_authority, period_px=frame_width_px + 20.0),
+        )
     support_center = 152.0
     support_top = support_center - support_span_px / 2.0
     support_bottom = support_center + support_span_px / 2.0
@@ -631,6 +641,134 @@ class TemplateOutputContractTest(unittest.TestCase):
             protections[BoundaryRole.BOTTOM].local_boundary_residual_px,
             1.0,
         )
+
+    def test_enclosing_support_preserves_both_slopes_at_one_position_vertex(self) -> None:
+        placement = _enclosing_support_placement(support_position_uncertainty_px=0.5)
+        cross = placement.cross_fit
+        pair = cross.enclosing_support_pair
+        assert pair is not None
+        traces = (0, 50, 250, 300)
+        angle = math.degrees(math.atan(0.01))
+        direction = FiniteInterval(-angle, angle)
+        pair = replace(
+            pair,
+            trace_coordinates_px=traces,
+            top_trace_intervals_px=(FiniteInterval(23.5, 30.5),) * 4,
+            bottom_trace_intervals_px=(FiniteInterval(273.5, 280.5),) * 4,
+        )
+        bindings = tuple(replace(
+            binding,
+            trace_coordinates_px=traces,
+            trace_position_intervals_px=intervals,
+            fit_direction_interval_degrees=direction,
+            full_direction_interval_degrees=direction,
+            observed_direction_interval_degrees=direction,
+        ) for binding, intervals in zip(
+            cross.direct_bindings,
+            (pair.top_trace_intervals_px, pair.bottom_trace_intervals_px),
+            strict=True,
+        ))
+        placement = replace(placement, cross_fit=replace(
+            cross, direct_bindings=bindings, enclosing_support_pair=pair,
+            shared_trace_support_count=4,
+        ))
+        projection = project_format_placement(placement)
+        states = projection.frame_states[0]
+        self.assertEqual({round(state.enclosing_support_slope, 8) for state in states}, {-0.01, 0.01})
+        reference = placement.frames[0].top.reference_trace_px
+        for trace in (100.0, 200.0):
+            self.assertAlmostEqual(min(
+                state.top_at_lane_reference_px + state.enclosing_support_slope * (trace - reference)
+                for state in states
+            ), 26.5 - 0.01 * abs(trace - 150.0))
+        output = output_footprint_from_template_placement(
+            placement, projection, lane=_lane(), lane_ordinal=1, layout="horizontal",
+        )
+        polygon = output.envelope.feasible_source_footprint
+        self.assertLessEqual(min(y for _, y in polygon), 26.0)
+        self.assertGreaterEqual(max(y for _, y in polygon), 278.0)
+
+    def test_support_risk_uses_source_axis_units_at_all_slopes(self) -> None:
+        # Normalized distance at either slope endpoint would be 4.99985,
+        # hiding the 5.0001 maximum at slope zero from a 5px budget.
+        for axis in (BoundaryAxis.X, BoundaryAxis.Y):
+            for slope in (-0.01, 0.0, 0.01):
+                norm = math.hypot(1.0, slope)
+                normal = (-slope / norm, 1.0 / norm)
+                polygon = ((0.0, -5.0001), (1.0, slope - 5.0001), (1.0, slope), (0.0, 0.0))
+                if axis == BoundaryAxis.Y:
+                    normal = tuple(reversed(normal))
+                    polygon = tuple((y, x) for x, y in polygon)
+                line = SourceCoordinateLine(
+                    normal_x=normal[0], normal_y=normal[1], offset_px=0.0,
+                    support_projection_px=FiniteInterval(0.0, 1.0), source_axis_long=axis,
+                )
+                self.assertAlmostEqual(
+                    _line_outward_expansion_px(line, BoundaryRole.TOP, polygon),
+                    5.0001,
+                )
+
+    def test_support_admits_raw_endpoints_reached_by_each_protection_layer(self) -> None:
+        for width, trace, slope in ((100.0, 201, 0.0), (300.0, 402, 0.0), (300.0, 402, 0.02)):
+            with self.subTest(width=width, slope=slope):
+                placement = _enclosing_support_placement(frame_width_px=width, support_slope=slope)
+                baseline = output_footprint_from_template_placement(
+                    placement, project_format_placement(placement), lane=_lane(), lane_ordinal=1, layout="horizontal",
+                )
+                top, bottom = placement.cross_fit.direct_bindings
+                raw = dict(zip(top.trace_coordinates_px, top.trace_position_intervals_px, strict=True))
+                measured_position = 27.0 + slope * (trace - 150.0)
+                raw[trace] = FiniteInterval(measured_position - 3.0, measured_position)
+                top = replace(top, trace_coordinates_px=tuple(sorted(raw)),
+                              trace_position_intervals_px=tuple(raw[t] for t in sorted(raw)))
+                placement = replace(placement, cross_fit=replace(placement.cross_fit, direct_bindings=(top, bottom)))
+                output = output_footprint_from_template_placement(
+                    placement, project_format_placement(placement), lane=_lane(), lane_ordinal=1, layout="horizontal",
+                )
+                for layer, polygon in (("mandatory", output.mandatory_source_footprint),
+                                       ("requested", output.requested_source_footprint)):
+                    top_intercept = min(y - slope * (x - 150.0) for x, y in polygon)
+                    if layer == "mandatory" and width == 300.0:
+                        self.assertLess(max(x for x, _ in polygon), trace)
+                        self.assertAlmostEqual(top_intercept, 26.0)
+                    else:
+                        self.assertGreaterEqual(max(x for x, _ in polygon), trace)
+                        self.assertAlmostEqual(top_intercept, 23.0)
+                risk = output.enclosing_support_aperture_risk
+                baseline_risk = baseline.enclosing_support_aperture_risk
+                assert risk is not None and baseline_risk is not None
+                self.assertAlmostEqual(risk.top_expansion_px, baseline_risk.top_expansion_px + 3.0)
+                self.assertAlmostEqual(output.maximum_same_state_cross_alignment_padding_px, 5.0)
+
+    def test_support_and_measured_sequence_protection_close_the_actual_corner(self) -> None:
+        slope = 0.06
+        placement = _enclosing_support_placement(frame_width_px=300.0, support_slope=slope)
+        cross = placement.cross_fit
+        pair = cross.enclosing_support_pair
+        assert pair is not None
+        traces = (0, 150, 450)
+        pair = replace(pair, trace_coordinates_px=traces,
+                       top_trace_intervals_px=tuple(FiniteInterval.exact(27.0 + slope * (t - 150.0)) for t in traces),
+                       bottom_trace_intervals_px=tuple(FiniteInterval.exact(277.0 + slope * (t - 150.0)) for t in traces))
+        cross = replace(cross, enclosing_support_pair=pair, direct_bindings=tuple(
+            replace(binding, trace_coordinates_px=traces, trace_position_intervals_px=intervals)
+            for binding, intervals in zip(cross.direct_bindings, (pair.top_trace_intervals_px, pair.bottom_trace_intervals_px), strict=True)
+        ))
+        sequence = placement.sequence_fit
+        sequence = replace(sequence, role_bindings=tuple(replace(binding, line_evidence=SequenceRoleLineEvidence(
+            observation_id=binding.observation_id, reference_trace_px=152.0,
+            fit_position_interval_px=binding.fit_position_interval_px,
+            fit_direction_interval_degrees=FiniteInterval.exact(-math.degrees(math.atan(slope))),
+        )) for binding in sequence.role_bindings))
+        placement = _compose(sequence.template, sequence, cross)
+        output = output_footprint_from_template_placement(
+            placement, project_format_placement(placement), lane=_lane(), lane_ordinal=1, layout="horizontal",
+        )
+        x = (400.0 + slope * 125.0 - slope * slope * 150.0) / (1.0 - slope * slope)
+        y = 277.0 + slope * (x - 150.0)
+        polygon = output.mandatory_source_footprint
+        for (x0, y0), (x1, y1) in zip(polygon, (*polygon[1:], polygon[0]), strict=True):
+            self.assertGreaterEqual((x1 - x0) * (y - y0) - (y1 - y0) * (x - x0), -1.0e-9)
 
     def test_enclosing_support_retains_observed_direction_beyond_trace_span(
         self,

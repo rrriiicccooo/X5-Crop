@@ -885,7 +885,8 @@ def _validate_cross_measurement_support(
         raise ValueError("Cross measured support records are missing")
     work = lane.get("cross_registration_work")
     if not isinstance(work, dict) or set(work) != {
-        "fit_attempt_count", "raw_observation_count", "local_fragment_count"
+        "fit_attempt_count", "raw_observation_count", "local_fragment_count",
+        "family_compatibility_evaluation_count",
     }:
         raise ValueError("Cross registration work is incomplete")
     receipt = CrossRegistrationWorkReceipt(**work)

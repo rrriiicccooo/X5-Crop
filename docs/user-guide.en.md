@@ -135,11 +135,16 @@ Development gold separately checks directional containment and actual five-perce
 the detector need not reproduce each annotated line. Source-truncated frames are compared against the actual confirmed,
 clipped polygon. Per-side diagnostics agree with full containment and do not require nonexistent content outside the TIFF.
 
-A directly observed continuous outer-support pair may replace unavailable aperture
+When one uniquely established top/bottom photo-boundary pair also meets the complete enclosing-support conditions,
+the output uses those measured boundaries and retains all position and slope uncertainty.
+A directly observed continuous outer-support pair may also replace unavailable aperture
 top/bottom when it fully encloses fixed H and its total height is no greater than `1.1H`; this direct pair does not
-depend on W/H ratio inference. That mode adds no 0.25 mm cross bleed, while per-side and joint alignment padding remain
+depend on W/H ratio inference. Each side must have continuous strip-wide support or measured coverage bracketing the
+complete output extent; observing only the beginning of the final photo does not authorize extrapolating the whole support.
+That mode adds no 0.25 mm cross bleed, while per-side and joint alignment padding remain
 inside their 5% budgets. The joint term uses line-alignment padding from one feasible state only; support-position
-uncertainty remains in the per-side budgets and incompatible top/bottom extrema are never added. After one unique support
+uncertainty remains in the per-side budgets and incompatible top/bottom extrema are never added. Every legal shared slope
+contributes to corner protection, and risk distances use the same short-axis units as photo height. After one unique support
 pair is selected, a gold-calibrated aperture-centre offset interval with full uncertainty may narrow the worst-case risk;
 it does not turn support into a photo boundary. Missing calibration retains the complete physically possible centre
 range. A conflict with direct support or expansion beyond 5% keeps the source in review. A true TIFF edge explicitly

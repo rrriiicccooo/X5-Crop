@@ -88,19 +88,14 @@ def _candidate(
 ) -> EnclosingSupportCandidate | None:
     if top.role != BoundaryRole.TOP or bottom.role != BoundaryRole.BOTTOM:
         return None
-    # A pre-closed coarse pair cannot be detached.  Otherwise both sides must
-    # remain role-unknown support observations; photo-aperture roles are never
-    # reinterpreted after fitting.
+    # A pre-closed coarse pair cannot be detached. Background-side role
+    # evidence does not prohibit a line from enclosing the photo; the complete
+    # pair below must independently prove support geometry and extent.
     if (top.enclosing_pair_id is None) != (bottom.enclosing_pair_id is None):
         return None
     if (
         top.enclosing_pair_id is not None
         and top.enclosing_pair_id != bottom.enclosing_pair_id
-    ):
-        return None
-    if (
-        top.enclosing_pair_id is None
-        and (top.role_authorized or bottom.role_authorized)
     ):
         return None
     if not top.trace_position_intervals_px or not bottom.trace_position_intervals_px:
@@ -165,13 +160,25 @@ def _candidate(
         directly_continuous
         and independent_regions >= SPATIAL_SUPPORT_REGION_COUNT
         and projection_authority.state == EvidenceState.SUPPORTED
+        # Touching every frame is not evidence for an unobserved tail within
+        # the last frame. A non-spanning support must bracket the complete
+        # candidate extent before its measured line can become the output.
+        and all(
+            binding.source_spanning_continuous
+            or all(
+                binding.trace_coordinates_px[0] <= domains[0].minimum
+                and binding.trace_coordinates_px[-1] >= domains[-1].maximum
+                for domains in longitudinal_support_domain_groups_px
+            )
+            for binding in (top, bottom)
+        )
     )
     if not source_spanning and not connected:
         return None
     midpoint = _midpoint_interval(top.full_interval_px, bottom.full_interval_px)
     span = _subtract(bottom.full_interval_px, top.full_interval_px)
     # The broad physical-H interval is search compatibility, not the
-    # aperture/support classifier. A role-unknown pair is usable only when it
+    # aperture/support classifier. An enclosing pair is usable only when it
     # directly contains canonical H and stays within the explicit 1.1H limit.
     if (
         span.minimum <= canonical_height_px

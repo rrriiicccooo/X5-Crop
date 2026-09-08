@@ -443,20 +443,31 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     support_checked = False
     support_receipt_accounted = False
 
-    def unique_enclosing_support() -> CrossFit | None:
+    def unique_enclosing_support(
+        selected_pair: CrossFit | None = None,
+    ) -> CrossFit | None:
         nonlocal enclosing_support_fit, support_competition, support_checked
         if support_checked:
             return enclosing_support_fit
         support_checked = True
-        # Prefer one already closed coarse pair.  If none was compiled, only
-        # role-unknown source support lines may form an enclosing output pair;
-        # photo-aperture roles are never reinterpreted here.
+        # Prefer one already closed coarse pair. Otherwise the full support
+        # proof, rather than a boundary's background-role flag, determines
+        # whether two measured lines enclose a usable fixed-H photo.
         explicit_pair_ids = {
             item.enclosing_pair_id
             for item in (*top, *bottom)
             if item.enclosing_pair_id is not None
         }
-        if explicit_pair_ids:
+        if selected_pair is not None:
+            support_top = tuple(
+                item for item in selected_pair.direct_bindings
+                if item.role == BoundaryRole.TOP
+            )
+            support_bottom = tuple(
+                item for item in selected_pair.direct_bindings
+                if item.role == BoundaryRole.BOTTOM
+            )
+        elif explicit_pair_ids:
             support_top = tuple(
                 item for item in top if item.enclosing_pair_id is not None
             )
@@ -464,10 +475,8 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                 item for item in bottom if item.enclosing_pair_id is not None
             )
         else:
-            support_top = tuple(item for item in top if not item.role_authorized)
-            support_bottom = tuple(
-                item for item in bottom if not item.role_authorized
-            )
+            support_top = top
+            support_bottom = bottom
         competition = fit_enclosing_support(
             template=inputs.template,
             fixed_height=fixed_height,
@@ -554,9 +563,10 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
 
     def support_resolution(
         receipt: CrossSearchReceipt,
+        selected_pair: CrossFit | None = None,
     ) -> tuple[CrossFitCompetition | None, CrossSearchReceipt]:
         nonlocal support_receipt_accounted
-        support_fit = unique_enclosing_support()
+        support_fit = unique_enclosing_support(selected_pair)
         evaluated = (
             0
             if support_competition is None or support_receipt_accounted
@@ -596,7 +606,11 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                 best=support_fit,
                 runner_up=None,
                 status=CrossFitStatus.RESOLVED,
-                winner_basis=CrossWinnerBasis.UNIQUE_ENCLOSING_SUPPORT,
+                winner_basis=(
+                    CrossWinnerBasis.AUTHORITATIVE_PAIR_ENCLOSING_USE
+                    if selected_pair is not None
+                    else CrossWinnerBasis.UNIQUE_ENCLOSING_SUPPORT
+                ),
                 reason=None,
                 failure_kind=None,
                 receipt=receipt,
@@ -1208,6 +1222,19 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         )
     resolved_aspect_ratio_authority = aspect_ratio_authority
     if best.direct_pair:
+        # The same measured pair may close both roles. Once all direct-pair
+        # competition checks above pass, a complete enclosing proof uses the
+        # observed outer lines themselves without aperture bleed. A different
+        # support pair cannot replace this independently selected aperture.
+        support_result, receipt = support_resolution(receipt, best)
+        if support_result is not None and (
+            support_result.status == CrossFitStatus.BOUND_EXCEEDED
+            or (
+                support_result.best is not None
+                and direct_pair_id(support_result.best) == direct_pair_id(best)
+            )
+        ):
+            return support_result
         if (
             best.boundary_use == OutputBoundaryUse.APERTURE_PAIR
             and best.height_compatibility_px is not None

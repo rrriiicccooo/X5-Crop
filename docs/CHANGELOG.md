@@ -21,6 +21,11 @@
 - Cross 单区域片段保留为测量与角色假设，完整 family 并集达到原有两区域要求后才可获权；
   模板覆盖数不提升原始测量支持。未获权假设不移动边界、不充当外侧反证，也不阻止已有有界缺边精修。
   完整测量账本与全局 solver 输入分别计数，局部假设不占用全局边界配额；原 producer 与求解上限不变。
+- Cross 的物理不相容 component 按独立 anchor 与唯一相容 fragment 分组；每组完整 refit，失败保留全员，
+  不丢弃测量或按结果挑选子集。已唯一获权的同一对上下边同时闭合完整包围合同后，使用直接支撑线输出。
+  外框投影保留完整的上下位置与共同斜率状态，风险以短轴坐标单位计算；不遗漏斜率解、不重复添加 cross bleed。
+  正常外扩后新进入范围的已登记端点与倾斜角点继续参与保护，实际采样、风险和对齐预算共用同一份结果。
+  非 source-spanning 的支撑边须各自以实测范围包围完整输出 extent；命中每张照片不能替代尾段的覆盖证明。
 - 源边或查询范围截断的定位峰不再以可见峰尾取得精确坐标；宽缓材质峰同时检查双尺度实际可观测域。
   完整峰、极性分区和窗口 ownership 保留既有职责，不增加像素读取或放宽测量阈值。
 - Sequence 边界的完整 reference 位置保留同一组 raw physical 测量允许的全部直线状态，
@@ -77,7 +82,7 @@
 
 - Normal report 与 Debug Analysis 只显示同次检测事实，分开 proposal、candidate、正式输出、runner、
   typed failure、calibration identity 和实际工作量，不重新检测或求解。当前 Report revision 为
-  `x5crop_v5_template_report_75`，Sequence 完整位置回链原始物理直线集合，推导边保留共同 W 与方向的联合角点保护；
+  `x5crop_v5_template_report_77`，Sequence 完整位置回链原始物理直线集合，推导边保留共同 W 与方向的联合角点保护；
   登记两轴归一化身份并检查基线无证据、完整范围与工作账本；
   逐候选记录 Cross 支撑区间、覆盖序号和真实 source extent，不保留旧 schema 兼容层。
 - Cross 每条直接边界保留原始独立区域数；开发校验回链原 query/transition、registered binding 与
