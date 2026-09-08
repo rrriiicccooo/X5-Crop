@@ -32,9 +32,10 @@
 
 ## 当前源码与已验证事实
 
-当前 Runtime 为 `4e2115bcd21a380214c11bbb661bdfef0744f6d9`，已正常推送 main。
+当前 Runtime 为 `f6eff660746d9813d98c6bcd45a1e93712a80ef4`，已正常推送 main；
+Cross 行为修正为 `4e2115bc`，后续提交只更新冻结校准身份。
 冻结依赖下正常 pre-push Hook 的 903 项工程测试通过、2 项按既定条件跳过；
-[Verify](https://github.com/rrriiicccooo/X5-Crop/actions/runs/34227900888) 已通过。
+[Verify](https://github.com/rrriiicccooo/X5-Crop/actions/runs/34230499524) 已通过。
 工程 CI 不替代最终三目标实机发布 receipt。
 
 共享 Python 的 SciPy/tifffile 在本轮期间已升级，首次 push 被冻结依赖检查正确阻断。
@@ -94,11 +95,12 @@
   区间仍为 `[-0.008H, +0.010H]`，没有为更高通过率缩窄区间；精确 observation-set SHA 为
   `754fc1d473c694eea389ccaf673de678c547f8c2b007f27ebd5fad66c391798d`。
   来自冻结环境完整黄金派生；非冻结环境的5个中点相差最多约7.6e-9px，但原始hull与校准区间不变。
-  精确身份按冻结环境重新登记，未放松核对；登记后全量复验尚待完成。登记不改变 pair 选择、采样 geometry 或 5% 阈值。
+  精确身份按冻结环境重新登记，未放松核对；登记后全量复验通过。登记不改变 pair 选择、采样 geometry 或 5% 阈值。
 
 ## 完整黄金与性能证据
 
-本轮非冻结环境完整开发 receipt：`Test/gold_analysis/cross_complete_support_final_20260908`，绑定提交前源码。
+本轮最终完整开发 receipt：`Test/gold_analysis/cross_complete_support_frozen_final_20260908`，
+冻结环境、干净 `f6eff660`，detector/comparator 均匹配 HEAD。
 110/110 完成、分析错误 0、全部 current report 和物理校准通过；登记前后质量与决定逐项不变。
 
 | 层级 | 结果 |
@@ -131,11 +133,9 @@ S086 新增安全 auto，S021 改为 Review；S043 最佳方案的合格短轴�
 人工确认照片的 frame ordinal，空白 slot 不虚构照片，也不减少用户要求的输出 slot 数。短轴合格不能
 替代整组四边合格。数值预算不能单独代替实际质量，也不能据此整体关闭风险检查。
 
-冻结环境、干净 `4e2115bc` 的完整复验已完成，输出
-`Test/gold_analysis/cross_complete_support_frozen_4e2115bc`。110/110完成、分析错误0，四项质量统计与前轮
-逐项一致；唯一未通过的是上述校准精确身份，v12登记后的复验尚待完成。Cohort 不变：
+最终 receipt 的 cohort 不变：
 `c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`。
-Detector 指纹为 `08669362b1042c8adf7dffda3394a3080d8dd6b0ae3ca398c3f2bf53ffee8e04`；comparator 为
+Detector 指纹为 `2c0c3da321039cd782ebc46e86b751827ccba4d5a95fe4f341eb874108ed886c`；comparator 为
 `a49ea7bff6a1f24a53e7571ae977673bd58905bc502c8c897f017c201b541609`。
 
 干净 `4e2115bc`、冻结依赖下正式 `tools/verify performance` receipt：
@@ -147,7 +147,7 @@ Detector 指纹为 `08669362b1042c8adf7dffda3394a3080d8dd6b0ae3ca398c3f2bf53ffee
 
 ## 开放风险与精确下一步
 
-先完成v12冻结环境完整黄金复验并同步检查点，再继续无合格短轴方案；Cross修正的Hook/CI与正式性能已通过。
+继续无合格短轴方案；冻结黄金、正常Hook、Cross修正的CI与正式性能已通过，尚不满足发布目标。
 S006 的同一获权 pair 已按完整支撑用途输出，两份方案全部六格短轴合格，runner 整组合格；primary
 仍有第六格长轴问题，整张 Review。该结果来自正式流，不再是只读对照。
 S005 尾段 TOP :1 可分别与 :2 或 :6 完整 refit（73/73、15/15），两种 raw 无 allowance 直线域都非空；
@@ -158,6 +158,12 @@ S018 bottom :67 的 raw2835..19845 未包围头尾；左侧 :66/:73 均多重归
 8/1 个 transition，不能选择性删除恢复；末 query20115 没有 raw transition。
 S012 F1 top 外扩110.642px、上限107.399px，主要来自coarse首raw4995之前的域外方向保护；仅相容的
 TOP :21 两条宽区间不收紧任何共同直线状态，且有22种其它归属。不能以它延长coarse实测域并取消保护。
+S016/S033/S036 当前都从外侧TOP加固定H推BOTTOM，后者缺少直接绑定；但测量拒绝细因不同。
+S016 TOP :3 上移约67.317px、固定H比黄金跨度短49.153px，导致BOTTOM native内移约116.470px。
+当前phase与Cross的四个现成组合只读生成后仍全部不合格，不能靠补一个runner解决，暂不扩大两份上限。
+S033/S036 仍有黄金匹配BOTTOM测量，下一步核查其角色、物理身份与完整方向合同，不放宽背景门槛。
+S061 的正短轴外扩与 inward flags不矛盾：F1约2374px长轴头部缺失触发真实斜角半平面失败，
+属于必要长轴依赖；同时四格BOTTOM仍外扩超限，不能计为短轴合格，也不修改比较器消除角点失败。
 S021 方案仍黄金合格，但改变支撑用途后不再把外框当作 source H，内部预算阻断；留待生成问题后处理，
 不能为恢复旧 auto 让外框重新冒充照片 H。S028/S093 长轴审计与 S065 候选完成不对称暂时冻结。
 以下 S038/S064 的只读诊断已完成，尚无可合入修复。
