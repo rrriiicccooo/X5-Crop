@@ -32,14 +32,16 @@
 
 ## 当前源码与已验证事实
 
-当前在 main 的 `9f54d7de` 上完成有条件 Cross family 提案。Canonical 完整组作为不可拆分输入，
+当前 Runtime 为 `c3b6b6eb0813777f72db2fa9400eea9797a07305`，已正常推送 main。Canonical 完整组作为不可拆分输入，
 新解释只保留完整 raw 并集；原有 Cross best/runner/H 与自动权限独立决定。每条 lane 至多追加一份
 有条件提案，全部物化、预算与特征计入实际工作量；不扩大像素查询、phase 搜索或原 Cross 总上限。
 完整合同见架构第 8、9、14 节。Report revision 78；Gold record/summary v21/v24，无旧 schema 兼容。
 
 本轮 188 项相关专项测试通过；随后补充的第三份 proposal 物化/权限反例和黄金三角色标签测试分别通过
-10 项与 42 项。110-task 正式 production flow 与全部 current report 校验完成；正常提交 Hook 与正式性能
-待本轮提交后验证，不能沿用旧性能作为本轮合格证明。
+10 项与 42 项。110-task 正式 production flow 与全部 current report 校验完成；正常 pre-push Hook 的
+907 项工程测试通过，2 项按既定条件跳过。干净提交的正式性能通过，详情见下一节。
+[Verify](https://github.com/rrriiicccooo/X5-Crop/actions/runs/34744270182) 的 12 个环境组合全部通过；
+工程 CI 不替代最终三目标实机发布 receipt。
 
 冻结环境为 `/private/tmp/x5crop-frozen-20260910`，SciPy 1.18.0、tifffile 2026.8.16；依赖检查已通过，
 系统共享包未修改。后续先核对该环境仍存在，并在 PATH 前置其 bin；共享 Python 版本已漂移。
@@ -132,14 +134,20 @@ S005 有条件提案虽然黄金安全，数值预算仍失败；生成进展尚
 `4cdcf34ae9b9b25122818027248a0c788686e01443fda83dff8f92cdda58dd56`；
 comparator 指纹为 `12029b441774fa99231909de4450b2d54aa2e8084507d71d9d6bd99887bf407f`；
 cohort 为 `c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`。
-提交后核对源码指纹，不改写原 receipt 身份。
+提交后逐字节复核：仅 Debug Analysis 标题布局的三行与本轮黄金快照不同；其余 detector、comparator、
+cohort 精确一致，原 receipt 未改写。当前 detector 指纹为
+`08a698f86fa1d7db1c7ab7c19d456f67bf4d4a3508e2ba20342f26d8ed083607`。
 
-上一个已提交 Runtime `c30a7ef6` 的 24-source 正式性能均值为 3.673461 秒，5 秒 Gate 通过，
-3 秒挑战未达成。本轮增加完整提案物化，必须另跑干净提交的正式性能；旧值不能代替本轮证据。
+干净 `c3b6b6eb`、冻结依赖下 `tools/verify performance` 完成：24-source 完整用户路径均值
+**3.865011 秒**，5 秒 Gate 通过，3 秒挑战未达成。p95 为 7.071714 秒，最慢 S091 为 7.088811 秒；
+未插桩 peak RSS 最大 1,228,226,560 bytes。决定为 2 auto / 22 Review。
+Receipt 为 `build/v5-performance/performance_receipt.json`，仅证明该提交、当前机器与本次决定分布。
+上一接受 Runtime 的均值为 3.673461 秒；本轮略增，不能声称提速或用剖面时间替代正式计时。
 
 ## 开放风险与精确下一步
 
-先完成本轮正常 Hook 与干净提交的正式性能，再继续 32 个无合格短轴方案的生成问题。
+本轮正常 Hook、正式全量黄金与干净提交性能已完成。继续 32 个无合格短轴方案的生成问题，
+先研究 S031 的同 trace 竞争片段归属；保持完整 canonical 原子与全体测量，不按拟合结果挑子集。
 有条件 family 不能侵入 canonical 选择；首次侵入版本曾丢失 S022/S084/S089 的安全 auto 并使 S062
 首选退步，已由权限分离和独立提案位置修复。失败版 `cross_conditional_family_full_20260910`
 不能作为接受基线。
