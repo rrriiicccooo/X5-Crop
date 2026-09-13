@@ -356,6 +356,7 @@ class CrossBoundaryFamilyResolution:
     failure_kind: CrossBoundaryFamilyFailureKind | None
     refit_receipt: BoundaryFamilyFitReceipt
     use: CrossBoundaryFamilyUse = CrossBoundaryFamilyUse.CANONICAL_REGISTRATION
+    membership_parent_family_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         supported = self.state == EvidenceState.SUPPORTED
@@ -363,6 +364,9 @@ class CrossBoundaryFamilyResolution:
         conditional = self.use == CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL
         if (
             not self.family_id
+            or tuple(sorted(set(self.membership_parent_family_ids))) != self.membership_parent_family_ids
+            or any(not identity or identity == self.family_id for identity in self.membership_parent_family_ids)
+            or (self.membership_parent_family_ids and not conditional)
             or not isinstance(self.use, CrossBoundaryFamilyUse)
             or self.role not in {BoundaryRole.TOP, BoundaryRole.BOTTOM}
             or not (supported or unavailable)

@@ -23,7 +23,7 @@ from .measurement_model import (
     PhotoBoundaryMeasurementSet,
     SequenceTransitionObservation,
 )
-from .model import BoundaryAxis, BoundaryEvidenceState, QueryPurpose
+from .model import BoundaryAxis, BoundaryEvidenceState, BoundaryRole, QueryPurpose
 from .registered_measurement import registered_baseline_query_groups
 from .observation_types import (
     BasicAxisProfile,
@@ -45,6 +45,7 @@ from .search_model import SequenceAnchorDiscoveryDomain
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import (
     CrossBoundaryFamilyResolution,
+    CrossEvidence,
     CrossFitCompetition,
     CrossRoleBinding,
     TemplateCrossInput,
@@ -71,7 +72,9 @@ from .template_registration import (
     CrossRegistrationWorkReceipt,
     project_cross_solver_bindings,
     validate_cross_family_provenance,
+    validate_membership_registration,
 )
+from .template_family_membership import MembershipAtom
 
 
 @dataclass(frozen=True)
@@ -561,6 +564,17 @@ class PreparedTemplateLane(RegisteredTemplateLane):
             raise TypeError("prepared template lane requires its exact cross input")
         if not isinstance(self.cross_registration_work, CrossRegistrationWorkReceipt):
             raise TypeError("prepared lane requires cross registration work")
+        validate_membership_registration(
+            self.cross_registration_work.membership, self.cross_boundary_family_resolutions,
+            {item.observation_id: MembershipAtom(item.observation_id, item.transition_ids,
+                                               item.independent_support_region_count) for item in self.raw_cross_observations},
+            {item.observation_id: item.role for item in self.raw_cross_observations},
+            {BoundaryRole.TOP: self.cross_input.registered_top_run_count,
+             BoundaryRole.BOTTOM: self.cross_input.registered_bottom_run_count},
+            frozenset(binding.observation_id for binding in (*self.top_cross_bindings, *self.bottom_cross_bindings)
+                      if binding.evidence == CrossEvidence.TEMPLATE_LOCAL_REFINEMENT),
+            self.cross_registration_work.fit_attempt_count,
+        )
         local_count = sum(
             not item.has_independent_spatial_support
             for item in (*self.top_cross_bindings, *self.bottom_cross_bindings)

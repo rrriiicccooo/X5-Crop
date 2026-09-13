@@ -65,6 +65,11 @@ from x5crop.detection.photo_geometry.template_registration import (
     CrossRegistrationWorkReceipt,
     complete_family_evaluations,
     validate_cross_family_provenance,
+    validate_membership_registration,
+)
+from x5crop.detection.photo_geometry.template_family_membership import (
+    MAXIMUM_MEMBERSHIP_VISITS, MembershipAtom, MembershipFitBudget, MembershipReceipt,
+    MembershipScope, MembershipState, MembershipTransition, MembershipWork, enumerate_membership_scope,
 )
 from x5crop.detection.photo_geometry.line_observations import (
     BoundaryFamilyFitReceipt,
@@ -1006,6 +1011,30 @@ def _validate_complete_family_numerics(
         raise ValueError("Cross constrained line numerical receipt is not reproducible")
 
 
+def _read_membership_receipt(value: Any) -> MembershipReceipt | None:
+    if value is None:
+        return None
+
+    def exact(record, model):
+        if not isinstance(record, dict) or set(record) != {field.name for field in fields(model)}:
+            raise ValueError("Cross membership receipt fields are incomplete")
+        return record
+
+    exact(value, MembershipReceipt)
+    scopes = []
+    for item in value['scopes']:
+        exact(item, MembershipScope)
+        work = MembershipWork(**exact(item['work'], MembershipWork))
+        scopes.append(MembershipScope(**{**item, 'role': BoundaryRole(item['role']),
+            'state': MembershipState(item['state']), 'work': work,
+            'anchor_observation_ids': tuple(map(ObservationId, item['anchor_observation_ids'])),
+            'maximal_member_groups': tuple(tuple(map(ObservationId, group)) for group in item['maximal_member_groups'])}))
+    budgets = tuple(MembershipFitBudget(**{**exact(item, MembershipFitBudget), 'role': BoundaryRole(item['role'])})
+                    for item in value['fit_budgets'])
+    return MembershipReceipt(MembershipState(value['state']), tuple(scopes), budgets,
+                             tuple(map(ObservationId, value['original_observation_ids'])))
+
+
 def _validate_cross_measurement_support(
     lane: dict[str, Any], query_records: list[dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
@@ -1019,7 +1048,7 @@ def _validate_cross_measurement_support(
     work = lane.get("cross_registration_work")
     if not isinstance(work, dict) or set(work) != {field.name for field in fields(CrossRegistrationWorkReceipt)}:
         raise ValueError("Cross registration work is incomplete")
-    receipt = CrossRegistrationWorkReceipt(**work)
+    receipt = CrossRegistrationWorkReceipt(**{**work, 'membership': _read_membership_receipt(work['membership'])})
     if (
         receipt.raw_observation_count != len(raw)
         or receipt.local_fragment_count != sum(
@@ -1116,6 +1145,7 @@ def _validate_cross_measurement_support(
             "family_id", "role", "state", "use", "member_observation_ids",
             "member_transition_ids", "member_transition_groups",
             "final_observation_ids", "failure_kind", "refit_receipt",
+            "membership_parent_family_ids",
         }:
             raise ValueError("Cross family provenance is incomplete")
         family = CrossBoundaryFamilyResolution(
@@ -1129,6 +1159,7 @@ def _validate_cross_measurement_support(
             failure_kind=(None if item["failure_kind"] is None else
                           CrossBoundaryFamilyFailureKind(item["failure_kind"])),
             refit_receipt=_read_boundary_family_receipt(item["refit_receipt"]),
+            membership_parent_family_ids=tuple(item['membership_parent_family_ids']),
         )
         if any(str(identity) not in transitions for identity in family.member_transition_ids):
             raise ValueError("Cross family lost its original transition provenance")
@@ -1141,6 +1172,40 @@ def _validate_cross_measurement_support(
         {ObservationId(identity): tuple(item["conditional_family_ids"])
          for identity, item in registered.items()},
     )
+    membership_atoms = {ObservationId(item['observation_id']): MembershipAtom(
+        ObservationId(item['observation_id']), tuple(map(ObservationId, item['transition_ids'])),
+        item['independent_support_region_count']) for item in raw}
+    competition_receipt = lane.get('cross_competition', {}).get('receipt', {})
+    membership_counts = {
+        role: competition_receipt.get(f'registered_{role.value}_run_count', 0)
+        for role in (BoundaryRole.TOP, BoundaryRole.BOTTOM)}
+    validate_membership_registration(
+        receipt.membership, tuple(families), membership_atoms,
+        {ObservationId(item['observation_id']): BoundaryRole(item['role']) for item in raw}, membership_counts,
+        frozenset(ObservationId(identity) for identity, binding in registered.items()
+                  if identity in raw_ids and binding['evidence'] == 'template_local_refinement'), receipt.fit_attempt_count)
+    if receipt.membership is not None:
+        family_by_id = {family.family_id: family for family in families}
+        remaining = MAXIMUM_MEMBERSHIP_VISITS
+        for scope in receipt.membership.scopes:
+            parent = family_by_id[scope.parent_family_id]
+            query_ids = {transitions[str(identity)]['query_id'] for identity in parent.member_transition_ids}
+            if len(query_ids) != 1:
+                raise ValueError("membership family changed its original query")
+            query_id = next(iter(query_ids))
+            query = queries[query_id]
+            points = tuple(MembershipTransition(
+                ObservationId(point['transition_id']), float(point['trace_coordinate_px']),
+                FiniteInterval(**point['physical_position_interval_px']))
+                for point in transitions.values() if point['query_id'] == query_id)
+            replayed = enumerate_membership_scope(
+                parent_family_id=parent.family_id, role=parent.role,
+                atoms=tuple(membership_atoms[key] for key in parent.member_observation_ids),
+                transitions=points, query_trace_positions_px=tuple(query['trace_positions_px']),
+                scale_px_per_mm=query['boundary_axis_scale_px_per_mm']['maximum'], remaining_visits=remaining)
+            if replayed != scope:
+                raise ValueError("membership enumeration or actual work is not reproducible from original measurements")
+            remaining -= replayed.work.visited_count
     evaluations = complete_family_evaluations(tuple(families))
     if (
         receipt.constrained_fit_attempt_count != len(evaluations)

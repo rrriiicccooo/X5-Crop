@@ -92,6 +92,8 @@ def physical_line_region(
     trace_intervals: tuple[tuple[float, FiniteInterval], ...],
     maximum_slope: float,
     reference_trace_px: float,
+    *,
+    work: dict[str, int] | None = None,
 ) -> PhysicalLineRegion | None:
     """Retain all raw-physical straight-line states without another fit or LP.
 
@@ -101,7 +103,7 @@ def physical_line_region(
     Connection allowance does not make an infeasible physical family close.
     """
 
-    return _physical_line_region(trace_intervals, maximum_slope, reference_trace_px)
+    return _physical_line_region(trace_intervals, maximum_slope, reference_trace_px, work=work)
 
 
 def _physical_line_region(

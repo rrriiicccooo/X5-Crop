@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 import math
 
 from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
+from ...run_local_identity import source_identity_scope
 from ...formats import FramePhysicalSpec
 from .boundary_fitting import (
     BoundaryFamilyFit,
@@ -28,7 +29,12 @@ from .line_observations import (
     PhotoBoundaryObservation,
 )
 from .robust_line_fit import physical_line_region
-from .physical_identity import physical_fact_id
+from .physical_identity import physical_fact_id, physical_observation_id
+from .template_family_membership import (
+    MAXIMUM_MEMBERSHIP_VISITS, MembershipAtom, MembershipFitBudget,
+    MembershipReceipt, MembershipState, MembershipTransition, enumerate_membership_scope,
+    new_membership_groups,
+)
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import (
     CrossBoundaryFamilyFailureKind,
@@ -83,8 +89,18 @@ def validate_cross_family_provenance(
     }
     known = dict(observations)
     expected: dict[ObservationId, set[str]] = {}
+    by_id = {family.family_id: family for family in families}
     for family in families:
         conditional = family.use == CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL
+        for parent_id in family.membership_parent_family_ids:
+            parent = by_id.get(parent_id)
+            if (
+                parent is None or parent.membership_parent_family_ids
+                or parent.use != CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL
+                or parent.state != EvidenceState.UNAVAILABLE or parent.role != family.role
+                or not set(family.member_observation_ids).issubset(parent.member_observation_ids)
+            ):
+                raise ValueError("membership proposal lost its unresolved whole-atom parent")
         if not conditional and family.state == EvidenceState.SUPPORTED and any(
             identity in observations and identity not in family.final_observation_ids
             for identity in family.member_observation_ids
@@ -133,6 +149,70 @@ def complete_family_evaluations(
     )
 
 
+def validate_membership_registration(
+    receipt: MembershipReceipt | None, families: tuple[CrossBoundaryFamilyResolution, ...],
+    atoms: dict[ObservationId, MembershipAtom], roles: dict[ObservationId, BoundaryRole],
+    run_counts: dict[BoundaryRole, int],
+    refinement_observation_ids: frozenset[ObservationId],
+    fit_attempt_count: int,
+) -> None:
+    """Bind the frozen search universe, all interpretations and preflight counts."""
+    added = tuple(family for family in families if family.membership_parent_family_ids)
+    if receipt is None:
+        if added:
+            raise ValueError("membership families require their complete search receipt")
+        return
+    original = tuple(family for family in families if not family.membership_parent_family_ids)
+    frozen = set(receipt.original_observation_ids)
+    outputs = {identity for family in added for identity in family.final_observation_ids}
+    if frozen != set(atoms) - outputs - refinement_observation_ids:
+        raise ValueError("membership search changed its frozen observations")
+    original_fit_count = sum(run_counts.values()) + len({
+        (family.role, family.member_transition_ids) for family in original})
+    membership_fit_count = len({(family.role, family.member_transition_ids) for family in added})
+    refinement_fit_count = fit_attempt_count - original_fit_count - membership_fit_count
+    if not len(refinement_observation_ids) <= refinement_fit_count <= sum(run_counts.values()):
+        raise ValueError("membership phase provenance disagrees with actual refinement work")
+    parents = {family.family_id: family for family in original
+               if family.use == CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL and family.state == EvidenceState.UNAVAILABLE}
+    if set(parents) != {scope.parent_family_id for scope in receipt.scopes}:
+        raise ValueError("membership search omitted an unresolved family")
+    for scope in receipt.scopes:
+        parent = parents[scope.parent_family_id]
+        anchors = tuple(key for key in parent.member_observation_ids
+                        if atoms[key].independent_support_region_count >= MINIMUM_INDEPENDENT_SUPPORT_REGIONS)
+        if (
+            scope.role != parent.role or scope.atom_count != len(parent.member_observation_ids)
+            or not set(parent.member_observation_ids).issubset(frozen)
+            or scope.anchor_observation_ids != anchors
+            or scope.raw_transition_count != len(parent.member_transition_ids)
+            or any(not set(group).issubset(parent.member_observation_ids) for group in scope.maximal_member_groups)
+        ):
+            raise ValueError("membership scope changed its indivisible measured atoms")
+    if receipt.state == MembershipState.SEARCH_BOUND_EXCEEDED:
+        if added:
+            raise ValueError("incomplete membership enumeration emitted a proposal prefix")
+        return
+    existing = {(roles[key], atoms[key].transition_ids) for key in frozen}
+    existing.update((family.role, family.member_transition_ids) for family in original)
+    groups = new_membership_groups(receipt.scopes, atoms, existing)
+    unions = {(role, union) for role, _members, union in groups}
+    expected_budgets = []
+    for role in (BoundaryRole.TOP, BoundaryRole.BOTTOM):
+        old = {family.member_transition_ids: family for family in original if family.role == role}
+        expected_budgets.append(MembershipFitBudget(
+            role, run_counts[role], len(old),
+            sum(family.refit_receipt.constrained_evaluation is not None for family in old.values()),
+            sum(union_role == role for union_role, _union in unions)))
+    if tuple(expected_budgets) != receipt.fit_budgets:
+        raise ValueError("membership fit preflight changed original or proposed work")
+    expected = groups if receipt.state == MembershipState.COMPLETE else {}
+    actual = {(family.role, family.member_observation_ids, family.member_transition_ids): family.membership_parent_family_ids
+              for family in added}
+    if len(actual) != len(added) or actual != expected:
+        raise ValueError("membership result lost a complete interpretation or emitted a withheld batch")
+
+
 @dataclass(frozen=True)
 class CrossRegistrationWorkReceipt:
     fit_attempt_count: int
@@ -142,6 +222,7 @@ class CrossRegistrationWorkReceipt:
     constrained_fit_attempt_count: int = 0
     constrained_fit_edge_count: int = 0
     constrained_fit_event_count: int = 0
+    membership: MembershipReceipt | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -161,6 +242,8 @@ class CrossRegistrationWorkReceipt:
             ))
         ):
             raise ValueError("cross registration work receipt is invalid")
+        if self.membership is not None and not isinstance(self.membership, MembershipReceipt):
+            raise TypeError("cross registration requires typed membership work")
 
 
 def template_spec_from_physical_authority(
@@ -210,6 +293,7 @@ class RegisteredCrossEvidence:
     registered_bottom_run_count: int | None = None
     family_resolutions: tuple[CrossBoundaryFamilyResolution, ...] = ()
     family_compatibility_evaluation_count: int = 0
+    membership_receipt: MembershipReceipt | None = None
 
     @property
     def work_receipt(self) -> CrossRegistrationWorkReceipt:
@@ -227,6 +311,7 @@ class RegisteredCrossEvidence:
             constrained_fit_attempt_count=len(evaluations),
             constrained_fit_edge_count=sum(item.work.edge_count for item in evaluations),
             constrained_fit_event_count=sum(item.work.event_count for item in evaluations),
+            membership=self.membership_receipt,
         )
 
     def __post_init__(self) -> None:
@@ -290,6 +375,16 @@ class RegisteredCrossEvidence:
             self,
             "registered_bottom_run_count",
             registered_bottom_run_count,
+        )
+        validate_membership_registration(
+            self.membership_receipt, self.family_resolutions,
+            {item.observation_id: MembershipAtom(item.observation_id, item.transition_ids,
+                                               item.independent_support_region_count) for item in self.observations},
+            {item.observation_id: item.role for item in self.observations},
+            {BoundaryRole.TOP: registered_top_run_count, BoundaryRole.BOTTOM: registered_bottom_run_count},
+            frozenset(binding.observation_id for binding in (*self.top_bindings, *self.bottom_bindings)
+                      if binding.evidence == CrossEvidence.TEMPLATE_LOCAL_REFINEMENT),
+            self.fit_attempt_count,
         )
 
 
@@ -767,6 +862,107 @@ def _merge_registered_cross_families(
     return tuple(merged), attempts, tuple(final_resolutions), compatibility_count
 
 
+def _register_membership_proposals(
+    registered: RegisteredCrossEvidence, *,
+    top_measurement: PhotoBoundaryMeasurementSet, bottom_measurement: PhotoBoundaryMeasurementSet,
+    width_axis: BoundaryAxis, height_axis: BoundaryAxis,
+    height_scale_px_per_mm: PositiveInterval, lane_reference_trace_px: float,
+) -> RegisteredCrossEvidence:
+    """Add the complete finite interpretation batch after canonical identity freezes."""
+    observations = {item.observation_id: item for item in registered.observations}
+    atoms = {key: MembershipAtom(key, item.transition_ids, item.independent_support_region_count)
+             for key, item in observations.items()}
+    measurements = {BoundaryRole.TOP: top_measurement, BoundaryRole.BOTTOM: bottom_measurement}
+    raw = {role: tuple(MembershipTransition(point.transition_id, float(point.trace_coordinate_px),
+                                          point.physical_position_interval_px)
+                       for point in measurement.transitions)
+           for role, measurement in measurements.items()}
+    scopes = []
+    remaining = MAXIMUM_MEMBERSHIP_VISITS
+    frozen_ids = tuple(sorted(observations, key=str))
+    for family in registered.family_resolutions:
+        if family.use != CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL or family.state != EvidenceState.UNAVAILABLE:
+            continue
+        scope = enumerate_membership_scope(
+            parent_family_id=family.family_id, role=family.role,
+            atoms=tuple(atoms[key] for key in family.member_observation_ids),
+            transitions=raw[family.role],
+            query_trace_positions_px=measurements[family.role].query.trace_positions_px,
+            scale_px_per_mm=height_scale_px_per_mm.maximum, remaining_visits=remaining,
+        )
+        scopes.append(scope)
+        remaining -= scope.work.visited_count
+    scope_records = tuple(scopes)
+    if any(scope.state == MembershipState.SEARCH_BOUND_EXCEEDED for scope in scopes):
+        return replace(registered, membership_receipt=MembershipReceipt(
+            MembershipState.SEARCH_BOUND_EXCEEDED, scope_records, (), frozen_ids))
+    existing = {(item.role, item.transition_ids) for item in registered.observations}
+    existing.update((family.role, family.member_transition_ids) for family in registered.family_resolutions)
+    groups = new_membership_groups(scope_records, atoms, existing)
+    new_unions = {(role, union) for role, _members, union in groups}
+    budgets = []
+    for role, count in ((BoundaryRole.TOP, registered.registered_top_run_count),
+                        (BoundaryRole.BOTTOM, registered.registered_bottom_run_count)):
+        original = {family.member_transition_ids: family for family in registered.family_resolutions if family.role == role}
+        budgets.append(MembershipFitBudget(
+            role, count, len(original),
+            sum(family.refit_receipt.constrained_evaluation is not None for family in original.values()),
+            sum(union_role == role for union_role, _union in new_unions),
+        ))
+    if registered.fit_attempt_count != sum(item.registered_run_count + item.original_family_fit_count for item in budgets):
+        raise ValueError("membership preflight lost original fit attempts")
+    admitted = all(item.admits_all for item in budgets)
+    receipt = MembershipReceipt(MembershipState.COMPLETE if admitted else MembershipState.FIT_BOUND_EXCEEDED,
+                                scope_records, tuple(budgets), frozen_ids)
+    if not admitted:
+        return replace(registered, membership_receipt=receipt)
+    cache = {}
+    families = list(registered.family_resolutions)
+    bindings = list((*registered.top_bindings, *registered.bottom_bindings))
+    binding_parents: dict[ObservationId, set[str]] = {}
+    for (role, members, union), parents in groups.items():
+        key = (role, union)
+        if key not in cache:
+            # Numerical materialization must not consume original line/run
+            # ordinals used by later canonical refinement and sorting.
+            with source_identity_scope():
+                fitted = fit_boundary_family(measurements[role], transition_ids=union, role=role,
+                                             source_axis_long=width_axis,
+                                             boundary_axis_scale_px_per_mm=height_scale_px_per_mm)
+                proposal, numerical = fitted.canonical_observation, fitted.receipt
+                if proposal is None:
+                    proposal, numerical = complete_boundary_family_proposal(fitted)
+                run = None if proposal is None else _canonical_cross_run(proposal, measurements[role])
+            if proposal is not None:
+                identity = physical_observation_id("membership-proposal-line", role.value, *union)
+                proposal = replace(proposal, observation_id=identity)
+                run = replace(run, run_id=physical_fact_id("membership-proposal-run", role.value, identity))
+                observations[identity] = proposal
+                bindings.append(CrossRoleBinding.from_measurement(
+                    run, proposal, lane_reference_trace_px=lane_reference_trace_px, boundary_axis=height_axis))
+            cache[key] = proposal, numerical
+        proposal, numerical = cache[key]
+        family_id = physical_fact_id("membership-proposal-family", role.value, *members)
+        families.append(CrossBoundaryFamilyResolution(
+            family_id=family_id, role=role, use=CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL,
+            state=EvidenceState.SUPPORTED if proposal is not None else EvidenceState.UNAVAILABLE,
+            member_observation_ids=members, member_transition_ids=union,
+            member_transition_groups=tuple(atoms[member].transition_ids for member in members),
+            final_observation_ids=() if proposal is None else (proposal.observation_id,),
+            failure_kind=None if proposal is not None else CrossBoundaryFamilyFailureKind.COMPLETE_TRANSITION_UNION_REFIT_REJECTED,
+            refit_receipt=numerical, membership_parent_family_ids=parents,
+        ))
+        if proposal is not None:
+            binding_parents.setdefault(proposal.observation_id, set()).add(family_id)
+    bindings = [replace(binding, conditional_family_ids=tuple(sorted(binding_parents[binding.observation_id])))
+                if binding.observation_id in binding_parents else binding for binding in bindings]
+    return replace(registered,
+                   top_bindings=tuple(binding for binding in bindings if binding.role == BoundaryRole.TOP),
+                   bottom_bindings=tuple(binding for binding in bindings if binding.role == BoundaryRole.BOTTOM),
+                   observations=tuple(observations.values()), family_resolutions=tuple(families),
+                   fit_attempt_count=registered.fit_attempt_count + len(cache), membership_receipt=receipt)
+
+
 def register_cross_evidence(
     *,
     profile: BasicAxisProfile,
@@ -883,7 +1079,7 @@ def register_cross_evidence(
             ),
         )
     )
-    return RegisteredCrossEvidence(
+    registered = RegisteredCrossEvidence(
         top_bindings=tuple(
             binding
             for binding, _observation in ordered
@@ -902,6 +1098,11 @@ def register_cross_evidence(
             sorted(family_resolutions, key=lambda item: item.family_id)
         ),
         family_compatibility_evaluation_count=family_compatibility_count,
+    )
+    return _register_membership_proposals(
+        registered, top_measurement=top_measurement, bottom_measurement=bottom_measurement,
+        width_axis=width_axis, height_axis=height_axis, height_scale_px_per_mm=height_scale_px_per_mm,
+        lane_reference_trace_px=lane_reference_trace_px,
     )
 
 
@@ -1146,4 +1347,5 @@ def register_template_local_cross_refinements(
         family_compatibility_evaluation_count=(
             registered.family_compatibility_evaluation_count
         ),
+        membership_receipt=registered.membership_receipt,
     )

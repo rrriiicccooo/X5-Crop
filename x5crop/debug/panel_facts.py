@@ -875,10 +875,15 @@ def axis_authority_summaries(
     )
     def cross_registration_label(lane) -> str:
         receipt = lane.prepared.cross_competition.receipt
+        membership = lane.prepared.cross_registration_work.membership
+        grouping = ("" if membership is None or not membership.scopes else
+                    f" · GROUP {membership.state.value.upper()} "
+                    f"{sum(scope.work.visited_count for scope in membership.scopes)} visits")
         return (
             f"T{receipt.registered_top_run_count}/"
             f"B{receipt.registered_bottom_run_count}"
             f"≤{receipt.registered_run_bound_per_role}"
+            f"{grouping}"
         )
 
     cross_registration = "/".join(

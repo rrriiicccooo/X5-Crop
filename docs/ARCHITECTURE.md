@@ -1067,6 +1067,21 @@ gradient、全部顶点的 first-order gap，并要求 `gap <= robust_fit_tolera
 必然属于不同 family；两项验收事实分别保存在 `BoundaryFamilyFitReceipt`。同一并集的 canonical
 失败记录与 conditional 成功记录共用一次数值结果，账本按完整 raw union 去重计数。新增线与 family
 使用独立编号前缀，不改变原有两侧 registration 和后续精修的编号顺序。
+完整并集仍不成立的有条件 family 可以进一步保留完整原子的归属解释。原 canonical observation
+不可拆分；该 family 中全部至少两区域的 observation 同时固定为 anchor，其余原子只作为整体加入。
+在这个固定原子宇宙内，以同 trace 不同 identity 冲突和完整物理域为空作单调剪枝，穷尽全部可行集合后
+保留所有包含极大集合。极大性只表示无法再加入一个完整原子，不证明成员身份或角色权限。
+无独立 anchor 时明确记为不适用；多个 anchor 联合不可行时不删除任何 anchor。搜索不读取拟合结果、
+背景角色授权、黄金或 placement。已有 raw union 不重复物化；新 union 的不同成员解释分别保留来源，
+只共用一次完整数值拟合。每份新 family 绑定其原始未解决 parent，原 raw 和全部原 observation 继续保存。
+同 lane 两侧及全部 family 共用至多 4096 次组合访问；访问前检查预算，任一 scope 耗尽时整批不添加新线，
+不能输出此前完成的搜索前缀。全部搜索完成后，以每角色原 run 数 R、原唯一 family 拟合数 U、原约束
+拟合数 C、新唯一 union 数 K 预检 `R+U+K <= 3R` 与 `C+K <= 2R`；任一侧失败时两侧均不执行新增拟合。
+新增拟合都通过预检后才开始，失败保留完整解释及明确的不可用结果，不根据成功次数截取前 N 组。
+`template_family_membership.py` 唯一拥有搜索、极大解释和拟合预检类型，registration 仍独占物化与权限。
+`MembershipReceipt` 保存原观察全集、全部 parent scope、原子与 anchor、完整极大解释、状态和工作量。
+冻结观察必须恰等于最终 raw 账本扣除新增条件线与后续精修线；精修线数量和额外拟合次数也须对账。
+Report 从原 query/transition 重放每个 scope，逐项核对实际计数；Debug 显示分组状态和访问次数。
 这类线可以生成单独的待检查裁切范围，以 `family_assignment_unresolved` 标记其分组权限缺口。
 Canonical best、runner、状态与 source H 由只含 canonical binding 的视图决定；附加提案不能替换它们，
 在原全局工作量上限内不改变其批准结果；真实超界仍按统一 bound 拒绝。它不形成已获权 candidate，
@@ -1080,8 +1095,17 @@ anchor/opposite 或外侧角色反证，也不能通过排除另一组
 Raster trace 不连续不等于物理边界不同；完整并集重拟合能够成立时，跨 domain fragment 仍可属于同一条线。
 坐标邻近、方向相似、support 更多或 residual 更小都不能选择性丢弃组员。每侧原 registered run 数为 R 时，
 两阶段 family 相容域计算合计不超过 `2R(R+1)`，以 `family_compatibility_evaluation_count` 保留真实次数；
-初次 run 拟合、canonical 分组与有条件分组的原拟合尝试合计不超过 `3R`，完整物理约束拟合至多 `2R`，
+初次 run、canonical 分组、有条件分组及新增归属解释的稳健拟合尝试合计不超过 `3R`，
+完整物理约束拟合至多 `2R`，
 两者分别计数，合计不超过 `5R`；原有缺边精修至多再增加 `R`。
+归属搜索另记实际访问、raw union 输入与 identity 检查、物理域与 raw interval、裁剪与顶点检查、
+可行集合及极大性检查次数。令一次 scope 有 A 个原子、T 个原始 transition、Q 条 query trace、V 次访问：
+raw union 输入不超过 `2TV`，identity 检查不超过 `TV`；每个无身份冲突集合至多 Q 条约束，
+裁剪至多 `2Q` 次、顶点检查至多 `4Q²+10Q` 次，极大性检查至多 `AV`。临时 DFS 深度至多 A，
+已访问集合只保存整数 mask；完整极大解释与预检前 union 计划最多 V 组，获准拟合的唯一 union 数还须
+满足 `3R/2R` 预检。
+有 trace 冲突时极大集合数量可以指数增长，二维物理参数空间不提供一般多项式枚举保证；4096 是明确
+工作上限，不是完整性保证。搜索预算不替代下游 512 observation 和 4096 pair/fit 的实际计数与拒绝合同。
 约束拟合对 N 个点裁剪至多 2N 个半平面、保留至多 `V <= 2N+4` 个顶点，每边至多 2N 个导数事件；
 计算上界为 `O(N V log N)`、临时存储为 `O(N+V)`。成功与失败均记录实际约束、裁剪、顶点评估、
 初始解检查、边、事件生成/访问、候选、loss/gradient 点项、gap 顶点与原始约束复查次数；

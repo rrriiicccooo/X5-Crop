@@ -301,6 +301,9 @@ class TemplateRegistrationContractTest(unittest.TestCase):
         # External reports retain run-local identities; validation must not
         # recreate their ordinal allocation in a different process scope.
         with source_identity_scope():
+            lane['cross_competition'] = {'receipt': {
+                'registered_top_run_count': registered.registered_top_run_count,
+                'registered_bottom_run_count': registered.registered_bottom_run_count}}
             _validate_cross_measurement_support(lane, queries)
         invalid = deepcopy(lane)
         invalid["observations"]["cross_boundary_family_resolutions"][0]["member_transition_groups"][0].pop()
@@ -386,7 +389,7 @@ class TemplateRegistrationContractTest(unittest.TestCase):
         ))
         self.assertTrue(all(not item.role_authorized for item in registered.top_bindings))
         self.assertEqual(project_cross_solver_bindings(registered.top_bindings), ())
-        self.assertEqual(registered.work_receipt, CrossRegistrationWorkReceipt(3, 2, 2, 2))
+        self.assertEqual(replace(registered.work_receipt, membership=None), CrossRegistrationWorkReceipt(3, 2, 2, 2))
         family = registered.family_resolutions[0]
         self.assertEqual(family.state, EvidenceState.UNAVAILABLE)
         self.assertEqual(
@@ -440,6 +443,8 @@ class TemplateRegistrationContractTest(unittest.TestCase):
             cross_input = replace(
                 prepared.cross_input, top_bindings=projected,
                 fitted_observation_count=len(projected),
+                registered_top_run_count=registered.registered_top_run_count,
+                registered_bottom_run_count=registered.registered_bottom_run_count,
             )
             valid = replace(
                 prepared, top_cross_bindings=registered.top_bindings,
@@ -455,6 +460,16 @@ class TemplateRegistrationContractTest(unittest.TestCase):
                 ))
             with self.assertRaisesRegex(ValueError, "registration work disagrees"):
                 replace(valid, cross_registration_work=CrossRegistrationWorkReceipt(0, 0, 0))
+
+    def test_original_observation_cannot_be_relabelled_as_unperformed_refinement(self) -> None:
+        registered = self._registered_top_families((100.0,) * 12, ((0, 1, 2),))
+        self.assertEqual(registered.fit_attempt_count, 1)
+        self.assertIsNotNone(registered.membership_receipt)
+        with self.assertRaisesRegex(ValueError, 'actual refinement work'):
+            replace(registered,
+                    top_bindings=tuple(replace(binding, evidence=CrossEvidence.TEMPLATE_LOCAL_REFINEMENT)
+                                       for binding in registered.top_bindings),
+                    membership_receipt=replace(registered.membership_receipt, original_observation_ids=()))
 
     def test_single_point_cannot_become_a_local_cross_line(self) -> None:
         registered = self._registered_top_families((100.0,) * 12, ((0,),))
@@ -482,6 +497,9 @@ class TemplateRegistrationContractTest(unittest.TestCase):
             },
         }
         queries = [typed_read_model(make_side_measurement_set(((100.0,),) * 12))]
+        lane['cross_competition'] = {'receipt': {
+            'registered_top_run_count': registered.registered_top_run_count,
+            'registered_bottom_run_count': registered.registered_bottom_run_count}}
         _validate_cross_measurement_support(lane, queries)
         for keys in (
             ("raw_top_bottom_lines",),
@@ -628,6 +646,9 @@ class TemplateRegistrationContractTest(unittest.TestCase):
             },
         }
         queries = [typed_read_model(measurement)]
+        lane['cross_competition'] = {'receipt': {
+            'registered_top_run_count': registered.registered_top_run_count,
+            'registered_bottom_run_count': registered.registered_bottom_run_count}}
         _validate_cross_measurement_support(lane, queries)
         for field in ("constrained_fit_attempt_count", "constrained_fit_edge_count", "constrained_fit_event_count"):
             invalid = deepcopy(lane)

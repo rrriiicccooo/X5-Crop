@@ -112,6 +112,9 @@ If the sequence alternative cannot form a distinct crop, the existing cross-axis
 At most one additional conditional cross-axis proposal is retained separately from the primary and runner.
 When a fit satisfies the physical limits for a complete group of boundary measurements, this proposal can preserve
 an interpretation that the original fit could not retain, for manual review. Automatic approval conditions remain unchanged.
+When fragment membership is ambiguous, the system preserves the original complete measurement groups and examines
+whole-group combinations. If search or batch fitting exceeds its work limit, the report records the reason and retains
+the existing crop proposals. These combinations are available for Review only.
 Development gold analysis evaluates each footprint independently, allows multiple safe results, and separates unsafe from
 unavailable geometry. Each retained crop also records its numeric budget and physical features with units, provenance,
 and explicit missing reasons. Numeric budget assessment remains separate from final approval conditions.
