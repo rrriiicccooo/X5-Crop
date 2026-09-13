@@ -68,6 +68,7 @@ class DebugStyleParameters:
     broad_material_transition_color: tuple[int, int, int] = (255, 203, 78)
     selected_boundary_color: tuple[int, int, int] = (255, 171, 37)
     competitor_color: tuple[int, int, int] = (197, 111, 255)
+    conditional_proposal_color: tuple[int, int, int] = (242, 221, 103)
     safe_output_color: tuple[int, int, int] = (30, 144, 255)
     approved_color: tuple[int, int, int] = (50, 183, 105)
     review_color: tuple[int, int, int] = (230, 73, 61)

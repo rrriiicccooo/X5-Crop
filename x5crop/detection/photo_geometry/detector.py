@@ -133,7 +133,7 @@ def _placements(
     prepared: PreparedTemplateLane,
     *,
     source_geometry: SourceScanGeometry,
-) -> tuple[FormatPlacement | None, FormatPlacement | None]:
+) -> tuple[FormatPlacement | None, FormatPlacement | None, FormatPlacement | None]:
     """Compose existing fits; conditional constraints do not select a winner."""
 
     phase = prepared.phase_competition
@@ -230,7 +230,16 @@ def _placements(
         )
     if best is not None and runner is not None and best.placement_id == runner.placement_id:
         runner = None
-    return best, runner
+    family_proposal = None
+    if cross.conditional_proposal is not None:
+        family_proposal = _compose(
+            prepared,
+            sequence_fit=phase.best,
+            global_lattice_authority=best_lattice_authority,
+            cross_fit=cross.conditional_proposal,
+            source_geometry=source_geometry,
+        )
+    return best, runner, family_proposal
 
 
 def _materialize_placement_proposal(
@@ -389,7 +398,7 @@ def reconstruct_photo_geometry(
         strict=True,
     ):
         geometry = shared_geometry or lane.source_scan_geometry
-        best, runner = _placements(
+        best, runner, family_proposal = _placements(
             lane,
             source_geometry=geometry,
         )
@@ -422,6 +431,12 @@ def reconstruct_photo_geometry(
             cross=lane.cross_competition,
             content_assessment=content_assessment,
         )
+        if family_proposal is not None:
+            competition = replace(
+                competition,
+                placements=(*competition.placements, family_proposal),
+                conditional_proposal_placement_id=family_proposal.placement_id,
+            )
         if proposal is None:
             proposal = TemplatePlacementProposal(
                 lane_id=lane.lane.domain.lane_id,
@@ -432,16 +447,18 @@ def reconstruct_photo_geometry(
                 acceptability_features=None,
                 failure=competition.failure or failure_fact(GateGap.COMPLETE_PLACEMENT_UNAVAILABLE),
             )
-        alternatives = ()
-        if runner is not None:
+        alternatives = []
+        for placement in (runner, family_proposal):
+            if placement is None:
+                continue
             alternative, evaluations = _materialize_placement_proposal(
-                lane, runner, layout=layout,
+                lane, placement, layout=layout,
             )
-            alternatives = (alternative,)
+            alternatives.append(alternative)
             proposal_output_evaluations += evaluations
         provisional.append(
             _ProvisionalLanePlacement(
-                best, content_assessment, competition, proposal, alternatives,
+                best, content_assessment, competition, proposal, tuple(alternatives),
                 proposal_output_evaluations,
             )
         )

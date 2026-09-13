@@ -332,13 +332,18 @@ class CrossBoundaryFamilyFailureKind(str, Enum):
     )
 
 
+class CrossBoundaryFamilyUse(str, Enum):
+    CANONICAL_REGISTRATION = "canonical_registration"
+    CONDITIONAL_PROPOSAL = "conditional_proposal"
+
+
 @dataclass(frozen=True)
 class CrossBoundaryFamilyResolution:
     """Canonical registration result for one same-role line component.
 
-    A supported family owns exactly one refitted observation containing the
-    complete transition union.  An unavailable family retains every member as
-    a distinct alternative; it never selects a convenient subset.
+    A supported family retains the complete transition union. Canonical
+    registration may replace its members; a conditional proposal keeps them
+    as indivisible inputs and does not grant resolved family identity.
     """
 
     family_id: str
@@ -346,14 +351,18 @@ class CrossBoundaryFamilyResolution:
     state: EvidenceState
     member_observation_ids: tuple[ObservationId, ...]
     member_transition_ids: tuple[ObservationId, ...]
+    member_transition_groups: tuple[tuple[ObservationId, ...], ...]
     final_observation_ids: tuple[ObservationId, ...]
     failure_kind: CrossBoundaryFamilyFailureKind | None
+    use: CrossBoundaryFamilyUse = CrossBoundaryFamilyUse.CANONICAL_REGISTRATION
 
     def __post_init__(self) -> None:
         supported = self.state == EvidenceState.SUPPORTED
         unavailable = self.state == EvidenceState.UNAVAILABLE
+        conditional = self.use == CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL
         if (
             not self.family_id
+            or not isinstance(self.use, CrossBoundaryFamilyUse)
             or self.role not in {BoundaryRole.TOP, BoundaryRole.BOTTOM}
             or not (supported or unavailable)
             or len(self.member_observation_ids) < 2
@@ -362,7 +371,15 @@ class CrossBoundaryFamilyResolution:
             or not self.member_transition_ids
             or tuple(sorted(set(self.member_transition_ids), key=str))
             != self.member_transition_ids
-            or not self.final_observation_ids
+            or len(self.member_transition_groups) != len(self.member_observation_ids)
+            or any(
+                not group or tuple(sorted(set(group), key=str)) != group
+                for group in self.member_transition_groups
+            )
+            or tuple(sorted({
+                identity for group in self.member_transition_groups for identity in group
+            }, key=str)) != self.member_transition_ids
+            or (not self.final_observation_ids and not (conditional and unavailable))
             or tuple(sorted(set(self.final_observation_ids), key=str))
             != self.final_observation_ids
             or any(
@@ -370,6 +387,7 @@ class CrossBoundaryFamilyResolution:
                 for identity in (
                     *self.member_observation_ids,
                     *self.member_transition_ids,
+                    *(identity for group in self.member_transition_groups for identity in group),
                     *self.final_observation_ids,
                 )
             )
@@ -379,13 +397,13 @@ class CrossBoundaryFamilyResolution:
             if len(self.final_observation_ids) != 1 or self.failure_kind is not None:
                 raise ValueError("supported cross family must resolve to one line")
         elif (
-            self.final_observation_ids != self.member_observation_ids
+            self.final_observation_ids != (() if conditional else self.member_observation_ids)
             or not isinstance(
                 self.failure_kind,
                 CrossBoundaryFamilyFailureKind,
             )
         ):
-            raise ValueError("unavailable cross family must retain every member")
+            raise ValueError("unavailable cross family has invalid retained members")
 
 
 @dataclass(frozen=True)
@@ -502,6 +520,7 @@ class CrossRoleBinding:
     enclosing_pair_id: str | None = None
     trace_position_intervals_px: tuple[FiniteInterval, ...] = ()
     observed_direction_interval_degrees: FiniteInterval | None = None
+    conditional_family_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.role not in {BoundaryRole.TOP, BoundaryRole.BOTTOM}:
@@ -550,6 +569,12 @@ class CrossRoleBinding:
             raise ValueError("cross fit residual is invalid")
         if not isinstance(self.evidence, CrossEvidence):
             raise TypeError("cross evidence must be typed")
+        if (
+            tuple(sorted(set(self.conditional_family_ids))) != self.conditional_family_ids
+            or any(not isinstance(identity, str) or not identity for identity in self.conditional_family_ids)
+            or (self.conditional_family_ids and self.evidence != CrossEvidence.DIRECT)
+        ):
+            raise ValueError("conditional Cross family references are invalid")
         if (
             not isinstance(self.independent_support_region_count, int)
             or self.independent_support_region_count < 0
@@ -836,10 +861,10 @@ class TemplateCrossInput:
         if any(not isinstance(value, int) or value <= 0 for value in bounds):
             raise ValueError("cross work bounds must be positive integers")
         binding_top_run_count = len(
-            {item.run_id for item in self.top_bindings}
+            {item.run_id for item in self.top_bindings if not item.conditional_family_ids}
         )
         binding_bottom_run_count = len(
-            {item.run_id for item in self.bottom_bindings}
+            {item.run_id for item in self.bottom_bindings if not item.conditional_family_ids}
         )
         observation_count = len(
             {
@@ -976,6 +1001,7 @@ class CrossFailureKind(str, Enum):
     LONGITUDINAL_PROJECTION_AUTHORITY_UNAVAILABLE = (
         "longitudinal_projection_authority_unavailable"
     )
+    FAMILY_ASSIGNMENT_UNRESOLVED = "family_assignment_unresolved"
 
 
 class CrossWinnerBasis(str, Enum):
@@ -1214,6 +1240,12 @@ class CrossFit:
         return self.direct_provenance_ids
 
     @property
+    def conditional_family_ids(self) -> tuple[str, ...]:
+        return tuple(sorted({
+            identity for binding in self.direct_bindings for identity in binding.conditional_family_ids
+        }))
+
+    @property
     def inferred_observation_ids(self) -> tuple[ObservationId, ...]:
         return tuple(identity for item in self.inferred_bindings for identity in item.source_observation_ids)
 
@@ -1238,8 +1270,15 @@ class CrossFitCompetition:
     aperture_aspect_ratio_authority: ApertureAspectRatioAuthority = field(
         default_factory=unavailable_aperture_aspect_ratio_authority
     )
+    conditional_proposal: CrossFit | None = None
+    conditional_proposal_failure_kind: CrossFailureKind | None = None
 
     def __post_init__(self) -> None:
+        if self.conditional_proposal is not None and (
+            not self.conditional_proposal.conditional_family_ids
+            or self.conditional_proposal_failure_kind is None
+        ):
+            raise ValueError("conditional Cross proposal requires its unresolved family dependency")
         if not isinstance(
             self.aperture_aspect_ratio_authority,
             ApertureAspectRatioAuthority,
@@ -1257,6 +1296,16 @@ class CrossFitCompetition:
             raise ValueError(
                 "resolved cross competition requires a best fit and winner basis"
             )
+        if (
+            self.best is not None
+            and self.best.conditional_family_ids
+            and self.status == CrossFitStatus.RESOLVED
+        ):
+            raise ValueError("conditional Cross family cannot acquire resolved identity")
+        if self.failure_kind == CrossFailureKind.FAMILY_ASSIGNMENT_UNRESOLVED and (
+            self.best is None or not self.best.conditional_family_ids
+        ):
+            raise ValueError("Cross family assignment failure requires conditional geometry")
         if (
             self.status == CrossFitStatus.RESOLVED
             and self.best is not None

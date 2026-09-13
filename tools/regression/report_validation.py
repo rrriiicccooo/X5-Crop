@@ -21,6 +21,7 @@ from x5crop.detection.photo_geometry.output_model import (
 from x5crop.detection.photo_geometry.model import (
     AuthoritySide,
     BoundaryAxis,
+    BoundaryRole,
     MINIMUM_INDEPENDENT_SUPPORT_REGIONS,
     PHOTO_BOUNDARY_MEASUREMENT_SPEC,
     QueryPurpose,
@@ -37,6 +38,9 @@ from x5crop.detection.photo_geometry.template_acceptability_features import (
     PlacementFeatureUnit,
 )
 from x5crop.detection.photo_geometry.template_cross_model import (
+    CrossBoundaryFamilyFailureKind,
+    CrossBoundaryFamilyResolution,
+    CrossBoundaryFamilyUse,
     CrossFailureKind,
     CrossFitStatus,
     CrossHeightInferenceBasis,
@@ -55,8 +59,11 @@ from x5crop.detection.photo_geometry.template_phase_model import (
 from x5crop.detection.photo_geometry.template_placement import (
     compile_cross_support_domains_px,
 )
-from x5crop.detection.photo_geometry.template_registration import CrossRegistrationWorkReceipt
-from x5crop.domain import Box, FiniteInterval, ObservationId, PositiveInterval, WorkspaceExtent
+from x5crop.detection.photo_geometry.template_registration import (
+    CrossRegistrationWorkReceipt,
+    validate_cross_family_provenance,
+)
+from x5crop.domain import Box, EvidenceState, FiniteInterval, ObservationId, PositiveInterval, WorkspaceExtent
 from x5crop.detection.photo_geometry.measurement_model import PhotoBoundaryMeasurementQuery
 from x5crop.detection.photo_geometry.registered_measurement import registered_baseline_query_groups
 from x5crop.detection.photo_geometry.robust_line_fit import physical_line_region
@@ -976,6 +983,39 @@ def _validate_cross_measurement_support(
             or binding.get("role_authorized") is not role_authorized
         ):
             raise ValueError("Cross measured spatial support is not reproducible")
+    family_records = observations.get("cross_boundary_family_resolutions")
+    if not isinstance(family_records, list):
+        raise ValueError("Cross family provenance is missing")
+    families = []
+    for item in family_records:
+        if not isinstance(item, dict) or set(item) != {
+            "family_id", "role", "state", "use", "member_observation_ids",
+            "member_transition_ids", "member_transition_groups",
+            "final_observation_ids", "failure_kind",
+        }:
+            raise ValueError("Cross family provenance is incomplete")
+        family = CrossBoundaryFamilyResolution(
+            family_id=item["family_id"], role=BoundaryRole(item["role"]),
+            state=EvidenceState(item["state"]), use=CrossBoundaryFamilyUse(item["use"]),
+            member_observation_ids=tuple(map(ObservationId, item["member_observation_ids"])),
+            member_transition_ids=tuple(map(ObservationId, item["member_transition_ids"])),
+            member_transition_groups=tuple(tuple(map(ObservationId, group))
+                                          for group in item["member_transition_groups"]),
+            final_observation_ids=tuple(map(ObservationId, item["final_observation_ids"])),
+            failure_kind=(None if item["failure_kind"] is None else
+                          CrossBoundaryFamilyFailureKind(item["failure_kind"])),
+        )
+        if any(str(identity) not in transitions for identity in family.member_transition_ids):
+            raise ValueError("Cross family lost its original transition provenance")
+        families.append(family)
+    validate_cross_family_provenance(
+        tuple(families),
+        {ObservationId(item["observation_id"]): (
+            BoundaryRole(item["role"]), tuple(map(ObservationId, item["transition_ids"])),
+        ) for item in raw},
+        {ObservationId(identity): tuple(item["conditional_family_ids"])
+         for identity, item in registered.items()},
+    )
     return registered
 
 
@@ -990,6 +1030,7 @@ def _validate_cross_fit_binding_support(
             binding[field] != registered[field] for field in (
                 "role", "role_authorized", "independent_support_region_count",
                 "trace_coordinates_px",
+                "conditional_family_ids",
             )
         ):
             raise ValueError("Cross fit changed original measured spatial support")
@@ -3367,22 +3408,28 @@ def _validate_geometry(
         proposal = lane["placement_proposal"]
         alternatives = lane.get("alternative_placement_proposals")
         runner_id = lane.get("runner_up_placement_id")
+        conditional_id = lane.get("conditional_proposal_placement_id")
+        alternative_ids = [identity for identity in (runner_id, conditional_id) if identity is not None]
         if (
             not isinstance(alternatives, list)
-            or len(alternatives) > 1
-            or bool(alternatives) != (runner_id is not None)
+            or [item.get("placement_id") for item in alternatives] != alternative_ids
+            or len(set(alternative_ids)) != len(alternative_ids)
+            or conditional_id is not None and (
+                conditional_id in {proposal["placement_id"], lane.get("selected_placement_id")}
+                or lane.get("conditional_proposal_failure_kind") != CrossFailureKind.FAMILY_ASSIGNMENT_UNRESOLVED.value
+            )
         ):
-            raise ValueError("alternative proposals do not retain the lane runner")
+            raise ValueError("alternative proposals do not retain canonical and conditional identities")
         slot_count = sum(
             identity["lane_id"] == lane_id for identity in geometry["slot_identities"]
         )
-        for alternative in alternatives:
+        for alternative, identity in zip(alternatives, alternative_ids):
             alternative_outputs = _validate_placement_proposal(
                 alternative, lane_id=lane_id, source_geometry=lane.get("source_scan_geometry"),
                 expected_source_extent=expected_source_extent,
             )
             if (
-                alternative["placement_id"] != runner_id
+                alternative["placement_id"] != identity
                 or alternative["placement_id"] == proposal["placement_id"]
                 or alternative_outputs and len(alternative_outputs) != slot_count
             ):
@@ -4286,8 +4333,22 @@ def _validate_development(record: dict[str, Any]) -> None:
             if proposal["placement_id"] is not None
         ]
         placements = placement.get("placements")
-        if not isinstance(placements, list) or len(placements) > 2:
+        if not isinstance(placements, list) or len(placements) > 3:
             raise ValueError("retained placement set exceeds its compiled bound")
+        conditional_id = placement.get("conditional_proposal_placement_id")
+        conditional_ids = {
+            item["placement_id"] for item in placements
+            if any(binding["conditional_family_ids"] for binding in item["cross_fit"]["direct_bindings"])
+        }
+        if (
+            conditional_id != production_lane.get("conditional_proposal_placement_id")
+            or conditional_ids != (set() if conditional_id is None else {conditional_id})
+            or len(placements) > 2 and conditional_id is None
+            or conditional_id is not None and conditional_id in {
+                placement.get("selected_placement_id"), placement.get("runner_up_placement_id"),
+            }
+        ):
+            raise ValueError("conditional placement changed canonical eligibility")
         ids = [item["placement_id"] for item in placements]
         proposed_ids = [item["placement_id"] for item in retained]
         evaluated = work.get("proposal_output_evaluation_count")
@@ -4381,6 +4442,24 @@ def _validate_development(record: dict[str, Any]) -> None:
         ):
             raise ValueError("Cross solver count changed the independent measurement projection")
         best_cross = cross_competition.get("best")
+        conditional_cross = cross_competition.get("conditional_proposal")
+        conditional_failure = cross_competition.get("conditional_proposal_failure_kind")
+        if conditional_failure != production_lane.get("conditional_proposal_failure_kind") or (
+            conditional_cross is not None and (
+                not any(binding["conditional_family_ids"] for binding in conditional_cross["direct_bindings"])
+                or conditional_failure != CrossFailureKind.FAMILY_ASSIGNMENT_UNRESOLVED.value
+            )
+        ):
+            raise ValueError("conditional Cross proposal lost its unresolved dependency")
+        conditional_best = best_cross is not None and any(
+            binding["conditional_family_ids"] for binding in best_cross["direct_bindings"]
+        )
+        if (
+            conditional_best and cross_competition["status"] == CrossFitStatus.RESOLVED.value
+            or cross_competition.get("failure_kind") == CrossFailureKind.FAMILY_ASSIGNMENT_UNRESOLVED.value
+            and not conditional_best
+        ):
+            raise ValueError("Cross conditional family acquired resolved identity")
         expected_direct_support = [
             {key: binding[key] for key in (
                 "observation_id", "role", "independent_support_region_count"
@@ -4392,6 +4471,7 @@ def _validate_development(record: dict[str, Any]) -> None:
         for cross_fit in (
             cross_competition.get("best"),
             cross_competition.get("runner_up"),
+            conditional_cross,
             *(item["cross_fit"] for item in placements),
         ):
             if cross_fit is None:

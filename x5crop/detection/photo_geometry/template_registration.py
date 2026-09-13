@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 import math
 
-from ...domain import EvidenceState, FiniteInterval, PositiveInterval
+from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
 from ...formats import FramePhysicalSpec
 from .boundary_fitting import fit_format_bound_boundary_observation
 from .measurement_model import PhotoBoundaryMeasurementSet
@@ -23,6 +23,7 @@ from .source_geometry import SourceScanGeometry
 from .template_cross_model import (
     CrossBoundaryFamilyFailureKind,
     CrossBoundaryFamilyResolution,
+    CrossBoundaryFamilyUse,
     CrossEvidence,
     CrossRoleBinding,
 )
@@ -51,6 +52,58 @@ def project_cross_solver_bindings(
     """
 
     return tuple(item for item in bindings if item.has_independent_spatial_support)
+
+
+def validate_cross_family_provenance(
+    families: tuple[CrossBoundaryFamilyResolution, ...],
+    observations: dict[ObservationId, tuple[BoundaryRole, tuple[ObservationId, ...]]],
+    binding_families: dict[ObservationId, tuple[str, ...]],
+) -> None:
+    """Bind complete family unions and conditional permission to measured atoms."""
+
+    if len({item.family_id for item in families}) != len(families):
+        raise ValueError("cross boundary families must be registered once")
+    if len({(item.role, item.use, item.member_observation_ids) for item in families}) != len(families):
+        raise ValueError("cross boundary family members were registered twice")
+    conditional_outputs = {
+        identity for family in families
+        if family.use == CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL
+        for identity in family.final_observation_ids
+    }
+    known = dict(observations)
+    expected: dict[ObservationId, set[str]] = {}
+    for family in families:
+        conditional = family.use == CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL
+        if not conditional and family.state == EvidenceState.SUPPORTED and any(
+            identity in observations and identity not in family.final_observation_ids
+            for identity in family.member_observation_ids
+        ):
+            raise ValueError("canonical cross family did not consume its members")
+        for identity, transitions in zip(
+            family.member_observation_ids, family.member_transition_groups,
+        ):
+            fact = (family.role, transitions)
+            if conditional and (
+                identity not in observations or identity in conditional_outputs
+            ):
+                raise ValueError("conditional cross family lost its canonical atom")
+            if identity in known and known[identity] != fact:
+                raise ValueError("cross family changed a member transition group")
+            known[identity] = fact
+        for identity in family.final_observation_ids:
+            if identity not in observations:
+                raise ValueError("cross family lost its final observation")
+            if family.state == EvidenceState.SUPPORTED and observations[identity] != (
+                family.role, family.member_transition_ids,
+            ):
+                raise ValueError("cross family discarded a measured transition")
+            if conditional:
+                expected.setdefault(identity, set()).add(family.family_id)
+    if any(
+        tuple(sorted(expected.get(identity, ()))) != refs
+        for identity, refs in binding_families.items()
+    ) or not set(expected).issubset(binding_families):
+        raise ValueError("cross binding changed conditional family permission")
 
 
 @dataclass(frozen=True)
@@ -141,13 +194,19 @@ class RegisteredCrossEvidence:
         family_ids = tuple(item.family_id for item in self.family_resolutions)
         if len(set(family_ids)) != len(family_ids):
             raise ValueError("cross boundary families must be registered once")
+        validate_cross_family_provenance(
+            self.family_resolutions,
+            {item.observation_id: (item.role, item.transition_ids) for item in self.observations},
+            {item.observation_id: item.conditional_family_ids
+             for item in (*self.top_bindings, *self.bottom_bindings)},
+        )
         if self.fit_attempt_count < len(self.observations):
             raise ValueError("cross fit-attempt receipt is incomplete")
         binding_top_run_count = len(
-            {item.run_id for item in self.top_bindings}
+            {item.run_id for item in self.top_bindings if not item.conditional_family_ids}
         )
         binding_bottom_run_count = len(
-            {item.run_id for item in self.bottom_bindings}
+            {item.run_id for item in self.bottom_bindings if not item.conditional_family_ids}
         )
         registered_top_run_count = (
             binding_top_run_count
@@ -166,7 +225,7 @@ class RegisteredCrossEvidence:
             or registered_bottom_run_count < 0
             or type(self.family_compatibility_evaluation_count) is not int
             or not 0 <= self.family_compatibility_evaluation_count <= sum(
-                count * (count + 1)
+                2 * count * (count + 1)
                 for count in (registered_top_run_count, registered_bottom_run_count)
             )
         ):
@@ -394,6 +453,7 @@ def _partition_cross_families(
     *,
     measurement: PhotoBoundaryMeasurementSet,
     height_scale_px_per_mm: PositiveInterval,
+    use: CrossBoundaryFamilyUse = CrossBoundaryFamilyUse.CANONICAL_REGISTRATION,
 ) -> tuple[tuple[tuple[int, ...], ...], int]:
     """Separate incompatible physical tracks before complete-union refitting.
 
@@ -404,6 +464,7 @@ def _partition_cross_families(
     residual, role preference or favorable subset selects family members.
     """
     by_id = {item.transition_id: item for item in measurement.transitions}
+    conditional = use == CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL
     reference = (
         measurement.query.trace_positions_px[0]
         + measurement.query.trace_positions_px[-1]
@@ -425,6 +486,9 @@ def _partition_cross_families(
             identities = tuple(sorted({
                 identity for index in members for identity in values[index].transition_ids
             }, key=str))
+            if conditional and len({by_id[identity].trace_coordinate_px for identity in identities}) != len(identities):
+                cache[key] = False
+                return False
             intervals = tuple(
                 (float(by_id[identity].trace_coordinate_px), FiniteInterval(
                     by_id[identity].physical_position_interval_px.minimum - allowance,
@@ -474,16 +538,19 @@ def _partition_cross_families(
                 continue
             matches = [index for index, group in enumerate(groups)
                        if compatible((*group, fragment))]
-            if len(matches) == 1:
+            if conditional:
+                for match in matches:
+                    assigned[match].append(fragment)
+            elif len(matches) == 1:
                 assigned[matches[0]].append(fragment)
             else:
                 residual.append(fragment)
         result.extend(tuple(sorted(group)) for group in assigned)
-        if residual:
+        if residual and not conditional:
             result.append(tuple(residual))
     if len(cache) > len(values) * (len(values) + 1):
         raise AssertionError("cross family compatibility exceeded its quadratic bound")
-    if sorted(index for group in result for index in group) != list(range(len(values))):
+    if not conditional and sorted(index for group in result for index in group) != list(range(len(values))):
         raise AssertionError("cross family partition lost or duplicated an observation")
     return tuple(result), len(cache)
 
@@ -514,14 +581,14 @@ def _merge_registered_cross_families(
     fit_cache: dict[tuple[str, ...], PhotoBoundaryObservation | None] = {}
     attempts = 0
 
-    def fit(indices: tuple[int, ...]) -> PhotoBoundaryObservation | None:
+    def fit(members: tuple[PhotoBoundaryObservation, ...]) -> PhotoBoundaryObservation | None:
         nonlocal attempts
         identities = tuple(
             sorted(
                 {
                     identity
-                    for index in indices
-                    for identity in values[index].transition_ids
+                    for member in members
+                    for identity in member.transition_ids
                 },
                 key=str,
             )
@@ -543,72 +610,69 @@ def _merge_registered_cross_families(
             return None
         return candidate
 
-    components = _cross_family_components(
-        values,
-        measurement=measurement,
-        height_scale_px_per_mm=height_scale_px_per_mm,
-    )
-    components, compatibility_count = _partition_cross_families(
-        values, components, measurement=measurement,
-        height_scale_px_per_mm=height_scale_px_per_mm,
-    )
-
     merged: list[PhotoBoundaryObservation] = []
     resolutions: list[CrossBoundaryFamilyResolution] = []
-    for component in components:
-        if len(component) == 1:
-            merged.append(values[component[0]])
-            continue
-        members = tuple(values[index] for index in component)
-        member_observation_ids = tuple(
-            sorted(
-                (item.observation_id for item in members),
-                key=str,
+    compatibility_count = 0
+    for use in (
+        CrossBoundaryFamilyUse.CANONICAL_REGISTRATION,
+        CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL,
+    ):
+        conditional = use == CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL
+        # Existing complete families are indivisible measured inputs. New
+        # interpretations add proposals; they never repartition those facts.
+        inputs = tuple(merged) if conditional else values
+        existing_unions = {item.transition_ids for item in inputs}
+        components = _cross_family_components(
+            inputs, measurement=measurement,
+            height_scale_px_per_mm=height_scale_px_per_mm,
+        )
+        groups, count = _partition_cross_families(
+            inputs, components, measurement=measurement,
+            height_scale_px_per_mm=height_scale_px_per_mm, use=use,
+        )
+        compatibility_count += count
+        for group in groups:
+            if len(group) == 1:
+                if not conditional:
+                    merged.append(inputs[group[0]])
+                continue
+            members = tuple(sorted(
+                (inputs[index] for index in group),
+                key=lambda item: str(item.observation_id),
+            ))
+            member_observation_ids = tuple(item.observation_id for item in members)
+            member_transition_ids = tuple(sorted({
+                identity for item in members for identity in item.transition_ids
+            }, key=str))
+            if conditional and (
+                member_transition_ids in existing_unions
+                or tuple(map(str, member_transition_ids)) in fit_cache
+            ):
+                continue
+            family_id = physical_fact_id(
+                "cross-boundary-family", role.value, use.value,
+                *(str(identity) for identity in member_observation_ids),
             )
-        )
-        member_transition_ids = tuple(
-            sorted(
-                {
-                    identity
-                    for item in members
-                    for identity in item.transition_ids
-                },
-                key=str,
-            )
-        )
-        family_id = physical_fact_id(
-            "cross-boundary-family",
-            role.value,
-            *(str(identity) for identity in member_observation_ids),
-        )
-        observation = fit(component)
-        if observation is None:
-            merged.extend(members)
+            observation = fit(members)
+            if observation is not None:
+                merged.append(observation)
+            elif not conditional:
+                merged.extend(members)
             resolutions.append(
                 CrossBoundaryFamilyResolution(
                     family_id=family_id,
                     role=role,
-                    state=EvidenceState.UNAVAILABLE,
+                    use=use,
+                    state=(EvidenceState.SUPPORTED if observation is not None else EvidenceState.UNAVAILABLE),
                     member_observation_ids=member_observation_ids,
                     member_transition_ids=member_transition_ids,
-                    final_observation_ids=member_observation_ids,
-                    failure_kind=(
-                        CrossBoundaryFamilyFailureKind
-                        .COMPLETE_TRANSITION_UNION_REFIT_REJECTED
+                    member_transition_groups=tuple(item.transition_ids for item in members),
+                    final_observation_ids=(
+                        (observation.observation_id,) if observation is not None
+                        else () if conditional else member_observation_ids
                     ),
-                )
-            )
-        else:
-            merged.append(observation)
-            resolutions.append(
-                CrossBoundaryFamilyResolution(
-                    family_id=family_id,
-                    role=role,
-                    state=EvidenceState.SUPPORTED,
-                    member_observation_ids=member_observation_ids,
-                    member_transition_ids=member_transition_ids,
-                    final_observation_ids=(observation.observation_id,),
-                    failure_kind=None,
+                    failure_kind=(None if observation is not None else
+                        CrossBoundaryFamilyFailureKind.COMPLETE_TRANSITION_UNION_REFIT_REJECTED),
                 )
             )
     return tuple(merged), attempts, tuple(resolutions), compatibility_count
@@ -698,9 +762,14 @@ def register_cross_evidence(
         family_compatibility_count += compatibility_count
         merged_observations.extend(values)
         family_resolutions.extend(resolutions)
+    conditional_ids: dict[ObservationId, set[str]] = {}
+    for family in family_resolutions:
+        if family.use == CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL:
+            for identity in family.final_observation_ids:
+                conditional_ids.setdefault(identity, set()).add(family.family_id)
     registered = {
         str(observation.observation_id): (
-            CrossRoleBinding.from_measurement(
+            replace(CrossRoleBinding.from_measurement(
                 _canonical_cross_run(
                     observation,
                     top_measurement
@@ -710,7 +779,7 @@ def register_cross_evidence(
                 observation,
                 lane_reference_trace_px=lane_reference_trace_px,
                 boundary_axis=height_axis,
-            ),
+            ), conditional_family_ids=tuple(sorted(conditional_ids.get(observation.observation_id, ())))),
             observation,
         )
         for observation in merged_observations
@@ -783,6 +852,7 @@ def register_template_local_cross_refinements(
         binding
         for binding in (*registered.top_bindings, *registered.bottom_bindings)
         if binding.role_authorized
+        and not binding.conditional_family_ids
         and binding.canonical_direction_degrees is not None
         and binding.full_direction_interval_degrees is not None
         and binding.has_independent_spatial_support
@@ -814,6 +884,7 @@ def register_template_local_cross_refinements(
         for opposite in opposites:
             if (
                 opposite.evidence != CrossEvidence.DIRECT
+                or opposite.conditional_family_ids
                 or not opposite.role_authorized
                 or not opposite.has_independent_spatial_support
                 or len(

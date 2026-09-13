@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from bisect import bisect_left
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from heapq import nsmallest
 import math
 from ...domain import EvidenceState, FiniteInterval, ObservationId
@@ -21,6 +21,7 @@ from .model import (
 from .output_model import OutputBoundaryUse
 from .source_geometry import SourceScanGeometry
 from .template_cross_candidates import (
+    _Candidate,
     _covers_template_domains,
     _direct_candidate,
     _fit_from_group,
@@ -111,6 +112,59 @@ def _receipt(
     )
 
 
+@dataclass(frozen=True)
+class _CrossPairPool:
+    candidates: tuple[_Candidate, ...]
+    failures: frozenset[CrossFailureKind]
+    canonical_failures: frozenset[CrossFailureKind]
+
+
+def _conditional_candidate(candidate: _Candidate) -> bool:
+    return bool(candidate.top.conditional_family_ids or candidate.bottom.conditional_family_ids)
+
+
+def _enumerate_cross_pairs(inputs: TemplateCrossInput) -> _CrossPairPool:
+    """Construct each interval-compatible pair once for both permission views."""
+
+    candidates: list[_Candidate] = []
+    failures: set[CrossFailureKind] = set()
+    canonical_failures: set[CrossFailureKind] = set()
+    ordered_top = tuple(sorted(inputs.top_bindings, key=lambda item: (
+        item.full_interval_px.minimum, str(item.observation_id),
+    )))
+    ordered_bottom = tuple(sorted(inputs.bottom_bindings, key=lambda item: (
+        item.full_interval_px.minimum, str(item.observation_id),
+    )))
+    starts = tuple(item.full_interval_px.minimum for item in ordered_bottom)
+    prefix_max: list[float] = []
+    running = -math.inf
+    for item in ordered_bottom:
+        running = max(running, item.full_interval_px.maximum)
+        prefix_max.append(running)
+    for top in ordered_top:
+        expected = _add(top.full_interval_px, inputs.fixed_height_px)
+        index = bisect_left(prefix_max, expected.minimum)
+        while index < len(ordered_bottom) and starts[index] <= expected.maximum:
+            bottom = ordered_bottom[index]
+            candidate, failure = _direct_candidate(
+                top, bottom, fixed_height=inputs.fixed_height_px,
+                canonical_height_px=float(inputs.canonical_fixed_height_px),
+                minimum_shared_trace_support=inputs.minimum_shared_trace_support,
+                longitudinal_support_domain_groups_px=inputs.longitudinal_support_domain_groups_px,
+                source_direction=inputs.source_direction,
+            )
+            if failure is not None:
+                failures.add(failure)
+                if not top.conditional_family_ids and not bottom.conditional_family_ids:
+                    canonical_failures.add(failure)
+            if candidate is not None:
+                candidates.append(candidate)
+                if len(candidates) > inputs.maximum_compatible_pairs:
+                    return _CrossPairPool(tuple(candidates), frozenset(failures), frozenset(canonical_failures))
+            index += 1
+    return _CrossPairPool(tuple(candidates), frozenset(failures), frozenset(canonical_failures))
+
+
 def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     """Fit one fixed-H short-axis template with bounded interval search."""
 
@@ -127,11 +181,11 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         raise ValueError("cross observation registered more than once")
     registered_top_runs = max(
         int(inputs.registered_top_run_count),
-        len({item.run_id for item in top}),
+        len({item.run_id for item in top if not item.conditional_family_ids}),
     )
     registered_bottom_runs = max(
         int(inputs.registered_bottom_run_count),
-        len({item.run_id for item in bottom}),
+        len({item.run_id for item in bottom if not item.conditional_family_ids}),
     )
     fitted_observations = max(
         int(inputs.fitted_observation_count),
@@ -174,6 +228,74 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             failure_kind=CrossFailureKind.DIRECT_EVIDENCE_UNAVAILABLE,
             receipt=empty_receipt(),
             aperture_aspect_ratio_authority=aspect_ratio_authority,
+        )
+    pairs = _enumerate_cross_pairs(inputs)
+    if len(pairs.candidates) > inputs.maximum_compatible_pairs:
+        return CrossFitCompetition(
+            template_id=inputs.template.template_id, best=None, runner_up=None,
+            status=CrossFitStatus.BOUND_EXCEEDED, winner_basis=None,
+            reason="cross compatible-pair bound exceeded",
+            failure_kind=CrossFailureKind.COMPATIBLE_PAIR_BOUND_EXCEEDED,
+            receipt=replace(empty_receipt(), compatible_pair_count=len(pairs.candidates)),
+            aperture_aspect_ratio_authority=aspect_ratio_authority,
+        )
+    canonical = _select_cross_competition(inputs, pairs, empty_receipt(), canonical_only=True)
+    if canonical.status == CrossFitStatus.BOUND_EXCEEDED or not any(
+        item.conditional_family_ids for item in (*top, *bottom)
+    ):
+        return canonical
+    proposed = _select_cross_competition(inputs, pairs, empty_receipt(), canonical_only=False)
+    receipt = replace(
+        canonical.receipt,
+        compatible_pair_count=len(pairs.candidates),
+        single_side_inference_count=(canonical.receipt.single_side_inference_count
+                                     + proposed.receipt.single_side_inference_count),
+        evaluated_fit_count=(canonical.receipt.evaluated_fit_count
+                             + proposed.receipt.evaluated_fit_count),
+    )
+    if proposed.status == CrossFitStatus.BOUND_EXCEEDED or receipt.evaluated_fit_count > receipt.evaluated_fit_bound:
+        return CrossFitCompetition(
+            template_id=inputs.template.template_id, best=None, runner_up=None,
+            status=CrossFitStatus.BOUND_EXCEEDED, winner_basis=None,
+            reason="cross evaluated-fit bound exceeded",
+            failure_kind=CrossFailureKind.EVALUATED_FIT_BOUND_EXCEEDED,
+            receipt=receipt, aperture_aspect_ratio_authority=aspect_ratio_authority,
+        )
+    fit = next((item for item in (proposed.best, proposed.runner_up)
+                if item is not None and item.conditional_family_ids), None)
+    return replace(
+        canonical, receipt=receipt, conditional_proposal=fit,
+        conditional_proposal_failure_kind=(
+            CrossFailureKind.FAMILY_ASSIGNMENT_UNRESOLVED if fit is not None else
+            proposed.failure_kind or CrossFailureKind.PHYSICAL_GROUP_UNAVAILABLE
+        ),
+    )
+
+
+def _select_cross_competition(
+    inputs: TemplateCrossInput,
+    pairs: _CrossPairPool,
+    registration: CrossSearchReceipt,
+    *,
+    canonical_only: bool,
+) -> CrossFitCompetition:
+    """Select from one measured pool under explicit family permissions."""
+
+    top = tuple(item for item in inputs.top_bindings
+                if not canonical_only or not item.conditional_family_ids)
+    bottom = tuple(item for item in inputs.bottom_bindings
+                   if not canonical_only or not item.conditional_family_ids)
+    registered_top_runs = registration.registered_top_run_count
+    registered_bottom_runs = registration.registered_bottom_run_count
+    fitted_observations = registration.fitted_observation_count
+    aspect_ratio_authority = inputs.aperture_aspect_ratio_authority
+    if not top and not bottom:
+        return CrossFitCompetition(
+            template_id=inputs.template.template_id, best=None, runner_up=None,
+            status=CrossFitStatus.UNRESOLVED, winner_basis=None,
+            reason="cross fit requires top or bottom direct evidence",
+            failure_kind=CrossFailureKind.DIRECT_EVIDENCE_UNAVAILABLE,
+            receipt=registration, aperture_aspect_ratio_authority=aspect_ratio_authority,
         )
     fixed_height = inputs.fixed_height_px
     assert isinstance(fixed_height, FiniteInterval)
@@ -443,6 +565,18 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     support_checked = False
     support_receipt_accounted = False
 
+    def complete_resolution(best, runner, receipt, winner_basis, authority):
+        conditional = bool(best.conditional_family_ids)
+        return CrossFitCompetition(
+            template_id=inputs.template.template_id,
+            best=best, runner_up=runner,
+            status=CrossFitStatus.UNRESOLVED if conditional else CrossFitStatus.RESOLVED,
+            winner_basis=None if conditional else winner_basis,
+            reason="Cross geometry depends on a conditional family assignment" if conditional else None,
+            failure_kind=CrossFailureKind.FAMILY_ASSIGNMENT_UNRESOLVED if conditional else None,
+            receipt=receipt, aperture_aspect_ratio_authority=authority,
+        )
+
     def unique_enclosing_support(
         selected_pair: CrossFit | None = None,
     ) -> CrossFit | None:
@@ -601,22 +735,14 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         if support_fit is None:
             return None, receipt
         return (
-            CrossFitCompetition(
-                template_id=inputs.template.template_id,
-                best=support_fit,
-                runner_up=None,
-                status=CrossFitStatus.RESOLVED,
-                winner_basis=(
+            complete_resolution(
+                support_fit, None, receipt,
+                (
                     CrossWinnerBasis.AUTHORITATIVE_PAIR_ENCLOSING_USE
                     if selected_pair is not None
                     else CrossWinnerBasis.UNIQUE_ENCLOSING_SUPPORT
                 ),
-                reason=None,
-                failure_kind=None,
-                receipt=receipt,
-                aperture_aspect_ratio_authority=(
-                    inputs.aperture_aspect_ratio_authority
-                ),
+                inputs.aperture_aspect_ratio_authority,
             ),
             receipt,
         )
@@ -647,70 +773,14 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         )
 
     required_support_regions = inputs.minimum_shared_trace_support
-    direct_candidates: list[_Candidate] = []
+    direct_candidates = [
+        item for item in pairs.candidates
+        if not canonical_only or not _conditional_candidate(item)
+    ]
     candidates: list[_Candidate] = []
-    compatible_pairs = 0
-    pair_failure_kinds: set[CrossFailureKind] = set()
-    # Sorted starts plus prefix maxima enumerate every interval overlap.  No
-    # nearest-neighbour or used-bottom shortcut may discard a valid answer.
-    if top and bottom:
-        ordered_top = tuple(sorted(top, key=lambda item: (item.full_interval_px.minimum, str(item.observation_id))))
-        ordered_bottom = tuple(sorted(bottom, key=lambda item: (item.full_interval_px.minimum, str(item.observation_id))))
-        starts = tuple(item.full_interval_px.minimum for item in ordered_bottom)
-        prefix_max: list[float] = []
-        running = -math.inf
-        for item in ordered_bottom:
-            running = max(running, item.full_interval_px.maximum)
-            prefix_max.append(running)
-        for top_item in ordered_top:
-            expected = _add(top_item.full_interval_px, fixed_height)
-            start_index = bisect_left(prefix_max, expected.minimum)
-            index = start_index
-            while index < len(ordered_bottom) and starts[index] <= expected.maximum:
-                bottom_item = ordered_bottom[index]
-                candidate, pair_failure_kind = _direct_candidate(
-                    top_item,
-                    bottom_item,
-                    fixed_height=fixed_height,
-                    canonical_height_px=float(inputs.canonical_fixed_height_px),
-                    minimum_shared_trace_support=inputs.minimum_shared_trace_support,
-                    longitudinal_support_domain_groups_px=(
-                        inputs.longitudinal_support_domain_groups_px
-                    ),
-                    source_direction=inputs.source_direction,
-                )
-                if pair_failure_kind is not None:
-                    pair_failure_kinds.add(pair_failure_kind)
-                if candidate is not None:
-                    compatible_pairs += 1
-                    direct_candidates.append(candidate)
-                    if compatible_pairs > inputs.maximum_compatible_pairs:
-                        receipt = _receipt(
-                            inputs=inputs,
-                            registered_top_runs=registered_top_runs,
-                            registered_bottom_runs=registered_bottom_runs,
-                            fitted_observations=fitted_observations,
-                            compatible_pairs=compatible_pairs,
-                            single_side_inferences=0,
-                            evaluated_fits=0,
-                        )
-                        return CrossFitCompetition(
-                            template_id=inputs.template.template_id,
-                            best=None,
-                            runner_up=None,
-                            status=CrossFitStatus.BOUND_EXCEEDED,
-                            winner_basis=None,
-                            reason="cross compatible-pair bound exceeded",
-                            failure_kind=(
-                                CrossFailureKind
-                                .COMPATIBLE_PAIR_BOUND_EXCEEDED
-                            ),
-                            receipt=receipt,
-                            aperture_aspect_ratio_authority=(
-                                aspect_ratio_authority
-                            ),
-                        )
-                index += 1
+    compatible_pairs = len(direct_candidates)
+    pair_failure_kinds = set(pairs.canonical_failures if canonical_only else pairs.failures)
+
     def has_template_pair_authority(candidate: _Candidate) -> bool:
         return (
             candidate.top.role_authorized
@@ -741,7 +811,11 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     minimum_local_top_maximum_by_bottom: dict[ObservationId, float] = {}
     maximum_local_bottom_minimum_by_top: dict[ObservationId, float] = {}
     for candidate in direct_candidates:
-        if has_template_pair_authority(candidate):
+        if (
+            candidate.top.conditional_family_ids
+            or candidate.bottom.conditional_family_ids
+            or has_template_pair_authority(candidate)
+        ):
             continue
         bottom_id = candidate.bottom.observation_id
         top_id = candidate.top.observation_id
@@ -1237,6 +1311,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             return support_result
         if (
             best.boundary_use == OutputBoundaryUse.APERTURE_PAIR
+            and not best.conditional_family_ids
             and best.height_compatibility_px is not None
         ):
             resolved_aspect_ratio_authority = reconcile_direct_aperture_height(
@@ -1265,22 +1340,14 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     elif (
         best.height_inference_basis
         == CrossHeightInferenceBasis.APERTURE_ASPECT_RATIO
+        and not best.conditional_family_ids
     ):
         resolved_aspect_ratio_authority = (
             consume_aperture_aspect_ratio_for_cross(
                 aspect_ratio_authority
             )
         )
-    return CrossFitCompetition(
-        template_id=inputs.template.template_id,
-        best=best,
-        runner_up=runner,
-        status=CrossFitStatus.RESOLVED,
-        winner_basis=CrossWinnerBasis.ONLY_AUTHORITATIVE_FIT,
-        reason=None,
-        failure_kind=None,
-        receipt=receipt,
-        aperture_aspect_ratio_authority=(
-            resolved_aspect_ratio_authority
-        ),
+    return complete_resolution(
+        best, runner, receipt, CrossWinnerBasis.ONLY_AUTHORITATIVE_FIT,
+        resolved_aspect_ratio_authority,
     )

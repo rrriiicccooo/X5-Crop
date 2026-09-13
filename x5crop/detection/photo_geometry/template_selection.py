@@ -249,6 +249,7 @@ def withhold_lane_winner(
         direct_role_aperture_domain_authority=(
             competition.direct_role_aperture_domain_authority
         ),
+        conditional_proposal_placement_id=competition.conditional_proposal_placement_id,
     )
 
 

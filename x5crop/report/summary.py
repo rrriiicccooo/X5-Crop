@@ -252,6 +252,13 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                 "runner_up_placement_id": (
                     lane.placement_competition.runner_up_placement_id
                 ),
+                "conditional_proposal_placement_id": (
+                    lane.placement_competition.conditional_proposal_placement_id
+                ),
+                "conditional_proposal_failure_kind": (
+                    None if lane.prepared.cross_competition.conditional_proposal_failure_kind is None
+                    else lane.prepared.cross_competition.conditional_proposal_failure_kind.value
+                ),
                 "photo_group_outer": typed_read_model(
                     None
                     if lane.holder_fill_assessment is None

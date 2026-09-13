@@ -10,6 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 from ..configuration.diagnostics import DebugStyleParameters
 from ..detection.photo_geometry.model import BoundaryAxis
 from .canvas import FRAME_FILL_COLORS
+from .status import fit_text
 
 
 @dataclass(frozen=True)
@@ -158,6 +159,8 @@ def panel_base(
     )
     title_font = font(style.title_font_size)
     draw.text((16, 11), title, fill=style.text_color, font=title_font)
+    right_start = 16 + text_width(draw, title, title_font) + 24
+    right_title = fit_text(draw, right_title, title_font, width - right_start - 17)
     right_width = text_width(draw, right_title, title_font)
     draw.text(
         (width - right_width - 17, 11),

@@ -48,7 +48,7 @@ class ConditionalPlacementContractTest(unittest.TestCase):
         # have separate real-model coverage in feasible_geometry_contract.
         self.prepared = SimpleNamespace(
             phase_competition=self.phase,
-            cross_competition=SimpleNamespace(best=object(), runner_up=None),
+            cross_competition=SimpleNamespace(best=object(), runner_up=None, conditional_proposal=None),
             source_frame_width_authority=self.width,
             phase_input=phase_input,
         )
@@ -70,7 +70,8 @@ class ConditionalPlacementContractTest(unittest.TestCase):
         self.assertEqual(compose.call_count, 2)
         self.assertIs(result[0].sequence_fit, self.phase.best)
         self.assertIs(result[1].sequence_fit, self.phase.runner_up)
-        return result, direct, lattice
+        self.assertIsNone(result[2])
+        return result[:2], direct, lattice
 
     def test_each_hypothesis_uses_own_authority_and_foreign_width_is_removed(self) -> None:
         result, direct, lattice = self.route()
@@ -155,7 +156,7 @@ class ConditionalPlacementContractTest(unittest.TestCase):
                 side_effect=(primary, phase_placement, alternative),
             ) as compose:
                 result = _placements(self.prepared, source_geometry=object())
-            self.assertEqual(result, (primary, alternative))
+                self.assertEqual(result, (primary, alternative, None))
             self.assertEqual(compose.call_count, 3)
             self.assertIs(compose.call_args.kwargs["sequence_fit"], self.phase.best)
             self.assertIs(compose.call_args.kwargs["cross_fit"], cross_runner)

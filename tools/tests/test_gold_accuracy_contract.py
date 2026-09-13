@@ -856,7 +856,11 @@ class GoldAccuracyContractTest(unittest.TestCase):
         primary["output_footprints"][0]["required_source_footprint"] = gold
         runner = typed_read_model(retained_proposal_fixture("runner"))
         runner["output_footprints"][0]["required_source_footprint"] = [[-1.0, -1.0], [561.0, -1.0], [561.0, 561.0], [-1.0, 561.0]]
-        lane = {"placement_proposal": primary, "alternative_placement_proposals": [runner]}
+        lane = {
+            "placement_proposal": primary,
+            "alternative_placement_proposals": [runner],
+            "conditional_proposal_placement_id": None,
+        }
         labels = _retained_placement_gold_labels(record, lane)
         self.assertEqual([item["geometry_conformance"] for item in labels], ["safe", "safe"])
         self.assertTrue(all(item["frame_diagnostics"][0]["physical_frame_id"] for item in labels))
@@ -870,6 +874,17 @@ class GoldAccuracyContractTest(unittest.TestCase):
         summary = _retained_placement_summary([analysis])
         self.assertEqual(summary["task_set_state_counts"], {"multiple_safe": 1})
         self.assertEqual(summary["safe_with_placement_ambiguity_task_ids"], ["retained-set"])
+        conditional = typed_read_model(retained_proposal_fixture("conditional"))
+        conditional["output_footprints"][0]["required_source_footprint"] = gold
+        three_labels = _retained_placement_gold_labels(record, {
+            **lane, "alternative_placement_proposals": [runner, conditional],
+            "conditional_proposal_placement_id": conditional["placement_id"],
+        })
+        self.assertEqual([item["role"] for item in three_labels], ["primary", "runner", "conditional"])
+        self.assertEqual([item["geometry_conformance"] for item in three_labels], ["safe"] * 3)
+        self.assertEqual(_retained_placement_summary([
+            {**analysis, "retained_placement_gold_labels": three_labels},
+        ])["task_set_state_counts"], {"multiple_safe": 1})
         for role in ("nominal", "challenge"):
             self.assertEqual(_retained_placement_gold_labels({**record, "cohort_role": role}, lane), labels)
         analysis["placement_failure_gap"] = "direct_use_budget_exhausted"

@@ -70,6 +70,7 @@ from .template_placement import FormatPlacement
 from .template_registration import (
     CrossRegistrationWorkReceipt,
     project_cross_solver_bindings,
+    validate_cross_family_provenance,
 )
 
 
@@ -468,6 +469,13 @@ class RegisteredTemplateLane:
         )
         if len(set(family_ids)) != len(family_ids):
             raise ValueError("cross boundary families must be registered once")
+        validate_cross_family_provenance(
+            self.cross_boundary_family_resolutions,
+            {item.observation_id: (item.role, item.transition_ids)
+             for item in self.raw_cross_observations},
+            {item.observation_id: item.conditional_family_ids
+             for item in (*self.top_cross_bindings, *self.bottom_cross_bindings)},
+        )
         enclosing = self.coarse_support.enclosing_support
         coarse_ids = (
             set()
@@ -648,7 +656,7 @@ class PreparedTemplateLane(RegisteredTemplateLane):
 
 @dataclass(frozen=True)
 class TemplatePlacementCompetition:
-    """A bounded placement set retaining only winner and runner metadata."""
+    """Canonical winner/runner plus one explicitly conditional review proposal."""
 
     placements: tuple[FormatPlacement, ...]
     selected_placement_id: str | None
@@ -658,6 +666,7 @@ class TemplatePlacementCompetition:
     direct_role_aperture_domain_authority: (
         DirectRoleApertureDomainAuthority | None
     ) = None
+    conditional_proposal_placement_id: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.state, EvidenceState):
@@ -673,8 +682,17 @@ class TemplatePlacementCompetition:
                 "placement competition aperture-domain authority is invalid"
             )
         ids = tuple(item.placement_id for item in self.placements)
-        if len(ids) > 2 or len(set(ids)) != len(ids) or any(not isinstance(item, FormatPlacement) for item in self.placements):
+        if len(ids) > 3 or len(set(ids)) != len(ids) or any(not isinstance(item, FormatPlacement) for item in self.placements):
             raise ValueError("placement competition identities are invalid")
+        conditional_id = self.conditional_proposal_placement_id
+        conditional_ids = {item.placement_id for item in self.placements
+                           if item.cross_fit.conditional_family_ids}
+        if conditional_ids != (set() if conditional_id is None else {conditional_id}) or (
+            len(ids) > 2 and conditional_id is None
+        ) or conditional_id is not None and conditional_id in {
+            self.selected_placement_id, self.runner_up_placement_id,
+        }:
+            raise ValueError("conditional placement cannot acquire canonical eligibility")
         if self.selected_placement_id not in ({None} | set(ids)):
             raise ValueError("selected placement is outside its competition")
         if self.runner_up_placement_id not in ({None} | set(ids)):
@@ -857,13 +875,14 @@ class TemplateLaneReconstruction:
         if proposal.placement_id not in ({None} | placement_ids):
             raise ValueError("placement proposal is outside its competition")
         alternatives = self.alternative_placement_proposals
-        if len(alternatives) > 1 or any(
-            item.placement_id != self.placement_competition.runner_up_placement_id
-            or item.placement_id is None
-            or item.lane_id != self.lane_id
-            for item in alternatives
+        alternative_ids = tuple(identity for identity in (
+            self.placement_competition.runner_up_placement_id,
+            self.placement_competition.conditional_proposal_placement_id,
+        ) if identity is not None)
+        if tuple(item.placement_id for item in alternatives) != alternative_ids or any(
+            item.lane_id != self.lane_id for item in alternatives
         ):
-            raise ValueError("alternative proposal must retain the lane runner")
+            raise ValueError("alternative proposals must retain the runner and conditional placement")
         retained = tuple(
             item for item in (proposal, *alternatives)
             if item.placement_id is not None

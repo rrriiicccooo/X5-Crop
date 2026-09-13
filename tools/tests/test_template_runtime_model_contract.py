@@ -350,9 +350,9 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
         )
         self.assertEqual(retained.output_footprints, ())
         self.assertIs(retained.placement_proposal, proposal)
-        with self.assertRaisesRegex(ValueError, "exactly one proposal"):
+        with self.assertRaisesRegex(ValueError, "exactly one proposal|must retain"):
             replace(retained, alternative_placement_proposals=())
-        with self.assertRaisesRegex(ValueError, "retain the lane runner"):
+        with self.assertRaisesRegex(ValueError, "retain the runner"):
             replace(retained, alternative_placement_proposals=(proposal,))
         with self.assertRaisesRegex(ValueError, "work exceeds"):
             replace(retained, work=replace(retained.work, proposal_projection_count=1))
@@ -361,6 +361,44 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
         for field in ("proposal_budget_evaluation_count", "placement_feature_evaluation_count"):
             with self.subTest(field=field), self.assertRaisesRegex(ValueError, "work exceeds"):
                 replace(retained, work=replace(retained.work, **{field: getattr(retained.work, field) + 1}))
+        conditional_cross = replace(
+            placement.cross_fit,
+            direct_bindings=tuple(
+                replace(binding, conditional_family_ids=("family:test",))
+                for binding in placement.cross_fit.direct_bindings
+            ),
+        )
+        conditional = replace(
+            placement, placement_id="placement:conditional", cross_fit=conditional_cross,
+        )
+        conditional_proposal, evaluations = _materialize_placement_proposal(
+            prepared, conditional, layout="horizontal",
+        )
+        self.assertEqual(evaluations, 1)
+        self.assertEqual(conditional_proposal.state, TemplateProposalState.GENERATED)
+        three = replace(
+            retained,
+            placement_competition=replace(
+                retained.placement_competition, placements=(placement, runner, conditional),
+                conditional_proposal_placement_id=conditional.placement_id,
+            ),
+            alternative_placement_proposals=(runner_proposal, conditional_proposal),
+            work=replace(
+                retained.work, proposal_projection_count=3, proposal_output_evaluation_count=3,
+                proposal_budget_evaluation_count=3,
+                placement_feature_evaluation_count=3 * len(PLACEMENT_FEATURE_DEFINITIONS),
+            ),
+        )
+        self.assertIs(three.placement_proposal, proposal)
+        self.assertEqual(three.output_footprints, ())
+        with self.assertRaisesRegex(ValueError, "conditional placement"):
+            replace(three.placement_competition, conditional_proposal_placement_id=None)
+        with self.assertRaisesRegex(ValueError, "conditional placement"):
+            replace(three.placement_competition, runner_up_placement_id=conditional.placement_id)
+        with self.assertRaisesRegex(ValueError, "conditional placement"):
+            replace(three.placement_competition, selected_placement_id=conditional.placement_id)
+        with self.assertRaisesRegex(ValueError, "work exceeds"):
+            replace(three, work=retained.work)
         unavailable_runner = replace(
             runner_proposal, state=TemplateProposalState.UNAVAILABLE,
             output_footprints=(), failure=failure_fact(GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE),

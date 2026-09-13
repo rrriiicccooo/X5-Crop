@@ -27,6 +27,7 @@ from x5crop.debug.panel_facts import (
     alignment_summary,
     axis_authority_summaries,
     competition_summary,
+    conditional_geometry_by_identity,
     output_footprints,
     primary_geometry_by_identity,
     root_gate_summary,
@@ -287,8 +288,8 @@ class DebugAnalysisContractTest(unittest.TestCase):
                     wraps=debug_axis_panels._draw_primary_top_bottom,
                 ) as primary,
                 mock.patch(
-                    "x5crop.debug.axis_panels._draw_runner_top_bottom",
-                    wraps=debug_axis_panels._draw_runner_top_bottom,
+                    "x5crop.debug.axis_panels._draw_alternative_top_bottom",
+                    wraps=debug_axis_panels._draw_alternative_top_bottom,
                 ) as runner,
             ):
                 cross_axis_panel(
@@ -300,7 +301,9 @@ class DebugAnalysisContractTest(unittest.TestCase):
                 )
         self.assertEqual(detected.call_count, 1)
         self.assertEqual(primary.call_count, 1)
-        self.assertEqual(runner.call_count, 1)
+        self.assertEqual(runner.call_count, 2)
+        self.assertEqual(runner.call_args_list[0].args[-1], configuration.diagnostics.style.competitor_color)
+        self.assertEqual(runner.call_args_list[1].args[-1], configuration.diagnostics.style.conditional_proposal_color)
 
     def test_long_axis_panel_draws_every_detected_transition(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -548,6 +551,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
             placements=(winner, runner),
             selected_placement_id="winner",
             runner_up_placement_id="runner",
+            conditional_proposal_placement_id=None,
         )
         geometry = SimpleNamespace(
             lane_reconstructions=(
@@ -606,6 +610,10 @@ class DebugAnalysisContractTest(unittest.TestCase):
         )
         self.assertEqual(primary_geometry_by_identity(detection), ((1, winner_frame),))
         self.assertEqual(runner_geometry_by_identity(detection), ((1, runner_frame),))
+        self.assertEqual(conditional_geometry_by_identity(detection), ())
+        competition.conditional_proposal_placement_id = "runner"
+        self.assertEqual(conditional_geometry_by_identity(detection), ((1, runner_frame),))
+        competition.conditional_proposal_placement_id = None
         self.assertIn("PHASE DIRECT SUPPORT", competition_summary(detection))
         self.assertIn(
             "CROSS ONLY AUTHORITATIVE FIT",

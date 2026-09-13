@@ -52,9 +52,9 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record, validate_placement_feature_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v20"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v23"
-RETAINED_PLACEMENT_SCOPE = "retained_best_and_single_runner"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v21"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v24"
+RETAINED_PLACEMENT_SCOPE = "retained_canonical_pair_and_conditional_cross_proposal"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
 SOURCE_TIMEOUT_SECONDS = 600
@@ -907,7 +907,8 @@ def _retained_placement_gold_labels(
 ) -> list[dict[str, Any]]:
     proposals = (
         ("primary", lane["placement_proposal"]),
-        *(("runner", item) for item in lane["alternative_placement_proposals"]),
+        *(("conditional" if item["placement_id"] == lane["conditional_proposal_placement_id"]
+           else "runner", item) for item in lane["alternative_placement_proposals"]),
     )
     labels = []
     for role, proposal in proposals:
@@ -948,10 +949,12 @@ def _retained_placement_summary(records: Sequence[dict[str, Any]]) -> dict[str, 
         labels = record["retained_placement_gold_labels"]
         ids = [item["placement_id"] for item in labels]
         if (
-            len(labels) > 2 or len(set(ids)) != len(ids)
+            len(labels) > 3 or len(set(ids)) != len(ids)
             or any(not isinstance(identity, str) or not identity for identity in ids)
             or [item["role"] for item in labels]
-            not in ([], ["primary"], ["runner"], ["primary", "runner"])
+            not in ([], ["primary"], ["runner"], ["primary", "runner"],
+                    ["conditional"], ["primary", "conditional"], ["runner", "conditional"],
+                    ["primary", "runner", "conditional"])
         ):
             raise ValueError("invalid retained placement identities")
         counts: Counter[str] = Counter()

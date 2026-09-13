@@ -83,6 +83,10 @@ only when the complete measurement supports at least two independent regions; se
 small fragment do not add evidence strength. Unauthorized fragments remain boundary hypotheses without moving a crop
 or preventing further checks of missing edges, and do not consume the global boundary quota. Reports preserve each
 direct boundary's original region count and distinguish complete measurements from boundaries used by the global solver.
+Existing complete edge groups may also form a crop proposal for review. Every group's original measurements remain
+intact. When fragment membership has multiple interpretations, the report records the grouping condition and retains the
+new crop for review. The existing primary and runner crops keep their approval conditions. More fragments alone do not
+authorize automatic output.
 
 Normal strips use one shared pitch. Every directly proven, ordinal-unique separator may constrain its own wide or narrow
 gap; later Frames apply that measured delta once. Multiple proven gap changes still use one bounded pass. An ambiguous
@@ -105,6 +109,7 @@ additional candidates do not add evidence strength.
 Runtime acceptability scoring is not yet enabled; this is a current selection limit, not a requirement to prove one uniquely true crop.
 Reports retain each lane's existing primary and single runner crop footprint, or the specific reason it could not be generated.
 If the sequence alternative cannot form a distinct crop, the existing cross-axis alternative is still considered.
+At most one additional conditional cross-axis proposal is retained separately from the primary and runner.
 Development gold analysis evaluates each footprint independently, allows multiple safe results, and separates unsafe from
 unavailable geometry. Each retained crop also records its numeric budget and physical features with units, provenance,
 and explicit missing reasons. Numeric budget assessment remains separate from final approval conditions.

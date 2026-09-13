@@ -82,6 +82,17 @@ def runner_geometry_by_identity(
     return _placement_geometry_by_identity(detection, placement_ids)
 
 
+def conditional_geometry_by_identity(
+    detection: FinalDetection,
+) -> tuple[tuple[int, TemplateFrame], ...]:
+    placement_ids = tuple(
+        lane.placement_competition.conditional_proposal_placement_id
+        for lane in detection.candidate.geometry.lane_reconstructions
+        if lane.placement_competition.conditional_proposal_placement_id is not None
+    )
+    return _placement_geometry_by_identity(detection, placement_ids)
+
+
 def output_footprints(
     detection: FinalDetection,
 ) -> tuple[OutputFootprint, ...]:

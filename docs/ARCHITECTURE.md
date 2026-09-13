@@ -1049,12 +1049,29 @@ refit 成功的 component 不会被拆分；最终合并继续要求至少两个
 | refit 丢弃任一 transition 或无法成线 | 全部原 observation 原样保留，`complete_transition_union_refit_rejected` |
 | 只有一个 observation | 不建立多余 family record |
 
+同一 registration owner 随后把上述 canonical observation 作为不可拆分的输入，再生成有条件的
+分组解释。每条 trace 只能贡献一个不同 transition；完整 component 不相容时，沿用同一 anchor
+分组规则，把每个单区域 fragment 加入全部相容的固定 anchor group。每组仍只检验完整 raw 并集，
+不枚举子集、不根据 refit 结果删成员；已检验过的相同并集不重复拟合或登记。只有完整并集重拟合成功
+才追加 observation，所有 canonical 输入继续原样保留。失败记录没有 final observation，原始成员仍在账本。
+`CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL`、逐成员 transition group 与 binding 的
+`conditional_family_ids` 共同记录这项条件。空间覆盖和完整 refit 不证明分组身份已经闭合。
+这类线可以生成单独的待检查裁切范围，以 `family_assignment_unresolved` 标记其分组权限缺口。
+Canonical best、runner、状态与 source H 由只含 canonical binding 的视图决定；附加提案不能替换它们，
+也不能把原本符合条件的 canonical 输出变为 Review。它不形成已获权 candidate，不校准 source H，不充当缺边精修
+anchor/opposite 或外侧角色反证，也不能通过排除另一组
+候选间接消歧。Canonical 成员、全部 raw 并集、final observation 与条件标记由运行时和开发报告双向校验。
+同一 pair owner 只枚举一次物理配对；canonical 选择和包含条件线的提案选择使用同一求解函数的两个权限视图。
+两视图的实际 fit 与单侧推导次数相加，受原 4096 总上限约束；配对枚举只计一次。条件视图至多保留一份
+含条件 binding 的 Cross fit，不追加 phase 搜索、source H 校准或像素查询。
+
 Raster trace 不连续不等于物理边界不同；完整并集重拟合能够成立时，跨 domain fragment 仍可属于同一条线。
 坐标邻近、方向相似、support 更多或 residual 更小都不能选择性丢弃组员。每侧原 registered run 数为 R 时，
-family 相容域计算不超过 `R(R+1)`，以 `family_compatibility_evaluation_count` 保留真实次数；
+两阶段 family 相容域计算合计不超过 `2R(R+1)`，以 `family_compatibility_evaluation_count` 保留真实次数；
+初次 run 拟合、canonical 分组与有条件分组的拟合尝试合计不超过 `3R`，原有缺边精修至多再增加 `R`；
 每次裁剪的工作量为 raw 并集规模的平方上界，缓存只保存 observation 索引组合与布尔结果。
 Selection 不再
-拥有 broader/local containment 或 dominance 逻辑，只消费 registration 的 canonical identity。TOP 与
+拥有 broader/local containment 或 dominance 逻辑，只消费 registration 的 identity 与显式条件。TOP 与
 BOTTOM 是两个独立 registered-run producer，各自使用同一编译合同与每角色 512 条上限；一侧的局部
 fragment 不能占用另一侧配额，总工作量只由两侧 receipt 求和。任一侧单独超界即产生
 `producer_bound_exceeded`，不能把总数与单侧上限比较、截断候选或静默跳过。Family 完成后，完整 raw 与
@@ -1248,16 +1265,17 @@ Margin 只是一项可审计特征，不是独立的一票否决条件。多个�
 footprint，不读取 Runtime 决定来制造正例。内部预算等风险代理必须先与真实黄金结果对照，不能把代理
 全部永久硬化后再期待评分提高覆盖，也不能未经验证整体关闭它们。
 
-第一阶段的集合范围固定为每条 lane 已组成的 best 与单个 runner，最多两个 placement，不是整个 phase/cross
-搜索空间。先尝试已有 phase runner；只有它无法组成 placement 或与 primary 相同时，才用 primary phase
+集合范围固定为每条 lane 已组成的 canonical best、单个 runner 与至多一份有条件 Cross 提案，最多三个
+placement，不是整个 phase/cross 搜索空间。先尝试已有 phase runner；只有它无法组成 placement 或与 primary 相同时，才用 primary phase
 与已有 Cross runner 填充空缺的备选位置。两种路径各用对应 phase 的原有约束，不能借用另一 phase 的
-source W，也不清除原失败。最多尝试 primary 与两种既有备选组合，保留数仍不超过两个；不展开
-phase/cross 笛卡尔积。每个 placement 由同一 production projection
+source W，也不清除原失败。Canonical 部分最多尝试 primary 与两种既有备选组合，保留数不超过两个。
+有条件 Cross 提案只与 primary phase 及其已有 lattice authority 组成第三份提案，不能占用 runner 位置或
+成为 selected placement；不展开 phase/cross 笛卡尔积。每个 placement 由同一 production projection
 与 output owner 恰好物化一次完整 footprint 或 typed unavailable；primary 与 alternative 分开保存，选中输出
 直接复用 primary。报告和黄金分析只读取这些同次 runtime facts，不重新求解几何。物化次数与实际逐 slot
-输出评估次数进入工作量 receipt，分别不超过 2 与两份已有 placement 的 slot 总数。
+输出评估次数进入工作量 receipt，分别不超过 3 与全部保留 placement 的 slot 总数。
 黄金逐候选标签仍由唯一方向性 comparator 产生；保留集合中没有安全候选，不能外推为所有潜在裁切均不可用。
-Gold record 在同一 source SHA、format/count 身份下保存每份 placement ID、primary/runner 角色、实际
+Gold record 在同一 source SHA、format/count 身份下保存每份 placement ID、primary/runner/conditional 角色、实际
 footprint、typed generation failure 与带 physical frame ID 的逐帧诊断。集合按 task 计数，不将不同 count
 的同源任务混成一个答案；多正例不归一化，unavailable 不产生负例。可用但有 placement 歧义的统计只消费
 明确的 discrete phase ambiguity 或 non-equivalent Cross fits，不将 coverage 缺口或所有 Review 算作歧义。
@@ -1712,9 +1730,10 @@ probability candidates / features / OOD evaluations（仅在第 9.2 节获准启
 domain pixels / peak temporary bytes
 ```
 
-离散歧义下最多保留两份 placement；primary 复用已有 lattice authority，runner 最多追加一次只读的
-direct-role 与 global-lattice 评估，受同一 placement 上界约束。不新增像素 query、phase 搜索或 footprint
-projection；每份 proposal 的 projection 和 output evaluation 仍由原 receipt 逐次计数。
+Canonical 部分最多保留两份 placement；primary 复用已有 lattice authority，runner 最多追加一次只读的
+direct-role 与 global-lattice 评估。有条件 Cross 提案最多增加一份 placement，复用 primary 的 phase 与
+lattice authority。不新增像素 query 或 phase 搜索；包括第三份提案在内的全部 footprint projection、
+物化和 output evaluation 由同一 receipt 逐次计数。
 两个已有 phase fit 的 local completion 各记录一次 `H × R` lookup 和实际新增 binding，第二次消耗一份
 既有 fit-pass 预算；晚期弱线 projection/nominal solve 按各候选实际调用计数，不扩大 6-pass 上限。
 

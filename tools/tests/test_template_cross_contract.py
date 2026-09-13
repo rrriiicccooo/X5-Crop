@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import unittest
+from unittest.mock import patch
 from types import SimpleNamespace
 
 from tools.tests.template_test_support import (
@@ -204,6 +205,65 @@ class TemplateCrossContractTest(unittest.TestCase):
         )
         self.assertEqual(registered.independent_support_region_count, 2)
         self.assertTrue(registered.source_spanning_continuous)
+
+    def test_conditional_family_cannot_resolve_or_disambiguate_other_pairs(self) -> None:
+        domains = (FiniteInterval(0, 20), FiniteInterval(40, 60), FiniteInterval(80, 100))
+        def edge(role, name, position, traces):
+            return binding(role, name, position, traces=traces,
+                           independent_regions=2, source_spanning=False)
+        a1 = edge(BoundaryRole.TOP, "a1", 100, (50, 90))
+        a2 = edge(BoundaryRole.TOP, "a2", 200, (50, 90))
+        b1 = edge(BoundaryRole.BOTTOM, "b1", 340, (10, 15))
+        b2 = edge(BoundaryRole.BOTTOM, "b2", 440, (10, 15))
+        conditional = replace(edge(BoundaryRole.TOP, "conditional", 95, (10, 15)),
+                              conditional_family_ids=("conditional-family",))
+        base = aspect_input(
+            template=template(count=3), fixed_height_px=FiniteInterval(230, 250),
+            registered_trace_coordinates_px=(10, 15, 50, 90),
+            longitudinal_support_domain_groups_px=(domains,),
+            top_bindings=(a1, a2), bottom_bindings=(b1, b2),
+        )
+        for value in (base, replace(base, top_bindings=(a1, a2, conditional))):
+            result = fit_template_cross(value)
+            self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+            self.assertEqual(result.failure_kind, CrossFailureKind.NON_EQUIVALENT_FITS)
+        result = fit_template_cross(replace(
+            base, top_bindings=(replace(a1, conditional_family_ids=("family",)),),
+            bottom_bindings=(b1,),
+        ))
+        self.assertIsNotNone(result.best)
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertIsNotNone(result.conditional_proposal)
+        self.assertEqual(result.conditional_proposal_failure_kind, CrossFailureKind.FAMILY_ASSIGNMENT_UNRESOLVED)
+        with self.assertRaisesRegex(ValueError, "conditional Cross family"):
+            replace(result, best=result.conditional_proposal, status=CrossFitStatus.RESOLVED,
+                    winner_basis=CrossWinnerBasis.ONLY_AUTHORITATIVE_FIT, failure_kind=None)
+
+    def test_conditional_view_preserves_canonical_result_and_enumerates_pairs_once(self) -> None:
+        from x5crop.detection.photo_geometry import template_cross as owner
+
+        top = binding(BoundaryRole.TOP, "canonical-top", 100)
+        bottom = binding(BoundaryRole.BOTTOM, "canonical-bottom", 340)
+        base = aspect_input(
+            template=template(), fixed_height_px=FiniteInterval(230, 250),
+            top_bindings=(top,), bottom_bindings=(bottom,),
+        )
+        canonical = fit_template_cross(base)
+        conditional = replace(
+            binding(BoundaryRole.TOP, "conditional-top", 95),
+            conditional_family_ids=("family",),
+        )
+        with patch.object(owner, "_direct_candidate", wraps=owner._direct_candidate) as pairs:
+            result = fit_template_cross(replace(base, top_bindings=(top, conditional)))
+        identities = [(call.args[0].observation_id, call.args[1].observation_id)
+                      for call in pairs.call_args_list]
+        self.assertEqual(len(identities), 2)
+        self.assertEqual(len(set(identities)), 2)
+        self.assertEqual(replace(
+            result, receipt=canonical.receipt, conditional_proposal=None,
+            conditional_proposal_failure_kind=None,
+        ), canonical)
+        self.assertGreater(result.receipt.evaluated_fit_count, canonical.receipt.evaluated_fit_count)
 
     def test_unique_direct_pair_wins(self) -> None:
         result = fit_template_cross(

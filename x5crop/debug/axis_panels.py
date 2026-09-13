@@ -16,6 +16,7 @@ from .panel_facts import (
     alignment_summary,
     axis_authority_summaries,
     competition_summary,
+    conditional_geometry_by_identity,
     primary_geometry_by_identity,
     runner_geometry_by_identity,
     selection_summary,
@@ -130,11 +131,12 @@ def _draw_primary_start_end(
         )
 
 
-def _draw_runner_start_end(
+def _draw_alternative_start_end(
     draw: ImageDraw.ImageDraw,
     geometries: tuple[tuple[int, TemplateFrame], ...],
     selected_viewport: Viewport,
     style: DebugStyleParameters,
+    color: tuple[int, int, int],
 ) -> None:
     for index, (_ordinal, geometry) in enumerate(geometries):
         roles = (
@@ -153,7 +155,7 @@ def _draw_runner_start_end(
                 draw_dashed_polyline(
                     draw,
                     clipped,
-                    style.competitor_color,
+                    color,
                     2,
                     style.line_dash_length,
                     style.line_dash_gap,
@@ -223,11 +225,12 @@ def _draw_primary_top_bottom(
     return roles
 
 
-def _draw_runner_top_bottom(
+def _draw_alternative_top_bottom(
     draw: ImageDraw.ImageDraw,
     geometries: tuple[tuple[int, TemplateFrame], ...],
     selected_viewport: Viewport,
     style: DebugStyleParameters,
+    color: tuple[int, int, int],
 ) -> None:
     for _ordinal, geometry in geometries:
         for boundary in (geometry.top, geometry.bottom):
@@ -244,7 +247,7 @@ def _draw_runner_top_bottom(
                 draw_dashed_polyline(
                     draw,
                     clipped,
-                    style.competitor_color,
+                    color,
                     2,
                     style.line_dash_length,
                     style.line_dash_gap,
@@ -377,7 +380,11 @@ def cross_axis_panel(
             style,
             runner=False,
         )
-    _draw_runner_top_bottom(draw, runner, selected_viewport, style)
+    _draw_alternative_top_bottom(draw, runner, selected_viewport, style, style.competitor_color)
+    conditional = conditional_geometry_by_identity(detection)
+    _draw_alternative_top_bottom(
+        draw, conditional, selected_viewport, style, style.conditional_proposal_color,
+    )
     fit_runner = set()
     if not runner:
         fit_runner = _draw_fit_top_bottom(
@@ -390,6 +397,15 @@ def cross_axis_panel(
         )
     top_y = style.panel_title_height + 6
     bottom_y = grid.cross_axis_panel_height - 27
+    if conditional:
+        label = "CONDITIONAL TOP / BOTTOM"
+        label_x = selected_viewport.target_box[2] - text_width(
+            draw, label, font(style.frame_label_font_size),
+        ) - 18
+        draw_label_chip(
+            draw, (label_x, bottom_y), label, style.conditional_proposal_color,
+            style, filled=False,
+        )
     left = selected_viewport.target_box[0]
     supported = (
         detection.candidate.geometry.source_placement_selection.state.value
@@ -591,7 +607,11 @@ def long_axis_panel(
             style,
             runner=False,
         )
-    _draw_runner_start_end(draw, runner, selected_viewport, style)
+    _draw_alternative_start_end(draw, runner, selected_viewport, style, style.competitor_color)
+    conditional = conditional_geometry_by_identity(detection)
+    _draw_alternative_start_end(
+        draw, conditional, selected_viewport, style, style.conditional_proposal_color,
+    )
     runner_fit = False
     if not runner:
         runner_fit = _draw_fit_start_end(
@@ -648,6 +668,11 @@ def long_axis_panel(
             style.competitor_color,
             style,
             filled=False,
+        )
+    if conditional:
+        draw_label_chip(
+            draw, (media_left + 414, footer_y), "CONDITIONAL",
+            style.conditional_proposal_color, style, filled=False,
         )
     detail = competition_summary(detection)
     detail_font = font(style.annotation_font_size)

@@ -11,6 +11,7 @@ from tools.regression.report_validation import (
 )
 from tools.tests.photo_geometry_support import make_side_measurement_set
 from x5crop.report.read_models import typed_read_model
+from x5crop.run_local_identity import source_identity_scope
 from x5crop.domain import (
     EvidenceState,
     FiniteInterval,
@@ -27,6 +28,7 @@ from x5crop.detection.photo_geometry.observation_types import (
 from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossBoundaryFamilyFailureKind,
+    CrossBoundaryFamilyUse,
     CrossEvidence,
     CrossRoleBinding,
     CrossFitStatus,
@@ -263,10 +265,55 @@ class TemplateRegistrationContractTest(unittest.TestCase):
             tuple(ObservationId(f"transition:{index}:1") for index in range(3)),
         )
         registered = self._register_top_transition_groups(measurement, groups)
-        self.assertEqual({frozenset(item.transition_ids) for item in registered.observations},
+        conditional_ids = {item.observation_id for item in registered.top_bindings
+                           if item.conditional_family_ids}
+        self.assertEqual({frozenset(item.transition_ids) for item in registered.observations
+                          if item.observation_id not in conditional_ids},
                          set(map(frozenset, groups)))
         self.assertEqual(sorted(item.independent_support_region_count
-                                for item in registered.observations), [1, 2, 2])
+                                for item in registered.observations
+                                if item.observation_id not in conditional_ids), [1, 2, 2])
+        self.assertEqual({frozenset(item.transition_ids) for item in registered.observations
+                          if item.observation_id in conditional_ids},
+                         {frozenset(groups[0] + groups[2]), frozenset(groups[1] + groups[2])})
+        self.assertEqual(len(conditional_ids), 2)
+        self.assertTrue(all(item.use == CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL
+                            for item in registered.family_resolutions))
+        with self.assertRaisesRegex(ValueError, "conditional family permission"):
+            replace(registered, top_bindings=tuple(
+                replace(item, conditional_family_ids=()) for item in registered.top_bindings
+            ))
+        atom = next(item for item in registered.observations
+                    if item.observation_id not in conditional_ids)
+        with self.assertRaisesRegex(ValueError, "canonical atom"):
+            replace(registered, observations=tuple(item for item in registered.observations if item != atom))
+        lane = {
+            "lane_id": "lane:0",
+            "cross_registration_work": typed_read_model(registered.work_receipt),
+            "observations": {
+                "cross_boundary_family_resolutions": typed_read_model(registered.family_resolutions),
+                "raw_top_bottom_lines": typed_read_model(registered.observations),
+                "registered_top_bottom_bindings": typed_read_model(registered.top_bindings),
+            },
+        }
+        queries = [typed_read_model(measurement)]
+        # External reports retain run-local identities; validation must not
+        # recreate their ordinal allocation in a different process scope.
+        with source_identity_scope():
+            _validate_cross_measurement_support(lane, queries)
+        invalid = deepcopy(lane)
+        invalid["observations"]["cross_boundary_family_resolutions"][0]["member_transition_groups"][0].pop()
+        with self.assertRaises(ValueError):
+            _validate_cross_measurement_support(invalid, queries)
+        invalid = deepcopy(lane)
+        for item in invalid["observations"]["registered_top_bottom_bindings"]:
+            item["conditional_family_ids"] = []
+        with self.assertRaisesRegex(ValueError, "conditional family permission"):
+            _validate_cross_measurement_support(invalid, queries)
+        for item in invalid["observations"]["cross_boundary_family_resolutions"]:
+            item["use"] = CrossBoundaryFamilyUse.CANONICAL_REGISTRATION.value
+        with self.assertRaisesRegex(ValueError, "did not consume its members"):
+            _validate_cross_measurement_support(invalid, queries)
 
     def test_unique_cross_fragments_cannot_be_cherry_picked_after_union_failure(self) -> None:
         measurement = self._separated_track_measurement((98.0, 100.0, 102.0))
@@ -338,7 +385,7 @@ class TemplateRegistrationContractTest(unittest.TestCase):
         ))
         self.assertTrue(all(not item.role_authorized for item in registered.top_bindings))
         self.assertEqual(project_cross_solver_bindings(registered.top_bindings), ())
-        self.assertEqual(registered.work_receipt, CrossRegistrationWorkReceipt(3, 2, 2, 1))
+        self.assertEqual(registered.work_receipt, CrossRegistrationWorkReceipt(3, 2, 2, 2))
         family = registered.family_resolutions[0]
         self.assertEqual(family.state, EvidenceState.UNAVAILABLE)
         self.assertEqual(
@@ -428,6 +475,7 @@ class TemplateRegistrationContractTest(unittest.TestCase):
             "lane_id": "lane:0",
             "cross_registration_work": typed_read_model(registered.work_receipt),
             "observations": {
+                "cross_boundary_family_resolutions": typed_read_model(registered.family_resolutions),
                 "raw_top_bottom_lines": typed_read_model(registered.observations),
                 "registered_top_bottom_bindings": typed_read_model(registered.top_bindings),
             },
@@ -495,6 +543,7 @@ class TemplateRegistrationContractTest(unittest.TestCase):
             **track, "role": role, "role_authorized": False,
             "run_id": f"coarse-enclosing:{track['observation_id']}",
             "enclosing_pair_id": pair_id,
+            "conditional_family_ids": [],
         } for role, track in zip(("top", "bottom"), tracks)]
         lane = {
             "lane_id": "lane:0",
@@ -503,6 +552,7 @@ class TemplateRegistrationContractTest(unittest.TestCase):
                 "minimum_track": tracks[0], "maximum_track": tracks[1],
             }}},
             "observations": {
+                "cross_boundary_family_resolutions": [],
                 "raw_top_bottom_lines": [],
                 "registered_top_bottom_bindings": bindings,
             },
