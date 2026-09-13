@@ -152,8 +152,9 @@ cohort 为 `c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`。
 本轮正常 Hook、正式全量黄金、干净提交性能与 12 组合 CI 已完成；继续剩余 30 个短轴任务。
 新增测量或完整拟合不能挤掉已有合格
 短轴备选。完整分组的数值补充只保留为有条件提案，保持原 canonical 两阶段与排序相关编号。
-下一步研究 S031/S032 的同 trace 竞争片段归属。保持完整 canonical 原子与
-全体测量，不按拟合或黄金结果挑子集。
+S031/S032 的完整原子归属实验已显示生成收益，但尚未修改生产检测器。下一步先闭合搜索工作量、
+整批拟合预检与报告合同，再接入同一 registration owner；保持完整 canonical 原子和全部原测量，
+不按拟合或黄金结果挑子集。
 有条件 family 不能侵入 canonical 选择；首次侵入版本曾丢失 S022/S084/S089 的安全 auto 并使 S062
 首选退步，已由权限分离和独立提案位置修复。失败版 `cross_conditional_family_full_20260910`
 不能作为接受基线。
@@ -203,6 +204,38 @@ S032 最佳短轴 4/6→5/6，第 1 格左下角仍内切 `0.336718 px`，不得
 一致；8-state 耗尽反例必须返回 incomplete、没有可用 maximal 前缀。该量级不证明其它组都在预算内，
 也不证明这些组合可完整 refit 或裁切安全。接入前必须定义全部访问、raw 裁剪、拟合和候选保留上界；
 耗尽保持未解决，不按前 N 组、成功 refit、黄金或支持数删除其它身份。
+
+完整原子归属的 110-task 原 TIFF 实验保存在
+`Test/gold_analysis/whole_atom_membership_probe_20260913`，绑定 `80f60d02`，不属于当前 Runtime
+或发布证据。108 项完成结构校验与黄金比较：原 primary/runner 的实际 polygon 全部不变，短轴
+整组合格 79→81，整组安全方案 44→45，安全 auto 19、错误 auto 0；这组分母排除了 S013/S059，
+不能冒充成功的 110 项结果。S031 新条件方案短轴 6/6 合格、长轴仍不安全；S032 新条件方案整组安全，
+二者均仍 Review。S016/S018/S019/S064 只有部分短轴改善。31 项用尽每 lane 4096 次访问后整批不添加
+新方案；其余 77 项共新增 3029 次完整 union 拟合。搜索 complete 仅指有 anchor 的合格原子宇宙，
+无 anchor 的 family 不在该完整性声明内。原脚本 `maximality_checks` 为潜在次数上界，不能当实际次数。
+
+该实验暴露了现有拟合上限：S013 TOP 的 constrained 次数 91>78，S059 BOTTOM 为 88>58，
+两项被原 `2R` 校验拒绝。另有 12 个结构校验成功的样片超过每角色 `3R` 稳健拟合合同；S091 TOP
+为 282>213。因此报告结构通过不能证明新机制的工作量合格。108 份报告与两项失败现场的完整原子
+组合均未发现同 raw union 对应不同成员集合，也未发现重复生成原 canonical 单原子 union；这些
+有限样片不能排除一般反例。全部比较与计数见该目录的 `EXPERIMENT_SUMMARY.json` 和
+`MEMBERSHIP_WORK_AND_PROVENANCE_AUDIT.json`，原实验 receipt 保持不变。
+
+整批拟合前预检实验保存在 `Test/gold_analysis/whole_atom_membership_preflight_20260913`。
+每角色 R 为原 registered run 数，U 为原唯一 family union 数，C 为原 constrained 次数，K 为全部
+新增唯一 union 数；拟合前要求 `R+U+K <= 3R` 且 `C+K <= 2R`，任一侧超界则整 lane 不添加
+新候选，不执行新增拟合。7 项正式完整 flow 实验复测无错误：S031/S032 的上述改善保留，
+S013/S059/S091 拟合前整批拒绝并保持原结果，S022 保持安全 auto，S112 搜索耗尽后保持原结果；
+全部 canonical polygon 不变。独立 LP 穷举 64 组合得到 16 个可行集合、9 个包含极大集合，与搜索
+一致；另已核对排列不变、8 次访问耗尽不返回前缀、多 anchor 两两可行但联合为空、闭集点状交集。
+这是研究验证，不是新增正式黄金或性能 receipt。
+
+接入前仍须在唯一 owner 中定义搜索状态、固定 anchor 与完整原子宇宙、全部极大归属解释、raw union
+缓存和逐成员 provenance，计入访问、完整物理域裁剪、极大性检查及下游 Cross/placement 工作。
+保持原 `3R`/`2R` 拟合及全局 512 observation / 4096 pair/fit 上限；拟合预检不能代替其它工作合同。
+几何多边形顶点只能完整覆盖无 trace 冲突的交集解释；同 trace 不同 identity 可以编码任意冲突图，
+互不相交的三角冲突组已有指数多个极大集合，不能以二维参数空间声称一般搜索为多项式。
+耗尽或 provenance 不能闭合时必须明确不可用，不输出搜索前缀，不以极大性授予 family 或 auto 权限。
 
 此前 S031/S032后段TOP内切最大12.939/38.605px，已选raw本身全部被输出包住。S031的7+4完整并集在
 原bend域内可行，但Huber代表点会丢4点；S032的11+4则因同trace只能保留一点而丢 :156，
