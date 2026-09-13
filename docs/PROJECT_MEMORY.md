@@ -20,8 +20,8 @@
   高度，明确区分照片边与外框支撑。冻结无关长轴算法调整，使用当前 W 和各格长轴范围；只处理妨碍
   Cross 正确性验证的必要依赖，不要求两轴完全解耦。
 - 每轮分别报告短轴质量改善、整组合格方案任务数、可靠自动交付数、错误自动交付数，并保留端到端与
-  性能验证。当前先修复没有合格短轴方案的 30 个任务，再处理已有合格方案的可靠选择与误阻断。
-  整组仍有 65 个任务无合格方案，另有 26 个已有合格方案但 Review。多个解释或多个合格方案不应永久
+  性能验证。当前先修复没有合格短轴方案的 28 个任务，再处理已有合格方案的可靠选择与误阻断。
+  整组仍有 64 个任务无合格方案，另有 27 个已有合格方案但 Review。多个解释或多个合格方案不应永久
   阻断输出，有充分可用性依据即可选择，不要求唯一真实边界；精确合同见架构第 9、14 节。
   补齐外框、扩大保护、增加 Review 或 Cross 变为 resolved，本身均不算产品质量进展。
 - Source-W、有界候选集合、typed features 与首轮离线开发排序已验证。首轮排序没有改善选择，
@@ -32,20 +32,18 @@
 
 ## 当前源码与已验证事实
 
-当前 Runtime 为 `80f60d02219cf9df2970f7b1e7f6f643dc92cfb3`，已正常提交并推送 main。
-完整分组物理约束 Huber 数值解仅补充有条件提案。
-前一接受 Runtime 为 `c3b6b6eb0813777f72db2fa9400eea9797a07305`。Canonical 完整组作为不可拆分输入，
+当前 Runtime 为 `52f3c005891e0a5e8ee082f694c6cb29cfbb543c`，已正常提交并推送 main。
+完整原子归属搜索、整批拟合预检和可重放工作账本已接入同一 registration owner，新增解释仅为有条件提案。
+前一接受 Runtime 为 `80f60d02219cf9df2970f7b1e7f6f643dc92cfb3`。Canonical 完整组作为不可拆分输入，
 新解释只保留完整 raw 并集；原有 Cross best/runner/H 与自动权限独立决定。每条 lane 至多追加一份
 有条件提案，全部物化、预算与特征计入实际工作量；不扩大像素查询、phase 搜索或原 Cross 总上限。
-完整合同见架构第 8、9、14 节。Report revision 79；Gold record/summary v21/v24，无旧 schema 兼容。
+完整合同见架构第 8、9、14 节。Report revision 80；Gold record/summary v21/v24，无旧 schema 兼容。
 
-本轮 176 项数值、registration、Cross、测量及物理域专项测试通过；110-task 正式 production flow
-与全部 current report 校验完成。S032/S041/S101 正式 Debug Analysis 及其 report 校验通过。
-本轮正常 pre-push 工程验证通过，共 926 项测试、2 项按既定条件跳过；干净提交性能见下一节。
-[当前 Verify](https://github.com/rrriiicccooo/X5-Crop/actions/runs/34748617182) 的 12 个环境组合全部通过。
-macOS ARM Python 3.12/3.13 最初因 runner 未被分配而未启动，重试后通过，无需修改源码。
-原始 check-run annotation 保存在本轮黄金目录 `ci_runner_allocation_failures.json`。
-工程 CI 不替代最终三目标实机发布 receipt；前一接受 Runtime 的 12 组合曾全部通过。
+本轮 74 项搜索、registration、报告、runtime 与 Debug 专项测试通过；110-task 正式 production flow
+与全部 current report 校验完成。S013/S031/S032 正式 Debug Analysis、report 校验及单张有界预览检查通过。
+本轮正常 pre-push 工程验证通过，共 935 项测试、2 项按既定条件跳过；干净提交性能见下一节。
+[当前 Verify](https://github.com/rrriiicccooo/X5-Crop/actions/runs/34764480215) 的 12 个环境组合全部通过。
+工程 CI 不替代最终三目标实机发布 receipt；前一接受 Runtime 的 12 组合全部通过。
 
 冻结环境为 `/private/tmp/x5crop-frozen-20260910`，SciPy 1.18.0、tifffile 2026.8.16；依赖检查已通过，
 系统共享包未修改。后续先核对该环境仍存在，并在 PATH 前置其 bin；共享 Python 版本已漂移。
@@ -105,7 +103,7 @@ macOS ARM Python 3.12/3.13 最初因 runner 未被分配而未启动，重试后
 
 ## 完整黄金与性能证据
 
-最新完整开发结果：`Test/gold_analysis/constrained_family_full_20260913`，冻结依赖下
+最新完整开发结果：`Test/gold_analysis/whole_atom_membership_full_20260913`，冻结依赖下
 110/110 完成，分析错误 0，全部 current report 与物理校准通过。它是 development 验证，不是 release receipt。
 
 | 层级 | 结果 |
@@ -113,48 +111,51 @@ macOS ARM Python 3.12/3.13 最初因 runner 未被分配而未启动，重试后
 | Primary proposal | 39 safe / 70 unsafe / 1 unavailable |
 | Candidate | 27 safe / 13 unsafe / 70 unavailable |
 | 最终决定 | 19 safe auto / 0 unsafe auto / 91 Review |
-| Nominal（96 任务） | 40 生成合格方案 / 19 安全自动交付 / 77 Review |
+| Nominal（96 任务） | 41 生成合格方案 / 19 安全自动交付 / 77 Review |
 | Challenge（14 任务） | 5 生成合格方案 / 0 自动交付 / 14 Review |
-| 短轴合格方案 | 80 个任务：nominal 71 / challenge 9 |
-| 无合格短轴方案 | 30 个任务：nominal 25 / challenge 5 |
-| 保留候选集合 | 207 份；53 safe / 154 unsafe |
-| 每任务至少一份安全 | 45 |
-| 无合格方案 | 65 个任务：nominal 56 / challenge 9 |
-| 已有合格方案仍 Review | 26 个任务：nominal 21 / challenge 5 |
+| 短轴合格方案 | 82 个任务：nominal 73 / challenge 9 |
+| 无合格短轴方案 | 28 个任务：nominal 23 / challenge 5 |
+| 保留候选集合 | 220 份；57 safe / 163 unsafe |
+| 每任务至少一份安全 | 46 |
+| 无合格方案 | 64 个任务：nominal 55 / challenge 9 |
+| 已有合格方案仍 Review | 27 个任务：nominal 22 / challenge 5 |
 
-与接受基线 `Test/gold_analysis/cross_conditional_portfolio_full_20260913` 按 source SHA、format/count 和角色
-对齐：短轴合格 78→80，整组合格 43→45，安全 auto 19→19，错误 auto 0→0。原有 189 份 canonical
+与接受基线 `Test/gold_analysis/constrained_family_full_20260913` 按 source SHA、format/count 和角色
+对齐：短轴合格 80→82，整组合格 45→46，安全 auto 19→19，错误 auto 0→0。原有 189 份 canonical
 placement 的实际 `required_source_footprint` 多边形逐项完全相同；全部最终决定相同。
-S041/S050 新增整组安全条件方案；S032 最佳短轴 4/6→5/6，但仍不安全。S101 原 runner 12/12
-合格短轴保持。其它任务的质量指标无退步；具体对照保存在该目录 `baseline_quality_comparison.json`。
+S031 新条件方案短轴 6/6 合格、长轴仍不安全；S032 新条件方案整组安全。S016/S018/S019/S064
+只有部分短轴改善，均仍不合格。S101 原 runner 12/12 合格短轴保持。其它任务的质量指标无退步；
+具体对照保存在该目录 `baseline_quality_comparison.json`，可重算脚本为 `compare_current.py`。
 S051 primary 仍不可用，保留的 runner 可评价但不安全；不晋升 runner 或伪造 primary。
 
-短轴统计读取同一最终 footprint 的逐帧 cross_low/cross_high 内切与外扩诊断，并核对全部实际确认照片
-身份。短轴合格不能替代整组四边合格，数值预算不能替代黄金质量。
+短轴统计读取同一最终 footprint 的逐帧 cross_low/cross_high 内切与外扩诊断，并核对全部已确认
+`boundary_pair` 身份，包括局部照片。S007/S049/S050 各有一格 `not_applicable` 空白曝光：输出 count
+仍为 6，几何比较为 5 格；不能把空白格当遗漏，也不能漏掉已有 reference 的局部照片。
+短轴合格不能替代整组四边合格，数值预算不能替代黄金质量。
 S005 有条件提案虽然黄金安全，数值预算仍失败；生成进展尚未解除其自动准入缺口。
 
 当前结果的 detector 指纹为
-`467e18d8a3e94ae3629f7ba0cbf1fcf7903214b0d6a18f4b1a559dad92befc99`；
-comparator 指纹为 `07e6c7c288aa5844ba8a16b6faf42ffd02bbb9d1a332f11077ad24d96023ff8f`；
+`13a1550525d3f9cee9651583bfb80821f187c306bb18e474b2a66c9846e98bbb`；
+comparator 指纹为 `ce0affae8d78c904f0a0178b76932091bf6eb37e776de6ce872d634fea2f0bb9`；
 cohort 为 `c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`。
 该全量运行从未提交源码开始，不能伪造为同一 release commit receipt。提交后已确认 detector、comparator
 与 cohort 指纹逐项完全一致；独立复核保存在 `post_commit_identity_verification.json`，原 receipt 未改写。
 
-干净 `80f60d02`、冻结依赖下 `tools/verify performance` 完成：24-source 完整用户路径均值
-**3.852067 秒**，5 秒 Gate 通过，3 秒挑战未达成。p95 为 6.964715 秒，最慢 S109 为 7.059213 秒；
-未插桩 peak RSS 最大 1,225,031,680 bytes。决定为 2 auto / 22 Review。
+干净 `52f3c005`、冻结依赖下 `tools/verify performance` 完成：24-source 完整用户路径均值
+**4.015434 秒**，5 秒 Gate 通过，3 秒挑战未达成。p95 为 7.210149 秒，最慢 S109 为 7.212746 秒；
+未插桩 peak RSS 最大 1,224,179,712 bytes。决定为 2 auto / 22 Review。
 当前 receipt 为 `build/v5-performance/performance_receipt.json`，并保存在本轮黄金目录
-`performance_receipt_80f60d02.json`。它仅证明该提交、当前机器与本次决定分布。
-前一接受 Runtime 均值为 3.865011 秒；这次小幅变化不能证明提速，不用剖面时间替代正式计时。
+`performance_receipt_52f3c005.json`。它仅证明该提交、当前机器与本次决定分布。
+前一接受 Runtime 均值为 3.852067 秒；本轮均值增加约 0.163 秒，不能声称提速，不用剖面时间替代正式计时。
 
 ## 开放风险与精确下一步
 
-本轮正常 Hook、正式全量黄金、干净提交性能与 12 组合 CI 已完成；继续剩余 30 个短轴任务。
+本轮正常 Hook、正式全量黄金、干净提交性能与 12 组合 CI 已完成；继续剩余 28 个短轴任务。
 新增测量或完整拟合不能挤掉已有合格
 短轴备选。完整分组的数值补充只保留为有条件提案，保持原 canonical 两阶段与排序相关编号。
-S031/S032 的完整原子归属实验已显示生成收益，但尚未修改生产检测器。下一步先闭合搜索工作量、
-整批拟合预检与报告合同，再接入同一 registration owner；保持完整 canonical 原子和全部原测量，
-不按拟合或黄金结果挑子集。
+完整原子归属已接入并保留 S031/S032 的生成收益。下一步先核对 S018/S019/S064 条件方案剩余
+cross_low/cross_high 内切与外扩失败，区分原测量覆盖、归属、方向和输出保护贡献。保持完整 canonical
+原子及全部原测量，不按拟合或黄金结果挑子集；S031 剩余长轴问题不算短轴失败。
 有条件 family 不能侵入 canonical 选择；首次侵入版本曾丢失 S022/S084/S089 的安全 auto 并使 S062
 首选退步，已由权限分离和独立提案位置修复。失败版 `cross_conditional_family_full_20260910`
 不能作为接受基线。
@@ -192,7 +193,7 @@ S031 本轮正式报告的 51-transition 有条件 TOP 完整组只包含 45 条
 S041/S050 是同一 source SHA 的两个格数任务，不能计成两个独立源；新增条件方案安全，原两方案仍不安全。
 S032 最佳短轴 4/6→5/6，第 1 格左下角仍内切 `0.336718 px`，不得按该差额增加 bleed。
 这条路径已整理为当前源码：原始 run/精修、canonical 验收与物理限制保持；完整数值解具有独立方法、
-原始约束复查及实际工作 receipt，report revision 79。有限 gap 只是浮点核验，不是严格舍入认证；
+原始约束复查及实际工作 receipt。有限 gap 只是浮点核验，不是严格舍入认证；
 原严格距离比较与现有闭集 `1e-9 px` 算术判据的区别已在架构中明确，不能宣称数值判据完全未改。
 正式四任务重点验证目录为 `Test/gold_analysis/constrained_family_targeted_20260913b`，
 原两方案 polygon 均完全相同；S101 保持 12/12 合格短轴。正式全量与干净提交性能结论见上一节。
@@ -230,9 +231,11 @@ S013/S059/S091 拟合前整批拒绝并保持原结果，S022 保持安全 auto�
 一致；另已核对排列不变、8 次访问耗尽不返回前缀、多 anchor 两两可行但联合为空、闭集点状交集。
 这是研究验证，不是新增正式黄金或性能 receipt。
 
-接入前仍须在唯一 owner 中定义搜索状态、固定 anchor 与完整原子宇宙、全部极大归属解释、raw union
-缓存和逐成员 provenance，计入访问、完整物理域裁剪、极大性检查及下游 Cross/placement 工作。
-保持原 `3R`/`2R` 拟合及全局 512 observation / 4096 pair/fit 上限；拟合预检不能代替其它工作合同。
+上述研究现已整理为当前生产路径：搜索状态、固定 anchor 与完整原子宇宙、全部极大归属解释、raw union
+缓存和逐成员 provenance 由唯一 owner 保存，实际访问、物理域裁剪与极大性检查可由原 query 重放。
+新增拟合保持原 `3R`/`2R` 上限，下游继续使用原 512 observation / 4096 pair/fit 上限。
+原观察全集与后续精修按阶段和实际拟合次数对账；同时篡改冻结列表与精修标记、却没有相应拟合工作
+的反例已被测试拒绝。共享访问预算恰好用尽 4096 后下一 scope 请求访问的边界也已覆盖。
 几何多边形顶点只能完整覆盖无 trace 冲突的交集解释；同 trace 不同 identity 可以编码任意冲突图，
 互不相交的三角冲突组已有指数多个极大集合，不能以二维参数空间声称一般搜索为多项式。
 耗尽或 provenance 不能闭合时必须明确不可用，不输出搜索前缀，不以极大性授予 family 或 auto 权限。
@@ -242,7 +245,7 @@ S013/S059/S091 拟合前整批拒绝并保持原结果，S022 保持安全 auto�
 该点本身未超过bend阈值。S031片段 :4 同时兼容anchor :2/:7，三者共同域为空，现行partition保持歧义。
 只读对照证明：仅把完整族Huber代表点约束到原bend可行域，登记、Cross和输出均不变；不能把优化器
 漏解修正单独计为产品进展。下一步仍是保留完整provenance的多族方案及归属反证，不强制唯一分配，
-不改变同trace身份、raw物理域、角色准入或预算。
+不改变同trace身份、raw物理域、角色准入或预算。完整原子方案的生成已完成接入，身份准入仍须独立证据。
 将coarse sharp view从5条扩展到全部9条已测trace的只读检查亦未证明收益：S012 F1 TOP外扩反增到
 113.608px；S013失去完整pair；S027超出当前联合投影顶点上界。未接入Runtime或放宽上界。
 S097 的BOTTOM外扩120.986–162.771px主要来自完整H半区间133.840px，而非canonical H过大。
