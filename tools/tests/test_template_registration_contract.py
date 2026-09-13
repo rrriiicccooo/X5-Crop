@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from copy import deepcopy
 import unittest
+from unittest.mock import patch
 
 from tools.regression.report_validation import (
     _validate_cross_direct_support_regions,
@@ -575,18 +576,121 @@ class TemplateRegistrationContractTest(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(len(registered.top_bindings), 2)
-        self.assertEqual(len(registered.observations), 2)
-        self.assertEqual(len(registered.family_resolutions), 1)
+        self.assertEqual(len(registered.top_bindings), 3)
+        self.assertEqual(len(registered.observations), 3)
+        self.assertEqual(len(registered.family_resolutions), 2)
+        original = next(item for item in registered.family_resolutions
+                        if item.use == CrossBoundaryFamilyUse.CANONICAL_REGISTRATION)
+        conditional = next(item for item in registered.family_resolutions
+                           if item.use == CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL)
         self.assertEqual(
-            registered.family_resolutions[0].state,
+            original.state,
             EvidenceState.UNAVAILABLE,
         )
         self.assertEqual(
-            registered.family_resolutions[0].failure_kind,
+            original.failure_kind,
             CrossBoundaryFamilyFailureKind
             .COMPLETE_TRANSITION_UNION_REFIT_REJECTED,
         )
+        self.assertEqual(original.use, CrossBoundaryFamilyUse.CANONICAL_REGISTRATION)
+        self.assertEqual(conditional.use, CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL)
+        self.assertEqual(conditional.state, EvidenceState.SUPPORTED)
+        self.assertEqual(original.member_transition_ids, conditional.member_transition_ids)
+        self.assertEqual(original.refit_receipt, conditional.refit_receipt)
+        self.assertEqual(len(original.refit_receipt.robust_retained_transition_ids), 8)
+        self.assertEqual(len(conditional.member_transition_ids), 12)
+        self.assertEqual(registered.work_receipt.constrained_fit_attempt_count, 1)
+        self.assertGreater(registered.work_receipt.constrained_fit_edge_count, 0)
+        self.assertEqual(sum(not item.conditional_family_ids for item in registered.top_bindings), 2)
+
+    def test_complete_constrained_family_report_preserves_authority_and_work(self) -> None:
+        coordinates = (100.0,) * 9 + (102.0,) * 2
+        measurement = make_side_measurement_set(tuple((value,) for value in coordinates))
+        groups = tuple(tuple(ObservationId(f"transition:{i}:0") for i in indices)
+                       for indices in (range(9), range(9, 11)))
+        registered = self._register_top_transition_groups(measurement, groups)
+        original = next(item for item in registered.family_resolutions
+                        if item.use == CrossBoundaryFamilyUse.CANONICAL_REGISTRATION)
+        conditional = next(item for item in registered.family_resolutions
+                           if item.use == CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL)
+        self.assertEqual(len(original.refit_receipt.robust_retained_transition_ids), 9)
+        self.assertEqual(len(registered.observations), 3)
+        self.assertEqual(registered.work_receipt.constrained_fit_attempt_count, 1)
+        with self.assertRaisesRegex(ValueError, "numerical acceptance authority"):
+            replace(conditional, use=CrossBoundaryFamilyUse.CANONICAL_REGISTRATION)
+        lane = {
+            "lane_id": "lane:0",
+            "cross_registration_work": typed_read_model(registered.work_receipt),
+            "observations": {
+                "cross_boundary_family_resolutions": typed_read_model(registered.family_resolutions),
+                "raw_top_bottom_lines": typed_read_model(registered.observations),
+                "registered_top_bottom_bindings": typed_read_model(registered.top_bindings),
+            },
+        }
+        queries = [typed_read_model(measurement)]
+        _validate_cross_measurement_support(lane, queries)
+        for field in ("constrained_fit_attempt_count", "constrained_fit_edge_count", "constrained_fit_event_count"):
+            invalid = deepcopy(lane)
+            invalid["cross_registration_work"][field] += 1
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                _validate_cross_measurement_support(invalid, queries)
+        for field in ("cost", "optimality_gap", "intercept"):
+            invalid = deepcopy(lane)
+            for family in invalid["observations"]["cross_boundary_family_resolutions"]:
+                family["refit_receipt"]["constrained_evaluation"]["solution"][field] += 0.01
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                _validate_cross_measurement_support(invalid, queries)
+        invalid = deepcopy(lane)
+        for family in invalid["observations"]["cross_boundary_family_resolutions"]:
+            del family["refit_receipt"]["constrained_evaluation"]["work"]["event_count"]
+        with self.assertRaisesRegex(ValueError, "work is incomplete"):
+            _validate_cross_measurement_support(invalid, queries)
+
+    def test_complete_constrained_family_keeps_empty_domain_failure(self) -> None:
+        registered = self._registered_top_families(
+            (100.0,) * 9 + (103.0,) * 2, (tuple(range(9)), (9, 10)),
+        )
+        self.assertEqual(len(registered.observations), 2)
+        self.assertEqual(len(registered.family_resolutions), 0)
+        self.assertEqual(registered.work_receipt.constrained_fit_attempt_count, 0)
+        from x5crop.detection.photo_geometry.boundary_fitting import (
+            fit_boundary_family, complete_boundary_family_proposal,
+        )
+        measurement = make_side_measurement_set(tuple((v,) for v in (100.0,) * 9 + (103.0,) * 2))
+        family = fit_boundary_family(
+            measurement, transition_ids=tuple(item.transition_id for item in measurement.transitions),
+            role=BoundaryRole.TOP, source_axis_long=BoundaryAxis.Y,
+            boundary_axis_scale_px_per_mm=PositiveInterval.exact(10.0),
+        )
+        proposal, receipt = complete_boundary_family_proposal(family)
+        self.assertIsNone(proposal)
+        evaluation = receipt.constrained_evaluation
+        self.assertIsNone(evaluation.solution)
+        self.assertEqual(evaluation.failure_kind.value, "physical_region_unavailable")
+        self.assertGreater(evaluation.work.polygon_clip_count, 0)
+        self.assertEqual(evaluation.work.edge_count, 0)
+
+    def test_constrained_family_keeps_original_observation_and_run_id_allocation(self) -> None:
+        from x5crop.detection.photo_geometry.physical_identity import physical_fact_id
+        from x5crop.detection.photo_geometry import template_registration as owner
+
+        def run():
+            registered = self._registered_top_families(
+                (100.0,) * 9 + (102.0,) * 2, (tuple(range(9)), (9, 10)),
+            )
+            later = tuple(physical_fact_id(prefix, "later") for prefix in (
+                "format-role-bound-line", "registered-cross-run", "cross-boundary-family",
+            ))
+            originals = tuple(item for item in registered.top_bindings if not item.conditional_family_ids)
+            return originals, later
+
+        with source_identity_scope():
+            actual = run()
+        with source_identity_scope(), patch.object(
+            owner, "complete_boundary_family_proposal", side_effect=lambda family: (None, family.receipt),
+        ):
+            original = run()
+        self.assertEqual(actual, original)
 
     @staticmethod
     def _top_anchor() -> CrossRoleBinding:

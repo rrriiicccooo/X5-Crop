@@ -110,6 +110,8 @@ Runtime acceptability scoring is not yet enabled; this is a current selection li
 Reports retain each lane's existing primary and single runner crop footprint, or the specific reason it could not be generated.
 If the sequence alternative cannot form a distinct crop, the existing cross-axis alternative is still considered.
 At most one additional conditional cross-axis proposal is retained separately from the primary and runner.
+When a fit satisfies the physical limits for a complete group of boundary measurements, this proposal can preserve
+an interpretation that the original fit could not retain, for manual review. Automatic approval conditions remain unchanged.
 Development gold analysis evaluates each footprint independently, allows multiple safe results, and separates unsafe from
 unavailable geometry. Each retained crop also records its numeric budget and physical features with units, provenance,
 and explicit missing reasons. Numeric budget assessment remains separate from final approval conditions.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import math
 
 import numpy as np
@@ -18,8 +19,19 @@ from .model import (
     independent_spatial_support_count,
 )
 from .measurement_model import PhotoBoundaryMeasurementSet
-from .line_observations import PhotoBoundaryObservation, SourceCoordinateLine
-from .robust_line_fit import fit_transition_line, physical_slope_interval
+from .line_observations import (
+    BoundaryFamilyFitReceipt,
+    ConstrainedLineFitReceipt,
+    PhotoBoundaryObservation,
+    SourceCoordinateLine,
+)
+from .robust_line_fit import (
+    LINE_REGION_ARITHMETIC_EPSILON_PX,
+    TransitionLineFit,
+    fit_complete_transition_line,
+    fit_transition_line,
+    physical_slope_interval,
+)
 from .trace_support import (
     PIXEL_CENTER_HALF_EXTENT_PX,
     continuous_trace_support_fraction,
@@ -64,26 +76,16 @@ def _canonical_rotation_degrees(
     return math.degrees(math.atan(slope))
 
 
-def fit_format_bound_boundary_observation(
+def _prepare_boundary_points(
     measurement_set: PhotoBoundaryMeasurementSet,
     *,
     transition_ids: tuple[ObservationId, ...],
     role: BoundaryRole,
-    source_axis_long: BoundaryAxis,
-    boundary_axis_scale_px_per_mm: PositiveInterval,
-    support_interval_px: FiniteInterval | None = None,
-    minimum_independent_support_regions: int = (
-        MINIMUM_INDEPENDENT_SUPPORT_REGIONS
-    ),
-    spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
-) -> PhotoBoundaryObservation | None:
-    """Fit one robust line from transitions bound to one fixed-format role.
-
-    This is deliberately not a line-family search.  The observation owner
-    binds one tracked run first; this function then estimates the sole raw
-    line supported by that run.  Adding an unrelated transition therefore
-    cannot create another slope candidate or move this observation.
-    """
+    support_interval_px: FiniteInterval | None,
+    minimum_independent_support_regions: int,
+    spec: PhotoBoundaryMeasurementSpec,
+) -> tuple[tuple[TransitionPoint, ...], tuple[int, ...]] | None:
+    """Check the one registered raw family before either numerical estimate."""
 
     if role not in {BoundaryRole.TOP, BoundaryRole.BOTTOM}:
         raise ValueError("format-role line requires top or bottom role")
@@ -151,11 +153,181 @@ def fit_format_bound_boundary_observation(
         < spec.tone_or_texture_z_minimum
     ):
         return None
-    fitted = fit_transition_line(
-        points,
-        boundary_axis_scale_px_per_mm.maximum,
-        spec,
+    return points, queried_traces
+
+
+def fit_format_bound_boundary_observation(
+    measurement_set: PhotoBoundaryMeasurementSet,
+    *,
+    transition_ids: tuple[ObservationId, ...],
+    role: BoundaryRole,
+    source_axis_long: BoundaryAxis,
+    boundary_axis_scale_px_per_mm: PositiveInterval,
+    support_interval_px: FiniteInterval | None = None,
+    minimum_independent_support_regions: int = (
+        MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+    ),
+    spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+) -> PhotoBoundaryObservation | None:
+    """Fit one robust line from transitions bound to one fixed-format role.
+
+    This is deliberately not a line-family search.  The observation owner
+    binds one tracked run first; this function then estimates the sole raw
+    line supported by that run.  Adding an unrelated transition therefore
+    cannot create another slope candidate or move this observation.
+    """
+
+    prepared = _prepare_boundary_points(
+        measurement_set, transition_ids=transition_ids, role=role,
+        support_interval_px=support_interval_px,
+        minimum_independent_support_regions=minimum_independent_support_regions,
+        spec=spec,
     )
+    if prepared is None:
+        return None
+    points, queried_traces = prepared
+    fitted = fit_transition_line(points, boundary_axis_scale_px_per_mm.maximum, spec)
+    return _observe_boundary_fit(
+        fitted,
+        measurement_set=measurement_set,
+        queried_traces=queried_traces,
+        role=role,
+        source_axis_long=source_axis_long,
+        boundary_axis_scale_px_per_mm=boundary_axis_scale_px_per_mm,
+        minimum_independent_support_regions=minimum_independent_support_regions,
+        spec=spec,
+    )
+
+
+@dataclass(frozen=True)
+class _BoundaryFamilyInputs:
+    measurement: PhotoBoundaryMeasurementSet
+    points: tuple[TransitionPoint, ...]
+    queried_traces: tuple[int, ...]
+    role: BoundaryRole
+    source_axis_long: BoundaryAxis
+    boundary_scale: PositiveInterval
+    spec: PhotoBoundaryMeasurementSpec
+
+
+@dataclass(frozen=True)
+class BoundaryFamilyFit:
+    canonical_observation: PhotoBoundaryObservation | None
+    receipt: BoundaryFamilyFitReceipt
+    inputs: _BoundaryFamilyInputs | None
+    robust_line: TransitionLineFit | None
+
+
+def fit_boundary_family(
+    measurement_set: PhotoBoundaryMeasurementSet,
+    *,
+    transition_ids: tuple[ObservationId, ...],
+    role: BoundaryRole,
+    source_axis_long: BoundaryAxis,
+    boundary_axis_scale_px_per_mm: PositiveInterval,
+    spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+) -> BoundaryFamilyFit:
+    """Evaluate the original canonical rule once for a complete raw union."""
+    minimum_independent_support_regions = MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+    prepared = _prepare_boundary_points(
+        measurement_set, transition_ids=transition_ids, role=role,
+        support_interval_px=None,
+        minimum_independent_support_regions=minimum_independent_support_regions,
+        spec=spec,
+    )
+    if prepared is None:
+        return BoundaryFamilyFit(
+            None, BoundaryFamilyFitReceipt(None, (), None), None, None,
+        )
+    points, queried_traces = prepared
+    fitted = fit_transition_line(points, boundary_axis_scale_px_per_mm.maximum, spec)
+    original = _observe_boundary_fit(
+        fitted,
+        measurement_set=measurement_set,
+        queried_traces=queried_traces,
+        role=role,
+        source_axis_long=source_axis_long,
+        boundary_axis_scale_px_per_mm=boundary_axis_scale_px_per_mm,
+        minimum_independent_support_regions=minimum_independent_support_regions,
+        spec=spec,
+    )
+    retained = () if original is None else original.transition_ids
+    return BoundaryFamilyFit(
+        original if set(retained) == set(transition_ids) else None,
+        BoundaryFamilyFitReceipt(fitted.receipt, retained, None),
+        _BoundaryFamilyInputs(
+            measurement_set, points, queried_traces, role, source_axis_long,
+            boundary_axis_scale_px_per_mm, spec,
+        ),
+        fitted,
+    )
+
+
+def complete_boundary_family_proposal(
+    family: BoundaryFamilyFit,
+) -> tuple[PhotoBoundaryObservation | None, BoundaryFamilyFitReceipt]:
+    """Add only a conditional estimate after canonical inputs are frozen.
+
+    Original fitting and qualification are reused. Physical feasibility and
+    finite-precision optimization do not establish canonical family identity.
+    """
+    inputs = family.inputs
+    if family.canonical_observation is not None or inputs is None:
+        return None, family.receipt
+    evaluation = fit_complete_transition_line(
+        inputs.points, inputs.boundary_scale.maximum, inputs.spec,
+        initial_fit=family.robust_line,
+    )
+    receipt = BoundaryFamilyFitReceipt(
+        family.receipt.robust_fit_receipt,
+        family.receipt.robust_retained_transition_ids,
+        evaluation,
+    )
+    solution = evaluation.solution
+    if solution is None:
+        return None, receipt
+    residuals = np.asarray(solution.residuals, dtype=np.float64)
+    residuals.flags.writeable = False
+    conditional_fit = TransitionLineFit(
+        slope=solution.slope, intercept=solution.intercept,
+        residuals=residuals, selected_points=inputs.points,
+        receipt=ConstrainedLineFitReceipt(
+            method="physical_constraint_huber",
+            cost=solution.cost, optimality_gap=solution.optimality_gap,
+            work=evaluation.work,
+        ),
+    )
+    conditional = _observe_boundary_fit(
+        conditional_fit,
+        measurement_set=inputs.measurement,
+        queried_traces=inputs.queried_traces,
+        role=inputs.role,
+        source_axis_long=inputs.source_axis_long,
+        boundary_axis_scale_px_per_mm=inputs.boundary_scale,
+        minimum_independent_support_regions=MINIMUM_INDEPENDENT_SUPPORT_REGIONS,
+        spec=inputs.spec,
+        complete_union=True,
+    )
+    expected = {point.transition.transition_id for point in inputs.points}
+    if conditional is None or set(conditional.transition_ids) != expected:
+        raise ValueError("verified complete-family fit lost a raw transition")
+    return conditional, receipt
+
+
+def _observe_boundary_fit(
+    fitted: TransitionLineFit,
+    *,
+    measurement_set: PhotoBoundaryMeasurementSet,
+    queried_traces: tuple[int, ...],
+    role: BoundaryRole,
+    source_axis_long: BoundaryAxis,
+    boundary_axis_scale_px_per_mm: PositiveInterval,
+    minimum_independent_support_regions: int,
+    spec: PhotoBoundaryMeasurementSpec,
+    complete_union: bool = False,
+) -> PhotoBoundaryObservation | None:
+    """Materialize the same measurement uncertainty for either representative."""
+    minimum_support = 2
     slope = fitted.slope
     intercept = fitted.intercept
     residuals = fitted.residuals
@@ -189,6 +361,18 @@ def fit_format_bound_boundary_observation(
         dtype=np.float64,
     )
     inlier_mask = interval_distance <= inlier_threshold
+    if complete_union:
+        # Use exactly the numerical kernel's expanded-interval arithmetic;
+        # subtracting a distance first can disagree at a closed endpoint.
+        inlier_mask = np.asarray([
+            FiniteInterval(
+                point.transition.physical_position_interval_px.minimum - inlier_threshold,
+                point.transition.physical_position_interval_px.maximum + inlier_threshold,
+            ).contains(value, epsilon=LINE_REGION_ARITHMETIC_EPSILON_PX)
+            for point, value in zip(selected, predicted, strict=True)
+        ], dtype=np.bool_)
+    if complete_union and not bool(np.all(inlier_mask)):
+        return None
     if int(np.count_nonzero(inlier_mask)) < minimum_support:
         return None
     inliers = tuple(
@@ -288,7 +472,7 @@ def fit_format_bound_boundary_observation(
         sorted((point.transition.transition_id for point in inliers), key=str)
     )
     observation_id = physical_observation_id(
-        "format-role-bound-line",
+        "constrained-family-line" if complete_union else "format-role-bound-line",
         role.value,
         *(str(identity) for identity in selected_ids),
     )

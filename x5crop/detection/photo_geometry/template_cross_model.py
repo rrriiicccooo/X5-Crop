@@ -8,7 +8,7 @@ import math
 
 from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
 from ...formats import OUTPUT_PROTECTION_SPEC
-from .line_observations import PhotoBoundaryObservation
+from .line_observations import BoundaryFamilyFitReceipt, PhotoBoundaryObservation
 from .interval_math import intersect, subtract
 from .model import (
     BoundaryAxis,
@@ -354,6 +354,7 @@ class CrossBoundaryFamilyResolution:
     member_transition_groups: tuple[tuple[ObservationId, ...], ...]
     final_observation_ids: tuple[ObservationId, ...]
     failure_kind: CrossBoundaryFamilyFailureKind | None
+    refit_receipt: BoundaryFamilyFitReceipt
     use: CrossBoundaryFamilyUse = CrossBoundaryFamilyUse.CANONICAL_REGISTRATION
 
     def __post_init__(self) -> None:
@@ -393,6 +394,21 @@ class CrossBoundaryFamilyResolution:
             )
         ):
             raise ValueError("cross boundary family resolution is invalid")
+        if not isinstance(self.refit_receipt, BoundaryFamilyFitReceipt):
+            raise TypeError("cross family requires its complete refit receipt")
+        retained = self.refit_receipt.robust_retained_transition_ids
+        constrained = self.refit_receipt.constrained_evaluation
+        robust_complete = retained == self.member_transition_ids
+        constrained_complete = constrained is not None and constrained.solution is not None
+        if (
+            not set(retained).issubset(self.member_transition_ids)
+            or (robust_complete and constrained is not None)
+            or (supported and not (robust_complete or (conditional and constrained_complete)))
+            or (unavailable and robust_complete)
+            or (unavailable and conditional and constrained_complete)
+            or (constrained is not None and constrained.work.input_point_count != len(self.member_transition_ids))
+        ):
+            raise ValueError("cross family changed its numerical acceptance authority")
         if supported:
             if len(self.final_observation_ids) != 1 or self.failure_kind is not None:
                 raise ValueError("supported cross family must resolve to one line")

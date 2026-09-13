@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import math
+from dataclasses import fields
+from statistics import median
 from typing import Any
 
 from x5crop.detection.candidate.assessment.model import CANDIDATE_GATE_CHECK_CODES
@@ -61,12 +63,25 @@ from x5crop.detection.photo_geometry.template_placement import (
 )
 from x5crop.detection.photo_geometry.template_registration import (
     CrossRegistrationWorkReceipt,
+    complete_family_evaluations,
     validate_cross_family_provenance,
+)
+from x5crop.detection.photo_geometry.line_observations import (
+    BoundaryFamilyFitReceipt,
+    CompleteTransitionLineEvaluation,
+    CompleteTransitionLineFailureKind,
+    CompleteTransitionLineSolution,
+    CompleteTransitionLineWork,
+    ConstrainedLineFitReceipt,
+    RobustLineFitReceipt,
 )
 from x5crop.domain import Box, EvidenceState, FiniteInterval, ObservationId, PositiveInterval, WorkspaceExtent
 from x5crop.detection.photo_geometry.measurement_model import PhotoBoundaryMeasurementQuery
 from x5crop.detection.photo_geometry.registered_measurement import registered_baseline_query_groups
-from x5crop.detection.photo_geometry.robust_line_fit import physical_line_region
+from x5crop.detection.photo_geometry.robust_line_fit import (
+    LINE_REGION_ARITHMETIC_EPSILON_PX,
+    physical_line_region,
+)
 from x5crop.report.read_models import typed_read_model
 from x5crop.formats import OUTPUT_PROTECTION_SPEC
 from x5crop.geometry.affine import AffineCoordinateTransform
@@ -880,6 +895,117 @@ def _validate_cross_direct_support_regions(lane: dict[str, Any]) -> None:
         raise ValueError("Cross fit lacks independent measured boundary support")
 
 
+def _read_complete_line_work(value: object) -> CompleteTransitionLineWork:
+    if not isinstance(value, dict) or set(value) != {field.name for field in fields(CompleteTransitionLineWork)}:
+        raise ValueError("Cross constrained numerical work is incomplete")
+    return CompleteTransitionLineWork(**value)
+
+
+def _read_line_fit_receipt(value: object) -> RobustLineFitReceipt | ConstrainedLineFitReceipt:
+    if not isinstance(value, dict):
+        raise ValueError("Cross line-fit receipt is missing")
+    if value.get("method") == "scipy_least_squares_huber":
+        return RobustLineFitReceipt(**value)
+    if value.get("method") == "physical_constraint_huber":
+        return ConstrainedLineFitReceipt(**{**value, "work": _read_complete_line_work(value["work"])})
+    raise ValueError("Cross line-fit method is unknown")
+
+
+def _read_boundary_family_receipt(value: object) -> BoundaryFamilyFitReceipt:
+    if not isinstance(value, dict) or set(value) != {field.name for field in fields(BoundaryFamilyFitReceipt)}:
+        raise ValueError("Cross family refit receipt is incomplete")
+    robust = value["robust_fit_receipt"]
+    evaluation = value["constrained_evaluation"]
+    if evaluation is not None:
+        solution = evaluation["solution"]
+        evaluation = CompleteTransitionLineEvaluation(**{
+            **evaluation,
+            "solution": None if solution is None else CompleteTransitionLineSolution(**{
+                **solution, "residuals": tuple(solution["residuals"]),
+            }),
+            "failure_kind": None if evaluation["failure_kind"] is None else
+                CompleteTransitionLineFailureKind(evaluation["failure_kind"]),
+            "work": _read_complete_line_work(evaluation["work"]),
+        })
+    return BoundaryFamilyFitReceipt(
+        None if robust is None else RobustLineFitReceipt(**robust),
+        tuple(map(ObservationId, value["robust_retained_transition_ids"])), evaluation,
+    )
+
+
+def _validate_complete_family_numerics(
+    evaluation: CompleteTransitionLineEvaluation,
+    points: tuple[dict[str, Any], ...],
+    scale: float,
+) -> None:
+    """Recompute full raw loss, constraints and first-order gap without fitting."""
+    work = evaluation.work
+    n = len(points)
+    v = work.polygon_vertex_count
+    if (
+        work.input_point_count != n
+        or work.raw_constraint_count not in (0, 2 * n)
+        or work.polygon_clip_count > work.raw_constraint_count
+        or v > 2 * n + 4
+        or work.polygon_vertex_evaluation_count > work.polygon_clip_count * (2 * n + 5)
+        or work.initial_fit_point_check_count not in (0, n)
+        or work.edge_count > v
+        or work.event_count > 2 * n * work.edge_count
+        or work.event_visit_count > work.event_count
+        or work.candidate_count > v + 1
+        or work.loss_point_evaluation_count > n * (v + 2)
+        or work.gradient_point_evaluation_count > n * (v + 2)
+        or work.gap_vertex_evaluation_count > 2 * v
+        or work.raw_recheck_point_count > 2 * n
+    ):
+        raise ValueError("Cross constrained numerical work exceeds its finite bound")
+    solution = evaluation.solution
+    if solution is None:
+        return
+    spec = PHOTO_BOUNDARY_MEASUREMENT_SPEC
+    delta = spec.robust_loss_minimum_scale_mm * scale
+    allowance = spec.inlier_minimum_threshold_mm * scale
+    cap = math.tan(math.radians(spec.maximum_measurable_line_angle_degrees))
+    traces = tuple(point["trace_coordinate_px"] for point in points)
+    reference = float(median(traces))
+    trace_scale = max(traces) - min(traces)
+    if len(set(traces)) != n or trace_scale <= 0.0 or abs(solution.slope) > cap:
+        raise ValueError("Cross constrained line has invalid raw trace or angle authority")
+    intervals = tuple(sorted((point["trace_coordinate_px"], FiniteInterval(
+        point["physical_position_interval_px"]["minimum"] - allowance,
+        point["physical_position_interval_px"]["maximum"] + allowance,
+    )) for point in points))
+    region = physical_line_region(intervals, cap, reference)
+    if region is None or len(region.vertices) != v or any(
+        not interval.contains(math.fsum((solution.slope * trace, solution.intercept)),
+                              epsilon=LINE_REGION_ARITHMETIC_EPSILON_PX)
+        for trace, interval in intervals
+    ):
+        raise ValueError("Cross constrained line violates the complete physical region")
+    residuals = tuple(point["canonical_coordinate_px"] - math.fsum((
+        solution.slope * point["trace_coordinate_px"], solution.intercept,
+    )) for point in points)
+    cost = math.fsum(0.5 * r * r if abs(r) <= delta else delta * (abs(r) - 0.5 * delta)
+                     for r in residuals)
+    clipped = tuple(min(delta, max(-delta, -r)) for r in residuals)
+    gradient = (math.fsum(clipped), math.fsum(
+        value * ((trace - reference) / trace_scale)
+        for value, trace in zip(clipped, traces, strict=True)
+    ))
+    position = math.fsum((solution.intercept, solution.slope * reference))
+    gap = max(0.0, max(math.fsum((
+        gradient[0] * (position - p), gradient[1] * (solution.slope * trace_scale - m * trace_scale),
+    )) for p, m in region.vertices))
+    if (
+        residuals != solution.residuals or cost != solution.cost or gap != solution.optimality_gap
+        or gap > spec.robust_fit_tolerance * cost
+        or (cost == 0.0 and any(r != 0.0 for r in residuals))
+        or work.raw_constraint_count != 2 * n or work.raw_recheck_point_count < n
+        or work.gradient_point_evaluation_count < n or work.gap_vertex_evaluation_count < v
+    ):
+        raise ValueError("Cross constrained line numerical receipt is not reproducible")
+
+
 def _validate_cross_measurement_support(
     lane: dict[str, Any], query_records: list[dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
@@ -891,10 +1017,7 @@ def _validate_cross_measurement_support(
     if not isinstance(raw, list) or not isinstance(bindings, list):
         raise ValueError("Cross measured support records are missing")
     work = lane.get("cross_registration_work")
-    if not isinstance(work, dict) or set(work) != {
-        "fit_attempt_count", "raw_observation_count", "local_fragment_count",
-        "family_compatibility_evaluation_count",
-    }:
+    if not isinstance(work, dict) or set(work) != {field.name for field in fields(CrossRegistrationWorkReceipt)}:
         raise ValueError("Cross registration work is incomplete")
     receipt = CrossRegistrationWorkReceipt(**work)
     if (
@@ -949,6 +1072,7 @@ def _validate_cross_measurement_support(
         for transition in record["transitions"]:
             transitions[transition["transition_id"]] = transition
     for observation in raw:
+        _read_line_fit_receipt(observation.get("fit_receipt"))
         identities = observation.get("transition_ids")
         if (
             not _valid_ids(identities, allow_empty=False)
@@ -991,7 +1115,7 @@ def _validate_cross_measurement_support(
         if not isinstance(item, dict) or set(item) != {
             "family_id", "role", "state", "use", "member_observation_ids",
             "member_transition_ids", "member_transition_groups",
-            "final_observation_ids", "failure_kind",
+            "final_observation_ids", "failure_kind", "refit_receipt",
         }:
             raise ValueError("Cross family provenance is incomplete")
         family = CrossBoundaryFamilyResolution(
@@ -1004,6 +1128,7 @@ def _validate_cross_measurement_support(
             final_observation_ids=tuple(map(ObservationId, item["final_observation_ids"])),
             failure_kind=(None if item["failure_kind"] is None else
                           CrossBoundaryFamilyFailureKind(item["failure_kind"])),
+            refit_receipt=_read_boundary_family_receipt(item["refit_receipt"]),
         )
         if any(str(identity) not in transitions for identity in family.member_transition_ids):
             raise ValueError("Cross family lost its original transition provenance")
@@ -1016,6 +1141,51 @@ def _validate_cross_measurement_support(
         {ObservationId(identity): tuple(item["conditional_family_ids"])
          for identity, item in registered.items()},
     )
+    evaluations = complete_family_evaluations(tuple(families))
+    if (
+        receipt.constrained_fit_attempt_count != len(evaluations)
+        or receipt.constrained_fit_edge_count != sum(item.work.edge_count for item in evaluations)
+        or receipt.constrained_fit_event_count != sum(item.work.event_count for item in evaluations)
+    ):
+        raise ValueError("Cross registration lost constrained numerical work")
+    checked = set()
+    constrained_outputs = {}
+    for family in families:
+        evaluation = family.refit_receipt.constrained_evaluation
+        if evaluation is None:
+            continue
+        key = (family.role, family.member_transition_ids)
+        if key not in checked:
+            points = tuple(point for identity, point in transitions.items()
+                           if ObservationId(identity) in family.member_transition_ids)
+            query_ids = {point["query_id"] for point in points}
+            if len(query_ids) != 1:
+                raise ValueError("Cross complete family changed original query authority")
+            scale = queries[next(iter(query_ids))]["boundary_axis_scale_px_per_mm"]["maximum"]
+            _validate_complete_family_numerics(evaluation, points, scale)
+            checked.add(key)
+        if family.use == CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL and evaluation.solution is not None:
+            for identity in family.final_observation_ids:
+                constrained_outputs[str(identity)] = evaluation
+    for observation in raw:
+        fitted = _read_line_fit_receipt(observation["fit_receipt"])
+        evaluation = constrained_outputs.get(observation["observation_id"])
+        if isinstance(fitted, ConstrainedLineFitReceipt) != (evaluation is not None):
+            raise ValueError("Cross constrained line lost its conditional family authority")
+        if evaluation is not None:
+            solution = evaluation.solution
+            assert solution is not None
+            line = observation["line"]
+            query = queries[transitions[observation["transition_ids"][0]]["query_id"]]
+            normal = line["normal_x" if query["boundary_axis"] == "x" else "normal_y"]
+            other = line["normal_y" if query["boundary_axis"] == "x" else "normal_x"]
+            if (
+                fitted.cost != solution.cost or fitted.optimality_gap != solution.optimality_gap
+                or fitted.work != evaluation.work
+                or not math.isclose(-other / normal, solution.slope, rel_tol=0.0, abs_tol=1e-12)
+                or not math.isclose(line["offset_px"] / normal, solution.intercept, rel_tol=0.0, abs_tol=1e-9)
+            ):
+                raise ValueError("Cross constrained observation changed its evaluated line")
     return registered
 
 

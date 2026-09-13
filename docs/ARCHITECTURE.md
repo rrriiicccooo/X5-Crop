@@ -1052,13 +1052,25 @@ refit 成功的 component 不会被拆分；最终合并继续要求至少两个
 同一 registration owner 随后把上述 canonical observation 作为不可拆分的输入，再生成有条件的
 分组解释。每条 trace 只能贡献一个不同 transition；完整 component 不相容时，沿用同一 anchor
 分组规则，把每个单区域 fragment 加入全部相容的固定 anchor group。每组仍只检验完整 raw 并集，
-不枚举子集、不根据 refit 结果删成员；已检验过的相同并集不重复拟合或登记。只有完整并集重拟合成功
+不枚举子集、不根据 refit 结果删成员；相同并集复用一次原稳健拟合结果。只有完整并集重拟合成功
 才追加 observation，所有 canonical 输入继续原样保留。失败记录没有 final observation，原始成员仍在账本。
 `CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL`、逐成员 transition group 与 binding 的
 `conditional_family_ids` 共同记录这项条件。空间覆盖和完整 refit 不证明分组身份已经闭合。
+原两阶段 registration 完成后，对已登记但未保留完整并集的分组，再进行至多一次完整物理约束 Huber
+拟合。它保持原等权 `0.05 mm × scale` 损失尺度、逐点 physical interval、`0.10 mm × scale` bend
+allowance 与 4° 方向上限，绝不检索 raw 子集。先复用原拟合中满足全部约束的完整解；否则在已有联合
+位置/斜率多边形的每条边上，按 Huber 导数的有限分段线性事件求最小值。最终从原始点重新计算 loss、
+gradient、全部顶点的 first-order gap，并要求 `gap <= robust_fit_tolerance × cost`，不设 cost floor；
+零 loss 必须逐点零残差。原始约束再检查只使用现有 `1e-9 px` 闭集算术容差，不增加物理 allowance。
+这是浮点数值核验，不是严格舍入认证；缺少可核验的内部最优点时，边扫描可能明确拒绝可行分组。
+新增解只生成有条件 observation，不提升 canonical family 权限。原拟合未保留全员也不证明物理边界
+必然属于不同 family；两项验收事实分别保存在 `BoundaryFamilyFitReceipt`。同一并集的 canonical
+失败记录与 conditional 成功记录共用一次数值结果，账本按完整 raw union 去重计数。新增线与 family
+使用独立编号前缀，不改变原有两侧 registration 和后续精修的编号顺序。
 这类线可以生成单独的待检查裁切范围，以 `family_assignment_unresolved` 标记其分组权限缺口。
 Canonical best、runner、状态与 source H 由只含 canonical binding 的视图决定；附加提案不能替换它们，
-也不能把原本符合条件的 canonical 输出变为 Review。它不形成已获权 candidate，不校准 source H，不充当缺边精修
+在原全局工作量上限内不改变其批准结果；真实超界仍按统一 bound 拒绝。它不形成已获权 candidate，
+不校准 source H，不充当缺边精修
 anchor/opposite 或外侧角色反证，也不能通过排除另一组
 候选间接消歧。Canonical 成员、全部 raw 并集、final observation 与条件标记由运行时和开发报告双向校验。
 同一 pair owner 只枚举一次物理配对；canonical 选择和包含条件线的提案选择使用同一求解函数的两个权限视图。
@@ -1068,18 +1080,23 @@ anchor/opposite 或外侧角色反证，也不能通过排除另一组
 Raster trace 不连续不等于物理边界不同；完整并集重拟合能够成立时，跨 domain fragment 仍可属于同一条线。
 坐标邻近、方向相似、support 更多或 residual 更小都不能选择性丢弃组员。每侧原 registered run 数为 R 时，
 两阶段 family 相容域计算合计不超过 `2R(R+1)`，以 `family_compatibility_evaluation_count` 保留真实次数；
-初次 run 拟合、canonical 分组与有条件分组的拟合尝试合计不超过 `3R`，原有缺边精修至多再增加 `R`；
-每次裁剪的工作量为 raw 并集规模的平方上界，缓存只保存 observation 索引组合与布尔结果。
+初次 run 拟合、canonical 分组与有条件分组的原拟合尝试合计不超过 `3R`，完整物理约束拟合至多 `2R`，
+两者分别计数，合计不超过 `5R`；原有缺边精修至多再增加 `R`。
+约束拟合对 N 个点裁剪至多 2N 个半平面、保留至多 `V <= 2N+4` 个顶点，每边至多 2N 个导数事件；
+计算上界为 `O(N V log N)`、临时存储为 `O(N+V)`。成功与失败均记录实际约束、裁剪、顶点评估、
+初始解检查、边、事件生成/访问、候选、loss/gradient 点项、gap 顶点与原始约束复查次数；
+registration work 汇总约束拟合次数、边数和事件数，开发校验从去重后的逐组账本复算汇总及有限上界。
+相容域裁剪的工作量为 raw 并集规模的平方上界；相容性缓存只保存 observation 索引组合与布尔结果。
 Selection 不再
 拥有 broader/local containment 或 dominance 逻辑，只消费 registration 的 identity 与显式条件。TOP 与
 BOTTOM 是两个独立 registered-run producer，各自使用同一编译合同与每角色 512 条上限；一侧的局部
 fragment 不能占用另一侧配额，总工作量只由两侧 receipt 求和。任一侧单独超界即产生
 `producer_bound_exceeded`，不能把总数与单侧上限比较、截断候选或静默跳过。Family 完成后，完整 raw 与
 registered binding 账本继续保留所有局部假设；同一 registration owner 只按原始两区域条件编译唯一
-solver 输入，不按背景角色是否获权筛选。全局 canonical fitted observation（包括 coarse pair）仍独立受
+solver 输入，不按背景角色是否获权筛选。全局 solver 的 fitted observation（包括条件线与 coarse pair）仍独立受
 512 条上限约束，compatible pair / evaluated fit 各受 4096 上限约束；局部假设不能占用全局边界配额。
 每角色 producer 原始数量不因投影减少；精修完整保留新增测量，由全局 typed bound 拒绝真实超界，
-不回填旧数组或隐藏工作量。Registration work 另存全部拟合尝试、最终 raw 数与局部假设数；独立线数量
+不回填旧数组或隐藏工作量。Registration work 另存原拟合尝试、最终 raw 数与局部假设数；独立线数量
 由 raw 减局部数复算，solver 总数另计真实 coarse pair。整个过程不新增
 TIFF 读取或 selected-placement query。每角色 run 数、上限、Family state、成员/transition/final identity
 与 typed failure 写入 development report 和 Debug。

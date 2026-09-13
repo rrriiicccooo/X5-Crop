@@ -20,8 +20,8 @@
   高度，明确区分照片边与外框支撑。冻结无关长轴算法调整，使用当前 W 和各格长轴范围；只处理妨碍
   Cross 正确性验证的必要依赖，不要求两轴完全解耦。
 - 每轮分别报告短轴质量改善、整组合格方案任务数、可靠自动交付数、错误自动交付数，并保留端到端与
-  性能验证。当前先修复没有合格短轴方案的 32 个任务，再处理已有合格方案的可靠选择与误阻断。
-  整组仍有 67 个任务无合格方案，另有 24 个已有合格方案但 Review。多个解释或多个合格方案不应永久
+  性能验证。当前先修复没有合格短轴方案的 30 个任务，再处理已有合格方案的可靠选择与误阻断。
+  整组仍有 65 个任务无合格方案，另有 26 个已有合格方案但 Review。多个解释或多个合格方案不应永久
   阻断输出，有充分可用性依据即可选择，不要求唯一真实边界；精确合同见架构第 9、14 节。
   补齐外框、扩大保护、增加 Review 或 Cross 变为 resolved，本身均不算产品质量进展。
 - Source-W、有界候选集合、typed features 与首轮离线开发排序已验证。首轮排序没有改善选择，
@@ -32,14 +32,15 @@
 
 ## 当前源码与已验证事实
 
-当前 Runtime 为 `c3b6b6eb0813777f72db2fa9400eea9797a07305`，已正常推送 main。Canonical 完整组作为不可拆分输入，
+本轮 Runtime 增加完整分组物理约束 Huber 数值解，仅补充有条件提案；待本轮正常提交及 Hook 闭合。
+前一接受 Runtime 为 `c3b6b6eb0813777f72db2fa9400eea9797a07305`。Canonical 完整组作为不可拆分输入，
 新解释只保留完整 raw 并集；原有 Cross best/runner/H 与自动权限独立决定。每条 lane 至多追加一份
 有条件提案，全部物化、预算与特征计入实际工作量；不扩大像素查询、phase 搜索或原 Cross 总上限。
-完整合同见架构第 8、9、14 节。Report revision 78；Gold record/summary v21/v24，无旧 schema 兼容。
+完整合同见架构第 8、9、14 节。Report revision 79；Gold record/summary v21/v24，无旧 schema 兼容。
 
-本轮 188 项相关专项测试通过；随后补充的第三份 proposal 物化/权限反例和黄金三角色标签测试分别通过
-10 项与 42 项。110-task 正式 production flow 与全部 current report 校验完成；正常 pre-push Hook 的
-907 项工程测试通过，2 项按既定条件跳过。干净提交的正式性能通过，详情见下一节。
+本轮 176 项数值、registration、Cross、测量及物理域专项测试通过；110-task 正式 production flow
+与全部 current report 校验完成。S032/S041/S101 正式 Debug Analysis 及其 report 校验通过。
+前一接受版本的正常 pre-push Hook 为 907 项通过、2 项按既定条件跳过；其干净提交性能见下一节。
 [Verify](https://github.com/rrriiicccooo/X5-Crop/actions/runs/34744270182) 的 12 个环境组合全部通过；
 工程 CI 不替代最终三目标实机发布 receipt。
 
@@ -81,8 +82,7 @@
   slice view 不重复计底层数组。该 detector 缓冲预算不冒充进程 RSS，像素与内存上限均未放宽。
 - 单区域片段仍保留在完整 family 账本，完整并集达到原两区域要求才可获权；全局 solver 只消费获权线。
   不按 selected Frame 覆盖数抬高独立证据，不选择性合并较有利子集，也不删除新增测量。
-- Report revision 为 `x5crop_v5_template_report_77`，gold record / summary 为 v20 / v23。
-  registered observation → phase binding → frame line 的完整物理来源与唯一有符号 W 位移被独立校验。
+- registered observation → phase binding → frame line 的完整物理来源与唯一有符号 W 位移被独立校验。
   `registered_normalization_revision` 绑定计划与报告。Runtime 与开发校验共用基线登记合同；
   缺失基线、虚构基线边界、lane 范围漂移、漏计像素或整组内存，即使重算总账也不能通过。
   原有 raw／角色／solver 回链、逐候选 Cross 支撑区间与 source extent 校验继续保留。
@@ -102,7 +102,7 @@
 
 ## 完整黄金与性能证据
 
-最新完整开发结果：`Test/gold_analysis/cross_conditional_portfolio_full_20260913`，冻结依赖下
+最新完整开发结果：`Test/gold_analysis/constrained_family_full_20260913`，冻结依赖下
 110/110 完成，分析错误 0，全部 current report 与物理校准通过。它是 development 验证，不是 release receipt。
 
 | 层级 | 结果 |
@@ -111,19 +111,19 @@
 | Candidate | 27 safe / 13 unsafe / 70 unavailable |
 | 最终决定 | 19 safe auto / 0 unsafe auto / 91 Review |
 | Nominal（96 任务） | 40 生成合格方案 / 19 安全自动交付 / 77 Review |
-| Challenge（14 任务） | 3 生成合格方案 / 0 自动交付 / 14 Review |
-| 短轴合格方案 | 78 个任务：nominal 71 / challenge 7 |
-| 无合格短轴方案 | 32 个任务：nominal 25 / challenge 7 |
-| 保留候选集合 | 200 份；50 safe / 150 unsafe |
-| 每任务至少一份安全 | 43 |
-| 无合格方案 | 67 个任务：nominal 56 / challenge 11 |
-| 已有合格方案仍 Review | 24 个任务：nominal 21 / challenge 3 |
+| Challenge（14 任务） | 5 生成合格方案 / 0 自动交付 / 14 Review |
+| 短轴合格方案 | 80 个任务：nominal 71 / challenge 9 |
+| 无合格短轴方案 | 30 个任务：nominal 25 / challenge 5 |
+| 保留候选集合 | 207 份；53 safe / 154 unsafe |
+| 每任务至少一份安全 | 45 |
+| 无合格方案 | 65 个任务：nominal 56 / challenge 9 |
+| 已有合格方案仍 Review | 26 个任务：nominal 21 / challenge 5 |
 
-与接受基线 `Test/gold_analysis/cross_runner_vacancy_full_20260908` 按 source SHA、format/count 和角色
-对齐：短轴合格 76→78，整组合格 42→43，安全 auto 19→19，错误 auto 0→0。原有 189 份 canonical
-placement 的实际 `required_source_footprint` 多边形逐项完全相同；新增 11 份有条件提案。
-S005 最佳短轴从 3/6→6/6，并新增整组安全方案；S027 从 5/6→6/6，但长轴仍不安全；
-S033 从 0→1 格短轴合格。其它任务的质量指标与决定无退步。
+与接受基线 `Test/gold_analysis/cross_conditional_portfolio_full_20260913` 按 source SHA、format/count 和角色
+对齐：短轴合格 78→80，整组合格 43→45，安全 auto 19→19，错误 auto 0→0。原有 189 份 canonical
+placement 的实际 `required_source_footprint` 多边形逐项完全相同；全部最终决定相同。
+S041/S050 新增整组安全条件方案；S032 最佳短轴 4/6→5/6，但仍不安全。S101 原 runner 12/12
+合格短轴保持。其它任务的质量指标无退步；具体对照保存在该目录 `baseline_quality_comparison.json`。
 S051 primary 仍不可用，保留的 runner 可评价但不安全；不晋升 runner 或伪造 primary。
 
 短轴统计读取同一最终 footprint 的逐帧 cross_low/cross_high 内切与外扩诊断，并核对全部实际确认照片
@@ -131,24 +131,23 @@ S051 primary 仍不可用，保留的 runner 可评价但不安全；不晋升 r
 S005 有条件提案虽然黄金安全，数值预算仍失败；生成进展尚未解除其自动准入缺口。
 
 当前结果的 detector 指纹为
-`4cdcf34ae9b9b25122818027248a0c788686e01443fda83dff8f92cdda58dd56`；
-comparator 指纹为 `12029b441774fa99231909de4450b2d54aa2e8084507d71d9d6bd99887bf407f`；
+`467e18d8a3e94ae3629f7ba0cbf1fcf7903214b0d6a18f4b1a559dad92befc99`；
+comparator 指纹为 `07e6c7c288aa5844ba8a16b6faf42ffd02bbb9d1a332f11077ad24d96023ff8f`；
 cohort 为 `c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`。
-提交后逐字节复核：仅 Debug Analysis 标题布局的三行与本轮黄金快照不同；其余 detector、comparator、
-cohort 精确一致，原 receipt 未改写。当前 detector 指纹为
-`08a698f86fa1d7db1c7ab7c19d456f67bf4d4a3508e2ba20342f26d8ed083607`。
+该全量运行从未提交源码开始，不能伪造为同一 release commit receipt；提交后须复核源码指纹一致。
 
 干净 `c3b6b6eb`、冻结依赖下 `tools/verify performance` 完成：24-source 完整用户路径均值
 **3.865011 秒**，5 秒 Gate 通过，3 秒挑战未达成。p95 为 7.071714 秒，最慢 S091 为 7.088811 秒；
 未插桩 peak RSS 最大 1,228,226,560 bytes。决定为 2 auto / 22 Review。
-Receipt 为 `build/v5-performance/performance_receipt.json`，仅证明该提交、当前机器与本次决定分布。
+旧 receipt 已保存在 `Test/gold_analysis/cross_conditional_portfolio_full_20260913/performance_receipt_c3b6b6eb.json`，
+仅证明该提交、当前机器与本次决定分布；本轮正式性能尚待干净提交后验证。
 上一接受 Runtime 的均值为 3.673461 秒；本轮略增，不能声称提速或用剖面时间替代正式计时。
 
 ## 开放风险与精确下一步
 
-接受基线的正常 Hook、正式全量黄金与干净提交性能已完成。继续 32 个无合格短轴方案的生成问题；
-新增测量或完整拟合不能挤掉已有合格短轴备选。下一步先补齐下述 S101 保留槽位反例与有界保留规则，
-再接入完整分组数值修正；随后研究 S031/S032 的同 trace 竞争片段归属。保持完整 canonical 原子与
+接受基线的正常 Hook、正式全量黄金与干净提交性能已完成。新增测量或完整拟合不能挤掉已有合格
+短轴备选。完整分组的数值补充只保留为有条件提案，保持原 canonical 两阶段与排序相关编号。
+完成本轮正式验证后，继续研究 S031/S032 的同 trace 竞争片段归属。保持完整 canonical 原子与
 全体测量，不按拟合或黄金结果挑子集。
 有条件 family 不能侵入 canonical 选择；首次侵入版本曾丢失 S022/S084/S089 的安全 auto 并使 S062
 首选退步，已由权限分离和独立提案位置修复。失败版 `cross_conditional_family_full_20260910`
@@ -179,25 +178,18 @@ S031 本轮正式报告的 51-transition 有条件 TOP 完整组只包含 45 条
 或约束代表点声称该组完整通过。证据为 `/private/tmp/x5crop-S031-complete-family-audit-20260913.json`，
 绑定同次 production report；它是归属诊断，不是 reference。
 
-完整分组数值实验已覆盖 110/110 个 source-bound 任务，错误 0；证据归档为
-`Test/gold_analysis/complete_family_numerical_probe_20260913`。它只在分组合并 owner 中，对原本无法完整
-保留的固定 raw 并集，试求原 Huber 目标在原 4°/bend 物理域内的代表线；原始 run 和缺边精修未改。
-同时按既有闭集裁剪采用 `1e-9 px` 算术余量，因此不是“严格原判据不变”。4 个最小实际完整组
-（S032 28 raw、S033 两组各 15 raw、S097 12 raw）与独立 SLSQP 目标值一致；原严格比较仍会因
-约 `2.3e-14` 至 `5.9e-13 px` 的边界算术丢点。有限边扫描只作浮点最优性核验，不是严格舍入认证；
-总工作为 `O(N V log N)`、`V <= 2N+4`，不是原平方工作量。生产接入还需真实方法 receipt、全部工作计数、
-数值退化反例、current schema 校验和性能证明。临时探针没有接入 tracked Runtime。
-
-该实验在 60 个任务恢复了 113 次完整拟合，但质量结果存在回退：短轴合格任务 78→79
-（nominal 71→70、challenge 7→9），整组安全方案 43→45，安全 auto 19→19，错误 auto 0→0。
-S041/S050 是同一 source SHA 的两个格数任务，primary 新增整组安全，仍为 Review；不能计成两个独立源。
-S032 新增 conditional，最佳短轴 4/6→5/6；第 1 格左下角仍内切 `0.336718 px`，不得按该差额增加 bleed。
-S101 原 runner 短轴 12/12→4/12：新 canonical TOP `:77` 由 `:28/:29` 的 5 raw 完整拟合产生；
-Review 保留器先各取一侧最外 anchor，使该 TOP 占首槽、原 BOTTOM `:74` 占次槽，原 BOTTOM `:71`
-被挤出。`:71` 测量本身仍存在；这是新增获权角色改变两槽分配，不能归因为旧边被重拟合删除。
-完整结果、源 SHA、方法脚本、S101 前后报告与槽位证据、S032 角点证据均保留在上述实验目录。
-原全模块替换曾误改 raw run 的首版探针已废弃，未用作上述结果。此实验不能替代接受基线或发布 receipt，
-也不能据净增量合入会丢失 S101 合格短轴方案的版本。
+完整分组数值补充的两个 110-task 实验均已归档，均不能替代正式 Runtime 或 release receipt。
+`Test/gold_analysis/complete_family_numerical_probe_20260913` 允许新增解进入 canonical，
+导致 S101 新 TOP 占用原两槽之一，原 BOTTOM runner 的 12/12 合格短轴被挤出；该方案未接入。
+`Test/gold_analysis/constrained_conditional_probe_20260913` 保持原 canonical，只补充有条件解：
+原 189 份 canonical polygon 完全相同，短轴合格 78→80、整组安全 43→45、安全 auto 19、错误 auto 0。
+S041/S050 是同一 source SHA 的两个格数任务，不能计成两个独立源；新增条件方案安全，原两方案仍不安全。
+S032 最佳短轴 4/6→5/6，第 1 格左下角仍内切 `0.336718 px`，不得按该差额增加 bleed。
+这条路径已整理为当前源码：原始 run/精修、canonical 验收与物理限制保持；完整数值解具有独立方法、
+原始约束复查及实际工作 receipt，report revision 79。有限 gap 只是浮点核验，不是严格舍入认证；
+原严格距离比较与现有闭集 `1e-9 px` 算术判据的区别已在架构中明确，不能宣称数值判据完全未改。
+正式四任务重点验证目录为 `Test/gold_analysis/constrained_family_targeted_20260913b`，
+原两方案 polygon 均完全相同；S101 保持 12/12 合格短轴。正式全量结论见上一节，干净提交性能待闭合。
 
 归属搜索只读量级验证：S031 原 7 个完整原子、固定两区域 anchor 的 64 个子集有 4 个包含极大可行
 集合；一般情形仍可能指数增长，不能无界枚举。S032 原 BOTTOM 72-raw 组含 17 个完整原子，固定

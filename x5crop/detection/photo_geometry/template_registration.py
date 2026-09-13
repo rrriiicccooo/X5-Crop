@@ -7,7 +7,12 @@ import math
 
 from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
 from ...formats import FramePhysicalSpec
-from .boundary_fitting import fit_format_bound_boundary_observation
+from .boundary_fitting import (
+    BoundaryFamilyFit,
+    complete_boundary_family_proposal,
+    fit_boundary_family,
+    fit_format_bound_boundary_observation,
+)
 from .measurement_model import PhotoBoundaryMeasurementSet
 from .model import (
     BoundaryAxis,
@@ -16,7 +21,12 @@ from .model import (
     PHOTO_BOUNDARY_MEASUREMENT_SPEC,
 )
 from .observation_types import BasicAxisProfile, ProfileRun
-from .line_observations import PhotoBoundaryObservation
+from .line_observations import (
+    BoundaryFamilyFitReceipt,
+    CompleteTransitionLineEvaluation,
+    ConstrainedLineFitReceipt,
+    PhotoBoundaryObservation,
+)
 from .robust_line_fit import physical_line_region
 from .physical_identity import physical_fact_id
 from .source_geometry import SourceScanGeometry
@@ -65,6 +75,7 @@ def validate_cross_family_provenance(
         raise ValueError("cross boundary families must be registered once")
     if len({(item.role, item.use, item.member_observation_ids) for item in families}) != len(families):
         raise ValueError("cross boundary family members were registered twice")
+    complete_family_evaluations(families)
     conditional_outputs = {
         identity for family in families
         if family.use == CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL
@@ -106,21 +117,48 @@ def validate_cross_family_provenance(
         raise ValueError("cross binding changed conditional family permission")
 
 
+def complete_family_evaluations(
+    families: tuple[CrossBoundaryFamilyResolution, ...],
+) -> tuple[CompleteTransitionLineEvaluation, ...]:
+    """Count each evaluated full raw union once across permission records."""
+    receipts: dict[tuple[BoundaryRole, tuple[ObservationId, ...]], BoundaryFamilyFitReceipt] = {}
+    for family in families:
+        key = (family.role, family.member_transition_ids)
+        if key in receipts and receipts[key] != family.refit_receipt:
+            raise ValueError("cross family changed a cached complete-union evaluation")
+        receipts[key] = family.refit_receipt
+    return tuple(
+        receipt.constrained_evaluation for receipt in receipts.values()
+        if receipt.constrained_evaluation is not None
+    )
+
+
 @dataclass(frozen=True)
 class CrossRegistrationWorkReceipt:
     fit_attempt_count: int
     raw_observation_count: int
     local_fragment_count: int
     family_compatibility_evaluation_count: int = 0
+    constrained_fit_attempt_count: int = 0
+    constrained_fit_edge_count: int = 0
+    constrained_fit_event_count: int = 0
 
     def __post_init__(self) -> None:
         if (
             any(type(value) is not int for value in (
                 self.fit_attempt_count, self.raw_observation_count, self.local_fragment_count,
                 self.family_compatibility_evaluation_count,
+                self.constrained_fit_attempt_count, self.constrained_fit_edge_count,
+                self.constrained_fit_event_count,
             ))
             or not 0 <= self.local_fragment_count <= self.raw_observation_count <= self.fit_attempt_count
             or self.family_compatibility_evaluation_count < 0
+            or not 0 <= self.constrained_fit_attempt_count <= self.fit_attempt_count
+            or self.constrained_fit_edge_count < 0
+            or self.constrained_fit_event_count < 0
+            or (self.constrained_fit_attempt_count == 0 and (
+                self.constrained_fit_edge_count or self.constrained_fit_event_count
+            ))
         ):
             raise ValueError("cross registration work receipt is invalid")
 
@@ -175,6 +213,7 @@ class RegisteredCrossEvidence:
 
     @property
     def work_receipt(self) -> CrossRegistrationWorkReceipt:
+        evaluations = complete_family_evaluations(self.family_resolutions)
         return CrossRegistrationWorkReceipt(
             fit_attempt_count=self.fit_attempt_count,
             raw_observation_count=len(self.observations),
@@ -185,6 +224,9 @@ class RegisteredCrossEvidence:
             family_compatibility_evaluation_count=(
                 self.family_compatibility_evaluation_count
             ),
+            constrained_fit_attempt_count=len(evaluations),
+            constrained_fit_edge_count=sum(item.work.edge_count for item in evaluations),
+            constrained_fit_event_count=sum(item.work.event_count for item in evaluations),
         )
 
     def __post_init__(self) -> None:
@@ -227,6 +269,15 @@ class RegisteredCrossEvidence:
             or not 0 <= self.family_compatibility_evaluation_count <= sum(
                 2 * count * (count + 1)
                 for count in (registered_top_run_count, registered_bottom_run_count)
+            )
+            or any(
+                len(complete_family_evaluations(tuple(
+                    family for family in self.family_resolutions if family.role == role
+                ))) > 2 * count
+                for role, count in (
+                    (BoundaryRole.TOP, registered_top_run_count),
+                    (BoundaryRole.BOTTOM, registered_bottom_run_count),
+                )
             )
         ):
             raise ValueError("cross registration receipt is invalid")
@@ -308,7 +359,8 @@ def _canonical_cross_run(
     queried = measurement.query.trace_positions_px
     return ProfileRun(
         run_id=physical_fact_id(
-            "registered-cross-run",
+            ("constrained-cross-run" if isinstance(observation.fit_receipt, ConstrainedLineFitReceipt)
+             else "registered-cross-run"),
             observation.role.value,
             observation.observation_id,
         ),
@@ -578,10 +630,10 @@ def _merge_registered_cross_families(
 
     if len(values) < 2:
         return values, 0, (), 0
-    fit_cache: dict[tuple[str, ...], PhotoBoundaryObservation | None] = {}
+    fit_cache: dict[tuple[str, ...], BoundaryFamilyFit] = {}
     attempts = 0
 
-    def fit(members: tuple[PhotoBoundaryObservation, ...]) -> PhotoBoundaryObservation | None:
+    def fit(members: tuple[PhotoBoundaryObservation, ...]) -> BoundaryFamilyFit:
         nonlocal attempts
         identities = tuple(
             sorted(
@@ -596,19 +648,14 @@ def _merge_registered_cross_families(
         key = tuple(map(str, identities))
         if key not in fit_cache:
             attempts += 1
-            fit_cache[key] = fit_format_bound_boundary_observation(
+            fit_cache[key] = fit_boundary_family(
                 measurement,
                 transition_ids=identities,
                 role=role,
                 source_axis_long=width_axis,
                 boundary_axis_scale_px_per_mm=height_scale_px_per_mm,
             )
-        candidate = fit_cache[key]
-        if candidate is None:
-            return None
-        if set(candidate.transition_ids) != set(identities):
-            return None
-        return candidate
+        return fit_cache[key]
 
     merged: list[PhotoBoundaryObservation] = []
     resolutions: list[CrossBoundaryFamilyResolution] = []
@@ -653,7 +700,8 @@ def _merge_registered_cross_families(
                 "cross-boundary-family", role.value, use.value,
                 *(str(identity) for identity in member_observation_ids),
             )
-            observation = fit(members)
+            evaluation = fit(members)
+            observation = evaluation.canonical_observation
             if observation is not None:
                 merged.append(observation)
             elif not conditional:
@@ -667,6 +715,7 @@ def _merge_registered_cross_families(
                     member_observation_ids=member_observation_ids,
                     member_transition_ids=member_transition_ids,
                     member_transition_groups=tuple(item.transition_ids for item in members),
+                    refit_receipt=evaluation.receipt,
                     final_observation_ids=(
                         (observation.observation_id,) if observation is not None
                         else () if conditional else member_observation_ids
@@ -675,7 +724,47 @@ def _merge_registered_cross_families(
                         CrossBoundaryFamilyFailureKind.COMPLETE_TRANSITION_UNION_REFIT_REJECTED),
                 )
             )
-    return tuple(merged), attempts, tuple(resolutions), compatibility_count
+    # Freeze both original registration passes before producing a constrained
+    # estimate. New observation identities cannot enter canonical grouping or
+    # change the order in which any original observation is materialized.
+    conditional_results: dict[
+        tuple[str, ...], tuple[PhotoBoundaryObservation | None, BoundaryFamilyFitReceipt]
+    ] = {}
+    additional_observations: dict[ObservationId, PhotoBoundaryObservation] = {}
+    original_ids = {item.observation_id for item in merged}
+    final_resolutions: list[CrossBoundaryFamilyResolution] = []
+    for family in resolutions:
+        if family.state == EvidenceState.SUPPORTED:
+            final_resolutions.append(family)
+            continue
+        key = tuple(map(str, family.member_transition_ids))
+        if key not in conditional_results:
+            conditional_results[key] = complete_boundary_family_proposal(fit_cache[key])
+        proposal, refit_receipt = conditional_results[key]
+        if proposal is None:
+            final_resolutions.append(replace(family, refit_receipt=refit_receipt))
+            continue
+        if proposal.observation_id in original_ids:
+            raise ValueError("conditional refit changed an existing observation's permission")
+        additional_observations[proposal.observation_id] = proposal
+        conditional = family.use == CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL
+        if not conditional:
+            final_resolutions.append(replace(family, refit_receipt=refit_receipt))
+        final_resolutions.append(replace(
+            family,
+            refit_receipt=refit_receipt,
+            family_id=(family.family_id if conditional else physical_fact_id(
+                "constrained-cross-family", role.value,
+                CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL.value,
+                *(str(identity) for identity in family.member_observation_ids),
+            )),
+            use=CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL,
+            state=EvidenceState.SUPPORTED,
+            final_observation_ids=(proposal.observation_id,),
+            failure_kind=None,
+        ))
+    merged.extend(additional_observations.values())
+    return tuple(merged), attempts, tuple(final_resolutions), compatibility_count
 
 
 def register_cross_evidence(

@@ -10,6 +10,86 @@ from ...domain import FiniteInterval, ObservationId
 from .model import BoundaryAxis, BoundaryRole, SPATIAL_SUPPORT_REGION_COUNT
 
 
+class CompleteTransitionLineFailureKind(str, Enum):
+    INVALID_INPUT = "invalid_input"
+    TRACE_IDENTITY_CONFLICT = "trace_identity_conflict"
+    PHYSICAL_REGION_UNAVAILABLE = "physical_region_unavailable"
+    NONFINITE_NUMERICAL_RESULT = "nonfinite_numerical_result"
+    RAW_CONSTRAINT_RECHECK_FAILED = "raw_constraint_recheck_failed"
+    NUMERICAL_OPTIMALITY_UNAVAILABLE = "numerical_optimality_unavailable"
+
+
+@dataclass(frozen=True)
+class CompleteTransitionLineSolution:
+    slope: float
+    intercept: float
+    residuals: tuple[float, ...]
+    cost: float
+    optimality_gap: float
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.residuals, tuple)
+            or not self.residuals
+            or any(not math.isfinite(value) for value in (
+                self.slope, self.intercept, self.cost, self.optimality_gap, *self.residuals,
+            ))
+            or self.cost < 0.0
+            or self.optimality_gap < 0.0
+        ):
+            raise ValueError("complete line solution requires finite coefficients, residuals and non-negative loss/gap")
+
+
+@dataclass(frozen=True)
+class CompleteTransitionLineWork:
+    """Actual operations, not a charged bound or an optimizer receipt.
+
+    Raw constraints count two interval half-planes per input point, excluding
+    the fixed initial slope rectangle. Polygon vertex evaluations count each
+    half-plane distance calculation (including the repeated closing vertex).
+    Events count generated interior Huber kinks; visits count swept events.
+    Loss/gradient counts are point terms, and raw rechecks are point intervals.
+    """
+
+    input_point_count: int = 0
+    raw_constraint_count: int = 0
+    polygon_clip_count: int = 0
+    polygon_vertex_evaluation_count: int = 0
+    polygon_vertex_count: int = 0
+    initial_fit_point_check_count: int = 0
+    edge_count: int = 0
+    event_count: int = 0
+    event_visit_count: int = 0
+    candidate_count: int = 0
+    loss_point_evaluation_count: int = 0
+    gradient_point_evaluation_count: int = 0
+    gap_vertex_evaluation_count: int = 0
+    raw_recheck_point_count: int = 0
+
+    def __post_init__(self) -> None:
+        if any(type(value) is not int or value < 0 for value in vars(self).values()):
+            raise ValueError("complete line work counts must be non-negative integers")
+
+
+@dataclass(frozen=True)
+class CompleteTransitionLineEvaluation:
+    solution: CompleteTransitionLineSolution | None
+    failure_kind: CompleteTransitionLineFailureKind | None
+    work: CompleteTransitionLineWork
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.work, CompleteTransitionLineWork):
+            raise TypeError("complete line evaluation requires typed numerical work")
+        if (self.solution is None) != isinstance(self.failure_kind, CompleteTransitionLineFailureKind):
+            raise ValueError("complete line solution and failure disagree")
+        if self.solution is not None and (
+            not isinstance(self.solution, CompleteTransitionLineSolution)
+            or self.failure_kind is not None
+            or len(self.solution.residuals) != self.work.input_point_count
+        ):
+            raise ValueError("complete line evaluation solution is invalid")
+
+
 @dataclass(frozen=True)
 class PhysicalLineRegion:
     """Joint reference-position/slope states of one measured transition family.
@@ -115,6 +195,42 @@ class RobustLineFitReceipt:
 
 
 @dataclass(frozen=True)
+class ConstrainedLineFitReceipt:
+    method: str
+    cost: float
+    optimality_gap: float
+    work: CompleteTransitionLineWork
+
+    def __post_init__(self) -> None:
+        if (
+            self.method != "physical_constraint_huber"
+            or not math.isfinite(self.cost) or self.cost < 0.0
+            or not math.isfinite(self.optimality_gap) or self.optimality_gap < 0.0
+            or not isinstance(self.work, CompleteTransitionLineWork)
+        ):
+            raise ValueError("constrained line-fit receipt is invalid")
+
+
+@dataclass(frozen=True)
+class BoundaryFamilyFitReceipt:
+    robust_fit_receipt: RobustLineFitReceipt | None
+    robust_retained_transition_ids: tuple[ObservationId, ...]
+    constrained_evaluation: CompleteTransitionLineEvaluation | None
+
+    def __post_init__(self) -> None:
+        if (
+            (self.robust_fit_receipt is not None and not isinstance(self.robust_fit_receipt, RobustLineFitReceipt))
+            or (self.constrained_evaluation is not None and not isinstance(self.constrained_evaluation, CompleteTransitionLineEvaluation))
+            or (self.robust_fit_receipt is None and (
+                self.robust_retained_transition_ids or self.constrained_evaluation is not None
+            ))
+            or tuple(sorted(set(self.robust_retained_transition_ids), key=str)) != self.robust_retained_transition_ids
+            or any(not isinstance(identity, ObservationId) for identity in self.robust_retained_transition_ids)
+        ):
+            raise ValueError("complete boundary-family refit receipt is invalid")
+
+
+@dataclass(frozen=True)
 class PhotoBoundaryObservation:
     observation_id: ObservationId
     role: BoundaryRole
@@ -127,7 +243,7 @@ class PhotoBoundaryObservation:
     independent_support_region_count: int
     continuous_support_fraction: float
     transition_ids: tuple[ObservationId, ...]
-    fit_receipt: RobustLineFitReceipt
+    fit_receipt: RobustLineFitReceipt | ConstrainedLineFitReceipt
     left_background_preference_fraction: float = 0.0
     right_background_preference_fraction: float = 0.0
     fit_angle_interval_degrees: FiniteInterval | None = None
@@ -145,7 +261,8 @@ class PhotoBoundaryObservation:
         fit_angle = self.fit_angle_interval_degrees
         assert fit_angle is not None
         if (
-            not self.offset_interval_px.contains(
+            not isinstance(self.fit_receipt, (RobustLineFitReceipt, ConstrainedLineFitReceipt))
+            or not self.offset_interval_px.contains(
                 self.line.offset_px,
                 epsilon=1.0e-8,
             )

@@ -264,6 +264,12 @@ class TemplateCrossContractTest(unittest.TestCase):
             conditional_proposal_failure_kind=None,
         ), canonical)
         self.assertGreater(result.receipt.evaluated_fit_count, canonical.receipt.evaluated_fit_count)
+        bounded = replace(base, maximum_fitted_observations=2)
+        self.assertEqual(fit_template_cross(bounded).status, canonical.status)
+        exceeded = fit_template_cross(replace(bounded, top_bindings=(top, conditional)))
+        self.assertEqual(exceeded.status, CrossFitStatus.BOUND_EXCEEDED)
+        self.assertIsNone(exceeded.best)
+        self.assertIsNone(exceeded.conditional_proposal)
 
     def test_unique_direct_pair_wins(self) -> None:
         result = fit_template_cross(
