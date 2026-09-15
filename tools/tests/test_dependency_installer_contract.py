@@ -83,7 +83,7 @@ class DependencyInstallerContractTest(unittest.TestCase):
             ),
             (
                 ("numpy", "numpy", "2.5.2", "numpy", "2.5.2", "numpy"),
-                ("scipy", "scipy", "1.18.0", "scipy", "1.18.0", "scipy"),
+                ("scipy", "scipy", "1.18.1", "scipy", "1.18.1", "scipy"),
                 (
                     "opencv",
                     "cv2",
@@ -95,9 +95,9 @@ class DependencyInstallerContractTest(unittest.TestCase):
                 (
                     "tifffile",
                     "tifffile",
-                    "2026.8.16",
+                    "2026.8.23",
                     "tifffile",
-                    "2026.8.16",
+                    "2026.8.23",
                     None,
                 ),
                 (

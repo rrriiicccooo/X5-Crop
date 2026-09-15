@@ -11,9 +11,9 @@ homebrew_formula = "numpy"
 [[dependencies]]
 name = "scipy"
 module = "scipy"
-module_version = "1.18.0"
+module_version = "1.18.1"
 pip_distribution = "scipy"
-pip_version = "1.18.0"
+pip_version = "1.18.1"
 homebrew_formula = "scipy"
 
 [[dependencies]]
@@ -27,9 +27,9 @@ homebrew_formula = "opencv"
 [[dependencies]]
 name = "tifffile"
 module = "tifffile"
-module_version = "2026.8.16"
+module_version = "2026.8.23"
 pip_distribution = "tifffile"
-pip_version = "2026.8.16"
+pip_version = "2026.8.23"
 
 [[dependencies]]
 name = "imagecodecs"

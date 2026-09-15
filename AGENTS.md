@@ -118,6 +118,10 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
 
 ## 验证
 
+- 本机依赖库升级后，以现场新版为准：核对实际加载版本，更新 `tools/install/dependencies.toml`
+  和受影响检查，再做相称验证。保留本机新版，不为满足旧合同或旧 receipt 降级共享依赖。
+  临时环境路径和历史版本记录不能替代实际 import 版本核验。
+
 `tools/verify` 是唯一验证入口：
 
 ```text
