@@ -20,8 +20,8 @@
   高度，明确区分照片边与外框支撑。冻结无关长轴算法调整，使用当前 W 和各格长轴范围；只处理妨碍
   Cross 正确性验证的必要依赖，不要求两轴完全解耦。
 - 每轮分别报告短轴质量改善、整组合格方案任务数、可靠自动交付数、错误自动交付数，并保留端到端与
-  性能验证。当前短轴诊断仍有 26 个任务无合格方案，再处理已有合格方案的可靠选择与误阻断；
-  S100 的诊断归因限制见下文。整组仍有 63 个任务无合格方案，另有 28 个已有合格方案但 Review。
+  性能验证。当前短轴诊断仍有 24 个任务无合格方案，再处理已有合格方案的可靠选择与误阻断；
+  S100 的诊断归因限制见下文。整组仍有 62 个任务无合格方案，另有 29 个已有合格方案但 Review。
   多个解释或多个合格方案不应永久阻断输出，有充分可用性依据即可选择，不要求唯一真实边界；
   精确合同见架构第 9、14 节。
   补齐外框、扩大保护、增加 Review 或 Cross 变为 resolved，本身均不算产品质量进展。
@@ -33,8 +33,8 @@
 
 ## 当前源码与已验证事实
 
-当前已验证提交为 `252a0d855c31cfe142286dfd8a313194c1f83286`，已正常推送 main。
-前一接受提交为 `de7348af`，依赖合同仍为 `51f7b6fc` 的现场新版。
+当前已验证提交为 `e077e3ac0fefa2e0ddd1f21e71e57cdc191af51a`，已正常推送 main。
+前一接受提交为 `252a0d85`，依赖合同仍为 `51f7b6fc` 的现场新版。
 Cross 保留完整位置/斜率联合域与统计、raw 保护；两轴闭合后保留每状态左右总保护，按实际长轴端点
 单次重投影上下边。外框支撑也已按各 sequence 状态的实际范围重算域外方向差，完整积顶点继续覆盖
 连续位置/斜率组合及同状态风险。全部已准入端点保持共享，精确合同与证明见架构第 10 节。
@@ -110,29 +110,32 @@ OpenCV 5.0.0、tifffile 2026.8.23、imagecodecs 2026.8.16、Pillow 12.3.0，依�
 
 ## 完整黄金与性能证据
 
-最新完整开发结果：`Test/gold_analysis/cross_support_actual_span_full_20260915b`，当前新版依赖下
+最新完整开发结果：`Test/gold_analysis/cross_side_observed_full_20260915b`，当前新版依赖下
 110/110 完成，分析错误 0，全部 current report 与物理校准通过。它是 development 验证，不是 release receipt。
 
 | 层级 | 结果 |
 |---|---|
-| Primary proposal | 39 safe / 70 unsafe / 1 unavailable |
-| Candidate | 27 safe / 13 unsafe / 70 unavailable |
+| Primary proposal | 40 safe / 69 unsafe / 1 unavailable |
+| Candidate | 28 safe / 12 unsafe / 70 unavailable |
 | 最终决定 | 19 safe auto / 0 unsafe auto / 91 Review |
-| Nominal（96 任务） | 42 生成合格方案 / 19 安全自动交付 / 77 Review |
+| Nominal（96 任务） | 43 生成合格方案 / 19 安全自动交付 / 77 Review |
 | Challenge（14 任务） | 5 生成合格方案 / 0 自动交付 / 14 Review |
-| 短轴诊断合格方案 | 84 个任务：nominal 75 / challenge 9；S100 归因限制见下文 |
-| 无合格短轴方案 | 26 个任务：nominal 21 / challenge 5 |
-| 保留候选集合 | 220 份；58 safe / 162 unsafe |
-| 每任务至少一份安全 | 47 |
-| 无合格方案 | 63 个任务：nominal 54 / challenge 9 |
-| 已有合格方案仍 Review | 28 个任务：nominal 23 / challenge 5 |
+| 短轴诊断合格方案 | 86 个任务：nominal 77 / challenge 9；S100 归因限制见下文 |
+| 无合格短轴方案 | 24 个任务：nominal 19 / challenge 5 |
+| 保留候选集合 | 220 份；59 safe / 161 unsafe |
+| 每任务至少一份安全 | 48 |
+| 无合格方案 | 62 个任务：nominal 53 / challenge 9 |
+| 已有合格方案仍 Review | 29 个任务：nominal 24 / challenge 5 |
 
-与接受基线 `Test/gold_analysis/cross_actual_span_full_20260915` 按 source SHA、format/count 和角色
-对齐：短轴诊断 84、整组合格 47、安全 auto 19、错误 auto 0 均保持。220 份 placement 的标签及全部
-最终决定相同。224 个 required 帧范围收紧，全部 1,167 帧的 mandatory/requested/required 均被旧范围
-包含；canonical、feasible、长轴保护不变，未新增 inward failure side。S054 primary 第 1 格下边超限
-2.531633→0.930046 px，S013 primary 末格 6.805505→6.700753 px，S051 runner 首格
-4.937945→4.740146 px；均仍不合格。本轮是留边余量改善，不是新增短轴或整组覆盖。
+与接受基线 `Test/gold_analysis/cross_support_actual_span_full_20260915b` 按 source SHA、format/count
+和角色对齐：短轴诊断 84→86、整组合格 47→48、安全 auto 19、错误 auto 0。唯一整组标签变化是
+S012 primary unsafe→safe，首格上边外扩 110.393473857→99.496217348 px，上限 107.398532078 px。
+S053 短轴 5/6→6/6，仍有长轴内切和外扩；S017 短轴 4/6→5/6，首格上边仍超限。全部最终决定相同。
+110 个 required 帧范围改变，全部 1,167 帧的 mandatory/requested/required 均被旧范围包含；
+canonical 与 feasible 不变，未新增 inward failure side 或安全标签退化。方向闭合联动使 114 项
+START/END 保护记录变化，因此不再声称本轮长轴保护数值不变。
+本轮修正 coarse 两侧 observed 的来源混合：每侧保留自身原 observed 与共同 full 的 hull，整条片带
+方向汇总仍取两侧 hull；共同 full、fit、raw 和阈值不变。Runtime 与报告逐侧回链，报告为 revision 84。
 对照为 `baseline_quality_comparison.json`、`footprint_containment_comparison.json`，可重算脚本为
 `compare_current.py`、`compare_footprints.py`。
 S019 条件方案的六格四边及数值预算保持合格，尚未可靠选定，仍为 Review。S031/S032、S101 已有收益保持。
@@ -147,30 +150,42 @@ S051 primary 仍不可用，保留的 runner 可评价但不安全；不晋升 r
 S005 有条件提案虽然黄金安全，数值预算仍失败；生成进展尚未解除其自动准入缺口。
 
 当前结果的 detector 指纹为
-`3cc2835d3d34bdfc5e8418dc84d100c6e9b9c567c8dbadfd4039b42764c81983`；
-comparator 指纹为 `154648d7674e03ae2f9aa100ad05a1a9258178d4ebf3732601b0736bb5dcef75`；
+`c0081a67c2382a593f7f25dc24d03f497b1fcd9d7b2d3ba45d6d81319b4765c6`；
+comparator 指纹为 `84f89cb73358c206fc1a9f5cd8465e2aa3528c5982b4eed61b62d17c320f5739`；
 cohort 为 `c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`。
 该全量运行从未提交源码开始，不能伪造为同一 release commit receipt。提交后已确认 detector、comparator
-与 cohort 指纹逐项完全一致；复核为 `post_commit_identity_verification.json` 和
-`validated_commit_identity_252a0d85.json`，原 receipt 未改写。依赖版本与来源由本轮正式性能 receipt 记录；
+与 cohort 指纹逐项完全一致；复核为 `post_commit_identity_verification.json`，原 receipt 未改写。
+依赖版本与来源由本轮正式性能 receipt 记录；
 此前现场版本观察保留在上一轮目录，不伪造冻结环境声明。
 
-干净 `252a0d85`、当前新版依赖下 `tools/verify performance` 完成：24-source 完整用户路径均值
-**4.112843 秒**，5 秒 Gate 通过，3 秒挑战未达成。p95 为 7.324585 秒，最慢 S091 为 7.588800 秒；
-未插桩 peak RSS 最大 1,207,713,792 bytes。
+干净 `e077e3ac`、当前新版依赖下 `tools/verify performance` 完成：24-source 完整用户路径均值
+**4.068112 秒**，5 秒 Gate 通过，3 秒挑战未达成。p95 为 7.245288 秒，最慢 S091 为 7.488001 秒；
+未插桩 peak RSS 最大 1,211,006,976 bytes。
 当前 receipt 为 `build/v5-performance/performance_receipt.json`，并保存在本轮黄金目录
-`performance_receipt_252a0d85.json`。它仅证明该提交、当前机器与本次决定分布。
-前一接受提交在相同依赖下均值为 4.091706 秒，本轮略慢，不声称提速，
-不用剖面时间替代正式计时。
+`performance_receipt_e077e3ac.json`。它仅证明该提交、当前机器与本次决定分布。
+前一接受提交在相同依赖下均值为 4.112843 秒；单次差异不能证明稳定提速，不用剖面时间替代正式计时。
+正常 pre-push 的 943 项工程检查通过、2 项跳过；CI `34934461798` 的 12 组合全部成功，
+结构化结果保存在本轮黄金目录 `ci_verification.json`。
 
 ## 开放风险与精确下一步
 
-本轮正常 Hook、正式全量黄金、干净提交性能与 12 组合 CI 已完成；继续剩余 26 个短轴诊断未合格任务，
+本轮正常 Hook、正式全量黄金、干净提交性能与 12 组合 CI 已完成；继续剩余 24 个短轴诊断未合格任务，
 并保留 S100 的侧向归因限制，不把诊断标签变化等同于新增覆盖。
 新增测量或完整拟合不能挤掉已有合格
 短轴备选。完整分组的数值补充只保留为有条件提案，保持原 canonical 两阶段与排序相关编号。
-完整原子归属与两类输出的实际跨度重投影均已接入。下一步先核对只剩 Cross 失败的 S012 首格与
-S013 末格：超限约 2.995/6.701 px，区分原始测量要求与支撑参数包络余量，不能直接减保护。
+完整原子归属、实际跨度重投影与 coarse 逐侧 observed 来源修正均已接入。下一步先核对只剩 Cross
+失败的 S013 末格与 S017 首格：超限约 6.701/30.787 px，区分原始测量要求与包络余量，不能直接减保护。
+S012 整组已黄金安全，但 F5 TOP/F6 BOTTOM 的 Runtime 风险仍为 1.367598/1.226402 mm，超过 1.2 mm。
+当前正式报告为 `Test/debug_analysis/cross_side_observed_20260915/S012/x5_crop_report.jsonl`。
+两项都有同状态合法 support 顶点：F5 TOP 的 114.706903421 px 由支撑半余量 59.778145539、
+校准中心上端 20.881214501、1 px、raw departure 28.322258772 与方向差 4.725284608 组成；
+F6 BOTTOM 的 102.864115506 px 由 59.955502996、16.704971601、1 px、零 raw 与方向差
+25.203640909 组成。不能按黄金合格取消完整校准区间或删去已准入 raw。
+原始测量探针为 `/private/tmp/x5crop-coarse-fit-S012-20260915.fit-witness.json`，运行正式 CLI，
+photo_geometry、candidate_gate、decision、output 与未插桩报告完全一致。F5 控制 raw 位于 trace 15255，
+physical `[219.5,247.5]`，localization `[242.5,243.5]`；应追踪物理宽区间来源，不把窄定位等同于窄支撑。
+F6 下边自身 observed 上界 0.249387293° 来自 measured full；physical 上界已达 0.245711388°，
+不能仅删除连接容差推断足以解决。继续核对完整原始测量与真实 material/aperture 身份。
 S018/S064 继续处理 family/角色解释，明确局部反证的有效位置范围与 pair 闭合范围是否一致；
 先保存原始 trace 与方向证据，不凭 lane reference 的
 标量次序、外侧位置或黄金结果转移跨域权限。已有条件方案的可靠选择继续单独验证，不因某份黄金
@@ -197,8 +212,8 @@ S006 与 S101 已有的完整短轴备选保持；它们的剩余长轴问题继
 
 S018 bottom :67 的 raw2835..19845 未包围头尾；左侧 :66/:73 均多重归属，完整 refit 分别丢弃
 8/1 个 transition，不能选择性删除恢复；末 query20115 没有 raw transition。
-S012 F1 top 外扩110.642px、上限107.399px，主要来自coarse首raw4995之前的域外方向保护；仅相容的
-TOP :21 两条宽区间不收紧任何共同直线状态，且有22种其它归属。不能以它延长coarse实测域并取消保护。
+S012 首格旧超限已由逐侧 observed 来源修正消除；此前仅相容的 TOP :21 两条宽区间仍不收紧任何
+共同直线状态，且有22种其它归属。不能以它延长coarse实测域并取消保护。
 S016/S033/S036 当前都从外侧TOP加固定H推BOTTOM，后者缺少直接绑定；但测量拒绝细因不同。
 S016 TOP :3 上移约67.317px、固定H比黄金跨度短49.153px，导致BOTTOM native内移约116.470px。
 当前phase与Cross的四个现成组合只读生成后仍全部不合格，不能靠补一个runner解决，暂不扩大两份上限。
