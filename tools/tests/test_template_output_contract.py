@@ -54,6 +54,7 @@ from x5crop.detection.photo_geometry.template_nominal_grid_authority import (
     assess_calibrated_nominal_grid_authority,
 )
 from x5crop.detection.photo_geometry.template_output import (
+    _aperture_binding_positions,
     _footprint,
     _line_outward_expansion_px,
     output_footprint_from_template_placement,
@@ -470,6 +471,37 @@ def _selected_output_gate_fact(
 
 
 class TemplateOutputContractTest(unittest.TestCase):
+    def test_cross_projection_preserves_joint_positions_without_marginal_corners(self) -> None:
+        # The two measured intervals y(0) in [0,2], y(1000) in [8,10]
+        # give these four exact line states at reference 500. A statistical
+        # location band cannot be combined with the full physical slope range.
+        region = PhysicalLineRegion(500.0, ((4.0, 0.008), (5.0, 0.010), (6.0, 0.008), (5.0, 0.006)))
+        binding = replace(
+            _binding(BoundaryRole.TOP, 'joint', 5.0),
+            fit_interval_px=FiniteInterval(4.9, 5.1),
+            full_interval_px=FiniteInterval(4.9, 5.1),
+            canonical_direction_degrees=math.degrees(math.atan(0.008)),
+            fit_direction_interval_degrees=FiniteInterval(
+                math.degrees(math.atan(0.00775)), math.degrees(math.atan(0.00825))),
+            full_direction_interval_degrees=FiniteInterval(
+                math.degrees(math.atan(0.006)), math.degrees(math.atan(0.010))),
+            observed_direction_interval_degrees=None,
+            physical_line_region=region,
+        )
+        def positions(trace, value=binding, basis=CrossLineProjectionBasis.COMPLETE_PHYSICAL_DIRECTION):
+            return _aperture_binding_positions(value, lane_reference_trace_px=500.0,
+                                              support=FiniteInterval.exact(trace), line_projection_basis=basis)
+        self.assertAlmostEqual(min(positions(-1000)), -10.0)
+        self.assertAlmostEqual(min(positions(-1000, replace(binding, physical_line_region=None))), -10.1)
+        self.assertEqual((min(positions(500)), max(positions(500))), (4.0, 6.0))
+        statistical = positions(500, basis=CrossLineProjectionBasis.RETAINED_REVIEW_STATISTICAL_FIT)
+        self.assertEqual((min(statistical), max(statistical)), (4.9, 5.1))
+        # A broad local measurement may extend beyond every common straight
+        # line. Its complete raw interval must still be protected independently.
+        raw = replace(binding, trace_coordinates_px=(0, 500, 1000), trace_position_intervals_px=(
+            FiniteInterval(0, 2), FiniteInterval(3, 7), FiniteInterval(8, 10)))
+        self.assertEqual((min(positions(500, raw)), max(positions(500, raw))), (3.0, 7.0))
+
     def test_cross_support_partitions_only_an_explicit_overlap(self) -> None:
         placement = _overlap_placement()
 

@@ -8,7 +8,7 @@ import math
 
 from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
 from ...formats import OUTPUT_PROTECTION_SPEC
-from .line_observations import BoundaryFamilyFitReceipt, PhotoBoundaryObservation
+from .line_observations import BoundaryFamilyFitReceipt, PhotoBoundaryObservation, PhysicalLineRegion
 from .interval_math import intersect, subtract
 from .model import (
     BoundaryAxis,
@@ -541,10 +541,13 @@ class CrossRoleBinding:
     trace_position_intervals_px: tuple[FiniteInterval, ...] = ()
     observed_direction_interval_degrees: FiniteInterval | None = None
     conditional_family_ids: tuple[str, ...] = ()
+    physical_line_region: PhysicalLineRegion | None = None
 
     def __post_init__(self) -> None:
         if self.role not in {BoundaryRole.TOP, BoundaryRole.BOTTOM}:
             raise ValueError("cross role binding requires top or bottom")
+        if self.physical_line_region is not None and not isinstance(self.physical_line_region, PhysicalLineRegion):
+            raise TypeError("Cross physical line region must retain joint states")
         if not self.run_id:
             raise ValueError("cross role binding requires a run identity")
         identity = (
@@ -770,6 +773,7 @@ class CrossRoleBinding:
                 )
             ),
             trace_position_intervals_px=trace_intervals,
+            physical_line_region=observation.physical_line_region,
             independent_support_region_count=int(
                 getattr(observation, "independent_support_region_count", 0)
             ),

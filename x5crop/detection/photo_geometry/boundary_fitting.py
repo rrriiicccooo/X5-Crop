@@ -30,6 +30,7 @@ from .robust_line_fit import (
     TransitionLineFit,
     fit_complete_transition_line,
     fit_transition_line,
+    physical_line_region,
     physical_slope_interval,
 )
 from .trace_support import (
@@ -441,6 +442,14 @@ def _observe_boundary_fit(
         math.radians(spec.maximum_measurable_line_angle_degrees)
     )
     physical_slope = physical_slope_interval(inliers, maximum_slope)
+    # Keep the joint physical states alongside their direction marginal. The
+    # statistical location band cannot substitute for the physical intercept.
+    physical_region = physical_line_region(
+        tuple((point.trace, point.transition.physical_position_interval_px)
+              for point in sorted(inliers, key=lambda item: item.trace)),
+        maximum_slope,
+        support.center,
+    )
     statistical_fit_angle = FiniteInterval(
         angle - fit_angle_uncertainty,
         angle + fit_angle_uncertainty,
@@ -524,4 +533,5 @@ def _observe_boundary_fit(
             point.transition.physical_position_interval_px
             for point in sorted(inliers, key=lambda item: item.trace)
         ),
+        physical_line_region=physical_region,
     )

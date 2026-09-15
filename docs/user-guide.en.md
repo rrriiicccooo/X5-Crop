@@ -115,6 +115,8 @@ an interpretation that the original fit could not retain, for manual review. Aut
 When fragment membership is ambiguous, the system preserves the original complete measurement groups and examines
 whole-group combinations. If search or batch fitting exceeds its work limit, the report records the reason and retains
 the existing crop proposals. These combinations are available for Review only.
+Cross-axis crop protection accounts for the relationship between measured position and direction, the statistical fit,
+and local edge departures. The existing per-side expansion budgets and automatic approval conditions still apply.
 Development gold analysis evaluates each footprint independently, allows multiple safe results, and separates unsafe from
 unavailable geometry. Each retained crop also records its numeric budget and physical features with units, provenance,
 and explicit missing reasons. Numeric budget assessment remains separate from final approval conditions.

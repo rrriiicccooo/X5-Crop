@@ -250,6 +250,7 @@ class PhotoBoundaryObservation:
     source_spanning_continuous: bool = False
     trace_coordinates_px: tuple[int, ...] = ()
     trace_position_intervals_px: tuple[FiniteInterval, ...] = ()
+    physical_line_region: PhysicalLineRegion | None = None
 
     def __post_init__(self) -> None:
         if self.fit_angle_interval_degrees is None:
@@ -262,6 +263,8 @@ class PhotoBoundaryObservation:
         assert fit_angle is not None
         if (
             not isinstance(self.fit_receipt, (RobustLineFitReceipt, ConstrainedLineFitReceipt))
+            or (self.physical_line_region is not None
+                and not isinstance(self.physical_line_region, PhysicalLineRegion))
             or not self.offset_interval_px.contains(
                 self.line.offset_px,
                 epsilon=1.0e-8,

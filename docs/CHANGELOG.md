@@ -9,6 +9,8 @@
 
 ### 产品行为
 
+- 短轴输出保护保留测量位置与方向的联合物理范围，并与统计拟合及逐点保护分别核对；
+  避免拼接不可能同时成立的位置和方向，也保留统计位置窄带之外的合法物理状态。原预算与批准条件不变。
 - 用户提供 format 并确认默认或显式 count；空白曝光格保留 ordinal。Runtime 不猜格式、照片数或 blank，
   不提供历史 mode、平行 detector 或兼容入口。任一 slot 不安全时整张 source 进入 Review，不做局部输出。
 - 校准 Grid 是唯一 placement 主生成模型。Format/count 编译有界 W/H/pitch，直接 absolute anchor 定位，

@@ -723,23 +723,29 @@ def _aperture_binding_positions(
         line_projection_basis
         == CrossLineProjectionBasis.RETAINED_REVIEW_STATISTICAL_FIT
     )
+    region = None if use_statistical_fit else binding.physical_line_region
     direction = (
         binding.fit_direction_interval_degrees
-        if use_statistical_fit
+        if use_statistical_fit or region is not None
         else binding.full_direction_interval_degrees
     )
+    statistical_position = binding.fit_interval_px if region is not None else binding.full_interval_px
     if direction is not None:
         positions.extend(
             value
             + math.tan(math.radians(angle))
             * (trace - lane_reference_trace_px)
             for value in (
-                binding.full_interval_px.minimum,
-                binding.full_interval_px.maximum,
+                statistical_position.minimum,
+                statistical_position.maximum,
             )
             for angle in (direction.minimum, direction.maximum)
             for trace in (support.minimum, support.maximum)
         )
+    if region is not None:
+        for trace in (support.minimum, support.maximum):
+            interval = region.project(trace)
+            positions.extend((interval.minimum, interval.maximum))
     if binding.trace_position_intervals_px:
         positions.extend(
             value

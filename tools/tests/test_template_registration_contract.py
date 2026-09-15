@@ -501,6 +501,16 @@ class TemplateRegistrationContractTest(unittest.TestCase):
             'registered_top_run_count': registered.registered_top_run_count,
             'registered_bottom_run_count': registered.registered_bottom_run_count}}
         _validate_cross_measurement_support(lane, queries)
+        self.assertIsNotNone(registered.observations[0].physical_line_region)
+        altered = replace(binding, physical_line_region=None)
+        with self.assertRaisesRegex(ValueError, 'measured line region'):
+            replace(registered, top_bindings=(altered,))
+        for replacement in (None, {'reference_trace_px': 0.0, 'vertices': [[100.0, 0.0]]}):
+            invalid_region = deepcopy(lane)
+            for key in ('raw_top_bottom_lines', 'registered_top_bottom_bindings'):
+                invalid_region['observations'][key][0]['physical_line_region'] = replacement
+            with self.subTest(region=replacement), self.assertRaisesRegex(ValueError, 'not reproducible'):
+                _validate_cross_measurement_support(invalid_region, queries)
         for keys in (
             ("raw_top_bottom_lines",),
             ("registered_top_bottom_bindings",),
@@ -531,6 +541,17 @@ class TemplateRegistrationContractTest(unittest.TestCase):
         registered_report = {independent_binding["observation_id"]: independent_binding}
         fit = {"direct_bindings": [deepcopy(independent_binding)]}
         _validate_cross_fit_binding_support(fit, registered_report)
+        for field, value in (
+            ('trace_position_intervals_px', []),
+            ('fit_interval_px', {'minimum': 100.0, 'maximum': 100.0}),
+            ('fit_direction_interval_degrees', {'minimum': 0.0, 'maximum': 0.0}),
+            ('physical_line_region', None),
+        ):
+            altered_fit = deepcopy(fit)
+            self.assertNotEqual(altered_fit['direct_bindings'][0][field], value)
+            altered_fit['direct_bindings'][0][field] = value
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'original measured'):
+                _validate_cross_fit_binding_support(altered_fit, registered_report)
         fit["direct_bindings"][0]["role_authorized"] = True
         with self.assertRaisesRegex(ValueError, "original measured"):
             _validate_cross_fit_binding_support(fit, registered_report)

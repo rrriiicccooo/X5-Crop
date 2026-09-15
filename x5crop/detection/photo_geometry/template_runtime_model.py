@@ -72,6 +72,7 @@ from .template_registration import (
     CrossRegistrationWorkReceipt,
     project_cross_solver_bindings,
     validate_cross_family_provenance,
+    validate_cross_line_provenance,
     validate_membership_registration,
 )
 from .template_family_membership import MembershipAtom
@@ -467,6 +468,9 @@ class RegisteredTemplateLane:
             self.raw_cross_observations
         ):
             raise ValueError("cross observations must be registered once")
+        validate_cross_line_provenance(
+            self.raw_cross_observations, (*self.top_cross_bindings, *self.bottom_cross_bindings),
+        )
         family_ids = tuple(
             item.family_id for item in self.cross_boundary_family_resolutions
         )

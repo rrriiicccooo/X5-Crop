@@ -1115,6 +1115,18 @@ def _validate_cross_measurement_support(
             raise ValueError("Cross measured support changed its original query")
         queried = tuple(queries[next(iter(query_ids))]["trace_positions_px"])
         traces = sorted(point["trace_coordinate_px"] for point in points)
+        trace_intervals = [point['physical_position_interval_px']
+                           for point in sorted(points, key=lambda point: point['trace_coordinate_px'])]
+        region = physical_line_region(
+            tuple((float(trace), FiniteInterval(**interval))
+                  for trace, interval in zip(traces, trace_intervals, strict=True)),
+            math.tan(math.radians(PHOTO_BOUNDARY_MEASUREMENT_SPEC.maximum_measurable_line_angle_degrees)),
+            0.5 * (traces[0] + traces[-1]),
+        )
+        expected_region = None if region is None else {
+            'reference_trace_px': region.reference_trace_px,
+            'vertices': [list(vertex) for vertex in region.vertices],
+        }
         count = independent_spatial_support_count(queried, tuple(traces))
         binding = registered[observation["observation_id"]]
         background_field = (
@@ -1134,6 +1146,12 @@ def _validate_cross_measurement_support(
             or binding.get("trace_coordinates_px") != traces
             or binding.get("role") != observation.get("role")
             or binding.get("role_authorized") is not role_authorized
+            or observation.get('trace_position_intervals_px') != trace_intervals
+            or binding.get('trace_position_intervals_px') != trace_intervals
+            or 'physical_line_region' not in observation
+            or 'physical_line_region' not in binding
+            or observation['physical_line_region'] != expected_region
+            or binding['physical_line_region'] != expected_region
         ):
             raise ValueError("Cross measured spatial support is not reproducible")
     family_records = observations.get("cross_boundary_family_resolutions")
@@ -1266,6 +1284,9 @@ def _validate_cross_fit_binding_support(
                 "role", "role_authorized", "independent_support_region_count",
                 "trace_coordinates_px",
                 "conditional_family_ids",
+                "physical_line_region",
+                "trace_position_intervals_px", "fit_interval_px", "full_interval_px",
+                "fit_direction_interval_degrees", "full_direction_interval_degrees",
             )
         ):
             raise ValueError("Cross fit changed original measured spatial support")

@@ -70,6 +70,21 @@ def project_cross_solver_bindings(
     return tuple(item for item in bindings if item.has_independent_spatial_support)
 
 
+def validate_cross_line_provenance(
+    observations: tuple[PhotoBoundaryObservation, ...],
+    bindings: tuple[CrossRoleBinding, ...],
+) -> None:
+    """A binding must preserve its measured joint region and raw departures."""
+    by_id = {binding.observation_id: binding for binding in bindings}
+    for observation in observations:
+        binding = by_id.get(observation.observation_id)
+        if binding is None or any(
+            getattr(binding, field) != getattr(observation, field)
+            for field in ('physical_line_region', 'trace_coordinates_px', 'trace_position_intervals_px')
+        ):
+            raise ValueError("Cross binding changed its measured line region or raw support")
+
+
 def validate_cross_family_provenance(
     families: tuple[CrossBoundaryFamilyResolution, ...],
     observations: dict[ObservationId, tuple[BoundaryRole, tuple[ObservationId, ...]]],
@@ -318,6 +333,7 @@ class RegisteredCrossEvidence:
         identities = tuple(item.observation_id for item in self.observations)
         if len(set(identities)) != len(identities):
             raise ValueError("cross observations must be registered once")
+        validate_cross_line_provenance(self.observations, (*self.top_bindings, *self.bottom_bindings))
         family_ids = tuple(item.family_id for item in self.family_resolutions)
         if len(set(family_ids)) != len(family_ids):
             raise ValueError("cross boundary families must be registered once")

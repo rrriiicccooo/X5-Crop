@@ -1433,6 +1433,15 @@ Sequence 输出保留原 `physical_line_region` 的联合位置/斜率，按该 
 统计 fit 仍是代表，不能替代物理线族；非空物理线族与可达位置裁空时明确报错，不能退回较窄的 fit。
 Report 同时校验 registered observation、phase binding、frame line 与这一次 W 位移的完整来源。
 
+Cross observation 同样保留全部原始 physical interval 与原 4° 上限确定的联合位置/斜率域。
+该域在 measurement 拟合结束时计算一次，只用于输出保护，不替换代表位置、分组、角色、fixed H 或选择。
+完整方向保护分别投影该物理域与原统计位置/统计方向族，取极值并集；不得把统计位置窄带与物理方向
+边际交叉组合，也不得将物理域裁到统计位置窄带。原逐 trace 完整区间仍独立保护局部 departure。
+原始区间的共同直线域为空时，保留现有残差方向与逐点保护；Review 的统计投影模式继续显式使用统计族。
+Registration、prepared lane 和 report 绑定同一物理域与原始 trace；开发校验从原查询区间重建该域。
+每条 observation 增加一次至多 2N 个半平面裁剪，工作量 `O(N²)`、临时与保留顶点 `O(N)`；每帧只投影
+已保存顶点，不增加像素读取、拟合、候选或输出状态数量。
+
 `APERTURE_PAIR` 的两轴保护相互影响：短轴外扩会增加 sequence 斜线在角点处的位移，
 长轴外扩也会增加 top/bottom 的位移。先在原完整 frame span 求逐边 signed departure，
 保留已经由位置包络覆盖的负余量。令基础长、短轴最大保护量为 `rx, ry`，对应线族最大绝对斜率为
