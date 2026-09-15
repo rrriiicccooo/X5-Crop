@@ -617,6 +617,34 @@ def _frame_boundary_residuals(
                     if enclosing:
                         base[role] += _support_direction_departure_px(binding, float(state.enclosing_support_slope), sequence_span)
         if not added:
+            if not enclosing:
+                raw_positions = {
+                    role: tuple(value for index in admitted[role]
+                                for value in (binding.trace_position_intervals_px[index].minimum,
+                                              binding.trace_position_intervals_px[index].maximum))
+                    if binding.trace_position_intervals_px else ()
+                    for role, binding in bindings.items()
+                }
+                for state, expansion, extras, sources in zip(
+                    states, expansions, optional, source_positions, strict=True,
+                ):
+                    # Keep the closed longitudinal protection. Reproject each
+                    # complete Cross family at this state's actual ends, not
+                    # the symmetric Lipschitz outer span. All admitted raw
+                    # intervals remain shared, including interior-only traces.
+                    ends = (state.sequence_start_px - direction * expansion[BoundaryRole.START],
+                            state.sequence_end_px + direction * expansion[BoundaryRole.END])
+                    support = FiniteInterval(min(sequence_span.minimum, *ends),
+                                             max(sequence_span.maximum, *ends))
+                    for role, binding in bindings.items():
+                        positions = _aperture_binding_positions(
+                            binding, lane_reference_trace_px=cross.lane_reference_trace_px,
+                            support=support, line_projection_basis=cross.line_projection_basis,
+                        ) + raw_positions[role]
+                        departure = (0.0 if not positions else
+                                     sources[role] - min(positions) if role == BoundaryRole.TOP else
+                                     max(positions) - sources[role])
+                        expansion[role] = PIXEL_CENTER_EXTENT_PX + extras[role] + max(0.0, departure)
             return tuple({role: expansion[role] - extras[role] for role in _ROLES}
                          for expansion, extras in zip(expansions, optional, strict=True))
     raise ValueError("aperture protection exceeded its registered endpoint bound")

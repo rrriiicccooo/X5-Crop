@@ -1454,6 +1454,20 @@ Mandatory 与含 bleed/topology 的 requested 分别闭合，产品 bleed 只计
 新增一个已登记 endpoint，最多执行 `N_endpoint+1` 轮。该过程不增加 pixel query、candidate、
 几何求解器或数值收敛迭代。Enclosing support 仍使用下述同状态 support 合同。
 
+准入闭合后，aperture 保留每个状态的 START/END 总保护量，只做一次 Cross 重投影：取该状态实际
+长轴端点与原 frame span 的并集范围，重新投影完整物理/统计线族，并保留旧共享账本中的全部 raw
+区间。TOP/BOTTOM 直接消费该范围的真实 departure，不再消费对称 `N*dx` 上界；不再次缩短长轴、
+重选 raw、混合不同状态或用旧新结果逐状态截取。每状态新范围包含于旧 `span±dx`，需求不超过原闭合
+上界，所以左右保护仍充分，无须新增闭合轮次。Mandatory/requested 分别使用自身含全部保护的端点。
+
+该收紧仅适用于源轴对齐的 aperture。固定 direction、正 W/H 下 bleed/topology 仿射，帧内固定的
+线族、斜率界、sequence extent 与 raw 账本使长轴 expansion 为状态的凸函数，实际左端凹、右端凸。
+任一固定 Cross 直线按斜率符号选择这两个端点，其下界凹、上界凸；完整线族与 raw 并集仍保留该性质。
+直接边的位置抵消、推导 opposite 的有符号同状态 H 都是仿射项，因此最终 TOP 凹、BOTTOM 凸。
+状态矩形在任意方向的支撑函数均凸，原 `JointFrameState` 顶点的 footprint hull 覆盖全部连续中间状态。
+每帧只增加每状态一次完整线族和原始区间投影，复杂度 `O(N_state * (N_vertex + N_raw))`，
+不增加状态、查询、拟合或通用 solver。
+
 产品 bleed：
 
 ```text

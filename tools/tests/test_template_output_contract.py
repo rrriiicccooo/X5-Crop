@@ -56,13 +56,17 @@ from x5crop.detection.photo_geometry.template_nominal_grid_authority import (
 from x5crop.detection.photo_geometry.template_output import (
     _aperture_binding_positions,
     _footprint,
+    _frame_boundary_residuals,
     _line_outward_expansion_px,
+    _state_footprint,
     output_footprint_from_template_placement,
     template_direct_use_budget_assessment,
 )
 from x5crop.detection.photo_geometry.template_feasible_geometry import (
+    JointFrameState,
     project_format_placement,
 )
+from x5crop.geometry.convex import convex_hull
 from x5crop.detection.photo_geometry.template_enclosing_support_aperture import (
     derive_enclosing_support_aperture_authority,
     unavailable_enclosing_support_aperture_authority,
@@ -1860,6 +1864,52 @@ class TemplateOutputContractTest(unittest.TestCase):
         # that slice remain. The impossible p=210,slope=.04 is not exported.
         self.assertAlmostEqual(max(x for x, _ in mandatory), 200.0 + 1.0 + 0.04 * 121.0)
 
+    def test_cross_protection_reprojects_both_actual_longitudinal_ends(self) -> None:
+        template = _template(1)
+        sequence = _sequence(template)
+        end = sequence.role_bindings[1]
+        assert end is not None
+        end = replace(end, line_evidence=SequenceRoleLineEvidence(
+            end.observation_id, 130.0, FiniteInterval.exact(200.0),
+            FiniteInterval.exact(math.degrees(math.atan(-0.04))),
+        ))
+        sequence = replace(sequence, role_bindings=(sequence.role_bindings[0], end))
+        angle = math.degrees(math.atan(0.01))
+        for one_sided in (False, True):
+            cross = _cross(template, one_sided=one_sided)
+            cross = replace(cross, direct_bindings=tuple(replace(
+                binding,
+                fit_direction_interval_degrees=FiniteInterval.exact(0.0),
+                full_direction_interval_degrees=FiniteInterval(-angle, angle),
+                observed_direction_interval_degrees=FiniteInterval(-angle, angle),
+                physical_line_region=PhysicalLineRegion(150.0, (
+                    (binding.full_interval_px.minimum, 0.01),
+                    (binding.full_interval_px.minimum + 0.001, -0.01),
+                )),
+            ) for binding in cross.direct_bindings))
+            placement = _compose(template, sequence, cross)
+            projection = project_format_placement(placement)
+            for bleed in (False, True):
+                with self.subTest(one_sided=one_sided, bleed=bleed):
+                    polygon = _footprint(placement, placement.frames[0], projection,
+                                         apply_residual=True, apply_bleed=bleed)
+                    left, right = min(x for x, _ in polygon), max(x for x, _ in polygon)
+                    # Before expansion the positive-slope line controls TOP.
+                    # The larger END extension makes the negative-slope line
+                    # control it instead. Both ends of both lines must survive.
+                    lines = ((10.0, 0.01), (10.001, -0.01))
+                    minimum = min(p + m * (x - 150.0)
+                                  for p, m in lines for x in (left, right))
+                    self.assertLess(10.001 - 0.01 * (right - 150.0),
+                                    10.0 + 0.01 * (left - 150.0))
+                    padding = 1.0 + (2.5 if bleed else 0.0)
+                    self.assertAlmostEqual(min(y for _, y in polygon), minimum - padding)
+                    if one_sided:
+                        maximum = max(p + m * (x - 150.0)
+                                      for p, m in lines for x in (left, right))
+                        self.assertAlmostEqual(max(y for _, y in polygon),
+                                               maximum + 240.0 + padding)
+
     def test_raw_trace_protects_interior_reference_states_and_new_span(self) -> None:
         for interior in (True, False):
             with self.subTest(interior=interior):
@@ -1890,6 +1940,79 @@ class TemplateOutputContractTest(unittest.TestCase):
                 projection = project_format_placement(placement)
                 mandatory = _footprint(placement, placement.frames[0], projection, apply_residual=True)
                 self.assertLessEqual(min(y for _, y in mandatory), -11.0)
+
+    def test_cross_reprojection_contains_mixed_states_in_every_hull_direction(self) -> None:
+        template = _template(1)
+        placement = _compose(template, _sequence(template), _cross(template))
+        original = placement.frames[0]
+        frame = replace(original,
+            start=replace(original.start, full_position_interval_px=FiniteInterval(100, 110)),
+            end=replace(original.end, full_position_interval_px=FiniteInterval(200, 230)),
+            top=replace(original.top, full_position_interval_px=FiniteInterval(10, 20)),
+            bottom=replace(original.bottom, full_position_interval_px=FiniteInterval(250, 280)),
+        )
+        vertices = (JointFrameState(100, 200, 10, 250, None),
+                    JointFrameState(110, 230, 20, 280, None))
+        angle = math.degrees(math.atan(0.03))
+        bindings = tuple(replace(binding,
+            fit_direction_interval_degrees=FiniteInterval(-angle, angle),
+            full_direction_interval_degrees=FiniteInterval(-angle, angle),
+            observed_direction_interval_degrees=FiniteInterval(-angle, angle),
+            trace_coordinates_px=(215,),
+            trace_position_intervals_px=(FiniteInterval(position - 2, position + 2),),
+        ) for binding, position in zip(placement.cross_fit.direct_bindings, (8.0, 282.0), strict=True))
+        for direction in (1, -1):
+            directed_frame = frame if direction == 1 else replace(frame,
+                start=replace(frame.end, role=BoundaryRole.START),
+                end=replace(frame.start, role=BoundaryRole.END),
+            )
+            directed_vertices = tuple(replace(state,
+                sequence_start_px=state.sequence_end_px,
+                sequence_end_px=state.sequence_start_px,
+            ) for state in vertices) if direction == -1 else vertices
+            for inferred_role in (None, BoundaryRole.TOP, BoundaryRole.BOTTOM):
+                direct = tuple(b for b in bindings if b.role != inferred_role)
+                inferred = () if inferred_role is None else (SimpleNamespace(
+                    role=inferred_role,
+                    source_observation_ids=(direct[0].observation_id,),
+                ),)
+                # This mechanism fixture holds the complete line and raw
+                # ledger fixed while varying signed W/H and reference state.
+                context = SimpleNamespace(
+                    frame_spec=placement.frame_spec,
+                    sequence_fit=SimpleNamespace(template=SimpleNamespace(direction=direction),
+                                                 adjacency_relations=()),
+                    cross_fit=SimpleNamespace(
+                        boundary_use=OutputBoundaryUse.APERTURE_PAIR,
+                        direct_bindings=direct, inferred_bindings=inferred,
+                        direct_pair=inferred_role is None,
+                        line_projection_basis=CrossLineProjectionBasis.COMPLETE_PHYSICAL_DIRECTION,
+                        lane_reference_trace_px=150.0,
+                    ),
+                )
+                mixed = tuple(JointFrameState(*(
+                    (1.0 - weight) * getattr(directed_vertices[0], name)
+                    + weight * getattr(directed_vertices[1], name)
+                    for name in ('sequence_start_px', 'sequence_end_px',
+                                 'top_at_lane_reference_px', 'bottom_at_lane_reference_px')
+                ), None) for weight in (0.1, 0.25, 0.5, 0.75, 0.9))
+                for bleed in (False, True):
+                    states = directed_vertices + mixed
+                    residuals = _frame_boundary_residuals(context, directed_frame, states, apply_bleed=bleed)
+                    polygons = tuple(_state_footprint(context, directed_frame, state,
+                        apply_residual=True, apply_bleed=bleed, residuals=residual,
+                    ) for state, residual in zip(states, residuals, strict=True))
+                    hull = convex_hull(tuple(point for polygon in polygons[:2] for point in polygon))
+                    # All hull halfplanes, including oblique ones, must contain
+                    # every protected corner of each interior reference state.
+                    for left, right in zip(hull, (*hull[1:], hull[0]), strict=True):
+                        for polygon in polygons[2:]:
+                            for x, y in polygon:
+                                self.assertGreaterEqual(
+                                    (right[0] - left[0]) * (y - left[1])
+                                    - (right[1] - left[1]) * (x - left[0]), -1e-8,
+                                    (direction, inferred_role, bleed),
+                                )
 
     def test_empty_native_physical_slice_cannot_fall_back_to_statistical_fit(self) -> None:
         template = _template(1)
