@@ -193,6 +193,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             canonical_direction_degrees=0.1,
             fit_angle_interval_degrees=FiniteInterval(-0.1, 0.2),
             full_direction_interval_degrees=FiniteInterval(-0.2, 0.3),
+            physical_line_region=None,
             independent_support_region_count=2,
             source_spanning_continuous=True,
             left_background_preference_fraction=0.0,
