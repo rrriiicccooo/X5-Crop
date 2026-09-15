@@ -175,9 +175,42 @@ cohort 为 `c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`。
 
 ## 开放风险与精确下一步
 
-`ceaf2f11` 的正常 Hook、正式全量黄金、干净提交性能与 12 组合 CI 已完成。后续只读测量审计尚未改变
-Runtime 或上述覆盖统计；开发提交不重复正式性能。继续剩余 23 个短轴诊断未合格任务，并保留
-S100 的侧向归因限制，不把诊断标签变化等同于新增覆盖。
+`ceaf2f11` 的正常 Hook、正式全量黄金、干净提交性能与 12 组合 CI 已完成。它仍是最后接受的
+Runtime 检查点；当前工作树有未接受的 broad 逐线原型及配套文档，不将其当作已合格版本。
+开发提交不重复正式性能。以下新证据不能替代上文接受检查点或发布验收。
+
+- 初轮原型已删除区域均值的伪代表点，保留真实 broad trace/峰身份、完整物理区间与原网格多数。
+  Runtime、report 86 和最终 edge provenance 校验同步；cross-height 弱梯度聚合保持独立。
+  已删除 coarse 重复的 support-trace 字段与恒等 broad view，无旧类型或兼容别名。
+- `Test/gold_analysis/broad_trace_full_20260915` 的全量进程已终止：109 完成、S086 分析错误，
+  18 安全 auto、91 Review，已完成记录未见危险 auto；校准 observation 身份漂移尚未登记。
+  原型整组合格方案从 49 降到 43，短轴从 87 降到 83。source-bound 对照保存在该目录
+  `baseline_quality_comparison.json`。S012/S030/S042/S044/S058/S086 丢失整组合格方案；不能接受这次回退。
+- S086 原始 footprint 投影失败后仍被选择，触发 `selected placement must reuse the primary proposal`。
+  已在 source selection 前沿原 typed failure 撤下 unavailable primary，保留候选和原始投影原因。
+  不放宽模型校验、不晋升 runner；故障注入覆盖该完整选择链。
+- S086/S097/S109/S110 的原始投影问题均为截面角点占满顶点额度。新的 slope polygon join 只删除
+  两侧均位于仿射边内部的组合，保留完整三维可行域；40 截面角点/24 极点反例有精确凸组合证书，
+  真实 40 极点仍拒绝。原 64 次工作与 32 顶点上限不变。完整输出与同状态风险对照、退化测试及
+  现有分别凸性合同通过独立只读复核；相关 114 项专项通过，新增完整输出对照另行通过。
+  `Test/gold_analysis/broad_trace_vertices_20260915` 的四张正式 CLI、report 校验及同源官方黄金函数完成：
+  S086 恢复 safe auto；另三张均恢复 proposal，但仍 unsafe Review。S109 短轴 7/7，S110 4/5；
+  S097 primary/runner 分别 3/12、8/12。没有修复后的新全量结果，不外推整体覆盖数。
+- S030/S042/S044 的旧源码隔离复跑报告位于 `broad_trace_old_measurements_20260915`，新报告位于
+  `broad_trace_regressions_20260915`；旧 primary footprint 均与接受检查点完全相等。S030 真实 END 链
+  8 点的区域计数为 `[4,2,2]/[4,3,4]`，末区不足多数，separator 消失，F1 END 改为宽模型推断。
+  保存的同次 registered 数组与 `S030-measurement/signal_summary.json` 显示，在 2905–2940 px，
+  trace 1848 最大 contrast z 2.85，低于原 3.0；2002 最大仅 1.333333。旧末区 3/4 是 polarity/background
+  状态支持，不能替代真实峰。观测运行没有新增 pixel query，三层保护 polygon 与此前原型逐项一致；
+  顶点压缩使 state count 80→48，risk 仅有约 1e-13 浮点差，不能声称完整报告相同。
+- S042 的对应 START 实际存在完整相容分支，reciprocal-nearest 在 trace 2826 从 14539.5 选择
+  14548.5，而另一条 14511 分支随后取得 3083:14519、3340:14503.5，导致主链失去末区多数。
+  主链前六点接后三点时区域数 `[3,2,4]`，水平线 p=14511 位于全部九点原 physical intervals 内。
+  这证明关联遗漏，不证明唯一边界；两个含不同 trace2826 峰的链不能直接 union。
+- S058 的 TOP 分成前段外边与后段内边，均不满足完整多数；转用 aperture 后 BOTTOM39 的两点方向
+  外推导致过宽。现有合法 Cross `26+54` 被枚举序与两个保留槽排除，尚无该组合正式 footprint，
+  不能称为安全替代。S012 则是新增完整 broad 与 sharp 非等价冲突，使旧 sharp 合格方案不再保留。
+  S044 是角色变化与 Grid 冲突；S030/S042/S044 不是简单的 raw 保护扩大。
 
 当前先修正 broad 区域测量的坐标语义。可复现证据位于
 `Test/gold_analysis/broad_region_geometry_20260915/reproduce.py` 与
@@ -194,7 +227,7 @@ S100 的侧向归因限制，不把诊断标签变化等同于新增覆盖。
   production 的多峰归属、最终输出或 Gate，不算新增黄金覆盖或错误 auto。
 - 平坦中间 trace 没有边界或局部峰时，另外两条线仍可生成标记该中间 trace 的区域观测。这只证明
   contributing/多数计数不是代表点测量，不将不存在的中间真边界用于准确性比较。
-- 当前类型把区域身份、全部 contributing traces 与代表点坐标混在一起；coarse 使用全部 contributing
+- 旧类型把区域身份、全部 contributing traces 与代表点坐标混在一起；coarse 使用全部 contributing
   traces 证明连续性，tracking 固定遍历三个代表点，报告校验也将该点区间重建为物理线域。
   不能只替换拟合数组，或按位置区间相交把 sharp 与 broad 合并成同一物理边界。
 - 引入提交 `a864fa4c` 与当前正例证明的是双尺度 broad 对宽缓边的检测：单条 trace 本身已有两个
@@ -207,10 +240,11 @@ S100 的侧向归因限制，不把诊断标签变化等同于新增覆盖。
   trace 17685 的 BOTTOM 有 2490/2494/2506.5 三峰。这里的相交仅为关联线索，不能按最近峰强选。
   九条原采样线共检出 293/91 个 broad 峰；改用逐线测量必须约束实际关联工作，不能沿用三点工作账。
 
-精确下一步：将 broad 几何回链到真实逐 trace 双尺度峰，移除将区域均值峰冒充代表点的路径。
-保留固定查询、三个独立区域、原角色与方向上限；区域支持分母仍是原 registered traces，不能先删
-缺测点再计算多数。必须同时闭合多峰归属、完整 raw、工作量和报告来源，并验证当前 broad 支撑样片
-S024/S058、双通道 S054 以及受共享 measurement owner 影响的回归；不能以更多 Review 冒充完成。
+精确下一步：先在实际峰图中处理 S042 揭示的有界互斥关联遗漏，分别保留每个解释的完整 raw、
+多数证明与工作量，不能按黄金选峰或把同 trace 冲突点合并。S030 的弱信号与材料支持/坐标支持
+语义另行处理：不把低于原阈值的信号伪造为已测峰，不以区域均值补坐标。继续修复 S012/S058 的
+合格短轴方案保留和 S044 角色回退；校准须等机制稳定后按原资格与全体 hull 重算，不能为当前结果
+收窄区间。再做受影响正式 CLI 与 full110，对照每份 source-bound footprint；回退未解决前保持原型未接受。
 
 新增测量或完整拟合不能挤掉已有合格
 短轴备选。完整分组的数值补充只保留为有条件提案，保持原 canonical 两阶段与排序相关编号。
