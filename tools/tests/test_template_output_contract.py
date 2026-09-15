@@ -55,6 +55,7 @@ from x5crop.detection.photo_geometry.template_nominal_grid_authority import (
 )
 from x5crop.detection.photo_geometry.template_output import (
     _aperture_binding_positions,
+    _enclosing_support_aperture_risk,
     _footprint,
     _frame_boundary_residuals,
     _line_outward_expansion_px,
@@ -832,6 +833,127 @@ class TemplateOutputContractTest(unittest.TestCase):
             protections[BoundaryRole.BOTTOM].local_boundary_residual_px,
             8.0,
         )
+
+    def test_support_extrapolates_only_to_the_actual_protected_ends(self) -> None:
+        for slope in (-0.02, 0.02):
+            placement = _enclosing_support_placement(
+                frame_width_px=300.0, support_slope=slope,
+                observed_direction_half_width_degrees=0.5,
+            )
+            sequence = placement.sequence_fit
+            start, end = sequence.role_bindings
+            assert start is not None
+            start = replace(start, line_evidence=SequenceRoleLineEvidence(
+                start.observation_id, 152.0, FiniteInterval.exact(100.0),
+                FiniteInterval.exact(math.degrees(math.atan(0.04))),
+            ))
+            placement = _compose(sequence.template,
+                                 replace(sequence, role_bindings=(start, end)), placement.cross_fit)
+            projection = project_format_placement(placement)
+            for bleed in (False, True):
+                with self.subTest(slope=slope, bleed=bleed):
+                    polygon = _footprint(placement, placement.frames[0], projection,
+                                         apply_residual=True, apply_bleed=bleed)
+                    left, right = min(x for x, _ in polygon), max(x for x, _ in polygon)
+                    self.assertGreater(100.0 - left, right - 400.0)
+                    self.assertGreater(left, 0.0)
+                    # Raw support is exactly the selected line on [0, 300].
+                    # Only the actual right extension has unmeasured direction;
+                    # the larger START protection cannot lengthen that domain.
+                    low, high = (math.tan(math.atan(slope) + math.radians(a))
+                                 for a in (-0.5, 0.5))
+                    intercepts = tuple(y - slope * (x - 150.0) for x, y in polygon)
+                    self.assertAlmostEqual(min(intercepts), 27.0 - 1.0 - (slope - low) * (right - 300.0))
+                    self.assertAlmostEqual(max(intercepts), 277.0 + 1.0 + (high - slope) * (right - 300.0))
+
+    def test_support_product_vertices_cover_mixed_slopes_and_same_state_risk(self) -> None:
+        placement = _enclosing_support_placement(frame_width_px=300.0,
+                                                observed_direction_half_width_degrees=4.0)
+        original = placement.frames[0]
+        frame = replace(original,
+            start=replace(original.start, full_position_interval_px=FiniteInterval(90, 110)),
+            end=replace(original.end, full_position_interval_px=FiniteInterval(380, 420)),
+        )
+        bindings = tuple(replace(binding, trace_coordinates_px=(0, 250, 300, 423),
+            trace_position_intervals_px=(interval,) * 3 + (outside,),
+        ) for binding, interval, outside in zip(placement.cross_fit.direct_bindings,
+            (FiniteInterval(20, 40), FiniteInterval(268, 287)),
+            (FiniteInterval(-8, 50), FiniteInterval(260, 320)), strict=True))
+        placement = replace(placement, frames=(frame,),
+                            cross_fit=replace(placement.cross_fit, direct_bindings=bindings))
+        sequence = ((90.0, 380.0), (110.0, 420.0))
+        support = ((25.0, 275.0, -0.02), (30.0, 278.0, 0.01), (28.0, 282.0, 0.03))
+        vertices = tuple(JointFrameState(*q, *z) for q in sequence for z in support)
+        mixed = tuple(JointFrameState(
+            *((1 - w) * sequence[0][i] + w * sequence[1][i] for i in range(2)),
+            *(sum(a * z[i] for a, z in zip(weights, support, strict=True)) for i in range(3)),
+        ) for w in (0.1, 0.5, 0.9) for weights in ((0.2, 0.3, 0.5), (0.5, 0.5, 0.0), (0.0, 0.4, 0.6)))
+        for bleed in (False, True):
+            residuals = _frame_boundary_residuals(placement, frame, vertices, apply_bleed=bleed)
+            all_residuals = _frame_boundary_residuals(placement, frame, vertices + mixed, apply_bleed=bleed)
+            self.assertEqual(residuals, all_residuals[:len(vertices)])
+            if bleed:
+                # Only the far END state reaches raw trace 423. Keep that
+                # interval even for states whose new individual span excludes it.
+                for state, residual in zip(vertices[:3], residuals[:3], strict=True):
+                    self.assertLess(state.sequence_end_px + residual[BoundaryRole.END] + 3.0, 423.0)
+                    self.assertGreaterEqual(residual[BoundaryRole.TOP],
+                        1.0 + state.top_at_lane_reference_px + state.enclosing_support_slope * (423.0 - frame.top.reference_trace_px) + 8.0)
+            polygons = tuple(_state_footprint(placement, frame, state,
+                apply_residual=True, apply_bleed=bleed, residuals=residual,
+            ) for state, residual in zip(vertices + mixed, all_residuals, strict=True))
+            hull = convex_hull(tuple(point for polygon in polygons[:len(vertices)] for point in polygon))
+            for left, right in zip(hull, (*hull[1:], hull[0]), strict=True):
+                for polygon in polygons[len(vertices):]:
+                    for x, y in polygon:
+                        self.assertGreaterEqual((right[0] - left[0]) * (y - left[1])
+                                                - (right[1] - left[1]) * (x - left[0]), -1e-8)
+            if bleed:
+                for offset in (None, FiniteInterval(-1.0, 2.0)):
+                    context = SimpleNamespace(
+                        frame_spec=placement.frame_spec, sequence_fit=placement.sequence_fit,
+                        cross_fit=placement.cross_fit,
+                        enclosing_support_aperture_authority=SimpleNamespace(
+                            authority_id="test-center", effective_center_offset_px=offset,
+                            state=EvidenceState.UNAVAILABLE if offset is None else EvidenceState.SUPPORTED,
+                        ),
+                    )
+                    risk = _enclosing_support_aperture_risk(
+                        context, frame, SimpleNamespace(frame_states=(vertices,)), residuals)
+                    mixed_risk = _enclosing_support_aperture_risk(
+                        context, frame, SimpleNamespace(frame_states=(mixed,)), all_residuals[len(vertices):])
+                    assert risk is not None and mixed_risk is not None
+                    self.assertLessEqual(mixed_risk.top_expansion_px, risk.top_expansion_px + 1e-8)
+                    self.assertLessEqual(mixed_risk.bottom_expansion_px, risk.bottom_expansion_px + 1e-8)
+
+    def test_support_direction_span_is_specific_to_each_sequence_state(self) -> None:
+        placement = _enclosing_support_placement(frame_width_px=300.0)
+        original = placement.frames[0]
+        vertices = (JointFrameState(100, 400, 27, 277, 0.0),
+                    JointFrameState(100, 420, 27, 277, 0.0))
+        frame = replace(original, end=replace(original.end, full_position_interval_px=FiniteInterval(400, 420)))
+        for angles in ((-1.0, 1.0), (0.0, 1.0), (-1.0, 0.0)):
+            context = replace(placement, cross_fit=replace(placement.cross_fit, direct_bindings=tuple(
+                replace(binding, observed_direction_interval_degrees=FiniteInterval(*angles))
+                for binding in placement.cross_fit.direct_bindings)))
+            for direction, bleed in ((1, False), (1, True), (-1, False), (-1, True)):
+                directed = SimpleNamespace(frame_spec=context.frame_spec, cross_fit=context.cross_fit,
+                    sequence_fit=SimpleNamespace(template=SimpleNamespace(direction=direction), adjacency_relations=()))
+                directed_frame = frame if direction == 1 else replace(frame,
+                    start=replace(frame.end, role=BoundaryRole.START),
+                    end=replace(frame.start, role=BoundaryRole.END))
+                states = vertices if direction == 1 else tuple(replace(state,
+                    sequence_start_px=state.sequence_end_px, sequence_end_px=state.sequence_start_px)
+                    for state in vertices)
+                residuals = _frame_boundary_residuals(directed, directed_frame, states, apply_bleed=bleed)
+                for state, residual in zip(states, residuals, strict=True):
+                    polygon = _state_footprint(directed, directed_frame, state, apply_residual=True,
+                                               apply_bleed=bleed, residuals=residual)
+                    right = max(420.0, max(x for x, _ in polygon))
+                    self.assertAlmostEqual(residual[BoundaryRole.TOP],
+                        1.0 + max(0.0, -math.tan(math.radians(angles[0]))) * (right - 300.0))
+                    self.assertAlmostEqual(residual[BoundaryRole.BOTTOM],
+                        1.0 + max(0.0, math.tan(math.radians(angles[1]))) * (right - 300.0))
 
     def test_enclosing_support_uses_no_cross_bleed_and_keeps_per_side_limit(self) -> None:
         placement = _enclosing_support_placement()

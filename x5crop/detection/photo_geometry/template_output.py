@@ -617,26 +617,32 @@ def _frame_boundary_residuals(
                     if enclosing:
                         base[role] += _support_direction_departure_px(binding, float(state.enclosing_support_slope), sequence_span)
         if not added:
-            if not enclosing:
-                raw_positions = {
-                    role: tuple(value for index in admitted[role]
-                                for value in (binding.trace_position_intervals_px[index].minimum,
-                                              binding.trace_position_intervals_px[index].maximum))
-                    if binding.trace_position_intervals_px else ()
-                    for role, binding in bindings.items()
-                }
-                for state, expansion, extras, sources in zip(
-                    states, expansions, optional, source_positions, strict=True,
-                ):
-                    # Keep the closed longitudinal protection. Reproject each
-                    # complete Cross family at this state's actual ends, not
-                    # the symmetric Lipschitz outer span. All admitted raw
-                    # intervals remain shared, including interior-only traces.
-                    ends = (state.sequence_start_px - direction * expansion[BoundaryRole.START],
-                            state.sequence_end_px + direction * expansion[BoundaryRole.END])
-                    support = FiniteInterval(min(sequence_span.minimum, *ends),
-                                             max(sequence_span.maximum, *ends))
-                    for role, binding in bindings.items():
+            raw_positions = {} if enclosing else {
+                role: tuple(value for index in admitted[role]
+                            for value in (binding.trace_position_intervals_px[index].minimum,
+                                          binding.trace_position_intervals_px[index].maximum))
+                if binding.trace_position_intervals_px else ()
+                for role, binding in bindings.items()
+            }
+            for state, expansion, signed, extras, sources in zip(
+                states, expansions, departures, optional, source_positions, strict=True,
+            ):
+                # Freeze closed longitudinal protection and the complete raw
+                # ledger. Project Cross at the actual ends, including the
+                # original frame span; do not shorten START/END or reselect raw.
+                ends = (state.sequence_start_px - direction * expansion[BoundaryRole.START],
+                        state.sequence_end_px + direction * expansion[BoundaryRole.END])
+                support = FiniteInterval(min(sequence_span.minimum, *ends),
+                                         max(sequence_span.maximum, *ends))
+                for role, binding in bindings.items():
+                    if enclosing:
+                        # This span depends only on the sequence state. With
+                        # shared raw, the full sequence x support vertex product
+                        # still bounds continuous states in every hull direction.
+                        expansion[role] = PIXEL_CENTER_EXTENT_PX + extras[role] + signed[role] + _support_direction_departure_px(
+                            binding, float(state.enclosing_support_slope), support,
+                        )
+                    else:
                         positions = _aperture_binding_positions(
                             binding, lane_reference_trace_px=cross.lane_reference_trace_px,
                             support=support, line_projection_basis=cross.line_projection_basis,

@@ -1539,6 +1539,20 @@ Enclosing 风险距离使用短轴坐标单位，与 source-axis H 一致；法�
 跨轴保护范围；同一斜率造成的角点位移只进入范围上界，不重复加到上下边保护。方向剩余项只在原实测
 trace 域外计算。Mandatory 与 requested 独立纳入新进入范围的 raw 端点，最多原端点数加一次检查；
 风险和同状态对齐预算直接使用 requested 的同一份保护结果，不再另算较小范围。
+准入闭合后，冻结共同 `dx/dy`、全部状态的 START/END 总保护和共享 raw departure。每个 sequence
+状态取自身实际长轴端点与原 frame span 的范围，只重算域外方向差；不能按新范围撤回旧 raw 或再缩短
+长轴。该范围包含于旧共同 `span±dx`，所以短轴需求不增加，原长轴保护仍充分。每状态只增加两侧各
+一次方向投影，不增加状态、查询、solver 或闭合轮次。
+
+当前投影是 sequence 顶点与 `(top, bottom, m)` 支撑顶点的完整笛卡尔积；长轴保护只依赖 sequence
+变量 `q`，实际左端 `L(q)` 凹、右端 `U(q)` 凸。记实测域 `[l,u]`、observed slope `[a-,a+]`、
+正部 `v+=max(0,v)`，BOTTOM 方向项为 `max((m-a-)+*(l-L)+, (a+-m)+*(U-u)+)`，TOP 对调两项
+斜率系数。它们对 `q` 与支撑变量分别凸，即使 observed 不包含 `m` 或跨越实测域端点也成立。
+共享 raw departure 对支撑变量凸且不依赖 `q`。倾斜角点包含 `m*x` 双线性项，不能宣称联合仿射，
+但任意方向的 footprint 支撑函数对两组变量分别凸，因此完整积顶点的 hull 覆盖连续内部状态。
+逐侧风险使用同状态斜率，`m*x` 在输出与 aperture 距离中抵消，剩余支撑高度余量、固定校准偏移
+（或完整物理偏移）与保护量仍分别凸。同状态对齐预算同理。该证明依赖固定 direction、正 W/H、固定
+canonical H、enclosing 无 cross bleed 和当前独立投影；不能移用于非积状态集合或非仿射变量 H。
 局部 residual 只保留实测 trace 相对这条同状态直线的 outward departure；超出实测 trace 域时，也只传播
 `observed_direction - state_slope` 的方向差。不得把绝对斜率再作为 residual 加一次，或用目标 trace 的
 水平位置与其它 trace 直接比较。`BoundaryProtectionFact.local_boundary_residual_px` 与
