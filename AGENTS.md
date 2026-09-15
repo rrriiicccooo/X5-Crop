@@ -138,6 +138,8 @@ platform | platform-check | platform-package | pre-push
 - 验证应与本次改动和声明相称：先运行能证明目标的最小专项检查；只有依赖范围、失败证据、项目 Gate
   或待提交内容要求时才扩大。一次成功且其输入未变化的检查不重复运行，也不以通用 skill 强制增加
   release 或 performance 验证。
+- 正式性能合格属于发布验收，发布前绑定同一 release commit 验证。开发提交默认不运行
+  `tools/verify performance`，不把每次提交的性能 receipt 作为开发完成条件。
 - Development gold、diagnostic、accuracy、performance、platform、cohort、source SHA、count、proposal、
   candidate、decision 与 release threshold 的全部精确语义由 `docs/ARCHITECTURE.md` 第 14 节定义；标注器
   权限与工作集布局由 `docs/MANUAL_ANNOTATION.md` 定义。此处只保存命令路由，不复制数值或状态合同。

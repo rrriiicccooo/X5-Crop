@@ -926,8 +926,8 @@ validation-only 合同让位。
 
 剩余能力继续按独立小机制形成检查点。带拒绝选项的概率选择仍只保留设计边界，须等独立 calibration
 与 sealed representative 数据具备后再进入 runtime；校准 Grid 的硬区间路径已经由第 7.2 节拥有。未来
-能力都必须完整交付 type、owner、Gate、Debug、正反例、真实样片、性能和黄金安全验收；尚未闭合的能力
-不授予自动批准权限，也不建立占位 runtime。
+能力都必须完整交付 type、owner、Gate、Debug、正反例、真实样片和黄金安全验收；尚未闭合的能力
+不授予自动批准权限，也不建立占位 runtime。正式性能合格在发布验收时确认，不逐开发提交运行。
 
 ### 7.2 Calibrated nominal Grid authority
 
@@ -1830,7 +1830,9 @@ beam、未校准的第二套 Grid/phase vote 搜索、候选笛卡尔积、完�
 candidate-dependent query 或 content-driven placement；概率层也只能消费已经生成且硬合法的有界候选。
 
 性能合同是 24-source 完整用户路径平均不超过 5 秒；同一均值不超过 3 秒是明确记录但不阻断
-提交、发布或平台 receipt 的 challenge。正式计时子进程同时由外部观察未插桩 peak RSS；该值与
+提交、发布或平台 receipt 的 challenge。正式性能验证属于发布验收，绑定同一 release commit；
+开发提交默认不运行该验证，也不要求每次提交生成性能 receipt。
+正式计时子进程同时由外部观察未插桩 peak RSS；该值与
 带 cProfile 的阶段归因 RSS 分开记录。`runtime_peak_temporary_bytes` 只描述 detector 自报的有界
 临时测量缓冲，不代表进程 RSS。Cross 与 sequence 两组 baseline 顺序测量，一组全部窗口消费完后释放
 其像素数组，再测量下一组。Receipt 计入整组所有 trace 同时保留的底层数组和处理缓冲，slice view 不
