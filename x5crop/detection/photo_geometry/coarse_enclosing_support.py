@@ -585,16 +585,6 @@ def _shared_tracks(
         math.degrees(math.atan(shared_slopes.minimum)),
         math.degrees(math.atan(shared_slopes.maximum)),
     )
-    observed_angle = FiniteInterval(
-        min(
-            minimum_track.observed_direction_interval_degrees.minimum,
-            maximum_track.observed_direction_interval_degrees.minimum,
-        ),
-        max(
-            minimum_track.observed_direction_interval_degrees.maximum,
-            maximum_track.observed_direction_interval_degrees.maximum,
-        ),
-    )
     canonical_angle = math.degrees(math.atan(canonical_slope))
 
     def compile_track(
@@ -632,7 +622,15 @@ def _shared_tracks(
             canonical_direction_degrees=canonical_angle,
             fit_direction_interval_degrees=shared_fit_angle,
             full_direction_interval_degrees=shared_full_angle,
-            observed_direction_interval_degrees=observed_angle,
+            # Common-trace filtering can widen the shared physical domain.
+            # Keep it and this side's measured error, without transferring
+            # the opposite side's extra error into local extrapolation.
+            observed_direction_interval_degrees=FiniteInterval(
+                min(raw.observed_direction_interval_degrees.minimum,
+                    shared_full_angle.minimum),
+                max(raw.observed_direction_interval_degrees.maximum,
+                    shared_full_angle.maximum),
+            ),
             trace_coordinates_px=tuple(
                 item.trace_coordinate_px for item in transitions
             ),
@@ -757,8 +755,11 @@ def _compile_coarse_enclosing_pair(
         full_direction_interval_degrees=(
             minimum_track.full_direction_interval_degrees
         ),
-        observed_direction_interval_degrees=(
-            minimum_track.observed_direction_interval_degrees
+        observed_direction_interval_degrees=FiniteInterval(
+            min(minimum_track.observed_direction_interval_degrees.minimum,
+                maximum_track.observed_direction_interval_degrees.minimum),
+            max(minimum_track.observed_direction_interval_degrees.maximum,
+                maximum_track.observed_direction_interval_degrees.maximum),
         ),
         trace_coordinates_px=minimum_track.trace_coordinates_px,
     )

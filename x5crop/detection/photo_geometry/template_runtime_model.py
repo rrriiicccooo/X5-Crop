@@ -496,6 +496,19 @@ class RegisteredTemplateLane:
         uses_enclosing = bool(bound_ids.intersection(coarse_ids))
         if uses_enclosing and not coarse_ids.issubset(bound_ids):
             raise ValueError("coarse enclosing pair must be registered together")
+        if uses_enclosing:
+            assert enclosing is not None
+            coarse_tracks = {
+                track.observation_id: track
+                for track in (enclosing.minimum_track, enclosing.maximum_track)
+            }
+            if any(
+                binding.observed_direction_interval_degrees
+                != coarse_tracks[binding.observation_id].observed_direction_interval_degrees
+                for binding in (*self.top_cross_bindings, *self.bottom_cross_bindings)
+                if binding.observation_id in coarse_tracks
+            ):
+                raise ValueError("coarse binding changed its observed direction")
         if bound_ids != {
             item.observation_id for item in self.raw_cross_observations
         }.union(coarse_ids if uses_enclosing else set()):

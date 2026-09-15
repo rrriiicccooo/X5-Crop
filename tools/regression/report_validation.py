@@ -1063,11 +1063,26 @@ def _validate_cross_measurement_support(
     raw_ids = {item["observation_id"] for item in raw}
     if len(raw_ids) != len(raw):
         raise ValueError("Cross measured support observations are duplicated")
-    enclosing = lane.get("search", {}).get("coarse_strip_support", {}).get("enclosing_support")
+    coarse = lane.get("search", {}).get("coarse_strip_support", {})
+    enclosing = coarse.get("enclosing_support")
     coarse_ids = set()
     if enclosing is not None:
         minimum = enclosing["minimum_track"]
         maximum = enclosing["maximum_track"]
+        direction = coarse.get("shared_direction")
+        if (
+            direction is None
+            or direction.get("observation_ids") != [
+                minimum["observation_id"], maximum["observation_id"]
+            ]
+            or direction.get("observed_direction_interval_degrees") != {
+                "minimum": min(track["observed_direction_interval_degrees"]["minimum"]
+                               for track in (minimum, maximum)),
+                "maximum": max(track["observed_direction_interval_degrees"]["maximum"]
+                               for track in (minimum, maximum)),
+            }
+        ):
+            raise ValueError("Cross coarse shared observed direction lost its side provenance")
         pair_id = f"coarse-enclosing-pair:{minimum['observation_id']}:{maximum['observation_id']}"
         for role, track in (("top", minimum), ("bottom", maximum)):
             identity = track["observation_id"]
@@ -1082,7 +1097,8 @@ def _validate_cross_measurement_support(
                 or binding.get("enclosing_pair_id") != pair_id
                 or binding.get("run_id") != f"coarse-enclosing:{identity}"
                 or any(binding.get(field) != track[field] for field in (
-                    "independent_support_region_count", "trace_coordinates_px"
+                    "independent_support_region_count", "trace_coordinates_px",
+                    "observed_direction_interval_degrees",
                 ))
             ):
                 raise ValueError("Cross coarse support binding is not reproducible")
@@ -1287,6 +1303,7 @@ def _validate_cross_fit_binding_support(
                 "physical_line_region",
                 "trace_position_intervals_px", "fit_interval_px", "full_interval_px",
                 "fit_direction_interval_degrees", "full_direction_interval_degrees",
+                "observed_direction_interval_degrees",
             )
         ):
             raise ValueError("Cross fit changed original measured spatial support")

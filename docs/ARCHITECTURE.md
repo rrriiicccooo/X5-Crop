@@ -404,6 +404,12 @@ trace，broad channel 使用 9 条固定 trace（每个长轴区域 3 条），�
 long-axis broad standalone edge 都只保留为 observation；它可能是照片内部构图线，不能单独取得 outer 或
 phase authority。
 
+共享方向编译后，每侧 observed direction 保留自身原始 observed 与共同 full direction 的 hull。
+共同 trace 子集可能扩大物理方向域，因此不能只保留原侧 observed；另一侧额外的测量余量也不能
+传播到本侧域外保护。Source shared summary 显式取编译后两侧 observed 的 hull；共同 canonical、fit、
+full 和 shared raw 的职责不变。Coarse 到 registered binding、再到 retained fit 的 observed 必须逐侧
+精确回链，不能以包含关系替代来源相等。
+
 ### 6.4 Cross observation
 
 Top/bottom observation 的局部线段先保持独立。方向相同、坐标接近、残差较小或 trace 较多都不足以

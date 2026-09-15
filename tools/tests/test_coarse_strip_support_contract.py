@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import replace
+import math
+from dataclasses import fields, replace
 from pathlib import Path
 import unittest
 
@@ -24,10 +25,15 @@ from x5crop.detection.photo_geometry.coarse_enclosing_model import (
     CoarseEnclosingMeasurementBasis,
     CoarseEnclosingResolution,
     CoarseEnclosingResolutionFailureKind,
+    CoarseEnclosingTrack,
+    CoarseSupportSide,
 )
 from x5crop.detection.photo_geometry.coarse_enclosing_support import (
+    _shared_tracks,
     observe_coarse_short_axis_tracks,
 )
+from tools.tests.photo_geometry_support import make_side_measurement_set
+from tools.tests.template_runtime_test_support import prepared_template_lane
 from x5crop.detection.photo_geometry.broad_material_transition_measurement import (
     measure_broad_material_transition_regions,
 )
@@ -36,6 +42,7 @@ from x5crop.detection.photo_geometry.corridors import (
     build_top_bottom_search_corridors,
 )
 from x5crop.detection.photo_geometry.lane_preparation import (
+    _coarse_enclosing_binding,
     _enclosing_support_for_canonical_height,
     _shared_direction_from_coarse,
 )
@@ -46,6 +53,7 @@ from x5crop.detection.photo_geometry.measurement_model import (
 )
 from x5crop.detection.photo_geometry.model import (
     BoundaryAxis,
+    BoundaryRole,
     PHOTO_BOUNDARY_MEASUREMENT_SPEC,
     QueryPurpose,
 )
@@ -62,6 +70,7 @@ from x5crop.detection.photo_geometry.template_measurement_plan import (
 from x5crop.detection.photo_geometry.template_model import (
     template_role_refinement_radius_px,
 )
+from x5crop.detection.photo_geometry.template_runtime_model import RegisteredTemplateLane
 from x5crop.detection.source_core import (
     SourceLaneEvidence,
     SourceStripValidationDomain,
@@ -118,6 +127,81 @@ def _lane(
 
 
 class CoarseStripSupportContractTest(unittest.TestCase):
+    def test_shared_tracks_keep_each_sides_observed_direction(self) -> None:
+        measurements = make_side_measurement_set(((40.0, 160.0),) * 4)
+        traces = (0, 100, 200, 300)
+        query = replace(measurements.query, trace_positions_px=traces)
+        sides = tuple(tuple(
+            replace(item, trace_coordinate_px=traces[item.trace_ordinal])
+            for item in measurements.transitions
+            if item.canonical_coordinate_px == position
+        ) for position in (40.0, 160.0))
+        physical_angle = math.degrees(math.atan(0.5 / 300.0))
+
+        def track(side, transitions, observed, *, constrained=False):
+            position = transitions[0].canonical_coordinate_px
+            # Two non-shared exact measurements constrain the original slope
+            # to zero. Removing them must retain the wider common full domain.
+            own_traces = (0, 50, 100, 200, 250, 300) if constrained else traces
+            return CoarseEnclosingTrack(
+                side=side,
+                measurement_basis=CoarseEnclosingMeasurementBasis.SHARP_TRANSITION,
+                observation_id=ObservationId(f"coarse:test:{side.value}"),
+                reference_trace_px=150.0,
+                canonical_position_px=position,
+                fit_position_interval_px=FiniteInterval.exact(position),
+                full_position_interval_px=FiniteInterval(position - 0.25, position + 0.25),
+                trace_coordinates_px=own_traces,
+                support_trace_coordinates_px=own_traces,
+                canonical_direction_degrees=0.0,
+                fit_direction_interval_degrees=FiniteInterval.exact(0.0),
+                full_direction_interval_degrees=(FiniteInterval.exact(0.0) if constrained
+                    else FiniteInterval(-physical_angle, physical_angle)),
+                observed_direction_interval_degrees=observed,
+                trace_position_intervals_px=tuple(
+                    FiniteInterval.exact(position) if trace in (50, 250)
+                    else FiniteInterval(position - 0.25, position + 0.25)
+                    for trace in own_traces
+                ),
+                fit_residual_px=0.0,
+                independent_support_region_count=3,
+                source_spanning_continuous=True,
+            )
+
+        for constrained in (False, True):
+            for narrow_side in (0, 1):
+                with self.subTest(constrained=constrained, narrow_side=narrow_side):
+                    own_observed = (FiniteInterval(-0.02, 0.02) if constrained
+                                    else FiniteInterval(-0.2, 0.12))
+                    observed = [FiniteInterval(-0.1, 0.3)] * 2
+                    observed[narrow_side] = own_observed
+                    originals = tuple(track(
+                        side, transitions, observed[index],
+                        constrained=constrained and index == narrow_side,
+                    ) for index, (side, transitions) in enumerate(zip(
+                        (CoarseSupportSide.MINIMUM, CoarseSupportSide.MAXIMUM), sides,
+                        strict=True,
+                    )))
+                    shared = _shared_tracks(
+                        query, minimum_track=originals[0], maximum_track=originals[1],
+                        minimum_transitions=sides[0], maximum_transitions=sides[1],
+                        reference_trace_px=150.0,
+                    )
+                    self.assertIsNotNone(shared)
+                    assert shared is not None
+                    for index, compiled in enumerate(shared):
+                        self.assertAlmostEqual(compiled.full_direction_interval_degrees.minimum, -physical_angle)
+                        self.assertAlmostEqual(compiled.full_direction_interval_degrees.maximum, physical_angle)
+                        self.assertAlmostEqual(compiled.canonical_direction_degrees, 0.0)
+                        self.assertEqual(compiled.trace_coordinates_px, traces)
+                        self.assertEqual(compiled.trace_position_intervals_px, tuple(
+                            item.physical_position_interval_px for item in sides[index]
+                        ))
+                        self.assertAlmostEqual(compiled.observed_direction_interval_degrees.minimum,
+                            min(observed[index].minimum, -physical_angle))
+                        self.assertAlmostEqual(compiled.observed_direction_interval_degrees.maximum,
+                            max(observed[index].maximum, physical_angle))
+
     def test_holder_slot_subset_keeps_full_phase_search_authority(self) -> None:
         authority = FiniteInterval(0.0, 1999.0)
         direct = FiniteInterval(100.0, 1200.0)
@@ -608,6 +692,46 @@ class CoarseStripSupportContractTest(unittest.TestCase):
             support.enclosing_resolution.selected_candidate.measurement_basis,
             CoarseEnclosingMeasurementBasis.SHARP_TRANSITION,
         )
+
+    def test_observed_side_provenance_survives_summary_and_registration(self) -> None:
+        pixels = np.full((322, 2320), 255, dtype=np.uint8)
+        pixels[35:290, 260:2060] = 80
+        support = self._observed_support(pixels)
+        assert support.enclosing_support is not None
+        assert support.shared_direction is not None
+        enclosing = replace(
+            support.enclosing_support,
+            minimum_track=replace(support.enclosing_support.minimum_track,
+                observed_direction_interval_degrees=FiniteInterval(-2.0, 1.0)),
+            maximum_track=replace(support.enclosing_support.maximum_track,
+                observed_direction_interval_degrees=FiniteInterval(-1.0, 2.0)),
+        )
+        direction = replace(support.shared_direction,
+            observed_direction_interval_degrees=FiniteInterval(-2.0, 2.0))
+        support = replace(support, enclosing_support=enclosing, shared_direction=direction)
+        for observed in (FiniteInterval(-2.0, 1.0), FiniteInterval(-3.0, 3.0)):
+            with self.subTest(observed=observed), self.assertRaisesRegex(ValueError, "side provenance"):
+                replace(support, shared_direction=replace(direction,
+                    observed_direction_interval_degrees=observed))
+        prepared = prepared_template_lane()
+        support = replace(prepared.coarse_support, enclosing_support=enclosing,
+            shared_direction=direction, enclosing_resolution=support.enclosing_resolution)
+        registered = RegisteredTemplateLane(**{
+            field.name: getattr(prepared, field.name)
+            for field in fields(RegisteredTemplateLane) if field.init
+        })
+        minimum, maximum = enclosing.minimum_track, enclosing.maximum_track
+        pair_id = f"coarse-enclosing-pair:{minimum.observation_id}:{maximum.observation_id}"
+        registered = replace(registered, coarse_support=support,
+            top_cross_bindings=(_coarse_enclosing_binding(minimum, BoundaryRole.TOP, pair_id=pair_id),),
+            bottom_cross_bindings=(_coarse_enclosing_binding(maximum, BoundaryRole.BOTTOM, pair_id=pair_id),))
+        binding = registered.top_cross_bindings[0]
+        for observed in (binding.full_direction_interval_degrees,
+                         maximum.observed_direction_interval_degrees,
+                         direction.observed_direction_interval_degrees):
+            with self.subTest(binding_observed=observed), self.assertRaisesRegex(ValueError, "changed its observed direction"):
+                replace(registered, top_cross_bindings=(replace(binding,
+                    observed_direction_interval_degrees=observed),))
 
     def test_unique_broad_material_pair_can_supply_enclosing_support(self) -> None:
         lane, plan = _lane()

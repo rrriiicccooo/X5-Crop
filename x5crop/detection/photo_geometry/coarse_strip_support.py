@@ -170,6 +170,21 @@ class CoarseStripSupport:
             raise ValueError(
                 "coarse enclosing support disagrees with its resolution"
             )
+        if self.enclosing_support is not None:
+            tracks = (self.enclosing_support.minimum_track,
+                      self.enclosing_support.maximum_track)
+            if (
+                self.shared_direction is None
+                or self.shared_direction.observation_ids != tuple(
+                    track.observation_id for track in tracks
+                )
+                or self.shared_direction.observed_direction_interval_degrees
+                != FiniteInterval(
+                    min(track.observed_direction_interval_degrees.minimum for track in tracks),
+                    max(track.observed_direction_interval_degrees.maximum for track in tracks),
+                )
+            ):
+                raise ValueError("coarse shared observed direction lost its side provenance")
 
 
 def _sparse_positions(values: tuple[int, ...], maximum: int = 5) -> tuple[int, ...]:
