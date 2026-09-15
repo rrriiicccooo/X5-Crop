@@ -1460,7 +1460,7 @@ Mandatory 与含 bleed/topology 的 requested 分别闭合，产品 bleed 只计
 重选 raw、混合不同状态或用旧新结果逐状态截取。每状态新范围包含于旧 `span±dx`，需求不超过原闭合
 上界，所以左右保护仍充分，无须新增闭合轮次。Mandatory/requested 分别使用自身含全部保护的端点。
 
-该收紧仅适用于源轴对齐的 aperture。固定 direction、正 W/H 下 bleed/topology 仿射，帧内固定的
+上述 aperture 上下界证明使用源轴对齐输出。固定 direction、正 W/H 下 bleed/topology 仿射，帧内固定的
 线族、斜率界、sequence extent 与 raw 账本使长轴 expansion 为状态的凸函数，实际左端凹、右端凸。
 任一固定 Cross 直线按斜率符号选择这两个端点，其下界凹、上界凸；完整线族与 raw 并集仍保留该性质。
 直接边的位置抵消、推导 opposite 的有符号同状态 H 都是仿射项，因此最终 TOP 凹、BOTTOM 凸。
