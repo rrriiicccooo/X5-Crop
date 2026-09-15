@@ -503,12 +503,21 @@ class RegisteredTemplateLane:
                 for track in (enclosing.minimum_track, enclosing.maximum_track)
             }
             if any(
-                binding.observed_direction_interval_degrees
-                != coarse_tracks[binding.observation_id].observed_direction_interval_degrees
+                any(getattr(binding, field) != getattr(coarse_tracks[binding.observation_id], source_field)
+                    for field, source_field in (
+                        ("coordinate_interval_px", "full_position_interval_px"),
+                        ("full_interval_px", "full_position_interval_px"),
+                        ("fit_interval_px", "fit_position_interval_px"),
+                        *((field, field) for field in (
+                            "canonical_direction_degrees", "fit_direction_interval_degrees",
+                            "full_direction_interval_degrees", "observed_direction_interval_degrees",
+                            "trace_coordinates_px", "trace_position_intervals_px", "fit_residual_px",
+                            "independent_support_region_count", "source_spanning_continuous")),
+                    ))
                 for binding in (*self.top_cross_bindings, *self.bottom_cross_bindings)
                 if binding.observation_id in coarse_tracks
             ):
-                raise ValueError("coarse binding changed its observed direction")
+                raise ValueError("coarse binding changed its measured support")
         if bound_ids != {
             item.observation_id for item in self.raw_cross_observations
         }.union(coarse_ids if uses_enclosing else set()):

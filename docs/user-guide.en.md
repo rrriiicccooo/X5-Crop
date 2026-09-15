@@ -162,6 +162,8 @@ contributes to corner protection, and risk distances use the same short-axis uni
 the longitudinal range actually reached by each feasible state, preserving measured protection while reducing excess border.
 Each coarse support side retains its own measured direction margin and the complete shared direction range, preventing
 extra uncertainty from the opposite side from increasing its border.
+Each side also retains all accepted endpoint measurements as geometric constraints, even where the opposite side has
+no measurement. Pairing still requires the original shared-region support.
 After one unique support pair is selected, a gold-calibrated aperture-centre offset interval with full uncertainty may narrow the worst-case risk;
 it does not turn support into a photo boundary. Missing calibration retains the complete physically possible centre
 range. A conflict with direct support or expansion beyond 5% keeps the source in review. A true TIFF edge explicitly

@@ -127,6 +127,75 @@ def _lane(
 
 
 class CoarseStripSupportContractTest(unittest.TestCase):
+    def test_shared_direction_retains_unpaired_side_measurements(self) -> None:
+        pixels = np.full((322, 2320), 255, dtype=np.uint8)
+        pixels[35:290, 260:2060] = 80
+        support = self._observed_support(pixels).enclosing_support
+        assert support is not None
+        for extra_side in (0, 1):
+            with self.subTest(extra_side=extra_side):
+                coordinates = ((40.0, 160.0),) * 5
+                measurement = make_side_measurement_set(coordinates)
+                side_points = tuple(tuple(
+                    replace(item, physical_position_interval_px=FiniteInterval.exact(item.canonical_coordinate_px),
+                            localization_interval_px=FiniteInterval.exact(item.canonical_coordinate_px))
+                    if item.trace_coordinate_px in (0, 40) else item
+                    for item in measurement.transitions
+                    if item.canonical_coordinate_px == coordinate
+                    and (index == extra_side or item.trace_coordinate_px not in (0, 40))
+                ) for index, coordinate in enumerate((40.0, 160.0)))
+                tracks = tuple(replace(
+                    base,
+                    reference_trace_px=20.0,
+                    canonical_position_px=coordinate,
+                    fit_position_interval_px=FiniteInterval.exact(coordinate),
+                    full_position_interval_px=FiniteInterval(coordinate - 0.25, coordinate + 0.25),
+                    trace_coordinates_px=tuple(p.trace_coordinate_px for p in points),
+                    support_trace_coordinates_px=tuple(p.trace_coordinate_px for p in points),
+                    canonical_direction_degrees=0.0,
+                    fit_direction_interval_degrees=FiniteInterval.exact(0.0),
+                    full_direction_interval_degrees=FiniteInterval.exact(0.0) if index == extra_side else FiniteInterval(-2.0, 2.0),
+                    observed_direction_interval_degrees=FiniteInterval(-2.0, 2.0),
+                    trace_position_intervals_px=tuple(p.physical_position_interval_px for p in points),
+                    fit_residual_px=0.0,
+                ) for index, (base, coordinate, points) in enumerate(zip(
+                    (support.minimum_track, support.maximum_track), (40.0, 160.0), side_points, strict=True,
+                )))
+                shared = _shared_tracks(
+                    measurement.query,
+                    minimum_track=tracks[0], maximum_track=tracks[1],
+                    minimum_transitions=side_points[0], maximum_transitions=side_points[1],
+                    reference_trace_px=20.0,
+                )
+                self.assertIsNotNone(shared)
+                assert shared is not None
+                for original, compiled in zip(tracks, shared, strict=True):
+                    self.assertEqual(compiled.observation_id, original.observation_id)
+                    self.assertEqual(compiled.trace_coordinates_px, original.trace_coordinates_px)
+                    self.assertEqual(compiled.trace_position_intervals_px, original.trace_position_intervals_px)
+                    self.assertEqual(compiled.full_direction_interval_degrees, FiniteInterval.exact(0.0))
+                self.assertEqual(shared[extra_side].full_position_interval_px,
+                                 FiniteInterval.exact((40.0, 160.0)[extra_side]))
+                # The opposite side requires a positive slope, while the
+                # unpaired exact endpoints require zero: no shared strip.
+                opposite = 1 - extra_side
+                incompatible = tuple(replace(point,
+                    canonical_coordinate_px=(40.0, 160.0)[opposite] + 0.02 * (point.trace_coordinate_px - 20.0),
+                    localization_interval_px=FiniteInterval.exact(
+                        (40.0, 160.0)[opposite] + 0.02 * (point.trace_coordinate_px - 20.0)),
+                    physical_position_interval_px=FiniteInterval.exact(
+                        (40.0, 160.0)[opposite] + 0.02 * (point.trace_coordinate_px - 20.0)),
+                ) for point in side_points[opposite])
+                rejected_points = list(side_points)
+                rejected_points[opposite] = incompatible
+                rejected_tracks = list(tracks)
+                rejected_tracks[opposite] = replace(tracks[opposite],
+                    trace_position_intervals_px=tuple(point.physical_position_interval_px for point in incompatible))
+                self.assertIsNone(_shared_tracks(measurement.query,
+                    minimum_track=rejected_tracks[0], maximum_track=rejected_tracks[1],
+                    minimum_transitions=rejected_points[0], maximum_transitions=rejected_points[1],
+                    reference_trace_px=20.0))
+
     def test_shared_tracks_keep_each_sides_observed_direction(self) -> None:
         measurements = make_side_measurement_set(((40.0, 160.0),) * 4)
         traces = (0, 100, 200, 300)
@@ -141,7 +210,7 @@ class CoarseStripSupportContractTest(unittest.TestCase):
         def track(side, transitions, observed, *, constrained=False):
             position = transitions[0].canonical_coordinate_px
             # Two non-shared exact measurements constrain the original slope
-            # to zero. Removing them must retain the wider common full domain.
+            # to zero. Omitting them from the shared fit must now be rejected.
             own_traces = (0, 50, 100, 200, 250, 300) if constrained else traces
             return CoarseEnclosingTrack(
                 side=side,
@@ -182,11 +251,15 @@ class CoarseStripSupportContractTest(unittest.TestCase):
                         (CoarseSupportSide.MINIMUM, CoarseSupportSide.MAXIMUM), sides,
                         strict=True,
                     )))
-                    shared = _shared_tracks(
-                        query, minimum_track=originals[0], maximum_track=originals[1],
+                    arguments = dict(minimum_track=originals[0], maximum_track=originals[1],
                         minimum_transitions=sides[0], maximum_transitions=sides[1],
                         reference_trace_px=150.0,
                     )
+                    if constrained:
+                        with self.assertRaisesRegex(ValueError, "complete measured track"):
+                            _shared_tracks(query, **arguments)
+                        continue
+                    shared = _shared_tracks(query, **arguments)
                     self.assertIsNotNone(shared)
                     assert shared is not None
                     for index, compiled in enumerate(shared):
@@ -709,6 +782,9 @@ class CoarseStripSupportContractTest(unittest.TestCase):
         direction = replace(support.shared_direction,
             observed_direction_interval_degrees=FiniteInterval(-2.0, 2.0))
         support = replace(support, enclosing_support=enclosing, shared_direction=direction)
+        with self.assertRaisesRegex(ValueError, "side provenance"):
+            replace(support, shared_direction=replace(direction,
+                trace_coordinates_px=(0, *direction.trace_coordinates_px)))
         for observed in (FiniteInterval(-2.0, 1.0), FiniteInterval(-3.0, 3.0)):
             with self.subTest(observed=observed), self.assertRaisesRegex(ValueError, "side provenance"):
                 replace(support, shared_direction=replace(direction,
@@ -726,10 +802,17 @@ class CoarseStripSupportContractTest(unittest.TestCase):
             top_cross_bindings=(_coarse_enclosing_binding(minimum, BoundaryRole.TOP, pair_id=pair_id),),
             bottom_cross_bindings=(_coarse_enclosing_binding(maximum, BoundaryRole.BOTTOM, pair_id=pair_id),))
         binding = registered.top_cross_bindings[0]
+        with self.assertRaisesRegex(ValueError, "changed its measured support"):
+            replace(registered, top_cross_bindings=(replace(binding,
+                full_direction_interval_degrees=binding.fit_direction_interval_degrees),))
+        with self.assertRaisesRegex(ValueError, "changed its measured support"):
+            replace(registered, top_cross_bindings=(replace(binding,
+                trace_position_intervals_px=(FiniteInterval(-10.0, 10.0),)
+                    + binding.trace_position_intervals_px[1:]),))
         for observed in (binding.full_direction_interval_degrees,
                          maximum.observed_direction_interval_degrees,
                          direction.observed_direction_interval_degrees):
-            with self.subTest(binding_observed=observed), self.assertRaisesRegex(ValueError, "changed its observed direction"):
+            with self.subTest(binding_observed=observed), self.assertRaisesRegex(ValueError, "changed its measured support"):
                 replace(registered, top_cross_bindings=(replace(binding,
                     observed_direction_interval_degrees=observed),))
 

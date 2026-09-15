@@ -404,11 +404,12 @@ trace，broad channel 使用 9 条固定 trace（每个长轴区域 3 条），�
 long-axis broad standalone edge 都只保留为 observation；它可能是照片内部构图线，不能单独取得 outer 或
 phase authority。
 
-共享方向编译后，每侧 observed direction 保留自身原始 observed 与共同 full direction 的 hull。
-共同 trace 子集可能扩大物理方向域，因此不能只保留原侧 observed；另一侧额外的测量余量也不能
-传播到本侧域外保护。Source shared summary 显式取编译后两侧 observed 的 hull；共同 canonical、fit、
-full 和 shared raw 的职责不变。Coarse 到 registered binding、再到 retained fit 的 observed 必须逐侧
-精确回链，不能以包含关系替代来源相等。
+共同 trace 只负责 midpoint 方向拟合、原三区域与连续性配对条件；每侧几何保留 `_fit_track` 最终
+retained 的全部测量，不因另一侧缺少同 trace 而删除自身约束，也不重新纳入已拒绝点。两侧完整 raw
+各自的物理斜率区间求交，并以共同斜率约束各自 reference 位置；每侧 observed 原样保留，不传播
+另一侧额外误差。Source shared summary 的 trace 恰为两侧 intersection，observed 为两侧 hull，
+canonical/fit/full 与两侧一致。Coarse 到 registered binding 再到 retained fit 的 raw 与 observed
+逐侧精确回链；单侧新增 trace 不增加共同支撑数或配对权限。
 
 ### 6.4 Cross observation
 
@@ -1519,7 +1520,7 @@ Enclosing support 本身只证明真实 aperture 位于两条 support 之间，�
 center_offset_ratio = (gold_aperture_center - support_midpoint) / H
 ```
 
-当前 calibration 只纳入 18 个 selected unique pair、且黄金 top/bottom 均为 `directly_visible` 的 source；
+当前 calibration 只纳入 22 个 selected unique pair、且黄金 top/bottom 均为 `directly_visible` 的 source；
 同源 count 先取中位数，再对 source hull 以 `0.001H` 向外量化，得到 `[-0.008H, +0.010H]`。Calibration
 同时绑定 development cohort SHA、eligibility revision 和精确 observation-set SHA；source 数量相同但成员、
 观测值或 detector 权限变化时同样视为 calibration drift。该 authority
@@ -1535,10 +1536,12 @@ cross 预算，但不改变正式采样 geometry。
 
 Support 的共享斜率属于同一个 `JointFrameState`，已经进入该状态的 boundary line 与联合 footprint。
 完整状态保留 `(top, bottom, slope)` 三维可行集合；不能只投影两个位置后保留任意一个斜率解。
-两侧各自在 native 位置、共同方向与原 shared raw 区间加既有 straight residual 内裁出完整直线参数多边形，
+两侧各自在 native 位置、共同方向与自身完整 retained raw 区间加既有 straight residual 内裁出完整直线参数多边形，
 合并全部斜率断点并逐断点保留两侧位置端点的同斜率组合。每个 placement 只计算一次，再仿射平移到
 各 Frame 的 reference；原 32 状态与 64 极值计算上限不变，超界保持不可用。
-每侧 N 个 shared raw interval 的半平面裁剪为 `O(N²)` 工作、`O(N)` 临时空间，不新增 TIFF query。
+`EnclosingSupportPair` 分别保存两侧 trace/interval 数组，逐侧与 direct binding 完全相等；共同支撑数
+仍为两侧 intersection。Straight residual 按完整本侧 raw 与原生中心重算，不能因方向收紧直接删除。
+每侧 N 个 raw interval 的半平面裁剪为 `O(N²)` 工作、`O(N)` 临时空间，不新增 TIFF query。
 Enclosing 风险距离使用短轴坐标单位，与 source-axis H 一致；法向距离除以对应短轴法向分量，避免
 归一化造成区间内部最大风险遗漏。完整包络与逐侧风险均保留完整三维顶点，预算上限不变。
 外框与 aperture 共用第 10 节的有界保护闭合及原始端点准入账本。外框先以完整状态的实际支撑高度建立

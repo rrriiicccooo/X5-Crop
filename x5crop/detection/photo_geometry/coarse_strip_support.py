@@ -178,6 +178,12 @@ class CoarseStripSupport:
                 or self.shared_direction.observation_ids != tuple(
                     track.observation_id for track in tracks
                 )
+                or self.shared_direction.trace_coordinates_px != tuple(sorted(
+                    set(tracks[0].trace_coordinates_px).intersection(tracks[1].trace_coordinates_px)
+                ))
+                or any(getattr(self.shared_direction, field) != getattr(tracks[0], field)
+                       for field in ("canonical_direction_degrees", "fit_direction_interval_degrees",
+                                     "full_direction_interval_degrees"))
                 or self.shared_direction.observed_direction_interval_degrees
                 != FiniteInterval(
                     min(track.observed_direction_interval_degrees.minimum for track in tracks),

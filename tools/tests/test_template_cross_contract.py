@@ -3264,6 +3264,17 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertEqual(bounded.status, CrossFitStatus.BOUND_EXCEEDED)
         self.assertEqual(bounded.receipt.evaluated_fit_count, 2)
 
+        top = inputs.top_bindings[0]
+        extra_trace = max(top.trace_coordinates_px) + 10
+        complete_top = replace(top, trace_coordinates_px=(*top.trace_coordinates_px, extra_trace),
+            trace_position_intervals_px=(*top.trace_position_intervals_px, FiniteInterval.exact(103.0)))
+        complete = fit_template_cross(replace(inputs, top_bindings=(complete_top,)))
+        assert complete.best is not None and complete.best.enclosing_support_pair is not None
+        self.assertEqual(complete.best.enclosing_support_pair.top_trace_coordinates_px, complete_top.trace_coordinates_px)
+        self.assertEqual(complete.best.enclosing_support_pair.top_trace_intervals_px, complete_top.trace_position_intervals_px)
+        self.assertAlmostEqual(complete.best.enclosing_support_pair.top_straight_model_residual_px, 3.0)
+        self.assertEqual(complete.best.shared_trace_support_count, result.best.shared_trace_support_count)
+
     def test_different_enclosing_pair_does_not_replace_unique_aperture(self) -> None:
         result = fit_template_cross(aspect_input(
             template=template(),

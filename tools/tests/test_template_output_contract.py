@@ -65,6 +65,7 @@ from x5crop.detection.photo_geometry.template_output import (
 )
 from x5crop.detection.photo_geometry.template_feasible_geometry import (
     JointFrameState,
+    _support_cross_vertices,
     project_format_placement,
 )
 from x5crop.geometry.convex import convex_hull
@@ -315,7 +316,8 @@ def _enclosing_support_placement(
             support_span_px + 2.0 * support_position_uncertainty_px,
         ),
         reference_trace_px=150.0,
-        trace_coordinates_px=support_traces,
+        top_trace_coordinates_px=support_traces,
+        bottom_trace_coordinates_px=support_traces,
         top_trace_intervals_px=tuple(
             FiniteInterval(
                 support_top
@@ -476,6 +478,41 @@ def _selected_output_gate_fact(
 
 
 class TemplateOutputContractTest(unittest.TestCase):
+    def test_support_projection_keeps_unpaired_constraints_and_rejects_lost_raw(self) -> None:
+        placement = _enclosing_support_placement(support_position_uncertainty_px=0.5)
+        cross = placement.cross_fit
+        pair = cross.enclosing_support_pair
+        assert pair is not None
+        direction = FiniteInterval(-math.degrees(math.atan(0.01)), math.degrees(math.atan(0.01)))
+        top, bottom = cross.direct_bindings
+        top = replace(top, trace_coordinates_px=(0, 50, 150, 250, 300),
+            trace_position_intervals_px=(FiniteInterval.exact(27.0),) + (FiniteInterval(25.0, 29.0),) * 3
+                                       + (FiniteInterval.exact(27.0),),
+            fit_direction_interval_degrees=direction, full_direction_interval_degrees=direction,
+            observed_direction_interval_degrees=direction)
+        bottom = replace(bottom, trace_coordinates_px=(50, 150, 250),
+            trace_position_intervals_px=(FiniteInterval(275.0, 279.0),) * 3,
+            fit_direction_interval_degrees=direction, full_direction_interval_degrees=direction,
+            observed_direction_interval_degrees=direction)
+        pair = replace(pair, top_trace_coordinates_px=top.trace_coordinates_px,
+            bottom_trace_coordinates_px=bottom.trace_coordinates_px,
+            top_trace_intervals_px=top.trace_position_intervals_px,
+            bottom_trace_intervals_px=bottom.trace_position_intervals_px)
+        cross = replace(cross, direct_bindings=(top, bottom), enclosing_support_pair=pair)
+        placement = replace(placement, cross_fit=cross)
+        vertices, _ = _support_cross_vertices(placement)
+        self.assertEqual(set(vertices), {(27.0, 276.5, 0.0), (27.0, 277.5, 0.0)})
+        for altered in (
+            replace(pair, top_trace_coordinates_px=pair.top_trace_coordinates_px[1:],
+                    top_trace_intervals_px=pair.top_trace_intervals_px[1:]),
+            replace(pair, top_trace_intervals_px=(FiniteInterval(26.5, 27.5),)
+                    + pair.top_trace_intervals_px[1:]),
+        ):
+            with self.assertRaisesRegex(ValueError, "preserve direct bindings"):
+                replace(cross, enclosing_support_pair=altered)
+        with self.assertRaisesRegex(ValueError, "preserve direct bindings"):
+            replace(cross, shared_trace_support_count=5)
+
     def test_cross_projection_preserves_joint_positions_without_marginal_corners(self) -> None:
         # The two measured intervals y(0) in [0,2], y(1000) in [8,10]
         # give these four exact line states at reference 500. A statistical
@@ -689,7 +726,8 @@ class TemplateOutputContractTest(unittest.TestCase):
         direction = FiniteInterval(-angle, angle)
         pair = replace(
             pair,
-            trace_coordinates_px=traces,
+            top_trace_coordinates_px=traces,
+            bottom_trace_coordinates_px=traces,
             top_trace_intervals_px=(FiniteInterval(23.5, 30.5),) * 4,
             bottom_trace_intervals_px=(FiniteInterval(273.5, 280.5),) * 4,
         )
@@ -758,7 +796,12 @@ class TemplateOutputContractTest(unittest.TestCase):
                 raw[trace] = FiniteInterval(measured_position - 3.0, measured_position)
                 top = replace(top, trace_coordinates_px=tuple(sorted(raw)),
                               trace_position_intervals_px=tuple(raw[t] for t in sorted(raw)))
-                placement = replace(placement, cross_fit=replace(placement.cross_fit, direct_bindings=(top, bottom)))
+                pair = placement.cross_fit.enclosing_support_pair
+                assert pair is not None
+                pair = replace(pair, top_trace_coordinates_px=top.trace_coordinates_px,
+                               top_trace_intervals_px=top.trace_position_intervals_px)
+                placement = replace(placement, cross_fit=replace(placement.cross_fit,
+                                    direct_bindings=(top, bottom), enclosing_support_pair=pair))
                 output = output_footprint_from_template_placement(
                     placement, project_format_placement(placement), lane=_lane(), lane_ordinal=1, layout="horizontal",
                 )
@@ -784,7 +827,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         pair = cross.enclosing_support_pair
         assert pair is not None
         traces = (0, 150, 450)
-        pair = replace(pair, trace_coordinates_px=traces,
+        pair = replace(pair, top_trace_coordinates_px=traces, bottom_trace_coordinates_px=traces,
                        top_trace_intervals_px=tuple(FiniteInterval.exact(27.0 + slope * (t - 150.0)) for t in traces),
                        bottom_trace_intervals_px=tuple(FiniteInterval.exact(277.0 + slope * (t - 150.0)) for t in traces))
         cross = replace(cross, enclosing_support_pair=pair, direct_bindings=tuple(
@@ -879,8 +922,15 @@ class TemplateOutputContractTest(unittest.TestCase):
         ) for binding, interval, outside in zip(placement.cross_fit.direct_bindings,
             (FiniteInterval(20, 40), FiniteInterval(268, 287)),
             (FiniteInterval(-8, 50), FiniteInterval(260, 320)), strict=True))
-        placement = replace(placement, frames=(frame,),
-                            cross_fit=replace(placement.cross_fit, direct_bindings=bindings))
+        pair = placement.cross_fit.enclosing_support_pair
+        assert pair is not None
+        pair = replace(pair, top_trace_coordinates_px=bindings[0].trace_coordinates_px,
+                       bottom_trace_coordinates_px=bindings[1].trace_coordinates_px,
+                       top_trace_intervals_px=bindings[0].trace_position_intervals_px,
+                       bottom_trace_intervals_px=bindings[1].trace_position_intervals_px)
+        placement = replace(placement, frames=(frame,), cross_fit=replace(placement.cross_fit,
+                            direct_bindings=bindings, enclosing_support_pair=pair,
+                            shared_trace_support_count=4))
         sequence = ((90.0, 380.0), (110.0, 420.0))
         support = ((25.0, 275.0, -0.02), (30.0, 278.0, 0.01), (28.0, 282.0, 0.03))
         vertices = tuple(JointFrameState(*q, *z) for q in sequence for z in support)

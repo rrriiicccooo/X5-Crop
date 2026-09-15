@@ -578,6 +578,14 @@ class TemplateRegistrationContractTest(unittest.TestCase):
             "observation_id": identity,
             "trace_coordinates_px": [0.0, 50.0, 100.0],
             "independent_support_region_count": 3,
+            "trace_position_intervals_px": [{"minimum": 20.0, "maximum": 21.0}] * 3,
+            "full_position_interval_px": {"minimum": 20.0, "maximum": 21.0},
+            "fit_position_interval_px": {"minimum": 20.5, "maximum": 20.5},
+            "fit_residual_px": 0.0,
+            "source_spanning_continuous": True,
+            "canonical_direction_degrees": 0.0,
+            "fit_direction_interval_degrees": {"minimum": -0.05, "maximum": 0.05},
+            "full_direction_interval_degrees": {"minimum": -0.1, "maximum": 0.1},
             "observed_direction_interval_degrees": observed,
         } for identity, observed in (
             ("coarse-minimum", {"minimum": -0.2, "maximum": 0.3}),
@@ -586,6 +594,9 @@ class TemplateRegistrationContractTest(unittest.TestCase):
         pair_id = "coarse-enclosing-pair:coarse-minimum:coarse-maximum"
         bindings = [{
             **track, "role": role, "role_authorized": False,
+            "coordinate_interval_px": track["full_position_interval_px"],
+            "full_interval_px": track["full_position_interval_px"],
+            "fit_interval_px": track["fit_position_interval_px"],
             "run_id": f"coarse-enclosing:{track['observation_id']}",
             "enclosing_pair_id": pair_id,
             "conditional_family_ids": [],
@@ -596,6 +607,9 @@ class TemplateRegistrationContractTest(unittest.TestCase):
             "search": {"coarse_strip_support": {
                 "enclosing_support": {"minimum_track": tracks[0], "maximum_track": tracks[1]},
                 "shared_direction": {
+                    **{field: tracks[0][field] for field in (
+                        "trace_coordinates_px", "canonical_direction_degrees",
+                        "fit_direction_interval_degrees", "full_direction_interval_degrees")},
                     "observation_ids": [track["observation_id"] for track in tracks],
                     "observed_direction_interval_degrees": {"minimum": -0.4, "maximum": 0.3},
                 },
@@ -607,6 +621,10 @@ class TemplateRegistrationContractTest(unittest.TestCase):
             },
         }
         self.assertEqual(len(_validate_cross_measurement_support(lane, [])), 2)
+        invalid = deepcopy(lane)
+        invalid["search"]["coarse_strip_support"]["shared_direction"]["trace_coordinates_px"].append(150.0)
+        with self.assertRaisesRegex(ValueError, "side provenance"):
+            _validate_cross_measurement_support(invalid, [])
         for observed in (
             {"minimum": -0.2, "maximum": 0.3},
             {"minimum": -0.5, "maximum": 0.4},
@@ -628,7 +646,10 @@ class TemplateRegistrationContractTest(unittest.TestCase):
             ] = observed
             with self.subTest(observed=observed), self.assertRaisesRegex(ValueError, "coarse support"):
                 _validate_cross_measurement_support(invalid, [])
-        for field, value in (("role_authorized", True), ("independent_support_region_count", 2)):
+        for field, value in (("role_authorized", True), ("independent_support_region_count", 2),
+                             ("trace_position_intervals_px", [{"minimum": 19.0, "maximum": 22.0}] * 3),
+                             ("full_interval_px", {"minimum": 20.2, "maximum": 20.8}),
+                             ("full_direction_interval_degrees", {"minimum": -0.08, "maximum": 0.08})):
             invalid = deepcopy(lane)
             invalid["observations"]["registered_top_bottom_bindings"][0][field] = value
             with self.subTest(field=field), self.assertRaisesRegex(ValueError, "coarse support"):

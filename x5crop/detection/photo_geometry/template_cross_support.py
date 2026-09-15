@@ -233,18 +233,17 @@ def _candidate(
         bottom_provenance_ids=(bottom.observation_id,),
         observed_span_px=span,
         reference_trace_px=reference_trace_px,
-        trace_coordinates_px=traces,
-        top_trace_intervals_px=tuple(top_by_trace[trace] for trace in traces),
-        bottom_trace_intervals_px=tuple(
-            bottom_by_trace[trace] for trace in traces
-        ),
+        top_trace_coordinates_px=top.trace_coordinates_px,
+        bottom_trace_coordinates_px=bottom.trace_coordinates_px,
+        top_trace_intervals_px=top.trace_position_intervals_px,
+        bottom_trace_intervals_px=bottom.trace_position_intervals_px,
         top_straight_model_residual_px=straight_residual(
             top,
-            {trace: top_by_trace[trace] for trace in traces},
+            top_by_trace,
         ),
         bottom_straight_model_residual_px=straight_residual(
             bottom,
-            {trace: bottom_by_trace[trace] for trace in traces},
+            bottom_by_trace,
         ),
     )
     return EnclosingSupportCandidate(

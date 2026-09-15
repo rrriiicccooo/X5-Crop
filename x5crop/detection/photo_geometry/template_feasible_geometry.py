@@ -661,15 +661,15 @@ def _support_cross_vertices(
     ):
         raise ValueError("enclosing support span differs from its native intervals")
     polygons = []
-    for position, intervals, residual in (
-        (bounds[0], support.top_trace_intervals_px, support.top_straight_model_residual_px),
-        (bounds[1], support.bottom_trace_intervals_px, support.bottom_straight_model_residual_px),
+    for position, traces, intervals, residual in (
+        (bounds[0], support.top_trace_coordinates_px, support.top_trace_intervals_px, support.top_straight_model_residual_px),
+        (bounds[1], support.bottom_trace_coordinates_px, support.bottom_trace_intervals_px, support.bottom_straight_model_residual_px),
     ):
         vertices = tuple(dict.fromkeys((
             (position[0], bounds[2][0]), (position[1], bounds[2][0]),
             (position[1], bounds[2][1]), (position[0], bounds[2][1]),
         )))
-        for trace, interval in zip(support.trace_coordinates_px, intervals, strict=True):
+        for trace, interval in zip(traces, intervals, strict=True):
             distance = float(trace) - support.reference_trace_px
             vertices = _clip_line_region(vertices, 1.0, distance, interval.maximum + residual)
             vertices = _clip_line_region(vertices, -1.0, -distance, residual - interval.minimum)

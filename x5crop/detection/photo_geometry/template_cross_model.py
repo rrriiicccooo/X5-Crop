@@ -438,7 +438,8 @@ class EnclosingSupportPair:
     bottom_provenance_ids: tuple[ObservationId, ...]
     observed_span_px: FiniteInterval
     reference_trace_px: float
-    trace_coordinates_px: tuple[int, ...]
+    top_trace_coordinates_px: tuple[int, ...]
+    bottom_trace_coordinates_px: tuple[int, ...]
     top_trace_intervals_px: tuple[FiniteInterval, ...]
     bottom_trace_intervals_px: tuple[FiniteInterval, ...]
     top_straight_model_residual_px: float = 0.0
@@ -473,13 +474,14 @@ class EnclosingSupportPair:
         if self.observed_span_px != expected_span or self.observed_span_px.minimum <= 0.0:
             raise ValueError("support span must come from direct boundaries")
         if (
-            tuple(sorted(set(self.trace_coordinates_px)))
-            != self.trace_coordinates_px
-            or len(self.trace_coordinates_px) < 2
-            or len(self.top_trace_intervals_px)
-            != len(self.trace_coordinates_px)
-            or len(self.bottom_trace_intervals_px)
-            != len(self.trace_coordinates_px)
+            any(
+                tuple(sorted(set(traces))) != traces or len(traces) < 2
+                or len(intervals) != len(traces)
+                for traces, intervals in (
+                    (self.top_trace_coordinates_px, self.top_trace_intervals_px),
+                    (self.bottom_trace_coordinates_px, self.bottom_trace_intervals_px),
+                )
+            )
             or any(
                 not isinstance(item, FiniteInterval)
                 for item in (
@@ -492,7 +494,7 @@ class EnclosingSupportPair:
             or self.top_straight_model_residual_px < 0.0
             or self.bottom_straight_model_residual_px < 0.0
         ):
-            raise ValueError("support pair requires aligned direct trace intervals")
+            raise ValueError("support pair requires complete per-side trace intervals")
         top_ids = tuple(
             item if isinstance(item, ObservationId) else ObservationId(str(item))
             for item in self.top_provenance_ids
@@ -1200,6 +1202,13 @@ class CrossFit:
                 or support.bottom_full_interval_px != bottom_binding.full_interval_px
                 or support.top_provenance_ids != (top_binding.observation_id,)
                 or support.bottom_provenance_ids != (bottom_binding.observation_id,)
+                or support.top_trace_coordinates_px != top_binding.trace_coordinates_px
+                or support.bottom_trace_coordinates_px != bottom_binding.trace_coordinates_px
+                or support.top_trace_intervals_px != top_binding.trace_position_intervals_px
+                or support.bottom_trace_intervals_px != bottom_binding.trace_position_intervals_px
+                or self.shared_trace_support_count != len(set(support.top_trace_coordinates_px).intersection(
+                    support.bottom_trace_coordinates_px
+                ))
             ):
                 raise ValueError("support output must preserve direct bindings")
             span = support.observed_span_px

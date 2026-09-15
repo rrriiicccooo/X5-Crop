@@ -270,8 +270,6 @@ class CoarseEnclosingSupport:
             or self.maximum_track.side != CoarseSupportSide.MAXIMUM
             or self.minimum_track.measurement_basis
             != self.maximum_track.measurement_basis
-            or self.minimum_track.trace_coordinates_px
-            != self.maximum_track.trace_coordinates_px
             or self.minimum_track.canonical_direction_degrees
             != self.maximum_track.canonical_direction_degrees
             or self.minimum_track.fit_direction_interval_degrees
@@ -287,6 +285,8 @@ class CoarseEnclosingSupport:
             )
             or self.observed_span_px.minimum <= 0.0
             or self.evaluated_trace_count
-            < len(self.minimum_track.trace_coordinates_px)
+            < len(set(self.minimum_track.trace_coordinates_px).union(
+                self.maximum_track.trace_coordinates_px
+            ))
         ):
             raise ValueError("coarse enclosing support is invalid")

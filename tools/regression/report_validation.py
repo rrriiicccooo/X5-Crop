@@ -1075,6 +1075,12 @@ def _validate_cross_measurement_support(
             or direction.get("observation_ids") != [
                 minimum["observation_id"], maximum["observation_id"]
             ]
+            or direction.get("trace_coordinates_px") != sorted(
+                set(minimum["trace_coordinates_px"]).intersection(maximum["trace_coordinates_px"])
+            )
+            or any(direction.get(field) != minimum[field] or minimum[field] != maximum[field]
+                   for field in ("canonical_direction_degrees", "fit_direction_interval_degrees",
+                                 "full_direction_interval_degrees"))
             or direction.get("observed_direction_interval_degrees") != {
                 "minimum": min(track["observed_direction_interval_degrees"]["minimum"]
                                for track in (minimum, maximum)),
@@ -1096,9 +1102,15 @@ def _validate_cross_measurement_support(
                 or binding.get("role_authorized") is not False
                 or binding.get("enclosing_pair_id") != pair_id
                 or binding.get("run_id") != f"coarse-enclosing:{identity}"
-                or any(binding.get(field) != track[field] for field in (
-                    "independent_support_region_count", "trace_coordinates_px",
-                    "observed_direction_interval_degrees",
+                or any(binding.get(field) != track[source_field] for field, source_field in (
+                    ("coordinate_interval_px", "full_position_interval_px"),
+                    ("full_interval_px", "full_position_interval_px"),
+                    ("fit_interval_px", "fit_position_interval_px"),
+                    *((field, field) for field in (
+                        "canonical_direction_degrees", "fit_direction_interval_degrees",
+                        "full_direction_interval_degrees", "observed_direction_interval_degrees",
+                        "trace_coordinates_px", "trace_position_intervals_px", "fit_residual_px",
+                        "independent_support_region_count", "source_spanning_continuous")),
                 ))
             ):
                 raise ValueError("Cross coarse support binding is not reproducible")

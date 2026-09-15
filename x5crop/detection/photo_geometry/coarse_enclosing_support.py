@@ -504,9 +504,18 @@ def _shared_tracks(
 ) -> tuple[CoarseEnclosingTrack, CoarseEnclosingTrack] | None:
     """Compile one straight strip direction and keep side bend as position."""
 
-    if tuple(item.trace_coordinate_px for item in minimum_transitions) != tuple(
-        item.trace_coordinate_px for item in maximum_transitions
-    ):
+    for track, transitions in ((minimum_track, minimum_transitions),
+                               (maximum_track, maximum_transitions)):
+        if (
+            tuple(item.trace_coordinate_px for item in transitions) != track.trace_coordinates_px
+            or tuple(item.physical_position_interval_px for item in transitions)
+            != track.trace_position_intervals_px
+        ):
+            raise ValueError("shared strip fitting must retain each complete measured track")
+    minimum_by_trace = {item.trace_coordinate_px: item for item in minimum_transitions}
+    maximum_by_trace = {item.trace_coordinate_px: item for item in maximum_transitions}
+    common_traces = sorted(set(minimum_by_trace).intersection(maximum_by_trace))
+    if not common_traces:
         return None
     minimum_points = tuple(
         TransitionPoint(item, float(item.trace_coordinate_px), item.canonical_coordinate_px)
@@ -530,15 +539,11 @@ def _shared_tracks(
         return None
     midpoint_points = tuple(
         TransitionPoint(
-            transition := _midpoint_transition(minimum, maximum),
+            transition := _midpoint_transition(minimum_by_trace[trace], maximum_by_trace[trace]),
             float(transition.trace_coordinate_px),
             transition.canonical_coordinate_px,
         )
-        for minimum, maximum in zip(
-            minimum_transitions,
-            maximum_transitions,
-            strict=True,
-        )
+        for trace in common_traces
     )
     fitted = fit_transition_line(
         midpoint_points,
@@ -622,21 +627,8 @@ def _shared_tracks(
             canonical_direction_degrees=canonical_angle,
             fit_direction_interval_degrees=shared_fit_angle,
             full_direction_interval_degrees=shared_full_angle,
-            # Common-trace filtering can widen the shared physical domain.
-            # Keep it and this side's measured error, without transferring
-            # the opposite side's extra error into local extrapolation.
-            observed_direction_interval_degrees=FiniteInterval(
-                min(raw.observed_direction_interval_degrees.minimum,
-                    shared_full_angle.minimum),
-                max(raw.observed_direction_interval_degrees.maximum,
-                    shared_full_angle.maximum),
-            ),
-            trace_coordinates_px=tuple(
-                item.trace_coordinate_px for item in transitions
-            ),
-            trace_position_intervals_px=tuple(
-                item.physical_position_interval_px for item in transitions
-            ),
+            # Each side keeps its complete raw ledger and own observed error.
+            # The shared physical domain is an intersection of those ledgers.
             fit_residual_px=float(np.median(deviations)),
         )
 
@@ -713,16 +705,15 @@ def _compile_coarse_enclosing_pair(
         )
     ):
         return None, None
-    common = set(common_traces)
     minimum_values = tuple(
         item
         for item in minimum_transitions
-        if item.trace_coordinate_px in common
+        if item.trace_coordinate_px in minimum_track.trace_coordinates_px
     )
     maximum_values = tuple(
         item
         for item in maximum_transitions
-        if item.trace_coordinate_px in common
+        if item.trace_coordinate_px in maximum_track.trace_coordinates_px
     )
     shared = _shared_tracks(
         query,
@@ -761,7 +752,7 @@ def _compile_coarse_enclosing_pair(
             max(minimum_track.observed_direction_interval_degrees.maximum,
                 maximum_track.observed_direction_interval_degrees.maximum),
         ),
-        trace_coordinates_px=minimum_track.trace_coordinates_px,
+        trace_coordinates_px=common_traces,
     )
     span = FiniteInterval(
         maximum_track.full_position_interval_px.minimum

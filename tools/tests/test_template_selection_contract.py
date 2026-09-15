@@ -146,7 +146,8 @@ def _enclosing_cross_fit(spec) -> CrossFit:
         bottom_provenance_ids=(bottom.observation_id,),
         observed_span_px=FiniteInterval.exact(260.0),
         reference_trace_px=0.0,
-        trace_coordinates_px=top.trace_coordinates_px,
+        top_trace_coordinates_px=top.trace_coordinates_px,
+        bottom_trace_coordinates_px=bottom.trace_coordinates_px,
         top_trace_intervals_px=top.trace_position_intervals_px,
         bottom_trace_intervals_px=bottom.trace_position_intervals_px,
     )
