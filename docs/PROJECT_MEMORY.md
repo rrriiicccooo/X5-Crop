@@ -1,6 +1,6 @@
 # 项目记忆
 
-更新：2026-09-15。现场 Git、原 TIFF、source SHA、current report 与最新验证高于本文件。
+更新：2026-09-18。现场 Git、原 TIFF、source SHA、current report 与最新验证高于本文件。
 长期合同见 [ARCHITECTURE.md](ARCHITECTURE.md)，人工权限见
 [MANUAL_ANNOTATION.md](MANUAL_ANNOTATION.md)，协作规则见 [AGENTS.md](../AGENTS.md)。
 
@@ -52,8 +52,9 @@ report 85 校验通过，均保持 Review、无正式 TIFF；它们分别验证�
 工程 CI 不替代最终三目标实机发布 receipt。
 
 按用户要求，本机依赖升级后以现场新版为准，同步 `tools/install/dependencies.toml` 并验证，
-不为旧合同或旧 receipt 降级共享库。当前实际加载 Python 3.14.7、NumPy 2.5.2、SciPy 1.18.1、
-OpenCV 5.0.0、tifffile 2026.8.23、imagecodecs 2026.8.16、Pillow 12.3.0，依赖检查全部通过。
+不为旧合同或旧 receipt 降级共享库。2026-09-18 实际加载 Python 3.14.7、NumPy 2.5.3、SciPy 1.18.1、
+OpenCV 5.0.0、tifffile 2026.9.15、imagecodecs 2026.8.16、Pillow 12.3.0；合同已同步，依赖检查及
+18 项安装/TIFF/平台 I/O 专项通过。此前全量 receipt 不能冒充这组新版依赖的重新验收。
 旧 `/private/tmp/x5crop-frozen-20260910` 已不构成独立冻结环境，本轮实际加载的是上述新版；
 其目录名不能证明旧版本仍在使用。后续核对实际 import 版本与来源，入口使用 `/opt/homebrew/bin/python3`。
 
@@ -179,13 +180,28 @@ cohort 为 `c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`。
 Runtime 检查点；当前工作树有未接受的 broad 逐线原型及配套文档，不将其当作已合格版本。
 开发提交不重复正式性能。以下新证据不能替代上文接受检查点或发布验收。
 
-- 初轮原型已删除区域均值的伪代表点，保留真实 broad trace/峰身份、完整物理区间与原网格多数。
-  Runtime、report 86 和最终 edge provenance 校验同步；cross-height 弱梯度聚合保持独立。
+- 当前原型已删除区域均值的伪代表点，保留真实 broad trace/峰身份、完整物理区间与原网格多数。
+  Runtime、report 87 和最终 edge provenance 校验同步；cross-height 弱梯度聚合保持独立。
   已删除 coarse 重复的 support-trace 字段与恒等 broad view，无旧类型或兼容别名。
-- `Test/gold_analysis/broad_trace_full_20260915` 的全量进程已终止：109 完成、S086 分析错误，
-  18 安全 auto、91 Review，已完成记录未见危险 auto；校准 observation 身份漂移尚未登记。
-  原型整组合格方案从 49 降到 43，短轴从 87 降到 83。source-bound 对照保存在该目录
-  `baseline_quality_comparison.json`。S012/S030/S042/S044/S058/S086 丢失整组合格方案；不能接受这次回退。
+- `Test/gold_analysis/broad_association_full_20260915` 已完成 110 项、0 分析错误，16 安全 auto、
+  0 危险 auto、94 Review。2026-09-18 重新读取并核对 summary 聚合，改动前 detector/comparator/cohort
+  身份与该 receipt 一致；同目录 `baseline_quality_comparison.json` 核对全部 source SHA、format/count、
+  cohort role 与物理 frame 身份。相对接受检查点，整组合格方案 49→46（nominal 44→42，challenge 5→4），
+  短轴合格 87→86（nominal 78→77，challenge 9→9）。S030/S044/S058 丢失整组合格方案；
+  S058/S110 丢失短轴合格，S109 新增短轴合格。S012/S042/S086 已恢复整组合格。
+  Primary 为 38 safe / 71 unsafe / 1 unavailable；候选为 20 safe / 13 unsafe / 77 unavailable；
+  222 份保留方案为 57 safe / 165 unsafe。尚不满足 nominal 全部自动正确通过，原型未接受。
+- 关联对每份 query 的实际峰只运行一次，保留完整多数且物理相容的极大 raw 集合；超界清空 paths，
+  保留原始测量并阻止 selected placement。最终 edge 允许完整关联路径的子集或经过物理核验的完整
+  source-region 并集。原始 material-band 身份加入映射后 ID，避免不同带映射同一边界对产生重复登记。
+  2026-09-18 新版依赖下 114 项测量、关联、provenance 与 Runtime 专项通过；没有放宽 Gate 或把局部测量改为 reference。
+- 新增的三项 auto 回退 S069/S078/S082 均为 `producer_bound_exceeded`，其合格方案仍保留。
+  2026-09-18 三份正式 CLI/report 87 复现保存在 `Test/gold_analysis/association_bounds_20260918`。
+  受阻 query 的 P 分别为 18/18/19；S069 独立穷举确认三个极大解释，长度 10/11/10。
+  完成第一条后仍有非包含尾部峰，使保守未来 raw 集合阻止子集剪枝；不能只选最长解释或提高额度。
+  新增的 18 峰数值反例仅验证完整结果须等于三个解释、超界不能泄露部分路径，尚未证明预算内完成。
+  Cursor 收紧及插入支配实验均未在原额度内解决三例，未留在 Runtime；下一步需要改进极大解释搜索，
+  而非继续叠加未取得收益的剪枝。
 - S086 原始 footprint 投影失败后仍被选择，触发 `selected placement must reuse the primary proposal`。
   已在 source selection 前沿原 typed failure 撤下 unavailable primary，保留候选和原始投影原因。
   不放宽模型校验、不晋升 runner；故障注入覆盖该完整选择链。
@@ -195,7 +211,7 @@ Runtime 检查点；当前工作树有未接受的 broad 逐线原型及配套�
   现有分别凸性合同通过独立只读复核；相关 114 项专项通过，新增完整输出对照另行通过。
   `Test/gold_analysis/broad_trace_vertices_20260915` 的四张正式 CLI、report 校验及同源官方黄金函数完成：
   S086 恢复 safe auto；另三张均恢复 proposal，但仍 unsafe Review。S109 短轴 7/7，S110 4/5；
-  S097 primary/runner 分别 3/12、8/12。没有修复后的新全量结果，不外推整体覆盖数。
+  S097 primary/runner 分别 3/12、8/12。修复后的整体覆盖以本节新全量结果为准。
 - S030/S042/S044 的旧源码隔离复跑报告位于 `broad_trace_old_measurements_20260915`，新报告位于
   `broad_trace_regressions_20260915`；旧 primary footprint 均与接受检查点完全相等。S030 真实 END 链
   8 点的区域计数为 `[4,2,2]/[4,3,4]`，末区不足多数，separator 消失，F1 END 改为宽模型推断。
@@ -206,13 +222,14 @@ Runtime 检查点；当前工作树有未接受的 broad 逐线原型及配套�
 - S042 的对应 START 实际存在完整相容分支，reciprocal-nearest 在 trace 2826 从 14539.5 选择
   14548.5，而另一条 14511 分支随后取得 3083:14519、3340:14503.5，导致主链失去末区多数。
   主链前六点接后三点时区域数 `[3,2,4]`，水平线 p=14511 位于全部九点原 physical intervals 内。
-  这证明关联遗漏，不证明唯一边界；两个含不同 trace2826 峰的链不能直接 union。
+  这证明关联遗漏，不证明唯一边界；两个含不同 trace2826 峰的链不能直接 union。新关联已保留两条
+  非包含合法解释，正式 CLI、report 87 与全量黄金确认 primary safe；材料带冲突仍保持 Review。
 - S058 的 TOP 分成前段外边与后段内边，均不满足完整多数；转用 aperture 后 BOTTOM39 的两点方向
   外推导致过宽。现有合法 Cross `26+54` 被枚举序与两个保留槽排除，尚无该组合正式 footprint，
-  不能称为安全替代。S012 则是新增完整 broad 与 sharp 非等价冲突，使旧 sharp 合格方案不再保留。
+  不能称为安全替代。S012 初轮曾因新增完整 broad 与 sharp 非等价冲突丢失合格方案，新全量已恢复。
   S044 是角色变化与 Grid 冲突；S030/S042/S044 不是简单的 raw 保护扩大。
 
-当前先修正 broad 区域测量的坐标语义。可复现证据位于
+Broad 区域测量坐标修正的原始反例证据位于
 `Test/gold_analysis/broad_region_geometry_20260915/reproduce.py` 与
 `measurement_counterexamples.json`，绑定 `67dec91e` 和三个测量/拟合 owner 的 SHA：
 
@@ -240,9 +257,9 @@ Runtime 检查点；当前工作树有未接受的 broad 逐线原型及配套�
   trace 17685 的 BOTTOM 有 2490/2494/2506.5 三峰。这里的相交仅为关联线索，不能按最近峰强选。
   九条原采样线共检出 293/91 个 broad 峰；改用逐线测量必须约束实际关联工作，不能沿用三点工作账。
 
-精确下一步：先在实际峰图中处理 S042 揭示的有界互斥关联遗漏，分别保留每个解释的完整 raw、
-多数证明与工作量，不能按黄金选峰或把同 trace 冲突点合并。S030 的弱信号与材料支持/坐标支持
-语义另行处理：不把低于原阈值的信号伪造为已测峰，不以区域均值补坐标。继续修复 S012/S058 的
+精确下一步：先解决 S069/S078/S082 的重复子集搜索，在原工作上界内保留全部非包含解释，
+核对独立穷举及正式 CLI；不能按黄金选峰或把同 trace 冲突点合并。S030 的弱信号与材料支持/坐标支持
+语义另行处理：不把低于原阈值的信号伪造为已测峰，不以区域均值补坐标。继续修复 S058/S110 的
 合格短轴方案保留和 S044 角色回退；校准须等机制稳定后按原资格与全体 hull 重算，不能为当前结果
 收窄区间。再做受影响正式 CLI 与 full110，对照每份 source-bound footprint；回退未解决前保持原型未接受。
 

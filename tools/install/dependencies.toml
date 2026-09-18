@@ -3,9 +3,9 @@ schema = "x5crop_dependencies_v2"
 [[dependencies]]
 name = "numpy"
 module = "numpy"
-module_version = "2.5.2"
+module_version = "2.5.3"
 pip_distribution = "numpy"
-pip_version = "2.5.2"
+pip_version = "2.5.3"
 homebrew_formula = "numpy"
 
 [[dependencies]]
@@ -27,9 +27,9 @@ homebrew_formula = "opencv"
 [[dependencies]]
 name = "tifffile"
 module = "tifffile"
-module_version = "2026.8.23"
+module_version = "2026.9.15"
 pip_distribution = "tifffile"
-pip_version = "2026.8.23"
+pip_version = "2026.9.15"
 
 [[dependencies]]
 name = "imagecodecs"
