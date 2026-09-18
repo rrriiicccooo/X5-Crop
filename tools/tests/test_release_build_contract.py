@@ -18,11 +18,12 @@ from tools.release.standalone import (
     read_sources,
 )
 from x5crop.app_info import VERSION
+from tools.tests.git_environment_support import isolated_git_environment
 
 
 class ReleaseBuildContractTest(unittest.TestCase):
     def test_sparse_excluded_license_is_read_from_current_git_tree(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
+        with isolated_git_environment(), tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
 
             def git(*arguments: str) -> None:

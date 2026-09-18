@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from tools.tests.git_environment_support import isolated_git_environment
 
 from tools.verification_scope import (
     DOCUMENTATION_SCOPE,
@@ -94,7 +95,7 @@ class VerificationScopeContractTest(unittest.TestCase):
         )
 
     def test_pre_push_refs_classify_the_actual_commit_range(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
+        with isolated_git_environment(), tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
 
             def git(*arguments: str) -> str:
