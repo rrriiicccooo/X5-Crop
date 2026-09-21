@@ -1957,6 +1957,10 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   逐条检查属于受保护侧的输出边半平面是否包含全部实际确认顶点，且每个受保护侧都必须实际参与检查。
   未裁剪的人工物理线可以延伸到 TIFF 外，不能因此要求输出超出已冻结的源内 polygon。判定与逐侧诊断
   使用同一检查，不修改确认坐标、不补齐源外内容，也不增加亚像素容差。
+- 逐帧黄金诊断的 `inward_failure_witnesses` 保留失败输出边、边长、越界确认顶点及有符号垂距；
+  索引从零开始，退化半平面或缺失受保护侧分别记录原因。逐侧失败描述最终 footprint 的保护情况，
+  不直接标注真实接触检测误差；另一轴偏移也可能令被归到 H 的短角边失败。短边仍参与原有包含检查，
+  垂距仅用于解释，不作为新增容差。人工黄金线指导离线接触搜索，不是精确到 1 px 的接触真值。
 - 源域表示与采样分开验证：每份 proposal、runner、selected 与 final footprint 的 `source_extent`
   必须等于 canonical input shape；input/runtime Orientation 由同一 raw extent/tag 复算，并与 measurement
   及 deskew transform 的 source extent 一致。Saturation 的源侧／内部 lane 分类由实际源尺寸复算，不能

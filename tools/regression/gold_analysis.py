@@ -52,8 +52,8 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record, validate_placement_feature_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v21"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v24"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v22"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v25"
 RETAINED_PLACEMENT_SCOPE = "retained_canonical_pair_and_conditional_cross_proposal"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02

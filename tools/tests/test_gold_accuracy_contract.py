@@ -428,6 +428,41 @@ class GoldAccuracyContractTest(unittest.TestCase):
             ["sequence_start"],
         )
         self.assertEqual(diagnostics[0]["outward_budget_failure_sides"], [])
+        witness, = diagnostics[0]["inward_failure_witnesses"]
+        self.assertEqual(witness["side"], "sequence_start")
+        self.assertEqual(witness["cause"], "gold_vertex_outside_output_half_plane")
+        self.assertEqual(witness["output_edge_index"], 3)
+        self.assertEqual(witness["output_edge"], [[10.0, 560.0], [10.0, 0.0]])
+        self.assertEqual(witness["violating_gold_vertex_indices"], [0, 3])
+        self.assertEqual(witness["minimum_signed_distance_px"], -10.0)
+
+    def test_corner_witness_does_not_mistake_side_name_for_contact_error(self) -> None:
+        record = _basis_aware_record(start_basis="directly_visible")
+        # W is displaced by 80 px while the long H edges safely enclose gold.
+        # Very short corner edges still protect real half-planes and cannot
+        # be discarded merely to improve the H-only diagnostic count.
+        output = [
+            [80.0, -19.994], [80.007, -20.0], [579.993, -20.0], [580.0, -19.994],
+            [580.0, 579.994], [579.993, 580.0], [80.007, 580.0], [80.0, 579.994],
+        ]
+        for polygon in (output, list(reversed(output)), output[3:] + output[:3]):
+            with self.subTest(polygon=polygon):
+                report = _approved_report(polygon)
+                with self.assertRaisesRegex(ValueError, "crosses user-confirmed inward baseline"):
+                    validate_approved_geometry(record, report)
+                diagnostic, = gold_frame_diagnostics(record, report)
+                self.assertEqual(diagnostic["inward_failure_sides"],
+                                 ["cross_high", "cross_low", "sequence_start"])
+                cross = [w for w in diagnostic["inward_failure_witnesses"] if w["side"].startswith("cross_")]
+                self.assertEqual(len(cross), 2)
+                self.assertTrue(all(0 < w["output_edge_length_px"] < .01 for w in cross))
+                for witness in cross:
+                    index = witness["output_edge_index"]
+                    self.assertEqual(witness["output_edge"], [polygon[index], polygon[(index+1)%len(polygon)]])
+                    self.assertLess(witness["minimum_signed_distance_px"], 0)
+        rectangle = [[80.0, -20.0], [580.0, -20.0], [580.0, 580.0], [80.0, 580.0]]
+        diagnostic, = gold_frame_diagnostics(record, _approved_report(rectangle))
+        self.assertEqual(diagnostic["inward_failure_sides"], ["sequence_start"])
 
     def test_estimated_start_does_not_block_inward_accuracy(self) -> None:
         output = [[10.0, 0.0], [560.0, 0.0], [560.0, 560.0], [10.0, 560.0]]
@@ -567,6 +602,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
                     gold_frame_diagnostics(record, report)[0]["inward_failure_sides"],
                     [],
                 )
+                self.assertEqual(gold_frame_diagnostics(record, report)[0]["inward_failure_witnesses"], [])
 
     def test_source_clipped_diagnostics_agree_with_full_containment(self) -> None:
         record = _source_clipped_record(start_basis="directly_visible")
@@ -649,6 +685,9 @@ class GoldAccuracyContractTest(unittest.TestCase):
                     gold_frame_diagnostics(record, report)[0]["inward_failure_sides"],
                     ["cross_high", "cross_low"],
                 )
+                witnesses = gold_frame_diagnostics(record, report)[0]["inward_failure_witnesses"]
+                self.assertEqual({item["side"] for item in witnesses}, {"cross_high", "cross_low"})
+                self.assertTrue(any(item["cause"] == "protected_side_unrepresented" for item in witnesses))
 
     def test_challenge_review_keeps_candidate_accuracy_diagnostic_only(
         self,

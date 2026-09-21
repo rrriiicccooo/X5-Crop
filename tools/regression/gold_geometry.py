@@ -398,12 +398,34 @@ def _respects_blocking_sides(
             (0, 3) if horizontal else (0, 1),
             (1, 2) if horizontal else (3, 2),
         )
+    return not _blocking_half_plane_failures(
+        output, gold, blocking_sides,
+        sequence_axis=sequence_axis, cross_axis=cross_axis, epsilon=epsilon,
+    )
+
+
+def _blocking_half_plane_failures(
+    output: Sequence[Sequence[float]],
+    gold: Sequence[Sequence[float]],
+    blocking_sides: frozenset[str],
+    *,
+    sequence_axis: tuple[float, float],
+    cross_axis: tuple[float, float],
+    epsilon: float = 1.0e-6,
+) -> tuple[dict[str, object], ...]:
+    """Explain the same protected output half-planes used by acceptance.
+
+    A short corner edge can fail because the other axis is displaced. Its
+    assigned side is an output-protection fact, not a contact-error label.
+    No edge is dropped by its length, and no acceptance tolerance changes.
+    """
     center_x = sum(float(point[0]) for point in output) / len(output)
     center_y = sum(float(point[1]) for point in output) / len(output)
     center_sequence = center_x * sequence_axis[0] + center_y * sequence_axis[1]
     center_cross = center_x * cross_axis[0] + center_y * cross_axis[1]
     checked_sides: set[str] = set()
-    for left, right in zip(output, (*output[1:], output[0]), strict=True):
+    failures: list[dict[str, object]] = []
+    for edge_index, (left, right) in enumerate(zip(output, (*output[1:], output[0]), strict=True)):
         edge_x = right[0] - left[0]
         edge_y = right[1] - left[1]
         sequence_alignment = abs(
@@ -441,17 +463,50 @@ def _respects_blocking_sides(
             - edge_y * (center_x - left[0])
         )
         if abs(interior_cross) <= epsilon:
-            return False
-        for point in gold:
+            failures.append({
+                "side": side,
+                "cause": "degenerate_output_half_plane",
+                "output_edge_index": edge_index,
+                "output_edge": [list(left), list(right)],
+                "output_edge_length_px": math.hypot(edge_x, edge_y),
+                "violating_gold_vertex_indices": [],
+                "minimum_signed_distance_px": None,
+            })
+            continue
+        margins = []
+        violating_vertices = []
+        for point_index, point in enumerate(gold):
             point_cross = (
                 edge_x * (point[1] - left[1])
                 - edge_y * (point[0] - left[0])
             )
-            if point_cross * (1.0 if interior_cross > 0.0 else -1.0) < -epsilon:
-                return False
+            signed = point_cross * (1.0 if interior_cross > 0.0 else -1.0)
+            margins.append(signed)
+            if signed < -epsilon:
+                violating_vertices.append(point_index)
+        if violating_vertices:
+            length = math.hypot(edge_x, edge_y)
+            failures.append({
+                "side": side,
+                "cause": "gold_vertex_outside_output_half_plane",
+                "output_edge_index": edge_index,
+                "output_edge": [list(left), list(right)],
+                "output_edge_length_px": length,
+                "violating_gold_vertex_indices": violating_vertices,
+                "minimum_signed_distance_px": min(margins) / length,
+            })
     # A partial-permission result cannot silently omit a protected side when
     # an oblique clipped edge was classified under a different physical axis.
-    return blocking_sides.issubset(checked_sides)
+    failures.extend({
+        "side": side,
+        "cause": "protected_side_unrepresented",
+        "output_edge_index": None,
+        "output_edge": None,
+        "output_edge_length_px": None,
+        "violating_gold_vertex_indices": [],
+        "minimum_signed_distance_px": None,
+    } for side in sorted(blocking_sides - checked_sides))
+    return tuple(failures)
 
 
 def _unit_vector(x: float, y: float) -> tuple[float, float]:
@@ -828,6 +883,11 @@ def _gold_frame_diagnostics(
             {
                 "frame_index": frame_index,
                 "inward_failure_sides": list(inward_failures),
+                "inward_failure_witnesses": list(_blocking_half_plane_failures(
+                    output, polygon, frozenset(inward_failures),
+                    sequence_axis=frame_accuracy_sides.sequence_axis,
+                    cross_axis=frame_accuracy_sides.cross_axis,
+                )) if inward_failures else [],
                 "outward_budget_failure_sides": list(outward_failures),
                 "expansion_px_by_side": expansion_by_side,
                 "outward_limit_px_by_side": limits,
