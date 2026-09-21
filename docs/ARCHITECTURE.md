@@ -1949,6 +1949,13 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   Review proposal/candidate 的偏差不产生正式输出，因此不能称为用户层危险批准。几何 epsilon 只吸收浮点计算
   误差。具有向外预算权限的每一侧，其总 expansion 不得超过对应确认 W/H span 的 5% 加命名的 sampling
   allowance，uncertainty、residual 与 bleed 均消耗该预算。这不是零像素误差或对称接近度要求。
+- H 的验收对象是最终可直接使用的 post-bleed 裁切：保护画面、满足既有外扩及运行时预算，并能安全
+  批准。检测线与人工指导线的数像素差异、或中间 H 解释尚不唯一，本身不是新增失败条件。若完整合法
+  H 解释集能由同一输出覆盖，且共同输出在每个解释下都满足已有几何、预算、源域与内容保护条件，
+  可以保留解释差异；不得强行选择唯一边，也不得只相对 primary 证明安全。W 后续还必须证明逐帧归属
+  与相邻关系正确。当前离散 Cross 多解仍在共同输出验证之前阻断，尚未实现这项共同输出能力。
+  接触精度研究只服务具体内切、预算超限或安全批准缺口；已直接可用的样片继续回归，不以进一步精修
+  中间检测线作为未完成事项。新特征或搜索自由度必须证明实际输出收益才可进入 Runtime。
 - 人工 line、polygon 与 `source_truncated` 交集始终以原 TIFF 坐标持久化；Runtime footprint 使用
   Orientation-normalized canonical 坐标。`tools/regression/gold_geometry.py` 是验收映射的唯一 owner，必须
   用冻结的 `raw_to_canonical` affine 将全部人工几何恰好转换一次，再进行 proposal、candidate 或正式输出
