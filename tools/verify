@@ -86,7 +86,12 @@ case "${1:-}" in
         ;;
     diagnostic)
         shift
-        "$PYTHON" -m tools.regression.diagnostic_cohort "$@"
+        if [ "${1:-}" = "--gold-boundary-features" ]; then
+            shift
+            "$PYTHON" -m tools.regression.gold_boundary_features "$@"
+        else
+            "$PYTHON" -m tools.regression.diagnostic_cohort "$@"
+        fi
         ;;
     performance)
         "$PYTHON" -m tools.regression.performance
