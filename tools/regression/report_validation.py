@@ -3700,6 +3700,18 @@ def _validate_holder_fill_identity(lane: dict[str, Any]) -> None:
         raise ValueError("holder-fill free space is not reproducible")
 
 
+def _common_authority_comparison_record(authority: CommonHOutputAuthority) -> dict[str, Any]:
+    """Compare replayed facts independently of generated local proof names."""
+    record = typed_read_model(authority)
+    for competition in record["enclosing_support_competitions"]:
+        for name in ("best", "runner_up"):
+            if competition[name] is not None:
+                fit = competition[name]
+                fit["selected_direction"]["direction_id"] = "recomputed-direction"
+                fit["longitudinal_projection_authority"]["authority_id"] = "recomputed-projection"
+    return record
+
+
 def _validate_common_authority_provenance(lane, production_lane, query_records) -> None:
     """Replay bounded membership and member authority, never crop selection."""
     authority = _common_authority_record(lane)
@@ -3741,18 +3753,12 @@ def _validate_common_authority_provenance(lane, production_lane, query_records) 
         boundary_axis=common.placements[0].height_axis,
         aperture_aspect_ratio_authority=cross.aperture_aspect_ratio_authority,
     )
-    expected = typed_read_model(assess_common_h_output_authority(
+    expected = _common_authority_comparison_record(assess_common_h_output_authority(
         common, phase=phase, cross=cross, registration=registration,
         membership_coverage=coverage, cross_input=cross_input,
     ))
-    actual = typed_read_model(authority)
-    # Only generated run-local direction names are non-reproducible offline;
-    # all binding identities, intervals, work and resulting authority remain exact.
-    for record in (actual, expected):
-        for competition in record["enclosing_support_competitions"]:
-            for name in ("best", "runner_up"):
-                if competition[name] is not None:
-                    competition[name]["selected_direction"]["direction_id"] = "recomputed-direction"
+    actual = _common_authority_comparison_record(authority)
+    # All source and binding identities, intervals, work and authority remain exact.
     if actual != expected:
         raise ValueError("common H member authority or membership coverage is not reproducible")
 

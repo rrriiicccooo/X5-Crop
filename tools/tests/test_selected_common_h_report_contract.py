@@ -5,7 +5,8 @@ from dataclasses import fields, replace
 import unittest
 
 from tools.regression.report_validation import (
-    _read_common_proof, _validate_common_authority_provenance, _validate_finalization,
+    _common_authority_comparison_record, _read_common_proof,
+    _validate_common_authority_provenance, _validate_finalization,
     _validate_holder_fill_identity, _validate_holder_fill_provenance,
     _validate_nominal_grid_authority, _validate_selected_contact_protection,
     _validate_selected_output_reuse, _validate_sequence_output_line_provenance,
@@ -169,6 +170,35 @@ class SelectedCommonHReportContractTest(unittest.TestCase):
                         item["evaluated_candidate_count"] = 1 - item["evaluated_candidate_count"]
                     with self.assertRaisesRegex(ValueError, "not reproducible"):
                         _validate_common_authority_provenance(bad, self.lane, self.queries)
+
+    def test_support_replay_ignores_generated_names_but_keeps_measurements_and_work(self):
+        from tools.tests.test_common_h_selection_contract import _case, _authority
+        from x5crop.detection.photo_geometry.template_common_output import CommonHOutputAuthority
+
+        authority = _authority(_case(support_pair=True))
+        baseline = _common_authority_comparison_record(authority)
+        record = typed_read_model(authority)
+        fit = record["enclosing_support_competitions"][0]["best"]
+        self.assertIsNotNone(fit)
+        fit["selected_direction"]["direction_id"] = "another-run-direction"
+        fit["longitudinal_projection_authority"]["authority_id"] = "another-run-projection"
+        renamed = _read_common_proof(record, CommonHOutputAuthority)
+        self.assertEqual(_common_authority_comparison_record(renamed), baseline)
+        for field in ("work", "source", "measurement"):
+            with self.subTest(field=field):
+                changed = deepcopy(record)
+                support = changed["enclosing_support_competitions"][0]
+                if field == "work":
+                    support["evaluated_candidate_count"] = 0
+                elif field == "source":
+                    support["best"]["top_binding"]["observation_id"] = "foreign-source-edge"
+                    with self.assertRaises(ValueError):
+                        _read_common_proof(changed, CommonHOutputAuthority)
+                    continue
+                else:
+                    support["best"]["top_binding"]["fit_residual_px"] += 1.0
+                changed = _read_common_proof(changed, CommonHOutputAuthority)
+                self.assertNotEqual(_common_authority_comparison_record(changed), baseline)
 
     def test_contact_protection_cannot_be_completed_by_other_member(self):
         outputs = deepcopy(self.lane["output_footprints"])
