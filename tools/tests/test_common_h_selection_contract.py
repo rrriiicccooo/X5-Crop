@@ -130,12 +130,15 @@ class CommonHSelectionContractTest(unittest.TestCase):
         self.assertIsNone(selected.selected_placement_id)
         self.assertEqual(len(selected.common_h_output.placements), 2)
 
-    def test_same_pair_enclosing_support_cannot_be_relabelled_common_aperture(self):
+    def test_common_aperture_cannot_assume_each_members_pair_is_unique(self):
         case = _case(support_pair=True)
-        _phase, _cross, inputs, common = case
+        _phase, cross, inputs, common = case
+        self.assertEqual(cross.status, CrossFitStatus.UNRESOLVED)
         for bottom in inputs.bottom_bindings:
             singleton = fit_template_cross(replace(inputs, bottom_bindings=(bottom,)))
-            self.assertEqual(singleton.best.boundary_use.value, "enclosing_support_pair")
+            self.assertEqual(singleton.best.boundary_use.value, "aperture_pair")
+        # A uniquely authorized native aperture keeps its measured H, but
+        # removing its competitors does not prove uniqueness in the full set.
         authority = _authority(case)
         self.assertTrue(all(s.status == SupportFitStatus.RESOLVED
                             for s in authority.enclosing_support_competitions))
