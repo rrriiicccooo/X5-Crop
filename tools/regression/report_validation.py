@@ -7,6 +7,9 @@ from dataclasses import fields
 from statistics import median
 from typing import Any
 
+from .common_output_validation import validate_common_h_output
+from x5crop.detection.photo_geometry.template_measurement_plan_model import MAX_CROSS_PAIRS
+
 from x5crop.detection.candidate.assessment.model import CANDIDATE_GATE_CHECK_CODES
 from x5crop.detection.decision.vocabulary import FINAL_REVIEW_REASONS
 from x5crop.detection.output_deskew import DeskewSkipReason
@@ -3684,6 +3687,15 @@ def _validate_geometry(
         lane_id = lane.get("lane_id")
         if not isinstance(lane_id, str) or not lane_id:
             raise ValueError("source lane identity is invalid")
+        if "common_h_output" not in lane:
+            raise ValueError("source lane lost its common H output assessment")
+        common = lane["common_h_output"]
+        validate_common_h_output(common, expected_source_extent=expected_source_extent)
+        if common is not None and any(
+            p["lane_id"] != lane_id or p["source_scan_geometry"] != lane.get("source_scan_geometry")
+            for p in common["placements"]
+        ):
+            raise ValueError("common H output changed lane or source authority")
         proposal_outputs = _validate_placement_proposal(
             lane.get("placement_proposal"),
             lane_id=lane_id,
@@ -4590,6 +4602,8 @@ def _validate_development(record: dict[str, Any]) -> None:
             != production_lane.get("placement_proposal")
             or lane.get("alternative_placement_proposals")
             != production_lane.get("alternative_placement_proposals")
+            or "common_h_output" not in lane
+            or lane["common_h_output"] != production_lane["common_h_output"]
             or not isinstance(winner, dict)
             or set(winner)
             != {
@@ -4665,6 +4679,18 @@ def _validate_development(record: dict[str, Any]) -> None:
             ):
                 raise ValueError("retained proposal feature provenance changed")
         cross_competition = lane["cross_competition"]
+        common = lane["common_h_output"]
+        validate_common_h_output(
+            common,
+            expected_source_extent=WorkspaceExtent(**record["measurement"]["source_extent"]),
+            cross_competition=cross_competition,
+            cross_registration_work=lane["cross_registration_work"],
+            phase_best=lane["phase_competition"]["best"],
+        )
+        common_compositions = work.get("common_h_composition_count")
+        if (type(common_compositions) is not int or not 0 <= common_compositions <= MAX_CROSS_PAIRS
+                or common is not None and common_compositions != common["work"]["member_count"]):
+            raise ValueError("common H composition work is incomplete or unbounded")
         retained_cross = cross_competition.get(
             "retained_proposal_basis"
         )

@@ -50,6 +50,8 @@ from .template_cross_model import (
     CrossRoleBinding,
     TemplateCrossInput,
 )
+from .template_common_output import CommonHOutput, common_h_fit_members
+from .template_phase_model import PhaseFitStatus
 from .template_direct_role_aperture_domain import (
     DirectRoleApertureDomainAuthority,
 )
@@ -64,7 +66,7 @@ from .template_acceptability_features import (
 )
 from .template_holder_fill import HolderFillAssessment
 from .template_model import SourceFrameWidthAuthorityBasis, TemplateSpec
-from .template_measurement_plan_model import TemplateMeasurementPlan
+from .template_measurement_plan_model import MAX_CROSS_PAIRS, TemplateMeasurementPlan
 from .template_nominal_grid_model import CalibratedNominalGridAuthority
 from .template_phase_model import PhaseFitResult, TemplatePhaseInput
 from .template_placement import FormatPlacement
@@ -864,6 +866,7 @@ class TemplatePlacementWorkReceipt:
     proposal_budget_evaluation_count: int
     placement_feature_evaluation_count: int
     bound_exceeded: bool = False
+    common_h_composition_count: int = 0
 
     def __post_init__(self) -> None:
         values = (
@@ -875,9 +878,12 @@ class TemplatePlacementWorkReceipt:
             self.proposal_output_evaluation_count,
             self.proposal_budget_evaluation_count,
             self.placement_feature_evaluation_count,
+            self.common_h_composition_count,
         )
         if any(type(value) is not int or value < 0 for value in values):
             raise ValueError("template placement work values must be non-negative")
+        if self.common_h_composition_count > MAX_CROSS_PAIRS:
+            raise ValueError("common H composition exceeds the Cross pair bound")
         if not isinstance(self.bound_exceeded, bool):
             raise TypeError("placement bound status must be boolean")
 
@@ -901,10 +907,25 @@ class TemplateLaneReconstruction:
     holder_fill_assessment: HolderFillAssessment | None
     content_veto_facts: tuple[ContentVetoFact, ...]
     work: TemplatePlacementWorkReceipt
+    common_h_output: CommonHOutput | None = None
 
     def __post_init__(self) -> None:
         if not self.lane_id or self.prepared.lane.domain.lane_id != self.lane_id:
             raise ValueError("template reconstruction lane authority is invalid")
+        common = self.common_h_output
+        if self.work.common_h_composition_count:
+            attempted = common_h_fit_members(self.prepared.cross_competition, self.prepared.cross_registration_work)
+            if (attempted is None or len(attempted[0]) != self.work.common_h_composition_count
+                    or self.prepared.phase_competition.status != PhaseFitStatus.RESOLVED):
+                raise ValueError("common H composition work lost its complete retained fit set")
+        if common is not None:
+            expected = common_h_fit_members(self.prepared.cross_competition, self.prepared.cross_registration_work)
+            if (not isinstance(common, CommonHOutput) or common.lane_id != self.lane_id or expected is None
+                    or tuple(p.cross_fit for p in common.placements) != expected[0]
+                    or common.group_member_indices != expected[1]
+                    or self.work.common_h_composition_count != len(common.placements)
+                    or any(p.sequence_fit != self.prepared.phase_competition.best for p in common.placements)):
+                raise ValueError("common H output lost a retained interpretation or changed W ownership")
         placements = self.placement_competition.placements
         if any(item.lane_id != self.lane_id for item in placements):
             raise ValueError("placement competition crosses lane authority")

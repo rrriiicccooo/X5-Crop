@@ -22,6 +22,7 @@ from .measurement_model import PhotoBoundaryMeasurementField
 from .output_model import OutputFootprint, OutputSlotIdentity
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import CrossFitStatus
+from .template_common_output import CommonHOutput, common_h_fit_members, materialize_common_h_output
 from .template_direct_role_authority import assess_direct_role_binding_authority
 from .template_acceptability_features import build_placement_acceptability_features
 from .template_feasible_geometry import project_format_placement
@@ -300,6 +301,8 @@ class _ProvisionalLanePlacement:
     proposal: TemplatePlacementProposal
     alternatives: tuple[TemplatePlacementProposal, ...]
     proposal_output_evaluation_count: int
+    common_h_output: CommonHOutput | None
+    common_h_composition_count: int
 
 
 def _empty_result(
@@ -456,10 +459,30 @@ def reconstruct_photo_geometry(
             )
             alternatives.append(alternative)
             proposal_output_evaluations += evaluations
+        common_h_output = None
+        members = (
+            common_h_fit_members(lane.cross_competition, lane.cross_registration_work)
+            if best is not None and lane.phase_competition.status == PhaseFitStatus.RESOLVED
+            else None
+        )
+        if members is not None:
+            composed = tuple(_compose(lane, sequence_fit=best.sequence_fit,
+                global_lattice_authority=best.global_lattice_authority, cross_fit=fit,
+                source_geometry=geometry) for fit in members[0])
+            if all(p is not None for p in composed):
+                retained = {p.placement_id: p for p in competition.placements}
+                reusable = tuple((retained[p.placement_id], p.output_footprints)
+                                 for p in (proposal, *alternatives)
+                                 if p.state == TemplateProposalState.GENERATED)
+                common_h_output = materialize_common_h_output(
+                    composed, members[1], lane=lane.lane, layout=layout, reusable=reusable,
+                )
         provisional.append(
             _ProvisionalLanePlacement(
                 best, content_assessment, competition, proposal, tuple(alternatives),
                 proposal_output_evaluations,
+                common_h_output,
+                0 if members is None else len(members[0]),
             )
         )
 
@@ -602,7 +625,9 @@ def reconstruct_photo_geometry(
                         phase_receipt.peak_temporary_bytes,
                     ),
                     bound_exceeded=bound_exceeded,
+                    common_h_composition_count=values.common_h_composition_count,
                 ),
+                common_h_output=values.common_h_output,
             )
         )
     reconstructed = tuple(reconstructions)

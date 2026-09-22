@@ -861,6 +861,8 @@ class TemplateRegistrationContractTest(unittest.TestCase):
         )
         self.assertTrue(refined.bottom_bindings[0].role_authorized)
         self.assertEqual(refined.fit_attempt_count, 1)
+        self.assertEqual(refined.local_refinement_scope_count, 1)
+        self.assertEqual(refined.work_receipt.local_refinement_scope_count, 1)
         self.assertEqual(len(refined.observations), 1)
         self.assertEqual(refined.registered_bottom_run_count, 0)
         # Refinement retains the newly measured line even when the later
@@ -902,12 +904,25 @@ class TemplateRegistrationContractTest(unittest.TestCase):
 
         self.assertEqual(refined.bottom_bindings, ())
         self.assertEqual(refined.fit_attempt_count, 0)
+        self.assertEqual(refined.local_refinement_scope_count, 1)
+        self.assertEqual(refined.work_receipt.local_refinement_scope_count, 1)
+
+    def test_template_local_cross_counts_mixed_nearest_ties_once(self) -> None:
+        refined = self._local_cross_refinement(
+            ((99.0, 101.0), (100.0,), (100.0,),
+             (100.0,), (100.0,), (99.0, 101.0))
+        )
+
+        self.assertEqual(refined.local_refinement_scope_count, 1)
+        self.assertEqual(refined.work_receipt.local_refinement_scope_count, 1)
 
     def test_template_local_cross_ignores_transitions_outside_corridor(self) -> None:
         refined = self._local_cross_refinement(((120.0,),) * 6)
 
         self.assertEqual(refined.bottom_bindings, ())
         self.assertEqual(refined.fit_attempt_count, 0)
+        self.assertEqual(refined.local_refinement_scope_count, 1)
+        self.assertEqual(refined.work_receipt.local_refinement_scope_count, 1)
 
     def test_template_local_cross_does_not_duplicate_direct_closure(self) -> None:
         top = self._top_anchor()
@@ -953,7 +968,17 @@ class TemplateRegistrationContractTest(unittest.TestCase):
         self.assertEqual(refined.top_bindings, (top,))
         self.assertEqual(refined.bottom_bindings, (bottom,))
         self.assertEqual(refined.fit_attempt_count, 0)
+        self.assertEqual(refined.local_refinement_scope_count, 0)
+        self.assertEqual(refined.work_receipt.local_refinement_scope_count, 0)
         self.assertEqual(refined.observations, ())
+
+    def test_local_refinement_scope_count_requires_nonnegative_int(self) -> None:
+        refined = self._local_cross_refinement(((100.0,),) * 6)
+        for value in (-1, True):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                replace(refined, local_refinement_scope_count=value)
+            with self.subTest(receipt_value=value), self.assertRaises(ValueError):
+                replace(refined.work_receipt, local_refinement_scope_count=value)
 
     def test_source_scale_evidence_intersects_without_lane_identity(self) -> None:
         frame = FramePhysicalSpec(36.0, 24.0, 2.0)

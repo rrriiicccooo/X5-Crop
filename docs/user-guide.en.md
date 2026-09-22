@@ -115,6 +115,9 @@ an interpretation that the original fit could not retain, for manual review. Aut
 When fragment membership is ambiguous, the system preserves the original complete measurement groups and examines
 whole-group combinations. If search or batch fitting exceeds its work limit, the report records the reason and retains
 the existing crop proposals. These combinations are available for Review only.
+When photo ownership is fixed and multiple complete top/bottom interpretations remain, the report may also record
+a common crop and the padding budget under each interpretation. This checks whether boundary differences affect
+the usable crop; the common crop remains available for Review only and does not grant automatic approval.
 Cross-axis crop protection accounts for the relationship between measured position and direction, the statistical fit,
 and local edge departures. Top and bottom protection uses the actual reachable longitudinal ends to reduce excess
 padding. The existing per-side expansion budgets and automatic approval conditions still apply.

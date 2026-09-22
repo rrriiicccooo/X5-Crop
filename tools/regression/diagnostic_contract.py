@@ -9,6 +9,7 @@ from x5crop.detection.photo_geometry.template_model import (
     MAX_TEMPLATE_FIT_PASSES,
 )
 from x5crop.detection.photo_geometry.template_measurement_plan_model import (
+    MAX_CROSS_PAIRS,
     MAX_PHASE_OBSERVATIONS,
 )
 
@@ -34,6 +35,7 @@ WORK_FIELDS = (
     "placement_evaluation_count",
     "boundary_evaluation_count",
     "content_evaluation_count",
+    "common_h_composition_count",
     "domain_pixels",
     "peak_temporary_bytes",
 )
@@ -100,6 +102,7 @@ def bounded_work(
         and int(row["boundary_evaluation_count"])
         <= int(row["placement_evaluation_count"]) * count * 4
         and int(row["content_evaluation_count"]) <= 1
+        and int(row["common_h_composition_count"]) <= MAX_CROSS_PAIRS
         for row, count in zip(work_rows, lane_counts, strict=True)
     )
     return (

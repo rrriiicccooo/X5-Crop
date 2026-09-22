@@ -238,6 +238,7 @@ class CrossRegistrationWorkReceipt:
     constrained_fit_edge_count: int = 0
     constrained_fit_event_count: int = 0
     membership: MembershipReceipt | None = None
+    local_refinement_scope_count: int = 0
 
     def __post_init__(self) -> None:
         if (
@@ -246,12 +247,14 @@ class CrossRegistrationWorkReceipt:
                 self.family_compatibility_evaluation_count,
                 self.constrained_fit_attempt_count, self.constrained_fit_edge_count,
                 self.constrained_fit_event_count,
+                self.local_refinement_scope_count,
             ))
             or not 0 <= self.local_fragment_count <= self.raw_observation_count <= self.fit_attempt_count
             or self.family_compatibility_evaluation_count < 0
             or not 0 <= self.constrained_fit_attempt_count <= self.fit_attempt_count
             or self.constrained_fit_edge_count < 0
             or self.constrained_fit_event_count < 0
+            or self.local_refinement_scope_count < 0
             or (self.constrained_fit_attempt_count == 0 and (
                 self.constrained_fit_edge_count or self.constrained_fit_event_count
             ))
@@ -309,6 +312,7 @@ class RegisteredCrossEvidence:
     family_resolutions: tuple[CrossBoundaryFamilyResolution, ...] = ()
     family_compatibility_evaluation_count: int = 0
     membership_receipt: MembershipReceipt | None = None
+    local_refinement_scope_count: int = 0
 
     @property
     def work_receipt(self) -> CrossRegistrationWorkReceipt:
@@ -327,6 +331,7 @@ class RegisteredCrossEvidence:
             constrained_fit_edge_count=sum(item.work.edge_count for item in evaluations),
             constrained_fit_event_count=sum(item.work.event_count for item in evaluations),
             membership=self.membership_receipt,
+            local_refinement_scope_count=self.local_refinement_scope_count,
         )
 
     def __post_init__(self) -> None:
@@ -367,6 +372,8 @@ class RegisteredCrossEvidence:
             or not isinstance(registered_bottom_run_count, int)
             or registered_bottom_run_count < 0
             or type(self.family_compatibility_evaluation_count) is not int
+            or type(self.local_refinement_scope_count) is not int
+            or self.local_refinement_scope_count < 0
             or not 0 <= self.family_compatibility_evaluation_count <= sum(
                 2 * count * (count + 1)
                 for count in (registered_top_run_count, registered_bottom_run_count)
@@ -1234,6 +1241,7 @@ def register_template_local_cross_refinements(
         for item in (*registered.top_bindings, *registered.bottom_bindings)
     }
     fit_attempt_count = registered.fit_attempt_count
+    local_refinement_scope_count = registered.local_refinement_scope_count
 
     for anchor in anchors:
         # This pass only fills a physically missing opposite side.  Re-fitting
@@ -1242,6 +1250,7 @@ def register_template_local_cross_refinements(
         # manufacture a discrete runner-up from non-independent evidence.
         if has_direct_opposite_closure(anchor):
             continue
+        local_refinement_scope_count += 1
         opposite_role = (
             BoundaryRole.BOTTOM
             if anchor.role == BoundaryRole.TOP
@@ -1364,4 +1373,5 @@ def register_template_local_cross_refinements(
             registered.family_compatibility_evaluation_count
         ),
         membership_receipt=registered.membership_receipt,
+        local_refinement_scope_count=local_refinement_scope_count,
     )

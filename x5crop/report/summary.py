@@ -244,6 +244,7 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                     or lane.prepared.cross_competition.best is None
                     else lane.prepared.cross_competition.best.boundary_use.value
                 ),
+                "common_h_output": typed_read_model(lane.common_h_output),
                 "selected_placement_id": (
                     None
                     if lane.selected_placement is None

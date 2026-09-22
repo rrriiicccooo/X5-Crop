@@ -1439,8 +1439,15 @@ aperture 需求。输入为各 H 解释自己的 placement 和完整 native outp
 四条 canonical 边和源轴状态重新计算原 5% 预算；不复用 native 预算，也不删除超预算成员。源域、
 TIFF 截断和内部 lane 越界复用 native output 的同一合同，截断不能消除 requested 的预算风险。
 输入数量受原 `MAX_CROSS_PAIRS` 限制，缺项、重复、不同 W/slot/source 权限或 enclosing support 均拒绝。
-该核算只证明所给集合的需求与预算；当前由离线验证调用，尚未接入共同输出的选择和批准。调用方仍须
-证明完整合法解释集合、逐成员权限、最终采样和有界总工作量，不能把共同几何冒充某个 native placement。
+该核算只证明所给集合的需求与预算。`template_common_output` 现从同一 Cross 求解器的两种完整分组
+视图生成共同输出诊断：固定已确定的 W，完整 `CrossFit` 相同才复用；任一组支持不足、归属搜索未完整
+结束、经过局部精修或不是直接 aperture pair 时不生成共同解释集。`local_refinement_scope_count` 记录
+实际进入的精修作用域，即使该作用域没有拟合出新线也计数；零次不代表全部物理解释已穷尽。
+每次 composition、实际或复用的 projection、逐帧输出及逐成员预算工作分别记账，继续受原 Cross pair
+及 slot 上限约束。任一成员投影失败则共同输出整体不可用，保留全部成员和失败前实际工作；超预算成员
+也完整保留。普通及开发报告保存同一诊断，校验器核对完整映射、源域和逐成员预算，不能借用原生预算。
+共同输出尚未接入选择和批准，仍须完成逐成员权限、正式选择及最终采样验证，不能把共同几何冒充某个
+native placement。
 
 `PlacementFeasibleSet` 保留同一 observation bindings、ordinal topology、boundary use 和 placement
 identity 下仍合法的 W、未观察 Grid role、local delta 与 cross 联合状态；直接 sequence role 从自己的
