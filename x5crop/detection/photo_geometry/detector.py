@@ -299,7 +299,6 @@ def _materialize_placement_proposal(
 
 @dataclass(frozen=True)
 class _ProvisionalLanePlacement:
-    best: FormatPlacement | None
     content_assessment: ContentVetoAssessment | None
     competition: TemplatePlacementCompetition
     proposal: TemplatePlacementProposal
@@ -490,7 +489,7 @@ def reconstruct_photo_geometry(
             )
         provisional.append(
             _ProvisionalLanePlacement(
-                best, content_assessment, competition, proposal, tuple(alternatives),
+                content_assessment, competition, proposal, tuple(alternatives),
                 proposal_output_evaluations,
                 0 if members is None else len(members[0]),
             )
