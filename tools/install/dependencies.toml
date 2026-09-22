@@ -27,9 +27,9 @@ homebrew_formula = "opencv"
 [[dependencies]]
 name = "tifffile"
 module = "tifffile"
-module_version = "2026.9.15"
+module_version = "2026.9.20"
 pip_distribution = "tifffile"
-pip_version = "2026.9.15"
+pip_version = "2026.9.20"
 
 [[dependencies]]
 name = "imagecodecs"

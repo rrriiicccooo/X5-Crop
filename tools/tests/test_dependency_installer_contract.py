@@ -95,9 +95,9 @@ class DependencyInstallerContractTest(unittest.TestCase):
                 (
                     "tifffile",
                     "tifffile",
-                    "2026.9.15",
+                    "2026.9.20",
                     "tifffile",
-                    "2026.9.15",
+                    "2026.9.20",
                     None,
                 ),
                 (
