@@ -1433,6 +1433,15 @@ selected placement
 → authority + direct-use assessment
 ```
 
+`template_output.common_aperture_output_footprint` 在同一输出 owner 内核算固定 W 归属下的共同
+aperture 需求。输入为各 H 解释自己的 placement 和完整 native output，保留独立 envelope、保护量与
+身份；逐帧分别合并全部 mandatory/requested hull，不再添加 bleed。共同 requested 相对每个解释自己的
+四条 canonical 边和源轴状态重新计算原 5% 预算；不复用 native 预算，也不删除超预算成员。源域、
+TIFF 截断和内部 lane 越界复用 native output 的同一合同，截断不能消除 requested 的预算风险。
+输入数量受原 `MAX_CROSS_PAIRS` 限制，缺项、重复、不同 W/slot/source 权限或 enclosing support 均拒绝。
+该核算只证明所给集合的需求与预算；当前由离线验证调用，尚未接入共同输出的选择和批准。调用方仍须
+证明完整合法解释集合、逐成员权限、最终采样和有界总工作量，不能把共同几何冒充某个 native placement。
+
 `PlacementFeasibleSet` 保留同一 observation bindings、ordinal topology、boundary use 和 placement
 identity 下仍合法的 W、未观察 Grid role、local delta 与 cross 联合状态；直接 sequence role 从自己的
 native interval 投影，不能被全局 Grid 拉回。直接 enclosing pair 额外保留自己的 same-state slope。
@@ -1961,7 +1970,8 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   批准。检测线与人工指导线的数像素差异、或中间 H 解释尚不唯一，本身不是新增失败条件。若完整合法
   H 解释集能由同一输出覆盖，且共同输出在每个解释下都满足已有几何、预算、源域与内容保护条件，
   可以保留解释差异；不得强行选择唯一边，也不得只相对 primary 证明安全。W 后续还必须证明逐帧归属
-  与相邻关系正确。当前离散 Cross 多解仍在共同输出验证之前阻断，尚未实现这项共同输出能力。
+  与相邻关系正确。当前已有第 10 节的共同需求及逐成员预算核算，但离散 Cross 多解仍阻断正式输出，
+  尚未完成共同输出的运行时选择与批准。
   接触精度研究只服务具体内切、预算超限或安全批准缺口；已直接可用的样片继续回归，不以进一步精修
   中间检测线作为未完成事项。新特征或搜索自由度必须证明实际输出收益才可进入 Runtime。
 - 人工 line、polygon 与 `source_truncated` 交集始终以原 TIFF 坐标持久化；Runtime footprint 使用

@@ -434,6 +434,7 @@ def _selected_output_gate_fact(
     )
     reconstruction = SimpleNamespace(
         prepared=SimpleNamespace(
+            measurement_sets=(),
             measurement_work=SimpleNamespace(
                 completed_query_count=1,
                 measurement_query_count=1,

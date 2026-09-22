@@ -73,6 +73,17 @@ support 的 aperture-center、共同斜率及同状态风险不能套用这里�
 `Test/debug_analysis/h_all_cross_groups_20260922/`。四个扫描源均参与过开发，结论仅限开发集。
 本检查未改变运行时选边、Gate 或黄金合同，未进行正式性能验收。
 
+共同需求的计算现已放入既有 `template_output` owner：保留各 native output 与独立身份，合并完整
+mandatory/requested，再相对每个解释重新核算四边预算及源域。`common_output_owner_probe.py` 使用上述
+正式 CLI 捕获的类型化输入，核对当前报告保存的完整分组；四个源的几何、逐成员预算及黄金诊断与原
+独立离线计算逐项一致。S067 仍通过必要检查，S035/S058 仍超预算，S048 仍无已获独立支持的集合。
+结果保存为同目录的 `S*_common_output_owner.json`；这些调用不产生解释完整性、角色或自动批准权限。
+
+输出 owner 的原生路径重构另用正式 CLI 回归 S003、S067、S035、S058、S048，当前报告与源 SHA
+校验通过；裁切几何、决定及逐 lane 证明均与改动前完全相同。报告和逐源核对位于
+`Test/debug_analysis/h_common_output_owner_20260922/`。共同输出仍未接入正式选择，下一步只处理
+完整解释集合、逐成员权限、最终采样及有界工作量等实际批准缺口，不继续追求唯一像素边界。
+
 H 先验证、验收，再推进 W 实现。W 可以预先收集离线数据，但不能因此宣称 H 已解决。
 准确性、reference 权限和发布验收仍以 [ARCHITECTURE.md](ARCHITECTURE.md) 第 14 节及
 [MANUAL_ANNOTATION.md](MANUAL_ANNOTATION.md) 为准。

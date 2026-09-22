@@ -27,6 +27,8 @@ from .model import (
 )
 from .output_model import (
     BoundaryProtectionFact,
+    CommonOutputFootprint,
+    CommonOutputMemberBudget,
     DirectUseBudgetAssessment,
     DirectUseBudgetEdgeAssessment,
     EnclosingSupportApertureRisk,
@@ -42,6 +44,7 @@ from .output_model import (
     source_boundary_sides,
 )
 from .template_placement import FormatPlacement, TemplateFrame
+from .template_measurement_plan_model import MAX_CROSS_PAIRS
 from .template_cross_model import (
     CrossLineProjectionBasis,
     CrossRoleBinding,
@@ -1170,16 +1173,12 @@ def _assert_selected_output(
         raise ValueError("output footprint does not belong to selected placement")
 
 
-def template_direct_use_budget_assessment(
+def _budget_edge_assessments(
     placement: FormatPlacement,
-    output: OutputFootprint,
-) -> DirectUseBudgetAssessment:
-    """Assess complete uncertainty plus bleed against the output policy."""
+    expansion_px: dict[BoundaryRole, float],
+) -> tuple[DirectUseBudgetEdgeAssessment, ...]:
+    """Apply the same physical output budget to native and common requests."""
 
-    if not isinstance(output, OutputFootprint):
-        raise TypeError("direct-use assessment requires an output footprint")
-    _assert_selected_output(placement, output)
-    protections = {item.role: item for item in output.boundary_protections}
     width_state = placement.source_scan_geometry.width_state
     height_state = placement.source_scan_geometry.height_state
     ratio = OUTPUT_PROTECTION_SPEC.maximum_expansion_ratio_per_side
@@ -1195,6 +1194,31 @@ def template_direct_use_budget_assessment(
         BoundaryRole.TOP: placement.frame_spec.frame_height_mm * ratio,
         BoundaryRole.BOTTOM: placement.frame_spec.frame_height_mm * ratio,
     }
+    expansion_mm = {role: states[role].worst_case_mm(expansion_px[role]) for role in _ROLES}
+    return tuple(
+        DirectUseBudgetEdgeAssessment(
+            role=role,
+            expansion_px=expansion_px[role],
+            expansion_mm=expansion_mm[role],
+            limit_mm=limit_mm[role],
+            limit_applies=True,
+            within_limit=expansion_mm[role] <= limit_mm[role],
+        )
+        for role in _ROLES
+    )
+
+
+def template_direct_use_budget_assessment(
+    placement: FormatPlacement,
+    output: OutputFootprint,
+) -> DirectUseBudgetAssessment:
+    """Assess complete uncertainty plus bleed against the output policy."""
+
+    if not isinstance(output, OutputFootprint):
+        raise TypeError("direct-use assessment requires an output footprint")
+    _assert_selected_output(placement, output)
+    protections = {item.role: item for item in output.boundary_protections}
+    height_state = placement.source_scan_geometry.height_state
     support_output = (
         output.envelope.boundary_use
         == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
@@ -1212,29 +1236,14 @@ def template_direct_use_budget_assessment(
         )
         for role in _ROLES
     }
-    expansion_mm = {
-        role: states[role].worst_case_mm(
-            expansion_px[role]
-        )
-        for role in _ROLES
-    }
+    edge_assessments = _budget_edge_assessments(placement, expansion_px)
+    cross_limit_mm = next(item.limit_mm for item in edge_assessments if item.role == BoundaryRole.TOP)
     maximum_same_state_cross_alignment_padding_mm = (
         height_state.worst_case_mm(
             float(output.maximum_same_state_cross_alignment_padding_px)
         )
         if support_output
         else None
-    )
-    edge_assessments = tuple(
-        DirectUseBudgetEdgeAssessment(
-            role=role,
-            expansion_px=expansion_px[role],
-            expansion_mm=expansion_mm[role],
-            limit_mm=limit_mm[role],
-            limit_applies=True,
-            within_limit=expansion_mm[role] <= limit_mm[role],
-        )
-        for role in _ROLES
     )
     support_ratio = None
     support_within_limit = None
@@ -1258,7 +1267,7 @@ def template_direct_use_budget_assessment(
         None
         if maximum_same_state_cross_alignment_padding_mm is None
         else maximum_same_state_cross_alignment_padding_mm
-        <= limit_mm[BoundaryRole.TOP]
+        <= cross_limit_mm
     )
     supported = (
         all(item.within_limit for item in edge_assessments)
@@ -1282,4 +1291,75 @@ def template_direct_use_budget_assessment(
             if supported
             else EvidenceState.CONTRADICTED
         ),
+    )
+
+
+def common_aperture_output_footprint(
+    placements: tuple[FormatPlacement, ...],
+    outputs: tuple[OutputFootprint, ...],
+) -> CommonOutputFootprint:
+    """Cover one slot under every supplied H explanation with fixed W ownership.
+
+    Each native output already contains its own correlated states, residuals
+    and bleed. No parameter intervals are merged, and no member is dropped
+    because it fails a budget. Search completeness and placement authority
+    remain the caller's separate obligations.
+    """
+
+    if not placements or len(placements) != len(outputs) or len(placements) > MAX_CROSS_PAIRS:
+        raise ValueError("common output requires a bounded, complete member list")
+    first = placements[0]
+    native = outputs[0]
+    same_w_fields = (
+        "lane_id", "frame_spec", "output_slot_count", "sequence_fit",
+        "global_lattice_authority", "width_axis", "height_axis",
+        "width_authority_px", "height_authority_px",
+    )
+    for placement, output in zip(placements, outputs, strict=True):
+        _assert_selected_output(placement, output)
+        if any(getattr(placement, field) != getattr(first, field) for field in same_w_fields) or (
+            placement.source_scan_geometry.width_state != first.source_scan_geometry.width_state
+        ):
+            raise ValueError("common H output requires identical W ownership and source width authority")
+        if output.envelope.boundary_use != OutputBoundaryUse.APERTURE_PAIR:
+            raise ValueError("common aperture output cannot inherit enclosing-support risk")
+        if (output.envelope.lane_ordinal != native.envelope.lane_ordinal
+                or output.sampling_authority_box != native.sampling_authority_box
+                or output.source_extent != native.source_extent
+                or output.authority_profile_id != native.authority_profile_id):
+            raise ValueError("common output changed slot or source authority")
+    if len({p.placement_id for p in placements}) != len(placements):
+        raise ValueError("common output repeats a placement")
+    mandatory = convex_hull(tuple(point for output in outputs for point in output.mandatory_source_footprint))
+    requested = convex_hull(tuple(point for output in outputs for point in output.requested_source_footprint))
+    saturation = _saturation_facts(requested, mandatory, native.sampling_authority_box, native.source_extent)
+    required = (
+        clip_convex_polygon_to_bounds(requested, sampling_authority_bounds(native.sampling_authority_box, native.source_extent))
+        if saturation and all(fact.source_boundary for fact in saturation)
+        else requested
+    )
+    geometry_id = run_local_id("common-aperture-output", *sorted(output.geometry_id for output in outputs))
+    budgets = []
+    for placement, output in zip(placements, outputs, strict=True):
+        boundaries = _canonical_boundaries(_frame(placement, output.envelope.lane_ordinal))
+        edges = _budget_edge_assessments(placement, {
+            role: _expansion_px(boundaries[role], requested) for role in _ROLES
+        })
+        budgets.append(CommonOutputMemberBudget(
+            placement_id=placement.placement_id,
+            native_geometry_id=output.geometry_id,
+            assessment=DirectUseBudgetAssessment(
+                geometry_id=geometry_id, boundary_use=OutputBoundaryUse.APERTURE_PAIR,
+                edge_assessments=edges, enclosing_support_height_ratio=None,
+                enclosing_support_within_limit=None, maximum_same_state_cross_alignment_padding_mm=None,
+                maximum_same_state_cross_alignment_padding_within_limit=None,
+                state=EvidenceState.SUPPORTED if all(edge.within_limit for edge in edges) else EvidenceState.CONTRADICTED,
+            ),
+        ))
+    return CommonOutputFootprint(
+        geometry_id=geometry_id, members=outputs,
+        mandatory_source_footprint=mandatory, requested_source_footprint=requested,
+        required_source_footprint=required, member_budgets=tuple(budgets),
+        saturation_facts=saturation, sampling_authority_box=native.sampling_authority_box,
+        source_extent=native.source_extent, authority_profile_id=native.authority_profile_id,
     )

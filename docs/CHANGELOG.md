@@ -104,6 +104,9 @@
 
 ### 报告与验证
 
+- 固定 W 下的共同 aperture 输出需求复用现有输出 owner，保留各 H 解释的独立身份，对共同范围逐成员
+  重算四边预算与源域；覆盖单独合格而合并超限、源边截断和内部 lane 越界反例。该能力用于离线核验，
+  尚不改变正式输出或自动批准，不能据此宣称 H 已验收。
 - Normal report 与 Debug Analysis 只显示同次检测事实，分开 proposal、candidate、正式输出、runner、
   typed failure、calibration identity 和实际工作量，不重新检测或求解。当前 Report revision 为
   `x5crop_v5_template_report_80`，Cross 分组保留逐成员来源、显式条件、完整归属搜索与拟合预算预检账本，

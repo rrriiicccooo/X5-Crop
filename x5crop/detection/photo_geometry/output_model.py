@@ -411,6 +411,52 @@ class EnclosingSupportApertureRisk:
             )
 
 
+def _validate_source_requirement(output: OutputFootprint | CommonOutputFootprint) -> None:
+    """One source/clipping contract for native and shared output requirements."""
+
+    if not output.geometry_id or not output.sampling_authority_box.valid() or not output.authority_profile_id:
+        raise ValueError("output footprint is invalid")
+    for polygon, name in (
+        (output.mandatory_source_footprint, "mandatory source footprint"),
+        (output.requested_source_footprint, "requested source footprint"),
+        (output.required_source_footprint, "required source footprint"),
+    ):
+        _validate_continuous_footprint(polygon, name)
+    if len({fact.authority_side for fact in output.saturation_facts}) != len(output.saturation_facts):
+        raise ValueError("saturation facts require one fact per authority side")
+    expected_sides = footprint_outside_authority_sides(
+        output.requested_source_footprint, output.sampling_authority_box, output.source_extent,
+    )
+    if tuple(fact.authority_side for fact in output.saturation_facts) != expected_sides:
+        raise ValueError("saturation facts disagree with requested footprint")
+    for fact in output.saturation_facts:
+        if fact.source_boundary != (fact.authority_side in source_boundary_sides(
+            output.sampling_authority_box, output.source_extent,
+        )):
+            raise ValueError("saturation kind disagrees with the TIFF source extent")
+        requested_overflow = footprint_overflow_px(
+            output.requested_source_footprint, output.sampling_authority_box,
+            fact.authority_side, output.source_extent,
+        )
+        mandatory_overflow = footprint_overflow_px(
+            output.mandatory_source_footprint, output.sampling_authority_box,
+            fact.authority_side, output.source_extent,
+        )
+        if (abs(fact.requested_overflow_px - requested_overflow) > 1.0e-8
+                or abs(fact.mandatory_overflow_px - mandatory_overflow) > 1.0e-8):
+            raise ValueError("saturation fact distances are not reproducible")
+    expected_required = (
+        clip_convex_polygon_to_bounds(
+            output.requested_source_footprint,
+            sampling_authority_bounds(output.sampling_authority_box, output.source_extent),
+        )
+        if output.saturation_facts and output.source_authority_supported
+        else output.requested_source_footprint
+    )
+    if output.required_source_footprint != expected_required:
+        raise ValueError("required footprint disagrees with saturation contract")
+
+
 @dataclass(frozen=True)
 class OutputFootprint:
     """Final selected-frame source requirement and its source-edge contract.
@@ -440,25 +486,9 @@ class OutputFootprint:
     authority_profile_id: str
 
     def __post_init__(self) -> None:
-        if (
-            not self.geometry_id
-            or not isinstance(self.envelope, JointPlacementEnvelope)
-            or not self.sampling_authority_box.valid()
-            or not self.authority_profile_id
-        ):
+        if not isinstance(self.envelope, JointPlacementEnvelope):
             raise ValueError("output footprint is invalid")
-        _validate_continuous_footprint(
-            self.mandatory_source_footprint,
-            "mandatory source footprint",
-        )
-        _validate_continuous_footprint(
-            self.requested_source_footprint,
-            "requested source footprint",
-        )
-        _validate_continuous_footprint(
-            self.required_source_footprint,
-            "required source footprint",
-        )
+        _validate_source_requirement(self)
         if tuple(item.role for item in self.boundary_protections) != (
             BoundaryRole.START,
             BoundaryRole.END,
@@ -485,49 +515,6 @@ class OutputFootprint:
             or float(self.maximum_same_state_cross_alignment_padding_px) < 0.0
         ):
             raise ValueError("same-state cross padding is invalid")
-        if len({fact.authority_side for fact in self.saturation_facts}) != len(
-            self.saturation_facts
-        ):
-            raise ValueError("saturation facts require one fact per authority side")
-        expected_sides = footprint_outside_authority_sides(
-            self.requested_source_footprint,
-            self.sampling_authority_box,
-            self.source_extent,
-        )
-        if tuple(fact.authority_side for fact in self.saturation_facts) != expected_sides:
-            raise ValueError("saturation facts disagree with requested footprint")
-        for fact in self.saturation_facts:
-            if fact.source_boundary != (fact.authority_side in source_boundary_sides(
-                self.sampling_authority_box, self.source_extent
-            )):
-                raise ValueError("saturation kind disagrees with the TIFF source extent")
-            requested_overflow = footprint_overflow_px(
-                self.requested_source_footprint,
-                self.sampling_authority_box,
-                fact.authority_side,
-                self.source_extent,
-            )
-            mandatory_overflow = footprint_overflow_px(
-                self.mandatory_source_footprint,
-                self.sampling_authority_box,
-                fact.authority_side,
-                self.source_extent,
-            )
-            if (
-                abs(fact.requested_overflow_px - requested_overflow) > 1.0e-8
-                or abs(fact.mandatory_overflow_px - mandatory_overflow) > 1.0e-8
-            ):
-                raise ValueError("saturation fact distances are not reproducible")
-        expected_required = (
-            clip_convex_polygon_to_bounds(
-                self.requested_source_footprint,
-                sampling_authority_bounds(self.sampling_authority_box, self.source_extent),
-            )
-            if self.saturation_facts and self.source_authority_supported
-            else self.requested_source_footprint
-        )
-        if self.required_source_footprint != expected_required:
-            raise ValueError("required footprint disagrees with saturation contract")
 
     @property
     def source_authority_supported(self) -> bool:
@@ -639,6 +626,80 @@ class DirectUseBudgetAssessment:
                 != (padding <= cross_limit)
             ):
                 raise ValueError("same-state cross padding budget is invalid")
+
+
+@dataclass(frozen=True)
+class CommonOutputMemberBudget:
+    """A common requirement evaluated against one native interpretation."""
+
+    placement_id: str
+    native_geometry_id: str
+    assessment: DirectUseBudgetAssessment
+
+    def __post_init__(self) -> None:
+        if not self.placement_id or not self.native_geometry_id or not isinstance(self.assessment, DirectUseBudgetAssessment):
+            raise ValueError("common-output budget requires native interpretation identity")
+
+
+@dataclass(frozen=True)
+class CommonOutputFootprint:
+    """One crop covering named native aperture outputs, with per-member budgets.
+
+    This is a geometric proof over the supplied set, not evidence that the
+    set is complete or that its members have final placement authority.
+    Native envelopes and protection facts keep their own identities.
+    """
+
+    geometry_id: str
+    members: tuple[OutputFootprint, ...]
+    mandatory_source_footprint: ConvexPolygon
+    requested_source_footprint: ConvexPolygon
+    required_source_footprint: ConvexPolygon
+    member_budgets: tuple[CommonOutputMemberBudget, ...]
+    saturation_facts: tuple[FootprintSaturationFact, ...]
+    sampling_authority_box: Box
+    source_extent: WorkspaceExtent
+    authority_profile_id: str
+
+    def __post_init__(self) -> None:
+        if not self.members or any(not isinstance(member, OutputFootprint) for member in self.members):
+            raise ValueError("common output requires native members")
+        identities = tuple((m.envelope.placement_id, m.geometry_id) for m in self.members)
+        if (len({p for p, _ in identities}) != len(identities)
+                or len({g for _, g in identities}) != len(identities)
+                or self.geometry_id in {g for _, g in identities}):
+            raise ValueError("common output must preserve distinct member identities")
+        first = self.members[0].envelope
+        if any(
+            member.envelope.lane_id != first.lane_id
+            or member.envelope.lane_ordinal != first.lane_ordinal
+            or member.envelope.boundary_use != OutputBoundaryUse.APERTURE_PAIR
+            or member.sampling_authority_box != self.sampling_authority_box
+            or member.source_extent != self.source_extent
+            or member.authority_profile_id != self.authority_profile_id
+            for member in self.members
+        ):
+            raise ValueError("common aperture output changed lane, slot or source authority")
+        for name in ("mandatory_source_footprint", "requested_source_footprint"):
+            expected = convex_hull(tuple(point for member in self.members for point in getattr(member, name)))
+            if getattr(self, name) != expected:
+                raise ValueError("common output lost a native member requirement")
+        if (
+            tuple((b.placement_id, b.native_geometry_id) for b in self.member_budgets) != identities
+            or any(b.assessment.geometry_id != self.geometry_id
+                   or b.assessment.boundary_use != OutputBoundaryUse.APERTURE_PAIR
+                   for b in self.member_budgets)
+        ):
+            raise ValueError("common output budgets do not cover every native member")
+        _validate_source_requirement(self)
+
+    @property
+    def source_authority_supported(self) -> bool:
+        return all(fact.source_boundary for fact in self.saturation_facts)
+
+    @property
+    def budget_supported(self) -> bool:
+        return all(member.assessment.state == EvidenceState.SUPPORTED for member in self.member_budgets)
 
 
 @dataclass(frozen=True)
