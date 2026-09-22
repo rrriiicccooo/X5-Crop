@@ -96,7 +96,7 @@ class PhysicalLineRegionContractTest(unittest.TestCase):
                 "observations": {"sequence_edges": [edge], "cross_height_edges": [],
                                  "broad_material_edges": []},
                 "phase_competition": {"best": fit, "runner_up": None},
-                "placement_competition": {"placements": [{"sequence_fit": fit, "frames": [{
+                "placement_competition": {"placements": [{"placement_id": "native:0", "sequence_fit": fit, "frames": [{
                     "start": {"line_evidence": evidence}, "end": {"line_evidence": inferred},
                     "top": {"line_evidence": None}, "bottom": {"line_evidence": None},
                 }]}]},
