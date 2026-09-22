@@ -117,6 +117,35 @@ RGB 变化。它们可能包含噪声，不能反过来全部当作画面边界�
 证据与可重算脚本位于同目录的 `native_contact.*`、`contact_interval_audit.py` 和
 `contact_interval_audit.json`。此次排除了不安全且无整源 H 收益的缩区间方向，没有新增测量或搜索路径。
 
+### 内侧碎片的完整解释与共同输出
+
+从上述两源失败的 canonical BOTTOM family 取全部原子，不按黄金位置、拟合分数或区域数挑成员，
+离线枚举符合现有 trace 唯一性、完整 physical 区间与角度约束的极大并集。S006 的 12 个原子在
+407 次访问内得到 20 组，17 组可由原 family owner 拟合；S007 的 14 个原子在 319 次访问内得到
+26 组，24 组可拟合。保留每个原子的全部 transition 和原 query 覆盖统计。这是未获注册权限的
+搜索范围假设，不能把它冒充当前运行时已经搜索完整的结果。
+
+将全部新 binding 与原输入共同交给 Cross，两源仍只保留原外侧 H pair。分别审查原因和必要输出：
+
+- S006 有 9 对内侧解释通过原角色、方向、高度及完整照片域覆盖检查，但双侧 source-spanning
+  优先路径只保留原外侧 pair。绕开该优先级的离线检查中，7 对单独满足 H 黄金几何及预算；
+  全部 9 对的共同输出虽保护黄金 H，下侧成员预算却达 122.502%。加入仍未被排除的外侧 pair 后，
+  下侧预算为 153.947%，黄金 H 外扩也失败。不能按黄金只保留那 7 对，或把原外侧解释直接删除。
+- S007 有 18 对通过局部配对检查，但全部为 `template_domains_unavailable`；其未解决的放置模型
+  没有提供照片域。更多局部线并不能补出这项覆盖权限，不能将 source 分区数冒充逐照片域覆盖。
+- 两源的比例 H 推断均因不确定性加必要留边超预算而不可用；现有比例 owner 保留直接 H、
+  `blocks_cross_resolution=false`，并未提供可用来排除上述竞争解释的独立约束。
+
+另核对了 BOTTOM scope 缺失：conditional 分组重遇已失败的 canonical raw union 时，
+`template_registration` 的 fit 缓存去重跳过了 conditional parent 记录；membership 只遍历已生成的
+conditional unavailable parent。S007 的局部线 `:18` 已有两个区域，不能将遗漏归因于 anchor 不足；
+S006 则确实没有单条独立 anchor。当前 `COMPLETE` 的语义仍限于已生成 scopes，不能扩大为全部失败
+family 或物理解释已覆盖。缓存的数值复用与解释范围完整性须分别核验。
+
+本项未证明扩大枚举或取消 source-spanning 优先能产生合格输出，因此不修改运行时。下一步的有效研究
+对象是造成共同输出超限的竞争材料解释，以及模型无法提供覆盖域的具体原因；不以候选数量增加作为进展指标。
+脚本与逐组结果为同目录的 `fragment_scope.py`、`fragment_pair_audit.py` 和逐源对应 JSON。
+
 ### 已整合的共同 H 输出与反例边界
 
 现有联合求解在 W 归属已固定、上游归属与投影完整时，保留正式及条件视图中的全部不同 H 解释。
