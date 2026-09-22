@@ -122,8 +122,7 @@ def protected_output_panel(
     footprints = output_footprints(detection)
     budget_labels: list[tuple[int, str]] = []
     for output in footprints:
-        envelope = output.envelope
-        identity = identities[(envelope.lane_id, envelope.lane_ordinal)]
+        identity = identities[(output.lane_id, output.lane_ordinal)]
         color = frame_color(identity.global_output_ordinal)
         fill_polygon(
             overlay_draw,
@@ -135,8 +134,7 @@ def protected_output_panel(
     panel = Image.alpha_composite(panel.convert("RGBA"), overlay).convert("RGB")
     draw = ImageDraw.Draw(panel)
     for output in footprints:
-        envelope = output.envelope
-        identity = identities[(envelope.lane_id, envelope.lane_ordinal)]
+        identity = identities[(output.lane_id, output.lane_ordinal)]
         color = frame_color(identity.global_output_ordinal)
         if output.saturation_facts:
             requested_output = selected_viewport.polygon(

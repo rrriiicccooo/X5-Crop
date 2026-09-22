@@ -151,6 +151,24 @@ class MembershipReceipt:
             raise ValueError("membership augmentation lost whole-lane atomicity")
 
 
+@dataclass(frozen=True)
+class MembershipProjectionCoverage:
+    """One enumerated interpretation represented in the actual solver input."""
+
+    parent_family_id: str
+    role: BoundaryRole
+    member_observation_ids: tuple[ObservationId, ...]
+    member_transition_ids: tuple[ObservationId, ...]
+    solver_observation_ids: tuple[ObservationId, ...]
+
+    def __post_init__(self) -> None:
+        if not self.parent_family_id or self.role not in (BoundaryRole.TOP, BoundaryRole.BOTTOM):
+            raise ValueError("membership projection requires its parent and role")
+        for identities in (self.member_observation_ids, self.member_transition_ids, self.solver_observation_ids):
+            if not identities or tuple(sorted(set(identities), key=str)) != identities:
+                raise ValueError("membership projection identities are incomplete")
+
+
 def new_membership_groups(
     scopes: tuple[MembershipScope, ...], atoms: dict[ObservationId, MembershipAtom],
     existing_unions: set[tuple[BoundaryRole, tuple[ObservationId, ...]]],

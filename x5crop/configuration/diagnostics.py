@@ -150,7 +150,7 @@ class DiagnosticsConfiguration:
         style = self.style
         return (
             DebugLegendEntry("DETECTED TOP/BOTTOM", style.detected_edge_color, "dashed"),
-            DebugLegendEntry("SELECTED TOP/BOTTOM", style.selected_edge_color, "solid"),
+            DebugLegendEntry("PRIMARY TOP/BOTTOM", style.selected_edge_color, "solid"),
             DebugLegendEntry("DETECTED START/END", style.detected_transition_color, "dashed"),
             DebugLegendEntry("JOINT START/END", style.joint_transition_color, "dashed"),
             DebugLegendEntry(

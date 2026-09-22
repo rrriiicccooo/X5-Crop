@@ -3,12 +3,21 @@
 from __future__ import annotations
 
 import math
-from dataclasses import fields
+from dataclasses import fields, is_dataclass
+from enum import Enum
+from functools import lru_cache
 from statistics import median
-from typing import Any
+from types import UnionType
+from typing import Any, Union, get_args, get_origin, get_type_hints
 
 from .common_output_validation import validate_common_h_output
 from x5crop.detection.photo_geometry.template_measurement_plan_model import MAX_CROSS_PAIRS
+from x5crop.detection.photo_geometry.template_common_output import (
+    CommonHOutput, CommonHOutputAuthority, assess_common_h_output_authority,
+)
+from x5crop.detection.photo_geometry.template_output import common_direct_use_budget_assessment
+from x5crop.detection.photo_geometry.template_holder_fill import HolderFillAssessment
+from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
 
 from x5crop.detection.candidate.assessment.model import CANDIDATE_GATE_CHECK_CODES
 from x5crop.detection.decision.vocabulary import FINAL_REVIEW_REASONS
@@ -54,21 +63,25 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     CrossLongitudinalProjectionBasis,
     CrossLongitudinalProjectionFailureKind,
     CrossRetainedProposalBasis,
+    CrossFitCompetition, CrossRoleBinding, TemplateCrossInput,
     cross_role_authorized_by_measurement,
 )
 from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseFailureKind,
     PhaseFitStatus,
     PhaseRetainedProposalBasis,
+    PhaseFitResult,
 )
 from x5crop.detection.photo_geometry.template_placement import (
     compile_cross_support_domains_px,
+    FormatPlacement,
 )
 from x5crop.detection.photo_geometry.template_registration import (
     CrossRegistrationWorkReceipt,
     complete_family_evaluations,
     validate_cross_family_provenance,
     validate_membership_registration,
+    membership_projection_coverage, project_cross_solver_bindings,
 )
 from x5crop.detection.photo_geometry.template_family_membership import (
     MAXIMUM_MEMBERSHIP_VISITS, MembershipAtom, MembershipFitBudget, MembershipReceipt,
@@ -82,6 +95,7 @@ from x5crop.detection.photo_geometry.line_observations import (
     CompleteTransitionLineWork,
     ConstrainedLineFitReceipt,
     RobustLineFitReceipt,
+    PhotoBoundaryObservation,
 )
 from x5crop.domain import Box, EvidenceState, FiniteInterval, ObservationId, PositiveInterval, WorkspaceExtent
 from x5crop.detection.photo_geometry.measurement_model import PhotoBoundaryMeasurementQuery
@@ -831,7 +845,15 @@ def _validate_sequence_output_line_provenance(lane: dict[str, Any]) -> None:
     for fit in (phase["best"], phase["runner_up"]):
         if fit is not None:
             validate_fit(fit)
-    for placement in lane["placement_competition"]["placements"]:
+    placements = dict()
+    common = lane["common_h_output"]
+    for placement in (*lane["placement_competition"]["placements"],
+                      *(() if common is None else common["placements"])):
+        identity = placement["placement_id"]
+        if identity in placements and placements[identity] != placement:
+            raise ValueError("common H member changed a retained native placement")
+        placements[identity] = placement
+    for placement in placements.values():
         fit = placement["sequence_fit"]
         validate_fit(fit)
         bindings = fit["role_bindings"]
@@ -3528,6 +3550,250 @@ def _validate_gate(record: dict[str, Any], stage: str) -> None:
             raise ValueError(f"{stage} Gate typed gap is inconsistent")
 
 
+@lru_cache(maxsize=None)
+def _common_proof_field_types(model: type) -> dict[str, Any]:
+    return get_type_hints(model)
+
+
+def _read_common_proof(value: Any, model: type) -> Any:
+    """Rehydrate only the current common-output proof roots for pure owners."""
+    if model not in (CommonHOutput, CommonHOutputAuthority, PhaseFitResult,
+                     CrossFitCompetition, CrossRoleBinding, PhotoBoundaryObservation,
+                     SourceScanGeometry, HolderFillAssessment, FormatPlacement):
+        raise ValueError("unsupported common-output proof root")
+
+    def read(raw: Any, kind: Any) -> Any:
+        origin = get_origin(kind)
+        arguments = get_args(kind)
+        if origin in (Union, UnionType):
+            failures = []
+            for option in arguments:
+                try:
+                    return read(raw, option)
+                except (ValueError, TypeError) as error:
+                    failures.append(str(error))
+            raise ValueError("common-output proof union has no matching current type: " + "; ".join(failures))
+        if origin is tuple:
+            if not isinstance(raw, list):
+                raise ValueError("common-output proof tuple must be a JSON array")
+            if len(arguments) == 2 and arguments[1] is Ellipsis:
+                return tuple(read(item, arguments[0]) for item in raw)
+            if len(raw) != len(arguments):
+                raise ValueError("common-output proof tuple length changed")
+            return tuple(read(item, item_type) for item, item_type in zip(raw, arguments, strict=True))
+        if kind is type(None):
+            if raw is not None:
+                raise ValueError("common-output proof requires null")
+            return None
+        if isinstance(kind, type) and issubclass(kind, Enum):
+            if not isinstance(raw, str):
+                raise ValueError("common-output proof enum must be a string")
+            return kind(raw)
+        if is_dataclass(kind):
+            declared = fields(kind)
+            if not isinstance(raw, dict) or set(raw) != {field.name for field in declared}:
+                raise ValueError(f"common-output {kind.__name__} fields changed")
+            types = _common_proof_field_types(kind)
+            values = {}
+            for field in declared:
+                try:
+                    values[field.name] = read(raw[field.name], types[field.name])
+                except ValueError as error:
+                    raise ValueError(f"{kind.__name__}.{field.name}: {error}") from error
+            result = kind(**{field.name: values[field.name] for field in declared if field.init})
+            if typed_read_model(result) != raw:
+                raise ValueError("common-output proof changed a derived field")
+            return result
+        if kind is float:
+            if type(raw) not in (int, float) or not math.isfinite(raw):
+                raise ValueError("common-output proof requires a finite number")
+            return float(raw)
+        if kind in (int, bool):
+            if type(raw) is not kind:
+                raise ValueError("common-output proof scalar type changed")
+            return raw
+        if isinstance(kind, type) and issubclass(kind, str):
+            if not isinstance(raw, str):
+                raise ValueError("common-output proof identity must be a string")
+            return kind(raw)
+        raise ValueError("unsupported common-output proof field type")
+
+    try:
+        return read(value, model)
+    except (KeyError, TypeError, AttributeError, IndexError, OverflowError) as error:
+        raise ValueError("common-output proof is malformed") from error
+
+
+def _common_authority_record(lane: dict[str, Any]) -> CommonHOutputAuthority | None:
+    if "common_h_output" not in lane or "common_h_authority" not in lane:
+        raise ValueError("lane lost its current common H output or authority")
+    common = lane["common_h_output"]
+    authority = lane["common_h_authority"]
+    if (common is None) != (authority is None):
+        raise ValueError("common H output and authority must be retained together")
+    if common is None:
+        return None
+    result = _read_common_proof(authority, CommonHOutputAuthority)
+    if (result.placement_id != common["placement_id"]
+            or list(result.member_placement_ids) != [p["placement_id"] for p in common["placements"]]):
+        raise ValueError("common H authority changed member identities")
+    return result
+
+
+def _validate_selected_output_reuse(lane: dict[str, Any]) -> bool:
+    """Bind selected output to its exact native proposal or common proof."""
+    selected = lane["selected_placement_id"]
+    outputs = lane["output_footprints"]
+    budgets = lane["direct_use_budget_assessments"]
+    if (selected is None) != (not outputs):
+        raise ValueError("selected template output is incomplete")
+    common = lane["common_h_output"]
+    selected_common = common is not None and selected == common["placement_id"]
+    if selected_common:
+        authority = _common_authority_record(lane)
+        if common["failure"] is not None or authority.state != EvidenceState.SUPPORTED:
+            raise ValueError("selected common output lacks complete member authority")
+        typed = _read_common_proof(common, CommonHOutput)
+        expected_budgets = typed_read_model(tuple(common_direct_use_budget_assessment(o) for o in typed.output_footprints))
+        if outputs != common["output_footprints"] or budgets != expected_budgets:
+            raise ValueError("selected common output or worst-member budgets changed")
+    elif selected is not None:
+        proposal = lane["placement_proposal"]
+        if (proposal["state"] != "generated" or proposal["placement_id"] != selected
+                or proposal["output_footprints"] != outputs
+                or proposal["direct_use_budget_assessments"] != budgets):
+            raise ValueError("selected output does not reuse the proposal")
+    elif budgets:
+        raise ValueError("unselected output cannot expose selected budgets")
+    return selected_common
+
+
+def _validate_selected_contact_protection(outputs, expected, *, common: bool) -> None:
+    # Every interpretation must retain the whole topology proof. A union of
+    # partial member ledgers cannot fill another member's missing protection.
+    groups = (
+        [tuple(output["members"][index] for output in outputs)
+         for index in range(len(outputs[0]["members"]))]
+        if outputs and common else [outputs]
+    )
+    for members in groups:
+        actual = {(fact["topology_relation_id"], output["envelope"]["lane_ordinal"], fact["role"])
+                  for output in members for fact in output["boundary_protections"]
+                  if fact["topology_relation_id"] is not None}
+        if members and actual != expected:
+            raise ValueError("output topology protection disagrees with contact relations")
+
+
+def _validate_holder_fill_identity(lane: dict[str, Any]) -> None:
+    value = lane["holder_fill_assessment"]
+    outer = lane["photo_group_outer"]
+    if value is None:
+        if outer is not None:
+            raise ValueError("photo-group outer lost its holder-fill assessment")
+        return
+    assessment = _read_common_proof(value, HolderFillAssessment)
+    if (outer != value["outer"] or assessment.outer.placement_id != lane["selected_placement_id"]
+            or assessment.outer.lane_id != lane["lane_id"]):
+        raise ValueError("holder fill changed selected output identity")
+    from x5crop.detection.photo_geometry.template_holder_fill import assess_holder_fill_state
+    if typed_read_model(assess_holder_fill_state(assessment.outer, assessment.lane_authority)) != value:
+        raise ValueError("holder-fill free space is not reproducible")
+
+
+def _validate_common_authority_provenance(lane, production_lane, query_records) -> None:
+    """Replay bounded membership and member authority, never crop selection."""
+    authority = _common_authority_record(lane)
+    if authority is None:
+        return
+    common = _read_common_proof(lane["common_h_output"], CommonHOutput)
+    phase = _read_common_proof(lane["phase_competition"], PhaseFitResult)
+    cross = _read_common_proof(lane["cross_competition"], CrossFitCompetition)
+    raw_work = lane["cross_registration_work"]
+    registration = CrossRegistrationWorkReceipt(**{
+        **raw_work, "membership": _read_membership_receipt(raw_work["membership"]),
+    })
+    observations = tuple(_read_common_proof(item, PhotoBoundaryObservation)
+                         for item in lane["observations"]["raw_top_bottom_lines"])
+    bindings = project_cross_solver_bindings(tuple(_read_common_proof(item, CrossRoleBinding)
+                         for item in lane["observations"]["registered_top_bottom_bindings"]))
+    coverage = membership_projection_coverage(registration.membership, observations, bindings)
+    # An unresolved direct-pair set does not calibrate its own source H. Use
+    # the prepared lane state, before the cross-lane source intersection.
+    source = _read_common_proof(production_lane["source_scan_geometry"], SourceScanGeometry)
+    if cross.aperture_aspect_ratio_authority.consumed_for_cross_inference:
+        raise ValueError("common H authority lost its original fixed-height input")
+    fixed_height = source.height_state.extent_projection_px()
+    top_queries = [item["query"] for item in query_records if item["query"]["lane_id"] == lane["lane_id"]
+                   and item["query"]["purpose"] == QueryPurpose.TOP_CORRIDOR.value]
+    if len(top_queries) != 1:
+        raise ValueError("common H authority lost its registered top trace domain")
+    template = phase.template
+    if typed_read_model(template) != lane["template_spec"]:
+        raise ValueError("common H authority changed its template")
+    cross_input = TemplateCrossInput(
+        template=template, fixed_height_px=fixed_height, canonical_fixed_height_px=fixed_height.center,
+        lane_reference_trace_px=common.placements[0].width_authority_px.center,
+        top_bindings=tuple(b for b in bindings if b.role == BoundaryRole.TOP),
+        bottom_bindings=tuple(b for b in bindings if b.role == BoundaryRole.BOTTOM),
+        registered_trace_coordinates_px=tuple(top_queries[0]["trace_positions_px"]),
+        longitudinal_support_domain_groups_px=tuple(tuple(FiniteInterval(**interval) for interval in group)
+            for group in _cross_support_domains_from_phase_report(lane["phase_competition"])),
+        boundary_axis=common.placements[0].height_axis,
+        aperture_aspect_ratio_authority=cross.aperture_aspect_ratio_authority,
+    )
+    expected = typed_read_model(assess_common_h_output_authority(
+        common, phase=phase, cross=cross, registration=registration,
+        membership_coverage=coverage, cross_input=cross_input,
+    ))
+    actual = typed_read_model(authority)
+    # Only generated run-local direction names are non-reproducible offline;
+    # all binding identities, intervals, work and resulting authority remain exact.
+    for record in (actual, expected):
+        for competition in record["enclosing_support_competitions"]:
+            for name in ("best", "runner_up"):
+                if competition[name] is not None:
+                    competition[name]["selected_direction"]["direction_id"] = "recomputed-direction"
+    if actual != expected:
+        raise ValueError("common H member authority or membership coverage is not reproducible")
+
+
+def _validate_holder_fill_provenance(lane, production_lane, measurement, *, layout: str) -> None:
+    from x5crop.detection.photo_geometry.template_holder_fill import (
+        LaneLongAxisAuthority, assess_holder_fill_state, photo_group_outer_from_selected_placement,
+    )
+
+    selected_id = production_lane["selected_placement_id"]
+    if lane["holder_fill_assessment"] != production_lane["holder_fill_assessment"]:
+        raise ValueError("development holder fill changed production facts")
+    if selected_id is None:
+        if lane["holder_fill_assessment"] is not None:
+            raise ValueError("unselected lane exposed holder fill")
+        return
+    common = lane["common_h_output"]
+    if common is not None and selected_id == common["placement_id"]:
+        selected = _read_common_proof(common, CommonHOutput)
+    else:
+        matches = [p for p in lane["placement_competition"]["placements"] if p["placement_id"] == selected_id]
+        if len(matches) != 1:
+            raise ValueError("holder fill selected placement is not unique")
+        selected = _read_common_proof(matches[0], FormatPlacement)
+    domains = [item["domain"] for item in measurement["source_lanes"]
+               if item["domain"]["lane_id"] == lane["lane_id"]]
+    if len(domains) != 1:
+        raise ValueError("holder fill lost its source lane authority")
+    work = Box(**domains[0]["work_box"])
+    if layout == "vertical":
+        work = Box(work.top, work.left, work.bottom, work.right)
+    elif layout != "horizontal":
+        raise ValueError("holder fill source layout is invalid")
+    expected = assess_holder_fill_state(
+        photo_group_outer_from_selected_placement(selected),
+        LaneLongAxisAuthority.from_box(lane["lane_id"], selected.width_axis, work),
+    )
+    if typed_read_model(expected) != lane["holder_fill_assessment"]:
+        raise ValueError("holder fill does not reproduce selected W and source authority")
+
+
 def _validate_finalization(
     record: dict[str, Any], expected_source_extent: WorkspaceExtent
 ) -> None:
@@ -3564,10 +3830,14 @@ def _validate_finalization(
             item for lane in geometry["lanes"] for item in lane["output_footprints"]
         ]:
             raise ValueError("final footprints changed selected output geometry")
-        for footprint in footprints:
-            validate_output_footprint_authority(
-                footprint, expected_source_extent=expected_source_extent
-            )
+        for lane in geometry["lanes"]:
+            common = lane.get("common_h_output")
+            if common is not None and lane.get("selected_placement_id") == common["placement_id"]:
+                validate_common_h_output(common, expected_source_extent=expected_source_extent)
+                _validate_selected_output_reuse(lane)
+            else:
+                for footprint in lane["output_footprints"]:
+                    validate_output_footprint_authority(footprint, expected_source_extent=expected_source_extent)
         output_extent = deskew["transform"]["output_extent"]
         transform = AffineCoordinateTransform(
             matrix=tuple(tuple(row) for row in deskew["transform"]["matrix"]),
@@ -3683,6 +3953,28 @@ def _validate_geometry(
     lane_ids: list[str] = []
     lane_proposal_ids: list[str | None] = []
     lane_selected_ids: list[str | None] = []
+    lane_runner_ids: list[str | None] = []
+    if "shared_scan_geometry" not in geometry:
+        raise ValueError("source selection lost its shared scan geometry")
+    shared = geometry["shared_scan_geometry"]
+    sources = tuple(_read_common_proof(lane["source_scan_geometry"], SourceScanGeometry)
+                    for lane in geometry["lanes"])
+    expected_shared = sources[0] if sources else None
+    try:
+        for source in sources[1:]:
+            expected_shared = expected_shared.intersect_source_state(source)
+    except ValueError:
+        expected_shared = None
+    if (shared is not None) != source_selected:
+        raise ValueError("shared scan geometry is selected-only source authority")
+    if shared is not None:
+        actual_shared = _read_common_proof(shared, SourceScanGeometry)
+        if (expected_shared is None or actual_shared.frame_spec != expected_shared.frame_spec
+                or actual_shared.width_state != expected_shared.width_state
+                or actual_shared.height_state != expected_shared.height_state):
+            raise ValueError("shared scan geometry does not reproduce all lane states")
+    if source_selected and shared is None:
+        raise ValueError("selected source requires shared scan geometry")
     for lane in geometry["lanes"]:
         lane_id = lane.get("lane_id")
         if not isinstance(lane_id, str) or not lane_id:
@@ -3691,11 +3983,17 @@ def _validate_geometry(
             raise ValueError("source lane lost its common H output assessment")
         common = lane["common_h_output"]
         validate_common_h_output(common, expected_source_extent=expected_source_extent)
-        if common is not None and any(
-            p["lane_id"] != lane_id or p["source_scan_geometry"] != lane.get("source_scan_geometry")
-            for p in common["placements"]
-        ):
-            raise ValueError("common H output changed lane or source authority")
+        _common_authority_record(lane)
+        if common is not None:
+            expected_source = expected_shared or _read_common_proof(lane["source_scan_geometry"], SourceScanGeometry)
+            for placement in common["placements"]:
+                member_source = _read_common_proof(placement["source_scan_geometry"], SourceScanGeometry)
+                if (placement["lane_id"] != lane_id
+                        or shared is not None and placement["source_scan_geometry"] != shared
+                        or member_source.frame_spec != expected_source.frame_spec
+                        or member_source.width_state != expected_source.width_state
+                        or member_source.height_state != expected_source.height_state):
+                    raise ValueError("common H output changed lane or source authority")
         proposal_outputs = _validate_placement_proposal(
             lane.get("placement_proposal"),
             lane_id=lane_id,
@@ -3739,6 +4037,8 @@ def _validate_geometry(
         )
         outputs = lane["output_footprints"]
         budgets = lane["direct_use_budget_assessments"]
+        selected_common = _validate_selected_output_reuse(lane)
+        _validate_holder_fill_identity(lane)
         outputs_by_id = {item["geometry_id"]: item for item in outputs}
         alignment = lane.get("template_alignment")
         contact_edge_observations = _validate_contact_edge_observations(
@@ -4070,18 +4370,9 @@ def _validate_geometry(
             output_geometry_ids=set(outputs_by_id),
         )
         _validate_direct_use_budgets(budgets, outputs, lane.get("source_scan_geometry"))
-        for output in outputs:
-            validate_output_footprint_authority(output, expected_source_extent=expected_source_extent)
-        protected_contact_sides = {
-            (
-                protection["topology_relation_id"],
-                output["envelope"]["lane_ordinal"],
-                protection["role"],
-            )
-            for output in outputs
-            for protection in output["boundary_protections"]
-            if protection["topology_relation_id"] is not None
-        }
+        if not selected_common:
+            for output in outputs:
+                validate_output_footprint_authority(output, expected_source_extent=expected_source_extent)
         expected_contact_sides = {
             (identity, ordinal, "end")
             for identity, ordinal in contact_relations.items()
@@ -4091,21 +4382,14 @@ def _validate_geometry(
                 for identity, ordinal in contact_relations.items()
             }
         )
-        if outputs and protected_contact_sides != expected_contact_sides:
-            raise ValueError(
-                "output topology protection disagrees with contact relations"
-            )
+        _validate_selected_contact_protection(outputs, expected_contact_sides, common=selected_common)
         selected = lane["selected_placement_id"]
-        if (selected is None) != (not outputs):
-            raise ValueError("selected template output is incomplete")
-        if selected is not None and (
-            proposal["state"] != "generated"
-            or proposal["placement_id"] != selected
-            or proposal_outputs != outputs
-            or proposal["direct_use_budget_assessments"] != budgets
-        ):
-            raise ValueError("selected output does not reuse the proposal")
+        expected_boundary_use = None if not outputs else (
+            "aperture_pair" if selected_common else outputs[0]["envelope"]["boundary_use"])
+        if lane["selected_cross_boundary_use"] != expected_boundary_use:
+            raise ValueError("selected Cross boundary use changed output ownership")
         lane_selected_ids.append(selected)
+        lane_runner_ids.append(runner_id)
         if not isinstance(lane.get("peak_temporary_bytes"), int) or lane[
             "peak_temporary_bytes"
         ] < 0:
@@ -4114,13 +4398,7 @@ def _validate_geometry(
         source_proposal["lane_ids"] != lane_ids
         or source_proposal["placement_ids"] != lane_proposal_ids
         or source_selection["selected_placement_ids"] != lane_selected_ids
-        or len(source_selection["runner_up_placement_ids"]) != len(lane_ids)
-        or source_selected
-        and (
-            source_proposal["state"] != "generated"
-            or source_proposal["placement_ids"]
-            != source_selection["selected_placement_ids"]
-        )
+        or source_selection["runner_up_placement_ids"] != lane_runner_ids
     ):
         raise ValueError("proposal, eligibility, and source selection disagree")
 
@@ -4544,12 +4822,21 @@ def _validate_development(record: dict[str, Any]) -> None:
         != production_geometry.get("source_placement_proposal")
     ):
         raise ValueError("development lane facts are unavailable")
+    selected = development.get("source_placement_selection")
+    if (not isinstance(selected, dict)
+            or selected.get("lane_ids") != [lane["lane_id"] for lane in production_lanes]
+            or selected.get("shared_scan_geometry") != production_geometry["shared_scan_geometry"]
+            or any(selected.get(key) != value for key, value in
+                   production_geometry["source_placement_selection"].items())):
+        raise ValueError("development source selection changed actual chosen identities")
     for lane, production_lane in zip(lanes, production_lanes, strict=True):
         placement = lane.get("placement_competition")
         work = lane.get("work")
         winner = lane.get("winner_basis")
         if (
             not isinstance(placement, dict)
+            or set(placement) != {"placements", "selected_placement_id", "runner_up_placement_id",
+                "state", "failure", "direct_role_aperture_domain_authority", "conditional_proposal_placement_id"}
             or not isinstance(work, dict)
             or work.get("placement_evaluation_count")
             != len(placement.get("placements", ()))
@@ -4604,6 +4891,8 @@ def _validate_development(record: dict[str, Any]) -> None:
             != production_lane.get("alternative_placement_proposals")
             or "common_h_output" not in lane
             or lane["common_h_output"] != production_lane["common_h_output"]
+            or "common_h_authority" not in lane
+            or lane["common_h_authority"] != production_lane["common_h_authority"]
             or not isinstance(winner, dict)
             or set(winner)
             != {
@@ -4622,8 +4911,10 @@ def _validate_development(record: dict[str, Any]) -> None:
             or winner["failure"] != placement.get("failure")
             or winner["selected_placement_id"]
             != placement.get("selected_placement_id")
+            or winner["selected_placement_id"] != production_lane["selected_placement_id"]
             or winner["runner_up_placement_id"]
             != placement.get("runner_up_placement_id")
+            or winner["runner_up_placement_id"] != production_lane["runner_up_placement_id"]
         ):
             raise ValueError("development template ledger is invalid")
         retained = [
@@ -4687,6 +4978,9 @@ def _validate_development(record: dict[str, Any]) -> None:
             cross_registration_work=lane["cross_registration_work"],
             phase_best=lane["phase_competition"]["best"],
         )
+        _validate_common_authority_provenance(lane, production_lane, development["measurement"]["queries"])
+        _validate_holder_fill_provenance(lane, production_lane, development["measurement"],
+                                        layout=record["measurement"]["layout"])
         common_compositions = work.get("common_h_composition_count")
         if (type(common_compositions) is not int or not 0 <= common_compositions <= MAX_CROSS_PAIRS
                 or common is not None and common_compositions != common["work"]["member_count"]):

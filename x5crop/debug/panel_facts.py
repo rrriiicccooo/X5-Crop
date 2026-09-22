@@ -10,6 +10,7 @@ from ..detection.photo_geometry.separator_material import (
     normal_separator_material_bands,
 )
 from ..detection.photo_geometry.output_model import (
+    CommonOutputFootprint,
     FootprintSaturationKind,
     OutputFootprint,
 )
@@ -95,7 +96,7 @@ def conditional_geometry_by_identity(
 
 def output_footprints(
     detection: FinalDetection,
-) -> tuple[OutputFootprint, ...]:
+) -> tuple[OutputFootprint | CommonOutputFootprint, ...]:
     return detection.output_footprints
 
 
@@ -239,7 +240,10 @@ def competition_summary(detection: FinalDetection) -> str:
                 + "]"
             )
         cross_basis = lane.prepared.cross_competition.winner_basis
-        if cross_basis is not None:
+        if (competition.common_h_output is not None
+                and competition.selected_placement_id == competition.common_h_output.placement_id):
+            cross_bases.add("COMMON OUTPUT")
+        elif cross_basis is not None:
             cross_bases.add(cross_basis.value.upper().replace("_", " "))
         if lane.prepared.phase_competition.runner_up is not None:
             differences.add("PHASE")
@@ -644,7 +648,7 @@ def selected_output_safety_summary(detection: FinalDetection) -> str:
     uses = "/".join(
         sorted(
             {
-                output.envelope.boundary_use.value.upper().replace("_", " ")
+                output.boundary_use.value.upper().replace("_", " ")
                 for output in outputs
             }
         )
@@ -667,7 +671,8 @@ def selected_output_safety_summary(detection: FinalDetection) -> str:
     protections = tuple(
         protection
         for output in outputs
-        for protection in output.boundary_protections
+        for member in (output.members if isinstance(output, CommonOutputFootprint) else (output,))
+        for protection in member.boundary_protections
     )
     measurement = max(
         (item.measurement_expansion_px for item in protections),
@@ -703,7 +708,7 @@ def selected_output_safety_summary(detection: FinalDetection) -> str:
     enclosing_risks = tuple(
         output.enclosing_support_aperture_risk
         for output in outputs
-        if output.enclosing_support_aperture_risk is not None
+        if isinstance(output, OutputFootprint) and output.enclosing_support_aperture_risk is not None
     )
     enclosing_risk = (
         ""

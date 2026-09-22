@@ -36,6 +36,7 @@ from .observation_types import (
     SeparatorBandObservation,
 )
 from .output_model import (
+    CommonOutputFootprint,
     DirectUseBudgetAssessment,
     OutputFootprint,
     OutputSlotIdentity,
@@ -50,7 +51,7 @@ from .template_cross_model import (
     CrossRoleBinding,
     TemplateCrossInput,
 )
-from .template_common_output import CommonHOutput, common_h_fit_members
+from .template_common_output import CommonHOutput, CommonHOutputAuthority, common_h_fit_members
 from .template_phase_model import PhaseFitStatus
 from .template_direct_role_aperture_domain import (
     DirectRoleApertureDomainAuthority,
@@ -72,6 +73,7 @@ from .template_phase_model import PhaseFitResult, TemplatePhaseInput
 from .template_placement import FormatPlacement
 from .template_registration import (
     CrossRegistrationWorkReceipt,
+    membership_projection_coverage,
     project_cross_solver_bindings,
     validate_cross_family_provenance,
     validate_cross_line_provenance,
@@ -709,6 +711,8 @@ class TemplatePlacementCompetition:
         DirectRoleApertureDomainAuthority | None
     ) = None
     conditional_proposal_placement_id: str | None = None
+    common_h_output: CommonHOutput | None = None
+    common_h_authority: CommonHOutputAuthority | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.state, EvidenceState):
@@ -735,8 +739,22 @@ class TemplatePlacementCompetition:
             self.selected_placement_id, self.runner_up_placement_id,
         }:
             raise ValueError("conditional placement cannot acquire canonical eligibility")
-        if self.selected_placement_id not in ({None} | set(ids)):
+        common = self.common_h_output
+        authority = self.common_h_authority
+        if (common is None) != (authority is None) or common is not None and (
+            not isinstance(common, CommonHOutput) or not isinstance(authority, CommonHOutputAuthority)
+            or authority.placement_id != common.placement_id
+            or authority.member_placement_ids != tuple(p.placement_id for p in common.placements)
+            or common.placement_id in ids
+        ):
+            raise ValueError("common output and its member authority disagree")
+        common_id = None if common is None else common.placement_id
+        if self.selected_placement_id not in ({None, common_id} | set(ids)):
             raise ValueError("selected placement is outside its competition")
+        if common_id is not None and self.selected_placement_id == common_id and (
+            common.failure is not None or authority.state != EvidenceState.SUPPORTED
+        ):
+            raise ValueError("selected common output lacks complete member authority")
         if self.runner_up_placement_id not in ({None} | set(ids)):
             raise ValueError("runner-up placement is outside its competition")
         if self.selected_placement_id is not None and self.selected_placement_id == self.runner_up_placement_id:
@@ -748,6 +766,14 @@ class TemplatePlacementCompetition:
                 raise ValueError("supported placement has no failure")
         elif not isinstance(self.failure, DetectionFailureFact):
             raise ValueError("unsupported placement requires a typed failure")
+
+    @property
+    def selected_output(self) -> FormatPlacement | CommonHOutput | None:
+        if self.selected_placement_id is None:
+            return None
+        if self.common_h_output is not None and self.selected_placement_id == self.common_h_output.placement_id:
+            return self.common_h_output
+        return next(item for item in self.placements if item.placement_id == self.selected_placement_id)
 
 
 class TemplateProposalState(str, Enum):
@@ -897,8 +923,8 @@ class TemplateLaneReconstruction:
     placement_competition: TemplatePlacementCompetition
     placement_proposal: TemplatePlacementProposal
     alternative_placement_proposals: tuple[TemplatePlacementProposal, ...]
-    selected_placement: FormatPlacement | None
-    output_footprints: tuple[OutputFootprint, ...]
+    selected_placement: FormatPlacement | CommonHOutput | None
+    output_footprints: tuple[OutputFootprint | CommonOutputFootprint, ...]
     calibrated_nominal_grid_authority: CalibratedNominalGridAuthority
     enclosing_support_aperture_authority: (
         EnclosingSupportApertureAuthority
@@ -907,7 +933,10 @@ class TemplateLaneReconstruction:
     holder_fill_assessment: HolderFillAssessment | None
     content_veto_facts: tuple[ContentVetoFact, ...]
     work: TemplatePlacementWorkReceipt
-    common_h_output: CommonHOutput | None = None
+
+    @property
+    def common_h_output(self) -> CommonHOutput | None:
+        return self.placement_competition.common_h_output
 
     def __post_init__(self) -> None:
         if not self.lane_id or self.prepared.lane.domain.lane_id != self.lane_id:
@@ -926,6 +955,13 @@ class TemplateLaneReconstruction:
                     or self.work.common_h_composition_count != len(common.placements)
                     or any(p.sequence_fit != self.prepared.phase_competition.best for p in common.placements)):
                 raise ValueError("common H output lost a retained interpretation or changed W ownership")
+            coverage = membership_projection_coverage(
+                self.prepared.cross_registration_work.membership,
+                self.prepared.raw_cross_observations,
+                (*self.prepared.cross_input.top_bindings, *self.prepared.cross_input.bottom_bindings),
+            )
+            if self.placement_competition.common_h_authority.membership_coverage != coverage:
+                raise ValueError("common H authority changed the registered interpretation coverage")
         placements = self.placement_competition.placements
         if any(item.lane_id != self.lane_id for item in placements):
             raise ValueError("placement competition crosses lane authority")
@@ -990,7 +1026,12 @@ class TemplateLaneReconstruction:
             raise ValueError("selected placement and competition state disagree")
         if self.selected_placement is not None and self.selected_placement.placement_id != selected_id:
             raise ValueError("selected placement is not competition winner")
-        if self.selected_placement is not None and (
+        if isinstance(self.selected_placement, CommonHOutput):
+            if (self.selected_placement != common or common.failure is not None
+                    or common.output_footprints != self.output_footprints
+                    or common.direct_use_budget_assessments != self.direct_use_budget_assessments):
+                raise ValueError("selected common output changed its complete geometry or member budgets")
+        elif self.selected_placement is not None and (
             proposal.state != TemplateProposalState.GENERATED
             or proposal.placement_id != selected_id
             or proposal.output_footprints != self.output_footprints
@@ -1023,12 +1064,12 @@ class TemplateLaneReconstruction:
             if self.selected_placement is None or len(self.output_footprints) != self.selected_placement.output_slot_count:
                 raise ValueError("output footprints must cover the selected template slots")
             ordinals = tuple(
-                item.envelope.lane_ordinal for item in self.output_footprints
+                item.lane_ordinal for item in self.output_footprints
             )
             if ordinals != tuple(range(1, len(ordinals) + 1)):
                 raise ValueError("output footprint ordinals must be contiguous")
             if any(
-                item.envelope.lane_id != self.lane_id
+                item.lane_id != self.lane_id
                 for item in self.output_footprints
             ):
                 raise ValueError("output footprint crosses lane authority")
@@ -1174,12 +1215,6 @@ class PhotoGeometryDetectionResult:
                 for item in self.lane_reconstructions
             ):
                 raise ValueError("selected lanes disagree with shared source authority")
-            if (
-                proposal.state != TemplateProposalState.GENERATED
-                or proposal.placement_ids
-                != self.source_placement_selection.selected_placement_ids
-            ):
-                raise ValueError("selected source must reuse the generated proposal")
         if self.source_placement_selection.state != EvidenceState.SUPPORTED and any(
             item.output_footprints or item.direct_use_budget_assessments or item.selected_placement is not None
             for item in self.lane_reconstructions
@@ -1193,7 +1228,7 @@ class PhotoGeometryDetectionResult:
         object.__setattr__(self, "assessment_facts", MappingProxyType(dict(self.assessment_facts)))
 
     @property
-    def output_footprints(self) -> tuple[OutputFootprint, ...]:
+    def output_footprints(self) -> tuple[OutputFootprint | CommonOutputFootprint, ...]:
         return tuple(
             output
             for lane in self.lane_reconstructions

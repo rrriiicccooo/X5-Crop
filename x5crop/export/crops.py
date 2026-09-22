@@ -7,7 +7,7 @@ import tempfile
 
 import numpy as np
 
-from ..detection.photo_geometry.output_model import OutputFootprint
+from ..detection.photo_geometry.output_model import CommonOutputFootprint, OutputFootprint
 from ..domain import Box
 from ..geometry.affine import AffineCoordinateTransform
 from ..image.transforms import sample_affine_roi
@@ -22,7 +22,7 @@ def write_crops(
     source_arr: np.ndarray,
     profile: ImageProfile,
     frames: tuple[Box, ...],
-    footprints: tuple[OutputFootprint, ...],
+    footprints: tuple[OutputFootprint | CommonOutputFootprint, ...],
     transform: AffineCoordinateTransform,
     output_dir: Path,
 ) -> list[str]:

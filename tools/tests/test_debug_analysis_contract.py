@@ -519,7 +519,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
             tuple(entry.label for entry in configuration.diagnostics.legend_entries),
             (
                 "DETECTED TOP/BOTTOM",
-                "SELECTED TOP/BOTTOM",
+                "PRIMARY TOP/BOTTOM",
                 "DETECTED START/END",
                 "JOINT START/END",
                 "BROAD MATERIAL START/END",
@@ -548,6 +548,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
             cross_fit="cross:best",
         )
         competition = SimpleNamespace(
+            common_h_output=None,
             placements=(winner, runner),
             selected_placement_id="winner",
             runner_up_placement_id="runner",

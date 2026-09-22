@@ -13,6 +13,7 @@ from .template_cross_model import CrossFitCompetition, CrossFitStatus
 from .template_aspect_ratio_model import ApertureAspectRatioFailureKind
 from .template_phase_model import PhaseFailureKind, PhaseFitResult, PhaseFitStatus
 from .template_placement import FormatPlacement
+from .template_common_output import CommonHOutput, CommonHOutputAuthority
 from .template_runtime_model import (
     TemplatePlacementCompetition,
     TemplateSourceSelection,
@@ -27,6 +28,8 @@ def select_lane_template_placement(
     phase: PhaseFitResult,
     cross: CrossFitCompetition,
     content_assessment: ContentVetoAssessment | None,
+    common_h_output: CommonHOutput | None = None,
+    common_h_authority: CommonHOutputAuthority | None = None,
 ) -> TemplatePlacementCompetition:
     """Publish the fit owners' winner while retaining one bounded runner."""
 
@@ -43,14 +46,17 @@ def select_lane_template_placement(
         raise ValueError("template placement crosses lane authority")
     if len({item.placement_id for item in placements}) != len(placements):
         raise ValueError("template winner and runner identities must differ")
+    target = common_h_output or best
+    if (common_h_output is None) != (common_h_authority is None):
+        raise ValueError("common output requires its complete member authority")
     if content_assessment is not None and (
         not isinstance(content_assessment, ContentVetoAssessment)
-        or best is None
-        or content_assessment.placement_id != best.placement_id
+        or target is None
+        or content_assessment.placement_id != target.placement_id
         or phase.status != PhaseFitStatus.RESOLVED
-        or cross.status != CrossFitStatus.RESOLVED
+        or common_h_output is None and cross.status != CrossFitStatus.RESOLVED
     ):
-        raise ValueError("content veto requires the unique fitted placement")
+        raise ValueError("content veto requires the actual complete output selection")
     try:
         phase.receipt.validate_bounds(slot_count=phase.template.count)
         cross.receipt.validate_bounds()
@@ -60,6 +66,8 @@ def select_lane_template_placement(
             None if runner_up is None else runner_up.placement_id,
             EvidenceState.CONTRADICTED,
             failure_fact(GateGap.PRODUCER_BOUND_EXCEEDED),
+            common_h_output=common_h_output,
+            common_h_authority=common_h_authority,
         )
     if phase.status == PhaseFitStatus.BOUND_EXCEEDED or cross.status == CrossFitStatus.BOUND_EXCEEDED:
         return TemplatePlacementCompetition(
@@ -67,6 +75,8 @@ def select_lane_template_placement(
             None if runner_up is None else runner_up.placement_id,
             EvidenceState.CONTRADICTED,
             failure_fact(GateGap.PRODUCER_BOUND_EXCEEDED),
+            common_h_output=common_h_output,
+            common_h_authority=common_h_authority,
         )
     if phase.status != PhaseFitStatus.RESOLVED or phase.best is None:
         phase_gap = {
@@ -130,6 +140,26 @@ def select_lane_template_placement(
                 phase_gap,
                 detail=phase.ambiguity_reason,
             ),
+            common_h_output=common_h_output,
+            common_h_authority=common_h_authority,
+        )
+    if common_h_output is not None:
+        if common_h_output.failure is not None or common_h_authority.state != EvidenceState.SUPPORTED:
+            return TemplatePlacementCompetition(
+                placements, None, None if runner_up is None else runner_up.placement_id,
+                EvidenceState.UNAVAILABLE, common_h_output.failure or common_h_authority.failure,
+                common_h_output=common_h_output,
+                common_h_authority=common_h_authority,
+            )
+        if content_assessment is None:
+            raise ValueError("common output selection requires its own content check")
+        return TemplatePlacementCompetition(
+            placements, None if content_assessment.vetoed else common_h_output.placement_id,
+            None if runner_up is None else runner_up.placement_id,
+            EvidenceState.CONTRADICTED if content_assessment.vetoed else EvidenceState.SUPPORTED,
+            failure_fact(GateGap.CONTENT_VETO_REJECTED) if content_assessment.vetoed else None,
+            common_h_output=common_h_output,
+            common_h_authority=common_h_authority,
         )
     if cross.status != CrossFitStatus.RESOLVED or cross.best is None:
         aspect = cross.aperture_aspect_ratio_authority
@@ -168,6 +198,8 @@ def select_lane_template_placement(
                     else cross.reason
                 ),
             ),
+            common_h_output=common_h_output,
+            common_h_authority=common_h_authority,
         )
     if best is None:
         return TemplatePlacementCompetition(
@@ -175,6 +207,8 @@ def select_lane_template_placement(
             None if runner_up is None else runner_up.placement_id,
             EvidenceState.UNAVAILABLE,
             failure_fact(GateGap.COMPLETE_PLACEMENT_UNAVAILABLE),
+            common_h_output=common_h_output,
+            common_h_authority=common_h_authority,
         )
     if best.sequence_fit != phase.best or best.cross_fit != cross.best:
         raise ValueError("template placement does not use the selected fits")
@@ -212,6 +246,8 @@ def select_lane_template_placement(
                 detail=aperture_domain_authority.reason,
             ),
             aperture_domain_authority,
+            common_h_output=common_h_output,
+            common_h_authority=common_h_authority,
         )
     if content_assessment is not None and content_assessment.vetoed:
         return TemplatePlacementCompetition(
@@ -220,6 +256,8 @@ def select_lane_template_placement(
             EvidenceState.CONTRADICTED,
             failure_fact(GateGap.CONTENT_VETO_REJECTED),
             aperture_domain_authority,
+            common_h_output=common_h_output,
+            common_h_authority=common_h_authority,
         )
     return TemplatePlacementCompetition(
         placements,
@@ -228,6 +266,8 @@ def select_lane_template_placement(
         EvidenceState.SUPPORTED,
         None,
         aperture_domain_authority,
+        common_h_output=common_h_output,
+        common_h_authority=common_h_authority,
     )
 
 
@@ -250,6 +290,8 @@ def withhold_lane_winner(
             competition.direct_role_aperture_domain_authority
         ),
         conditional_proposal_placement_id=competition.conditional_proposal_placement_id,
+        common_h_output=competition.common_h_output,
+        common_h_authority=competition.common_h_authority,
     )
 
 
@@ -289,14 +331,7 @@ def select_template_source(
             failure_fact(GateGap.SHARED_AUTHORITY_UNAVAILABLE),
             tuple(item.runner_up_placement_id for item in competitions),
         )
-    selected = tuple(
-        next(
-            placement
-            for placement in item.placements
-            if placement.placement_id == item.selected_placement_id
-        )
-        for item in competitions
-    )
+    selected = tuple(item.selected_output for item in competitions)
     if any(
         placement.source_scan_geometry != shared_scan_geometry
         for placement in selected

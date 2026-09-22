@@ -673,7 +673,7 @@ class TemplateSelectionContractTest(unittest.TestCase):
             facts=(),
         )
 
-        with self.assertRaisesRegex(ValueError, "unique fitted placement"):
+        with self.assertRaisesRegex(ValueError, "actual complete output selection"):
             select_lane_template_placement(
                 lane_id="lane:0",
                 best=placement,

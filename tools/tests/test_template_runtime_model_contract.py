@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from contextlib import ExitStack
+import numpy as np
 import unittest
 from unittest.mock import patch
 
@@ -16,7 +18,10 @@ from tools.tests.template_test_support import (
     placement_template,
 )
 from x5crop.detection.gate_checks import GateGap, TypedAssessment, failure_fact
-from x5crop.detection.photo_geometry.detector import _materialize_placement_proposal
+from x5crop.configuration.registry import get_detection_configuration
+from x5crop.detection.evidence.content_occupancy_model import ContentOccupancyObservationSet
+from x5crop.detection.photo_geometry.detector import _materialize_placement_proposal, reconstruct_photo_geometry
+from x5crop.detection.photo_geometry.measurement_model import PhotoBoundaryMeasurementField
 from x5crop.detection.photo_geometry.template_acceptability_features import (
     PLACEMENT_FEATURE_DEFINITIONS,
     build_placement_acceptability_features,
@@ -35,6 +40,7 @@ from x5crop.detection.photo_geometry.output_model import (
     JointPlacementEnvelope,
     OutputBoundaryUse,
     OutputFootprint,
+    ResolvedOutputSlots,
     SequenceProjectionConstraintBasis,
 )
 from x5crop.detection.photo_geometry.template_model import (
@@ -133,6 +139,50 @@ def _unresolved_result() -> PhotoGeometryDetectionResult:
 
 
 class TemplateRuntimeModelContractTest(unittest.TestCase):
+    def test_failed_primary_projection_withholds_otherwise_selected_winner(self) -> None:
+        prepared = _prepared()
+        template = placement_template(1)
+        placement = placement_compose(
+            template, placement_sequence(template),
+            placement_cross(template, direction=placement_direction()), lane_id="lane:0",
+        )
+        competition = TemplatePlacementCompetition(
+            (placement,), placement.placement_id, None, EvidenceState.SUPPORTED, None,
+        )
+        content = ContentOccupancyObservationSet("lane:0", (), None, None, 0, 0, 0, None, None)
+        owner = "x5crop.detection.photo_geometry.detector."
+        # Isolate the materialization-to-selection join. Projection fails after
+        # the fit owners have supplied an otherwise eligible canonical winner.
+        with ExitStack() as stack:
+            for name, value in (
+                ("resolve_output_slots", ResolvedOutputSlots((1,))),
+                ("prepare_template_lane", prepared),
+                ("_shared_geometry", placement.source_scan_geometry),
+                ("_placements", (placement, None, None)),
+                ("select_lane_template_placement", competition),
+            ):
+                stack.enter_context(patch(owner + name, return_value=value))
+            project = stack.enter_context(patch(
+                owner + "project_format_placement", side_effect=ValueError("physical projection failure"),
+            ))
+            result = reconstruct_photo_geometry(
+                PhotoBoundaryMeasurementField(np.zeros((322, 2320), dtype=np.uint8), "horizontal"),
+                (prepared.lane,), (content,), layout="horizontal",
+                configuration=get_detection_configuration("135"), resolved_slot_count=None,
+            )
+        project.assert_called_once_with(placement)
+        lane = result.lane_reconstructions[0]
+        self.assertIsNone(lane.selected_placement)
+        self.assertEqual(result.output_footprints, ())
+        self.assertEqual(lane.placement_competition.placements, (placement,))
+        failure = lane.placement_proposal.failure
+        self.assertEqual(failure.gap, GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE)
+        self.assertEqual(failure.detail, "physical projection failure")
+        self.assertEqual(result.source_placement_selection.failure, failure)
+        self.assertEqual(lane.work.proposal_projection_count, 1)
+        self.assertEqual(lane.work.proposal_output_evaluation_count, 0)
+
+
     def test_prepared_lane_is_fitted_and_mapping_is_frozen(self) -> None:
         prepared = _prepared()
         self.assertEqual(prepared.phase_competition.template, prepared.template_spec)

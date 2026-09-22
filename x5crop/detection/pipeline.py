@@ -10,6 +10,7 @@ from .gate_checks import GateGap, TypedAssessment
 from .photo_geometry.detector import reconstruct_photo_geometry
 from .photo_geometry.template_runtime_model import PhotoGeometryDetectionResult
 from .photo_geometry.output_model import (
+    CommonOutputFootprint,
     OutputFootprint,
     OutputSlotIdentity,
     ResolvedOutputSlots,
@@ -43,7 +44,7 @@ class PhotoGeometryCandidate:
         return self.geometry.output_slot_identities
 
     @property
-    def output_footprints(self) -> tuple[OutputFootprint, ...]:
+    def output_footprints(self) -> tuple[OutputFootprint | CommonOutputFootprint, ...]:
         return self.geometry.output_footprints
 
 def choose_detection(

@@ -22,7 +22,11 @@ from .measurement_model import PhotoBoundaryMeasurementField
 from .output_model import OutputFootprint, OutputSlotIdentity
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import CrossFitStatus
-from .template_common_output import CommonHOutput, common_h_fit_members, materialize_common_h_output
+from .template_common_output import (
+    CommonHOutput, assess_common_h_output_authority, common_h_fit_members,
+    materialize_common_h_output,
+)
+from .template_registration import membership_projection_coverage
 from .template_direct_role_authority import assess_direct_role_binding_authority
 from .template_acceptability_features import build_placement_acceptability_features
 from .template_feasible_geometry import project_format_placement
@@ -301,7 +305,6 @@ class _ProvisionalLanePlacement:
     proposal: TemplatePlacementProposal
     alternatives: tuple[TemplatePlacementProposal, ...]
     proposal_output_evaluation_count: int
-    common_h_output: CommonHOutput | None
     common_h_composition_count: int
 
 
@@ -411,45 +414,6 @@ def reconstruct_photo_geometry(
             proposal, proposal_output_evaluations = _materialize_placement_proposal(
                 lane, best, layout=layout,
             )
-        best_outputs = () if proposal is None else proposal.output_footprints
-        content_assessment = (
-            None
-            if (
-                best is None
-                or len(best_outputs) != best.output_slot_count
-                or lane.phase_competition.status != PhaseFitStatus.RESOLVED
-                or lane.cross_competition.status != CrossFitStatus.RESOLVED
-            )
-            else content_veto_assessment(
-                best,
-                tuple(item.required_source_footprint for item in best_outputs),
-                build_content_topology_index(content, layout=layout),
-            )
-        )
-        competition = select_lane_template_placement(
-            lane_id=lane.lane.domain.lane_id,
-            best=best,
-            runner_up=runner,
-            phase=lane.phase_competition,
-            cross=lane.cross_competition,
-            content_assessment=content_assessment,
-        )
-        if family_proposal is not None:
-            competition = replace(
-                competition,
-                placements=(*competition.placements, family_proposal),
-                conditional_proposal_placement_id=family_proposal.placement_id,
-            )
-        if proposal is None:
-            proposal = TemplatePlacementProposal(
-                lane_id=lane.lane.domain.lane_id,
-                state=TemplateProposalState.UNAVAILABLE,
-                placement_id=None,
-                output_footprints=(),
-                direct_use_budget_assessments=(),
-                acceptability_features=None,
-                failure=competition.failure or failure_fact(GateGap.COMPLETE_PLACEMENT_UNAVAILABLE),
-            )
         alternatives = []
         for placement in (runner, family_proposal):
             if placement is None:
@@ -460,6 +424,7 @@ def reconstruct_photo_geometry(
             alternatives.append(alternative)
             proposal_output_evaluations += evaluations
         common_h_output = None
+        common_h_authority = None
         members = (
             common_h_fit_members(lane.cross_competition, lane.cross_registration_work)
             if best is not None and lane.phase_competition.status == PhaseFitStatus.RESOLVED
@@ -470,18 +435,63 @@ def reconstruct_photo_geometry(
                 global_lattice_authority=best.global_lattice_authority, cross_fit=fit,
                 source_geometry=geometry) for fit in members[0])
             if all(p is not None for p in composed):
-                retained = {p.placement_id: p for p in competition.placements}
+                retained = {p.placement_id: p for p in (best, runner, family_proposal) if p is not None}
                 reusable = tuple((retained[p.placement_id], p.output_footprints)
                                  for p in (proposal, *alternatives)
-                                 if p.state == TemplateProposalState.GENERATED)
+                                 if p is not None and p.state == TemplateProposalState.GENERATED)
                 common_h_output = materialize_common_h_output(
                     composed, members[1], lane=lane.lane, layout=layout, reusable=reusable,
                 )
+                common_h_authority = assess_common_h_output_authority(
+                    common_h_output, phase=lane.phase_competition,
+                    cross=lane.cross_competition, registration=lane.cross_registration_work,
+                    membership_coverage=membership_projection_coverage(
+                        lane.cross_registration_work.membership, lane.raw_cross_observations,
+                        (*lane.cross_input.top_bindings, *lane.cross_input.bottom_bindings),
+                    ),
+                    cross_input=lane.cross_input,
+                )
+        target = common_h_output or best
+        target_outputs = (
+            common_h_output.output_footprints if common_h_output is not None
+            else () if proposal is None else proposal.output_footprints
+        )
+        content_assessment = (
+            None if target is None or len(target_outputs) != target.output_slot_count
+            or lane.phase_competition.status != PhaseFitStatus.RESOLVED
+            or (common_h_output is None and lane.cross_competition.status != CrossFitStatus.RESOLVED)
+            or (common_h_authority is not None and common_h_authority.state != EvidenceState.SUPPORTED)
+            else content_veto_assessment(
+                target, tuple(item.required_source_footprint for item in target_outputs),
+                build_content_topology_index(content, layout=layout),
+            )
+        )
+        competition = select_lane_template_placement(
+            lane_id=lane.lane.domain.lane_id, best=best, runner_up=runner,
+            phase=lane.phase_competition, cross=lane.cross_competition,
+            content_assessment=content_assessment, common_h_output=common_h_output,
+            common_h_authority=common_h_authority,
+        )
+        if (competition.state == EvidenceState.SUPPORTED and common_h_output is None
+                and proposal is not None and proposal.state == TemplateProposalState.UNAVAILABLE):
+            assert proposal.failure is not None
+            competition = withhold_lane_winner(competition, failure=proposal.failure)
+        if family_proposal is not None:
+            competition = replace(
+                competition, placements=(*competition.placements, family_proposal),
+                conditional_proposal_placement_id=family_proposal.placement_id,
+            )
+        if proposal is None:
+            proposal = TemplatePlacementProposal(
+                lane_id=lane.lane.domain.lane_id, state=TemplateProposalState.UNAVAILABLE,
+                placement_id=None, output_footprints=(), direct_use_budget_assessments=(),
+                acceptability_features=None,
+                failure=competition.failure or failure_fact(GateGap.COMPLETE_PLACEMENT_UNAVAILABLE),
+            )
         provisional.append(
             _ProvisionalLanePlacement(
                 best, content_assessment, competition, proposal, tuple(alternatives),
                 proposal_output_evaluations,
-                common_h_output,
                 0 if members is None else len(members[0]),
             )
         )
@@ -545,14 +555,20 @@ def reconstruct_photo_geometry(
         prepared, lanes, provisional, competitions, strict=True
     ):
         selected = (
-            values.best
+            competition.selected_output
             if source_selection.state == EvidenceState.SUPPORTED
             else None
         )
         output_footprints = ()
         if selected is not None:
-            output_footprints = values.proposal.output_footprints
-        budgets = values.proposal.direct_use_budget_assessments if selected is not None else ()
+            output_footprints = (
+                selected.output_footprints if isinstance(selected, CommonHOutput)
+                else values.proposal.output_footprints
+            )
+        budgets = (
+            selected.direct_use_budget_assessments if isinstance(selected, CommonHOutput)
+            else values.proposal.direct_use_budget_assessments if selected is not None else ()
+        )
         nominal_grid_authority = assess_calibrated_nominal_grid_authority(
             lane.phase_competition.calibrated_nominal_grid_evidence,
             placement_id=(
@@ -627,7 +643,6 @@ def reconstruct_photo_geometry(
                     bound_exceeded=bound_exceeded,
                     common_h_composition_count=values.common_h_composition_count,
                 ),
-                common_h_output=values.common_h_output,
             )
         )
     reconstructed = tuple(reconstructions)

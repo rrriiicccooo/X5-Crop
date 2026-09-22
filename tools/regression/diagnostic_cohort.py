@@ -17,6 +17,7 @@ from .report_validation import (
     validate_output_footprint_authority,
     validate_report_source_extent,
 )
+from .common_output_validation import validate_common_h_output
 
 from .cohort_count import validate_cohort_counts
 from .diagnostic_contract import (
@@ -113,6 +114,12 @@ def _source_geometry_authority_is_explicit(report: dict[str, Any]) -> bool:
     try:
         source_extent = validate_report_source_extent(report)
         for lane in report["photo_geometry"]["lanes"]:
+            common = lane.get("common_h_output")
+            if (common is not None and lane.get("selected_placement_id") == common["placement_id"]):
+                validate_common_h_output(common, expected_source_extent=source_extent)
+                if common["failure"] is not None or lane["output_footprints"] != common["output_footprints"]:
+                    return False
+                continue
             for output in lane["output_footprints"]:
                 validate_output_footprint_authority(output, expected_source_extent=source_extent)
     except (KeyError, TypeError, ValueError):

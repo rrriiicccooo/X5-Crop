@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import fields
 from typing import Any
 
 from ..detection.workspace import DetectionWorkspace
@@ -42,6 +43,14 @@ def _measurement_set_read_model(measurement_set: object) -> dict[str, object]:
             measurement_set.broad_material_transitions
         ),
     }
+
+
+def _placement_competition_read_model(competition: object) -> dict[str, Any]:
+    # The complete common proof has its own lane fields. Do not duplicate all
+    # member placements and native footprints inside the competition ledger.
+    return {field.name: typed_read_model(getattr(competition, field.name))
+            for field in fields(competition)
+            if field.name not in {"common_h_output", "common_h_authority"}}
 
 
 def development_report_facts(
@@ -213,7 +222,7 @@ def development_report_facts(
                     lane.prepared.cross_competition
                     .aperture_aspect_ratio_authority
                 ),
-                "placement_competition": typed_read_model(
+                "placement_competition": _placement_competition_read_model(
                     lane.placement_competition
                 ),
                 "placement_proposal": typed_read_model(
@@ -223,6 +232,7 @@ def development_report_facts(
                     lane.alternative_placement_proposals
                 ),
                 "common_h_output": typed_read_model(lane.common_h_output),
+                "common_h_authority": typed_read_model(lane.placement_competition.common_h_authority),
                 "winner_basis": {
                     "state": lane.placement_competition.state.value,
                     "phase": (

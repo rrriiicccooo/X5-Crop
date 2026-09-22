@@ -410,6 +410,10 @@ def cross_axis_panel(
     supported = (
         detection.candidate.geometry.source_placement_selection.state.value
         == "supported"
+        and all(
+            lane.selected_placement is not lane.common_h_output
+            for lane in detection.candidate.geometry.lane_reconstructions
+        )
     )
     if BoundaryRole.TOP in detected:
         draw_label_chip(

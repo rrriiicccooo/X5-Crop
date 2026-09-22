@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from ...domain import Box
 from ..decision.model import DecisionGateAssessment
 from ..photo_geometry.output_model import (
+    CommonOutputFootprint,
     OutputFootprint,
     OutputSlotIdentity,
     ResolvedOutputSlots,
@@ -81,7 +82,9 @@ class FinalDetection:
         return self.candidate.output_slot_identities
 
     @property
-    def output_footprints(self) -> tuple[OutputFootprint, ...]:
+    def output_footprints(
+        self,
+    ) -> tuple[OutputFootprint | CommonOutputFootprint, ...]:
         return (
             self.candidate.output_footprints
             if self.frame_export_eligible

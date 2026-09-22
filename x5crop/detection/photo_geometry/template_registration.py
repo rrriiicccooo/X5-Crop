@@ -31,7 +31,7 @@ from .line_observations import (
 from .robust_line_fit import physical_line_region
 from .physical_identity import physical_fact_id, physical_observation_id
 from .template_family_membership import (
-    MAXIMUM_MEMBERSHIP_VISITS, MembershipAtom, MembershipFitBudget,
+    MAXIMUM_MEMBERSHIP_VISITS, MembershipAtom, MembershipFitBudget, MembershipProjectionCoverage,
     MembershipReceipt, MembershipState, MembershipTransition, enumerate_membership_scope,
     new_membership_groups,
 )
@@ -56,6 +56,40 @@ def _add(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval:
         left.minimum + right.minimum,
         left.maximum + right.maximum,
     )
+
+def membership_projection_coverage(
+    receipt: MembershipReceipt | None,
+    observations: tuple[PhotoBoundaryObservation, ...],
+    solver_bindings: tuple[CrossRoleBinding, ...],
+) -> tuple[MembershipProjectionCoverage, ...] | None:
+    """Account for every searched interpretation without fitting or choosing it.
+
+    COMPLETE is a search/batch receipt. A numerically unavailable union or an
+    unsearched scope cannot disappear when output selection consumes it.
+    """
+    if receipt is None or receipt.state != MembershipState.COMPLETE or any(
+        scope.state != MembershipState.COMPLETE for scope in receipt.scopes
+    ):
+        return None
+    by_id = {item.observation_id: item for item in observations}
+    represented = {}
+    for binding in solver_bindings:
+        observation = by_id.get(binding.observation_id)
+        if observation is not None and binding.has_independent_spatial_support:
+            union = tuple(sorted(observation.transition_ids, key=str))
+            represented.setdefault((binding.role, union), []).append(binding.observation_id)
+    coverage = []
+    for scope in receipt.scopes:
+        for members in scope.maximal_member_groups:
+            if any(identity not in by_id for identity in members):
+                return None
+            union = tuple(sorted({raw for identity in members for raw in by_id[identity].transition_ids}, key=str))
+            identities = tuple(sorted(represented.get((scope.role, union), ()), key=str))
+            if not identities:
+                return None
+            coverage.append(MembershipProjectionCoverage(scope.parent_family_id, scope.role, members, union, identities))
+    return tuple(coverage)
+
 
 def project_cross_solver_bindings(
     bindings: tuple[CrossRoleBinding, ...],

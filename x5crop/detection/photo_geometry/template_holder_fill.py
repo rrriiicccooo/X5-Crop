@@ -7,6 +7,7 @@ from enum import Enum
 
 from ...domain import Box, FiniteInterval
 from .model import BoundaryAxis
+from .template_common_output import CommonHOutput
 from .template_placement import FormatPlacement
 
 
@@ -126,8 +127,31 @@ class HolderFillAssessment:
 
 
 def photo_group_outer_from_selected_placement(
-    placement: FormatPlacement,
+    placement: FormatPlacement | CommonHOutput,
 ) -> PhotoGroupOuter:
+    if isinstance(placement, CommonHOutput):
+        if placement.failure is not None or not placement.output_footprints:
+            raise ValueError("photo-group outer requires a complete common H output")
+        native_outers = tuple(
+            photo_group_outer_from_selected_placement(member)
+            for member in placement.placements
+        )
+        return PhotoGroupOuter(
+            placement_id=placement.placement_id,
+            lane_id=placement.lane_id,
+            axis=placement.width_axis,
+            lower_px=FiniteInterval(
+                min(item.lower_px.minimum for item in native_outers),
+                max(item.lower_px.maximum for item in native_outers),
+            ),
+            upper_px=FiniteInterval(
+                min(item.upper_px.minimum for item in native_outers),
+                max(item.upper_px.maximum for item in native_outers),
+            ),
+            frame_width_px=(
+                placement.source_scan_geometry.width_state.extent_projection_px()
+            ),
+        )
     if not isinstance(placement, FormatPlacement):
         raise TypeError("photo-group outer requires a selected placement")
     first = placement.frames[0]

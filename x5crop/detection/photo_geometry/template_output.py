@@ -1294,6 +1294,21 @@ def template_direct_use_budget_assessment(
     )
 
 
+def common_direct_use_budget_assessment(output: CommonOutputFootprint) -> DirectUseBudgetAssessment:
+    """Summarize the worst member per edge without replacing member proofs."""
+    edges = tuple(max(
+        (member.assessment.edge_assessments[index] for member in output.member_budgets),
+        key=lambda edge: edge.expansion_mm / edge.limit_mm,
+    ) for index in range(len(_ROLES)))
+    return DirectUseBudgetAssessment(
+        geometry_id=output.geometry_id, boundary_use=output.boundary_use,
+        edge_assessments=edges, enclosing_support_height_ratio=None,
+        enclosing_support_within_limit=None, maximum_same_state_cross_alignment_padding_mm=None,
+        maximum_same_state_cross_alignment_padding_within_limit=None,
+        state=EvidenceState.SUPPORTED if output.budget_supported else EvidenceState.CONTRADICTED,
+    )
+
+
 def common_aperture_output_footprint(
     placements: tuple[FormatPlacement, ...],
     outputs: tuple[OutputFootprint, ...],

@@ -1328,7 +1328,8 @@ source W，也不清除原失败。Canonical 部分最多尝试 primary 与两�
 有条件 Cross 提案只与 primary phase 及其已有 lattice authority 组成第三份提案，不能占用 runner 位置或
 成为 selected placement；不展开 phase/cross 笛卡尔积。每个 placement 由同一 production projection
 与 output owner 恰好物化一次完整 footprint 或 typed unavailable；primary 与 alternative 分开保存，选中输出
-直接复用 primary。报告和黄金分析只读取这些同次 runtime facts，不重新求解几何。物化次数与实际逐 slot
+直接复用 primary。Primary 投影失败时撤下原拟合 winner，保留 placement 与原始投影 failure；
+不能选择没有完整 footprint 的方案，也不因此晋升 runner。报告和黄金分析只读取这些同次 runtime facts，不重新求解几何。物化次数与实际逐 slot
 输出评估次数进入工作量 receipt，分别不超过 3 与全部保留 placement 的 slot 总数。
 黄金逐候选标签仍由唯一方向性 comparator 产生；保留集合中没有安全候选，不能外推为所有潜在裁切均不可用。
 Gold record 在同一 source SHA、format/count 身份下保存每份 placement ID、primary/runner/conditional 角色、实际
@@ -1418,8 +1419,8 @@ OOD 至少覆盖未校准的 format/holder profile/count/topology、必要 featu
 
 ## 10. 联合输出保护、bleed 与预算
 
-当前 runtime 的完整安全计算晚于选定 placement；这不意味着该 placement 是唯一真实解释。
-第 9.2 节的候选可用性评估必须复用同一 footprint 与安全计算 owner，对每个保留候选形成只读评价，
+Runtime 先对保留的 placement 核算完整输出保护，再由选择和 Gate 决定整张 source 是否可输出；
+不要求 placement 是唯一真实解释。第 9.2 节的候选可用性评估复用同一 footprint 与安全计算 owner，
 使黄金标签对应真正会输出的 footprint，而不是评分专用近似框。候选评价不提交正式输出，不新增
 candidate-dependent 像素读取，不合并离散候选。最终只有被选取并获准的一份 placement 进入输出事务：
 
@@ -1440,14 +1441,21 @@ aperture 需求。输入为各 H 解释自己的 placement 和完整 native outp
 TIFF 截断和内部 lane 越界复用 native output 的同一合同，截断不能消除 requested 的预算风险。
 输入数量受原 `MAX_CROSS_PAIRS` 限制，缺项、重复、不同 W/slot/source 权限或 enclosing support 均拒绝。
 该核算只证明所给集合的需求与预算。`template_common_output` 现从同一 Cross 求解器的两种完整分组
-视图生成共同输出诊断：固定已确定的 W，完整 `CrossFit` 相同才复用；任一组支持不足、归属搜索未完整
+视图生成共同输出：固定已确定的 W，完整 `CrossFit` 相同才复用；任一组支持不足、归属搜索未完整
 结束、经过局部精修或不是直接 aperture pair 时不生成共同解释集。`local_refinement_scope_count` 记录
 实际进入的精修作用域，即使该作用域没有拟合出新线也计数；零次不代表全部物理解释已穷尽。
 每次 composition、实际或复用的 projection、逐帧输出及逐成员预算工作分别记账，继续受原 Cross pair
 及 slot 上限约束。任一成员投影失败则共同输出整体不可用，保留全部成员和失败前实际工作；超预算成员
 也完整保留。普通及开发报告保存同一诊断，校验器核对完整映射、源域和逐成员预算，不能借用原生预算。
-共同输出尚未接入选择和批准，仍须完成逐成员权限、正式选择及最终采样验证，不能把共同几何冒充某个
-native placement。
+共同输出以独立身份进入原 placement selection 和 Gate，不把任一 native 成员或 unresolved Cross 改写为
+唯一解。`CommonHOutputAuthority` 要求每个归属作用域完整结束、每个 maximal raw union 确实进入原
+Cross 输入；未搜索的作用域或数值拟合失败不能因总 receipt 为 complete 而消失。每个成员分别复用
+比例与直接 H 相容性、局部 aperture domain 和原 enclosing-support owner；后者使用原 Cross input 的
+fixed/canonical H，逐 pair 至多一次核验。存在 enclosing-support 解释时，普通 aperture 共同输出保持
+不可批准，不能借用其预算语义。逐成员检查数量受原 `MAX_CROSS_PAIRS` 限制，不新增像素查询。
+内容 veto 检查实际共同 polygon；逐边预算摘要取全部成员的最坏值，完整成员证明仍保留。Nominal Grid、
+holder fill、最终采样和报告均绑定共同身份；holder outer 覆盖每个成员的 W 区间。原生 proposal 继续用于
+诊断，不冒充共同输出。最终仍须通过原 source、预算、内容及整张 Gate；黄金仅离线比较最终 polygon。
 
 `PlacementFeasibleSet` 保留同一 observation bindings、ordinal topology、boundary use 和 placement
 identity 下仍合法的 W、未观察 Grid role、local delta 与 cross 联合状态；直接 sequence role 从自己的
@@ -1977,8 +1985,8 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   批准。检测线与人工指导线的数像素差异、或中间 H 解释尚不唯一，本身不是新增失败条件。若完整合法
   H 解释集能由同一输出覆盖，且共同输出在每个解释下都满足已有几何、预算、源域与内容保护条件，
   可以保留解释差异；不得强行选择唯一边，也不得只相对 primary 证明安全。W 后续还必须证明逐帧归属
-  与相邻关系正确。当前已有第 10 节的共同需求及逐成员预算核算，但离散 Cross 多解仍阻断正式输出，
-  尚未完成共同输出的运行时选择与批准。
+  与相邻关系正确。第 10 节的共同输出在全部成员权限闭合时可以进入原自动批准流程；这不代表 H 已完成
+  全部真实样片验收，也不授予 W 多重归属相同权限。
   接触精度研究只服务具体内切、预算超限或安全批准缺口；已直接可用的样片继续回归，不以进一步精修
   中间检测线作为未完成事项。新特征或搜索自由度必须证明实际输出收益才可进入 Runtime。
 - 人工 line、polygon 与 `source_truncated` 交集始终以原 TIFF 坐标持久化；Runtime footprint 使用

@@ -520,6 +520,18 @@ class OutputFootprint:
     def source_authority_supported(self) -> bool:
         return all(fact.source_boundary for fact in self.saturation_facts)
 
+    @property
+    def lane_id(self) -> str:
+        return self.envelope.lane_id
+
+    @property
+    def lane_ordinal(self) -> int:
+        return self.envelope.lane_ordinal
+
+    @property
+    def boundary_use(self) -> OutputBoundaryUse:
+        return self.envelope.boundary_use
+
 
 @dataclass(frozen=True)
 class DirectUseBudgetEdgeAssessment:
@@ -700,6 +712,18 @@ class CommonOutputFootprint:
     @property
     def budget_supported(self) -> bool:
         return all(member.assessment.state == EvidenceState.SUPPORTED for member in self.member_budgets)
+
+    @property
+    def lane_id(self) -> str:
+        return self.members[0].lane_id
+
+    @property
+    def lane_ordinal(self) -> int:
+        return self.members[0].lane_ordinal
+
+    @property
+    def boundary_use(self) -> OutputBoundaryUse:
+        return OutputBoundaryUse.APERTURE_PAIR
 
 
 @dataclass(frozen=True)

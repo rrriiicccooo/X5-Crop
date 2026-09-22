@@ -54,6 +54,7 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
         "output_slot_count": detection.output_slot_count,
         "slot_identities": typed_read_model(detection.output_slot_identities),
         "source_placement_proposal": typed_read_model(proposal),
+        "shared_scan_geometry": typed_read_model(selection.shared_scan_geometry),
         "source_placement_selection": {
             "state": selection.state.value,
             "failure": typed_read_model(selection.failure),
@@ -240,11 +241,11 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                 },
                 "selected_cross_boundary_use": (
                     None
-                    if lane.selected_placement is None
-                    or lane.prepared.cross_competition.best is None
-                    else lane.prepared.cross_competition.best.boundary_use.value
+                    if not lane.output_footprints
+                    else lane.output_footprints[0].boundary_use.value
                 ),
                 "common_h_output": typed_read_model(lane.common_h_output),
+                "common_h_authority": typed_read_model(lane.placement_competition.common_h_authority),
                 "selected_placement_id": (
                     None
                     if lane.selected_placement is None

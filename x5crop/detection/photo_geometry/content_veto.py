@@ -17,11 +17,12 @@ from .content_veto_model import (
     ContentVetoReason,
 )
 from .model import BoundaryAxis, BoundaryRole
+from .template_common_output import CommonHOutput
 from .template_placement import FormatPlacement
 
 
 def _strip_footprint(
-    placement: FormatPlacement,
+    placement: FormatPlacement | CommonHOutput,
     footprint: ConvexPolygon,
 ) -> StripFootprint:
     """Normalize one source-coordinate footprint to strip axes."""
@@ -36,18 +37,29 @@ def _strip_footprint(
 
 
 def content_veto_assessment(
-    placement: FormatPlacement,
+    placement: FormatPlacement | CommonHOutput,
     required_source_footprints: tuple[ConvexPolygon, ...],
     content_index: ContentTopologyIndex,
 ) -> ContentVetoAssessment:
     """Veto only when content crosses the crop after residual and bleed.
 
-    The polygons are already fixed by the unique placement.  Content cannot
-    move an edge, select a runner, or create geometry; it can only contradict
-    the complete final footprint set.
+    The polygons are already fixed by the placement or shared common output.
+    Content cannot move an edge, select a runner, or create geometry; it can
+    only contradict the complete final footprint set.
     """
 
-    if len(required_source_footprints) != placement.output_slot_count:
+    if isinstance(placement, CommonHOutput):
+        if placement.failure is not None or not placement.output_footprints:
+            raise ValueError("content veto requires a complete common H output")
+        expected_footprints = tuple(
+            output.required_source_footprint
+            for output in placement.output_footprints
+        )
+        if required_source_footprints != expected_footprints:
+            raise ValueError("content veto must assess the actual common output")
+    if (
+        len(required_source_footprints) != placement.output_slot_count
+    ):
         raise ValueError("content veto requires one final footprint per slot")
     facts: list[ContentVetoFact] = []
     footprints = tuple(

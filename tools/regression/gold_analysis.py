@@ -575,10 +575,21 @@ def _interval_distance(interval: dict[str, Any], value: float) -> float:
     return 0.0
 
 
-def _selected_placement(lane: dict[str, Any]) -> dict[str, Any] | None:
+def _selected_native_placement(lane: dict[str, Any]) -> dict[str, Any] | None:
     competition = lane["placement_competition"]
     selected_id = competition.get("selected_placement_id")
     if selected_id is None:
+        return None
+    common = lane.get("common_h_output")
+    if isinstance(common, dict) and common.get("placement_id") == selected_id:
+        if (
+            "failure" not in common
+            or "output_footprints" not in common
+            or common["failure"] is not None
+            or not common["output_footprints"]
+        ):
+            raise ValueError("selected common H output is incomplete")
+        # A common crop intentionally has no single native line to diagnose.
         return None
     matches = tuple(
         placement
@@ -610,7 +621,7 @@ def sequence_boundary_diagnostics(
             for binding in best["role_bindings"]
         ]
     )
-    selected_placement = _selected_placement(lane)
+    selected_placement = _selected_native_placement(lane)
     selected_frames = (
         () if selected_placement is None else selected_placement["frames"]
     )
@@ -713,7 +724,7 @@ def cross_boundary_diagnostics(
 ) -> tuple[dict[str, Any], ...]:
     competition = lane["cross_competition"]
     best = competition.get("best")
-    selected_placement = _selected_placement(lane)
+    selected_placement = _selected_native_placement(lane)
     selected_cross = (
         None if selected_placement is None else selected_placement["cross_fit"]
     )
@@ -809,7 +820,7 @@ def enclosing_support_aperture_center_observation(
 ) -> dict[str, Any] | None:
     """Recompute one eligible gold aperture-center offset observation."""
 
-    selected = _selected_placement(lane)
+    selected = _selected_native_placement(lane)
     if selected is None:
         return None
     cross = selected["cross_fit"]
