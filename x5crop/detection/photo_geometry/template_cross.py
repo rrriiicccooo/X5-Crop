@@ -582,9 +582,7 @@ def _select_cross_competition(
             conditional_fit_groups=fit_groups if not canonical_only else (),
         )
 
-    def unique_enclosing_support(
-        selected_pair: CrossFit | None = None,
-    ) -> CrossFit | None:
+    def unique_enclosing_support() -> CrossFit | None:
         nonlocal enclosing_support_fit, support_competition, support_checked
         if support_checked:
             return enclosing_support_fit
@@ -597,16 +595,7 @@ def _select_cross_competition(
             for item in (*top, *bottom)
             if item.enclosing_pair_id is not None
         }
-        if selected_pair is not None:
-            support_top = tuple(
-                item for item in selected_pair.direct_bindings
-                if item.role == BoundaryRole.TOP
-            )
-            support_bottom = tuple(
-                item for item in selected_pair.direct_bindings
-                if item.role == BoundaryRole.BOTTOM
-            )
-        elif explicit_pair_ids:
+        if explicit_pair_ids:
             support_top = tuple(
                 item for item in top if item.enclosing_pair_id is not None
             )
@@ -702,10 +691,9 @@ def _select_cross_competition(
 
     def support_resolution(
         receipt: CrossSearchReceipt,
-        selected_pair: CrossFit | None = None,
     ) -> tuple[CrossFitCompetition | None, CrossSearchReceipt]:
         nonlocal support_receipt_accounted
-        support_fit = unique_enclosing_support(selected_pair)
+        support_fit = unique_enclosing_support()
         evaluated = (
             0
             if support_competition is None or support_receipt_accounted
@@ -742,11 +730,7 @@ def _select_cross_competition(
         return (
             complete_resolution(
                 support_fit, None, receipt,
-                (
-                    CrossWinnerBasis.AUTHORITATIVE_PAIR_ENCLOSING_USE
-                    if selected_pair is not None
-                    else CrossWinnerBasis.UNIQUE_ENCLOSING_SUPPORT
-                ),
+                CrossWinnerBasis.UNIQUE_ENCLOSING_SUPPORT,
                 inputs.aperture_aspect_ratio_authority,
             ),
             receipt,
@@ -1312,19 +1296,9 @@ def _select_cross_competition(
         )
     resolved_aspect_ratio_authority = aspect_ratio_authority
     if best.direct_pair:
-        # The same measured pair may close both roles. Once all direct-pair
-        # competition checks above pass, a complete enclosing proof uses the
-        # observed outer lines themselves without aperture bleed. A different
-        # support pair cannot replace this independently selected aperture.
-        support_result, receipt = support_resolution(receipt, best)
-        if support_result is not None and (
-            support_result.status == CrossFitStatus.BOUND_EXCEEDED
-            or (
-                support_result.best is not None
-                and direct_pair_id(support_result.best) == direct_pair_id(best)
-            )
-        ):
-            return support_result
+        # The independently selected aperture owns its measured H. Enclosing
+        # the nominal H with the same lines does not revoke that role or turn
+        # the measured height back into a nominal centered-photo hypothesis.
         if (
             best.boundary_use == OutputBoundaryUse.APERTURE_PAIR
             and not best.conditional_family_ids

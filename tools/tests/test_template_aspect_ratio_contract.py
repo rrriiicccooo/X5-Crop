@@ -29,7 +29,7 @@ from x5crop.detection.photo_geometry.template_frame_width import (
 from x5crop.detection.photo_geometry.template_model import (
     SourceFrameWidthAuthorityBasis,
 )
-from x5crop.detection.photo_geometry.template_cross import fit_template_cross
+from x5crop.detection.photo_geometry.template_cross import calibrate_source_frame_height, fit_template_cross
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossEvidence,
     CrossFitStatus,
@@ -407,6 +407,27 @@ class TemplateAspectRatioContractTest(unittest.TestCase):
             competition.failure.gap,
             GateGap.APERTURE_ASPECT_RATIO_DIRECT_CONFLICT,
         )
+
+    def test_enclosing_capable_direct_pair_cannot_bypass_ratio_conflict(self) -> None:
+        source = _source(1.48, 1.52)
+        authority = replace(
+            _derive(source), inferred_height_px=FiniteInterval(238.0, 242.0),
+            effective_height_px=FiniteInterval(238.0, 242.0), canonical_height_px=240.0,
+        )
+        top = binding(BoundaryRole.TOP, "support-capable-top", 100.0)
+        bottom = binding(BoundaryRole.BOTTOM, "support-capable-bottom", 350.0)
+        result = fit_template_cross(TemplateCrossInput(
+            template=template(), fixed_height_px=FiniteInterval(238.0, 260.0),
+            canonical_fixed_height_px=240.0,
+            top_bindings=(replace(top, trace_position_intervals_px=(FiniteInterval.exact(100.0),) * len(top.trace_coordinates_px)),),
+            bottom_bindings=(replace(bottom, trace_position_intervals_px=(FiniteInterval.exact(350.0),) * len(bottom.trace_coordinates_px)),),
+            aperture_aspect_ratio_authority=authority,
+        ))
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertEqual(result.aperture_aspect_ratio_authority.failure_kind,
+                         ApertureAspectRatioFailureKind.DIRECT_CONFLICT)
+        self.assertTrue(result.aperture_aspect_ratio_authority.blocks_cross_resolution)
+        self.assertEqual(calibrate_source_frame_height(source, result), source)
 
     def test_missing_ratio_does_not_create_a_ratio_gate_failure(self) -> None:
         unavailable = _derive(

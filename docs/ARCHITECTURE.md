@@ -1248,9 +1248,13 @@ Normal 校验要求非空域组数量与 phase 状态对应；development 校验
 - Pair 身份已经唯一闭合：来自原 direct aperture 竞争的唯一获权 pair，或独立 support 搜索的唯一合法 pair。
 
 两侧 `boundary_use` 必须一致，禁止 aperture/support 混用。原 direct aperture 竞争已通过全部权限、反证、
-覆盖与方向检查后，若同一对 observation 同时满足上述完整 support 合同，则以原直接支撑线输出，
-记录 `authoritative_pair_enclosing_use`；它不重选 pair，不替换 native 坐标，也不声称全局只有一个
-外框解释。背景角色已获权不禁止该同一 pair 同时作为包围边界。不同 ID 的外框不得取代原唯一获权 aperture。
+覆盖与方向检查并唯一闭合后，保留 `APERTURE_PAIR` 及其实测 H；同一对线同时包住 nominal H，不撤销
+已经成立的照片边界角色，也不将实测 H 改为支撑框内的名义高度假设。该直接 H 仍须与已支持的 W/H
+比例相容，冲突保持 Review；通过后才可按原合同校准 source H。完整 raw 区间、物理线族、局部变化、
+正常 cross bleed 与逐侧预算仍由 aperture 输出 owner 保护。此顺序由边界权限决定，不比较两种用途的
+预算或黄金表现来选较容易通过的一种；不再为已唯一闭合的 pair 重做 enclosing 检查或保留相应用途状态。
+不同 ID 的外框不得取代原唯一获权 aperture。背景角色已获权仍不禁止它在 aperture 未闭合时参与完整
+enclosing 证明。
 若 aperture 只有单侧 direct anchor、另一侧依赖固定 H 推导，或者仍有多个离散 aperture 解，则
 唯一且直接证明的 enclosing pair 可以成为更强的输出 authority。Enclosing pair 不声称自己是
 照片 aperture，只证明它完整包住可接受的照片区域。
@@ -1552,7 +1556,7 @@ Enclosing support 本身只证明真实 aperture 位于两条 support 之间，�
 center_offset_ratio = (gold_aperture_center - support_midpoint) / H
 ```
 
-当前 calibration 只纳入 22 个 selected unique pair、且黄金 top/bottom 均为 `directly_visible` 的 source；
+当前 calibration 只纳入 18 个 selected unique enclosing pair、且黄金 top/bottom 均为 `directly_visible` 的 source；
 同源 count 先取中位数，再对 source hull 以 `0.001H` 向外量化，得到 `[-0.008H, +0.010H]`。Calibration
 同时绑定 development cohort SHA、eligibility revision 和精确 observation-set SHA；source 数量相同但成员、
 观测值或 detector 权限变化时同样视为 calibration drift。该 authority

@@ -1035,7 +1035,6 @@ class CrossWinnerBasis(str, Enum):
 
     ONLY_AUTHORITATIVE_FIT = "only_authoritative_fit"
     UNIQUE_ENCLOSING_SUPPORT = "unique_enclosing_support"
-    AUTHORITATIVE_PAIR_ENCLOSING_USE = "authoritative_pair_enclosing_use"
 
 
 @dataclass(frozen=True)

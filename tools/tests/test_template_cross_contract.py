@@ -3306,7 +3306,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             source,
         )
 
-    def test_same_direct_pair_uses_its_complete_enclosing_proof(self) -> None:
+    def test_unique_direct_pair_keeps_measured_height_and_complete_raw_support(self) -> None:
         inputs = aspect_input(
             template=template(),
             fixed_height_px=FiniteInterval(238.0, 260.0),
@@ -3322,29 +3322,29 @@ class TemplateCrossContractTest(unittest.TestCase):
         )
         result = fit_template_cross(inputs)
         self.assertEqual(result.status, CrossFitStatus.RESOLVED)
-        self.assertEqual(result.winner_basis, CrossWinnerBasis.AUTHORITATIVE_PAIR_ENCLOSING_USE)
+        self.assertEqual(result.winner_basis, CrossWinnerBasis.ONLY_AUTHORITATIVE_FIT)
         assert result.best is not None
-        pair = result.best.enclosing_support_pair
-        assert pair is not None
-        self.assertEqual(pair.top_full_interval_px, FiniteInterval.exact(100.0))
-        self.assertEqual(pair.bottom_full_interval_px, FiniteInterval.exact(350.0))
-        self.assertEqual(result.best.fixed_height_px, inputs.fixed_height_px)
+        self.assertEqual(result.best.boundary_use, OutputBoundaryUse.APERTURE_PAIR)
+        self.assertIsNone(result.best.enclosing_support_pair)
+        self.assertEqual(result.best.top_full_interval_px, FiniteInterval.exact(100.0))
+        self.assertEqual(result.best.bottom_full_interval_px, FiniteInterval.exact(350.0))
+        self.assertEqual(result.best.height_compatibility_px, FiniteInterval.exact(250.0))
+        self.assertEqual(result.best.fixed_height_px, FiniteInterval.exact(250.0))
         self.assertFalse(result.aperture_aspect_ratio_authority.consumed_for_cross_inference)
-        self.assertEqual(result.receipt.evaluated_fit_count, 2)
+        self.assertEqual(result.receipt.evaluated_fit_count, 1)
 
         bounded = fit_template_cross(replace(inputs, maximum_evaluated_fits=1))
-        self.assertEqual(bounded.status, CrossFitStatus.BOUND_EXCEEDED)
-        self.assertEqual(bounded.receipt.evaluated_fit_count, 2)
+        self.assertEqual(bounded.status, CrossFitStatus.RESOLVED)
+        self.assertEqual(bounded.receipt.evaluated_fit_count, 1)
 
         top = inputs.top_bindings[0]
         extra_trace = max(top.trace_coordinates_px) + 10
         complete_top = replace(top, trace_coordinates_px=(*top.trace_coordinates_px, extra_trace),
             trace_position_intervals_px=(*top.trace_position_intervals_px, FiniteInterval.exact(103.0)))
         complete = fit_template_cross(replace(inputs, top_bindings=(complete_top,)))
-        assert complete.best is not None and complete.best.enclosing_support_pair is not None
-        self.assertEqual(complete.best.enclosing_support_pair.top_trace_coordinates_px, complete_top.trace_coordinates_px)
-        self.assertEqual(complete.best.enclosing_support_pair.top_trace_intervals_px, complete_top.trace_position_intervals_px)
-        self.assertAlmostEqual(complete.best.enclosing_support_pair.top_straight_model_residual_px, 3.0)
+        assert complete.best is not None
+        self.assertEqual(complete.best.boundary_use, OutputBoundaryUse.APERTURE_PAIR)
+        self.assertEqual(complete.best.direct_bindings[0], complete_top)
         self.assertEqual(complete.best.shared_trace_support_count, result.best.shared_trace_support_count)
 
     def test_different_enclosing_pair_does_not_replace_unique_aperture(self) -> None:

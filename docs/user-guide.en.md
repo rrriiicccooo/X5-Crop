@@ -78,6 +78,11 @@ A direct top/bottom pair that already meets shared-support and longitudinal-cove
 geometry when one side gains more complete source-spanning support. A local opposite edge must still meet the existing
 coverage rules, and multiple legal pairs remain in Review.
 
+When independent evidence uniquely establishes both photo edges, the crop keeps the measured height and normal
+protective margins. Enclosing the nominal height with those same edges does not replace that measurement with an
+inferred height inside the frame. A conflict with a supported aspect-ratio constraint still requires review. When direct
+photo edges cannot be established, complete outer-support evidence can still authorize a crop under the existing budget.
+
 Short fragments of the same photo edge are retained and checked together. They may become an authorized direct boundary
 only when the complete measurement supports at least two independent regions; several photo slots covering the same
 small fragment do not add evidence strength. Unauthorized fragments remain boundary hypotheses without moving a crop
