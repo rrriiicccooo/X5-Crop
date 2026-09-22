@@ -294,15 +294,32 @@ S022 连原生解释都已超限，覆盖它的共同输出无法靠合并解决
   条件假设交给现有 Cross 后，下边内切消失，但上边前两帧仍黄金外扩超限，且独立 pair 覆盖不足。
   该组合由离线研究选出，不是运行时可以选择的 family；它证明分组是研究线索，不授权按黄金挑成员。
 - S107/S112 的可见 TOP 位于所选照片范围，整源三分区却只计为一个区域。固定已解析 W，保留所有
-  原 solver binding，仅对完整落在所选范围内的原短线重算支持，不删点、不降低两区域或外侧背景条件：
+  原 solver binding，仅对完整落在所选范围内的原短线重算支持，不删点。这里的区域数采用了更小的
+  分母，属于尚未获权的局部角色假设，并不等于保留原始两区域权限：
   S107 新增两个假设，S112 新增一个，各仅形成一个位置、方向和高度相容 pair。两者最终 H 黄金检查
   均通过；S107 第一帧 BOTTOM 仍使用 105.9% 预算，S112 的 H 预算通过。两者整张输出均因 W 外扩
   不合格。这个必要检查说明模型范围可能解决实际 H 内切，但尚缺范围权限、完整归属搜索与原反证
   投影的统一证明，不能直接批准，也不能把原整源 `search_bound_exceeded` 隐藏掉。
 
+缩范围还会改变连续性事实。原查询为 0–1000、步长 10，而原始线仅覆盖 450–550 时，整源区域数为
+1、`source_spanning_continuous=False`；把同一批原点的查询范围缩成 450–550，区域数成为 3，且
+spanning 成为 true。在没有任何 template domain 的反例中，后者会使既有纵向权限从 unavailable
+变为 supported。因此局部覆盖不能覆写全源覆盖，保留原点和原 binding 本身也不足以证明权限不变。
+这只是对错误接入方式的纯函数反例，不是生产流程发生错误自动批准的证据。
+
+对 S107/S112 恢复原始 source-spanning、连续性及 pair 层完整 query，再保留局部区域数作为未批准
+假设，逐帧 mandatory/requested/required footprint、逐边预算和黄金结论均与初次实验相同。
+S112 的 TOP/BOTTOM 最坏预算使用仍为 57.68%/24.82%，S107 的 BOTTOM 仍为 105.85%。再恢复原始
+区域数与角色权限后，两任务均无获权 direct pair。故 S112 保留为“可能改善 H 输出的范围权限缺口”，
+不计为已解决；S107 同时保留真实 H 预算失败。模型范围若要进入运行时，须独立保留原始来源事实，
+覆盖全部保留 W 解释，并对新旧原子、membership、完整性和工作量统一重放；当前必要检查未完成这些
+证明，也不支持仅缩小 query 或更改 spanning/count 字段的实现。
+
 上述研究复用原 measurement、完整短线拟合、Cross 和输出 owner，未修改生产角色或搜索合同。
 证据位于 `Test/gold_analysis/h_role_gap_20260923/`：`capture.py`、`common_probe.py`、
-`native_windows.py`、`fragment_union_probe.py`、`target_scope_probe.py` 及对应逐源 JSON。
+`native_windows.py`、`fragment_union_probe.py`、`target_scope_probe.py`、`scope_provenance_audit.py`
+及对应逐源 JSON。初次范围实验脚本保留为 `target_scope_probe_initial.py`，与旧结果中的 SHA 对应；
+修正口径的两组结果使用 `target_scope_provenance_*` 文件名，不覆盖原记录。
 后续只验证模型定义的实际输出范围能否在同一证据账本内闭合，或能否修复造成实际越界的材料分组；
 不为已满足 H 输出的情况继续追求更精确的线。本组仍不构成 H 整体验收或运行时改进的回归证明。
 
