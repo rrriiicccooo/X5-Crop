@@ -92,6 +92,7 @@ class PhysicalLineRegionContractTest(unittest.TestCase):
                 inferred[field]["minimum"] += shifts[0]
                 inferred[field]["maximum"] += shifts[1]
             lane = {
+                "common_h_output": None,
                 "observations": {"sequence_edges": [edge], "cross_height_edges": [],
                                  "broad_material_edges": []},
                 "phase_competition": {"best": fit, "runner_up": None},
