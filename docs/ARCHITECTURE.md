@@ -1096,8 +1096,16 @@ Canonical best、runner、状态与 source H 由只含 canonical binding 的视�
 anchor/opposite 或外侧角色反证，也不能通过排除另一组
 候选间接消歧。Canonical 成员、全部 raw 并集、final observation 与条件标记由运行时和开发报告双向校验。
 同一 pair owner 只枚举一次物理配对；canonical 选择和包含条件线的提案选择使用同一求解函数的两个权限视图。
-两视图的实际 fit 与单侧推导次数相加，受原 4096 总上限约束；配对枚举只计一次。条件视图至多保留一份
+两视图的实际 fit 与单侧推导次数相加，受原 4096 总上限约束；配对枚举只计一次。展示位置至多保留一份
 含条件 binding 的 Cross fit，不追加 phase 搜索、source H 校准或像素查询。
+`CrossFitCompetition.fit_groups` 和 `conditional_fit_groups` 分别保留两权限视图在离散选择前生成的
+全部 binding 分组，包括没有完整独立空间支持的组。每个 `CrossFitGroup` 保留原 fit 和该次求解的
+独立支持结果；该结果不替代 family、aspect-ratio、完整搜索、最终预算或输出权限。未进入分组阶段时
+集合为空，不能把空集合解释为搜索已完整。Best/runner/conditional 仅承担原有展示与单解选择职责，
+不得把展示数量当作合法解释总数。两集合数量合计不超过 receipt 的实际 fit 次数；超界结果不发布搜索
+前缀。分组记录复用现有 fit，不重做拟合或配对，支持身份索引与保留开销为分组数的线性上界。
+当前报告逐组核验原始 binding、物理范围、纵向 domain 及支持状态；缺字段、重复身份、无覆盖却宣称
+有独立支持或超界仍保留部分集合均拒绝。该保留机制不宣称上游解释已穷尽，也不自动批准共同输出。
 
 Raster trace 不连续不等于物理边界不同；完整并集重拟合能够成立时，跨 domain fragment 仍可属于同一条线。
 坐标邻近、方向相似、support 更多或 residual 更小都不能选择性丢弃组员。每侧原 registered run 数为 R 时，

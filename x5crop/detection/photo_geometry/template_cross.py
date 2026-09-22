@@ -34,6 +34,7 @@ from .template_cross_model import (
     CrossFailureKind,
     CrossFit,
     CrossFitCompetition,
+    CrossFitGroup,
     CrossHeightInferenceBasis,
     CrossHeightProjectionBasis,
     CrossLineProjectionBasis,
@@ -265,6 +266,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                 if item is not None and item.conditional_family_ids), None)
     return replace(
         canonical, receipt=receipt, conditional_proposal=fit,
+        conditional_fit_groups=proposed.conditional_fit_groups,
         conditional_proposal_failure_kind=(
             CrossFailureKind.FAMILY_ASSIGNMENT_UNRESOLVED if fit is not None else
             proposed.failure_kind or CrossFailureKind.PHYSICAL_GROUP_UNAVAILABLE
@@ -564,6 +566,7 @@ def _select_cross_competition(
     support_competition = None
     support_checked = False
     support_receipt_accounted = False
+    fit_groups: tuple[CrossFitGroup, ...] = ()
 
     def complete_resolution(best, runner, receipt, winner_basis, authority):
         conditional = bool(best.conditional_family_ids)
@@ -575,6 +578,8 @@ def _select_cross_competition(
             reason="Cross geometry depends on a conditional family assignment" if conditional else None,
             failure_kind=CrossFailureKind.FAMILY_ASSIGNMENT_UNRESOLVED if conditional else None,
             receipt=receipt, aperture_aspect_ratio_authority=authority,
+            fit_groups=fit_groups if canonical_only else (),
+            conditional_fit_groups=fit_groups if not canonical_only else (),
         )
 
     def unique_enclosing_support(
@@ -770,6 +775,8 @@ def _select_cross_competition(
             receipt=receipt,
             retained_proposal_basis=retained_proposal_basis,
             aperture_aspect_ratio_authority=aspect_ratio_authority,
+            fit_groups=fit_groups if canonical_only else (),
+            conditional_fit_groups=fit_groups if not canonical_only else (),
         )
 
     required_support_regions = inputs.minimum_shared_trace_support
@@ -1216,6 +1223,13 @@ def _select_cross_competition(
             )
         )
     )
+    authoritative_group_ids = {
+        (item.direct_pair, item.bound_observation_ids) for item in authoritative
+    }
+    fit_groups = tuple(
+        CrossFitGroup(item, (item.direct_pair, item.bound_observation_ids) in authoritative_group_ids)
+        for item in representative_fits
+    )
     ordered_fits = authoritative or representative_fits
     best = ordered_fits[0] if ordered_fits else None
     runner = ordered_fits[1] if len(ordered_fits) > 1 else None
@@ -1293,6 +1307,8 @@ def _select_cross_competition(
             failure_kind=CrossFailureKind.APERTURE_ASPECT_RATIO_CONFLICT,
             receipt=receipt,
             aperture_aspect_ratio_authority=blocked_aspect_ratio,
+            fit_groups=fit_groups if canonical_only else (),
+            conditional_fit_groups=fit_groups if not canonical_only else (),
         )
     resolved_aspect_ratio_authority = aspect_ratio_authority
     if best.direct_pair:
@@ -1336,6 +1352,8 @@ def _select_cross_competition(
                     aperture_aspect_ratio_authority=(
                         resolved_aspect_ratio_authority
                     ),
+                    fit_groups=fit_groups if canonical_only else (),
+                    conditional_fit_groups=fit_groups if not canonical_only else (),
                 )
     elif (
         best.height_inference_basis

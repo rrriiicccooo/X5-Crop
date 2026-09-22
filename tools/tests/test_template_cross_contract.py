@@ -263,6 +263,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertEqual(replace(
             result, receipt=canonical.receipt, conditional_proposal=None,
             conditional_proposal_failure_kind=None,
+            conditional_fit_groups=(),
         ), canonical)
         self.assertGreater(result.receipt.evaluated_fit_count, canonical.receipt.evaluated_fit_count)
         bounded = replace(base, maximum_fitted_observations=2)
@@ -271,6 +272,77 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertEqual(exceeded.status, CrossFitStatus.BOUND_EXCEEDED)
         self.assertIsNone(exceeded.best)
         self.assertIsNone(exceeded.conditional_proposal)
+
+    def test_all_supported_cross_groups_survive_display_truncation(self) -> None:
+        tops = tuple(binding(BoundaryRole.TOP, f"top-{i}", 100 + i) for i in range(4))
+        conditional = replace(binding(BoundaryRole.TOP, "conditional", 104),
+                              conditional_family_ids=("family",))
+        inputs = aspect_input(
+            template=template(), fixed_height_px=FiniteInterval(230, 250),
+            top_bindings=(*tops, conditional),
+            bottom_bindings=(binding(BoundaryRole.BOTTOM, "bottom", 340),),
+        )
+        result = fit_template_cross(inputs)
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertEqual(result.failure_kind, CrossFailureKind.NON_EQUIVALENT_FITS)
+        self.assertEqual(len(result.fit_groups), 4)
+        self.assertEqual(len(result.conditional_fit_groups), 5)
+        self.assertTrue(all(g.independently_supported for g in (*result.fit_groups, *result.conditional_fit_groups)))
+        self.assertEqual({g.fit.direct_bindings[0].observation_id for g in result.fit_groups},
+                         {b.observation_id for b in tops})
+        self.assertTrue(any(g.fit not in (result.best, result.runner_up)
+                            for g in result.fit_groups))
+        self.assertEqual(sum(bool(g.fit.conditional_family_ids) for g in result.conditional_fit_groups), 1)
+        exceeded = fit_template_cross(replace(inputs, maximum_evaluated_fits=4))
+        self.assertEqual(exceeded.status, CrossFitStatus.BOUND_EXCEEDED)
+        self.assertEqual(exceeded.fit_groups, ())
+        self.assertEqual(exceeded.conditional_fit_groups, ())
+
+    def test_retained_cross_groups_do_not_upgrade_missing_coverage(self) -> None:
+        inputs = aspect_input(
+            template=template(count=3), fixed_height_px=FiniteInterval(230, 250),
+            registered_trace_coordinates_px=(10, 15, 50, 90),
+            longitudinal_support_domain_groups_px=((FiniteInterval(0, 20), FiniteInterval(40, 60), FiniteInterval(80, 100)),),
+            top_bindings=tuple(binding(BoundaryRole.TOP, f"local-{i}", 100 + i,
+                traces=(10, 15), independent_regions=2, source_spanning=False) for i in range(3)),
+            bottom_bindings=(binding(BoundaryRole.BOTTOM, "bottom", 340,
+                traces=(10, 15), independent_regions=2, source_spanning=False),),
+        )
+        result = fit_template_cross(inputs)
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertEqual(len(result.fit_groups), 3)
+        self.assertFalse(any(g.independently_supported for g in result.fit_groups))
+        with self.assertRaisesRegex(ValueError, "repeats a binding group"):
+            replace(result, fit_groups=(*result.fit_groups, result.fit_groups[0]))
+
+    def test_cross_group_report_rejects_lost_or_upgraded_group_evidence(self) -> None:
+        from copy import deepcopy
+        from tools.regression.report_validation import _validate_cross_fit_groups
+        from x5crop.report.read_models import typed_read_model
+
+        result = fit_template_cross(aspect_input(
+            template=template(), fixed_height_px=FiniteInterval(230, 250),
+            top_bindings=tuple(binding(BoundaryRole.TOP, f"top-{i}", 100 + i) for i in range(3)),
+            bottom_bindings=(binding(BoundaryRole.BOTTOM, "bottom", 340),),
+        ))
+        record = typed_read_model(result)
+        self.assertEqual(len(_validate_cross_fit_groups(record)), 3)
+        invalid = deepcopy(record)
+        del invalid["fit_groups"]
+        with self.assertRaisesRegex(ValueError, "group list"):
+            _validate_cross_fit_groups(invalid)
+        invalid = deepcopy(record)
+        invalid["fit_groups"].append(deepcopy(invalid["fit_groups"][0]))
+        with self.assertRaisesRegex(ValueError, "repeats a binding group"):
+            _validate_cross_fit_groups(invalid)
+        invalid = deepcopy(record)
+        invalid["fit_groups"][0]["fit"]["longitudinal_projection_authority"]["state"] = "unavailable"
+        with self.assertRaisesRegex(ValueError, "independent spatial coverage"):
+            _validate_cross_fit_groups(invalid)
+        invalid = deepcopy(record)
+        invalid["status"] = CrossFitStatus.BOUND_EXCEEDED.value
+        with self.assertRaisesRegex(ValueError, "partial group set"):
+            _validate_cross_fit_groups(invalid)
 
     def test_unique_direct_pair_wins(self) -> None:
         result = fit_template_cross(

@@ -1288,8 +1288,33 @@ class CrossFit:
 
 
 @dataclass(frozen=True)
+class CrossFitGroup:
+    """One complete binding group before discrete winner selection.
+
+    Independent support is the solver's pair/anchor support result, not final
+    output authority. Conditional family dependencies remain on the fit.
+    """
+
+    fit: CrossFit
+    independently_supported: bool
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.fit, CrossFit) or type(self.independently_supported) is not bool:
+            raise TypeError("cross fit group requires a fit and support result")
+        if self.independently_supported and (
+            any(not binding.has_independent_spatial_support for binding in self.fit.direct_bindings)
+            or self.fit.longitudinal_projection_authority.state != EvidenceState.SUPPORTED
+        ):
+            raise ValueError("supported cross group lost its independent spatial coverage")
+
+
+@dataclass(frozen=True)
 class CrossFitCompetition:
-    """Best/runner-up decision; only a clearly single physical group resolves."""
+    """Discrete decision and every group evaluated by its two permission views.
+
+    Best/runner/conditional are presentation roles. The group records are not
+    truncated to those roles, and do not assert upstream search completeness.
+    """
 
     template_id: str
     best: CrossFit | None
@@ -1305,8 +1330,24 @@ class CrossFitCompetition:
     )
     conditional_proposal: CrossFit | None = None
     conditional_proposal_failure_kind: CrossFailureKind | None = None
+    fit_groups: tuple[CrossFitGroup, ...] = ()
+    conditional_fit_groups: tuple[CrossFitGroup, ...] = ()
 
     def __post_init__(self) -> None:
+        groups = (*self.fit_groups, *self.conditional_fit_groups)
+        if any(not isinstance(group, CrossFitGroup) for group in groups):
+            raise TypeError("cross competition groups must retain typed support results")
+        if any(group.fit.template_id != self.template_id for group in groups):
+            raise ValueError("cross fit group changed template identity")
+        if any(group.fit.conditional_family_ids for group in self.fit_groups):
+            raise ValueError("canonical cross groups cannot depend on conditional families")
+        if any(len({(group.fit.direct_pair, group.fit.bound_observation_ids) for group in view}) != len(view)
+               for view in (self.fit_groups, self.conditional_fit_groups)):
+            raise ValueError("cross competition repeats a binding group")
+        if len(groups) > self.receipt.evaluated_fit_count:
+            raise ValueError("cross groups exceed recorded fit work")
+        if self.status == CrossFitStatus.BOUND_EXCEEDED and groups:
+            raise ValueError("bound-exceeded cross cannot publish a partial group set")
         if self.conditional_proposal is not None and (
             not self.conditional_proposal.conditional_family_ids
             or self.conditional_proposal_failure_kind is None

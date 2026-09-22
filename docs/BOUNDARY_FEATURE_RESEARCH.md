@@ -39,8 +39,9 @@ cohort 验收，也不能用黄金标签选出 runtime winner。
 完整逐帧证据、实际预算失败及各保留角色在 `Test/gold_analysis/h_output_triage_20260921/output_triage.json`。
 
 当前连续 H 不确定性已由同一解释内部的联合状态及输出 hull 覆盖；离散解释则按绑定身份分组，并在
-`NON_EQUIVALENT_FITS` 处提前拒绝。现有 best/runner/conditional 不是完整合法解释集，且 W runner
-可能占用唯一 runner 输出槽。不能直接把展示的几个结果合并后声称已覆盖全部合法 H。
+`NON_EQUIVALENT_FITS` 处提前拒绝。运行时现已分别保存两权限视图生成的全部 `fit_groups` 与
+`conditional_fit_groups`，支持不足的组也保留原状态。Best/runner/conditional 仍只是展示角色，W runner
+可能占用唯一 runner 输出槽。完整记录这些求解器分组是共同输出的前提，不能据此声称上游合法解释已穷尽。
 
 9 个 Cross 多解或权限未闭合任务还需按真实阻断拆分：S002、S009、S015、S034、S106 的 W 尚未确定；
 S062 有向外角色反证；S068 缺少纵向覆盖权限。只有 S048、S067 同时是 W 已确定且 Cross 报告多解，

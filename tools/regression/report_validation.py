@@ -4757,6 +4757,7 @@ def _validate_development(record: dict[str, Any]) -> None:
             cross_competition.get("best"),
             cross_competition.get("runner_up"),
             conditional_cross,
+            *_validate_cross_fit_groups(cross_competition),
             *(item["cross_fit"] for item in placements),
         ):
             if cross_fit is None:
@@ -4766,6 +4767,45 @@ def _validate_development(record: dict[str, Any]) -> None:
             _validate_cross_longitudinal_projection_authority(authority)
             if authority["candidate_support_domains_px"] != expected_domains:
                 raise ValueError("Cross support domains changed retained candidate geometry")
+
+
+def _validate_cross_fit_groups(competition: dict[str, Any]) -> tuple[dict[str, Any], ...]:
+    """Validate preserved groups without granting output or completeness authority."""
+
+    all_fits = []
+    for name in ("fit_groups", "conditional_fit_groups"):
+        groups = competition.get(name)
+        if not isinstance(groups, list):
+            raise ValueError("Cross report lost its complete recorded group list")
+        identities = set()
+        for group in groups:
+            if not isinstance(group, dict) or set(group) != {"fit", "independently_supported"}:
+                raise ValueError("Cross group must retain its fit and support result")
+            fit = group["fit"]
+            supported = group["independently_supported"]
+            if not isinstance(fit, dict) or type(supported) is not bool or fit.get("template_id") != competition.get("template_id"):
+                raise ValueError("Cross group changed its template or support result")
+            direct = fit.get("direct_bindings")
+            inferred = fit.get("inferred_bindings")
+            if not isinstance(direct, list) or not direct or not isinstance(inferred, list):
+                raise ValueError("Cross group lost its binding identities")
+            identity = (fit.get("direct_pair"), tuple(b["observation_id"] for b in direct))
+            if identity in identities:
+                raise ValueError("Cross report repeats a binding group")
+            identities.add(identity)
+            if name == "fit_groups" and any(b.get("conditional_family_ids") for b in direct):
+                raise ValueError("canonical Cross group acquired conditional family authority")
+            if supported and (
+                any(b.get("independent_support_region_count", 0) < MINIMUM_INDEPENDENT_SUPPORT_REGIONS for b in direct)
+                or fit.get("longitudinal_projection_authority", {}).get("state") != EvidenceState.SUPPORTED.value
+            ):
+                raise ValueError("supported Cross group lost independent spatial coverage")
+            all_fits.append(fit)
+    if len(all_fits) > competition["receipt"]["evaluated_fit_count"]:
+        raise ValueError("Cross groups exceed recorded fit work")
+    if all_fits and competition["status"] == CrossFitStatus.BOUND_EXCEEDED.value:
+        raise ValueError("bound-exceeded Cross published a partial group set")
+    return tuple(all_fits)
 
 
 def validate_report_source_extent(record: dict[str, Any]) -> WorkspaceExtent:
