@@ -110,6 +110,34 @@ Cross canonical frame domain 也不是全部 W/phase 状态的保护域，不据
 `protected_enclosing_feasibility.json` 与 `convex_envelope_verification.json`。
 全源种子色域和简单仿射外推的替代探针亦保留原结果；它们没有同时关闭安全与留边问题，未进入运行时。
 
+#### 完整物理投影与测量线之间的弱前沿
+
+后续检查将 raw 点保护扩展为原有 `template_output._aperture_binding_positions` 的完整投影：
+相关 `PhysicalLineRegion`、既有统计 fit 保护与 raw departure 均保留。已经 source-spanning 的
+binding 使用完整源域；其它 binding 只在原 trace hull 内投影，不把单区域 fragment 外推成全源照片边。
+106 个代表请求均核对了 lane reference；物理线族继续使用各自记录的 reference，不能混用。
+此时 H 半平面检查为 53 满足、46 外扩超限、7 不可用、内切 0。
+S062/S064/S067 仍通过完整输出的求解反事实，S003 保持原 aperture；这仍不授予区域身份。
+
+新的合成反例把 5 码弱前沿限制在两条固定 trace 之间的 50 px 宽区域。稀疏 raw 保护仍会内切
+`84.5 px`，所以保留已登记 binding 不能替代二维弱信号覆盖。
+全列弱保护复用 registered measurement 的 window、gap、gradient/tone/texture 与逐 trace MAD 判据，
+在固定外侧带保留第一个 credible coordinate 的外侧半像素。直接消费原始单像素列会把片夹噪声也
+变成强制外框约束，S062/S064/S067 因而外扩超限；没有据此放宽预算。
+
+在原有 5×5 区域平均场上测量相同弱信号，同时继续保留原始 binding 和完整物理线投影后，
+上述局部弱前沿反例退到可见前沿外 `18.922 px`。全部 106 个源的研究检查为
+40 满足、59 外扩超限、7 不可用、内切 0；S062/S064/S067 的 H 半平面仍满足。
+批量计算与逐 trace 原函数进行了 7158 条逐坐标等价核验。平均场的空间核及其观测范围必须明确，
+不能声称它保留任意亚核大小的弱画面；材料资格、完整输出和生产批准仍待接入验证。
+对应产物为 `projected_dense_*.json`、`projected_enclosing_feasibility.json`、
+`localized_weak_front_counterexample.json`、`smooth_weak_*.json` 与 `smooth_weak_full.log`。
+
+`constructed_enclosure.py` 已建立独立的几何构造 owner：全部上下侧约束进入凸包，完整 raw 重检只允许
+向外浮点修正，平坦最优区间选择最小绝对转角。结果类型与 `PhysicalLineRegion` 分开，不含 observation、
+照片角色或方向权限。对应 contract test 覆盖独立 LP、完整包含、翻转、平移、工作量和错误输入。
+该模块尚未接入 detector；它是区域 producer 的构造部件，不是新增自动批准通路。
+
 ### 按最终输出重分开发任务
 
 在唯一直接 H 保留画面边界用途的修正上，以当前本机依赖执行全部 110 个任务、106 个扫描源的完整生产流程，
