@@ -37,6 +37,8 @@
 - 主目录仍保留 31 个 tracked 未暂存修改和 2 个 untracked 文件，属于此前未验收的逐 trace broad
   测量/有界关联及其报告、Gate、三维顶点去冗余配套修改。它们不是本轮片夹区域识别实现，未覆盖、
   reset 或删除。两目录即使 HEAD 相同也不是同一检测器，不混用其 receipt。
+  同步区域接入时保留恢复快照 `e276f580b53bb7e05becd75cef1c89584554cd86`；33 个文件逐一核对原字节或
+  完整增删补丁一致，合并冲突已解决，原修改恢复为未暂存。
 - 旧 `h_direct_pair_use_full_20260923` 记录 21 safe auto / 0 unsafe auto，其 detector manifest
   `9157d7ca49fee662910997fb608ef33c6a6e60b6a239bdcf9d988ac6eef296da` 与当前干净源码不同，
   只能作为历史比较。旧 broad 原型完整诊断的 16 safe auto / 0 unsafe auto 也不是当前接受结论。
@@ -98,14 +100,21 @@ source-spanning binding 才使用全源投影，其余保留原 trace hull。106
 工作量。稳定 query 摘要可跨 source identity scope 和报告进程重建；区域与稀疏查询合并检查原上限。
 106 源的 producer 实验仍为 40 满足、59 外扩超限、7 不可用、内切 0，产物为
 `registered_region_all_proposals.json`、`registered_region_all_assessment.json`；这是 H 半平面研究。
-六源 S003/S047/S062/S064/S067/S106 的正式 CLI 诊断在隔离检出
-`Test/gold_analysis/registered_exterior_20260927_six_v2` 完成，报告校验错误 0，safe auto 2、unsafe auto 0。
-新接入的完整 110-task 与工程 Hook 验证待完成，不能用六源替代完整基线。
-首次 Hook 暴露物理计划身份混入像素范围的缩放不变性失败，已分离物理计划 revision 与区域查询摘要。
-只读复核发现差分临时数组漏记，已改原地绝对值、释放跨阶段索引，并以完整维度缓冲上界独立重放；
-完整诊断因此在 S028 附近主动停止，保留日志但不作为完整结果。两项修正待正常 Hook 与正式 CLI 重验。
+接入与修正已提交至 `e8d59e39f3fc832cf8346d34f9c56d92619d63cf` 并由正常 Hook 推送 main。
+工程验证为 1026 tests、2 skipped，依赖、cohort、编译及入口检查通过。物理计划保持缩放不变，
+区域查询独立绑定像素范围；差分原地化、索引释放和 NumPy 按列归约副本均纳入完整缓冲上界与回归。
+完整正式 CLI 已完成 110/110，报告错误 0，21 safe auto / 0 unsafe auto；原方案黄金标签、预算、
+Review 原因及决定逐项与此前基线一致。产物已按字节核对保存在主目录
+`Test/gold_analysis/registered_exterior_20260927_full/`；隔离目录原件为同名加 `_v3`。
+detector manifest 为 `fe85a1ff144b0533404b1d6924a67d4f6f519443dd0d84fb250248859a9017e7`，
+comparator manifest 为 `6c7b9662525092b7b747069b168434c8fa37361774311e2cb2dc274078532bf3`。
+区域观测的生产回归已经闭合，但未增加 H 输出权限或 safe auto，尚不达到发布标准。
 亚核反例 `subkernel_weak_counterexample.json` 中，1–3 px 宽的 5 码弱前沿仍被区域框内切约 20.5 px，
 5 px 宽的对应输入安全。这个权限缺口必须在区域自动输出前关闭。
+未经平滑的 seed-relative 连续变化保护可关闭上述生成反例，但六源实验仅 1 个 H 留边满足、
+4 个超限、1 个不可用，未进入生产；记录为 `native_prefix_six_*` 和 `native_prefix_synthetic.json`。
+端部片夹变化只是部分原因，不能用现有 requested footprint 缩小保护域：它依赖旧 H，当前没有覆盖
+全 source cross、全部 W 连续状态及角点／bleed 的独立照片占用域 API，位置统计也未证明足够收益。
 
 ## 精确下一步与开放风险
 
@@ -113,8 +122,9 @@ source-spanning binding 才使用全源投影，其余保留原 trace hull。106
    失败；23 项 H 预算证明失败；9 项共同输出或权限待闭合；4 项联合角边失败；1 项长轴未生成 primary。
    新 `output_triage.json` 复用原 classifier 与 comparator，绑定本次完整运行；后续只围绕实际输出失败
    增加 H 机制，不重新泛查已有合格 H 的 40 项，不把 Review 总数当作 H 失败数。
-2. 密集区域及全列弱信号已注册并记录工作量；下一项是完成接入回归，将其与有权限的物理投影组合为
-   可核验的 constructed 输出证明。材料种子资格、完整保护及输出 Gate 权限尚未闭合。
+2. 密集区域及全列弱信号的注册、工作量、报告与完整回归已闭合。下一项以 S062/S064/S067、亮内容
+   S047、贴源边 S106 和窄弱前沿反例为最小工作集，验证可区分片夹自身变化与原生弱照片内容的材料
+   证据，再与现有物理投影组合为 constructed 输出证明。材料种子资格、完整保护及输出 Gate 权限尚未闭合。
    必须同时保留宽弱前沿和测量线之间局部弱前沿反例；5×5 平均场的亚核弱内容与真实坐标 broad
    问题仍需正反例，不把 7158 条数值等价当成材料身份验证。
    材料种子不成立时保持 unavailable。8 码、5×5、0.25 mm 是当前固定实验参数，尚未取得
