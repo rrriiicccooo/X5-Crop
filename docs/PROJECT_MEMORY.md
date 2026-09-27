@@ -101,6 +101,11 @@ source-spanning binding 才使用全源投影，其余保留原 trace hull。106
 六源 S003/S047/S062/S064/S067/S106 的正式 CLI 诊断在隔离检出
 `Test/gold_analysis/registered_exterior_20260927_six_v2` 完成，报告校验错误 0，safe auto 2、unsafe auto 0。
 新接入的完整 110-task 与工程 Hook 验证待完成，不能用六源替代完整基线。
+首次 Hook 暴露物理计划身份混入像素范围的缩放不变性失败，已分离物理计划 revision 与区域查询摘要。
+只读复核发现差分临时数组漏记，已改原地绝对值、释放跨阶段索引，并以完整维度缓冲上界独立重放；
+完整诊断因此在 S028 附近主动停止，保留日志但不作为完整结果。两项修正待正常 Hook 与正式 CLI 重验。
+亚核反例 `subkernel_weak_counterexample.json` 中，1–3 px 宽的 5 码弱前沿仍被区域框内切约 20.5 px，
+5 px 宽的对应输入安全。这个权限缺口必须在区域自动输出前关闭。
 
 ## 精确下一步与开放风险
 

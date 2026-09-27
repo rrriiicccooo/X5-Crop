@@ -122,10 +122,52 @@ class ExteriorRegionQuery:
         averages = (self.read_depth - 4) * self.trace_count
         return 2 * (
             self.read_depth * self.work_box.width + KERNEL_AREA*averages
-            + self.coordinate_count*self.trace_count
+            + (3+2*self.persistence)*self.coordinate_count*self.trace_count
             + 2*self.seed_count*self.trace_count
             + self.weak_coordinate_count*self.trace_count*(2*self.window+2)
         )
+
+    @property
+    def temporary_buffer_bound(self) -> int:
+        """Dimension-derived upper bound for live numeric buffers, replayable without pixels.
+
+        Source-gray storage and retained scalar observations are not temporary
+        measurement arrays. Each stage includes full-lane arrays still alive
+        while a streaming block is processed; integer and float buffers are 8
+        bytes, coordinate arrays 4, boolean masks 1.
+        """
+        if not self.observable:
+            return 0
+        rows, columns = self.read_depth-4, self.trace_count
+        band = self.coordinate_count*columns
+        sums = 8*rows*columns
+        # Box sum, seed statistics, colour/persistence and global departure.
+        stages = [
+            8*self.read_depth*(2*self.work_box.width-3),
+            8*(self.read_depth+rows)*columns,
+            sums+16*self.seed_count*columns+24*columns,
+            # argmax(axis=0) may copy a C-order persistent mask into an
+            # axis-contiguous buffer; include that third boolean field.
+            sums+11*band+8*self.seed_count*columns+64*columns,
+            sums+4*band+96*columns,
+        ]
+        width = min(columns, max(1, SPEC.maximum_streaming_block_pixels//rows))
+        field = 8*self.weak_coordinate_count*width
+        mask = self.weak_coordinate_count*width
+        # Full sums, color/result vectors, coordinates, and the existing
+        # gradient mask stay alive during tone/texture calculations.
+        base = sums+16*columns+4*self.weak_coordinate_count+mask
+        differences = 8*(rows-1)*width
+        stages.extend((
+            base+3*field,
+            base+2*field+mask+32*width,
+            base+8*(rows+1)*width+4*field,
+            base+2*differences,
+            base+differences+8*rows*width+4*field,
+            base+differences+2*field+mask+32*width,
+            base+mask+24*width,
+        ))
+        return max(stages)
 
 
 @dataclass(frozen=True)
@@ -185,7 +227,7 @@ class ExteriorRegionMeasurement:
         block_width = max(1, SPEC.maximum_streaming_block_pixels // (query.read_depth-4))
         if (
             work.streaming_block_count != 2*math.ceil(query.trace_count/block_width)
-            or work.peak_temporary_bytes < 8*query.read_depth*(2*query.work_box.width-3)
+            or work.peak_temporary_bytes != query.temporary_buffer_bound
         ):
             raise ValueError("exterior work lost its full streaming and buffer coverage")
         for side in self.sides:
@@ -331,10 +373,11 @@ def measure_exterior_region(field: PhotoBoundaryMeasurementField, query: Exterio
         noise = NORMAL_MAD_SCALE*np.median(np.abs(seed_values-seed), axis=0)
         peak = max(peak, sums.nbytes + 2*seed_values.nbytes + 3*seed.nbytes)
         threshold = np.maximum(KERNEL_AREA*PREFIX_ALLOWANCE_GRAY, SEED_MAD_MULTIPLIER*noise)
-        differences = np.abs(band-seed)
+        differences = band-seed
+        np.abs(differences, out=differences)
         mask = differences > threshold
         indices, available = _first_persistent(mask, query.seed_count, query.persistence)
-        peak = max(peak, sums.nbytes + differences.nbytes + 2*mask.nbytes
+        peak = max(peak, sums.nbytes + differences.nbytes + 3*mask.nbytes
                    + seed_values.size*8 + seed.nbytes + noise.nbytes + threshold.nbytes)
         del differences, mask
         color = indices.astype(float) + KERNEL_RADIUS_PX
@@ -343,10 +386,10 @@ def measure_exterior_region(field: PhotoBoundaryMeasurementField, query: Exterio
         minimum, maximum = float(seed_values.min()), float(seed_values.max())
         allowance = np.maximum(KERNEL_AREA*REGISTERED_UINT8_QUANTIZATION_STEP, SEED_MAD_MULTIPLIER*noise)
         global_mask = (band < minimum-allowance) | (band > maximum+allowance)
-        _, global_available = _first_persistent(global_mask, query.seed_count, query.persistence)
+        global_indices, global_available = _first_persistent(global_mask, query.seed_count, query.persistence)
         counts = tuple(int(np.count_nonzero(part)) for part in np.array_split(global_available, 3))
         peak = max(peak, sums.nbytes + 3*global_mask.nbytes + 8*query.trace_count*8)
-        del global_mask, global_available, seed_values, seed, noise, threshold, allowance
+        del global_mask, global_indices, global_available, seed_values, seed, noise, threshold, allowance
         weak, weak_peak, weak_blocks = _weak_prefixes(sums, query)
         peak = max(peak, weak_peak + color.nbytes)
         blocks += weak_blocks
@@ -365,8 +408,10 @@ def measure_exterior_region(field: PhotoBoundaryMeasurementField, query: Exterio
         if all(all(s.seed_departure_count_by_third) for s in sides)
         else ExteriorRegionAvailability.SEED_DEPARTURE_UNOBSERVABLE)
     count = query.trace_count
+    if peak > query.temporary_buffer_bound:
+        raise ValueError("exterior numeric buffers exceeded the registered dimension bound")
     return ExteriorRegionMeasurement(query, availability, tuple(sides), ExteriorRegionWork(
         query.query_id, count, count, 2*query.coordinate_count*count,
         2*query.weak_coordinate_count*count, 2*query.read_depth*box.width,
-        query.expected_pixel_work, blocks, peak,
+        query.expected_pixel_work, blocks, query.temporary_buffer_bound,
     ))

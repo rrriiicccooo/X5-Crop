@@ -15,7 +15,7 @@ from ...formats import (
 from ..evidence.scan_canvas import CanvasAxisScaleIntervals
 from ..source_core import SourceStripValidationDomain
 from .model import PHOTO_BOUNDARY_MEASUREMENT_SPEC, REGISTERED_NORMALIZATION_REVISION
-from .exterior_region_measurement import ExteriorRegionQuery
+from .exterior_region_measurement import EXTERIOR_REGION_REVISION, ExteriorRegionQuery
 from .source_geometry import centered_short_axis_authority_px
 from .template_measurement_plan_model import (
     MAX_CROSS_FITTED_OBSERVATIONS,
@@ -184,7 +184,7 @@ def compile_template_measurement_plan(
         "template-plan",
         REGISTERED_NORMALIZATION_REVISION,
         physical_identity,
-        exterior_region_query.query_id,
+        EXTERIOR_REGION_REVISION,
         tuple(
             (
                 item.kind.value,

@@ -342,7 +342,7 @@ def prepare_template_lane(
     )
     measurement_plan.validate_measurement_receipt(
         pixel_query_count=measurement_plan.exterior_region_query.expected_pixel_work,
-        peak_temporary_bytes=0,
+        peak_temporary_bytes=measurement_plan.exterior_region_query.temporary_buffer_bound,
     )
     # Complete and release dense pixel buffers before sparse baseline buffers
     # exist. Only scalar prefix/provenance records remain in the lane ledger.

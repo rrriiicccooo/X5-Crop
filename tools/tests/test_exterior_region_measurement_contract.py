@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import tracemalloc
 import unittest
 
 import numpy as np
@@ -37,6 +38,21 @@ def _measure(gray, *, layout="horizontal", box=None):
 
 
 class ExteriorRegionMeasurementContractTest(unittest.TestCase):
+    def test_numeric_buffer_bound_includes_numpy_axis_reduction_copies(self):
+        # This shape makes color/persistence dominate the weak streaming
+        # buffers. Non-contiguous argmax once escaped the declared bound.
+        source = np.full((2000, 12000), 200, dtype=np.uint8)
+        tracemalloc.start()
+        try:
+            result = _measure(source)
+            _current, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        # Retained scalar tuples and small Python objects are separate from
+        # temporary numeric buffers; allow their bounded object overhead.
+        scalar_allowance = 2*result.query.trace_count*32 + 512*1024
+        self.assertLessEqual(peak, result.work.peak_temporary_bytes + scalar_allowance)
+
     def test_query_identity_survives_source_scope_and_report_replay(self):
         with source_identity_scope():
             result = _measure(_source())
@@ -129,6 +145,7 @@ class ExteriorRegionMeasurementContractTest(unittest.TestCase):
             replace(result.work,completed_trace_count=1),
             replace(result.work,coordinate_sample_count=1),
             replace(result.work,query_id="other"),
+            replace(result.work,peak_temporary_bytes=8*result.query.read_depth*(2*result.query.work_box.width-3)),
         ):
             with self.assertRaises(ValueError):
                 replace(result,work=changed)

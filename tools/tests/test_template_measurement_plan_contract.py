@@ -190,6 +190,7 @@ class TemplateMeasurementPlanContractTest(unittest.TestCase):
         doubled = _plan(scale=20.0, box=Box(0, 0, 7200, 4800))
         self.assertEqual(base.physical_identity, doubled.physical_identity)
         self.assertEqual(base.plan_identity, doubled.plan_identity)
+        self.assertNotEqual(base.exterior_region_query.query_id, doubled.exterior_region_query.query_id)
         self.assertEqual(base.query_intents, doubled.query_intents)
         self.assertEqual(base.template_spec.template_id, doubled.template_spec.template_id)
         self.assertNotEqual(
