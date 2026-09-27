@@ -15,6 +15,7 @@ from ...formats import (
 from ..evidence.scan_canvas import CanvasAxisScaleIntervals
 from ..source_core import SourceStripValidationDomain
 from .model import PHOTO_BOUNDARY_MEASUREMENT_SPEC, REGISTERED_NORMALIZATION_REVISION
+from .exterior_region_measurement import ExteriorRegionQuery
 from .source_geometry import centered_short_axis_authority_px
 from .template_measurement_plan_model import (
     MAX_CROSS_FITTED_OBSERVATIONS,
@@ -172,13 +173,18 @@ def compile_template_measurement_plan(
     )
     pixel_bounds, work_bounds = _bounds_for_lane(
         lane_authority.work_box,
-        len(query_intents),
+        len(query_intents) + 1,
         count,
+    )
+    exterior_region_query = ExteriorRegionQuery(
+        lane_authority.lane_id, layout, lane_authority.work_box,
+        scale_authority.height_axis_px_per_mm.maximum, physical_identity,
     )
     plan_identity = _stable_identity(
         "template-plan",
         REGISTERED_NORMALIZATION_REVISION,
         physical_identity,
+        exterior_region_query.query_id,
         tuple(
             (
                 item.kind.value,
@@ -211,6 +217,7 @@ def compile_template_measurement_plan(
         calibrated_nominal_grid_prior=calibrated_nominal_grid_prior,
         query_intents=query_intents,
         projected_queries=projected_queries,
+        exterior_region_query=exterior_region_query,
         phase_bounds=phase_bounds,
         role_bounds=role_bounds,
         cross_bounds=cross_bounds,

@@ -12,6 +12,8 @@ from typing import Any, Union, get_args, get_origin, get_type_hints
 
 from .common_output_validation import validate_common_h_output
 from x5crop.detection.photo_geometry.template_measurement_plan_model import MAX_CROSS_PAIRS
+from x5crop.detection.photo_geometry.template_measurement_plan import _bounds_for_lane
+from x5crop.detection.photo_geometry.exterior_region_measurement import ExteriorRegionMeasurement
 from x5crop.detection.photo_geometry.template_common_output import (
     CommonHOutput, CommonHOutputAuthority, assess_common_h_output_authority,
 )
@@ -3556,10 +3558,10 @@ def _common_proof_field_types(model: type) -> dict[str, Any]:
 
 
 def _read_common_proof(value: Any, model: type) -> Any:
-    """Rehydrate only the current common-output proof roots for pure owners."""
+    """Rehydrate only explicitly allowed current evidence roots for pure owners."""
     if model not in (CommonHOutput, CommonHOutputAuthority, PhaseFitResult,
                      CrossFitCompetition, CrossRoleBinding, PhotoBoundaryObservation,
-                     SourceScanGeometry, HolderFillAssessment, FormatPlacement):
+                     SourceScanGeometry, HolderFillAssessment, FormatPlacement, ExteriorRegionMeasurement):
         raise ValueError("unsupported common-output proof root")
 
     def read(raw: Any, kind: Any) -> Any:
@@ -4731,10 +4733,45 @@ def _read_measurement_query(value: dict[str, Any]) -> PhotoBoundaryMeasurementQu
         raise ValueError("registered normalization query is invalid") from error
 
 
+def _validate_exterior_measurements(record: dict[str, Any]) -> dict[str, ExteriorRegionMeasurement]:
+    development = record["development"]
+    measurement = development["measurement"]
+    values = measurement.get("exterior_regions")
+    if not isinstance(values, list):
+        raise ValueError("registered exterior region ledger is missing")
+    source_lanes = {item["domain"]["lane_id"]: item for item in measurement["source_lanes"]}
+    lanes = {item["lane_id"]: item for item in development["lanes"]}
+    result = {}
+    for value in values:
+        region = _read_common_proof(value, ExteriorRegionMeasurement)
+        query = region.query
+        if query.lane_id in result or query.lane_id not in lanes or query.lane_id not in source_lanes:
+            raise ValueError("exterior region must be measured once per registered lane")
+        source = source_lanes[query.lane_id]
+        lane = lanes[query.lane_id]
+        extent = record["measurement"]["source_extent"]
+        long_extent = extent["width" if query.layout == "horizontal" else "height"]
+        cross_extent = extent["height" if query.layout == "horizontal" else "width"]
+        if (
+            typed_read_model(query.work_box) != source["domain"]["work_box"]
+            or query.layout != record["measurement"]["layout"]
+            or source["domain"]["source_axis_long"] != ("x" if query.layout == "horizontal" else "y")
+            or query.work_box.right > long_extent or query.work_box.bottom > cross_extent
+            or query.scale_px_per_mm != source["axis_scale_intervals"]["height_axis_px_per_mm"]["maximum"]
+            or query.registration_provenance_id + ":spec" != lane["template_spec"]["template_id"]
+        ):
+            raise ValueError("exterior region changed registered source, scale or plan provenance")
+        result[query.lane_id] = region
+    if set(result) != set(lanes):
+        raise ValueError("exterior region ledger lost a planned lane")
+    return result
+
+
 def _validate_registered_normalization(record: dict[str, Any]) -> None:
     development = record["development"]
     measurement = development["measurement"]
     domains = {item["domain"]["lane_id"]: item["domain"] for item in measurement["source_lanes"]}
+    exterior = _validate_exterior_measurements(record)
     for lane in development["lanes"]:
         lane_id = lane["lane_id"]
         members = tuple(item for item in measurement["queries"] if item["query"]["lane_id"] == lane_id)
@@ -4798,14 +4835,26 @@ def _validate_registered_normalization(record: dict[str, Any]) -> None:
                     raise ValueError("normalization baseline work receipt is incomplete")
         work = lane["measurement_work"]
         receipts = [item["coverage"] for item in members]
+        dense = exterior[lane_id].work
         if (
             work["coverage_receipts"] != receipts
-            or work["measurement_query_count"] != len(receipts)
-            or work["completed_query_count"] != sum(item["complete"] for item in receipts)
-            or work["pixel_query_count"] != sum(item["pixel_query_count"] for item in receipts)
-            or work["peak_temporary_bytes"] != max(item["peak_temporary_bytes"] for item in receipts)
+            or work["exterior_work"] != typed_read_model(dense)
+            or work["measurement_query_count"] != len(receipts) + 1
+            or work["completed_query_count"] != sum(item["complete"] for item in receipts) + 1
+            or work["pixel_query_count"] != sum(item["pixel_query_count"] for item in receipts) + dense.pixel_query_count
+            or work["peak_temporary_bytes"] != max([dense.peak_temporary_bytes, *(item["peak_temporary_bytes"] for item in receipts)])
         ):
             raise ValueError("normalization baseline work lost its lane ledger")
+        bounds, _ = _bounds_for_lane(exterior[lane_id].query.work_box, len(queries)+1, lane["template_spec"]["count"])
+        if (
+            len(queries)+1 > bounds.max_registered_queries
+            or sum(len(q.trace_positions_px) for q in queries)+dense.registered_trace_count > bounds.max_trace_positions
+            or sum(max(1, int(math.ceil(i.width))+1) for q in queries for i in q.search_intervals_px)
+                + dense.coordinate_sample_count > bounds.max_coordinate_samples
+            or work["pixel_query_count"] > bounds.max_pixel_queries
+            or work["peak_temporary_bytes"] > bounds.max_peak_temporary_bytes
+        ):
+            raise ValueError("combined sparse/exterior measurement exceeds the compiled lane budget")
 
 
 def _validate_development(record: dict[str, Any]) -> None:

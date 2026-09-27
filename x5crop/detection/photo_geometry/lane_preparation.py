@@ -17,6 +17,7 @@ from .corridors import (
     source_lane_box,
 )
 from .coarse_strip_support import observe_coarse_strip_support
+from .exterior_region_measurement import measure_exterior_region
 from .coarse_enclosing_model import (
     CoarseEnclosingTrack,
     CoarseSharedDirection,
@@ -339,6 +340,13 @@ def prepare_template_lane(
         layout=layout,
         scale_authority=scales,
     )
+    measurement_plan.validate_measurement_receipt(
+        pixel_query_count=measurement_plan.exterior_region_query.expected_pixel_work,
+        peak_temporary_bytes=0,
+    )
+    # Complete and release dense pixel buffers before sparse baseline buffers
+    # exist. Only scalar prefix/provenance records remain in the lane ledger.
+    exterior_region_measurement = measure_exterior_region(field, measurement_plan.exterior_region_query)
     coarse_support, coarse_measurement_sets = observe_coarse_strip_support(
         field,
         lane,
@@ -370,15 +378,15 @@ def prepare_template_lane(
         item.query for item in coarse_measurement_sets
     ) + queries
     measurement_plan.validate_execution(
-        registered_query_count=len(all_queries),
+        registered_query_count=len(all_queries) + 1,
         trace_position_count=sum(
             len(query.trace_positions_px) for query in all_queries
-        ),
+        ) + exterior_region_measurement.work.registered_trace_count,
         coordinate_sample_count=sum(
             max(1, int(math.ceil(interval.width)) + 1)
             for query in all_queries
             for interval in query.search_intervals_px
-        ),
+        ) + exterior_region_measurement.work.coordinate_sample_count,
     )
     precision_measurement_sets = measure_registered_queries(
         field,
@@ -655,19 +663,22 @@ def prepare_template_lane(
     )
     coverage = tuple(item.coverage for item in measurement_sets)
     work = TemplateMeasurementWorkReceipt(
-        measurement_query_count=len(coverage),
-        pixel_query_count=sum(item.pixel_query_count for item in coverage),
-        completed_query_count=sum(item.complete for item in coverage),
+        measurement_query_count=len(coverage) + 1,
+        pixel_query_count=sum(item.pixel_query_count for item in coverage) + exterior_region_measurement.work.pixel_query_count,
+        completed_query_count=sum(item.complete for item in coverage) + 1,
         peak_temporary_bytes=max(
-            (item.peak_temporary_bytes for item in coverage), default=0
+            exterior_region_measurement.work.peak_temporary_bytes,
+            *(item.peak_temporary_bytes for item in coverage),
         ),
         coverage_receipts=coverage,
+        exterior_work=exterior_region_measurement.work,
     )
     measurement_plan.validate_measurement_receipt(
         pixel_query_count=work.pixel_query_count,
         peak_temporary_bytes=work.peak_temporary_bytes,
     )
     registered = RegisteredTemplateLane(
+        exterior_region_measurement=exterior_region_measurement,
         lane=lane,
         layout=layout,
         output_slot_count=output_slot_count,

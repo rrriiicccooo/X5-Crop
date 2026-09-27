@@ -52,7 +52,7 @@
   隔离检出使用独立 inode 的 APFS TIFF 副本，源身份由正式验证核对；不用指向主目录的 Test 符号链接。
 - 此轮实际 import：Python 3.14.7、NumPy 2.5.3、SciPy 1.18.1、OpenCV 5.0.0、tifffile 2026.9.20、
   imagecodecs 2026.8.16、Pillow 12.3.0，与当前依赖合同相符。入口为 `/opt/homebrew/bin/python3`。
-- 当前合同为 report 91。已有共同 H 输出、直接 aperture 用途及预算保护均保留；
+- 当前合同为 report 92，新增独立外侧区域测量账本。已有共同 H 输出、直接 aperture 用途及预算保护均保留；
   H 尚未验收，W 与正式发布性能仍后置。
 
 ## 当前片夹区域证据
@@ -93,14 +93,23 @@ source-spanning binding 才使用全源投影，其余保留原 trace hull。106
 物理线的输出构造类型。它尚未接入 detector；不能将新增源码后的 manifest 与旧捕获混用，或把上述
 研究结果当作新增 safe auto。原完整生产基线仍是上文 21 safe auto / 0 unsafe auto。
 
+`exterior_region_measurement.py` 已接入生产注册计划、lane 测量与开发报告，但尚不授予片夹或输出权限。
+以精确 5×5 整数像素和代替浮点平滑，保留颜色前缀和全列弱信号，独立登记 query、覆盖及像素／缓冲
+工作量。稳定 query 摘要可跨 source identity scope 和报告进程重建；区域与稀疏查询合并检查原上限。
+106 源的 producer 实验仍为 40 满足、59 外扩超限、7 不可用、内切 0，产物为
+`registered_region_all_proposals.json`、`registered_region_all_assessment.json`；这是 H 半平面研究。
+六源 S003/S047/S062/S064/S067/S106 的正式 CLI 诊断在隔离检出
+`Test/gold_analysis/registered_exterior_20260927_six_v2` 完成，报告校验错误 0，safe auto 2、unsafe auto 0。
+新接入的完整 110-task 与工程 Hook 验证待完成，不能用六源替代完整基线。
+
 ## 精确下一步与开放风险
 
 1. 当前完整基线和输出分类已闭合：21 项安全 auto；19 项 H 已满足、阻断在其它部分；33 项 H 几何
    失败；23 项 H 预算证明失败；9 项共同输出或权限待闭合；4 项联合角边失败；1 项长轴未生成 primary。
    新 `output_triage.json` 复用原 classifier 与 comparator，绑定本次完整运行；后续只围绕实际输出失败
    增加 H 机制，不重新泛查已有合格 H 的 40 项，不把 Review 总数当作 H 失败数。
-2. 下一项是把密集区域、全列弱信号和有权限的物理投影组合成可核验的 typed producer。几何构造
-   owner 已落到源码；注册、像素和内存工作量、材料种子资格、report/Gate 尚未接入。
+2. 密集区域及全列弱信号已注册并记录工作量；下一项是完成接入回归，将其与有权限的物理投影组合为
+   可核验的 constructed 输出证明。材料种子资格、完整保护及输出 Gate 权限尚未闭合。
    必须同时保留宽弱前沿和测量线之间局部弱前沿反例；5×5 平均场的亚核弱内容与真实坐标 broad
    问题仍需正反例，不把 7158 条数值等价当成材料身份验证。
    材料种子不成立时保持 unavailable。8 码、5×5、0.25 mm 是当前固定实验参数，尚未取得

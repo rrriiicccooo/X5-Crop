@@ -25,6 +25,7 @@ from x5crop.detection.photo_geometry.measurement_model import (
 )
 from x5crop.detection.photo_geometry.model import BoundaryAxis, QueryPurpose
 from x5crop.detection.photo_geometry.registered_measurement import measure_registered_queries
+from x5crop.detection.photo_geometry.exterior_region_measurement import measure_exterior_region
 from x5crop.detection.photo_geometry.observation_types import BasicAxisProfile
 from x5crop.detection.photo_geometry.search_model import (
     SequenceAnchorDiscoveryDomain,
@@ -208,7 +209,12 @@ def prepared_template_lane() -> PreparedTemplateLane:
         ),
     )
     coverage = tuple(item.coverage for item in measurement_sets)
+    exterior = measure_exterior_region(
+        PhotoBoundaryMeasurementField(np.zeros((322, 2320), dtype=np.uint8), "horizontal"),
+        plan.exterior_region_query,
+    )
     registered = RegisteredTemplateLane(
+        exterior_region_measurement=exterior,
         lane=lane,
         layout="horizontal",
         output_slot_count=1,
@@ -279,11 +285,12 @@ def prepared_template_lane() -> PreparedTemplateLane:
         raw_cross_observations=(),
         cross_boundary_family_resolutions=(),
         measurement_work=TemplateMeasurementWorkReceipt(
-            len(coverage),
-            sum(item.pixel_query_count for item in coverage),
-            sum(item.complete for item in coverage),
-            max(item.peak_temporary_bytes for item in coverage),
+            len(coverage) + 1,
+            sum(item.pixel_query_count for item in coverage) + exterior.work.pixel_query_count,
+            sum(item.complete for item in coverage) + 1,
+            max(exterior.work.peak_temporary_bytes, *(item.peak_temporary_bytes for item in coverage)),
             coverage,
+            exterior_work=exterior.work,
         ),
         measurement_plan=plan,
     )

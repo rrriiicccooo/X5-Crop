@@ -234,6 +234,9 @@ residual 中重复计数。页面并标明
 `DESKEW APPLIED`、`ROTATION NOT NEEDED` 或 typed `DESKEW SKIPPED`。它只读取同次检测事实，不会
 重新求解。
 
+开发报告另记录外侧区域的颜色连续性、弱信号和测量可用状态。这些观测用于核查外侧材料；
+测量可用不代表已经识别为片夹，也不单独授权裁切。
+
 默认输出：
 
 ```text

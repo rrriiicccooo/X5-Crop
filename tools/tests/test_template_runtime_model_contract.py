@@ -218,11 +218,12 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
             prepared,
             measurement_sets=measurements,
             measurement_work=TemplateMeasurementWorkReceipt(
-                len(coverage),
-                sum(item.pixel_query_count for item in coverage),
-                sum(item.complete for item in coverage),
-                max(item.peak_temporary_bytes for item in coverage),
+                len(coverage) + 1,
+                sum(item.pixel_query_count for item in coverage) + prepared.exterior_region_measurement.work.pixel_query_count,
+                sum(item.complete for item in coverage) + 1,
+                max(prepared.exterior_region_measurement.work.peak_temporary_bytes, *(item.peak_temporary_bytes for item in coverage)),
                 coverage,
+                exterior_work=prepared.exterior_region_measurement.work,
             ),
         )
         self.assertEqual(valid.measurement_sets[-1].query.lane_id, "lane:0")
@@ -252,9 +253,10 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
             )
             coverage = tuple(item.coverage for item in measurements)
             work = TemplateMeasurementWorkReceipt(
-                len(coverage), sum(item.pixel_query_count for item in coverage),
-                sum(item.complete for item in coverage),
-                max(item.peak_temporary_bytes for item in coverage), coverage,
+                len(coverage) + 1, sum(item.pixel_query_count for item in coverage) + prepared.exterior_region_measurement.work.pixel_query_count,
+                sum(item.complete for item in coverage) + 1,
+                max(prepared.exterior_region_measurement.work.peak_temporary_bytes, *(item.peak_temporary_bytes for item in coverage)), coverage,
+                exterior_work=prepared.exterior_region_measurement.work,
             )
             with self.subTest(purpose=purpose), self.assertRaisesRegex(ValueError, "baseline"):
                 replace(prepared, measurement_sets=measurements, measurement_work=work)

@@ -245,6 +245,18 @@ placement evidence，也不能把源边未观测区域补成背景；它只提�
 `registered_normalization_revision` 绑定计划与报告身份。开发报告重建登记合同，拒绝基线缺失、额外
 边界证据、lane 范围漂移或不完整工作账本；不保留旧小窗口归一化路径。
 
+`ExteriorRegionQuery` 同时冻结 lane、方向、尺度、物理计划身份与固定外侧测量带，身份由这些字段的
+稳定摘要绑定，可跨进程回读。每侧观察短轴外侧 20% 的全部 5×5 kernel-valid 列，按原生整数像素和
+计算区域平均；没有 padding，也不假称源边两列已测。固定 8 灰度码／种子 6 MAD 的连续偏离与同一
+平均场上的全列 gradient/tone/texture 弱信号分别保留，弱信号使用现有测量尺度与判据。
+`available` 仅表示源侧种子在三个长轴分区均有可观察偏离，不证明片夹身份、照片内缘或方向。
+没有偏离的列保留 null；区域事实不生成 transition、Cross binding 或自动输出权限。
+
+该区域查询与稀疏查询共用原 lane 像素、坐标和内存上限。工作账本计入两侧读取、25 像素平均核、
+颜色比较、种子统计和弱信号窗口的逻辑样本访问；前缀和优化不减少登记成本。密集像素缓冲在稀疏
+baseline 建立前释放，峰值按实际同时存活的数组记录。开发报告保留完整逐列结果和独立 work，回读
+重建查询与覆盖、核对来源计划／尺度／lane，并核验合并工作上限；不能只验证一个自洽的汇总数字。
+
 正常片条在 outer、phase/pitch、separator topology、闭环、content 和输出预算均唯一且相容时停止。
 Registered measurement 始终 candidate-independent；每个已唯一绑定的直接 separator 可以在同一次
 O(count) 传播中约束自己的 adjacency advance，但不能触发额外像素读取、fit pass、winner-specific
@@ -1918,6 +1930,8 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `x5crop/detection/source_core.py`、`evidence/scan_canvas.py` | source/lane 与 matched-holder authority |
 | `photo_geometry/coarse_strip_support.py`、`coarse_enclosing_model.py`、`coarse_enclosing_support.py` | role-free coarse query、sharp/broad 固定 trace view、粗片带 interval、source-wide 双侧 track、pair resolution 与 receipt |
 | `photo_geometry/template_measurement_plan*.py` | pixel-free 模板、有限 query intents、停止与工作上界 |
+| `photo_geometry/exterior_region_measurement.py` | 固定外侧带的全列区域／弱信号事实、注册身份与实际工作账本；不授予片夹或输出权限 |
+| `photo_geometry/constructed_enclosure.py` | 全部约束上的有界平行外框几何构造；构造方向与实测照片方向分开 |
 | `photo_geometry/corridors.py` | 候选无关 top/bottom 与完整 `W/pitch` sequence 查询走廊 |
 | `photo_geometry/registered_*.py`、`observations.py`、`separator_*.py` | 一次性 measurement、role-free edge 与 material band |
 | `photo_geometry/cross_height_transition_measurement.py`、`broad_material_transition_measurement.py` | 同一 registered baseline 上的三区域局部弱信号与双尺度宽缓 material 测量 |

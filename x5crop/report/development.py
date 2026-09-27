@@ -111,6 +111,10 @@ def development_report_facts(
                 for lane in geometry.lane_reconstructions
                 for measurement_set in lane.prepared.measurement_sets
             ],
+            "exterior_regions": [
+                typed_read_model(lane.prepared.exterior_region_measurement)
+                for lane in geometry.lane_reconstructions
+            ],
         },
         "source_placement_selection": typed_read_model(
             geometry.source_placement_selection

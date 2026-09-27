@@ -11,6 +11,7 @@ from ..evidence.scan_canvas import CanvasAxisScaleIntervals
 from ..source_core import SourceStripValidationDomain
 from .template_model import TemplateSpec
 from .template_nominal_grid_model import CalibratedNominalGridPrior
+from .exterior_region_measurement import ExteriorRegionQuery
 
 MAX_QUERY_INTENTS = 8
 MAX_REGISTERED_QUERIES = 64
@@ -286,6 +287,7 @@ class TemplateMeasurementPlan:
     calibrated_nominal_grid_prior: CalibratedNominalGridPrior
     query_intents: tuple[TemplateQueryIntent, ...]
     projected_queries: TemplateProjectedQueryPlan
+    exterior_region_query: ExteriorRegionQuery
     phase_bounds: TemplatePhaseBounds
     role_bounds: TemplateRoleBounds
     cross_bounds: TemplateCrossBounds
@@ -346,6 +348,12 @@ class TemplateMeasurementPlan:
             or self.calibrated_nominal_grid_prior.format_id
             != self.format_spec.format_id
             or not isinstance(self.projected_queries, TemplateProjectedQueryPlan)
+            or not isinstance(self.exterior_region_query, ExteriorRegionQuery)
+            or self.exterior_region_query.lane_id != self.lane_id
+            or self.exterior_region_query.layout != self.layout
+            or self.exterior_region_query.work_box != self.lane_authority.work_box
+            or self.exterior_region_query.scale_px_per_mm != self.scale_authority.height_axis_px_per_mm.maximum
+            or self.exterior_region_query.registration_provenance_id != self.physical_identity
             or self.projected_queries.cross_baseline_interval_px != FiniteInterval(
                 float(self.lane_authority.work_box.top),
                 float(self.lane_authority.work_box.bottom - 1),

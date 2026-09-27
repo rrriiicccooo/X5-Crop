@@ -17,6 +17,7 @@ from ..gate_checks import DetectionFailureFact, TypedAssessment
 from ..source_core import SourceLaneEvidence
 from .content_veto_model import ContentVetoFact
 from .coarse_strip_support import CoarseStripSupport
+from .exterior_region_measurement import ExteriorRegionMeasurement, ExteriorRegionWork
 from .line_observations import PhotoBoundaryObservation, SideTransitionRegion
 from .measurement_model import (
     PhotoBoundaryCoverageReceipt,
@@ -91,6 +92,7 @@ class TemplateMeasurementWorkReceipt:
     completed_query_count: int
     peak_temporary_bytes: int
     coverage_receipts: tuple[PhotoBoundaryCoverageReceipt, ...]
+    exterior_work: ExteriorRegionWork | None = None
 
     def __post_init__(self) -> None:
         values = (
@@ -106,16 +108,20 @@ class TemplateMeasurementWorkReceipt:
         query_ids = tuple(item.query_id for item in self.coverage_receipts)
         if len(set(query_ids)) != len(query_ids):
             raise ValueError("measurement coverage receipts must be unique")
-        if self.measurement_query_count != len(self.coverage_receipts):
+        extra = int(self.exterior_work is not None)
+        if self.exterior_work is not None and not isinstance(self.exterior_work, ExteriorRegionWork):
+            raise TypeError("exterior measurement work must retain its separate receipt")
+        if self.measurement_query_count != len(self.coverage_receipts) + extra:
             raise ValueError("measurement receipt count must cover every query")
-        if self.pixel_query_count != sum(item.pixel_query_count for item in self.coverage_receipts):
+        if self.pixel_query_count != (sum(item.pixel_query_count for item in self.coverage_receipts)
+                + (self.exterior_work.pixel_query_count if extra else 0)):
             raise ValueError("measurement pixel receipt does not match coverage")
-        if self.completed_query_count != sum(item.complete for item in self.coverage_receipts):
+        if self.completed_query_count != sum(item.complete for item in self.coverage_receipts) + extra:
             raise ValueError("measurement completion receipt does not match coverage")
-        if self.peak_temporary_bytes != max(
-            (item.peak_temporary_bytes for item in self.coverage_receipts),
-            default=0,
-        ):
+        if self.peak_temporary_bytes != max([
+            (self.exterior_work.peak_temporary_bytes if extra else 0),
+            *(item.peak_temporary_bytes for item in self.coverage_receipts),
+        ]):
             raise ValueError("measurement peak receipt does not match coverage")
 
 
@@ -167,6 +173,7 @@ class RegisteredTemplateLane:
     ]
     measurement_work: TemplateMeasurementWorkReceipt
     measurement_plan: TemplateMeasurementPlan
+    exterior_region_measurement: ExteriorRegionMeasurement
 
     def __post_init__(self) -> None:
         if not isinstance(self.lane, SourceLaneEvidence):
@@ -180,6 +187,12 @@ class RegisteredTemplateLane:
             raise TypeError("registered template lane requires lane-local coarse support")
         if self.layout not in {"horizontal", "vertical"}:
             raise ValueError("registered template lane layout is invalid")
+        if (
+            not isinstance(self.exterior_region_measurement, ExteriorRegionMeasurement)
+            or self.exterior_region_measurement.query != self.measurement_plan.exterior_region_query
+            or self.measurement_work.exterior_work != self.exterior_region_measurement.work
+        ):
+            raise ValueError("registered lane lost its planned exterior region measurement")
         if self.output_slot_count <= 0 or self.measurement_slot_count < self.output_slot_count:
             raise ValueError("template lane slot counts are inconsistent")
         if self.width_axis == self.height_axis:

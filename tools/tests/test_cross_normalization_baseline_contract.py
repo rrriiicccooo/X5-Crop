@@ -8,7 +8,11 @@ import weakref
 
 import numpy as np
 
-from x5crop.domain import FiniteInterval, PositiveInterval
+from x5crop.domain import Box, FiniteInterval, PositiveInterval
+from x5crop.detection.photo_geometry.exterior_region_measurement import (
+    ExteriorRegionQuery, measure_exterior_region,
+)
+from x5crop.report.read_models import typed_read_model
 from x5crop.detection.photo_geometry.measurement_model import (
     PhotoBoundaryMeasurementField,
     PhotoBoundaryMeasurementQuery,
@@ -205,17 +209,22 @@ class CrossNormalizationBaselineContractTest(unittest.TestCase):
             PhotoBoundaryMeasurementField(self._source(1926), "horizontal"),
             (top, bottom, baseline, sequence, window),
         )
+        exterior = measure_exterior_region(
+            PhotoBoundaryMeasurementField(self._source(1926), "horizontal"),
+            ExteriorRegionQuery("lane:0", "horizontal", Box(0, 0, 51, 1998), 81.5144220962, "plan:test"),
+        )
         record = {
-            "measurement": {"source_extent": {"width": 51, "height": 1998}},
+            "measurement": {"layout": "horizontal", "source_extent": {"width": 51, "height": 1998}},
             "development": {
                 "measurement": {
                     "source_lanes": [{"domain": {
                         "lane_id": "lane:0", "source_axis_long": "x",
                         "work_box": {"left": 0, "top": 0, "right": 51, "bottom": 1998},
-                    }}],
+                    }, "axis_scale_intervals": {"height_axis_px_per_mm": {"maximum": 81.5144220962}}}],
                     "queries": [_measurement_set_read_model(item) for item in measured],
+                    "exterior_regions": [typed_read_model(exterior)],
                 },
-                "lanes": [{"lane_id": "lane:0"}],
+                "lanes": [{"lane_id": "lane:0", "template_spec": {"template_id": "plan:test:spec", "count": 1}}],
             },
         }
 
@@ -223,15 +232,18 @@ class CrossNormalizationBaselineContractTest(unittest.TestCase):
             receipts = [item["coverage"] for item in value["development"]["measurement"]["queries"]]
             value["development"]["lanes"][0]["measurement_work"] = {
                 "coverage_receipts": deepcopy(receipts),
-                "measurement_query_count": len(receipts),
-                "completed_query_count": sum(item["complete"] for item in receipts),
-                "pixel_query_count": sum(item["pixel_query_count"] for item in receipts),
-                "peak_temporary_bytes": max(item["peak_temporary_bytes"] for item in receipts),
+                "exterior_work": typed_read_model(exterior.work),
+                "measurement_query_count": len(receipts) + 1,
+                "completed_query_count": sum(item["complete"] for item in receipts) + 1,
+                "pixel_query_count": sum(item["pixel_query_count"] for item in receipts) + exterior.work.pixel_query_count,
+                "peak_temporary_bytes": max(exterior.work.peak_temporary_bytes, *(item["peak_temporary_bytes"] for item in receipts)),
             }
 
         relink_work(record)
         _validate_registered_normalization(record)
-        for fault in ("missing", "evidence", "axis", "lane_extent", "pixels", "memory", "ledger"):
+        for fault in ("missing", "evidence", "axis", "lane_extent", "pixels", "memory", "ledger",
+                      "region_missing", "region_duplicate", "region_column", "region_seed", "region_scale",
+                      "region_parent", "region_work"):
             invalid = deepcopy(record)
             members = invalid["development"]["measurement"]["queries"]
             raw = members[2]
@@ -253,6 +265,29 @@ class CrossNormalizationBaselineContractTest(unittest.TestCase):
                 # Even a self-consistent lane ledger cannot erase retained
                 # arrays for the other five traces in the baseline batch.
                 raw["coverage"]["peak_temporary_bytes"] = (1998 - 52) * 68
+            elif fault.startswith("region_"):
+                regions = invalid["development"]["measurement"]["exterior_regions"]
+                region = regions[0]
+                if fault == "region_missing":
+                    regions.clear()
+                elif fault == "region_duplicate":
+                    regions.append(deepcopy(region))
+                elif fault == "region_column":
+                    region["sides"][0]["color_prefix_px"].pop()
+                elif fault == "region_seed":
+                    region["sides"][0]["seed_departure_count_by_third"][0] = 999
+                elif fault == "region_work":
+                    region["work"]["pixel_query_count"] = 0
+                else:
+                    query = replace(exterior.query, **(
+                        {"scale_px_per_mm": 10.} if fault == "region_scale"
+                        else {"registration_provenance_id": "different-plan"}
+                    ))
+                    # Recomputed internally consistent facts cannot change
+                    # the registered source scale or parent plan identity.
+                    regions[0] = typed_read_model(measure_exterior_region(
+                        PhotoBoundaryMeasurementField(self._source(1926), "horizontal"), query,
+                    ))
             relink_work(invalid)
             if fault == "ledger":
                 invalid["development"]["lanes"][0]["measurement_work"]["pixel_query_count"] -= 1

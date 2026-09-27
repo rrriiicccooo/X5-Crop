@@ -277,6 +277,10 @@ counted once in its joint state rather than again as a residual. It also shows
 plus `DESKEW APPLIED`, `ROTATION NOT NEEDED`, or a typed `DESKEW SKIPPED`. It reads the same detection facts and
 never solves geometry again.
 
+The development report also records exterior color continuity, weak signals, and measurement availability.
+These observations help inspect exterior material. An available measurement does not establish holder identity
+or authorize a crop by itself.
+
 Default output:
 
 ```text
