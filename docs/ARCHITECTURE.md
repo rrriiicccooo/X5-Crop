@@ -7,6 +7,11 @@
 
 X5 Crop 是已知胶片模板的自动对准器，不是通用照片边界检测器。
 
+内容保护对象是输入 TIFF 中已经记录、可见的真实照片内容。被片夹遮挡而未记录的画面不属于恢复目标，
+不要求为它重建边界或扩大输出。已可靠识别的片夹区域可以排除；这一权限以材料识别和内缘测量成立为
+前提，不能把低纹理、颜色相似或位于 TIFF 外侧本身当作片夹身份。最终输出仍保护原 TIFF 中的可见
+内容和人工确认的源内 polygon，并满足既有逐侧留边预算。原始 TIFF 与人工 reference 保持不变。
+
 ```text
 用户 format + 用户确认 count
 → format 设计先验与 source-level W/H 模板
@@ -2106,6 +2111,9 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   `unsafe_approved_auto = 0`，以及全部 runtime calibration 的 cohort、eligibility、observation set 与登记数值
   可复算一致；`tools/verify accuracy` 薄调用同一个 release analysis owner。任何已知错误 auto 或 calibration
   drift 都使 release detection gate 失败。
+  保留开发分析产物使用 `tools/verify diagnostic --gold-analysis --output-root <path>`，可用重复的
+  `--sample-id` 进行专项诊断；该入口只薄调用同一 analysis owner，不复制验证或改变默认 `report` gate。
+  `tools/verify accuracy` 继续负责完整 release detection gate。
 - 同一分析按 source SHA 去重验证 runtime 物理先验，并分别统计同源与跨 source 的 W/H、separator gap、
   pitch，以及 scan-canvas/profile 和 top/bottom corridor。黄金红线是人工确认、尽量贴近该 source 真实
   有效成像边界的最内侧可接受基准，基本可作为 source aperture 的真实尺寸观测；因此它可以校准物理

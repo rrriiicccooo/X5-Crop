@@ -89,6 +89,9 @@ case "${1:-}" in
         if [ "${1:-}" = "--gold-boundary-features" ]; then
             shift
             "$PYTHON" -m tools.regression.gold_boundary_features "$@"
+        elif [ "${1:-}" = "--gold-analysis" ]; then
+            shift
+            "$PYTHON" -m tools.regression.gold_analysis "$@"
         else
             "$PYTHON" -m tools.regression.diagnostic_cohort "$@"
         fi

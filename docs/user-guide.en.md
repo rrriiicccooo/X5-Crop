@@ -11,6 +11,10 @@ general-purpose photo-boundary recognizer.
 Official TIFFs are written only when every slot in the source has a directly usable crop that meets the current risk-admission rules. Otherwise the
 entire source becomes `needs_review`; individual slots are never salvaged.
 
+Cropping protects photograph content already visible in the input TIFF. Image content hidden by the holder and
+absent from the TIFF is outside the recovery scope. Visible content, including tilted corners, must be retained
+within the existing margin limits.
+
 ### Format And Count
 
 Format is always required. Count may be omitted or explicit:

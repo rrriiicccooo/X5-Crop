@@ -10,6 +10,9 @@ X5 Crop 用已知 format 的设计尺寸先验建立该 source 的有界物理�
 当整张 source 的每个 slot 都有通过当前风险准入、可直接使用的裁切时，才写出正式 TIFF；否则整张进入
 `needs_review`，不单独抢救部分 slot。
 
+裁切保护输入 TIFF 中已经可见的照片内容。被片夹遮住、没有记录进 TIFF 的画面不属于恢复范围；
+可见画面及其倾斜角点仍需完整保留，留边遵守既定上限。
+
 ### Format 与 count
 
 运行时必须提供 format。Count 可省略或明确指定：
