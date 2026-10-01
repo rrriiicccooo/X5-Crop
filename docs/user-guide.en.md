@@ -192,6 +192,8 @@ Each coarse support side retains its own measured direction margin and the compl
 extra uncertainty from the opposite side from increasing its border.
 Each side also retains all accepted endpoint measurements as geometric constraints, even where the opposite side has
 no measurement. Pairing still requires the original shared-region support.
+Broad outer support retains every original measurement in its complete association path. Residuals from the representative
+line do not remove constraints; the support remains unavailable when no line satisfies all physical intervals.
 After one unique support pair is selected, a gold-calibrated aperture-centre offset interval with full uncertainty may narrow the worst-case risk;
 it does not turn support into a photo boundary. Missing calibration retains the complete physically possible centre
 range. A conflict with direct support or expansion beyond 5% keeps the source in review. A true TIFF edge explicitly

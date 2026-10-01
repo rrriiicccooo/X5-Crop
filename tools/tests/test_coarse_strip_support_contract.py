@@ -30,6 +30,7 @@ from x5crop.detection.photo_geometry.coarse_enclosing_model import (
     CoarseSupportSide,
 )
 from x5crop.detection.photo_geometry.coarse_enclosing_support import (
+    _fit_track,
     _shared_tracks,
     observe_coarse_short_axis_tracks,
 )
@@ -76,7 +77,7 @@ from x5crop.detection.source_core import (
     SourceLaneEvidence,
     SourceStripValidationDomain,
 )
-from x5crop.domain import Box, EvidenceState, FiniteInterval, ObservationId
+from x5crop.domain import Box, EvidenceState, FiniteInterval, ObservationId, PositiveInterval
 
 
 def _unavailable_enclosing_resolution() -> CoarseEnclosingResolution:
@@ -128,6 +129,80 @@ def _lane(
 
 
 class CoarseStripSupportContractTest(unittest.TestCase):
+    def test_broad_track_keeps_complete_feasible_raw_family(self) -> None:
+        measurements = make_side_measurement_set(tuple(
+            () if coordinate is None else (coordinate,)
+            for coordinate in (40.0, None, 44.0, 46.0, None, 46.0, 46.0, None, 40.0)
+        ))
+        query = replace(measurements.query,
+            boundary_axis_scale_px_per_mm=PositiveInterval(25.0, 25.0))
+        for reverse in (False, True):
+            for mirror in (False, True):
+                with self.subTest(reverse=reverse, mirror=mirror):
+                    transitions = []
+                    for raw in measurements.transitions:
+                        coordinate = 200.0 - raw.canonical_coordinate_px if mirror else raw.canonical_coordinate_px
+                        physical = FiniteInterval(39.0, 41.0) if raw.trace_ordinal == 8 else FiniteInterval(30.0, 50.0)
+                        if mirror:
+                            physical = FiniteInterval(200.0 - physical.maximum, 200.0 - physical.minimum)
+                        transitions.append(replace(raw,
+                            trace_coordinate_px=80 - raw.trace_coordinate_px if reverse else raw.trace_coordinate_px,
+                            trace_ordinal=8 - raw.trace_ordinal if reverse else raw.trace_ordinal,
+                            canonical_coordinate_px=coordinate,
+                            localization_interval_px=FiniteInterval.exact(coordinate),
+                            physical_position_interval_px=physical))
+                    transitions = tuple(sorted(transitions, key=lambda raw: raw.trace_coordinate_px))
+                    # A flat line is inside every original physical interval;
+                    # its existence does not depend on the canonical Huber fit.
+                    self.assertTrue(all(raw.physical_position_interval_px.contains(160.0 if mirror else 40.0)
+                                        for raw in transitions))
+                    track = _fit_track(query, side=CoarseSupportSide.MINIMUM,
+                        measurement_basis=CoarseEnclosingMeasurementBasis.BROAD_MATERIAL,
+                        transitions=transitions, reference_trace_px=40.0)
+                    self.assertIsNotNone(track)
+                    assert track is not None
+                    self.assertEqual(track.trace_coordinates_px, tuple(raw.trace_coordinate_px for raw in transitions))
+                    self.assertEqual(track.trace_position_intervals_px,
+                                     tuple(raw.physical_position_interval_px for raw in transitions))
+
+    def test_broad_track_cannot_repair_empty_physical_family_by_dropping_trace(self) -> None:
+        measurements = make_side_measurement_set(tuple(
+            (70.0 if index == 4 else 40.0,) for index in range(9)
+        ))
+        for reverse in (False, True):
+            for mirror in (False, True):
+                with self.subTest(reverse=reverse, mirror=mirror):
+                    transitions = tuple(sorted((replace(raw,
+                        trace_coordinate_px=80 - raw.trace_coordinate_px if reverse else raw.trace_coordinate_px,
+                        trace_ordinal=8 - raw.trace_ordinal if reverse else raw.trace_ordinal,
+                        canonical_coordinate_px=200.0 - raw.canonical_coordinate_px if mirror else raw.canonical_coordinate_px,
+                        localization_interval_px=FiniteInterval(
+                            200.0 - raw.localization_interval_px.maximum,
+                            200.0 - raw.localization_interval_px.minimum) if mirror else raw.localization_interval_px,
+                        physical_position_interval_px=FiniteInterval(
+                            200.0 - raw.physical_position_interval_px.maximum,
+                            200.0 - raw.physical_position_interval_px.minimum) if mirror else raw.physical_position_interval_px,
+                    ) for raw in measurements.transitions), key=lambda raw: raw.trace_coordinate_px))
+                    broad = _fit_track(measurements.query, side=CoarseSupportSide.MINIMUM,
+                        measurement_basis=CoarseEnclosingMeasurementBasis.BROAD_MATERIAL,
+                        transitions=transitions, reference_trace_px=40.0)
+                    self.assertIsNone(broad)
+                    sharp = _fit_track(measurements.query, side=CoarseSupportSide.MINIMUM,
+                        measurement_basis=CoarseEnclosingMeasurementBasis.SHARP_TRANSITION,
+                        transitions=transitions, reference_trace_px=40.0)
+                    self.assertIsNotNone(sharp)
+                    assert sharp is not None
+                    self.assertEqual(len(sharp.trace_coordinates_px), 8)
+                    self.assertNotIn(40, sharp.trace_coordinates_px)
+
+    def test_broad_track_cannot_select_one_of_multiple_points_on_same_trace(self) -> None:
+        measurements = make_side_measurement_set(tuple(
+            (40.0, 41.0) if index == 4 else (40.0,) for index in range(9)
+        ))
+        self.assertIsNone(_fit_track(measurements.query, side=CoarseSupportSide.MINIMUM,
+            measurement_basis=CoarseEnclosingMeasurementBasis.BROAD_MATERIAL,
+            transitions=measurements.transitions, reference_trace_px=40.0))
+
     def test_shared_direction_retains_unpaired_side_measurements(self) -> None:
         pixels = np.full((322, 2320), 255, dtype=np.uint8)
         pixels[35:290, 260:2060] = 80

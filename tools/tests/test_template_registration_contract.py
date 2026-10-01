@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from tools.regression.report_validation import (
+    _validate_coarse_broad_support_track,
     _validate_cross_direct_support_regions,
     _validate_cross_fit_binding_support,
     _validate_cross_measurement_support,
@@ -66,6 +67,40 @@ def _lattice() -> PhaseLatticeAuthority:
 
 
 class TemplateRegistrationContractTest(unittest.TestCase):
+    def test_report_coarse_broad_track_keeps_complete_raw_constraints(self) -> None:
+        measurement = make_side_measurement_set(((40.0, 160.0),) * 9)
+        raw = [{**typed_read_model(item),
+                "background_side": "left" if item.canonical_coordinate_px == 40.0 else "right"}
+               for item in measurement.transitions]
+        paths = [[item["transition_id"] for item in raw if item["canonical_coordinate_px"] == coordinate]
+                 for coordinate in (40.0, 160.0)]
+        records = [{
+            "query": {**typed_read_model(measurement.query), "purpose": "coarse_strip_short"},
+            "broad_material_transitions": raw,
+            "broad_material_association": {"paths": paths},
+        }]
+        for side, coordinate in (("minimum", 40.0), ("maximum", 160.0)):
+            with self.subTest(side=side):
+                members = [item for item in raw if item["canonical_coordinate_px"] == coordinate]
+                track = {"side": side, "measurement_basis": "broad_material",
+                         "trace_coordinates_px": [item["trace_coordinate_px"] for item in members],
+                         "trace_position_intervals_px": [item["physical_position_interval_px"] for item in members]}
+                _validate_coarse_broad_support_track(track, "lane:0", records)
+                dropped = deepcopy(track)
+                dropped["trace_coordinates_px"].pop(0)
+                dropped["trace_position_intervals_px"].pop(0)
+                with self.assertRaisesRegex(ValueError, "complete association"):
+                    _validate_coarse_broad_support_track(dropped, "lane:0", records)
+                narrowed = deepcopy(track)
+                narrowed["trace_position_intervals_px"][0] = {"minimum": coordinate, "maximum": coordinate}
+                with self.assertRaisesRegex(ValueError, "complete association"):
+                    _validate_coarse_broad_support_track(narrowed, "lane:0", records)
+                wrong_background = deepcopy(records)
+                for item in wrong_background[0]["broad_material_transitions"]:
+                    item["background_side"] = "right" if side == "minimum" else "left"
+                with self.assertRaisesRegex(ValueError, "complete association"):
+                    _validate_coarse_broad_support_track(track, "lane:0", wrong_background)
+
     @staticmethod
     def _role_scoped_registration(
         roles: tuple[BoundaryRole, ...],
@@ -576,6 +611,7 @@ class TemplateRegistrationContractTest(unittest.TestCase):
     def test_report_binds_extra_coarse_tracks_without_aperture_authority(self) -> None:
         tracks = [{
             "observation_id": identity,
+            "measurement_basis": "sharp_transition",
             "trace_coordinates_px": [0.0, 50.0, 100.0],
             "independent_support_region_count": 3,
             "trace_position_intervals_px": [{"minimum": 20.0, "maximum": 21.0}] * 3,

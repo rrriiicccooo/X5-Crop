@@ -472,8 +472,11 @@ trace，broad channel 使用 9 条固定 trace（每个长轴区域 3 条），�
 long-axis broad standalone edge 都只保留为 observation；它可能是照片内部构图线，不能单独取得 outer 或
 phase authority。
 
+Broad 每侧保留完整 association path 的全部原始物理约束，不以 canonical Huber 代表线的残差删除成员，
+也不从同一 trace 的多个点选择较有利子集；完整物理直线域为空时拒绝该支撑。Sharp 保留既有孤立
+噪点过滤。开发报告逐侧回链完整 broad path 的实际 trace 和原物理区间，拒绝删点或缩窄区间。
 共同 trace 只负责 midpoint 方向拟合、原三区域与连续性配对条件；每侧几何保留 `_fit_track` 最终
-retained 的全部测量，不因另一侧缺少同 trace 而删除自身约束，也不重新纳入已拒绝点。两侧完整 raw
+retained 的全部测量，不因另一侧缺少同 trace 而删除自身约束。两侧完整 raw
 各自的物理斜率区间求交，并以共同斜率约束各自 reference 位置；每侧 observed 原样保留，不传播
 另一侧额外误差。Source shared summary 的 trace 恰为两侧 intersection，observed 为两侧 hull，
 canonical/fit/full 与两侧一致。Coarse 到 registered binding 再到 retained fit 的 raw 与 observed

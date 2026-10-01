@@ -187,44 +187,52 @@ def _fit_track(
         query.boundary_axis_scale_px_per_mm.maximum,
         PHOTO_BOUNDARY_MEASUREMENT_SPEC,
     )
-    predicted = np.asarray(
-        [
-            fitted.slope * point.trace + fitted.intercept
-            for point in fitted.selected_points
-        ],
-        dtype=np.float64,
-    )
-    interval_distance = np.asarray(
-        [
-            max(
-                point.transition.physical_position_interval_px.minimum
-                - value,
-                0.0,
-                value
-                - point.transition.physical_position_interval_px.maximum,
-            )
-            for point, value in zip(
+    if measurement_basis == CoarseEnclosingMeasurementBasis.BROAD_MATERIAL:
+        # Association already closed one point per trace on the complete
+        # physical line domain. A canonical representative cannot discard
+        # those constraints or repair an incompatible family by taking a subset.
+        retained = fitted.selected_points
+        if len(retained) != len(transitions):
+            return None
+    else:
+        predicted = np.asarray(
+            [
+                fitted.slope * point.trace + fitted.intercept
+                for point in fitted.selected_points
+            ],
+            dtype=np.float64,
+        )
+        interval_distance = np.asarray(
+            [
+                max(
+                    point.transition.physical_position_interval_px.minimum
+                    - value,
+                    0.0,
+                    value
+                    - point.transition.physical_position_interval_px.maximum,
+                )
+                for point, value in zip(
+                    fitted.selected_points,
+                    predicted,
+                    strict=True,
+                )
+            ],
+            dtype=np.float64,
+        )
+        inlier_threshold = (
+            PHOTO_BOUNDARY_MEASUREMENT_SPEC.inlier_minimum_threshold_mm
+            * query.boundary_axis_scale_px_per_mm.maximum
+        )
+        inlier_mask = interval_distance <= inlier_threshold
+        retained = tuple(
+            point
+            for point, keep in zip(
                 fitted.selected_points,
-                predicted,
+                inlier_mask,
                 strict=True,
             )
-        ],
-        dtype=np.float64,
-    )
-    inlier_threshold = (
-        PHOTO_BOUNDARY_MEASUREMENT_SPEC.inlier_minimum_threshold_mm
-        * query.boundary_axis_scale_px_per_mm.maximum
-    )
-    inlier_mask = interval_distance <= inlier_threshold
-    retained = tuple(
-        point
-        for point, keep in zip(
-            fitted.selected_points,
-            inlier_mask,
-            strict=True,
+            if bool(keep)
         )
-        if bool(keep)
-    )
     traces = tuple(int(point.trace) for point in retained)
     if (
         len(retained) < SPATIAL_SUPPORT_REGION_COUNT

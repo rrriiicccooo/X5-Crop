@@ -1104,6 +1104,34 @@ def _read_membership_receipt(value: Any) -> MembershipReceipt | None:
                              tuple(map(ObservationId, value['original_observation_ids'])))
 
 
+def _validate_coarse_broad_support_track(
+    track: dict[str, Any], lane_id: str, query_records: list[dict[str, Any]],
+) -> None:
+    """Match a broad coarse side to a complete registered association path."""
+
+    if track["measurement_basis"] != "broad_material":
+        return
+    background = "left" if track["side"] == "minimum" else "right"
+    for record in query_records:
+        query = record["query"]
+        if query["lane_id"] != lane_id or query["purpose"] != QueryPurpose.COARSE_STRIP_SHORT.value:
+            continue
+        raw = {item["transition_id"]: item for item in record["broad_material_transitions"]}
+        association = record["broad_material_association"]
+        for path in (() if association is None else association["paths"]):
+            members = sorted((raw[identity] for identity in path), key=lambda item: item["trace_coordinate_px"])
+            traces = [item["trace_coordinate_px"] for item in members]
+            if (
+                track["trace_coordinates_px"] == traces
+                and track["trace_position_intervals_px"] == [item["physical_position_interval_px"] for item in members]
+                and all(item["background_side"] == background for item in members)
+                and len({item["polarity"] for item in members}) == 1
+                and broad_material_trace_support_qualified(tuple(query["trace_positions_px"]), tuple(traces))
+            ):
+                return
+    raise ValueError("coarse broad support leaves its complete association")
+
+
 def _validate_cross_measurement_support(
     lane: dict[str, Any], query_records: list[dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
@@ -1160,6 +1188,7 @@ def _validate_cross_measurement_support(
             raise ValueError("Cross coarse shared observed direction lost its side provenance")
         pair_id = f"coarse-enclosing-pair:{minimum['observation_id']}:{maximum['observation_id']}"
         for role, track in (("top", minimum), ("bottom", maximum)):
+            _validate_coarse_broad_support_track(track, lane["lane_id"], query_records)
             identity = track["observation_id"]
             binding = registered.get(identity)
             # Final-H classification may reject the coarse pair entirely.
