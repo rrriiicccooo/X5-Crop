@@ -25,8 +25,9 @@ from ...formats import OUTPUT_PROTECTION_SPEC
 from ..source_core import SourceLaneEvidence
 from .axis_layout import axis_interval, source_axes
 from .broad_material_transition_measurement import (
-    measure_broad_material_transition_regions,
+    measure_broad_material_transitions,
 )
+from .broad_material_association import associate_registered_broad_material
 from .corridors import source_lane_box
 from .coarse_enclosing_model import (
     CoarseEnclosingResolution,
@@ -207,8 +208,8 @@ def _sparse_positions(values: tuple[int, ...], maximum: int = 5) -> tuple[int, .
 
 def _coarse_short_trace_lattices(
     values: tuple[int, ...],
-) -> tuple[tuple[int, ...], tuple[int, ...], tuple[int, ...]]:
-    """Return one registered union and the two fixed channel views."""
+) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    """Return the broad lattice and its fixed five-trace sharp view."""
 
     sharp_positions = _sparse_positions(
         values,
@@ -218,14 +219,15 @@ def _coarse_short_trace_lattices(
         values,
         maximum=COARSE_BROAD_REGION_TRACE_COUNT,
     )
-    registered = tuple(sorted({*sharp_positions, *broad_positions}))
+    # round(k*(N-1)/4) equals broad ordinal 2*k on the nine-trace lattice.
+    # For N <= 9 the broad lattice already contains every source trace.
+    registered = broad_positions
     ordinal_by_position = {
         position: ordinal for ordinal, position in enumerate(registered)
     }
     return (
         registered,
         tuple(ordinal_by_position[value] for value in sharp_positions),
-        tuple(ordinal_by_position[value] for value in broad_positions),
     )
 
 
@@ -282,7 +284,7 @@ def registered_coarse_support_queries(
     source_box = source_lane_box(lane, layout)
     projected = measurement_plan.projected_queries
     long_traces = _sparse_positions(projected.sequence_trace_positions_px)
-    short_traces, _sharp_ordinals, _broad_ordinals = (
+    short_traces, _sharp_ordinals = (
         _coarse_short_trace_lattices(
             projected.cross_trace_positions_px,
         )
@@ -704,7 +706,6 @@ def observe_coarse_strip_support(
     (
         registered_short_traces,
         sharp_trace_ordinals,
-        broad_trace_ordinals,
     ) = _coarse_short_trace_lattices(
         measurement_plan.projected_queries.cross_trace_positions_px,
     )
@@ -727,15 +728,16 @@ def observe_coarse_strip_support(
         )
     )
     broad_regions, broad_temporary = (
-        measure_broad_material_transition_regions(
+        measure_broad_material_transitions(
             short_measurement.query,
             short_trace_measurements,
-            trace_ordinals=broad_trace_ordinals,
         )
     )
+    broad_association = associate_registered_broad_material(short_measurement.query, broad_regions)
     short_measurement = replace(
         short_measurement,
         broad_material_transitions=broad_regions,
+        broad_material_association=broad_association,
     )
     measurements = (long_measurement, short_measurement)
     work = lane.domain.work_box
@@ -776,7 +778,9 @@ def observe_coarse_strip_support(
                 peak_temporary_bytes=max(
                     aggregate_temporary,
                     short_trace_temporary,
-                    broad_temporary,
+                    short_trace_temporary + broad_temporary,
+                    short_trace_temporary + (0 if broad_association is None
+                                             else broad_association.temporary_numeric_bytes),
                 ),
             ),
         ),

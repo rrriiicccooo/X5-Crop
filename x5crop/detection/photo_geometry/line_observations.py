@@ -317,7 +317,7 @@ class PhotoBoundaryObservation:
 class TransitionRegionMeasurementBasis(str, Enum):
     DIRECT_TRACE = "direct_trace"
     CROSS_HEIGHT_AGGREGATE = "cross_height_aggregate"
-    BROAD_MATERIAL_AGGREGATE = "broad_material_aggregate"
+    BROAD_MATERIAL_TRACE = "broad_material_trace"
 
 
 @dataclass(frozen=True)

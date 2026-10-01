@@ -73,7 +73,7 @@ class ProfileRun:
 class BoundaryEdgeMeasurementBasis(str, Enum):
     DIRECT_TRACE = "direct_trace"
     CROSS_HEIGHT_AGGREGATE = "cross_height_aggregate"
-    BROAD_MATERIAL_AGGREGATE = "broad_material_aggregate"
+    BROAD_MATERIAL_TRACE = "broad_material_trace"
     DIRECT_WITH_AGGREGATE = "direct_with_aggregate"
 
 
@@ -325,7 +325,7 @@ class SeparatorMaterialPolarity(str, Enum):
 class SeparatorBandMeasurementBasis(str, Enum):
     DIRECT_TRACE = "direct_trace"
     CROSS_HEIGHT_AGGREGATE = "cross_height_aggregate"
-    BROAD_MATERIAL_AGGREGATE = "broad_material_aggregate"
+    BROAD_MATERIAL_TRACE = "broad_material_trace"
 
 
 class SeparatorMaterialRegionState(str, Enum):

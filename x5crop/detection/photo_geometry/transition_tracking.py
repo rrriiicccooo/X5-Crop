@@ -23,11 +23,14 @@ from .model import (
 )
 from .measurement_model import PhotoBoundaryMeasurementSet
 from .cross_height_transition_measurement import spatial_region_trace_ordinals
+from .broad_material_transition_measurement import broad_material_trace_support_qualified
+from .broad_material_association import BroadAssociationState
 from .line_observations import (
     SideTransitionRegion,
     TransitionRegionMeasurementBasis,
 )
 from .physical_identity import physical_observation_id
+from .robust_line_fit import physical_line_region
 
 
 @dataclass
@@ -197,7 +200,7 @@ def _track_transition_regions(
             ),
         )
     )
-    if measurement_basis != TransitionRegionMeasurementBasis.DIRECT_TRACE:
+    if measurement_basis == TransitionRegionMeasurementBasis.CROSS_HEIGHT_AGGREGATE:
         trace_lattices = {
             item.query.trace_positions_px for item in measurement_sets
         }
@@ -250,121 +253,134 @@ def _track_transition_regions(
         math.radians(spec.maximum_measurable_line_angle_degrees)
     )
 
-    def same_aggregate_material_state(
-        point: TransitionPoint,
-        last: TransitionPoint,
-    ) -> bool:
-        if measurement_basis == TransitionRegionMeasurementBasis.DIRECT_TRACE:
-            return True
-        if point.transition.polarity != last.transition.polarity:
-            return False
-        if (
-            measurement_basis
-            == TransitionRegionMeasurementBasis.BROAD_MATERIAL_AGGREGATE
-        ):
-            return (
-                point.transition.background_side
-                == last.transition.background_side
-            )
-        return True
-
-    active: list[_SideTrack] = []
-    completed: list[_SideTrack] = []
-    for trace in queried_traces:
-        trace_index = trace_to_index[trace]
-        current = sorted(
-            by_trace.get(trace, ()),
-            key=lambda point: (
-                point.coordinate,
-                str(point.transition.transition_id),
-            ),
-        )
-        eligible: list[_SideTrack] = []
-        for track in active:
-            if (
-                trace_index - track.last_trace_index
-                <= spec.maximum_missing_lattice_steps + 1
-            ):
-                eligible.append(track)
-            else:
-                completed.append(track)
-        active = eligible
-        connected_points: set[int] = set()
-        gaps = tuple(
-            sorted(
-                {
-                    trace_index - track.last_trace_index
-                    for track in active
-                }
-            )
-        )
-        # A contiguous track owns the first reciprocal-nearest opportunity.
-        # A track using the single permitted missing step may only consume a
-        # transition left unmatched by the contiguous class.  This prevents
-        # one ambiguous fork from leaving an older ghost track that blocks
-        # the same physical edge on every later trace.
-        for gap in gaps:
-            track_indices = tuple(
-                index
-                for index, track in enumerate(active)
-                if trace_index - track.last_trace_index == gap
-            )
-            proposed_by_point: dict[int, list[tuple[float, int]]] = (
-                defaultdict(list)
-            )
-            nearest_by_track: dict[int, int | None] = {}
-            for track_index in track_indices:
-                track = active[track_index]
-                last = track.points[-1]
-                allowance = (
-                    abs(float(trace) - last.trace) * maximum_slope
-                    + connection_px
-                )
-                distances = [
-                    (abs(point.coordinate - last.coordinate), point_index)
-                    for point_index, point in enumerate(current)
-                    if point_index not in connected_points
-                    and same_aggregate_material_state(point, last)
-                    and abs(point.coordinate - last.coordinate)
-                    <= allowance + 1.0e-12
+    if measurement_basis == TransitionRegionMeasurementBasis.BROAD_MATERIAL_TRACE:
+        completed = []
+        for measurement in measurement_sets:
+            association = measurement.broad_material_association
+            if association is None:
+                continue
+            if association.state != BroadAssociationState.COMPLETE:
+                return ()
+            for path in association.paths:
+                points = [
+                    TransitionPoint(
+                        transition_by_id[str(identity)],
+                        float(transition_by_id[str(identity)].trace_coordinate_px),
+                        transition_by_id[str(identity)].coordinate_px,
+                    )
+                    for identity in path
+                    if transition_by_id[str(identity)].trace_coordinate_px in trace_to_index
                 ]
-                nearest = _unique_nearest(distances, tie_tolerance)
-                nearest_by_track[track_index] = nearest
-                if nearest is not None:
-                    distance = abs(
-                        current[nearest].coordinate - last.coordinate
-                    )
-                    proposed_by_point[nearest].append(
-                        (distance, track_index)
-                    )
-            nearest_track_by_point = {
-                point_index: _unique_nearest(proposals, tie_tolerance)
-                for point_index, proposals in proposed_by_point.items()
-            }
-            for track_index in track_indices:
-                point_index = nearest_by_track[track_index]
+                if points:
+                    completed.append(_SideTrack(points, trace_to_index[int(points[-1].trace)]))
+    else:
+        def same_aggregate_material_state(
+            point: TransitionPoint,
+            last: TransitionPoint,
+        ) -> bool:
+            if measurement_basis == TransitionRegionMeasurementBasis.DIRECT_TRACE:
+                return True
+            if point.transition.polarity != last.transition.polarity:
+                return False
+            return True
+
+        active: list[_SideTrack] = []
+        completed: list[_SideTrack] = []
+        for trace in queried_traces:
+            trace_index = trace_to_index[trace]
+            current = sorted(
+                by_trace.get(trace, ()),
+                key=lambda point: (
+                    point.coordinate,
+                    str(point.transition.transition_id),
+                ),
+            )
+            eligible: list[_SideTrack] = []
+            for track in active:
                 if (
-                    point_index is not None
-                    and nearest_track_by_point.get(point_index)
-                    == track_index
+                    trace_index - track.last_trace_index
+                    <= spec.maximum_missing_lattice_steps + 1
                 ):
-                    active[track_index].points.append(current[point_index])
-                    active[track_index].last_trace_index = trace_index
-                    connected_points.add(point_index)
-        for point_index, point in enumerate(current):
-            if point_index not in connected_points:
-                active.append(_SideTrack([point], trace_index))
-        still_active: list[_SideTrack] = []
-        for track in active:
-            if (
-                trace_index - track.last_trace_index
-                <= spec.maximum_missing_lattice_steps
-            ):
-                still_active.append(track)
-            else:
-                completed.append(track)
-        active = still_active
-    completed.extend(active)
+                    eligible.append(track)
+                else:
+                    completed.append(track)
+            active = eligible
+            connected_points: set[int] = set()
+            gaps = tuple(
+                sorted(
+                    {
+                        trace_index - track.last_trace_index
+                        for track in active
+                    }
+                )
+            )
+            # A contiguous track owns the first reciprocal-nearest opportunity.
+            # A track using the single permitted missing step may only consume a
+            # transition left unmatched by the contiguous class.  This prevents
+            # one ambiguous fork from leaving an older ghost track that blocks
+            # the same physical edge on every later trace.
+            for gap in gaps:
+                track_indices = tuple(
+                    index
+                    for index, track in enumerate(active)
+                    if trace_index - track.last_trace_index == gap
+                )
+                proposed_by_point: dict[int, list[tuple[float, int]]] = (
+                    defaultdict(list)
+                )
+                nearest_by_track: dict[int, int | None] = {}
+                for track_index in track_indices:
+                    track = active[track_index]
+                    last = track.points[-1]
+                    allowance = (
+                        abs(float(trace) - last.trace) * maximum_slope
+                        + connection_px
+                    )
+                    distances = [
+                        (abs(point.coordinate - last.coordinate), point_index)
+                        for point_index, point in enumerate(current)
+                        if point_index not in connected_points
+                        and same_aggregate_material_state(point, last)
+                        and abs(point.coordinate - last.coordinate)
+                        <= allowance + 1.0e-12
+                    ]
+                    nearest = _unique_nearest(distances, tie_tolerance)
+                    nearest_by_track[track_index] = nearest
+                    if nearest is not None:
+                        distance = abs(
+                            current[nearest].coordinate - last.coordinate
+                        )
+                        proposed_by_point[nearest].append(
+                            (distance, track_index)
+                        )
+                nearest_track_by_point = {
+                    point_index: _unique_nearest(proposals, tie_tolerance)
+                    for point_index, proposals in proposed_by_point.items()
+                }
+                for track_index in track_indices:
+                    point_index = nearest_by_track[track_index]
+                    if (
+                        point_index is not None
+                        and nearest_track_by_point.get(point_index)
+                        == track_index
+                    ):
+                        active[track_index].points.append(current[point_index])
+                        active[track_index].last_trace_index = trace_index
+                        connected_points.add(point_index)
+            for point_index, point in enumerate(current):
+                if point_index not in connected_points:
+                    active.append(_SideTrack([point], trace_index))
+            still_active: list[_SideTrack] = []
+            for track in active:
+                if (
+                    trace_index - track.last_trace_index
+                    <= spec.maximum_missing_lattice_steps
+                ):
+                    still_active.append(track)
+                else:
+                    completed.append(track)
+            active = still_active
+        completed.extend(active)
 
     # One local segment needs at least two distinct traces.  Repeated support
     # belongs to the later physical-family owner; it must not be demanded here
@@ -390,6 +406,10 @@ def _track_transition_regions(
         if (
             len(set(traces)) < minimum_support
             or independent_regions < minimum_independent_support_regions
+            or (
+                measurement_basis == TransitionRegionMeasurementBasis.BROAD_MATERIAL_TRACE
+                and not broad_material_trace_support_qualified(queried_traces, traces)
+            )
         ):
             continue
         mean_gradient_z = (
@@ -404,7 +424,7 @@ def _track_transition_regions(
             / len(points)
         )
         if measurement_basis == (
-            TransitionRegionMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+            TransitionRegionMeasurementBasis.BROAD_MATERIAL_TRACE
         ):
             qualified_strength = (
                 independent_regions == SPATIAL_SUPPORT_REGION_COUNT
@@ -419,21 +439,37 @@ def _track_transition_regions(
             )
         if not qualified_strength:
             continue
-        projected = tuple(
-            provisional_cross_projection_interval(
-                point.transition.localization_interval_px,
-                trace_coordinate_px=point.trace,
-                reference_trace_px=reference_trace_px,
-                maximum_angle_degrees=(
-                    spec.maximum_measurable_line_angle_degrees
-                ),
-                numeric_uncertainty_px=connection_px,
+        if measurement_basis == TransitionRegionMeasurementBasis.BROAD_MATERIAL_TRACE:
+            # Association already proved this complete raw family feasible.
+            # Localization peaks may curve within wide physical intervals;
+            # maximum localization coverage cannot discard those raw facts or
+            # turn a competing family into a shorter, more convenient one.
+            physical = physical_line_region(
+                tuple((point.trace, point.transition.physical_position_interval_px)
+                      for point in points),
+                maximum_slope,
+                reference_trace_px,
             )
-            for point in points
-        )
-        coverage, alternatives = _maximum_coverage_intervals(projected)
-        if coverage < minimum_support or not alternatives:
-            continue
+            if physical is None:
+                continue
+            alternatives = ((frozenset(range(len(points))),
+                             physical.project(reference_trace_px)),)
+        else:
+            projected = tuple(
+                provisional_cross_projection_interval(
+                    point.transition.localization_interval_px,
+                    trace_coordinate_px=point.trace,
+                    reference_trace_px=reference_trace_px,
+                    maximum_angle_degrees=(
+                        spec.maximum_measurable_line_angle_degrees
+                    ),
+                    numeric_uncertainty_px=connection_px,
+                )
+                for point in points
+            )
+            coverage, alternatives = _maximum_coverage_intervals(projected)
+            if coverage < minimum_support or not alternatives:
+                continue
         # Preserve every equal maximum-coverage line as a distinct physical
         # alternative.  Template fitting may resolve it with W, H, ordinal and
         # the other axis; lexical order may not choose one here.
@@ -444,7 +480,13 @@ def _track_transition_regions(
                 queried_traces,
                 selected_traces,
             )
-            if independent_count < minimum_independent_support_regions:
+            if (
+                independent_count < minimum_independent_support_regions
+                or (
+                    measurement_basis == TransitionRegionMeasurementBasis.BROAD_MATERIAL_TRACE
+                    and not broad_material_trace_support_qualified(queried_traces, selected_traces)
+                )
+            ):
                 continue
             transition_ids = tuple(
                 sorted(
@@ -569,16 +611,18 @@ def track_broad_material_transition_regions(
     boundary_axis_scale_px_per_mm: PositiveInterval,
     spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
 ) -> tuple[SideTransitionRegion, ...]:
-    """Track only three-region, two-scale material observations."""
+    """Consume each query's recorded association without merging lattices."""
 
-    return _track_transition_regions(
-        measurement_sets,
-        reference_trace_px=reference_trace_px,
-        boundary_axis_scale_px_per_mm=boundary_axis_scale_px_per_mm,
-        support_interval_px=None,
-        minimum_independent_support_regions=SPATIAL_SUPPORT_REGION_COUNT,
-        spec=spec,
-        measurement_basis=(
-            TransitionRegionMeasurementBasis.BROAD_MATERIAL_AGGREGATE
-        ),
+    return tuple(
+        region
+        for measurement in measurement_sets
+        for region in _track_transition_regions(
+            (measurement,),
+            reference_trace_px=reference_trace_px,
+            boundary_axis_scale_px_per_mm=boundary_axis_scale_px_per_mm,
+            support_interval_px=None,
+            minimum_independent_support_regions=SPATIAL_SUPPORT_REGION_COUNT,
+            spec=spec,
+            measurement_basis=TransitionRegionMeasurementBasis.BROAD_MATERIAL_TRACE,
+        )
     )

@@ -65,6 +65,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
         edges = build_sequence_edge_observations(
             profile,
             {str(item.transition_id): item for item in values},
+            queried_trace_coordinates_px=profile.trace_coordinates_px,
             reference_trace_px=200.0,
             boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
             measurement_basis=BoundaryEdgeMeasurementBasis.DIRECT_TRACE,
@@ -91,6 +92,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
         edges = build_sequence_edge_observations(
             profile,
             {str(item.transition_id): item for item in inconsistent},
+            queried_trace_coordinates_px=profile.trace_coordinates_px,
             reference_trace_px=200.0,
             boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
             measurement_basis=BoundaryEdgeMeasurementBasis.DIRECT_TRACE,
@@ -148,6 +150,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
         edges = build_sequence_edge_observations(
             BasicAxisProfile("sequence", 300, traces, (run,)),
             {str(item.transition_id): item for item in values},
+            queried_trace_coordinates_px=traces,
             reference_trace_px=150.0,
             boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
             measurement_basis=BoundaryEdgeMeasurementBasis.DIRECT_TRACE,
@@ -793,6 +796,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
         edges = build_sequence_edge_observations(
             profile,
             transitions,
+            queried_trace_coordinates_px=profile.trace_coordinates_px,
             reference_trace_px=50.0,
             boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
             measurement_basis=BoundaryEdgeMeasurementBasis.DIRECT_TRACE,

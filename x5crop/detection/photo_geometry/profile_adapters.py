@@ -37,7 +37,7 @@ def _region_anchor_qualified(
         >= spec.tone_or_texture_z_minimum
         and (
             region.measurement_basis
-            == TransitionRegionMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+            == TransitionRegionMeasurementBasis.BROAD_MATERIAL_TRACE
             or region.mean_gradient_z >= spec.gradient_z_minimum
         )
     )
@@ -47,7 +47,7 @@ def _region_anchor_qualified(
         >= MINIMUM_INDEPENDENT_SUPPORT_REGIONS
         and (
             region.measurement_basis
-            != TransitionRegionMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+            != TransitionRegionMeasurementBasis.BROAD_MATERIAL_TRACE
             or region.independent_support_region_count
             == SPATIAL_SUPPORT_REGION_COUNT
         )
@@ -103,14 +103,14 @@ def sequence_profile_from_regions(
                         and (
                             region.measurement_basis
                             == TransitionRegionMeasurementBasis
-                            .BROAD_MATERIAL_AGGREGATE
+                            .BROAD_MATERIAL_TRACE
                             or region.mean_gradient_z
                             >= spec.gradient_z_minimum
                         )
                         and (
                             region.measurement_basis
                             != TransitionRegionMeasurementBasis
-                            .BROAD_MATERIAL_AGGREGATE
+                            .BROAD_MATERIAL_TRACE
                             or region.independent_support_region_count
                             == SPATIAL_SUPPORT_REGION_COUNT
                         )

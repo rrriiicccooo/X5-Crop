@@ -1,6 +1,7 @@
 """Derive CandidateGate facts from bounded template reconstruction."""
 
 from __future__ import annotations
+from .broad_material_association import BroadAssociationState
 
 from ...domain import EvidenceState
 from ..gate_checks import (
@@ -48,6 +49,11 @@ def build_template_gate(
     )
     bounds_valid = all(
         not lane.work.bound_exceeded
+        and all(
+            item.broad_material_association is None
+            or item.broad_material_association.state == BroadAssociationState.COMPLETE
+            for item in lane.prepared.measurement_sets
+        )
         and lane.prepared.phase_competition.status
         != PhaseFitStatus.BOUND_EXCEEDED
         and lane.prepared.cross_competition.status

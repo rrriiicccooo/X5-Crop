@@ -42,6 +42,7 @@ def _measurement_set_read_model(measurement_set: object) -> dict[str, object]:
         "broad_material_transitions": typed_read_model(
             measurement_set.broad_material_transitions
         ),
+        "broad_material_association": typed_read_model(measurement_set.broad_material_association),
     }
 
 

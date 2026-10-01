@@ -351,22 +351,66 @@ texture 上界时才为 `supported`；否则明确为 `tone_unresolved` 或 `mat
 ### 6.3 跨高度 aggregate 与宽缓 material boundary
 
 `SEQUENCE_BASELINE` 只生成一次全长灰度测量，`SEQUENCE_ANCHOR_WINDOW` 只切出已经登记的坐标与
-transition ownership。它固定分成三个高度区域，并产生两种互不冒充的 typed aggregate：
+transition ownership。它固定分成三个高度区域，并保留两种互不冒充的测量来源：
 
 - `CROSS_HEIGHT_AGGREGATE` 在原有局部 signed gradient、tone 与 texture 上联合弱信号；
-- `BROAD_MATERIAL_AGGREGATE` 同时使用 `0.25 mm` 与 `0.50 mm` 两个物理尺度的 signed tone、两侧
+- `BROAD_MATERIAL_TRACE` 在每条真实 trace 上同时使用 `0.25 mm` 与 `0.50 mm` 两个物理尺度的 signed tone、两侧
   texture 与 material uniformity。两个尺度必须保持相同 polarity，同一侧必须在两个尺度上都是更均匀的
   background，完整 tone contrast 下界还必须高于该侧 texture 上界与 uint8 量化步长。
 
-每个 broad 高度区域内部要求多数 trace 支持同一 polarity 与 background side；三个高度区域还必须在
+Broad 不再将不同 trace 的 tone 求均值后冒充代表点坐标：不等对比度会移动聚合峰，甚至在真实直线
+边界上排除代表 trace 的真实位置。每份 `BroadMaterialTraceObservation` 的 canonical、localization、
+physical interval、polarity 和 background 均来自同一个实际采样峰，并绑定原 query/trace/空间区域。
+关联消费完整固定 lattice，沿用原缺测步长、连接距离、方向上限、polarity 与 background 相容条件。
+每条路径每个 trace 至多一个真实峰，并逐点裁剪同一位置/斜率物理可行域；不存在共同直线的路径不成立。
+保留全部满足支持条件的极大 raw 集合；两个互不包含的解释不能因长度、距离、强度或输出质量而互相淘汰。
+每个 broad 高度区域内部要求多数真实 trace 支持同一
+polarity 与 background side；分母始终是该区域全部 registered traces，缺测不能缩小分母。
+最终拟合裁点后再次检查三区域多数；区域存在、平坦贡献线和另一种材料峰不能代替真实点支持。
+三个高度区域还必须在
 位置区间、方向区间、polarity 和 background side 上一致。宽缓通道不伪造 gradient，不降低局部 edge
 阈值，也不扩大既有 query、transition ownership、local measurement halo 或 TIFF 读取。它只复用已经
-完整登记的全长 baseline；新增数组和计算完整进入 work/RSS receipt。
+完整登记的全长 baseline；新增数组和计算完整进入工作量检查。峰提取的数值 scratch 保守计入每坐标
+64 bytes，并与同时保留的 trace 缓冲相加；该数值缓冲预算不冒充进程 RSS。固定 trace 上的全部峰各
+提取一次。原 cross-height 弱梯度聚合与 sharp 最近邻跟踪保持独立。
+
+`broad_material_association.py` 在测量完成时对每个 query 运行一次，reference 为完整 lattice 两端的中点；
+后续跟踪只消费 receipt 中的路径。先按原连接规则划分连通分量，再以深度优先顺序检查路径；分量没有
+独立投票或角色权限。遍历从逐 trace 峰数序列较小的一端开始，只调度搜索，不选择完成后的解释。
+三个 registered 区域沿网格连续排列；初始有向连接图逐区域闭合 quota，以每个端点当前区域的最大
+prefix/suffix 支撑数筛去不可能属于合格路径的 raw。该筛选只证明原连接条件下的支持，不授予物理
+直线权限。后续在同一 raw 宇宙中，以同 trace 多峰、断开的相邻连接或共同物理域为空建立冲突分支。
+单调必选 raw 只缩小分支；物理不可能性证书向外保守扩张，最终可行性仍由原闭集半平面 owner 判断。
+只有完整可能 raw 宇宙包含于一份已证明可行且合格的路径时，才省略该分支；这只排除严格子集，
+不选择两个非包含解释。末尾可选分支复用当前栈帧，每次递归都必选一个新 trace。完成后保留全部
+合格的包含极大集合，包括较短的非包含解释。
+
+每份 query 的 P 是全部实际 broad 峰数，T 是完整 registered trace 数，不按局部边界裁小预算输入。
+点对检查、半平面顶点距离计算及 raw 成员检查合计最多 `5P²`，每次操作前预留额度；三区域 quota 检查
+另按实际 seed、extension 与完成路径次数计数。搜索深度至多 `min(P,T)`，完成的极大路径至多 P，
+raw mask 按实际 Python limb 操作计费，物理点对缓存至多 P 项；不缓存邻接矩阵或峰组合笛卡尔积。
+Mask 使用正数包含／排除运算，初始移位计入进位 limb。每个活动栈帧独立预留临时索引空间；递归前
+释放分组数据，只保留已计量的候选池、分支序列与必要状态。跨分量存活的点对缓存按 key 和两个
+端点共三个数值槽纳入动态上限，新条目写入前预留；不能用当前分量的临时空间代替全局缓存计量。
+记录搜索深度、完成路径数、索引引用和 polygon 顶点峰值；索引与
+顶点分别按 8/16 bytes，输入索引结构按 `64P + 80T` bytes 保守计入数值缓冲，再与同时保留的测量数组
+相加。该新前端工作合同独立于 Cross/phase 的已有上限，后续拟合仍受原有上限约束。
+既有 `sequence_edge_families.py` 仍可合并共享 raw 的完整片段，必须保留全部来源区域的原始并集，
+满足同一条物理线、连续支持及每个 trace 唯一峰；不能拼接互斥路径的任意子集。最终 edge 回链允许
+原关联路径的拟合子集或该已证明的完整区域并集，不能把合法 family 合并误判为新增测量。
+超界 receipt 保留完整输入身份和已执行工作，清空全部关联路径；原始测量仍保留，但该 lane 不能
+取得 selected placement，Gate 的 producer coverage 失败。报告校验从同一 raw ledger 重放有界关联，
+核对完整结果、工作与最终 edge 回链；它不重新读像素或选择 detector 方案。
+
+完整 broad 路径进入 physical region 时，保留原路径全部 raw，以共同物理直线域投影 reference 位置。
+定位峰在各自较宽的物理区间内可以弯曲；不得再按定位区间的最大重叠数裁点，避免隐藏已经成立的
+竞争解释。Source region 必须回链到一份完整关联路径；后续 edge 拟合可以保留合格子集，仍须满足
+原三区域多数及完整来源合同。
 
 宽缓定位峰的尾部探查还必须在双尺度 `observable` 域内闭合；域外占位零值不是已观察到的信号回落。
 这项完整性检查与局部峰共用当前测量 owner，不扩大窗口、补读像素或创造缺边反证。
 
-两类 aggregate 都不知道 role、ordinal 或 placement。`aggregate_edge_support.py` 是 edge resolution 与
+两类测量都不知道 role、ordinal 或 placement。`aggregate_edge_support.py` 是 edge resolution 与
 separator pair 投影的唯一 owner：
 
 | aggregate 与既有 edge/material 的关系 | typed resolution | 权限 |
@@ -428,6 +472,9 @@ retained 的全部测量，不因另一侧缺少同 trace 而删除自身约束�
 另一侧额外误差。Source shared summary 的 trace 恰为两侧 intersection，observed 为两侧 hull，
 canonical/fit/full 与两侧一致。Coarse 到 registered binding 再到 retained fit 的 raw 与 observed
 逐侧精确回链；单侧新增 trace 不增加共同支撑数或配对权限。
+Broad 的支撑坐标就是实际 retained trace，不再用区域全部参与线充当连续性证据。Sequence broad edge
+也必须回链到同一 query 的实际峰，保留原区域分母及完整物理线域；无方向 edge 不免除来源检查。
+Runtime 与当前报告都拒绝旧区域点 schema、虚构空间区域、跨 query 混合及不满足多数的最终成员。
 
 ### 6.4 Cross observation
 
@@ -1591,8 +1638,11 @@ cross 预算，但不改变正式采样 geometry。
 Support 的共享斜率属于同一个 `JointFrameState`，已经进入该状态的 boundary line 与联合 footprint。
 完整状态保留 `(top, bottom, slope)` 三维可行集合；不能只投影两个位置后保留任意一个斜率解。
 两侧各自在 native 位置、共同方向与自身完整 retained raw 区间加既有 straight residual 内裁出完整直线参数多边形，
-合并全部斜率断点并逐断点保留两侧位置端点的同斜率组合。每个 placement 只计算一次，再仿射平移到
-各 Frame 的 reference；原 32 状态与 64 极值计算上限不变，超界保持不可用。
+合并全部斜率断点，先按每断点四种组合检查原 64 次计算上限。共同斜率域端点保留全部组合；
+内部断点只保留至少一侧位置是该侧多边形顶点的组合。两侧都处于边内部的组合是同一对仿射边
+两端组合的凸组合，不是三维极点；删除它们不改变完整可行域，不使用 epsilon 合并邻近斜率或短边。
+每个 placement 只计算一次，再仿射平移到各 Frame 的 reference；原 32 个保留状态上限不变，
+真实顶点仍超界时保持不可用。完整积顶点的输出与风险覆盖依据本节后文的分别凸性证明。
 `EnclosingSupportPair` 分别保存两侧 trace/interval 数组，逐侧与 direct binding 完全相等；共同支撑数
 仍为两侧 intersection。Straight residual 按完整本侧 raw 与原生中心重算，不能因方向收紧直接删除。
 每侧 N 个 raw interval 的半平面裁剪为 `O(N²)` 工作、`O(N)` 临时空间，不新增 TIFF query。
@@ -1935,7 +1985,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/constructed_enclosure.py` | 全部约束上的有界平行外框几何构造；构造方向与实测照片方向分开 |
 | `photo_geometry/corridors.py` | 候选无关 top/bottom 与完整 `W/pitch` sequence 查询走廊 |
 | `photo_geometry/registered_*.py`、`observations.py`、`separator_*.py` | 一次性 measurement、role-free edge 与 material band |
-| `photo_geometry/cross_height_transition_measurement.py`、`broad_material_transition_measurement.py` | 同一 registered baseline 上的三区域局部弱信号与双尺度宽缓 material 测量 |
+| `photo_geometry/cross_height_transition_measurement.py`、`broad_material_transition_measurement.py`、`broad_material_association.py` | 同一 registered baseline 上的三区域局部弱信号、逐线双尺度宽缓 material 测量及有界完整关联 |
 | `photo_geometry/aggregate_edge_support.py`、`outer_material.py` | aggregate edge 的唯一解析、相关证据去重、完整三区域 separator pair 投影，以及最外侧窄材料带对首张 START / 末张 END 的内侧边界假设；窄带不否定外侧 edge 的独立权限 |
 | `photo_geometry/template_separator_support.py` | 共享 physical edge 的 separator band connected component、唯一相关 evidence group、source-wide pair 原子角色权限与 typed component failure；不读取像素或选择 placement |
 | `photo_geometry/template_contact.py` | candidate-independent `ContactEdgeObservation`：从既有 authoritative edge ledger 证明唯一共享 physical edge，不读取像素或选择 ordinal |

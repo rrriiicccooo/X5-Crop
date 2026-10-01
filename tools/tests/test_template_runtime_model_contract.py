@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from dataclasses import replace
 from contextlib import ExitStack
-import numpy as np
 import unittest
 from unittest.mock import patch
+
+import numpy as np
 
 from tools.tests.template_runtime_test_support import (
     prepared_template_lane as _prepared,
@@ -20,8 +21,15 @@ from tools.tests.template_test_support import (
 from x5crop.detection.gate_checks import GateGap, TypedAssessment, failure_fact
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.evidence.content_occupancy_model import ContentOccupancyObservationSet
-from x5crop.detection.photo_geometry.detector import _materialize_placement_proposal, reconstruct_photo_geometry
-from x5crop.detection.photo_geometry.measurement_model import PhotoBoundaryMeasurementField
+from x5crop.detection.photo_geometry.detector import (
+    _materialize_placement_proposal, reconstruct_photo_geometry,
+)
+from x5crop.detection.photo_geometry.measurement_model import (
+    PhotoBoundaryMeasurementField, BroadMaterialTraceObservation, MaterialBackgroundSide,
+)
+from x5crop.detection.photo_geometry.broad_material_association import (
+    BroadAssociationResult, BroadAssociationState, BroadAssociationWork,
+)
 from x5crop.detection.photo_geometry.template_acceptability_features import (
     PLACEMENT_FEATURE_DEFINITIONS,
     build_placement_acceptability_features,
@@ -182,6 +190,57 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
         self.assertEqual(lane.work.proposal_projection_count, 1)
         self.assertEqual(lane.work.proposal_output_evaluation_count, 0)
 
+    def test_broad_association_bound_withholds_otherwise_selected_winner(self) -> None:
+        from x5crop.domain import FiniteInterval, ObservationId
+
+        prepared = _prepared()
+        measured = prepared.measurement_sets[-1]
+        query = measured.query
+        raw = BroadMaterialTraceObservation(
+            ObservationId("broad:bound"), query.query_id, 0, 0, query.trace_positions_px[0],
+            5.0, FiniteInterval(4.5, 5.5), FiniteInterval(4.0, 6.0), (0.25, 0.5),
+            (8.0, 8.0), 8.0, 6.0, 1.0, 10.0, 20.0, 1.0, 5.0, 1,
+            MaterialBackgroundSide.LEFT, 1.0, 8.0, 1.0,
+        )
+        # Inject the producer's typed failure at the measurement-to-selection
+        # boundary. Enumeration tests independently exercise a real bound.
+        association = BroadAssociationResult(
+            BroadAssociationState.BOUND_EXCEEDED, (raw.transition_id,), query.trace_positions_px,
+            float(query.trace_positions_px[0]), (), BroadAssociationWork(), "charged_work_bound",
+        )
+        measured = replace(measured, broad_material_transitions=(raw,), broad_material_association=association)
+        prepared = replace(prepared, measurement_sets=(*prepared.measurement_sets[:-1], measured),
+                           transition_by_id={str(raw.transition_id): raw})
+        template = placement_template(1)
+        placement = placement_compose(template, placement_sequence(template),
+            placement_cross(template, direction=placement_direction()), lane_id="lane:0")
+        competition = TemplatePlacementCompetition(
+            (placement,), placement.placement_id, None, EvidenceState.SUPPORTED, None)
+        content = ContentOccupancyObservationSet("lane:0", (), None, None, 0, 0, 0, None, None)
+        owner = "x5crop.detection.photo_geometry.detector."
+        with ExitStack() as stack:
+            for name, value in (
+                ("resolve_output_slots", ResolvedOutputSlots((1,))),
+                ("prepare_template_lane", prepared),
+                ("_shared_geometry", placement.source_scan_geometry),
+                ("_placements", (placement, None, None)),
+                ("select_lane_template_placement", competition),
+            ):
+                stack.enter_context(patch(owner + name, return_value=value))
+            result = reconstruct_photo_geometry(
+                PhotoBoundaryMeasurementField(np.zeros((322, 2320), dtype=np.uint8), "horizontal"),
+                (prepared.lane,), (content,), layout="horizontal",
+                configuration=get_detection_configuration("135"), resolved_slot_count=None,
+            )
+        lane = result.lane_reconstructions[0]
+        self.assertIsNone(lane.selected_placement)
+        self.assertEqual(result.output_footprints, ())
+        self.assertEqual(lane.prepared.measurement_sets[-1].broad_material_transitions, (raw,))
+        self.assertEqual(result.source_placement_selection.failure.gap, GateGap.PRODUCER_BOUND_EXCEEDED)
+        for name in ("observation_completeness", "producer_coverage"):
+            self.assertEqual(result.assessment_facts[name].failure.gap, GateGap.PRODUCER_BOUND_EXCEEDED)
+        with self.assertRaisesRegex(ValueError, "incomplete broad association"):
+            replace(lane, selected_placement=placement)
 
     def test_prepared_lane_is_fitted_and_mapping_is_frozen(self) -> None:
         prepared = _prepared()
@@ -208,6 +267,58 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
                     ),
                 }
             )
+
+    def test_source_broad_region_cannot_drop_a_complete_path_member(self) -> None:
+        from tools.tests.test_broad_material_association_contract import _broad_point
+        from x5crop.detection.photo_geometry.broad_material_association import associate_registered_broad_material
+        from x5crop.detection.photo_geometry.registered_measurement import measure_registered_queries
+        from x5crop.detection.photo_geometry.transition_tracking import track_broad_material_transition_regions
+
+        prepared = _prepared()
+        traces = tuple(range(0, 81, 10))
+        queries = tuple(
+            replace(measured.query, trace_positions_px=traces,
+                search_intervals_px=measured.query.search_intervals_px * len(traces),
+                transition_ownership_intervals_px=(
+                    measured.query.transition_ownership_intervals_px * len(traces)))
+            if measured.query.purpose in {
+                QueryPurpose.SEQUENCE_BASELINE, QueryPurpose.SEQUENCE_ANCHOR_WINDOW,
+            } else measured.query
+            for measured in prepared.measurement_sets[2:]
+        )
+        measurements = (*prepared.measurement_sets[:2], *measure_registered_queries(
+            PhotoBoundaryMeasurementField(np.zeros((322, 2320), dtype=np.uint8), "horizontal"),
+            queries, registration_start=2,
+        ))
+        query = measurements[-1].query
+        raw = tuple(_broad_point(traces, ordinal, 5.0, query_id=query.query_id).transition
+                    for ordinal in range(len(traces)))
+        measured = replace(measurements[-1], broad_material_transitions=raw,
+            broad_material_association=associate_registered_broad_material(query, raw))
+        measurements = (*measurements[:-1], measured)
+        coverage = tuple(item.coverage for item in measurements)
+        work = replace(prepared.measurement_work, coverage_receipts=coverage,
+            pixel_query_count=(sum(item.pixel_query_count for item in coverage)
+                               + prepared.exterior_region_measurement.work.pixel_query_count),
+            peak_temporary_bytes=max(prepared.exterior_region_measurement.work.peak_temporary_bytes,
+                                     *(item.peak_temporary_bytes for item in coverage)))
+
+        def regions(item):
+            return track_broad_material_transition_regions((item,), reference_trace_px=40.0,
+                boundary_axis_scale_px_per_mm=query.boundary_axis_scale_px_per_mm)
+
+        prepared = replace(prepared, measurement_sets=measurements, measurement_work=work,
+            transition_by_id={str(item.transition_id): item for item in raw},
+            broad_material_regions=regions(measured))
+        partial = replace(measured, broad_material_transitions=raw[:-1],
+            broad_material_association=associate_registered_broad_material(query, raw[:-1]))
+        partial_regions = regions(partial)
+        self.assertEqual(len(partial_regions), 1)
+        self.assertEqual(len(partial_regions[0].transition_ids), len(raw) - 1)
+        # The shortened region still has three regional majorities and valid
+        # geometry. It must fail because the source association kept all raw.
+        with self.assertRaisesRegex(ValueError, "complete association"):
+            replace(prepared, broad_material_regions=partial_regions)
 
     def test_measurement_queries_are_lane_local(self) -> None:
         prepared = _prepared()

@@ -581,7 +581,7 @@ def alignment_summary(detection: FinalDetection) -> str:
             for item in lane.prepared.broad_material_edge_resolutions
         )
         broad_separator = sum(
-            item.measurement_basis.value == "broad_material_aggregate"
+            item.measurement_basis.value == "broad_material_trace"
             for item in lane.prepared.separator_bands
         )
         proof = (

@@ -19,6 +19,7 @@ from .lane_preparation import (
     resolve_output_slots,
 )
 from .measurement_model import PhotoBoundaryMeasurementField
+from .broad_material_association import BroadAssociationState
 from .output_model import OutputFootprint, OutputSlotIdentity
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import CrossFitStatus
@@ -471,6 +472,14 @@ def reconstruct_photo_geometry(
             content_assessment=content_assessment, common_h_output=common_h_output,
             common_h_authority=common_h_authority,
         )
+        if any(
+            item.broad_material_association is not None
+            and item.broad_material_association.state == BroadAssociationState.BOUND_EXCEEDED
+            for item in lane.measurement_sets
+        ):
+            competition = withhold_lane_winner(
+                competition, failure=failure_fact(GateGap.PRODUCER_BOUND_EXCEEDED),
+            )
         if (competition.state == EvidenceState.SUPPORTED and common_h_output is None
                 and proposal is not None and proposal.state == TemplateProposalState.UNAVAILABLE):
             assert proposal.failure is not None

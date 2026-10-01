@@ -488,6 +488,7 @@ def prepare_template_lane(
     direct_sequence_edges = build_sequence_edge_observations(
         direct_sequence_profile,
         transition_by_id,
+        queried_trace_coordinates_px=direct_sequence_profile.trace_coordinates_px,
         reference_trace_px=height_authority.center,
         boundary_axis_scale_px_per_mm=scales.width_axis_px_per_mm,
         measurement_basis=BoundaryEdgeMeasurementBasis.DIRECT_TRACE,
@@ -495,6 +496,7 @@ def prepare_template_lane(
     cross_height_edges = build_sequence_edge_observations(
         cross_height_profile,
         transition_by_id,
+        queried_trace_coordinates_px=cross_height_profile.trace_coordinates_px,
         reference_trace_px=height_authority.center,
         boundary_axis_scale_px_per_mm=scales.width_axis_px_per_mm,
         measurement_basis=(
@@ -504,10 +506,11 @@ def prepare_template_lane(
     broad_material_edges = build_sequence_edge_observations(
         broad_material_profile,
         transition_by_id,
+        queried_trace_coordinates_px=sequence_baseline.query.trace_positions_px,
         reference_trace_px=height_authority.center,
         boundary_axis_scale_px_per_mm=scales.width_axis_px_per_mm,
         measurement_basis=(
-            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_TRACE
         ),
     )
     direct_separator_bands = build_format_separator_bands(
@@ -538,7 +541,7 @@ def prepare_template_lane(
         width_axis,
         measurement_plan.template_spec.frame_width_px,
         measurement_basis=(
-            SeparatorBandMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+            SeparatorBandMeasurementBasis.BROAD_MATERIAL_TRACE
         ),
     )
     (
@@ -567,7 +570,7 @@ def prepare_template_lane(
             sequence_baseline.query.trace_positions_px
         ),
         aggregate_basis=(
-            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_TRACE
         ),
         bind_direct_edge=False,
     )
@@ -593,7 +596,7 @@ def prepare_template_lane(
                 *projected_cross_height_separator_bands,
             ),
             aggregate_basis=(
-                SeparatorBandMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+                SeparatorBandMeasurementBasis.BROAD_MATERIAL_TRACE
             ),
         )
     )

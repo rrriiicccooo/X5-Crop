@@ -1,14 +1,22 @@
 from __future__ import annotations
+from x5crop.detection.photo_geometry.broad_material_association import associate_registered_broad_material
 
 from dataclasses import replace
+from copy import deepcopy
 
 from tools.tests.photo_geometry_support import *
 from x5crop.detection.photo_geometry.cross_height_transition_measurement import (
     measure_cross_height_transition_regions,
 )
 from x5crop.detection.photo_geometry.broad_material_transition_measurement import (
-    measure_broad_material_transition_regions,
+    measure_broad_material_transitions,
+    broad_material_trace_support_qualified,
 )
+from x5crop.detection.photo_geometry.coarse_enclosing_support import _observe_broad_coarse_short_axis
+from x5crop.detection.photo_geometry.profile_adapters import sequence_profile_from_regions
+from x5crop.detection.photo_geometry.observations import validate_broad_material_edge_provenance
+from tools.regression.report_validation import _validate_broad_material_traces, _validate_sequence_physical_line_regions
+from x5crop.report.read_models import typed_read_model
 from x5crop.detection.photo_geometry.registered_transition_measurement import (
     TraceMeasurement,
     measure_trace,
@@ -384,7 +392,7 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
         traces: tuple[TraceMeasurement, ...],
     ) -> PhotoBoundaryMeasurementSet:
         transitions, peak_temporary = (
-            measure_broad_material_transition_regions(query, traces)
+            measure_broad_material_transitions(query, traces)
         )
         coordinate_count = 151 * len(traces)
         return PhotoBoundaryMeasurementSet(
@@ -404,6 +412,7 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
                 complete=True,
             ),
             broad_material_transitions=transitions,
+            broad_material_association=associate_registered_broad_material(query, transitions),
         )
     def test_cross_height_union_recovers_one_common_subthreshold_line(
         self,
@@ -542,7 +551,11 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
             boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
         )
 
-        self.assertEqual(len(measurement_set.broad_material_transitions), 6)
+        self.assertEqual(len(measurement_set.broad_material_transitions), 18)
+        self.assertTrue(all(
+            sum(item.trace_ordinal == ordinal for item in measurement_set.broad_material_transitions) == 2
+            for ordinal in range(len(traces))
+        ))
         self.assertEqual(len(regions), 2)
         self.assertTrue(
             all(item.independent_support_region_count == 3 for item in regions)
@@ -565,6 +578,206 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
         )
 
         self.assertEqual(regions, ())
+
+    @classmethod
+    def _sloping_broad_strip(cls, *, mirrored=False, blank_ordinals=()):
+        traces = tuple(range(0, 8001, 1000))
+        domain = FiniteInterval(0.0, 1000.0)
+        query = replace(
+            cls._broad_material_query(), purpose=QueryPurpose.COARSE_STRIP_SHORT,
+            trace_positions_px=traces, search_intervals_px=(domain,) * 9,
+            transition_ownership_intervals_px=(domain,) * 9,
+            expected_support_px=8000.0,
+        )
+        measured = []
+        for ordinal in range(9):
+            low, high = 198 + ordinal * 2, 798 + ordinal * 2
+            values = np.full(1001, 230, dtype=np.uint8)
+            if ordinal not in blank_ordinals:
+                inside = 70 if ordinal % 3 == 0 else 210
+                values[low:high] = inside + np.where(np.arange(low, high) % 2, 4, -4)
+            if mirrored:
+                values = values[::-1].copy()
+            measured.append(measure_trace(values, domain, 10.0,
+                PHOTO_BOUNDARY_MEASUREMENT_SPEC, include_broad_material=True))
+        result = cls._broad_material_measurement_set(query, tuple(measured))
+        return replace(result, coverage=replace(result.coverage,
+            registered_coordinate_count=9009, completed_coordinate_count=9009,
+            pixel_query_count=9009))
+
+    def test_broad_geometry_uses_actual_traces_with_unequal_contrast(self) -> None:
+        for mirrored in (False, True):
+            with self.subTest(mirrored=mirrored):
+                measured = self._sloping_broad_strip(mirrored=mirrored)
+                outward = tuple(item for item in measured.broad_material_transitions
+                    if (item.background_side.value == "left") == (item.polarity < 0))
+                self.assertEqual(len(outward), 18)
+                for item in outward:
+                    ordinal = item.trace_ordinal
+                    low, high = 197.5 + 2 * ordinal, 797.5 + 2 * ordinal
+                    if mirrored:
+                        low, high = 1000.0 - high, 1000.0 - low
+                    self.assertEqual(item.trace_coordinate_px, ordinal * 1000)
+                    self.assertTrue(item.physical_position_interval_px.contains(
+                        low if item.polarity < 0 else high), item)
+
+    def test_broad_pair_keeps_true_parallel_boundaries_with_unequal_contrast(self) -> None:
+        for mirrored in (False, True):
+            with self.subTest(mirrored=mirrored):
+                measured = self._sloping_broad_strip(mirrored=mirrored)
+                top, bottom = (194.5, 794.5) if mirrored else (205.5, 805.5)
+                _direction, support = _observe_broad_coarse_short_axis(
+                    measured, aggregate_interval_px=FiniteInterval(top, bottom),
+                    expected_height_px=FiniteInterval(580.0, 580.0), reference_trace_px=4000.0,
+                )
+                self.assertIsNotNone(support)
+                assert support is not None
+                self.assertTrue(support.minimum_track.full_position_interval_px.contains(top))
+                self.assertTrue(support.maximum_track.full_position_interval_px.contains(bottom))
+                self.assertEqual(support.minimum_track.trace_coordinates_px,
+                    measured.query.trace_positions_px)
+
+    def test_complete_physical_broad_competitor_survives_curved_localization(self) -> None:
+        from tools.tests.test_broad_material_association_contract import _broad_point
+
+        query = self._broad_material_query()
+        traces = query.trace_positions_px
+        curved = tuple(_broad_point(
+            traces, ordinal, 50.0 + 2.5 * (4 - abs(ordinal - 4)),
+            identity=f"curved:{ordinal}", physical=(45.0, 65.0),
+            query_id=query.query_id,
+        ).transition for ordinal in range(len(traces)))
+        straight = tuple(_broad_point(
+            traces, ordinal, 100.0, identity=f"straight:{ordinal}",
+            query_id=query.query_id,
+        ).transition for ordinal in range(len(traces)))
+        raw = curved + straight
+        measured = self._broad_material_measurement_set(query,
+            tuple(self._broad_material_trace() for _ in traces))
+        measured = replace(measured, broad_material_transitions=raw,
+            broad_material_association=associate_registered_broad_material(query, raw))
+        expected = {frozenset(item.transition_id for item in family)
+                    for family in (curved, straight)}
+        for reference in (0.0, 40.0, 80.0):
+            with self.subTest(reference=reference):
+                regions = track_broad_material_transition_regions((measured,),
+                    reference_trace_px=reference,
+                    boundary_axis_scale_px_per_mm=query.boundary_axis_scale_px_per_mm)
+                self.assertEqual({frozenset(region.transition_ids) for region in regions}, expected)
+                self.assertTrue(all(region.trace_support_count == len(traces)
+                                    for region in regions))
+                curved_region = next(region for region in regions
+                    if str(region.transition_ids[0]).startswith("curved:"))
+                self.assertTrue(curved_region.position_interval_px.contains(50.0))
+
+        lane = {"lane_id": query.lane_id, "observations": {
+            "sequence_edges": [], "cross_height_edges": [], "broad_material_edges": [],
+            "broad_material_transition_regions": typed_read_model(regions),
+        }}
+        queries = [{"query": typed_read_model(query), "transitions": [],
+            "cross_height_transitions": [], "broad_material_transitions": typed_read_model(raw),
+            "broad_material_association": typed_read_model(measured.broad_material_association)}]
+        _validate_sequence_physical_line_regions(lane, queries)
+        changed = deepcopy(lane)
+        changed["observations"]["broad_material_transition_regions"][0]["transition_ids"].pop()
+        with self.assertRaisesRegex(ValueError, "complete association"):
+            _validate_sequence_physical_line_regions(changed, queries)
+
+    def test_broad_missing_traces_cannot_shrink_the_majority_denominator(self) -> None:
+        for blanks, qualified in (((1,), True), ((0, 1), False)):
+            with self.subTest(blanks=blanks):
+                measured = self._sloping_broad_strip(blank_ordinals=blanks)
+                members = tuple(item.trace_coordinate_px for item in measured.broad_material_transitions)
+                self.assertTrue(all(item.trace_ordinal not in blanks
+                    for item in measured.broad_material_transitions))
+                self.assertEqual(broad_material_trace_support_qualified(
+                    measured.query.trace_positions_px, members), qualified)
+                regions = track_broad_material_transition_regions((measured,),
+                    reference_trace_px=4000.0, boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0))
+                self.assertEqual(bool(regions), qualified)
+
+    def test_broad_trace_schema_rejects_invented_region_and_old_aggregate_fields(self) -> None:
+        measured = self._sloping_broad_strip()
+        raw = {"broad_material_transitions": typed_read_model(measured.broad_material_transitions),
+               "broad_material_transition_count": len(measured.broad_material_transitions),
+               "broad_material_association": typed_read_model(measured.broad_material_association),
+               "coverage": typed_read_model(measured.coverage)}
+        _validate_broad_material_traces(raw, measured.query)
+        with self.assertRaisesRegex(ValueError, "association receipt"):
+            replace(measured, broad_material_association=None)
+        for mutation in ("missing", "path", "inputs", "work", "bound"):
+            changed = deepcopy(raw)
+            association = changed["broad_material_association"]
+            if mutation == "missing":
+                del changed["broad_material_association"]
+            elif mutation == "path":
+                association["paths"] = association["paths"][1:]
+            elif mutation == "inputs":
+                association["input_transition_ids"] = association["input_transition_ids"][1:]
+            elif mutation == "work":
+                association["work"]["seed_count"] = True
+            else:
+                association.update(state="bound_exceeded", paths=[], failure_reason="charged_work_bound")
+            with self.subTest(association_mutation=mutation), self.assertRaises(ValueError):
+                _validate_broad_material_traces(changed, measured.query)
+        for mutation in ("region", "trace", "legacy", "duplicate"):
+            changed = deepcopy(raw)
+            point = changed["broad_material_transitions"][0]
+            if mutation == "region":
+                point["spatial_region_index"] = 2
+            elif mutation == "trace":
+                point["trace_coordinate_px"] += 1
+            elif mutation == "legacy":
+                point["contributing_trace_ordinals"] = [0, 1, 2]
+            else:
+                changed["broad_material_transitions"].append(deepcopy(point))
+                changed["broad_material_transition_count"] += 1
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                _validate_broad_material_traces(changed, measured.query)
+
+    def test_broad_final_edge_cannot_mix_queries_or_lose_regional_majority(self) -> None:
+        query = self._broad_material_query()
+        measured = self._broad_material_measurement_set(query,
+            tuple(self._broad_material_trace() for _ in query.trace_positions_px))
+        transitions = {str(item.transition_id): item for item in measured.broad_material_transitions}
+        regions = track_broad_material_transition_regions((measured,),
+            reference_trace_px=40.0, boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0))
+        profile = sequence_profile_from_regions(regions, coordinate_count=151, transition_by_id=transitions)
+        edges = build_sequence_edge_observations(profile, transitions, reference_trace_px=40.0,
+            boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
+            measurement_basis=BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_TRACE,
+            queried_trace_coordinates_px=query.trace_positions_px)
+        self.assertEqual(len(edges), 2)
+        edge = edges[0]
+        queries = {query.query_id: query}
+        validate_broad_material_edge_provenance(edge, transitions, queries)
+        dropped = replace(edge, transition_ids=edge.transition_ids[2:],
+            trace_coordinates_px=edge.trace_coordinates_px[2:])
+        with self.assertRaisesRegex(ValueError, "regional majority"):
+            validate_broad_material_edge_provenance(dropped, transitions, queries)
+        foreign = replace(query, query_id="query:other-window")
+        mixed = dict(transitions)
+        first_id = str(edge.transition_ids[0])
+        mixed[first_id] = replace(mixed[first_id], query_id=foreign.query_id)
+        with self.assertRaisesRegex(ValueError, "measurement source"):
+            validate_broad_material_edge_provenance(edge, mixed, {**queries, foreign.query_id: foreign})
+        lane = {"lane_id": query.lane_id, "observations": {
+            "sequence_edges": [], "cross_height_edges": [], "broad_material_edges": [typed_read_model(edge)],
+            "broad_material_transition_regions": typed_read_model(regions)}}
+        raw_queries = [{"query": typed_read_model(query), "transitions": [], "cross_height_transitions": [],
+            "broad_material_transitions": typed_read_model(measured.broad_material_transitions),
+            "broad_material_association": typed_read_model(measured.broad_material_association)}]
+        _validate_sequence_physical_line_regions(lane, raw_queries)
+        for undirected in (False, True):
+            changed = deepcopy(lane)
+            target = changed["observations"]["broad_material_edges"][0]
+            target["transition_ids"] = target["transition_ids"][2:]
+            target["trace_coordinates_px"] = target["trace_coordinates_px"][2:]
+            if undirected:
+                target["canonical_direction_degrees"] = None
+                target["physical_line_region"] = None
+            with self.subTest(undirected=undirected), self.assertRaisesRegex(ValueError, "regional majority"):
+                _validate_sequence_physical_line_regions(changed, raw_queries)
 
     def test_measurement_spec_contains_only_production_values(self) -> None:
         spec = PHOTO_BOUNDARY_MEASUREMENT_SPEC

@@ -19,8 +19,9 @@ from .cross_height_transition_measurement import (
     measure_cross_height_transition_regions,
 )
 from .broad_material_transition_measurement import (
-    measure_broad_material_transition_regions,
+    measure_broad_material_transitions,
 )
+from .broad_material_association import associate_registered_broad_material
 from .model import (
     BoundaryAxis,
     PHOTO_BOUNDARY_MEASUREMENT_SPEC,
@@ -70,6 +71,7 @@ def _measure_query(
     transitions: list[PhotoBoundaryTransition] = []
     cross_height_transitions = ()
     broad_material_transitions = ()
+    broad_material_association = None
     peak_temporary = max(retained_temporary_bytes, premeasurement_peak_bytes)
     pixel_query_count = 0
     completed_coordinates = 0
@@ -197,14 +199,17 @@ def _measure_query(
             (
                 broad_material_transitions,
                 broad_material_temporary,
-            ) = measure_broad_material_transition_regions(
+            ) = measure_broad_material_transitions(
                 query,
                 premeasured,
                 spec,
             )
+            broad_material_association = associate_registered_broad_material(query, broad_material_transitions, spec)
             peak_temporary = max(
                 peak_temporary,
                 retained_temporary_bytes + broad_material_temporary,
+                retained_temporary_bytes + (0 if broad_material_association is None
+                                            else broad_material_association.temporary_numeric_bytes),
             )
     except Exception:
         receipt = _coverage_receipt(
@@ -242,6 +247,7 @@ def _measure_query(
         cross_height_transitions=cross_height_transitions,
         coverage=receipt,
         broad_material_transitions=broad_material_transitions,
+        broad_material_association=broad_material_association,
     )
 
 

@@ -156,6 +156,7 @@ class PhysicalLineRegionContractTest(unittest.TestCase):
         edges = build_sequence_edge_observations(
             BasicAxisProfile("sequence", 200, (0, 50, 100), (run,)),
             {str(item.transition_id): item for item in transitions},
+            queried_trace_coordinates_px=(0, 50, 100),
             reference_trace_px=50.0,
             boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
             measurement_basis=BoundaryEdgeMeasurementBasis.DIRECT_TRACE,
@@ -171,6 +172,7 @@ class PhysicalLineRegionContractTest(unittest.TestCase):
         lane = {"lane_id": "line-test", "observations": {
             "sequence_edges": [typed_read_model(edge)],
             "cross_height_edges": [], "broad_material_edges": [],
+            "broad_material_transition_regions": [],
         }}
         queries = [{"query": {"lane_id": "line-test"},
                     "transitions": typed_read_model(transitions),

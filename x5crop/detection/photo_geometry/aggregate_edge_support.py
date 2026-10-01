@@ -90,7 +90,7 @@ def resolve_aggregate_edge_support(
         raise ValueError("aggregate edge support requires one trace lattice")
     if aggregate_basis not in {
         BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE,
-        BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+        BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_TRACE,
     }:
         raise ValueError("aggregate edge support basis is invalid")
     if not isinstance(bind_direct_edge, bool):
@@ -313,7 +313,7 @@ def resolve_aggregate_separator_support(
 
     if aggregate_basis not in {
         SeparatorBandMeasurementBasis.CROSS_HEIGHT_AGGREGATE,
-        SeparatorBandMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+        SeparatorBandMeasurementBasis.BROAD_MATERIAL_TRACE,
     }:
         raise ValueError("aggregate separator basis is invalid")
     if any(band.measurement_basis != aggregate_basis for band in aggregate_bands):
@@ -406,6 +406,7 @@ def resolve_aggregate_separator_support(
                 observation_id=ObservationId(
                     run_local_id(
                         "aggregate-separator-band",
+                        band.observation_id,
                         aggregate_basis.value,
                         band.material_polarity.value,
                         left.observation_id,
@@ -438,7 +439,7 @@ def placement_sequence_edges_with_material_support(
 
     aggregate_bases = {
         SeparatorBandMeasurementBasis.CROSS_HEIGHT_AGGREGATE,
-        SeparatorBandMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+        SeparatorBandMeasurementBasis.BROAD_MATERIAL_TRACE,
     }
     if any(
         band.measurement_basis not in aggregate_bases
@@ -461,7 +462,7 @@ def placement_sequence_edges_with_material_support(
         if edge.measurement_basis
         in {
             BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE,
-            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_TRACE,
         }
     }
     base_placement_ids = {
@@ -486,7 +487,7 @@ def placement_sequence_edges_with_material_support(
             edge.measurement_basis
             not in {
                 BoundaryEdgeMeasurementBasis.CROSS_HEIGHT_AGGREGATE,
-                BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+                BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_TRACE,
             }
             or edge.observation_id in supported_ids
         )

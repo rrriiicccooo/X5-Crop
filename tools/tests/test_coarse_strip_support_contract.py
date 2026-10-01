@@ -1,4 +1,5 @@
 from __future__ import annotations
+from x5crop.detection.photo_geometry.broad_material_association import associate_registered_broad_material
 
 import ast
 import math
@@ -35,7 +36,7 @@ from x5crop.detection.photo_geometry.coarse_enclosing_support import (
 from tools.tests.photo_geometry_support import make_side_measurement_set
 from tools.tests.template_runtime_test_support import prepared_template_lane
 from x5crop.detection.photo_geometry.broad_material_transition_measurement import (
-    measure_broad_material_transition_regions,
+    measure_broad_material_transitions,
 )
 from x5crop.detection.photo_geometry.corridors import (
     build_sequence_anchor_discovery_domain,
@@ -151,7 +152,6 @@ class CoarseStripSupportContractTest(unittest.TestCase):
                     fit_position_interval_px=FiniteInterval.exact(coordinate),
                     full_position_interval_px=FiniteInterval(coordinate - 0.25, coordinate + 0.25),
                     trace_coordinates_px=tuple(p.trace_coordinate_px for p in points),
-                    support_trace_coordinates_px=tuple(p.trace_coordinate_px for p in points),
                     canonical_direction_degrees=0.0,
                     fit_direction_interval_degrees=FiniteInterval.exact(0.0),
                     full_direction_interval_degrees=FiniteInterval.exact(0.0) if index == extra_side else FiniteInterval(-2.0, 2.0),
@@ -221,7 +221,6 @@ class CoarseStripSupportContractTest(unittest.TestCase):
                 fit_position_interval_px=FiniteInterval.exact(position),
                 full_position_interval_px=FiniteInterval(position - 0.25, position + 0.25),
                 trace_coordinates_px=own_traces,
-                support_trace_coordinates_px=own_traces,
                 canonical_direction_degrees=0.0,
                 fit_direction_interval_degrees=FiniteInterval.exact(0.0),
                 full_direction_interval_degrees=(FiniteInterval.exact(0.0) if constrained
@@ -416,14 +415,11 @@ class CoarseStripSupportContractTest(unittest.TestCase):
     def _short_measurement_set(
         query: PhotoBoundaryMeasurementQuery,
         trace_measurements: tuple[TraceMeasurement, ...],
-        *,
-        broad_trace_ordinals: tuple[int, ...],
     ) -> PhotoBoundaryMeasurementSet:
         broad_regions, temporary_bytes = (
-            measure_broad_material_transition_regions(
+            measure_broad_material_transitions(
                 query,
                 trace_measurements,
-                trace_ordinals=broad_trace_ordinals,
             )
         )
         coordinate_count = sum(
@@ -448,6 +444,7 @@ class CoarseStripSupportContractTest(unittest.TestCase):
             cross_height_transitions=(),
             coverage=coverage,
             broad_material_transitions=broad_regions,
+            broad_material_association=associate_registered_broad_material(query, broad_regions),
         )
 
     def test_blank_pixels_keep_one_conservative_path(self) -> None:
@@ -492,7 +489,7 @@ class CoarseStripSupportContractTest(unittest.TestCase):
             measurement_plan=plan,
         )[1]
         source_positions = plan.projected_queries.cross_trace_positions_px
-        registered, sharp_ordinals, broad_ordinals = (
+        registered, sharp_ordinals = (
             _coarse_short_trace_lattices(source_positions)
         )
 
@@ -502,7 +499,7 @@ class CoarseStripSupportContractTest(unittest.TestCase):
             _sparse_positions(source_positions, maximum=5),
         )
         self.assertEqual(
-            tuple(registered[index] for index in broad_ordinals),
+            registered,
             _sparse_positions(source_positions, maximum=9),
         )
         self.assertEqual(
@@ -512,6 +509,16 @@ class CoarseStripSupportContractTest(unittest.TestCase):
                 *_sparse_positions(source_positions, maximum=9),
             },
         )
+
+    def test_broad_lattice_covers_the_registered_union_without_extra_traces(self) -> None:
+        for count in (*range(2, 19), 31, 64, 97):
+            with self.subTest(count=count):
+                source = tuple(index * index + 3 * index for index in range(count))
+                registered, sharp = _coarse_short_trace_lattices(
+                    source)
+                self.assertLessEqual(len(registered), 9)
+                self.assertEqual(registered, _sparse_positions(source, maximum=9))
+                self.assertEqual(tuple(registered[i] for i in sharp), _sparse_positions(source, maximum=5))
 
     def test_vertical_queries_map_canonical_axes_once(self) -> None:
         lane, plan = _lane(
@@ -829,7 +836,7 @@ class CoarseStripSupportContractTest(unittest.TestCase):
             maximum=291,
             sharp=False,
         )
-        _registered, sharp_ordinals, broad_ordinals = (
+        _registered, sharp_ordinals = (
             _coarse_short_trace_lattices(
                 plan.projected_queries.cross_trace_positions_px
             )
@@ -840,7 +847,6 @@ class CoarseStripSupportContractTest(unittest.TestCase):
             self._short_measurement_set(
                 query,
                 lattice,
-                broad_trace_ordinals=broad_ordinals,
             ),
             trace_measurements=lattice,
             sharp_trace_ordinals=sharp_ordinals,
@@ -878,7 +884,7 @@ class CoarseStripSupportContractTest(unittest.TestCase):
             maximum=301,
             sharp=False,
         )
-        _registered, sharp_ordinals, broad_ordinals = (
+        _registered, sharp_ordinals = (
             _coarse_short_trace_lattices(
                 plan.projected_queries.cross_trace_positions_px
             )
@@ -890,7 +896,6 @@ class CoarseStripSupportContractTest(unittest.TestCase):
             self._short_measurement_set(
                 query,
                 broad_lattice,
-                broad_trace_ordinals=broad_ordinals,
             ),
             trace_measurements=sharp_lattice,
             sharp_trace_ordinals=sharp_ordinals,
@@ -929,13 +934,13 @@ class CoarseStripSupportContractTest(unittest.TestCase):
             inside=175,
             sharp=False,
         )
-        _registered, sharp_ordinals, broad_ordinals = (
+        _registered, sharp_ordinals = (
             _coarse_short_trace_lattices(
                 plan.projected_queries.cross_trace_positions_px
             )
         )
         lattice_values = [dark for _ in query.trace_positions_px]
-        for index in broad_ordinals[3:6]:
+        for index in range(3, 6):
             lattice_values[index] = light
         lattice = tuple(lattice_values)
 
@@ -943,7 +948,6 @@ class CoarseStripSupportContractTest(unittest.TestCase):
             self._short_measurement_set(
                 query,
                 lattice,
-                broad_trace_ordinals=broad_ordinals,
             ),
             trace_measurements=lattice,
             sharp_trace_ordinals=sharp_ordinals,

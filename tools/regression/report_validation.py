@@ -100,7 +100,15 @@ from x5crop.detection.photo_geometry.line_observations import (
     PhotoBoundaryObservation,
 )
 from x5crop.domain import Box, EvidenceState, FiniteInterval, ObservationId, PositiveInterval, WorkspaceExtent
-from x5crop.detection.photo_geometry.measurement_model import PhotoBoundaryMeasurementQuery
+from x5crop.detection.photo_geometry.broad_material_association import (
+    BroadAssociationResult, BroadAssociationState, BroadAssociationWork,
+    associate_registered_broad_material,
+    broad_family_sources_supported,
+)
+from x5crop.detection.photo_geometry.measurement_model import (
+    PhotoBoundaryMeasurementQuery, BroadMaterialTraceObservation, MaterialBackgroundSide,
+)
+from x5crop.detection.photo_geometry.broad_material_transition_measurement import broad_material_trace_support_qualified
 from x5crop.detection.photo_geometry.registered_measurement import registered_baseline_query_groups
 from x5crop.detection.photo_geometry.robust_line_fit import (
     LINE_REGION_ARITHMETIC_EPSILON_PX,
@@ -770,6 +778,8 @@ def _validate_sequence_physical_line_regions(
     """Rebuild joint line states from the same registered raw family."""
 
     transitions: dict[str, dict[str, Any]] = {}
+    broad_trace_lattices: dict[str, tuple[int, ...]] = {}
+    broad_paths: dict[str, tuple[frozenset[str], ...]] = {}
     for query in queries:
         if query["query"]["lane_id"] != lane["lane_id"]:
             continue
@@ -779,13 +789,45 @@ def _validate_sequence_physical_line_regions(
                 if identity in transitions and transitions[identity] != transition:
                     raise ValueError("sequence raw transition identity is inconsistent")
                 transitions[identity] = transition
+                if field == "broad_material_transitions":
+                    broad_trace_lattices[identity] = tuple(query["query"]["trace_positions_px"])
+                    association = query["broad_material_association"]
+                    broad_paths[identity] = tuple(frozenset(path) for path in association["paths"])
     maximum_slope = math.tan(math.radians(
         PHOTO_BOUNDARY_MEASUREMENT_SPEC.maximum_measurable_line_angle_degrees
     ))
+    broad_region_sources = []
+    for region in lane["observations"]["broad_material_transition_regions"]:
+        ids = region["transition_ids"]
+        if (not ids or not any(frozenset(ids) == path for path in broad_paths.get(ids[0], ()))
+                or not broad_material_trace_support_qualified(
+                    broad_trace_lattices[ids[0]],
+                    tuple(transitions[identity]["trace_coordinate_px"] for identity in ids))):
+            raise ValueError("broad material region leaves its complete association")
+        broad_region_sources.append(frozenset(ids))
     for field in ("sequence_edges", "cross_height_edges", "broad_material_edges"):
         for edge in lane["observations"][field]:
             if "physical_line_region" not in edge:
                 raise ValueError("sequence edge lacks its physical line state")
+            if field == "broad_material_edges":
+                ids = edge["transition_ids"]
+                lattices = {broad_trace_lattices.get(identity) for identity in ids}
+                if (
+                    not ids or len(set(ids)) != len(ids)
+                    or len(set(edge["trace_coordinates_px"])) != len(ids)
+                    or None in lattices or len(lattices) != 1
+                    or len({transitions[identity]["query_id"] for identity in ids}) != 1
+                    or [transitions[identity]["trace_coordinate_px"] for identity in ids]
+                    != edge["trace_coordinates_px"]
+                    or not broad_material_trace_support_qualified(
+                        next(iter(lattices)), tuple(edge["trace_coordinates_px"]),
+                    )
+                    or len({transitions[identity]["polarity"] for identity in ids}) != 1
+                    or len({transitions[identity]["background_side"] for identity in ids}) != 1
+                ):
+                    raise ValueError("broad material edge lost its actual regional majority")
+                if not broad_family_sources_supported(ids, broad_paths.get(ids[0], ()), broad_region_sources):
+                    raise ValueError("broad material family lost its complete source regions")
             region = edge["physical_line_region"]
             if edge["canonical_direction_degrees"] is None:
                 if region is not None:
@@ -4767,6 +4809,64 @@ def _validate_exterior_measurements(record: dict[str, Any]) -> dict[str, Exterio
     return result
 
 
+def _validate_broad_material_traces(raw: dict[str, Any], query: PhotoBoundaryMeasurementQuery) -> BroadAssociationResult | None:
+    expected_fields = {field.name for field in fields(BroadMaterialTraceObservation)}
+    values = raw.get("broad_material_transitions")
+    if not isinstance(values, list) or raw.get("broad_material_transition_count") != len(values):
+        raise ValueError("broad material trace count is invalid")
+    identities = set()
+    observations = []
+    for value in values:
+        if not isinstance(value, dict) or set(value) != expected_fields:
+            raise ValueError("broad material trace schema is invalid")
+        try:
+            observation = BroadMaterialTraceObservation(**{
+                **value,
+                "transition_id": ObservationId(value["transition_id"]),
+                "localization_interval_px": FiniteInterval(**value["localization_interval_px"]),
+                "physical_position_interval_px": FiniteInterval(**value["physical_position_interval_px"]),
+                "window_scales_mm": tuple(value["window_scales_mm"]),
+                "scale_tone_contrasts": tuple(value["scale_tone_contrasts"]),
+                "background_side": MaterialBackgroundSide(value["background_side"]),
+            })
+            observation.validate_query(query)
+            if observation.transition_id in identities:
+                raise ValueError("duplicate broad material trace")
+            identities.add(observation.transition_id)
+            observations.append(observation)
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError("broad material trace provenance is invalid") from error
+    if "broad_material_association" not in raw:
+        raise ValueError("broad material association receipt is missing")
+    value = raw["broad_material_association"]
+    if not observations:
+        if value is not None:
+            raise ValueError("empty broad measurement has an association receipt")
+        return None
+    if not isinstance(value, dict) or set(value) != {field.name for field in fields(BroadAssociationResult)}:
+        raise ValueError("broad material association schema is invalid")
+    try:
+        receipt = BroadAssociationResult(**{
+            **value,
+            "state": BroadAssociationState(value["state"]),
+            "input_transition_ids": tuple(ObservationId(identity) for identity in value["input_transition_ids"]),
+            "queried_traces": tuple(value["queried_traces"]),
+            "paths": tuple(tuple(ObservationId(identity) for identity in path) for path in value["paths"]),
+            "work": BroadAssociationWork(**value["work"]),
+        })
+        receipt.validate_query(query, tuple(observations))
+        # Offline verification replays only the bounded raw association. It
+        # does not read pixels, refit lines or choose a detector alternative.
+        expected = associate_registered_broad_material(query, tuple(observations))
+        if receipt != expected:
+            raise ValueError("broad association changed its complete search or work ledger")
+        if raw["coverage"]["peak_temporary_bytes"] < receipt.temporary_numeric_bytes:
+            raise ValueError("broad association numeric scratch is missing from coverage")
+        return receipt
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError("broad material association provenance is invalid") from error
+
+
 def _validate_registered_normalization(record: dict[str, Any]) -> None:
     development = record["development"]
     measurement = development["measurement"]
@@ -4776,6 +4876,11 @@ def _validate_registered_normalization(record: dict[str, Any]) -> None:
         lane_id = lane["lane_id"]
         members = tuple(item for item in measurement["queries"] if item["query"]["lane_id"] == lane_id)
         queries = tuple(_read_measurement_query(item["query"]) for item in members)
+        for raw, query in zip(members, queries, strict=True):
+            association = _validate_broad_material_traces(raw, query)
+            if (association is not None and association.state == BroadAssociationState.BOUND_EXCEEDED
+                    and lane["placement_competition"]["selected_placement_id"] is not None):
+                raise ValueError("incomplete broad association was not propagated to selection")
         by_id = {item["query"]["query_id"]: item for item in members}
         if len(by_id) != len(members) or tuple(query.registration_index for query in queries) != tuple(range(len(queries))):
             raise ValueError("registered normalization query order is invalid")

@@ -187,7 +187,6 @@ class CoarseEnclosingTrack:
     fit_position_interval_px: FiniteInterval
     full_position_interval_px: FiniteInterval
     trace_coordinates_px: tuple[int, ...]
-    support_trace_coordinates_px: tuple[int, ...]
     canonical_direction_degrees: float
     fit_direction_interval_degrees: FiniteInterval
     full_direction_interval_degrees: FiniteInterval
@@ -219,11 +218,6 @@ class CoarseEnclosingTrack:
             )
             or tuple(sorted(set(self.trace_coordinates_px)))
             != self.trace_coordinates_px
-            or tuple(sorted(set(self.support_trace_coordinates_px)))
-            != self.support_trace_coordinates_px
-            or not set(self.trace_coordinates_px).issubset(
-                self.support_trace_coordinates_px
-            )
             or len(self.trace_position_intervals_px)
             != len(self.trace_coordinates_px)
             or self.independent_support_region_count

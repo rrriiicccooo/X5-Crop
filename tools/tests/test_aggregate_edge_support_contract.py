@@ -339,13 +339,13 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
             "broad-left",
             100.0,
             (10, 40, 70),
-            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_TRACE,
         )
         right = _edge(
             "broad-right",
             120.0,
             (10, 40, 70),
-            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_TRACE,
         )
         left = (
             replace(
@@ -359,7 +359,7 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
             (),
             (left, right),
             aggregate_basis=(
-                BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+                BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_TRACE
             ),
         )
         self.assertEqual(
@@ -374,7 +374,7 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
                 FiniteInterval(19.0, 21.0),
             ),
             measurement_basis=(
-                SeparatorBandMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+                SeparatorBandMeasurementBasis.BROAD_MATERIAL_TRACE
             ),
         )
 
@@ -384,7 +384,7 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
             edges,
             (),
             aggregate_basis=(
-                SeparatorBandMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+                SeparatorBandMeasurementBasis.BROAD_MATERIAL_TRACE
             ),
         )
 
@@ -411,14 +411,14 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
             "broad-matched-direct",
             100.0,
             (10, 40, 70),
-            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_TRACE,
         )
 
         edges, resolutions = self._resolve(
             (direct,),
             (broad,),
             aggregate_basis=(
-                BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+                BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_TRACE
             ),
             bind_direct_edge=False,
         )
@@ -446,13 +446,13 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
             "broad-pair-left",
             100.0,
             (10, 40, 70),
-            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_TRACE,
         )
         broad_right = _edge(
             "broad-pair-right",
             120.0,
             (10, 40, 70),
-            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_TRACE,
         )
         direct = (
             replace(
@@ -474,7 +474,7 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
             (direct,),
             (broad_left, broad_right),
             aggregate_basis=(
-                BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+                BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_TRACE
             ),
             bind_direct_edge=False,
         )
@@ -486,7 +486,7 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
                 FiniteInterval(19.0, 21.0),
             ),
             measurement_basis=(
-                SeparatorBandMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+                SeparatorBandMeasurementBasis.BROAD_MATERIAL_TRACE
             ),
         )
 
@@ -496,7 +496,7 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
             edges,
             (),
             aggregate_basis=(
-                SeparatorBandMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+                SeparatorBandMeasurementBasis.BROAD_MATERIAL_TRACE
             ),
         )
 
@@ -518,6 +518,21 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
             edges,
         )
 
+        alternative = replace(
+            phase_separator("broad-mixed-band-alternative", broad_left[0], broad_right[0],
+                            FiniteInterval(18.0, 22.0)),
+            measurement_basis=SeparatorBandMeasurementBasis.BROAD_MATERIAL_TRACE,
+        )
+        alternatives = resolve_aggregate_separator_support(
+            (band, alternative), resolutions, edges, (),
+            aggregate_basis=SeparatorBandMeasurementBasis.BROAD_MATERIAL_TRACE,
+        )
+        self.assertEqual(len({item.observation_id for item in alternatives}), 2)
+        self.assertEqual({item.transition_ids for item in alternatives},
+                         {band.transition_ids, alternative.transition_ids})
+        self.assertEqual(len({(item.left_edge_observation_id, item.right_edge_observation_id,
+                               item.gap_interval_px) for item in alternatives}), 1)
+
     def test_broad_pair_cannot_reassign_one_canonical_separator_edge(
         self,
     ) -> None:
@@ -537,13 +552,13 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
             "broad-competing-left",
             100.0,
             (10, 40, 70),
-            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_TRACE,
         )
         broad_right = _edge(
             "broad-competing-right",
             130.0,
             (10, 40, 70),
-            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_TRACE,
         )
         direct_left = (
             replace(
@@ -565,7 +580,7 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
             (direct_left, direct_right),
             (broad_left, broad_right),
             aggregate_basis=(
-                BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+                BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_TRACE
             ),
             bind_direct_edge=False,
         )
@@ -583,7 +598,7 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
                 FiniteInterval(29.0, 31.0),
             ),
             measurement_basis=(
-                SeparatorBandMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+                SeparatorBandMeasurementBasis.BROAD_MATERIAL_TRACE
             ),
         )
 
@@ -593,7 +608,7 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
             edges,
             (canonical,),
             aggregate_basis=(
-                SeparatorBandMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+                SeparatorBandMeasurementBasis.BROAD_MATERIAL_TRACE
             ),
         )
 
@@ -765,14 +780,14 @@ class AggregateEdgeSupportContractTest(unittest.TestCase):
             "broad-redundant",
             100.0,
             (10, 40, 70),
-            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+            BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_TRACE,
         )
 
         edges, resolutions = self._resolve(
             (existing,),
             (broad,),
             aggregate_basis=(
-                BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE
+                BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_TRACE
             ),
         )
 

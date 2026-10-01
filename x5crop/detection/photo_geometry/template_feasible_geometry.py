@@ -676,6 +676,21 @@ def _support_cross_vertices(
         if not vertices:
             raise ValueError("selected placement has no joint feasible state")
         polygons.append(vertices)
+    return _shared_slope_polygon_vertices(polygons[0], polygons[1])
+
+
+def _shared_slope_polygon_vertices(
+    top_polygon: tuple[tuple[float, float], ...],
+    bottom_polygon: tuple[tuple[float, float], ...],
+) -> tuple[tuple[tuple[float, float, float], ...], int]:
+    """Join two line polygons without retaining interior slice corners.
+
+    At an interior slope, a corner with neither side at a polygon vertex
+    lies on two affine polygon edges. It is a convex combination of the
+    corners where that pair of edges starts and ends. Boundary slopes and
+    every side vertex remain; no near-collinear or near-equal points merge.
+    """
+    polygons = (top_polygon, bottom_polygon)
     minimum_slope = max(min(m for _, m in polygon) for polygon in polygons)
     maximum_slope = min(max(m for _, m in polygon) for polygon in polygons)
     if minimum_slope > maximum_slope:
@@ -704,6 +719,11 @@ def _support_cross_vertices(
         for slope in slopes
         for top in positions_at_slope(polygons[0], slope)
         for bottom in positions_at_slope(polygons[1], slope)
+        if (
+            slope in (minimum_slope, maximum_slope)
+            or (top, slope) in top_polygon
+            or (bottom, slope) in bottom_polygon
+        )
     ))
     if len(states) > _MAX_PROJECTED_VERTICES:
         raise ValueError("joint feasible projection exceeded its vertex bound")

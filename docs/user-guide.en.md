@@ -67,6 +67,17 @@ support across three longitudinal regions, compatible direction, and a span that
 broad observations are equivalent, the sharp native coordinates remain canonical. A disagreement, a single side, or
 multiple explanations keeps the whole source in review; signal strength does not choose a winner.
 
+Broad boundary positions come from two-scale measurements on individual sampling traces. Each region requires a majority
+of its original traces to support the same material boundary, including after fitting. Missing traces remain in the
+denominator. A region's averaged signal is not treated as a measured coordinate on an individual trace.
+When measured material peaks admit several valid connections, each interpretation is retained. If association cannot
+finish within its computation bound, the whole source enters Review and the report retains the raw measurements and reason.
+Variation in broad localization peaks does not remove a physically valid boundary interpretation. Unresolved competition
+remains subject to the existing Review conditions.
+
+When a complete safe output footprint cannot be generated, the whole source enters Review and the diagnostic report
+retains the specific reason.
+
 Top and bottom use one signal baseline across the lane's full short axis, so each local query window does not independently
 set the scale used to assess edge strength. Boundaries still require complete observations inside their registered windows;
 the baseline creates no boundary evidence and does not treat missing regions beyond the source as background.

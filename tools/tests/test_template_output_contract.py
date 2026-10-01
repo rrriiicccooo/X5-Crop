@@ -65,6 +65,7 @@ from x5crop.detection.photo_geometry.template_output import (
 )
 from x5crop.detection.photo_geometry.template_feasible_geometry import (
     JointFrameState,
+    _shared_slope_polygon_vertices,
     _support_cross_vertices,
     project_format_placement,
 )
@@ -479,6 +480,84 @@ def _selected_output_gate_fact(
 
 
 class TemplateOutputContractTest(unittest.TestCase):
+    def test_support_slope_join_does_not_count_nonvertex_slice_corners(self) -> None:
+        # Ten slope slices have forty corners, but only twenty-four are
+        # extreme: the sixteen interior points on p_top=100 are redundant.
+        top = tuple((float(m * m), float(m)) for m in range(10)) + ((100.0, 9.0), (100.0, 0.0))
+        bottom = ((200.0, 0.0), (201.0, 0.0), (201.0, 9.0), (200.0, 9.0))
+        for left, right in ((top, bottom), (bottom, top), (top[::-1], bottom[::-1])):
+            with self.subTest(swapped=left == bottom, reversed=left == top[::-1]):
+                vertices, work = _shared_slope_polygon_vertices(left, right)
+                self.assertEqual(len(vertices), 24)
+                self.assertEqual(work, 40)
+        vertices, _ = _shared_slope_polygon_vertices(top, bottom)
+        for m in range(1, 9):
+            for b in (200.0, 201.0):
+                self.assertNotIn((100.0, b, float(m)), vertices)
+                self.assertIn((100.0, b, 0.0), vertices)
+                self.assertIn((100.0, b, 9.0), vertices)
+                # Exact convex-combination certificate, without a hull tolerance.
+                self.assertEqual(
+                    tuple(((9 - m) * a + m * z) / 9 for a, z in
+                          zip((100.0, b, 0.0), (100.0, b, 9.0), strict=True)),
+                    (100.0, b, float(m)),
+                )
+
+    def test_support_slope_join_keeps_real_bound_and_degenerate_fibers(self) -> None:
+        curved = (tuple((float(m * m), float(m)) for m in range(10))
+                  + tuple((float(200 - m * m), float(m)) for m in reversed(range(10))))
+        with self.assertRaisesRegex(ValueError, "vertex bound"):
+            _shared_slope_polygon_vertices(curved, tuple((p + 300.0, m) for p, m in curved))
+        top = ((0.0, 0.0), (9.0, 9.0))
+        bottom = ((20.0, 4.0), (22.0, 4.0))
+        vertices, _ = _shared_slope_polygon_vertices(top, bottom)
+        self.assertEqual(set(vertices), {(4.0, 20.0, 4.0), (4.0, 22.0, 4.0)})
+
+    def test_redundant_support_slices_preserve_full_output_and_risk(self) -> None:
+        top = tuple((float(m * m), float(m)) for m in range(10)) + ((100.0, 9.0), (100.0, 0.0))
+        bottom = ((200.0, 0.0), (201.0, 0.0), (201.0, 9.0), (200.0, 9.0))
+        extremes, _ = _shared_slope_polygon_vertices(top, bottom)
+        all_corners = tuple((p, b, float(m)) for m in range(10)
+                            for p in (float(m * m), 100.0) for b in (200.0, 201.0))
+        for width in (100.0, 300.0):
+            placement = _enclosing_support_placement(
+                frame_width_px=width, support_position_uncertainty_px=2.0,
+                observed_direction_half_width_degrees=1.0,
+            )
+            direction = FiniteInterval(-math.degrees(math.atan(0.005)), math.degrees(math.atan(0.005)))
+            placement = replace(placement, cross_fit=replace(
+                placement.cross_fit, direct_bindings=tuple(replace(
+                    binding, full_direction_interval_degrees=direction,
+                ) for binding in placement.cross_fit.direct_bindings),
+            ))
+            projection = project_format_placement(placement)
+            first = projection.frame_states[0][0]
+            outputs = []
+            for corners in (all_corners, extremes):
+                # An affine image of the certified polygon join, with the
+                # same physical/raw protection context for both representations.
+                states = tuple(JointFrameState(
+                    first.sequence_start_px, first.sequence_end_px,
+                    27.0 + 0.01 * (p - 50.0), 277.0 + 0.01 * (b - 200.5),
+                    0.001 * (m - 4.5),
+                ) for p, b, m in corners)
+                outputs.append(output_footprint_from_template_placement(
+                    placement, replace(projection, frame_states=(states,)),
+                    lane=_lane(), lane_ordinal=1, layout="horizontal",
+                ))
+            before, after = outputs
+            for field in ("mandatory_source_footprint", "requested_source_footprint", "required_source_footprint"):
+                old, new = getattr(before, field), getattr(after, field)
+                self.assertEqual(len(old), len(new))
+                for left, right in zip(old, new, strict=True):
+                    for a, b in zip(left, right, strict=True):
+                        self.assertAlmostEqual(a, b)
+            self.assertAlmostEqual(before.maximum_same_state_cross_alignment_padding_px,
+                                   after.maximum_same_state_cross_alignment_padding_px)
+            for field in ("top_expansion_px", "bottom_expansion_px", "maximum_center_shift_px"):
+                self.assertAlmostEqual(getattr(before.enclosing_support_aperture_risk, field),
+                                       getattr(after.enclosing_support_aperture_risk, field))
+
     def test_support_projection_keeps_unpaired_constraints_and_rejects_lost_raw(self) -> None:
         placement = _enclosing_support_placement(support_position_uncertainty_px=0.5)
         cross = placement.cross_fit

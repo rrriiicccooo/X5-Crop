@@ -26,6 +26,7 @@ from .measurement_model import (
 )
 from .model import BoundaryAxis, BoundaryEvidenceState, BoundaryRole, QueryPurpose
 from .registered_measurement import registered_baseline_query_groups
+from .broad_material_association import BroadAssociationState, broad_family_sources_supported
 from .observation_types import (
     BasicAxisProfile,
     BoundaryEdgeMeasurementBasis,
@@ -81,6 +82,7 @@ from .template_registration import (
     validate_membership_registration,
 )
 from .template_family_membership import MembershipAtom
+from .observations import validate_broad_material_edge_provenance
 
 
 @dataclass(frozen=True)
@@ -297,6 +299,17 @@ class RegisteredTemplateLane:
             for measurement_set in self.measurement_sets
             for item in measurement_set.broad_material_transitions
         }
+        query_by_id = {query.query_id: query for query in queries}
+        broad_paths = tuple(path for measurement in self.measurement_sets
+                            if measurement.broad_material_association is not None
+                            for path in measurement.broad_material_association.paths)
+        broad_sources = tuple(frozenset(region.transition_ids) for region in self.broad_material_regions)
+        if any(not any(source == path for path in map(frozenset, broad_paths)) for source in broad_sources):
+            raise ValueError("broad material region leaves its complete association")
+        for edge in self.broad_material_edges:
+            validate_broad_material_edge_provenance(edge, self.transition_by_id, query_by_id)
+            if not broad_family_sources_supported(edge.transition_ids, broad_paths, broad_sources):
+                raise ValueError("broad material family lost its complete source regions")
         if any(
             not set(item.transition_ids).issubset(direct_transition_ids)
             for item in self.side_regions
@@ -327,8 +340,8 @@ class RegisteredTemplateLane:
                 self.cross_height_edge_resolutions,
             ),
             (
-                BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
-                SeparatorBandMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+                BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_TRACE,
+                SeparatorBandMeasurementBasis.BROAD_MATERIAL_TRACE,
                 self.broad_material_edges,
                 self.broad_material_edge_resolutions,
             ),
@@ -389,7 +402,7 @@ class RegisteredTemplateLane:
                 band.measurement_basis
                 in {
                     SeparatorBandMeasurementBasis.CROSS_HEIGHT_AGGREGATE,
-                    SeparatorBandMeasurementBasis.BROAD_MATERIAL_AGGREGATE,
+                    SeparatorBandMeasurementBasis.BROAD_MATERIAL_TRACE,
                 }
                 and band.evidence_state == BoundaryEvidenceState.SUPPORT
             )
@@ -975,6 +988,12 @@ class TemplateLaneReconstruction:
             )
             if self.placement_competition.common_h_authority.membership_coverage != coverage:
                 raise ValueError("common H authority changed the registered interpretation coverage")
+        if self.selected_placement is not None and any(
+            item.broad_material_association is not None
+            and item.broad_material_association.state == BroadAssociationState.BOUND_EXCEEDED
+            for item in self.prepared.measurement_sets
+        ):
+            raise ValueError("incomplete broad association cannot select a placement")
         placements = self.placement_competition.placements
         if any(item.lane_id != self.lane_id for item in placements):
             raise ValueError("placement competition crosses lane authority")

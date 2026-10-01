@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 import math
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -21,7 +22,11 @@ from .model import (
     BoundaryAxis,
     QueryPurpose,
     SPATIAL_SUPPORT_REGION_COUNT,
+    spatial_support_region_index,
 )
+
+if TYPE_CHECKING:
+    from .broad_material_association import BroadAssociationResult
 
 
 @dataclass(frozen=True)
@@ -291,8 +296,8 @@ class CrossHeightTransitionRegionObservation:
 
 
 @dataclass(frozen=True)
-class BroadMaterialTransitionRegionObservation:
-    """One registered spatial region supporting a broad material boundary.
+class BroadMaterialTraceObservation:
+    """One two-scale material peak at its actual registered trace.
 
     The observation is produced from the same registered sequence traces as
     local transitions.  Its polarity comes from a two-scale signed tone
@@ -306,8 +311,6 @@ class BroadMaterialTransitionRegionObservation:
     spatial_region_index: int
     trace_ordinal: int
     trace_coordinate_px: int
-    contributing_trace_ordinals: tuple[int, ...]
-    contributing_trace_coordinates_px: tuple[int, ...]
     canonical_coordinate_px: float
     localization_interval_px: FiniteInterval
     physical_position_interval_px: FiniteInterval
@@ -321,9 +324,7 @@ class BroadMaterialTransitionRegionObservation:
     left_texture_mean: float
     right_texture_mean: float
     polarity: int
-    polarity_support_count: int
     background_side: MaterialBackgroundSide
-    background_side_support_count: int
     peak_width_px: float
     prominence: float
     local_noise: float
@@ -341,7 +342,6 @@ class BroadMaterialTransitionRegionObservation:
             self.prominence,
             self.local_noise,
         )
-        support_count = len(self.contributing_trace_ordinals)
         if (
             not self.query_id
             or not 0
@@ -349,21 +349,6 @@ class BroadMaterialTransitionRegionObservation:
             < SPATIAL_SUPPORT_REGION_COUNT
             or self.trace_ordinal < 0
             or self.polarity not in {-1, 1}
-            or support_count < 2
-            or tuple(sorted(set(self.contributing_trace_ordinals)))
-            != self.contributing_trace_ordinals
-            or support_count != len(self.contributing_trace_coordinates_px)
-            or tuple(sorted(set(self.contributing_trace_coordinates_px)))
-            != self.contributing_trace_coordinates_px
-            or self.trace_ordinal not in self.contributing_trace_ordinals
-            or self.trace_coordinate_px
-            not in self.contributing_trace_coordinates_px
-            or not support_count // 2
-            < self.polarity_support_count
-            <= support_count
-            or not support_count // 2
-            < self.background_side_support_count
-            <= support_count
             or not isinstance(self.background_side, MaterialBackgroundSide)
             or len(self.window_scales_mm) < 2
             or tuple(sorted(set(self.window_scales_mm)))
@@ -396,7 +381,7 @@ class BroadMaterialTransitionRegionObservation:
             or self.peak_width_px <= 0.0
         ):
             raise ValueError(
-                "broad material transition-region observation is invalid"
+                "broad material trace observation is invalid"
             )
 
     @property
@@ -415,11 +400,23 @@ class BroadMaterialTransitionRegionObservation:
     def texture_z(self) -> float:
         return 0.0
 
+    def validate_query(self, query: PhotoBoundaryMeasurementQuery) -> None:
+        if (
+            self.query_id != query.query_id
+            or query.purpose not in {QueryPurpose.COARSE_STRIP_SHORT, QueryPurpose.SEQUENCE_ANCHOR_WINDOW}
+            or not isinstance(self.trace_ordinal, int)
+            or not 0 <= self.trace_ordinal < len(query.trace_positions_px)
+            or query.trace_positions_px[self.trace_ordinal] != self.trace_coordinate_px
+            or spatial_support_region_index(query.trace_positions_px, self.trace_coordinate_px)
+            != self.spatial_region_index
+        ):
+            raise ValueError("broad material peak leaves its registered trace or region")
+
 
 SequenceTransitionObservation = (
     PhotoBoundaryTransition
     | CrossHeightTransitionRegionObservation
-    | BroadMaterialTransitionRegionObservation
+    | BroadMaterialTraceObservation
 )
 
 
@@ -469,9 +466,10 @@ class PhotoBoundaryMeasurementSet:
     ]
     coverage: PhotoBoundaryCoverageReceipt
     broad_material_transitions: tuple[
-        BroadMaterialTransitionRegionObservation,
+        BroadMaterialTraceObservation,
         ...,
     ] = ()
+    broad_material_association: BroadAssociationResult | None = None
 
     def __post_init__(self) -> None:
         if self.query.query_id != self.coverage.query_id:
@@ -519,10 +517,7 @@ class PhotoBoundaryMeasurementSet:
             )
         ):
             raise ValueError("measurement set contains a foreign transition")
-        for item in (
-            *self.cross_height_transitions,
-            *self.broad_material_transitions,
-        ):
+        for item in self.cross_height_transitions:
             expected_coordinates = tuple(
                 self.query.trace_positions_px[index]
                 for index in item.contributing_trace_ordinals
@@ -536,3 +531,16 @@ class PhotoBoundaryMeasurementSet:
                 raise ValueError(
                     "cross-height transition leaves its registered traces"
                 )
+        for item in self.broad_material_transitions:
+            if not isinstance(item, BroadMaterialTraceObservation):
+                raise ValueError("broad material requires actual trace observations")
+            item.validate_query(self.query)
+        if self.broad_material_association is None:
+            if self.broad_material_transitions:
+                raise ValueError("broad material requires a completed or bounded association receipt")
+        else:
+            from .broad_material_association import BroadAssociationResult
+
+            if not isinstance(self.broad_material_association, BroadAssociationResult):
+                raise TypeError("broad material requires a typed association receipt")
+            self.broad_material_association.validate_query(self.query, self.broad_material_transitions)
