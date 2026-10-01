@@ -498,6 +498,61 @@ class BroadMaterialAssociationContractTest(unittest.TestCase):
         self.assertEqual(result.state, BroadAssociationState.COMPLETE)
         self.assertEqual(_path_sets(result), expected)
 
+    def test_curved_full_universes_keep_all_non_subset_explanations(self) -> None:
+        traces = tuple(261 * index for index in range(13))
+        # Two materials share several traces. Within the qualifying material,
+        # a curved full universe contains multiple straight physical subsets.
+        # A completed superset may constrain later search, never remove a
+        # different non-subset explanation or shrink registered denominators.
+        cases = (
+            (
+                (0, 2, -10.5, 6.5, "left"), (0, 18, 13.5, 31.5, "right"),
+                (1, 7, 2.5, 19.5, "right"), (2, 3, -1.5, 16.5, "right"),
+                (3, -1, -5.5, 12.5, "right"), (4, -1.5, -6.5, 11.5, "right"),
+                (5, -1, -5.5, 11.5, "right"), (6, -4.5, -9.5, 9.5, "right"),
+                (7, 3.5, -1.5, 16.5, "right"), (8, -8, -13.5, -3.5, "left"),
+                (8, 7.5, 2.5, 21.5, "right"), (9, 5, 0.5, 18.5, "right"),
+                (10, -5, -13.5, -0.5, "left"), (10, 11, 6.5, 24.5, "right"),
+                (11, -2, -13.5, 2.5, "left"), (11, 14, 9.5, 27.5, "right"),
+                (12, -3, -13.5, 1.5, "left"), (12, 14, 9.5, 26.5, "right"),
+            ),
+            (
+                (0, 5.5, -10.5, 10.5, "left"), (0, 20.5, 15.5, 34.5, "right"),
+                (1, -7, -13.5, -2.5, "left"), (1, 10, 5.5, 22.5, "right"),
+                (2, 5.5, 0.5, 18.5, "right"), (3, 2, -2.5, 15.5, "right"),
+                (4, 0.5, -4.5, 14.5, "right"), (5, 0.5, -4.5, 14.5, "right"),
+                (6, -2, -7.5, 12.5, "right"), (7, 6, 0.5, 20.5, "right"),
+                (8, -2.5, -13.5, 2.5, "left"), (8, 12.5, 7.5, 27.5, "right"),
+                (9, 7.5, 2.5, 20.5, "right"), (10, -2, -13.5, 2.5, "left"),
+                (10, 14.5, 9.5, 27.5, "right"), (11, 1, -13.5, 5.5, "left"),
+                (11, 17, 12.5, 30.5, "right"), (12, 1, -13.5, 5.5, "left"),
+                (12, 17, 12.5, 30.5, "right"),
+            ),
+        )
+        bounds = dict(connection_px=7.527321315395724,
+                      maximum_slope=math.tan(math.radians(4)), maximum_missing_lattice_steps=1)
+        for case_index, rows in enumerate(cases):
+            for reverse, mirror in ((False, False), (True, False), (False, True), (True, True)):
+                points = tuple(_broad_point(
+                    traces, 12 - ordinal if reverse else ordinal,
+                    -coordinate if mirror else coordinate,
+                    identity=f"curved:{case_index}:{index:02}",
+                    physical=(-high, -low) if mirror else (low, high),
+                    polarity=-1, background=MaterialBackgroundSide(background),
+                ) for index, (ordinal, coordinate, low, high, background) in enumerate(rows))
+                with self.subTest(case=case_index, reverse=reverse, mirror=mirror):
+                    expected = _oracle_maximal_sets(points, traces, **bounds)
+                    # Reversing this 13-trace lattice moves raw support
+                    # between the fixed 4/4/5 regions. Keep those denominators;
+                    # the 11-point interpretation then loses regional quota.
+                    expected_lengths = ([12] if case_index == 0 else [12, 12]) if reverse else (
+                        [11, 12] if case_index == 0 else [11, 12, 12])
+                    self.assertEqual(sorted(map(len, expected)), expected_lengths)
+                    result = self._associate(points, traces, **bounds)
+                    self.assertEqual(result.state, BroadAssociationState.COMPLETE)
+                    self.assertEqual(_path_sets(result), expected)
+                    self.assertLessEqual(result.work.charged_work, 5 * len(points) ** 2)
+
     def test_tiny_random_lattices_match_independent_full_choice_oracle(self) -> None:
         traces = tuple(range(6))
         bounds = dict(connection_px=0.4, maximum_slope=0.5,
@@ -642,11 +697,12 @@ class BroadMaterialAssociationContractTest(unittest.TestCase):
                             for name in ("required", "pool", "filtered", "required_set",
                                          "duplicates", "forced", "optional", "conflict"):
                                 slots += count_container(values.get(name))
-                            for name in ("mask", "new_mask", "base", "removed"):
+                            for name in ("mask", "new_mask", "base", "removed", "difference"):
                                 value = values.get(name)
                                 if isinstance(value, int) and id(value) not in seen:
                                     seen.add(id(value))
-                                    slots += (value.bit_length() + 63) // 64
+                                    digits = (value.bit_length() + sys.int_info.bits_per_digit - 1) // sys.int_info.bits_per_digit
+                                    slots += (digits * sys.int_info.sizeof_digit + 7) // 8
                             ranges = values.get("ranges")
                             if isinstance(ranges, dict) and id(ranges) not in seen:
                                 seen.add(id(ranges))

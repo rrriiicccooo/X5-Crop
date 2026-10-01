@@ -74,6 +74,9 @@ When measured material peaks admit several valid connections, each interpretatio
 finish within its computation bound, the whole source enters Review and the report retains the raw measurements and reason.
 Variation in broad localization peaks does not remove a physically valid boundary interpretation. Unresolved competition
 remains subject to the existing Review conditions.
+Association avoids repeated checks so that some safe strips can finish within the original computation bound. Distinct
+valid interpretations remain intact. Automatic approval still requires content protection, compliant margins on each
+side, and complete evidence.
 
 When a complete safe output footprint cannot be generated, the whole source enters Review and the diagnostic report
 retains the specific reason.

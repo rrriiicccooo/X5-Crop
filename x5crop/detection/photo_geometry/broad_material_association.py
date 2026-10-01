@@ -146,6 +146,12 @@ class _BoundExceeded(Exception):
     pass
 
 
+def _mask_numeric_slots(raw_count: int) -> int:
+    """Reserve actual Python numeric limbs in eight-byte accounting slots."""
+    digits = (raw_count + sys.int_info.bits_per_digit - 1) // sys.int_info.bits_per_digit
+    return (digits * sys.int_info.sizeof_digit + 7) // 8
+
+
 def broad_family_sources_supported(
     identities, association_paths, source_regions,
 ) -> bool:
@@ -367,7 +373,27 @@ def associate_broad_material(
                                 hi_bound, hi_owners = hi, (prior, current)
                             if lo_bound > hi_bound:
                                 charge('dominance_member_check_count', len(lo_owners) + len(hi_owners))
-                                return tuple(sorted(set(lo_owners + hi_owners)))
+                                conflict = tuple(sorted(set(lo_owners + hi_owners)))
+                                if len(conflict) == 4:
+                                    # Four endpoint owners can describe a
+                                    # smaller strip contradiction. Certify a
+                                    # three-raw subset with the same outward
+                                    # arithmetic before creating its branches.
+                                    for omitted in range(4):
+                                        lo_subset, hi_subset = base_bounds[:2]
+                                        for right in range(4):
+                                            if right == omitted:
+                                                continue
+                                            for left in range(right):
+                                                if left == omitted:
+                                                    continue
+                                                lo, hi = pair_bounds(conflict[left], conflict[right])
+                                                lo_subset, hi_subset = max(lo_subset, lo), min(hi_subset, hi)
+                                        if lo_subset > hi_subset:
+                                            charge('dominance_member_check_count', 4)
+                                            return tuple(index for rank, index in enumerate(conflict)
+                                                         if rank != omitted)
+                                return conflict
                     # At arithmetic boundaries use the entire actually
                     # clipped union, rather than infer a smaller conflict.
                     return tuple(pool)
@@ -397,8 +423,15 @@ def associate_broad_material(
 
         for component in components.values():
             q = len(component)
+            if q < sum(quotas):
+                # Distinct trace support cannot exceed the raw cardinality.
+                # This rejects only components too small for the unchanged
+                # three regional quotas, before materializing search scratch.
+                counters['seed_count'] += 1
+                counters['quota_region_check_count'] += 3
+                continue
             limbs = (q + sys.int_info.bits_per_digit - 1) // sys.int_info.bits_per_digit
-            mask_references = (q + 63) // 64
+            mask_references = _mask_numeric_slots(q)
             component_start = len(completed)
             ranks = {index: rank for rank, index in enumerate(component)}
 
@@ -480,10 +513,11 @@ def associate_broad_material(
                         result.append(index)
                 return result
 
-            def propagate(pool, ranges, previous_required, required, bounds):
-                charge('dominance_member_check_count', len(previous_required) + len(required))
-                previous_set = set(previous_required)
-                additions = tuple(index for index in required if index not in previous_set)
+            def propagate(pool, ranges, required, bounds, additions):
+                # The branch already supplies every requested addition to
+                # add_required. Repeating an existing required raw is harmless:
+                # its pair bounds are already present in ranges. No difference
+                # of two required sets is needed to discover those additions.
                 charge('dominance_member_check_count', len(required))
                 required_set = set(required)
                 result = {}
@@ -513,9 +547,6 @@ def associate_broad_material(
             def visit(mask, required, bounds, depth, ranges=None):
                 nonlocal completed_references, frame_references
                 # Every suspended frame retains its own scratch reservation.
-                # The 8Q slots cover pools, branch schedules and helper copies;
-                # 2T covers trace grouping. Clear grouping scratch before a
-                # child so its construction shares only this reserved space.
                 scratch_references = 8 * q + 2 * t
                 references = scratch_references + 2 * mask_references + len(required) + 3 * len(ranges or ())
                 frame_references += references
@@ -525,8 +556,9 @@ def associate_broad_material(
                     active_references = references
                     # Grouping has been released. Only the pool, schedule and
                     # six numeric bound/owner slots survive beside durable
-                    # mask/required/range state. Child arguments are shared,
-                    # not copied, and become child-owned at visit entry.
+                    # mask/required/range state. Child arguments alias entry
+                    # state; stale entry buffers after child tail updates
+                    # remain covered by its active scratch reservation.
                     references = (len(pool) + schedule_count + 6 + 2 * mask_references
                                   + len(required) + 3 * len(ranges or ()))
                     frame_references += references - active_references
@@ -544,13 +576,49 @@ def associate_broad_material(
                         counters['created_path_count'] += 1
                         counters['peak_search_depth'] = max(counters['peak_search_depth'], depth)
                         reference_peak()
-                        if any(contained(mask, old) for _, old in completed[component_start:]):
-                            return
-                        pool = members(mask)
-                        filtered = []
                         charge('dominance_member_check_count', len(required))
                         required_set = set(required)
+                        dominance_forced = None
+                        new_mask = 0
+                        for rank in range(component_start, len(completed)):
+                            old = completed[rank][1]
+                            difference = 0
+                            # Original mask plus both transient positive
+                            # operands can coexist while XOR is evaluated.
+                            reference_peak(mask_references)
+                            words(2)
+                            difference = mask ^ (mask & old)
+                            if not difference:
+                                return
+                            words()
+                            if difference.bit_count() == 1:
+                                words()
+                                charge('dominance_member_check_count')
+                                index = component[difference.bit_length() - 1]
+                                charge('dominance_member_check_count')
+                                if index not in required_set:
+                                    dominance_forced = index
+                                    break
+                        difference = 0
+                        pool = members(mask)
+                        filtered = []
+                        if dominance_forced is not None:
+                            # Every explanation omitting this sole raw is
+                            # already contained in a qualified completed path.
+                            # Require it only in the remaining search branch;
+                            # the completed path itself stays represented.
+                            updated = add_required(required, bounds, (dominance_forced,), ranges)
+                            if updated is None:
+                                return
+                            ranges = propagate(pool, ranges, *updated, (dominance_forced,))
+                            frame_references -= references
+                            required, bounds = updated
+                            references = scratch_references + 2 * mask_references + len(required) + 3 * len(ranges)
+                            frame_references += references
+                            counters['extension_attempt_count'] += 1
+                            continue
                         new_mask = mask
+                        mask_filtered = False
                         by_trace: dict[int, list[int]] = {}
                         for index in pool:
                             charge('dominance_member_check_count')
@@ -565,6 +633,7 @@ def associate_broad_material(
                                     return
                                 words()
                                 new_mask ^= bit(index)
+                                mask_filtered = True
                         pool = filtered
                         region_counts = [0, 0, 0]
                         for indices in by_trace.values():
@@ -587,14 +656,14 @@ def associate_broad_material(
                             updated = add_required(required, bounds, forced, ranges)
                             if updated is None:
                                 return
-                            ranges = propagate(pool, ranges, required, *updated)
+                            ranges = propagate(pool, ranges, *updated, forced)
                             frame_references -= references
                             required, bounds = updated
                             references = scratch_references + 2 * mask_references + len(required) + 3 * len(ranges)
                             frame_references += references
                             counters['extension_attempt_count'] += 1
                             continue
-                        if any(contained(mask, old) for _, old in completed[component_start:]):
+                        if mask_filtered and any(contained(mask, old) for _, old in completed[component_start:]):
                             return
                         if duplicates:
                             removed = 0
@@ -619,7 +688,7 @@ def associate_broad_material(
                                 words()
                                 counters['extension_attempt_count'] += 1
                                 descend(base | bit(index), *updated,
-                                        propagate(pool, ranges, required, *updated), len(duplicates))
+                                        propagate(pool, ranges, *updated, (index,)), len(duplicates))
                                 updated = None
                             # The final choice also contains the zero-peak
                             # case. Its frame is reused, so only branches that
@@ -640,7 +709,7 @@ def associate_broad_material(
                                     remove.append(rank)
                             for rank in reversed(remove):
                                 old_component, _ = completed.pop(rank)
-                                completed_references -= (len(old_component) + 63) // 64
+                                completed_references -= _mask_numeric_slots(len(old_component))
                             if len(completed) == p:
                                 raise _BoundExceeded("completed_path_bound")
                             completed.append((component, mask))
@@ -657,6 +726,12 @@ def associate_broad_material(
                         optional = tuple(index for index in conflict if index not in required_set)
                         if not optional:
                             return
+                        charge('dominance_member_check_count', len(optional))
+                        optional = tuple(sorted(optional, key=lambda index: (
+                            -(ordered[index].transition.physical_position_interval_px.maximum
+                              - ordered[index].transition.physical_position_interval_px.minimum),
+                            orders[index], index,
+                        )))
                         by_trace.clear()
                         required_set.clear()
                         filtered = ()
@@ -673,7 +748,7 @@ def associate_broad_material(
                             words()
                             counters['extension_attempt_count'] += 1
                             descend(mask ^ bit(index), *updated,
-                                    propagate(pool, ranges, required, *updated), len(optional))
+                                    propagate(pool, ranges, *updated, optional[rank + 1:]), len(optional))
                             updated = None
                         words()
                         mask ^= bit(optional[-1])

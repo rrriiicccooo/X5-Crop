@@ -29,27 +29,32 @@
 
 ## 当前源码与验证身份
 
-完整逐 trace broad 修正已整合为 `40435b3d232706dbc8e4fe1ceb02fa7cd86af0df`：真实峰坐标、
+完整逐 trace broad 修正已在 `40435b3d232706dbc8e4fe1ceb02fa7cd86af0df` 整合：真实峰坐标、
 完整极大关联、物理竞争保留、最终来源回链、超界 Gate 与联合外框顶点去冗余由当前唯一路径消费。
+本轮关联减少重复搜索：已完成路径的包含传播、经原向外算术证明的三 raw 冲突、固定物理宽度调度，
+并按现场 CPython digit 载荷计量 mask 存储。完整 raw、互不包含解释与最终闭集物理 owner 均保持。
 `5P²`、`2PT+2T`、路径数量、深度、几何状态、区域分母及原自动批准标准均未提高。
 最终工程结果由正常 pre-push 的 `tools/verify full` 验收；Git 交付以现场 HEAD 与 origin/main 为准。
 
 最新完整生产开发诊断：
 
-- 命令：`tools/verify diagnostic --gold-analysis --output-root Test/gold_analysis/h_outer_reuse_20261001_integrated_full`。
-- 完成 110/110，analysis error 0，19 safe auto、0 unsafe auto；nominal 19/96 自动批准，77 Review，
-  challenge 14 项均 Review。整合前后全部决定、proposal/candidate 几何和逐帧诊断相同。
-- Detector manifest：`7b81954f0eebcfe6096655c6f757750c8fd756c76c14531fb2d85578fce9de12`。
+- 命令：`tools/verify diagnostic --gold-analysis --output-root Test/gold_analysis/h_assoc_optimization_20261001_final_full`。
+- 完成 110/110，analysis error 0，21 safe auto、0 unsafe auto；nominal 21/96 自动批准，75 Review，
+  challenge 14 项均 Review。最终存储修正前后全部非耗时字段相同；相对此前 19-auto 基线，
+  所有 primary 逐帧几何相同。
+- Detector manifest：`2a92bbfa939c01905e6933461a9839bf394da372a022a675589499a30083c94a`。
 - Comparator manifest：`8eaa13741d3ac9a472b8728d9d2c1340b55b074c48b19f205aa916be4b3e24aa`。
 - Cohort SHA：`c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`。
-- 该运行在提交前的 `8f23232e` dirty tree 执行；提交后的 detector/comparator 文件与 HEAD 相符，
-  两个 manifest 与 cohort SHA 精确相同。它是绑定源码字节的开发证据，不是 release receipt。
+- 该运行在隔离工作树的 `8f23232e` dirty tree 执行；整合以完整 detector/comparator manifest
+  与 cohort SHA 的精确一致为准。它是绑定源码字节的开发证据，不是 release receipt。
 - Report revision 为 `x5crop_v5_template_report_92`。现场依赖为 Python 3.14.7、NumPy 2.5.3、
   SciPy 1.18.1、OpenCV 5.0.0、tifffile 2026.9.20、imagecodecs 2026.8.16、Pillow 12.3.0。
 
-与旧已接受 `registered_exterior_20260927_full` 的 21 safe auto 相比，只有 S078/S082 转为
-producer-bound Review；不得把 19 误称为旧基线能力已全部恢复。与完整物理竞争修正后的 18 相比，
-新关联恢复 S069 为安全 auto。全部当前关联超界 task 为 S046/S055/S057/S058/S059/S078/S079/S082。
+S078/S082 已由 producer-bound Review 恢复为 safe auto，当前 21-auto 集合与旧已接受
+`registered_exterior_20260927_full` 相同。S079 已完成关联，仍因 `content_protection_conflict` Review。
+当前关联超界 task 为 S046/S055/S057/S058/S059；不能把搜索完成等同于 H 或产品验收。
+50 份正式 raw query 重放中，42 份原 COMPLETE 路径集合精确保持；S078/S079/S082 的新 COMPLETE
+集合与独立全选择 oracle 相同。存储研究实测活动容器和实际整数载荷，未宣称 Python heap/RSS 证明。
 
 当前 primary 的 H 逐侧诊断为 71 合格、18 外扩超限、15 内切、5 内切且外扩超限、1 未生成。
 这是最终 proposal 的 H 几何分类，既不证明 runtime H 预算或全部权限，也不等于 safe auto。
@@ -79,11 +84,11 @@ frame domains 不能反向授权新像素 query。不同材料层与 blank ends 
 
 ## 精确下一步与开放风险
 
-1. 先关闭真实的关联完成缺口。八项正式 CLI raw ledger、全部 COMPLETE/BOUND query 与其它
-   producer bounds 保存在 `Test/gold_analysis/h_remaining_bounds_20261001/`。
-   S078 broad 为 P18/T13、charged 1617/1620；S082 为 P19/T13、charged 1805/1805，
-   后者另有 Cross membership `fit_bound_exceeded`。收费优化必须机械等价并保留全部解释，
-   不用假较小输入或提高 cap；单修 broad 不代表 S082 能自动批准。
+1. 优先推进实际 H 缺口。S064/S052/S106 的原生 luma 与 RGB 研究复用正式 coarse-short 完整 query，
+   已核验 source SHA、布局和 gray capture；仅增加原生峰不构成整合依据。下一步按原关联、完整区域
+   多数及物理闭合核对全部观测表示，确认是否取得最终输出收益；RGB 通道不能作为独立投票。
+   五项残余关联超界与全部 raw query 仍在 `Test/gold_analysis/h_remaining_bounds_20261001/`；
+   后续优化只按具体输出阻断推进，保持机械等价，不用假较小输入或提高 cap。
 2. 在旧 outer 的全任务候选研究上，验证有实际最终输出收益的通用整行区域统计。
    同时保护原生弱／异色内容、全部物理线族与角点；保留当前 fixed query、材料身份、来源、
    构造／实测分离、Gate 与预算。仍无材料权限时保持 unavailable，不把研究候选接成自动输出。
