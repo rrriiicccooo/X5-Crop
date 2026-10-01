@@ -1,6 +1,6 @@
 # 项目记忆
 
-更新：2026-09-27。现场 Git、原 TIFF、source SHA、current report 与最新验证高于本文件。
+更新：2026-10-01。现场 Git、原 TIFF、source SHA、current report 与最新验证高于本文件。
 长期合同见 [ARCHITECTURE.md](ARCHITECTURE.md)，人工权限见
 [MANUAL_ANNOTATION.md](MANUAL_ANNOTATION.md)，协作规则见 [AGENTS.md](../AGENTS.md)。
 
@@ -29,135 +29,69 @@
 
 ## 当前源码与验证身份
 
-- 交接基点为 `0c4ecbb7199fdc048ae803a1db14bb7d965d196d`。
-  暂停会话的干净检出 `/private/tmp/x5crop-h-output-20260927` 已复用。
-  上次完整生产基线的 detector manifest 为
-  `c859a4ca7fec8b78441bacb78d4db256d83535397736ee6227582cfe89f99328`，
-  comparator manifest 为 `be79bfe58936b7c78c717a619536c597fcd2b8a6b7f61444f6da69d81a6f136d`。
-- 主目录仍保留 31 个 tracked 未暂存修改和 2 个 untracked 文件，属于此前未验收的逐 trace broad
-  测量/有界关联及其报告、Gate、三维顶点去冗余配套修改。它们不是本轮片夹区域识别实现，未覆盖、
-  reset 或删除。两目录即使 HEAD 相同也不是同一检测器，不混用其 receipt。
-  同步区域接入时保留恢复快照 `e276f580b53bb7e05becd75cef1c89584554cd86`；33 个文件逐一核对原字节或
-  完整增删补丁一致，合并冲突已解决，原修改恢复为未暂存。
-- 旧 `h_direct_pair_use_full_20260923` 记录 21 safe auto / 0 unsafe auto，其 detector manifest
-  `9157d7ca49fee662910997fb608ef33c6a6e60b6a239bdcf9d988ac6eef296da` 与当前干净源码不同，
-  只能作为历史比较。旧 broad 原型完整诊断的 16 safe auto / 0 unsafe auto 也不是当前接受结论。
-- 当前完整基线通过新增薄路由执行：
-  `tools/verify diagnostic --gold-analysis --output-root <path>`。它复用原 gold_analysis owner、
-  正式生产执行和原 comparator，默认 report gate；`accuracy` 的完整发布 gate 保持。
-  产物目录为主目录 `Test/gold_analysis/holder_region_baseline_20260927`，
-  运行日志为 `Test/gold_analysis/holder_region_20260927/production_baseline.log`。
-  已完成 110/110 项，analysis error 0，全部 current report 与物理校准通过；21 safe auto、0 unsafe auto，
-  nominal 仍有 75 Review，challenge 14 项均 Review。与旧完整记录的 proposal/candidate 安全标签和
-  最终决定逐项一致。该结果是当前源码绑定的开发基线，不是 H 验收或发布性能结果。
-  保留方案中 47 个任务至少有一份整组合格方案，63 个尚无；不能把存在合格方案等同可靠自动选择。
-  隔离检出使用独立 inode 的 APFS TIFF 副本，源身份由正式验证核对；不用指向主目录的 Test 符号链接。
-- 此轮实际 import：Python 3.14.7、NumPy 2.5.3、SciPy 1.18.1、OpenCV 5.0.0、tifffile 2026.9.20、
-  imagecodecs 2026.8.16、Pillow 12.3.0，与当前依赖合同相符。入口为 `/opt/homebrew/bin/python3`。
-- 当前合同为 report 92，新增独立外侧区域测量账本。已有共同 H 输出、直接 aperture 用途及预算保护均保留；
-  H 尚未验收，W 与正式发布性能仍后置。
+完整逐 trace broad 修正已整合为 `40435b3d232706dbc8e4fe1ceb02fa7cd86af0df`：真实峰坐标、
+完整极大关联、物理竞争保留、最终来源回链、超界 Gate 与联合外框顶点去冗余由当前唯一路径消费。
+`5P²`、`2PT+2T`、路径数量、深度、几何状态、区域分母及原自动批准标准均未提高。
+最终工程结果由正常 pre-push 的 `tools/verify full` 验收；Git 交付以现场 HEAD 与 origin/main 为准。
 
-## 当前片夹区域证据
+最新完整生产开发诊断：
 
-全部 106 个源的固定原生 RGB 外侧测量已完成，覆盖同源 110 个任务。脚本、数组、source/cohort SHA、
-逐点评估位于 `Test/gold_analysis/holder_region_20260927`；
-方法、反例和权限见 [BOUNDARY_FEATURE_RESEARCH.md](BOUNDARY_FEATURE_RESEARCH.md) 的
-“片夹区域与可见内容保护”。它是材料假设研究，不是新的检测器或 H 通过凭据。
+- 命令：`tools/verify diagnostic --gold-analysis --output-root Test/gold_analysis/h_outer_reuse_20261001_integrated_full`。
+- 完成 110/110，analysis error 0，19 safe auto、0 unsafe auto；nominal 19/96 自动批准，77 Review，
+  challenge 14 项均 Review。整合前后全部决定、proposal/candidate 几何和逐帧诊断相同。
+- Detector manifest：`7b81954f0eebcfe6096655c6f757750c8fd756c76c14531fb2d85578fce9de12`。
+- Comparator manifest：`8eaa13741d3ac9a472b8728d9d2c1340b55b074c48b19f205aa916be4b3e24aa`。
+- Cohort SHA：`c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`。
+- 该运行在提交前的 `8f23232e` dirty tree 执行；提交后的 detector/comparator 文件与 HEAD 相符，
+  两个 manifest 与 cohort SHA 精确相同。它是绑定源码字节的开发证据，不是 release receipt。
+- Report revision 为 `x5crop_v5_template_report_92`。现场依赖为 Python 3.14.7、NumPy 2.5.3、
+  SciPy 1.18.1、OpenCV 5.0.0、tifffile 2026.9.20、imagecodecs 2026.8.16、Pillow 12.3.0。
 
-S064 的外侧材料提供了位于黄金指导线外、留边合理的提示；强亮照片与白色片夹连通、照片已贴到源边
-分别由 S047、S106 暴露。固定颜色前缀门槛全部存在反例，不能直接生成排除 mask。
-已进一步完成全部 106 源的正式 CLI 灰度捕获；106 个代表请求的 primary footprint 和 decision
-与完整基线一致，当前运行时仍未改变。完整原生灰度、report、source SHA 位于上述目录的
-`registered_gray/`，无须重读全部 TIFF。四个同源 count 变体的注册测量尚未单独捕获。
+与旧已接受 `registered_exterior_20260927_full` 的 21 safe auto 相比，只有 S078/S082 转为
+producer-bound Review；不得把 19 误称为旧基线能力已全部恢复。与完整物理竞争修正后的 18 相比，
+新关联恢复 S069 为安全 auto。全部当前关联超界 task 为 S046/S055/S057/S058/S059/S078/S079/S082。
 
-全列密集区域与凸包外框研究已完成：110 task 的 H 半平面检查为 75 满足、27 外扩超限、8 区域不可用，
-内切 0。再保护全部已注册 H binding 原始区间后，106 个代表请求为 71 满足、28 外扩超限、
-7 不可用，内切仍为 0。这些不是生产裁切通过率或 safe auto。
-合成弱前沿反例证明仅靠颜色区域不安全：会内切 86.578 px；保留独立原生弱 sharp 区间后退到前沿外
-7.5 px。既有弱证据不能被区域标签覆盖，逐 trace 真坐标和完整物理线族保护仍是接入前提。
+当前 primary 的 H 逐侧诊断为 71 合格、18 外扩超限、15 内切、5 内切且外扩超限、1 未生成。
+这是最终 proposal 的 H 几何分类，既不证明 runtime H 预算或全部权限，也不等于 safe auto。
+S030 六帧 H 几何合格，但首帧长轴 END 外扩超限；不能把该 W 问题误算作 H。
+S064 仍有 H 外扩和比例推断缺口；一份条件方案虽通过 runtime 预算，却内切，不能用它替换主方案。
 
-将区域已获权作为明确反事实、保留原有全部 Cross 竞争后，现有 owner 对 S062/S064/S067 均产生
-黄金 safe 且全部预算通过的完整输出；S064 TOP/BOTTOM 预算约 77.523%/73.376%。
-S003 原唯一 aperture 保持不变。证据为 `protected_enclosing_feasibility.json`，它使用明确标识的
-synthetic certificate，只证明输出通路可行，不证明材料身份、真实 observation 或自动批准。
-研究凸包编译器与 LP 目标、完整约束、翻转及平移的 100 组检查通过；其后续源码构造 owner 见下段。
+## 旧版 outer 的复用证据与材料权限边界
 
-后续已增加完整物理投影保护：消费原输出 owner 的相关物理线族、统计 fit 和 raw 区间，只有原
-source-spanning binding 才使用全源投影，其余保留原 trace hull。106 项 H 检查为 53 满足、46 外扩
-超限、7 不可用、内切 0；四个关键样片的完整输出求解反事实仍安全。
-新增“弱前沿只落在两条固定 trace 之间”的合成反例证明，稀疏 raw 保护仍会内切 84.5 px。
-在既有 5×5 区域平均场上加入全列 registered gradient/tone/texture 保护后，该反例退到前沿外
-18.922 px。全源研究结果为 40 满足、59 外扩超限、7 不可用、内切 0；7158 条 trace 与原标量
-测量函数逐坐标等价。S062/S064/S067 的 H 半平面仍满足，但这一版本尚未经过完整输出和生产 Gate。
-单像素原始列的全列版本会保留大量片夹噪声，关键样片外扩超限，未采用该版本。
+稳定 `v4.2.8` 为 `8d14c55d8af5c944a0b78b51df4c4c428e606f07`。精确 tag outer 函数在当前
+正式 TIFF/gray owner 上的全任务研究保存在
+`Test/gold_analysis/h_release_outer_population_20261001/`，六份既有灰度捕获逐像素等价。
+全部 110 TIFF 路径在读取前核验实际 SHA，均与 cohort 匹配，覆盖 110 task / 106 source SHA；
+无 unsupported 或 untested。Raw 存在 H 半平面合格候选的任务为 91（nominal 84/96）；
+加旧默认 10 px 短轴 bleed 后为 84（nominal 76/96）。这支持优先研究整行统计，不能按黄金挑候选。
+研究不运行旧版完整 TIFF normalization、deskew、最终 footprint、材料判断或批准；它不证明 H 完成。
 
-已新增 `constructed_enclosure.py` 和独立 LP／包含／对称性／工作量 contract tests，建立不冒充实测
-物理线的输出构造类型。它尚未接入 detector；不能将新增源码后的 manifest 与旧捕获混用，或把上述
-研究结果当作新增 safe auto。原完整生产基线仍是上文 21 safe auto / 0 unsafe auto。
+现有固定区域测量仍只是 registered gray facts，未授予片夹或输出权限；`constructed_enclosure.py`
+仍未接入 detector。材料研究及反例在 `Test/gold_analysis/holder_region_20260927/` 和
+[BOUNDARY_FEATURE_RESEARCH.md](BOUNDARY_FEATURE_RESEARCH.md)。低纹理、外侧位置、颜色前缀均
+不足以证明片夹。S047 亮照片与白片夹连通、S106 照片贴源边、窄弱前沿、亚核弱内容及等亮异色
+反例继续有效；模型与自动工具不得据此代写人工 reference。
 
-`exterior_region_measurement.py` 已接入生产注册计划、lane 测量与开发报告，但尚不授予片夹或输出权限。
-以精确 5×5 整数像素和代替浮点平滑，保留颜色前缀和全列弱信号，独立登记 query、覆盖及像素／缓冲
-工作量。稳定 query 摘要可跨 source identity scope 和报告进程重建；区域与稀疏查询合并检查原上限。
-106 源的 producer 实验仍为 40 满足、59 外扩超限、7 不可用、内切 0，产物为
-`registered_region_all_proposals.json`、`registered_region_all_assessment.json`；这是 H 半平面研究。
-接入与修正已提交至 `e8d59e39f3fc832cf8346d34f9c56d92619d63cf` 并由正常 Hook 推送 main。
-工程验证为 1026 tests、2 skipped，依赖、cohort、编译及入口检查通过。物理计划保持缩放不变，
-区域查询独立绑定像素范围；差分原地化、索引释放和 NumPy 按列归约副本均纳入完整缓冲上界与回归。
-完整正式 CLI 已完成 110/110，报告错误 0，21 safe auto / 0 unsafe auto；原方案黄金标签、预算、
-Review 原因及决定逐项与此前基线一致。产物已按字节核对保存在主目录
-`Test/gold_analysis/registered_exterior_20260927_full/`；隔离目录原件为同名加 `_v3`。
-detector manifest 为 `fe85a1ff144b0533404b1d6924a67d4f6f519443dd0d84fb250248859a9017e7`，
-comparator manifest 为 `6c7b9662525092b7b747069b168434c8fa37361774311e2cb2dc274078532bf3`。
-区域观测的生产回归已经闭合，但未增加 H 输出权限或 safe auto，尚不达到发布标准。
-亚核反例 `subkernel_weak_counterexample.json` 中，1–3 px 宽的 5 码弱前沿仍被区域框内切约 20.5 px，
-5 px 宽的对应输入安全。这个权限缺口必须在区域自动输出前关闭。
-未经平滑的 seed-relative 连续变化保护可关闭上述生成反例，但六源实验仅 1 个 H 留边满足、
-4 个超限、1 个不可用，未进入生产；记录为 `native_prefix_six_*` 和 `native_prefix_synthetic.json`。
-端部片夹变化只是部分原因，不能用现有 requested footprint 缩小保护域：它依赖旧 H，当前没有覆盖
-全 source cross、全部 W 连续状态及角点／bleed 的独立照片占用域 API，位置统计也未证明足够收益。
-
-原生颜色反例与方向平均实验进一步限定了区域权限。等亮异色内容经正式灰度转换后可逐像素消失，
-现有区域框仍内切 20.5 px；凭据为 `chromatic_material_counterexample.json`。
-沿 H 的灰度 5×1 保留窄条并维持四个关键样片的 H 半平面，但仍有异色盲区。原生 RGB/257 不裁剪、
-不量化的逐列保护通过 18 个生成弱／异色前沿，六源仅 S003 留边满足；5×1 原生版本增加 S067，
-却仍会漏掉一像素高的弱内容。另查 S002/S068，逐列版分别满足／超限，均未接入运行时。
-产物为 `axial_*`、`native_code_scale_*`，完整方法见研究文档；这些不是生产准确性结果。
-逐行拟合种子颜色模式会吸收整行新内容，已否决。固定外侧 seed 的 lag 2–64 研究未发现强且一致的
-短周期；`seed_periodicity_probe.json` 绑定六源数组与 source SHA，不据此增加周期模板。
-当前区域身份仍未成立，停止继续枚举阈值、平均核与逐行模式。生产源码、批准与完整基线均未改变。
+S064 的完整 coarse-short broad 关联已完成，但全部候选都缺少共同物理直线，不是搜索超界。
+现有 coarse-long 只得到全源 `[0,9898]`，没有 candidate-independent 照片组长轴域；后来的 phase
+frame domains 不能反向授权新像素 query。不同材料层与 blank ends 的区分仍未成立；
+不能缩小原区域多数分母、删除竞争、套用黄金位置或放宽预算解决它。
 
 ## 精确下一步与开放风险
 
-1. 当前完整基线和输出分类已闭合：21 项安全 auto；19 项 H 已满足、阻断在其它部分；33 项 H 几何
-   失败；23 项 H 预算证明失败；9 项共同输出或权限待闭合；4 项联合角边失败；1 项长轴未生成 primary。
-   新 `output_triage.json` 复用原 classifier 与 comparator，绑定本次完整运行；后续只围绕实际输出失败
-   增加 H 机制，不重新泛查已有合格 H 的 40 项，不把 Review 总数当作 H 失败数。
-2. 密集区域及全列弱信号的注册、工作量、报告与完整回归已闭合。下一项以 S062/S064/S067、亮内容
-   S047、贴源边 S106 和窄弱前沿反例为最小工作集，验证可区分片夹自身变化与原生弱照片内容的材料
-   证据，再与现有物理投影组合为 constructed 输出证明。材料种子资格、完整保护及输出 Gate 权限尚未闭合。
-   必须同时保留宽弱前沿和测量线之间局部弱前沿反例；5×5 平均场的亚核弱内容与真实坐标 broad
-   问题仍需正反例，不把 7158 条数值等价当成材料身份验证。
-   材料种子不成立时保持 unavailable。8 码、5×5、0.25 mm 是当前固定实验参数，尚未取得
-   生产权限；不以全源无内切的开发结果代替反例、实际注册和完整运行。当前灰度／原生异常前缀
-   已证明不能同时解决细弱内容与片夹变化，不再直接沿此方法扩大测量。下一项先复核 S002 的完整
-   既有 H 解释与固定 W 前提，区分已有 H 保护、共同输出证明和真正材料身份缺口；同时回到下述
-   broad 真实坐标／完整关联 owner，优先关闭可验证的现有机制问题。保持 H 优先，不提前修改 W。
-3. 复用 coarse/Cross/现有 enclosing 输出；构造线必须与实测 transition 语义分开，不授予 placement
-   或 deskew 角度权限，不把 synthetic certificate 接入生产。完整源的所有点均已测量，不按 winner
-   重读；缺少 departure 的列受测量带边界约束。凸包编译替代研究 LP，登记实际像素、临时内存和几何
-   工作量，再补 report/Gate 回链。现有唯一 direct aperture 继续保留原权限。
-   接入后用正式 CLI 和冻结黄金验证 110 task，保留 21 个 safe auto，危险 auto 必须为 0；
-   分别报告 H、整组合格和可靠 auto，不能用反事实的 safe 输出冒充真实进展。
-   不增加按 canonical W domain 截短区域的接口：它不是完整物理保护域，且目前全源方案已有潜力。
-4. 主目录待验收 broad 修正另有明确真实问题：区域均值会偏移代表坐标，逐 trace 关联原型又暴露
-   搜索超界和输出回退。需要在当前唯一机制内关闭真实坐标与完整关联职责；不能因为此轮另研究片夹，
-   就接受旧伪代表点、清除合法竞争或遗忘未验收修改。当前失败与收益须用对应 manifest 重新验证。
-5. 公共中英文手册与架构已补充可见内容范围；研究检查点已推送 `4d40d5e4`。
-   本轮新增纯几何构造模块与测试，尚未改变生产接线和批准权限。研究结论与本检查点按正常 Hook 提交、推送；
-   保留主目录其余修改，不推送混杂的未验收源码。每项实现验证和 Git 交付按 AGENTS 执行。
-6. 发布仍需同一最终提交的全部验收，三目标实机 receipt 未在此轮完成。当前没有 sealed cohort，
-   黄金未覆盖 xpan、120-645、135-dual；按架构披露这些边界，不据此新增禁用规则或假称泛化合格。
-   概率选择若启用，另须其独立 calibration/sealed 合同；本轮未启用。
+1. 先关闭真实的关联完成缺口。八项正式 CLI raw ledger、全部 COMPLETE/BOUND query 与其它
+   producer bounds 保存在 `Test/gold_analysis/h_remaining_bounds_20261001/`。
+   S078 broad 为 P18/T13、charged 1617/1620；S082 为 P19/T13、charged 1805/1805，
+   后者另有 Cross membership `fit_bound_exceeded`。收费优化必须机械等价并保留全部解释，
+   不用假较小输入或提高 cap；单修 broad 不代表 S082 能自动批准。
+2. 在旧 outer 的全任务候选研究上，验证有实际最终输出收益的通用整行区域统计。
+   同时保护原生弱／异色内容、全部物理线族与角点；保留当前 fixed query、材料身份、来源、
+   构造／实测分离、Gate 与预算。仍无材料权限时保持 unavailable，不把研究候选接成自动输出。
+3. 只围绕实际 H 内切、外扩、预算和安全批准缺口推进；H 合格项继续回归，不以提高中间精度替代
+   最终裁切验收。H 验收后再开展 W，已有 W 模型可以约束 H，但不提前扩大 W 算法范围。
+4. 当前所有 receipt 均为 development；尚无 sealed cohort，xpan/120-645/135-dual 未被黄金覆盖。
+   正式性能、TIFF/metadata、安装、三目标实机及打包验收仍须绑定同一最终 release commit。
+   当前未启用概率选择；若启用，须独立 calibration/sealed 合同。未经用户确认不创建 RC/tag/Release。
 
 ## 延后任务：共同 W 与逐 Frame 真实变化审计
 
