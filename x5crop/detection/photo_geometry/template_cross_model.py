@@ -1357,6 +1357,8 @@ class CrossFitCompetition:
     fit_groups: tuple[CrossFitGroup, ...] = ()
     conditional_fit_groups: tuple[CrossFitGroup, ...] = ()
     support_pair_bindings: tuple[tuple[CrossRoleBinding, CrossRoleBinding], ...] = ()
+    enclosing_support_fits: tuple[CrossFit, ...] = ()
+    support_output_eligible: bool = False
 
     def __post_init__(self) -> None:
         if (any(len(pair) != 2 or pair[0].role != BoundaryRole.TOP
@@ -1364,6 +1366,14 @@ class CrossFitCompetition:
                 or len(self.support_pair_bindings) > self.receipt.evaluated_fit_count
                 or (self.status == CrossFitStatus.BOUND_EXCEEDED and self.support_pair_bindings)):
             raise ValueError("Cross support ledger exceeds its complete evaluated work")
+        if (type(self.support_output_eligible) is not bool
+                or self.support_output_eligible and self.status != CrossFitStatus.UNRESOLVED
+                or self.enclosing_support_fits and (
+                    tuple(fit.direct_bindings for fit in self.enclosing_support_fits) != self.support_pair_bindings
+                    or any(fit.template_id != self.template_id
+                        or fit.boundary_use != OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
+                        for fit in self.enclosing_support_fits))):
+            raise ValueError("Cross enclosing outputs changed their complete support ledger")
         groups = (*self.fit_groups, *self.conditional_fit_groups)
         if any(not isinstance(group, CrossFitGroup) for group in groups):
             raise TypeError("cross competition groups must retain typed support results")

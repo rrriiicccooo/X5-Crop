@@ -40,64 +40,19 @@ def _identity(value: Any) -> bool:
     return isinstance(value, str) and bool(value)
 
 
-def _budget(value: Any, placement: dict, native: dict, common: dict, ordinal: int) -> None:
+def _budget(value, placement, native, common, projection) -> None:
+    from x5crop.detection.photo_geometry.template_output import common_member_budget_assessment
     value = _record(value, CommonOutputMemberBudget)
-    assessment = _record(value["assessment"], DirectUseBudgetAssessment)
-    if (value["placement_id"] != placement["placement_id"]
-            or value["native_geometry_id"] != native["geometry_id"]
-            or assessment["geometry_id"] != common["geometry_id"]
-            or assessment["boundary_use"] != "aperture_pair"
-            or any(assessment[name] is not None for name in (
-                "enclosing_support_height_ratio", "enclosing_support_within_limit",
-                "maximum_same_state_cross_alignment_padding_mm",
-                "maximum_same_state_cross_alignment_padding_within_limit"))):
-        raise ValueError("common H member budget identity or aperture fields changed")
-    edges = assessment["edge_assessments"]
-    roles = ("start", "end", "top", "bottom")
-    if not isinstance(edges, list) or len(edges) != len(roles):
-        raise ValueError("common H member budget lost an edge")
-    frame = _record(placement["frames"][ordinal - 1], TemplateFrame)
-    supported = True
-    for role, edge in zip(roles, edges, strict=True):
-        edge = _record(edge, DirectUseBudgetEdgeAssessment)
-        boundary = _record(frame[role], FrameBoundaryGeometry)
-        raw_line = _record(boundary["line"], SourceCoordinateLine)
-        if (boundary["role"] != role or raw_line["source_axis_long"] != placement["width_axis"]
-                or any(not _number(raw_line[key]) for key in ("normal_x", "normal_y", "offset_px"))):
-            raise ValueError("common H member boundary identity is invalid")
-        line = SourceCoordinateLine(**{
-            **raw_line,
-            "support_projection_px": FiniteInterval(**raw_line["support_projection_px"]),
-            "source_axis_long": BoundaryAxis(raw_line["source_axis_long"]),
-        })
-        projections = [line.normal_x * x + line.normal_y * y
-                       for x, y in common["requested_source_footprint"]]
-        expansion = max(0.0, line.offset_px - min(projections)) if role in ("start", "top") else max(
-            0.0, max(projections) - line.offset_px)
-        axis = "width" if role in ("start", "end") else "height"
-        state = placement["source_scan_geometry"][f"{axis}_state"]
-        vertices = state.get("vertices") if isinstance(state, dict) else None
-        physical_extent = placement["frame_spec"].get(f"frame_{axis}_mm")
-        if (not isinstance(vertices, list) or not vertices
-                or any(not isinstance(point, list) or len(point) != 2
-                       or any(not _number(v) or v <= 0 for v in point) for point in vertices)
-                or not _number(physical_extent) or physical_extent <= 0):
-            raise ValueError("common H member source scale or frame specification is invalid")
-        expansion_mm = expansion / min(point[0] for point in vertices)
-        limit_mm = physical_extent * OUTPUT_PROTECTION_SPEC.maximum_expansion_ratio_per_side
-        within = expansion_mm <= limit_mm
-        # These are deterministic read-model values, with no new budget tolerance.
-        if (edge["role"] != role or edge["limit_applies"] is not True
-                or edge["within_limit"] is not within
-                or any(not _number(edge[key]) or edge[key] != expected for key, expected in (
-                    ("expansion_px", expansion), ("expansion_mm", expansion_mm), ("limit_mm", limit_mm)))):
-            raise ValueError("common H member budget does not reproduce the common requested footprint")
-        supported = supported and within
-    if assessment["state"] != ("supported" if supported else "contradicted"):
-        raise ValueError("common H member budget state is inconsistent")
+    if value["placement_id"] != placement.placement_id or value["native_geometry_id"] != native.geometry_id:
+        raise ValueError("common H member budget identity changed")
+    expected = common_member_budget_assessment(placement, native,
+        tuple(tuple(point) for point in common["requested_source_footprint"]),
+        geometry_id=common["geometry_id"], projection=projection)
+    if value["assessment"] != typed_read_model(expected):
+        raise ValueError("common H member budget does not reproduce the common requested footprint")
 
 
-def _output(value: Any, placements: list[dict], ordinal: int, extent: WorkspaceExtent) -> None:
+def _output(value: Any, placements: list[dict], ordinal: int, extent: WorkspaceExtent, typed, projections) -> None:
     # Local import keeps report_validation free to call this helper.
     from .report_validation import validate_output_footprint_authority, _validate_polygon
 
@@ -120,7 +75,8 @@ def _output(value: Any, placements: list[dict], ordinal: int, extent: WorkspaceE
                 or envelope["placement_id"] != placement["placement_id"]
                 or envelope["lane_id"] != placement["lane_id"]
                 or type(envelope["lane_ordinal"]) is not int or envelope["lane_ordinal"] != ordinal
-                or envelope["boundary_use"] != "aperture_pair"
+                or envelope["boundary_use"] != placements[0]["cross_fit"]["boundary_use"]
+                or envelope["boundary_use"] != placement["cross_fit"]["boundary_use"]
                 or envelope["canonical_source_footprint"] != typed_read_model(convex_hull(tuple(
                     tuple(point) for point in _validate_polygon(
                         frame["canonical_source_polygon"], "common H member frame"))))
@@ -154,8 +110,9 @@ def _output(value: Any, placements: list[dict], ordinal: int, extent: WorkspaceE
     if (value["saturation_facts"] != typed_read_model(saturation)
             or value["required_source_footprint"] != typed_read_model(required)):
         raise ValueError("common H source clipping or saturation changed")
-    for placement, native, budget in zip(placements, members, budgets, strict=True):
-        _budget(budget, placement, native, value, ordinal)
+    for index, budget in enumerate(budgets):
+        _budget(budget, typed.placements[index], typed.output_footprints[ordinal - 1].members[index],
+                value, projections[index] if projections else None)
 
 
 def validate_common_h_output(
@@ -209,23 +166,36 @@ def _validate_common_h_output(value, extent, cross, registration, phase) -> None
     if cross is not None:
         if not isinstance(cross, dict):
             raise ValueError("common H Cross competition is invalid")
-        fits, expected_mapping = [], []
-        for key in ("fit_groups", "conditional_fit_groups"):
-            groups = cross[key]
-            if not isinstance(groups, list):
-                raise ValueError("common H Cross groups are invalid")
-            indices = []
-            for group in groups:
-                # Full fit equality is essential: unsupported groups are not filtered.
-                fit = group["fit"]
-                if not isinstance(fit, dict):
-                    raise ValueError("common H Cross fit is invalid")
-                if fit not in fits:
-                    fits.append(fit)
-                indices.append(fits.index(fit))
-            expected_mapping.append(indices)
-        if mapping != expected_mapping or [p["cross_fit"] for p in placements] != fits:
-            raise ValueError("common H changed or omitted a retained Cross group")
+        if first["cross_fit"]["boundary_use"] == "enclosing_support_pair":
+            from .report_validation import _read_common_proof, _read_membership_receipt
+            from x5crop.detection.photo_geometry.template_cross_model import CrossFitCompetition
+            from x5crop.detection.photo_geometry.template_common_output import common_h_fit_members
+            from x5crop.detection.photo_geometry.template_registration import CrossRegistrationWorkReceipt
+            if registration is None:
+                raise ValueError("common H Cross proof requires its complete registration")
+            typed_registration = CrossRegistrationWorkReceipt(**{
+                **registration, "membership": _read_membership_receipt(registration["membership"])})
+            expected = common_h_fit_members(_read_common_proof(cross, CrossFitCompetition), typed_registration)
+            if expected is None or mapping != typed_read_model(expected[1]) or [p["cross_fit"] for p in placements] != typed_read_model(expected[0]):
+                raise ValueError("common H changed or omitted a retained Cross group")
+        else:
+            fits, expected_mapping = [], []
+            for key in ("fit_groups", "conditional_fit_groups"):
+                groups = cross[key]
+                if not isinstance(groups, list):
+                    raise ValueError("common H Cross groups are invalid")
+                indices = []
+                for group in groups:
+                    # Full fit equality is essential: unsupported groups are not filtered.
+                    fit = group["fit"]
+                    if not isinstance(fit, dict):
+                        raise ValueError("common H Cross fit is invalid")
+                    if fit not in fits:
+                        fits.append(fit)
+                    indices.append(fits.index(fit))
+                expected_mapping.append(indices)
+            if mapping != expected_mapping or [p["cross_fit"] for p in placements] != fits:
+                raise ValueError("common H changed or omitted a retained Cross group")
     if registration is not None and (
         not isinstance(registration, dict)
         or type(registration.get("local_refinement_scope_count")) is not int
@@ -251,5 +221,14 @@ def _validate_common_h_output(value, extent, cross, registration, phase) -> None
             or work.output_evaluation_count != work.projection_count * count
             or work.projection_count + work.reused_projection_count != len(placements)):
         raise ValueError("common H output does not cover every member and slot")
+    from .report_validation import _read_common_proof
+    from x5crop.detection.photo_geometry.template_feasible_geometry import project_format_placement
+    typed = _read_common_proof(value, CommonHOutput)
+    from x5crop.detection.photo_geometry.template_common_output import common_member_center_authority
+    if any(p.enclosing_support_aperture_authority != common_member_center_authority(p.cross_fit)
+           for p in typed.placements):
+        raise ValueError("common H member center authority does not reproduce its physical support")
+    projections = tuple(project_format_placement(p) for p in typed.placements) if (
+        first["cross_fit"]["boundary_use"] == "enclosing_support_pair") else ()
     for ordinal, output in enumerate(outputs, 1):
-        _output(output, placements, ordinal, extent)
+        _output(output, placements, ordinal, extent, typed, projections)

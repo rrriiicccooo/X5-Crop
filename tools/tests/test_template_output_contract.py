@@ -246,6 +246,7 @@ def _enclosing_support_placement(
     frame_count: int = 1,
     frame_width_px: float = 100.0,
     support_span_px: float = 250.0,
+    support_center_px: float = 152.0,
     support_position_uncertainty_px: float = 0.0,
     support_slope: float = 0.0,
     observed_direction_half_width_degrees: float = 0.0,
@@ -258,7 +259,7 @@ def _enclosing_support_placement(
             pitch_px=FiniteInterval.exact(frame_width_px + 20.0),
             phase_lattice_authority=replace(template.phase_lattice_authority, period_px=frame_width_px + 20.0),
         )
-    support_center = 152.0
+    support_center = support_center_px
     support_top = support_center - support_span_px / 2.0
     support_bottom = support_center + support_span_px / 2.0
     support_traces = (0, 150, 300)
@@ -354,12 +355,12 @@ def _enclosing_support_placement(
         template_id=template.template_id,
         lane_reference_trace_px=150.0,
         fixed_height_px=FiniteInterval.exact(240.0),
-        top_canonical_px=32.0,
-        bottom_canonical_px=272.0,
-        top_fit_interval_px=FiniteInterval.exact(32.0),
-        bottom_fit_interval_px=FiniteInterval.exact(272.0),
-        top_full_interval_px=FiniteInterval.exact(32.0),
-        bottom_full_interval_px=FiniteInterval.exact(272.0),
+        top_canonical_px=support_center - 120.0,
+        bottom_canonical_px=support_center + 120.0,
+        top_fit_interval_px=FiniteInterval.exact(support_center - 120.0),
+        bottom_fit_interval_px=FiniteInterval.exact(support_center + 120.0),
+        top_full_interval_px=FiniteInterval.exact(support_center - 120.0),
+        bottom_full_interval_px=FiniteInterval.exact(support_center + 120.0),
         direct_bindings=(top, bottom),
         inferred_bindings=(),
         selected_direction=direction,

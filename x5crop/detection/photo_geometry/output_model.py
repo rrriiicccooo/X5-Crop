@@ -655,7 +655,7 @@ class CommonOutputMemberBudget:
 
 @dataclass(frozen=True)
 class CommonOutputFootprint:
-    """One crop covering named native aperture outputs, with per-member budgets.
+    """One crop covering named native H outputs, with per-member budgets.
 
     This is a geometric proof over the supplied set, not evidence that the
     set is complete or that its members have final placement authority.
@@ -685,13 +685,13 @@ class CommonOutputFootprint:
         if any(
             member.envelope.lane_id != first.lane_id
             or member.envelope.lane_ordinal != first.lane_ordinal
-            or member.envelope.boundary_use != OutputBoundaryUse.APERTURE_PAIR
+            or member.envelope.boundary_use != first.boundary_use
             or member.sampling_authority_box != self.sampling_authority_box
             or member.source_extent != self.source_extent
             or member.authority_profile_id != self.authority_profile_id
             for member in self.members
         ):
-            raise ValueError("common aperture output changed lane, slot or source authority")
+            raise ValueError("common H output changed lane, slot or source authority")
         for name in ("mandatory_source_footprint", "requested_source_footprint"):
             expected = convex_hull(tuple(point for member in self.members for point in getattr(member, name)))
             if getattr(self, name) != expected:
@@ -699,7 +699,7 @@ class CommonOutputFootprint:
         if (
             tuple((b.placement_id, b.native_geometry_id) for b in self.member_budgets) != identities
             or any(b.assessment.geometry_id != self.geometry_id
-                   or b.assessment.boundary_use != OutputBoundaryUse.APERTURE_PAIR
+                   or b.assessment.boundary_use != first.boundary_use
                    for b in self.member_budgets)
         ):
             raise ValueError("common output budgets do not cover every native member")
@@ -723,7 +723,7 @@ class CommonOutputFootprint:
 
     @property
     def boundary_use(self) -> OutputBoundaryUse:
-        return OutputBoundaryUse.APERTURE_PAIR
+        return self.members[0].envelope.boundary_use
 
 
 @dataclass(frozen=True)

@@ -1219,7 +1219,16 @@ def _validate_native_coarse_side_support(lane, query_records, registered, source
         raise ValueError("coarse side registration overflow was not propagated")
     replay = fit_template_cross(inputs)
     competition = lane["cross_competition"]
+    def support_fits_record(fits):
+        record = typed_read_model(fits)
+        for fit in record:
+            fit["selected_direction"]["direction_id"] = "recomputed-direction"
+            fit["longitudinal_projection_authority"]["authority_id"] = "recomputed-projection"
+        return record
+    recorded = _read_common_proof(competition, CrossFitCompetition)
     if (typed_read_model(replay.support_pair_bindings) != competition.get("support_pair_bindings")
+            or replay.support_output_eligible != recorded.support_output_eligible
+            or support_fits_record(replay.enclosing_support_fits) != support_fits_record(recorded.enclosing_support_fits)
             or typed_read_model(replay.receipt) != competition["receipt"]
             or replay.status.value != competition["status"]
             or typed_read_model(replay.winner_basis) != competition["winner_basis"]):
@@ -3938,17 +3947,7 @@ def _validate_common_authority_provenance(lane, production_lane, query_records) 
     template = phase.template
     if typed_read_model(template) != lane["template_spec"]:
         raise ValueError("common H authority changed its template")
-    cross_input = TemplateCrossInput(
-        template=template, fixed_height_px=fixed_height, canonical_fixed_height_px=fixed_height.center,
-        lane_reference_trace_px=common.placements[0].width_authority_px.center,
-        top_bindings=tuple(b for b in bindings if b.role == BoundaryRole.TOP),
-        bottom_bindings=tuple(b for b in bindings if b.role == BoundaryRole.BOTTOM),
-        registered_trace_coordinates_px=tuple(top_queries[0]["trace_positions_px"]),
-        longitudinal_support_domain_groups_px=tuple(tuple(FiniteInterval(**interval) for interval in group)
-            for group in _cross_support_domains_from_phase_report(lane["phase_competition"])),
-        boundary_axis=common.placements[0].height_axis,
-        aperture_aspect_ratio_authority=cross.aperture_aspect_ratio_authority,
-    )
+    cross_input = _read_common_proof(lane["cross_input"], TemplateCrossInput)
     expected = _common_authority_comparison_record(assess_common_h_output_authority(
         common, phase=phase, cross=cross, registration=registration,
         membership_coverage=coverage, cross_input=cross_input,
@@ -4294,19 +4293,22 @@ def _validate_geometry(
             raise ValueError(
                 "selected cross and enclosing aperture authority disagree"
             )
+        common_record = lane.get("common_h_output")
+        common_selected = common_record is not None and lane["selected_placement_id"] == common_record["placement_id"]
+        if common_selected:
+            typed_common = _read_common_proof(common_record, CommonHOutput)
+            if typed_read_model(typed_common.enclosing_support_aperture_authority) != enclosing_aperture:
+                raise ValueError("common output changed its member authority summary")
+            member_authorities = [p.enclosing_support_aperture_authority for p in typed_common.placements]
         for output in outputs:
-            aperture_risk = output.get(
-                "enclosing_support_aperture_risk"
-            )
-            if aperture_risk is not None and (
-                aperture_risk["aperture_authority_id"]
-                != enclosing_aperture["authority_id"]
-                or aperture_risk["aperture_authority_state"]
-                != enclosing_aperture["state"]
-            ):
-                raise ValueError(
-                    "output changed enclosing-support aperture authority"
-                )
+            members = output["members"] if common_selected else [output]
+            authorities = member_authorities if common_selected else [None]
+            for member, authority in zip(members, authorities, strict=True):
+                expected = typed_read_model(authority) if authority is not None else enclosing_aperture
+                risk = member.get("enclosing_support_aperture_risk")
+                if risk is not None and (risk["aperture_authority_id"] != expected["authority_id"]
+                        or risk["aperture_authority_state"] != expected["state"]):
+                    raise ValueError("output changed enclosing-support aperture authority")
         _validate_direct_role_aperture_domain_authority(
             lane.get("direct_role_aperture_domain_authority")
         )
@@ -4571,7 +4573,8 @@ def _validate_geometry(
             selected_placement_id=lane.get("selected_placement_id"),
             output_geometry_ids=set(outputs_by_id),
         )
-        _validate_direct_use_budgets(budgets, outputs, lane.get("source_scan_geometry"))
+        if not selected_common:
+            _validate_direct_use_budgets(budgets, outputs, lane.get("source_scan_geometry"))
         if not selected_common:
             for output in outputs:
                 validate_output_footprint_authority(output, expected_source_extent=expected_source_extent)
@@ -4587,7 +4590,7 @@ def _validate_geometry(
         _validate_selected_contact_protection(outputs, expected_contact_sides, common=selected_common)
         selected = lane["selected_placement_id"]
         expected_boundary_use = None if not outputs else (
-            "aperture_pair" if selected_common else outputs[0]["envelope"]["boundary_use"])
+            outputs[0]["members"][0]["envelope"]["boundary_use"] if selected_common else outputs[0]["envelope"]["boundary_use"])
         if lane["selected_cross_boundary_use"] != expected_boundary_use:
             raise ValueError("selected Cross boundary use changed output ownership")
         lane_selected_ids.append(selected)
@@ -5394,6 +5397,7 @@ def _validate_development(record: dict[str, Any]) -> None:
             cross_competition.get("runner_up"),
             conditional_cross,
             *_validate_cross_fit_groups(cross_competition),
+            *cross_competition["enclosing_support_fits"],
             *(item["cross_fit"] for item in placements),
         ):
             if cross_fit is None:

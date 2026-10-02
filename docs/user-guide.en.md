@@ -144,6 +144,8 @@ When photo ownership is fixed and multiple complete top/bottom interpretations r
 a common crop and the padding budget under each interpretation. This checks whether boundary differences affect
 the usable crop. A common crop can be approved when it protects every interpretation within the padding budgets
 and passes all evidence and source-wide safety checks. The top/bottom boundaries need not be unique.
+For a common enclosing-support crop, every fully verified interpretation is protected and its padding is checked against
+its complete physical aperture-center range. Center calibration restricted to a uniquely selected pair is not reused.
 Incomplete interpretations or failed checks still require Review.
 Cross-axis crop protection accounts for the relationship between measured position and direction, the statistical fit,
 and local edge departures. Top and bottom protection uses the actual reachable longitudinal ends to reduce excess

@@ -1542,12 +1542,12 @@ selected placement
 → authority + direct-use assessment
 ```
 
-`template_output.common_aperture_output_footprint` 在同一输出 owner 内核算固定 W 归属下的共同
-aperture 需求。输入为各 H 解释自己的 placement 和完整 native output，保留独立 envelope、保护量与
+`template_output.common_h_output_footprint` 在同一输出 owner 内核算固定 W 归属下的共同
+同一边界用途的需求。输入为各 H 解释自己的 placement 和完整 native output，保留独立 envelope、保护量与
 身份；逐帧分别合并全部 mandatory/requested hull，不再添加 bleed。共同 requested 相对每个解释自己的
 四条 canonical 边和源轴状态重新计算原 5% 预算；不复用 native 预算，也不删除超预算成员。源域、
 TIFF 截断和内部 lane 越界复用 native output 的同一合同，截断不能消除 requested 的预算风险。
-输入数量受原 `MAX_CROSS_PAIRS` 限制，缺项、重复、不同 W/slot/source 权限或 enclosing support 均拒绝。
+输入数量受原 `MAX_CROSS_PAIRS` 限制，缺项、重复、不同 W/slot/source 权限或混合边界用途均拒绝。
 该核算只证明所给集合的需求与预算。`template_common_output` 现从同一 Cross 求解器的两种完整分组
 视图生成共同输出：固定已确定的 W，完整 `CrossFit` 相同才复用；任一组支持不足、归属搜索未完整
 结束、经过局部精修或不是直接 aperture pair 时不生成共同解释集。`local_refinement_scope_count` 记录
@@ -1561,6 +1561,19 @@ Cross 输入；未搜索的作用域或数值拟合失败不能因总 receipt �
 比例与直接 H 相容性、局部 aperture domain 和原 enclosing-support owner；后者使用原 Cross input 的
 fixed/canonical H，逐 pair 至多一次核验。存在 enclosing-support 解释时，普通 aperture 共同输出保持
 不可批准，不能借用其预算语义。逐成员检查数量受原 `MAX_CROSS_PAIRS` 限制，不新增像素查询。
+共同 enclosing 输出另从 Cross 已完成的完整 support candidate 集物化 `enclosing_support_fits`，不重新配对。
+Canonical Cross 必须显式授予 `support_output_eligible`；仅 conditional 视图产生的 ledger 不能授予该资格，
+唯一直接 aperture 的比例冲突分支也不允许被替代。新共同路径还要求全部成员无 conditional 依赖、无独立
+获权 direct aperture 竞争组，完整 membership 且局部精修作用域为零。该收紧不改变原唯一 support 优先级。
+每个成员恰好投影一次，完整 joint states 供全部 slot 复用；不复用缺少原投影的 native 输出缓存。各自的
+support span、共同 requested 对完整物理 aperture 中心范围的四边 expansion、同状态原 raw departure
+与 pixel-center alignment padding 分别按原合同核验。解释/位置不确定性只计入完整 expansion，不能重复
+计入 alignment。共同 hull 不新增 bleed，不用源边界截断消除 requested 风险。
+既有中心校准只适用于已选定唯一 support；共同成员使用 `common_member_center_authority` 的 unavailable
+校准和完整物理中心范围，不扩大旧校准适用域。逐成员 authority 完整保留；Gate 摘要按 contradicted、
+unavailable、supported 顺序取真实成员，不拼接各成员中心区间。报告从完整 Cross input 重放资格、候选
+和原工作量，从各 fit 重推导中心 authority，并按每成员一次投影重算全部共同预算；不信任自填资格、
+删除的竞争成员或缩窄的校准区间。
 内容 veto 检查实际共同 polygon；逐边预算摘要取全部成员的最坏值，完整成员证明仍保留。Nominal Grid、
 holder fill、最终采样和报告均绑定共同身份；holder outer 覆盖每个成员的 W 区间。原生 proposal 继续用于
 诊断，不冒充共同输出。最终仍须通过原 source、预算、内容及整张 Gate；黄金仅离线比较最终 polygon。

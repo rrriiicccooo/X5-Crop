@@ -87,7 +87,7 @@ class CommonOutputReportContractTest(unittest.TestCase):
                     self.validate(bad)
         bad = deepcopy(value)
         bad["output_footprints"][0]["saturation_facts"] = []
-        with self.assertRaisesRegex(ValueError, "clipping or saturation"):
+        with self.assertRaisesRegex(ValueError, "clipping or saturation|saturation facts"):
             self.validate(bad)
 
     def test_native_budget_cannot_replace_wider_common_budget(self):
@@ -126,7 +126,7 @@ class CommonOutputReportContractTest(unittest.TestCase):
         for placement in bad["placements"]:
             for vertex in placement["source_scan_geometry"]["height_state"]["vertices"]:
                 vertex[0] /= 2
-        with self.assertRaisesRegex(ValueError, "common requested footprint"):
+        with self.assertRaisesRegex(ValueError, "joint axis geometry"):
             self.validate(bad)
 
     def test_internal_lane_overflow_stays_unclipped(self):

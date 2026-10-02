@@ -85,6 +85,7 @@ def selected_common_fixture():
         "common_h_authority": lane["common_h_authority"], "phase_competition": typed_read_model(phase),
         "cross_competition": typed_read_model(cross), "cross_registration_work": typed_read_model(registration()),
         "template_spec": typed_read_model(phase.template),
+        "cross_input": typed_read_model(inputs),
         "observations": {"raw_top_bottom_lines": [], "registered_top_bottom_bindings": typed_read_model(bindings)},
         "placement_competition": {"placements": typed_read_model(placements)},
         "holder_fill_assessment": lane["holder_fill_assessment"],

@@ -236,6 +236,7 @@ def _enclosing_support_aperture_risk(
     frame: TemplateFrame,
     projection: FeasiblePlacementProjection,
     protected_states: tuple[dict[BoundaryRole, float], ...],
+    *, requested_override: ConvexPolygon | None = None,
 ) -> EnclosingSupportApertureRisk | None:
     """Bound output against every authorized same-state aperture center."""
 
@@ -279,7 +280,7 @@ def _enclosing_support_aperture_risk(
             state.top_at_lane_reference_px
             + state.bottom_at_lane_reference_px
         )
-        requested = _state_footprint(
+        requested = requested_override if requested_override is not None else _state_footprint(
             placement,
             frame,
             state,
@@ -1165,7 +1166,8 @@ def _assert_selected_output(
 ) -> None:
     frame = _frame(placement, output.envelope.lane_ordinal)
     if (
-        output.envelope.placement_id != placement.placement_id
+        output.envelope.boundary_use != placement.cross_fit.boundary_use
+        or output.envelope.placement_id != placement.placement_id
         or output.envelope.lane_id != placement.lane_id
         or output.envelope.canonical_source_footprint
         != convex_hull(frame.canonical_source_polygon)
@@ -1295,23 +1297,65 @@ def template_direct_use_budget_assessment(
 
 
 def common_direct_use_budget_assessment(output: CommonOutputFootprint) -> DirectUseBudgetAssessment:
-    """Summarize the worst member per edge without replacing member proofs."""
-    edges = tuple(max(
-        (member.assessment.edge_assessments[index] for member in output.member_budgets),
-        key=lambda edge: edge.expansion_mm / edge.limit_mm,
-    ) for index in range(len(_ROLES)))
+    """Summarize the worst member without replacing any member proof."""
+    assessments = tuple(member.assessment for member in output.member_budgets)
+    edges = tuple(max((member.edge_assessments[index] for member in assessments),
+        key=lambda edge: edge.expansion_mm / edge.limit_mm) for index in range(len(_ROLES)))
+    support = output.boundary_use == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
     return DirectUseBudgetAssessment(
         geometry_id=output.geometry_id, boundary_use=output.boundary_use,
-        edge_assessments=edges, enclosing_support_height_ratio=None,
-        enclosing_support_within_limit=None, maximum_same_state_cross_alignment_padding_mm=None,
-        maximum_same_state_cross_alignment_padding_within_limit=None,
+        edge_assessments=edges,
+        enclosing_support_height_ratio=max(a.enclosing_support_height_ratio for a in assessments) if support else None,
+        enclosing_support_within_limit=all(a.enclosing_support_within_limit for a in assessments) if support else None,
+        maximum_same_state_cross_alignment_padding_mm=max(a.maximum_same_state_cross_alignment_padding_mm for a in assessments) if support else None,
+        maximum_same_state_cross_alignment_padding_within_limit=all(a.maximum_same_state_cross_alignment_padding_within_limit for a in assessments) if support else None,
         state=EvidenceState.SUPPORTED if output.budget_supported else EvidenceState.CONTRADICTED,
     )
 
 
-def common_aperture_output_footprint(
+def common_member_budget_assessment(
+    placement: FormatPlacement, output: OutputFootprint, requested: ConvexPolygon,
+    *, geometry_id: str, projection: FeasiblePlacementProjection | None = None,
+) -> DirectUseBudgetAssessment:
+    """Evaluate the actual common polygon under this member's complete states."""
+    _assert_selected_output(placement, output)
+    frame = _frame(placement, output.envelope.lane_ordinal)
+    boundaries = _canonical_boundaries(frame)
+    expansion = {role: _expansion_px(boundaries[role], requested) for role in _ROLES}
+    support_ratio = support_within = padding_mm = padding_within = None
+    if output.envelope.boundary_use == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR:
+        if projection is None or projection.placement_id != placement.placement_id:
+            raise ValueError("common enclosing output requires its complete member projection")
+        states = projection.frame_states[frame.lane_ordinal - 1]
+        protected = _frame_boundary_residuals(placement, frame, states, apply_bleed=True)
+        risk = _enclosing_support_aperture_risk(placement, frame, projection, protected,
+                                              requested_override=requested)
+        expansion[BoundaryRole.TOP] = risk.top_expansion_px
+        expansion[BoundaryRole.BOTTOM] = risk.bottom_expansion_px
+        # Alignment is measured raw departure plus pixel-center protection in
+        # one state. Interpretation/position uncertainty belongs exclusively
+        # to the full common-polygon aperture risk above, not this second cap.
+        padding_mm = placement.source_scan_geometry.height_state.worst_case_mm(
+            _maximum_same_state_cross_alignment_padding_px(placement, protected))
+        support_ratio = placement.cross_fit.enclosing_support_pair.observed_span_px.maximum / (
+            placement.cross_fit.bottom_canonical_px - placement.cross_fit.top_canonical_px)
+        support_within = support_ratio <= OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio
+    edges = _budget_edge_assessments(placement, expansion)
+    if padding_mm is not None:
+        padding_within = padding_mm <= next(edge.limit_mm for edge in edges if edge.role == BoundaryRole.TOP)
+    supported = all(edge.within_limit for edge in edges) and support_within is not False and padding_within is not False
+    return DirectUseBudgetAssessment(geometry_id=geometry_id, boundary_use=output.envelope.boundary_use,
+        edge_assessments=edges, enclosing_support_height_ratio=support_ratio,
+        enclosing_support_within_limit=support_within,
+        maximum_same_state_cross_alignment_padding_mm=padding_mm,
+        maximum_same_state_cross_alignment_padding_within_limit=padding_within,
+        state=EvidenceState.SUPPORTED if supported else EvidenceState.CONTRADICTED)
+
+
+def common_h_output_footprint(
     placements: tuple[FormatPlacement, ...],
     outputs: tuple[OutputFootprint, ...],
+    *, projections: tuple[FeasiblePlacementProjection, ...] = (),
 ) -> CommonOutputFootprint:
     """Cover one slot under every supplied H explanation with fixed W ownership.
 
@@ -1336,8 +1380,8 @@ def common_aperture_output_footprint(
             placement.source_scan_geometry.width_state != first.source_scan_geometry.width_state
         ):
             raise ValueError("common H output requires identical W ownership and source width authority")
-        if output.envelope.boundary_use != OutputBoundaryUse.APERTURE_PAIR:
-            raise ValueError("common aperture output cannot inherit enclosing-support risk")
+        if output.envelope.boundary_use != native.envelope.boundary_use:
+            raise ValueError("common H output cannot mix aperture and enclosing boundary uses")
         if (output.envelope.lane_ordinal != native.envelope.lane_ordinal
                 or output.sampling_authority_box != native.sampling_authority_box
                 or output.source_extent != native.source_extent
@@ -1353,24 +1397,14 @@ def common_aperture_output_footprint(
         if saturation and all(fact.source_boundary for fact in saturation)
         else requested
     )
-    geometry_id = run_local_id("common-aperture-output", *sorted(output.geometry_id for output in outputs))
-    budgets = []
-    for placement, output in zip(placements, outputs, strict=True):
-        boundaries = _canonical_boundaries(_frame(placement, output.envelope.lane_ordinal))
-        edges = _budget_edge_assessments(placement, {
-            role: _expansion_px(boundaries[role], requested) for role in _ROLES
-        })
-        budgets.append(CommonOutputMemberBudget(
-            placement_id=placement.placement_id,
-            native_geometry_id=output.geometry_id,
-            assessment=DirectUseBudgetAssessment(
-                geometry_id=geometry_id, boundary_use=OutputBoundaryUse.APERTURE_PAIR,
-                edge_assessments=edges, enclosing_support_height_ratio=None,
-                enclosing_support_within_limit=None, maximum_same_state_cross_alignment_padding_mm=None,
-                maximum_same_state_cross_alignment_padding_within_limit=None,
-                state=EvidenceState.SUPPORTED if all(edge.within_limit for edge in edges) else EvidenceState.CONTRADICTED,
-            ),
-        ))
+    geometry_id = run_local_id("common-h-footprint", *sorted(output.geometry_id for output in outputs))
+    if projections and (len(projections) != len(placements) or any(
+            p.placement_id != placement.placement_id for p,placement in zip(projections, placements, strict=True))):
+        raise ValueError("common H member projections changed identity or order")
+    budgets = tuple(CommonOutputMemberBudget(placement.placement_id, output.geometry_id,
+        common_member_budget_assessment(placement, output, requested, geometry_id=geometry_id,
+            projection=projections[index] if projections else None))
+        for index,(placement,output) in enumerate(zip(placements, outputs, strict=True)))
     return CommonOutputFootprint(
         geometry_id=geometry_id, members=outputs,
         mandatory_source_footprint=mandatory, requested_source_footprint=requested,

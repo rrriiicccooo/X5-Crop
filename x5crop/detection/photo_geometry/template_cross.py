@@ -168,6 +168,75 @@ def _enumerate_cross_pairs(inputs: TemplateCrossInput) -> _CrossPairPool:
     return _CrossPairPool(tuple(candidates), frozenset(failures), frozenset(canonical_failures))
 
 
+def _enclosing_support_cross_fit(inputs: TemplateCrossInput, candidate) -> CrossFit:
+    midpoint = _midpoint_interval(
+        candidate.top_binding.full_interval_px,
+        candidate.bottom_binding.full_interval_px,
+    )
+    center = midpoint.center
+    canonical_height = float(inputs.canonical_fixed_height_px)
+    top_canonical = center - canonical_height / 2.0
+    bottom_canonical = center + canonical_height / 2.0
+    top_full = FiniteInterval(
+        center - inputs.fixed_height_px.maximum / 2.0,
+        center - inputs.fixed_height_px.minimum / 2.0,
+    )
+    bottom_full = FiniteInterval(
+        center + inputs.fixed_height_px.minimum / 2.0,
+        center + inputs.fixed_height_px.maximum / 2.0,
+    )
+    direction = candidate.selected_direction
+    return CrossFit(
+        template_id=inputs.template.template_id,
+        lane_reference_trace_px=inputs.lane_reference_trace_px,
+        fixed_height_px=inputs.fixed_height_px,
+        top_canonical_px=top_canonical,
+        bottom_canonical_px=bottom_canonical,
+        top_fit_interval_px=FiniteInterval.exact(top_canonical),
+        bottom_fit_interval_px=FiniteInterval.exact(bottom_canonical),
+        top_full_interval_px=top_full,
+        bottom_full_interval_px=bottom_full,
+        direct_bindings=(candidate.top_binding, candidate.bottom_binding),
+        inferred_bindings=(),
+        selected_direction=direction,
+        direct_pair=True,
+        shared_trace_support_count=candidate.shared_trace_support_count,
+        continuous_support_fraction=min(
+            candidate.top_binding.continuous_support_fraction,
+            candidate.bottom_binding.continuous_support_fraction,
+        ),
+        residual_sum_px=(
+            candidate.top_binding.fit_residual_px
+            + candidate.bottom_binding.fit_residual_px
+        ),
+        boundary_use=OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR,
+        pair_support_mode=None,
+        height_projection_basis=(
+            CrossHeightProjectionBasis.COMPLETE_PHYSICAL_INTERVAL
+        ),
+        line_projection_basis=(
+            CrossLineProjectionBasis.COMPLETE_PHYSICAL_DIRECTION
+        ),
+        enclosing_support_pair=candidate.pair,
+        height_compatibility_px=inputs.fixed_height_px,
+        shift_interval_px=top_full,
+        parallel_direction_interval_degrees=(
+            direction.full_angle_interval_degrees
+        ),
+        direction_provenance_ids=direction.selected_observation_ids,
+        direct_provenance_ids=(
+            candidate.top_binding.observation_id,
+            candidate.bottom_binding.observation_id,
+        ),
+        independent_support_region_count=(
+            candidate.independent_support_region_count
+        ),
+        longitudinal_projection_authority=(
+            candidate.longitudinal_projection_authority
+        ),
+    )
+
+
 def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     """Fit one fixed-H short-axis template with bounded interval search."""
 
@@ -271,7 +340,9 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         if result.status == CrossFitStatus.BOUND_EXCEEDED or not support_pool:
             return result
         return replace(result, support_pair_bindings=tuple(
-            (item.top_binding, item.bottom_binding) for item in support_pool[0].candidates))
+            (item.top_binding, item.bottom_binding) for item in support_pool[0].candidates),
+            enclosing_support_fits=tuple(_enclosing_support_cross_fit(inputs, item)
+                for item in support_pool[0].candidates))
 
     canonical = _select_cross_competition(inputs, pairs, empty_receipt(), canonical_only=True,
                                          support_search=support_search)
@@ -631,72 +702,7 @@ def _select_cross_competition(
         if competition.status != SupportFitStatus.RESOLVED or competition.best is None:
             return None
         candidate = competition.best
-        midpoint = _midpoint_interval(
-            candidate.top_binding.full_interval_px,
-            candidate.bottom_binding.full_interval_px,
-        )
-        center = midpoint.center
-        canonical_height = float(inputs.canonical_fixed_height_px)
-        top_canonical = center - canonical_height / 2.0
-        bottom_canonical = center + canonical_height / 2.0
-        top_full = FiniteInterval(
-            center - fixed_height.maximum / 2.0,
-            center - fixed_height.minimum / 2.0,
-        )
-        bottom_full = FiniteInterval(
-            center + fixed_height.minimum / 2.0,
-            center + fixed_height.maximum / 2.0,
-        )
-        direction = candidate.selected_direction
-        enclosing_support_fit = CrossFit(
-            template_id=inputs.template.template_id,
-            lane_reference_trace_px=inputs.lane_reference_trace_px,
-            fixed_height_px=fixed_height,
-            top_canonical_px=top_canonical,
-            bottom_canonical_px=bottom_canonical,
-            top_fit_interval_px=FiniteInterval.exact(top_canonical),
-            bottom_fit_interval_px=FiniteInterval.exact(bottom_canonical),
-            top_full_interval_px=top_full,
-            bottom_full_interval_px=bottom_full,
-            direct_bindings=(candidate.top_binding, candidate.bottom_binding),
-            inferred_bindings=(),
-            selected_direction=direction,
-            direct_pair=True,
-            shared_trace_support_count=candidate.shared_trace_support_count,
-            continuous_support_fraction=min(
-                candidate.top_binding.continuous_support_fraction,
-                candidate.bottom_binding.continuous_support_fraction,
-            ),
-            residual_sum_px=(
-                candidate.top_binding.fit_residual_px
-                + candidate.bottom_binding.fit_residual_px
-            ),
-            boundary_use=OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR,
-            pair_support_mode=None,
-            height_projection_basis=(
-                CrossHeightProjectionBasis.COMPLETE_PHYSICAL_INTERVAL
-            ),
-            line_projection_basis=(
-                CrossLineProjectionBasis.COMPLETE_PHYSICAL_DIRECTION
-            ),
-            enclosing_support_pair=candidate.pair,
-            height_compatibility_px=fixed_height,
-            shift_interval_px=top_full,
-            parallel_direction_interval_degrees=(
-                direction.full_angle_interval_degrees
-            ),
-            direction_provenance_ids=direction.selected_observation_ids,
-            direct_provenance_ids=(
-                candidate.top_binding.observation_id,
-                candidate.bottom_binding.observation_id,
-            ),
-            independent_support_region_count=(
-                candidate.independent_support_region_count
-            ),
-            longitudinal_projection_authority=(
-                candidate.longitudinal_projection_authority
-            ),
-        )
+        enclosing_support_fit = _enclosing_support_cross_fit(inputs, candidate)
         return enclosing_support_fit
 
     def support_resolution(
@@ -769,6 +775,8 @@ def _select_cross_competition(
             failure_kind=failure_kind,
             receipt=receipt,
             retained_proposal_basis=retained_proposal_basis,
+            support_output_eligible=(canonical_only and support_competition is not None
+                and support_competition.status != SupportFitStatus.BOUND_EXCEEDED),
             aperture_aspect_ratio_authority=aspect_ratio_authority,
             fit_groups=fit_groups if canonical_only else (),
             conditional_fit_groups=fit_groups if not canonical_only else (),
@@ -1314,6 +1322,9 @@ def _select_cross_competition(
             reason=blocked_aspect_ratio.failure_detail,
             failure_kind=CrossFailureKind.APERTURE_ASPECT_RATIO_CONFLICT,
             receipt=receipt,
+            support_output_eligible=(canonical_only and support_checked
+                and support_competition is not None
+                and support_competition.status != SupportFitStatus.BOUND_EXCEEDED),
             aperture_aspect_ratio_authority=blocked_aspect_ratio,
             fit_groups=fit_groups if canonical_only else (),
             conditional_fit_groups=fit_groups if not canonical_only else (),

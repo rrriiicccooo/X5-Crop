@@ -236,7 +236,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
         self.assertIsNotNone(result.conditional_proposal)
         self.assertEqual(result.conditional_proposal_failure_kind, CrossFailureKind.FAMILY_ASSIGNMENT_UNRESOLVED)
-        with self.assertRaisesRegex(ValueError, "conditional Cross family"):
+        with self.assertRaisesRegex(ValueError, "conditional Cross family|complete support ledger"):
             replace(result, best=result.conditional_proposal, status=CrossFitStatus.RESOLVED,
                     winner_basis=CrossWinnerBasis.ONLY_AUTHORITATIVE_FIT, failure_kind=None)
 

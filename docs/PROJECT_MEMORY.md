@@ -104,35 +104,34 @@ S064 仍有 H 外扩和比例推断缺口；一份条件方案虽通过 runtime 
 不足以证明片夹。S047 亮照片与白片夹连通、S106 照片贴源边、窄弱前沿、亚核弱内容及等亮异色
 反例继续有效；模型与自动工具不得据此代写人工 reference。
 
-S064 的完整 coarse-short broad 关联已完成，但全部候选都缺少共同物理直线，不是搜索超界。
+旧 registered-gray 路径的 S064 coarse-short broad 全部候选缺少共同物理直线；当前原生 16-bit 路径已安全自动批准。
 现有 coarse-long 只得到全源 `[0,9898]`，没有 candidate-independent 照片组长轴域；后来的 phase
 frame domains 不能反向授权新像素 query。不同材料层与 blank ends 的区分仍未成立；
 不能缩小原区域多数分母、删除竞争、套用黄金位置或放宽预算解决它。
 
 ## 精确下一步与开放风险
 
-1. 原生 16-bit coarse-short broad 的开发保存在独立 worktree
-   `/Users/zhyoung/Documents/Codex/2026-10-02/task/x5-association`，未并入 main。它将完整 side facts
-   交给唯一 Cross 支撑 sweep，保留全部原始路径、预算和竞争；禁止采用另一个 `x5-native-h` 原型中的
-   独立 min×max 配对。第一次 110-task 诊断为 20 safe auto、0 unsafe auto、2 analysis errors；
-   S038/S094 报告异常已修复，专项 S038/S064/S067/S094/S095 均完成，S064/S067 safe auto，
-   S094/S095 仍因真实竞争 Review。修复后完整 110-task 复验全部完成、analysis error 0，
-   20 safe auto、0 unsafe auto、76 nominal Review，保存在 `native_h_cross_owner_20261002_full_verified`。
-   该分支尚无净覆盖收益，不并入 main。之后的 schema95 保存固定 sharp 中位 profile 的全部聚合峰，
-   同一纯端点归约重放窗口，峰坐标与数量绑定原单 profile；不能缩窗后隐藏 native 竞争。
-   Retained singleton 按完整 candidate 身份复用，新增实际拟合即使几何去重仍计费。
-   当前工程检查 1069 tests OK、2 skipped；10 项 native 合同测试覆盖物理域、孤立侧、完整 raw、
-   缩窗隐藏竞争、实际拟合次数和聚合峰越域。最终 5 张重点 TIFF 全部完成、0 analysis errors、
-   2 safe auto、0 unsafe auto，记录在 `native_h_cross_owner_20261002_proof_final_targets`。
-   当前 detector manifest 为 `072cf1b5be59e96fc80217a57d8adeaef1883afeba2ec05e948b87f99b012177`，
-   comparator 为 `b5d54a203850959866af74e67a040bc41874998865ab622958b34d9e8ce0b12c`。
-   上述最后补强尚未重跑完整 110-task，不能借用前次 manifest。
-   下一步在现有共同输出 owner 内证明全部 enclosing-support 成员的完整性、同状态中心风险、对齐预算及
-   source/content 约束；不能删除 S094/S095 竞争或直接复用 aperture-only 权限。S094 phase resolved、
-   membership complete、4 个 support pair、local refinement scope 为 0；可先研究完整集合的共同输出。
-   S095 有 1 个局部精修 scope，现有完整性限制继续保留。S095 的 3 解释共同 polygon
-   离线检查上下风险最大约 2.150 mm、保守同状态对齐约 2.426 mm，均低于 2.8 mm；这只是可行性诊断，
-   不证明搜索完整、最终批准或全部 H 完成。
+1. 原生 16-bit coarse-short 与共同 enclosing 输出保存在独立 worktree
+   `/Users/zhyoung/Documents/Codex/2026-10-02/task/x5-association`，尚未并入 main。
+   Schema96 由 canonical Cross 显式授予共同 support 资格，保留完整候选 fits；所有成员使用完整物理
+   aperture 中心范围，不扩大 unique-pair 校准的适用域。共同 polygon 逐成员重算风险，alignment
+   只计原 raw departure/pixel-center 保护，不重复计入解释/位置不确定性。报告独立重放资格、完整
+   fits、物理中心权限与预算。S094 已恢复 safe auto，S064/S067 保持 safe auto。
+   当前 full 为 1074 tests OK、2 Windows skipped；完整 110-task 全部完成、0 analysis errors，
+   21 safe auto、0 unsafe auto、75 nominal Review、14 challenge Review。
+   证据：`Test/gold_analysis/common_support_20261002_full`；detector
+   `213c5b6b0b2d725579f01b855c7aa62aa5071766fb121756edf10a880fee30e6`，comparator
+   `efc6294f2b1b15bde4d74899a7ae4d2abd3485cfd408bbd2ef7b8b1c1aecc97b`，cohort
+   `c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`。
+   S095 仍有真实 local refinement scope 1：bottom:98 是唯一 anchor，55 traces 中13个唯一最近点、
+   40个歧义、2个无候选；拟合收敛但 role 不获权，方向也与anchor不相交，所以被拒。原selected输入
+   全部仍在原raw observations中。下一步保留scope计数，补完整原owner receipt与可重放结构拒绝证明，
+   不能清零、删除guard或把数值失败当作闭合。Canonical/proposed 单侧bottom组完全相同，可按完整
+   fit身份证明没有新增解释，不能凭组名称丢弃真正不同的conditional解释。
+   Main 已新增本地性能提交 `37f0607397e04f19410042dab3ae5ce8d4a7c2d2`：精确证明组外严格多数零值
+   中位数。Main full 1063 tests OK、2 skipped；S101 12131次计算全部与原median一致，10280次可省
+   partition；measurement/photo_geometry/candidate_gate/decision与优化前完全一致。正式性能正在单独
+   运行，未宣布<=5s通过。该优化未进入此工作树；两处仍须按已验证范围串行整合，不推送。
 2. 在旧 outer 的全任务候选研究上，验证有实际最终输出收益的通用整行区域统计。
    同时保护原生弱／异色内容、全部物理线族与角点；保留当前 fixed query、材料身份、来源、
    构造／实测分离、Gate 与预算。仍无材料权限时保持 unavailable，不把研究候选接成自动输出。

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from ...domain import EvidenceState
 from ...run_local_identity import run_local_id
@@ -20,10 +20,11 @@ from .template_family_membership import MembershipState
 from .template_feasible_geometry import project_format_placement
 from .template_measurement_plan_model import MAX_CROSS_PAIRS
 from .template_output import (
-    common_aperture_output_footprint, common_direct_use_budget_assessment,
+    common_h_output_footprint, common_direct_use_budget_assessment,
     output_footprint_from_template_placement,
 )
 from .template_enclosing_support_aperture import not_applicable_enclosing_support_aperture_authority
+from .template_enclosing_support_aperture import EnclosingSupportApertureAuthority, derive_enclosing_support_aperture_authority
 from .template_aspect_ratio import reconcile_direct_aperture_height
 from .template_aspect_ratio_model import ApertureAspectRatioAuthority
 from .template_direct_role_aperture_domain import (
@@ -33,6 +34,12 @@ from .template_family_membership import MembershipProjectionCoverage
 from .template_phase_model import PhaseFitResult, PhaseFitStatus
 from .template_placement import FormatPlacement
 from .template_registration import CrossRegistrationWorkReceipt
+
+
+def common_member_center_authority(fit: CrossFit) -> EnclosingSupportApertureAuthority:
+    # The frozen calibration was validated for selected unique support pairs.
+    # An unresolved member must retain its entire physical center interval.
+    return derive_enclosing_support_aperture_authority(fit, calibration=None)
 
 
 @dataclass(frozen=True)
@@ -123,6 +130,11 @@ class CommonHOutput:
 
     @property
     def enclosing_support_aperture_authority(self):
+        authorities = tuple(p.enclosing_support_aperture_authority for p in self.placements)
+        for state in (EvidenceState.CONTRADICTED, EvidenceState.UNAVAILABLE, EvidenceState.SUPPORTED):
+            member = next((item for item in authorities if item.state == state), None)
+            if member is not None:
+                return member
         return not_applicable_enclosing_support_aperture_authority()
 
     @property
@@ -140,6 +152,8 @@ class CommonHOutputAuthority:
     aperture_aspect_ratio_authorities: tuple[ApertureAspectRatioAuthority, ...]
     direct_role_aperture_domain_authorities: tuple[DirectRoleApertureDomainAuthority | None, ...]
     enclosing_support_competitions: tuple[SupportFitCompetition, ...]
+    boundary_use: OutputBoundaryUse
+    enclosing_support_aperture_authorities: tuple[EnclosingSupportApertureAuthority, ...]
     state: EvidenceState
     failure: DetectionFailureFact | None
 
@@ -152,7 +166,10 @@ class CommonHOutputAuthority:
                     not isinstance(item, MembershipProjectionCoverage) for item in self.membership_coverage)
                 or len(self.aperture_aspect_ratio_authorities) != count
                 or len(self.direct_role_aperture_domain_authorities) != count
-                or len(self.enclosing_support_competitions) != count
+                or not isinstance(self.boundary_use, OutputBoundaryUse)
+                or len(self.enclosing_support_aperture_authorities) != count
+                or len(self.enclosing_support_competitions) != (
+                    count if self.boundary_use == OutputBoundaryUse.APERTURE_PAIR else 0)
                 or any(item.evaluated_candidate_count > 1 for item in self.enclosing_support_competitions)
                 or self.state not in (EvidenceState.SUPPORTED, EvidenceState.CONTRADICTED, EvidenceState.UNAVAILABLE)
                 or (self.state == EvidenceState.SUPPORTED) != (self.failure is None)
@@ -162,7 +179,9 @@ class CommonHOutputAuthority:
             self.membership_coverage is None
             or any(item.status != SupportFitStatus.UNRESOLVED or item.best is not None
                    for item in self.enclosing_support_competitions)
-            or any(item.blocks_cross_resolution for item in self.aperture_aspect_ratio_authorities)
+            or (self.boundary_use == OutputBoundaryUse.APERTURE_PAIR
+                and any(item.blocks_cross_resolution for item in self.aperture_aspect_ratio_authorities))
+            or any(item.state == EvidenceState.CONTRADICTED for item in self.enclosing_support_aperture_authorities)
             or any(item is not None and item.state != EvidenceState.SUPPORTED
                    for item in self.direct_role_aperture_domain_authorities)
         ):
@@ -183,9 +202,14 @@ def assess_common_h_output_authority(
         raise ValueError("common H authority changed its retained fits or fixed W")
     direct = phase.direct_role_binding_authority
     requires_domain = direct is not None and bool(direct.aperture_domain_required_role_indices)
+    support_mode = common.placements[0].cross_fit.boundary_use == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
+    centers = tuple(p.enclosing_support_aperture_authority for p in common.placements)
+    if centers != tuple(common_member_center_authority(p.cross_fit) for p in common.placements):
+        raise ValueError("common H member center authority changed its physical support")
     aspects = tuple(reconcile_direct_aperture_height(
         cross.aperture_aspect_ratio_authority, placement.cross_fit.height_compatibility_px,
-    ) for placement in common.placements)
+    ) for placement in common.placements) if not support_mode else tuple(
+        cross_input.aperture_aspect_ratio_authority for _ in common.placements)
     domains = tuple(assess_direct_role_aperture_domain_authority(
         phase.best, placement.cross_fit, direct,
     ) if requires_domain else None for placement in common.placements)
@@ -193,7 +217,7 @@ def assess_common_h_output_authority(
         trace for binding in (*cross_input.top_bindings, *cross_input.bottom_bindings)
         for trace in binding.trace_coordinates_px
     }))
-    support = tuple(fit_enclosing_support(
+    support = () if support_mode else tuple(fit_enclosing_support(
         template=cross_input.template, fixed_height=cross_input.fixed_height_px,
         canonical_height_px=cross_input.canonical_fixed_height_px,
         reference_trace_px=cross_input.lane_reference_trace_px,
@@ -210,7 +234,10 @@ def assess_common_h_output_authority(
         state = EvidenceState.UNAVAILABLE
         failure = failure_fact(GateGap.CROSS_AUTHORITY_UNAVAILABLE,
                                detail="an H membership interpretation is unsearched or absent from solver inputs")
-    elif any(item.blocks_cross_resolution for item in aspects):
+    elif any(item.state == EvidenceState.CONTRADICTED for item in centers):
+        state = EvidenceState.CONTRADICTED
+        failure = failure_fact(GateGap.ENCLOSING_SUPPORT_APERTURE_CONFLICT)
+    elif not support_mode and any(item.blocks_cross_resolution for item in aspects):
         state = EvidenceState.CONTRADICTED
         failure = failure_fact(GateGap.APERTURE_ASPECT_RATIO_DIRECT_CONFLICT)
     elif any(item.status != SupportFitStatus.UNRESOLVED or item.best is not None for item in support):
@@ -228,7 +255,7 @@ def assess_common_h_output_authority(
             )
     return CommonHOutputAuthority(
         common.placement_id, tuple(p.placement_id for p in common.placements), membership_coverage,
-        aspects, domains, support, state, failure,
+        aspects, domains, support, common.placements[0].cross_fit.boundary_use, centers, state, failure,
     )
 
 
@@ -237,13 +264,21 @@ def common_h_fit_members(
 ) -> tuple[tuple[CrossFit, ...], tuple[tuple[int, ...], tuple[int, ...]]] | None:
     """Retain all groups or none; a display winner cannot define this set."""
     if (cross.status != CrossFitStatus.UNRESOLVED
-            or cross.failure_kind != CrossFailureKind.NON_EQUIVALENT_FITS
             or registration.local_refinement_scope_count
             or registration.membership is None
-            or registration.membership.state != MembershipState.COMPLETE
-            or cross.aperture_aspect_ratio_authority.blocks_cross_resolution):
+            or registration.membership.state != MembershipState.COMPLETE):
         return None
     cross.receipt.validate_bounds()
+    if (cross.support_output_eligible and 1 < len(cross.enclosing_support_fits) <= MAX_CROSS_PAIRS
+            and not cross.conditional_fit_groups
+            and not any(group.independently_supported and group.fit.direct_pair
+                        for group in cross.fit_groups)
+            and tuple(fit.direct_bindings for fit in cross.enclosing_support_fits) == cross.support_pair_bindings
+            and all(not fit.conditional_family_ids for fit in cross.enclosing_support_fits)):
+        return cross.enclosing_support_fits, (tuple(range(len(cross.enclosing_support_fits))), ())
+    if (cross.failure_kind != CrossFailureKind.NON_EQUIVALENT_FITS
+            or cross.aperture_aspect_ratio_authority.blocks_cross_resolution):
+        return None
     views = (cross.fit_groups, cross.conditional_fit_groups)
     members: list[CrossFit] = []
     indices: dict[CrossFit, int] = {}
@@ -280,7 +315,12 @@ def materialize_common_h_output(
     """Compose no candidates and read no pixels; share existing native outputs."""
     if not 1 < len(placements) <= MAX_CROSS_PAIRS:
         raise ValueError("common H materialization requires a bounded complete set")
-    cached = {p.placement_id: (p, outputs) for p, outputs in reusable}
+    support_mode = placements[0].cross_fit.boundary_use == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
+    if support_mode:
+        placements = tuple(replace(p, enclosing_support_aperture_authority=common_member_center_authority(p.cross_fit))
+                           for p in placements)
+    cached = {} if support_mode else {p.placement_id: (p, outputs) for p, outputs in reusable}
+    member_projections = []
     native = []
     reused = projections = evaluations = common_evaluations = 0
     outputs = ()
@@ -296,6 +336,7 @@ def materialize_common_h_output(
                 continue
             projections += 1
             projection = project_format_placement(placement)
+            member_projections.append(projection)
             member_outputs = []
             for ordinal in range(1, placement.output_slot_count + 1):
                 evaluations += 1
@@ -305,7 +346,8 @@ def materialize_common_h_output(
         common_outputs = []
         for i in range(placements[0].output_slot_count):
             common_evaluations += 1
-            common_outputs.append(common_aperture_output_footprint(placements, tuple(member[i] for member in native)))
+            common_outputs.append(common_h_output_footprint(placements, tuple(member[i] for member in native),
+                projections=tuple(member_projections) if support_mode else ()))
         outputs = tuple(common_outputs)
     except ValueError as error:
         failure = failure_fact(GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE, detail=str(error))
