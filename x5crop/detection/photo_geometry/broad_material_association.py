@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from bisect import bisect_right
 from dataclasses import dataclass, fields
 from enum import Enum
 import math
 import sys
+
+import numpy as np
 
 from ...domain import ObservationId
 from .cross_height_transition_measurement import spatial_region_trace_ordinals
@@ -411,31 +414,96 @@ def associate_broad_material(
                 index = parent[index]
             return index
 
-        # This is the dominant point-pair loop. Inline the same linked
-        # predicate and retain every charge in its original order, including
-        # same-trace rejections; no adjacency or completed path is skipped.
-        for first in range(p):
-            a = ordered[first]
-            a_polarity = a.transition.polarity
-            a_background = a.transition.background_side
-            a_coordinate, a_trace = a.coordinate, a.trace
-            first_order = orders[first]
-            for second in range(first + 1, p):
-                delta = orders[second] - first_order
-                if delta > maximum_missing_lattice_steps + 1:
-                    break
-                if charged + 1 > charged_limit:
+        # Batch the same float64 predicate without caching adjacency. Pair
+        # charges and union order remain scalar-equivalent, even on overflow.
+        reference_capacity = 2 * p * t + 2 * t
+        pair_block = min(256, (8 * reference_capacity - 18 * p) // 26)
+        use_vector = pair_block > 0 and all(
+            type(value) is float
+            for point in ordered for value in (point.coordinate, point.trace)
+        ) and type(maximum_slope) is float and type(connection_px) is float
+        if use_vector:
+            # Source columns: 18P bytes. Scratch and worst-case matching indices:
+            # 2 float64 + 2 bool + 1 intp per element = 26B on supported 64-bit hosts.
+            reference_peak((18 * p + 26 * pair_block + 7) // 8)
+            pair_coordinates = np.fromiter((point.coordinate for point in ordered), dtype=np.float64, count=p)
+            pair_traces = np.fromiter((point.trace for point in ordered), dtype=np.float64, count=p)
+            pair_polarities = np.fromiter((point.transition.polarity for point in ordered), dtype=np.int8, count=p)
+            pair_backgrounds = np.fromiter((point.transition.background_side == "left" for point in ordered), dtype=np.bool_, count=p)
+            pair_distance = np.empty(pair_block, dtype=np.float64)
+            pair_allowance = np.empty(pair_block, dtype=np.float64)
+            pair_mask = np.empty(pair_block, dtype=np.bool_)
+            pair_predicate = np.empty(pair_block, dtype=np.bool_)
+            for first in range(p):
+                stop = bisect_right(orders, orders[first] + maximum_missing_lattice_steps + 1, lo=first+1)
+                first_different = bisect_right(orders, orders[first], lo=first+1, hi=stop)
+                same_count = first_different - first - 1
+                if charged + same_count > charged_limit:
+                    counters['point_pair_check_count'] += charged_limit - charged
+                    charged = charged_limit
                     raise _BoundExceeded("charged_work_bound")
-                charged += 1
-                counters['point_pair_check_count'] += 1
-                if delta == 0:
-                    continue
-                b = ordered[second]
-                if (a_polarity == b.transition.polarity
-                        and a_background == b.transition.background_side
-                        and abs(a_coordinate - b.coordinate)
-                        <= abs(a_trace - b.trace) * maximum_slope + connection_px + 1.0e-12):
-                    parent[root(second)] = root(first)
+                charged += same_count
+                counters['point_pair_check_count'] += same_count
+                for begin in range(first_different, stop, pair_block):
+                    end = min(stop, begin + pair_block)
+                    count = end - begin
+                    if charged + count > charged_limit:
+                        counters['point_pair_check_count'] += charged_limit - charged
+                        charged = charged_limit
+                        raise _BoundExceeded("charged_work_bound")
+                    charged += count
+                    counters['point_pair_check_count'] += count
+                    distance = pair_distance[:count]
+                    allowance = pair_allowance[:count]
+                    mask = pair_mask[:count]
+                    predicate = pair_predicate[:count]
+                    np.equal(pair_polarities[begin:end], pair_polarities[first], out=mask)
+                    np.equal(pair_backgrounds[begin:end], pair_backgrounds[first], out=predicate)
+                    np.logical_and(mask, predicate, out=mask)
+                    # Separate ufuncs preserve scalar subtraction/abs/multiply/
+                    # add/add ordering; no fused multiply-add or changed epsilon.
+                    with np.errstate(over="ignore", invalid="ignore", under="ignore"):
+                        np.subtract(pair_coordinates[first], pair_coordinates[begin:end], out=distance)
+                        np.abs(distance, out=distance)
+                        np.subtract(pair_traces[first], pair_traces[begin:end], out=allowance)
+                        np.abs(allowance, out=allowance)
+                        np.multiply(allowance, maximum_slope, out=allowance)
+                        np.add(allowance, connection_px, out=allowance)
+                        np.add(allowance, 1.0e-12, out=allowance)
+                    np.less_equal(distance, allowance, out=predicate)
+                    np.logical_and(mask, predicate, out=mask)
+                    for relative in np.flatnonzero(mask):
+                        second = begin + int(relative)
+                        parent[root(second)] = root(first)
+            # Views also retain their buffers. Release them with the owning arrays
+            # before any DFS scratch becomes live; empty loops create no views.
+            if 'distance' in locals():
+                del distance, allowance, mask, predicate
+            del pair_coordinates, pair_traces, pair_polarities, pair_backgrounds
+            del pair_distance, pair_allowance, pair_mask, pair_predicate
+        else:
+            for first in range(p):
+                a = ordered[first]
+                a_polarity = a.transition.polarity
+                a_background = a.transition.background_side
+                a_coordinate, a_trace = a.coordinate, a.trace
+                first_order = orders[first]
+                for second in range(first + 1, p):
+                    delta = orders[second] - first_order
+                    if delta > maximum_missing_lattice_steps + 1:
+                        break
+                    if charged + 1 > charged_limit:
+                        raise _BoundExceeded("charged_work_bound")
+                    charged += 1
+                    counters['point_pair_check_count'] += 1
+                    if delta == 0:
+                        continue
+                    b = ordered[second]
+                    if (a_polarity == b.transition.polarity
+                            and a_background == b.transition.background_side
+                            and abs(a_coordinate - b.coordinate)
+                            <= abs(a_trace - b.trace) * maximum_slope + connection_px + 1.0e-12):
+                        parent[root(second)] = root(first)
         components: dict[int, list[int]] = {}
         for index in range(p):
             charge('dominance_member_check_count')

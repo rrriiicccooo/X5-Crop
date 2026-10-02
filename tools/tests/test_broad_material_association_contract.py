@@ -163,6 +163,61 @@ def _oracle_maximal_sets(
 
 
 class BroadMaterialAssociationContractTest(unittest.TestCase):
+    def test_batched_pair_predicate_preserves_scalar_paths_and_work(self) -> None:
+        class ScalarFloat(float):
+            pass
+
+        traces = tuple(range(9))
+        rng = random.Random(1731)
+        for trial in range(36):
+            limit = 0.25 + 1.0e-12
+            coordinates = (100.0, 100.0 + math.nextafter(limit, -math.inf),
+                           100.0 + limit, 100.0 + math.nextafter(limit, math.inf))
+            points = tuple(
+                _broad_point(
+                    traces, ordinal, rng.choice(coordinates),
+                    identity=f"batch:{ordinal}:{peak}",
+                    polarity=rng.choice((-1, 1)),
+                    background=rng.choice(tuple(MaterialBackgroundSide)),
+                )
+                for ordinal in range(len(traces))
+                for peak in range(rng.randint(1, 3))
+            )
+            with self.subTest(trial=trial):
+                vector = self._associate(points, traces, maximum_slope=0.0, connection_px=0.25)
+                scalar = self._associate(points, traces, maximum_slope=ScalarFloat(0.0), connection_px=0.25)
+                for field in fields(BroadAssociationResult):
+                    if field.name != "work":
+                        self.assertEqual(getattr(vector, field.name), getattr(scalar, field.name))
+                for field in fields(BroadAssociationWork):
+                    if field.name != "peak_point_reference_count":
+                        self.assertEqual(getattr(vector.work, field.name), getattr(scalar.work, field.name))
+                self.assertGreaterEqual(vector.work.peak_point_reference_count,
+                                        scalar.work.peak_point_reference_count)
+                self.assertLessEqual(vector.work.peak_point_reference_count,
+                                     2 * len(points) * len(traces) + 2 * len(traces))
+
+    def test_batched_pair_connection_respects_one_ulp_boundary(self) -> None:
+        traces = tuple(range(9))
+        limit = 1.0 + 1.0e-12
+        for coordinate, expected_count in ((math.nextafter(limit, -math.inf), 9),
+                                            (limit, 9), (math.nextafter(limit, math.inf), 8)):
+            points = tuple(_broad_point(traces, ordinal, 0.0 if ordinal == 0 else coordinate,
+                                        physical=(-1.0, 2.0)) for ordinal in range(9))
+            result = self._associate(points, traces, maximum_slope=0.0, connection_px=1.0)
+            self.assertEqual(result.state, BroadAssociationState.COMPLETE)
+            self.assertEqual(tuple(map(len, result.paths)), (expected_count,))
+
+    def test_same_trace_pair_charges_span_multiple_blocks(self) -> None:
+        traces = tuple(range(9))
+        points = tuple(_broad_point(traces, 4, 100.0 + peak * 0.1,
+                                    identity=f"same-trace:{peak}") for peak in range(300))
+        result = self._associate(points, traces)
+        self.assertEqual(result.state, BroadAssociationState.COMPLETE)
+        self.assertEqual(result.paths, ())
+        self.assertEqual(result.work.point_pair_check_count, len(points) * (len(points) - 1) // 2)
+        self.assertEqual(result.work.seed_count, len(points))
+
     def test_family_union_preserves_whole_registered_regions(self) -> None:
         paths = (("a", "b", "c", "x"), ("y", "b", "c", "d"))
         regions = (("a", "b", "c"), ("b", "c", "d"))
