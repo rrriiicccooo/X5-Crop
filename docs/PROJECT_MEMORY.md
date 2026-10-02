@@ -1,6 +1,6 @@
 # 项目记忆
 
-本工作树是原生 coarse/Cross 证据实验快照，未并入 main，不能当作发布版本。
+本地 main 已整合原生 coarse/Cross、共同输出及完整细化记录，仍未达到发布标准。
 
 更新：2026-10-02。现场 Git、原 TIFF、source SHA、current report 与最新验证高于本文件。
 长期合同见 [ARCHITECTURE.md](ARCHITECTURE.md)，人工权限见
@@ -12,7 +12,8 @@
 `01a0e15e-4384-7972-9455-cd3a9af52ee0`，后者持有持续目标；不唤醒前者。
 最新用户要求是在当前 Apple Silicon Mac 完成全部适用发布标准后，再由用户安排 Intel Mac 和
 Windows x64 实机验收；跨平台待验不阻塞本阶段开发，也不算已通过。当前只授权本地开发和验证，
-不推送、发布、部署、合并或建立公开包。原任务停在 `659d1847`，本轮从干净主工作区继续。
+已授权本地串行整合和提交；不推送、发布、部署、远程合并或建立公开包。原任务停在 `659d1847`，
+本轮从干净主工作区继续。
 
 1. 先完成 H，验收对象是最终安全、留边合格、直接可用的裁切。当前优先识别外侧大面积纯色、低纹理
    或规律纹理片夹区域，再沿其内缘保留照片。保护给定 TIFF 中已经记录的可见内容，不恢复被片夹
@@ -33,6 +34,11 @@ Windows x64 实机验收；跨平台待验不阻塞本阶段开发，也不算�
 同源 task 按 source SHA 组织研究；黄金只用于离线研究和评价，不进入运行时选边。
 
 ## 当前源码与验证身份
+
+本轮三项独立实验已串行进入本地 main：`34a13e01` 原生 coarse/Cross 证据、`2f655640` 完整共同
+enclosing 输出、`cfbe9b00` 可重放的局部精修记录。原 `702c78f7` 及之前的性能修复完整保留；
+整合后正在重新验证同一源码的工程、正式性能与完整金标，不能借用独立工作树结果宣称最终通过。
+`x5-association` 的 `8b1a280a` 是对应独立实验快照；`x5-native-h` 的独立 min×max 原型未采用。
 
 完整逐 trace broad 修正已在 `40435b3d232706dbc8e4fe1ceb02fa7cd86af0df` 整合：真实峰坐标、
 完整极大关联、物理竞争保留、最终来源回链、超界 Gate 与联合外框顶点去冗余由当前唯一路径消费。
@@ -112,7 +118,7 @@ frame domains 不能反向授权新像素 query。不同材料层与 blank ends 
 ## 精确下一步与开放风险
 
 1. 原生 16-bit coarse-short 与共同 enclosing 输出保存在独立 worktree
-   `/Users/zhyoung/Documents/Codex/2026-10-02/task/x5-association`，尚未并入 main。
+   `/Users/zhyoung/Documents/Codex/2026-10-02/task/x5-association`，现已按上述提交进入本地 main。
    Schema96 由 canonical Cross 显式授予共同 support 资格，保留完整候选 fits；所有成员使用完整物理
    aperture 中心范围，不扩大 unique-pair 校准的适用域。共同 polygon 逐成员重算风险，alignment
    只计原 raw departure/pixel-center 保护，不重复计入解释/位置不确定性。报告独立重放资格、完整
@@ -136,7 +142,7 @@ frame domains 不能反向授权新像素 query。不同材料层与 blank ends 
    partition；measurement/photo_geometry/candidate_gate/decision与优化前完全一致。该提交正式性能均值
    5.1710271234秒，仍未过5秒；证据主库 `Test/gold_analysis/local_release_20261002/performance_37f06073_5_171.json`。
    Main 后续 `702c78f7` 复用同一格约束矩阵与秩，S101 5387次fit及报告四块与原值完全相同，1063 full
-   通过、2 Windows skipped；未另跑正式性能。上述性能改动未进入本实验，待串行整合，不推送。
+   通过、2 Windows skipped；这些性能改动保留在已整合的main中，独立实验快照未包含它们。不推送。
    Schema97 full 1078 tests通过、2 Windows skipped，新增第五项歧义反例另通过；S095原记录重放及
    7类篡改（删除/清零scope、改歧义、覆盖、query、role、方向）全部按预期通过/拒绝。
    `Test/gold_analysis/local_scope_20261002_full` 完成110项、0分析异常，21 safe auto/0 unsafe auto、
