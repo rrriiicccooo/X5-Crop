@@ -47,8 +47,10 @@ _BASELINE_PURPOSES = frozenset(purpose for purpose, _windows in _BASELINE_WINDOW
 def make_photo_boundary_measurement_field(
     source_gray: np.ndarray,
     layout: str,
+    *,
+    source_rgb: np.ndarray,
 ) -> PhotoBoundaryMeasurementField:
-    return PhotoBoundaryMeasurementField(source_gray, layout)
+    return PhotoBoundaryMeasurementField(source_gray, layout, source_rgb=source_rgb)
 
 
 def _measure_query(

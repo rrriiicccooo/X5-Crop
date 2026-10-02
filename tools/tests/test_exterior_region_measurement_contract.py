@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tools.tests.photo_geometry_support import make_native_test_field
 
 from dataclasses import replace
 import tracemalloc
@@ -32,7 +33,7 @@ def _source():
 def _measure(gray, *, layout="horizontal", box=None):
     if box is None:
         box = Box(0,0,gray.shape[1],gray.shape[0])
-    field = PhotoBoundaryMeasurementField(gray if layout == "horizontal" else gray.T.copy(), layout)
+    field = make_native_test_field(gray if layout == "horizontal" else gray.T.copy(), layout)
     query = ExteriorRegionQuery("lane:0",layout,box,10.,"physical-plan:test")
     return measure_exterior_region(field,query)
 
@@ -42,9 +43,14 @@ class ExteriorRegionMeasurementContractTest(unittest.TestCase):
         # This shape makes color/persistence dominate the weak streaming
         # buffers. Non-contiguous argmax once escaped the declared bound.
         source = np.full((2000, 12000), 200, dtype=np.uint8)
+        # Source TIFF/gray storage already exists before measurement begins.
+        field = make_native_test_field(source, "horizontal")
+        query = ExteriorRegionQuery(
+            "lane:0", "horizontal", Box(0, 0, 12000, 2000), 10., "physical-plan:test",
+        )
         tracemalloc.start()
         try:
-            result = _measure(source)
+            result = measure_exterior_region(field, query)
             _current, peak = tracemalloc.get_traced_memory()
         finally:
             tracemalloc.stop()
@@ -162,7 +168,7 @@ class ExteriorRegionMeasurementContractTest(unittest.TestCase):
             replace(result.query,work_box=Box(0.,0,1500,600))
         query = replace(result.query,work_box=Box(0,0,1600,600))
         with self.assertRaises(ValueError):
-            measure_exterior_region(PhotoBoundaryMeasurementField(_source(),"horizontal"),query)
+            measure_exterior_region(make_native_test_field(_source(),"horizontal"),query)
 
 
 if __name__ == "__main__":

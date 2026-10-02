@@ -17,6 +17,7 @@ from .corridors import (
     source_lane_box,
 )
 from .coarse_strip_support import observe_coarse_strip_support
+from .template_coarse_sides import coarse_enclosing_binding as _coarse_enclosing_binding, register_coarse_side_facts
 from .exterior_region_measurement import measure_exterior_region
 from .coarse_enclosing_model import (
     CoarseEnclosingTrack,
@@ -104,44 +105,6 @@ from .transition_tracking import (
     track_side_transition_regions,
 )
 
-
-def _coarse_enclosing_binding(
-    track: CoarseEnclosingTrack,
-    role: BoundaryRole,
-    *,
-    pair_id: str,
-) -> CrossRoleBinding:
-    """Expose a geometric support side without granting aperture authority."""
-
-    return CrossRoleBinding(
-        role=role,
-        run_id=f"coarse-enclosing:{track.observation_id}",
-        observation_id=track.observation_id,
-        coordinate_interval_px=track.full_position_interval_px,
-        trace_coordinates_px=track.trace_coordinates_px,
-        support_fraction=1.0,
-        continuous_support_fraction=1.0,
-        fit_residual_px=track.fit_residual_px,
-        fit_interval_px=track.fit_position_interval_px,
-        full_interval_px=track.full_position_interval_px,
-        canonical_direction_degrees=track.canonical_direction_degrees,
-        fit_direction_interval_degrees=(
-            track.fit_direction_interval_degrees
-        ),
-        full_direction_interval_degrees=(
-            track.full_direction_interval_degrees
-        ),
-        observed_direction_interval_degrees=(
-            track.observed_direction_interval_degrees
-        ),
-        trace_position_intervals_px=track.trace_position_intervals_px,
-        independent_support_region_count=(
-            track.independent_support_region_count
-        ),
-        source_spanning_continuous=track.source_spanning_continuous,
-        role_authorized=False,
-        enclosing_pair_id=pair_id,
-    )
 
 
 def _shared_direction_from_coarse(
@@ -998,8 +961,13 @@ def prepare_template_lane(
             ),
         )
     )
-    top_bindings = (*cross.top_bindings, *coarse_top)
-    bottom_bindings = (*cross.bottom_bindings, *coarse_bottom)
+    base_fitted_count = len(project_cross_solver_bindings((*cross.top_bindings, *cross.bottom_bindings, *coarse_top, *coarse_bottom)))
+    native_top, native_bottom, coarse_side_registration = register_coarse_side_facts(
+        coarse_support.enclosing_side_facts,
+        remaining_bound=max(0, measurement_plan.cross_bounds.max_fitted_observations - base_fitted_count),
+    )
+    top_bindings = (*cross.top_bindings, *coarse_top, *native_top)
+    bottom_bindings = (*cross.bottom_bindings, *coarse_bottom, *native_bottom)
     solver_top = project_cross_solver_bindings(top_bindings)
     solver_bottom = project_cross_solver_bindings(bottom_bindings)
     source_direction = _shared_direction_from_coarse(
@@ -1029,6 +997,7 @@ def prepare_template_lane(
         registered_top_run_count=cross.registered_top_run_count,
         registered_bottom_run_count=cross.registered_bottom_run_count,
         fitted_observation_count=len(solver_top) + len(solver_bottom),
+        coarse_side_registration=coarse_side_registration,
         aperture_aspect_ratio_authority=aperture_aspect_ratio,
     )
     cross_competition = fit_template_cross(cross_input)

@@ -528,7 +528,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
             profile,
             (edge(left_run, 1), edge(right_run, -1)),
             transition_by_id,
-            PhotoBoundaryMeasurementField(pixels, "horizontal"),
+            make_native_test_field(pixels, "horizontal"),
             BoundaryAxis.X,
             PositiveInterval(90.0, 110.0),
             measurement_basis=SeparatorBandMeasurementBasis.DIRECT_TRACE,

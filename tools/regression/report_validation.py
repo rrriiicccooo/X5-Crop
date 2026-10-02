@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import fields, is_dataclass
+from dataclasses import fields, is_dataclass, replace
 from enum import Enum
 from functools import lru_cache
 from statistics import median
@@ -53,6 +53,7 @@ from x5crop.detection.photo_geometry.template_acceptability_features import (
     PlacementFeatureMissingReason,
     PlacementFeatureUnit,
 )
+from x5crop.detection.photo_geometry.template_cross import fit_template_cross
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossBoundaryFamilyFailureKind,
     CrossBoundaryFamilyResolution,
@@ -106,8 +107,12 @@ from x5crop.detection.photo_geometry.broad_material_association import (
     broad_family_sources_supported,
 )
 from x5crop.detection.photo_geometry.measurement_model import (
-    PhotoBoundaryMeasurementQuery, BroadMaterialTraceObservation, MaterialBackgroundSide,
+    PhotoBoundaryMeasurementQuery, PhotoBoundaryMeasurementSet, BroadMaterialTraceObservation, MaterialBackgroundSide,
 )
+from x5crop.detection.photo_geometry.coarse_strip_support import CoarseStripSupport
+from x5crop.detection.photo_geometry.coarse_enclosing_support import observe_coarse_broad_side_facts
+from x5crop.detection.photo_geometry.template_coarse_sides import coarse_enclosing_binding, register_coarse_side_facts, close_coarse_side_bindings
+from x5crop.detection.photo_geometry.template_measurement_plan_model import MAX_CROSS_FITTED_OBSERVATIONS, MAX_CROSS_REGISTERED_RUNS_PER_ROLE
 from x5crop.detection.photo_geometry.broad_material_transition_measurement import broad_material_trace_support_qualified
 from x5crop.detection.photo_geometry.registered_measurement import registered_baseline_query_groups
 from x5crop.detection.photo_geometry.robust_line_fit import (
@@ -1132,8 +1137,99 @@ def _validate_coarse_broad_support_track(
     raise ValueError("coarse broad support leaves its complete association")
 
 
+def _validate_native_coarse_side_support(lane, query_records, registered, source_lanes):
+    coarse = _read_common_proof(lane["search"]["coarse_strip_support"], CoarseStripSupport)
+    inputs = _read_common_proof(lane["cross_input"], TemplateCrossInput)
+    records = [item for item in query_records
+               if item["query"]["lane_id"] == lane["lane_id"]
+               and item["query"]["purpose"] == QueryPurpose.COARSE_STRIP_SHORT.value]
+    if len(records) != 1:
+        raise ValueError("coarse sides lost their sole registered query")
+    record = records[0]
+    measurement = _read_common_proof(
+        {field.name: record[field.name] for field in fields(PhotoBoundaryMeasurementSet)},
+        PhotoBoundaryMeasurementSet)
+    domains = [item["domain"] for item in source_lanes
+               if item["domain"]["lane_id"] == lane["lane_id"]]
+    if len(domains) != 1:
+        raise ValueError("coarse sides lost their source lane authority")
+    box = domains[0]["work_box"]
+    reference = (box["left"] + box["right"] - 1) / 2.0
+    height = PositiveInterval(**lane["template_spec"]["frame_height_px"])
+    from x5crop.detection.photo_geometry.coarse_strip_support import (
+        aggregate_short_hull_from_evidence, _coarse_short_trace_lattices,
+    )
+    aggregate = measurement.coarse_aggregate
+    if (aggregate is None or aggregate.trace_ordinals
+            != _coarse_short_trace_lattices(measurement.query.trace_positions_px)[1]):
+        raise ValueError("coarse short support lost its fixed aggregate measurement")
+    direct, _ = aggregate_short_hull_from_evidence(
+        measurement.query, aggregate, expected_height_px=height)
+    if direct != coarse.short_axis.direct_interval_px:
+        raise ValueError("coarse short support changed its complete aggregate endpoint reduction")
+    facts = observe_coarse_broad_side_facts(measurement,
+        aggregate_interval_px=coarse.short_axis.direct_interval_px,
+        expected_height_px=height, reference_trace_px=reference)
+    if facts != coarse.enclosing_side_facts:
+        raise ValueError("coarse side ledger changed a complete registered raw path")
+    original = tuple(_read_common_proof(item, CrossRoleBinding) for item in registered.values())
+    expected_solver = project_cross_solver_bindings(original)
+    if (inputs.top_bindings != tuple(item for item in expected_solver if item.role == BoundaryRole.TOP)
+            or inputs.bottom_bindings != tuple(item for item in expected_solver if item.role == BoundaryRole.BOTTOM)
+            or inputs.maximum_fitted_observations != MAX_CROSS_FITTED_OBSERVATIONS
+            or inputs.maximum_registered_runs_per_role != MAX_CROSS_REGISTERED_RUNS_PER_ROLE
+            or inputs.maximum_compatible_pairs != MAX_CROSS_PAIRS
+            or inputs.maximum_evaluated_fits != MAX_CROSS_PAIRS
+            or inputs.minimum_shared_trace_support != MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+            or typed_read_model(inputs.template) != lane["template_spec"]
+            or not all(math.isclose(value, expected, rel_tol=0.0, abs_tol=1.0e-9) for value, expected in (
+                (inputs.fixed_height_px.minimum, height.minimum),
+                (inputs.fixed_height_px.maximum, height.maximum),
+                (float(inputs.canonical_fixed_height_px), inputs.fixed_height_px.center)))
+            or inputs.lane_reference_trace_px != reference):
+        raise ValueError("Cross input changed the original registered solver evidence")
+    from x5crop.detection.photo_geometry.lane_preparation import _shared_direction_from_coarse
+    top_queries = [item["query"] for item in query_records
+                   if item["query"]["lane_id"] == lane["lane_id"]
+                   and item["query"]["purpose"] == QueryPurpose.TOP_CORRIDOR.value]
+    if (len(top_queries) != 1
+            or inputs.registered_trace_coordinates_px != tuple(top_queries[0]["trace_positions_px"])
+            or inputs.boundary_axis != measurement.query.boundary_axis
+            or inputs.source_direction != _shared_direction_from_coarse(coarse.shared_direction)):
+        raise ValueError("Cross input changed its registered trace or source direction authority")
+    if "phase_competition" in lane and typed_read_model(inputs.longitudinal_support_domain_groups_px) != _cross_support_domains_from_phase_report(lane["phase_competition"]):
+        raise ValueError("Cross input changed its retained longitudinal domain")
+    regular = tuple(item for item in expected_solver if item.coarse_side_fact is None)
+    top, bottom, work = register_coarse_side_facts(facts,
+        remaining_bound=max(0, MAX_CROSS_FITTED_OBSERVATIONS - len(regular)))
+    native = tuple(item for item in original if item.coarse_side_fact is not None)
+    expected = (*top, *bottom)
+    # Run-local ordinals depend on earlier fits. Bind replay geometry to the
+    # recorded identity only after matching its complete raw path one-to-one.
+    if len(native) != len(expected):
+        raise ValueError("coarse side registration omitted a fitted raw path")
+    for actual, replay in zip(native, expected, strict=True):
+        track = replace(replay.coarse_side_track, observation_id=actual.observation_id)
+        if actual != coarse_enclosing_binding(track, replay.role, side_fact=replay.coarse_side_fact):
+            raise ValueError("coarse side registration changed its complete raw fit")
+    if (inputs.coarse_side_registration != work
+            or lane["cross_competition"]["receipt"].get("coarse_side_registration") != typed_read_model(work)):
+        raise ValueError("coarse side registration changed its raw fits or shared budget")
+    if work.bound_exceeded and lane["cross_competition"]["status"] != CrossFitStatus.BOUND_EXCEEDED.value:
+        raise ValueError("coarse side registration overflow was not propagated")
+    replay = fit_template_cross(inputs)
+    competition = lane["cross_competition"]
+    if (typed_read_model(replay.support_pair_bindings) != competition.get("support_pair_bindings")
+            or typed_read_model(replay.receipt) != competition["receipt"]
+            or replay.status.value != competition["status"]
+            or typed_read_model(replay.winner_basis) != competition["winner_basis"]):
+        raise ValueError("Cross support competition changed its complete candidates or bounded work")
+    return {str(item.observation_id) for item in native}
+
+
 def _validate_cross_measurement_support(
     lane: dict[str, Any], query_records: list[dict[str, Any]],
+    *, native_ids: frozenset[str] | set[str] = frozenset(),
 ) -> dict[str, dict[str, Any]]:
     """Recompute raw Cross spatial provenance from the original query traces."""
 
@@ -1215,7 +1311,7 @@ def _validate_cross_measurement_support(
             coarse_ids.add(identity)
     if coarse_ids and len(coarse_ids) != 2:
         raise ValueError("Cross coarse support pair is incomplete")
-    if set(registered) != raw_ids | coarse_ids:
+    if set(registered) != raw_ids | coarse_ids | native_ids:
         raise ValueError("Cross measured support lost its observation provenance")
     queries = {}
     transitions = {}
@@ -1400,8 +1496,35 @@ def _validate_cross_measurement_support(
 
 def _validate_cross_fit_binding_support(
     cross_fit: dict[str, Any], registered_cross: dict[str, dict[str, Any]],
+    cross_input: dict[str, Any] | None = None,
 ) -> None:
-    for binding in cross_fit["direct_bindings"]:
+    direct = cross_fit["direct_bindings"]
+    if any(item.get("coarse_side_fact") is not None for item in direct):
+        if len(direct) != 2 or any(item.get("coarse_side_fact") is None for item in direct):
+            raise ValueError("coarse pair lost one original side")
+        inputs = _read_common_proof(cross_input, TemplateCrossInput)
+        try:
+            original = tuple(_read_common_proof(registered_cross[item["observation_id"]], CrossRoleBinding)
+                             for item in direct)
+        except KeyError as error:
+            raise ValueError("coarse pair leaves registered observations") from error
+        expected = close_coarse_side_bindings(*original,
+            fixed_height=FiniteInterval.exact(float(inputs.canonical_fixed_height_px)),
+            reference_trace_px=inputs.lane_reference_trace_px)
+        if expected is None or typed_read_model(expected) != direct:
+            raise ValueError("coarse pair changed its complete raw physical closure")
+        from x5crop.detection.photo_geometry.template_cross_support import _candidate
+        support = _candidate(*original, template=inputs.template, fixed_height=inputs.fixed_height_px,
+            canonical_height_px=float(inputs.canonical_fixed_height_px),
+            reference_trace_px=inputs.lane_reference_trace_px,
+            registered_traces=inputs.registered_trace_coordinates_px,
+            minimum_shared_trace_support=inputs.minimum_shared_trace_support,
+            longitudinal_support_domain_groups_px=inputs.longitudinal_support_domain_groups_px)
+        if (support is None or typed_read_model(support.pair) != cross_fit.get("enclosing_support_pair")
+                or typed_read_model(support.selected_direction) != cross_fit.get("selected_direction")):
+            raise ValueError("coarse output changed its pair geometry or shared direction")
+        return
+    for binding in direct:
         if binding["independent_support_region_count"] < MINIMUM_INDEPENDENT_SUPPORT_REGIONS:
             raise ValueError("Cross fit contains a local-only measured fragment")
         registered = registered_cross.get(binding["observation_id"])
@@ -3625,14 +3748,15 @@ def _validate_gate(record: dict[str, Any], stage: str) -> None:
 
 @lru_cache(maxsize=None)
 def _common_proof_field_types(model: type) -> dict[str, Any]:
-    return get_type_hints(model)
+    return get_type_hints(model, localns={"BroadAssociationResult": BroadAssociationResult})
 
 
 def _read_common_proof(value: Any, model: type) -> Any:
     """Rehydrate only explicitly allowed current evidence roots for pure owners."""
     if model not in (CommonHOutput, CommonHOutputAuthority, PhaseFitResult,
                      CrossFitCompetition, CrossRoleBinding, PhotoBoundaryObservation,
-                     SourceScanGeometry, HolderFillAssessment, FormatPlacement, ExteriorRegionMeasurement):
+                     SourceScanGeometry, HolderFillAssessment, FormatPlacement, ExteriorRegionMeasurement,
+                     TemplateCrossInput, CoarseStripSupport, PhotoBoundaryMeasurementSet):
         raise ValueError("unsupported common-output proof root")
 
     def read(raw: Any, kind: Any) -> Any:
@@ -3777,9 +3901,8 @@ def _common_authority_comparison_record(authority: CommonHOutputAuthority) -> di
     """Compare replayed facts independently of generated local proof names."""
     record = typed_read_model(authority)
     for competition in record["enclosing_support_competitions"]:
-        for name in ("best", "runner_up"):
-            if competition[name] is not None:
-                fit = competition[name]
+        for fit in (competition["best"], competition["runner_up"], *competition["candidates"]):
+            if fit is not None:
                 fit["selected_direction"]["direction_id"] = "recomputed-direction"
                 fit["longitudinal_projection_authority"]["authority_id"] = "recomputed-projection"
     return record
@@ -5223,8 +5346,12 @@ def _validate_development(record: dict[str, Any]) -> None:
         expected_domains = _cross_support_domains_from_phase_report(
             lane["phase_competition"]
         )
+        native_ids = _validate_native_coarse_side_support(lane,
+            development["measurement"]["queries"],
+            {item["observation_id"]: item for item in lane["observations"]["registered_top_bottom_bindings"]},
+            development["measurement"]["source_lanes"])
         registered_cross = _validate_cross_measurement_support(
-            lane, development["measurement"]["queries"]
+            lane, development["measurement"]["queries"], native_ids=native_ids
         )
         _validate_sequence_physical_line_regions(
             lane, development["measurement"]["queries"]
@@ -5271,7 +5398,7 @@ def _validate_development(record: dict[str, Any]) -> None:
         ):
             if cross_fit is None:
                 continue
-            _validate_cross_fit_binding_support(cross_fit, registered_cross)
+            _validate_cross_fit_binding_support(cross_fit, registered_cross, lane["cross_input"])
             authority = cross_fit.get("longitudinal_projection_authority")
             _validate_cross_longitudinal_projection_authority(authority)
             if authority["candidate_support_domains_px"] != expected_domains:
@@ -5361,6 +5488,9 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
         raise ValueError("report does not use the current-only schema")
     if record["configuration"]["measurement"].get("registered_normalization_revision") != REGISTERED_NORMALIZATION_REVISION:
         raise ValueError("report registered normalization revision is unavailable")
+    from x5crop.report.configuration import native_coarse_intensity_read_model
+    if record["configuration"]["measurement"].get("coarse_broad_intensity") != native_coarse_intensity_read_model():
+        raise ValueError("report changed native coarse intensity units or scope")
     source_extent = validate_report_source_extent(record)
     _validate_geometry(record, source_extent)
     _validate_gate(record["candidate_gate"], "candidate")

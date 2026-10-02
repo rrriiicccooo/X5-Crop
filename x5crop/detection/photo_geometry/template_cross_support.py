@@ -31,6 +31,7 @@ from .template_cross_model import (
 )
 from .template_cross_longitudinal import assess_cross_longitudinal_projection
 from .template_model import TemplateSpec
+from .template_coarse_sides import close_coarse_side_bindings
 
 
 class SupportFitStatus(str, Enum):
@@ -57,6 +58,7 @@ class SupportFitCompetition:
     status: SupportFitStatus
     reason: str | None
     evaluated_candidate_count: int
+    candidates: tuple[EnclosingSupportCandidate, ...] = ()
 
     def __post_init__(self) -> None:
         if (
@@ -88,6 +90,13 @@ def _candidate(
 ) -> EnclosingSupportCandidate | None:
     if top.role != BoundaryRole.TOP or bottom.role != BoundaryRole.BOTTOM:
         return None
+    if top.coarse_side_fact is not None or bottom.coarse_side_fact is not None:
+        closed = close_coarse_side_bindings(top, bottom,
+            fixed_height=FiniteInterval.exact(canonical_height_px), reference_trace_px=reference_trace_px)
+        if closed is None:
+            return None
+        registered_traces = top.coarse_side_fact.query.trace_positions_px
+        top, bottom = closed
     # A pre-closed coarse pair cannot be detached. Background-side role
     # evidence does not prohibit a line from enclosing the photo; the complete
     # pair below must independently prove support geometry and extent.
@@ -295,13 +304,26 @@ def fit_enclosing_support(
         * canonical_height_px
     )
     candidates: list[EnclosingSupportCandidate] = []
+    attempted = 0
     for top in ordered_top:
-        lower = top.full_interval_px.maximum + canonical_height_px
-        upper = top.full_interval_px.minimum + support_bound
+        # Raw native sides have not yet shared their physical slope domain.
+        # Pair closure may narrow either position interval, so pruning here
+        # must retain every potentially compatible span. The complete proof
+        # below still enforces the original full-interval containment bound.
+        if top.coarse_side_fact is not None:
+            lower = top.full_interval_px.minimum + canonical_height_px
+            upper = top.full_interval_px.maximum + support_bound
+        else:
+            lower = top.full_interval_px.maximum + canonical_height_px
+            upper = top.full_interval_px.minimum + support_bound
         if lower > upper:
             continue
         index = bisect_left(prefix_max, lower)
         while index < len(ordered_bottom) and starts[index] <= upper:
+            if attempted >= maximum_evaluated_candidates:
+                return SupportFitCompetition(None, None, SupportFitStatus.BOUND_EXCEEDED,
+                    "enclosing-support evaluated-fit bound exceeded", attempted)
+            attempted += 1
             candidate = _candidate(
                 top,
                 ordered_bottom[index],
@@ -315,14 +337,6 @@ def fit_enclosing_support(
             )
             if candidate is not None:
                 candidates.append(candidate)
-                if len(candidates) > maximum_evaluated_candidates:
-                    return SupportFitCompetition(
-                        None,
-                        None,
-                        SupportFitStatus.BOUND_EXCEEDED,
-                        "enclosing-support evaluated-fit bound exceeded",
-                        len(candidates),
-                    )
             index += 1
     ordered = tuple(
         sorted(
@@ -340,7 +354,8 @@ def fit_enclosing_support(
             None,
             SupportFitStatus.RESOLVED,
             None,
-            len(ordered),
+            attempted,
+            ordered,
         )
     if ordered:
         return SupportFitCompetition(
@@ -348,12 +363,50 @@ def fit_enclosing_support(
             ordered[1] if len(ordered) > 1 else None,
             SupportFitStatus.UNRESOLVED,
             "multiple enclosing support pairs remain",
-            len(ordered),
+            attempted,
+            ordered,
         )
     return SupportFitCompetition(
         None,
         None,
         SupportFitStatus.UNRESOLVED,
         "no enclosing support pair",
-        0,
+        attempted,
     )
+
+
+def support_permission_view(competition, *, canonical_only):
+    """Reduce permissions and one-to-one sharp/native correlation, without re-fitting."""
+    if competition.status == SupportFitStatus.BOUND_EXCEEDED:
+        return competition
+    candidates = tuple(item for item in competition.candidates
+        if not canonical_only or not (item.top_binding.conditional_family_ids
+                                      or item.bottom_binding.conditional_family_ids))
+    # Production registration admits exactly one pre-closed sharp coarse pair.
+    # Overlap is not transitive: a wide sharp interval must never collapse two
+    # different native explanations. Keep every raw candidate in the ledger.
+    sharp = tuple(item for item in candidates
+        if item.top_binding.enclosing_pair_id is not None
+        and item.top_binding.coarse_side_fact is None
+        and item.bottom_binding.coarse_side_fact is None)
+    representatives = candidates
+    if len(sharp) == 1:
+        anchor = sharp[0]
+        matches = tuple(item for item in candidates
+            if item.top_binding.coarse_side_fact is not None
+            and item.bottom_binding.coarse_side_fact is not None
+            and all(max(left.minimum, right.minimum) <= min(left.maximum, right.maximum)
+                for left, right in (
+                    (anchor.top_binding.full_interval_px, item.top_binding.full_interval_px),
+                    (anchor.bottom_binding.full_interval_px, item.bottom_binding.full_interval_px),
+                    (anchor.top_binding.full_direction_interval_degrees, item.top_binding.full_direction_interval_degrees),
+                    (anchor.bottom_binding.full_direction_interval_degrees, item.bottom_binding.full_direction_interval_degrees),
+                    (anchor.pair.observed_span_px, item.pair.observed_span_px))))
+        if len(matches) == 1:
+            representatives = tuple(item for item in candidates if item is not matches[0])
+    return SupportFitCompetition(
+        representatives[0] if representatives else None,
+        representatives[1] if len(representatives) > 1 else None,
+        SupportFitStatus.RESOLVED if len(representatives) == 1 else SupportFitStatus.UNRESOLVED,
+        None if len(representatives) == 1 else "multiple enclosing support pairs remain" if representatives else "no enclosing support pair",
+        competition.evaluated_candidate_count, candidates)

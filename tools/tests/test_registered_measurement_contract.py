@@ -12,7 +12,8 @@ from x5crop.detection.photo_geometry.broad_material_transition_measurement impor
     measure_broad_material_transitions,
     broad_material_trace_support_qualified,
 )
-from x5crop.detection.photo_geometry.coarse_enclosing_support import _observe_broad_coarse_short_axis
+from x5crop.detection.photo_geometry.coarse_enclosing_support import observe_coarse_broad_side_facts
+from x5crop.detection.photo_geometry.template_coarse_sides import register_coarse_side_facts, close_coarse_side_bindings
 from x5crop.detection.photo_geometry.profile_adapters import sequence_profile_from_regions
 from x5crop.detection.photo_geometry.observations import validate_broad_material_edge_provenance
 from tools.regression.report_validation import _validate_broad_material_traces, _validate_sequence_physical_line_regions
@@ -61,7 +62,7 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
             registration_provenance_ids=("synthetic-source",),
         )
         measured = measure_registered_queries(
-            PhotoBoundaryMeasurementField(source, "horizontal"),
+            make_native_test_field(source, "horizontal"),
             (query, replace(
                 query, query_id="query:source-edge:baseline", registration_index=1,
                 purpose=QueryPurpose.CROSS_BASELINE,
@@ -152,7 +153,7 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
             )
         )
         _baseline, left, right = measure_registered_queries(
-            PhotoBoundaryMeasurementField(source, "horizontal"),
+            make_native_test_field(source, "horizontal"),
             (baseline, *windows),
         )
         self.assertEqual(left.transitions, ())
@@ -626,16 +627,18 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
             with self.subTest(mirrored=mirrored):
                 measured = self._sloping_broad_strip(mirrored=mirrored)
                 top, bottom = (194.5, 794.5) if mirrored else (205.5, 805.5)
-                _direction, support = _observe_broad_coarse_short_axis(
+                facts = observe_coarse_broad_side_facts(
                     measured, aggregate_interval_px=FiniteInterval(top, bottom),
                     expected_height_px=FiniteInterval(580.0, 580.0), reference_trace_px=4000.0,
                 )
-                self.assertIsNotNone(support)
-                assert support is not None
-                self.assertTrue(support.minimum_track.full_position_interval_px.contains(top))
-                self.assertTrue(support.maximum_track.full_position_interval_px.contains(bottom))
-                self.assertEqual(support.minimum_track.trace_coordinates_px,
-                    measured.query.trace_positions_px)
+                minimum, maximum, work = register_coarse_side_facts(facts, remaining_bound=512)
+                self.assertEqual((len(minimum), len(maximum)), (1, 1))
+                closed = close_coarse_side_bindings(minimum[0], maximum[0],
+                    fixed_height=FiniteInterval.exact(580.0), reference_trace_px=4000.0)
+                self.assertIsNotNone(closed)
+                self.assertTrue(closed[0].full_interval_px.contains(top))
+                self.assertTrue(closed[1].full_interval_px.contains(bottom))
+                self.assertEqual(closed[0].trace_coordinates_px, measured.query.trace_positions_px)
 
     def test_complete_physical_broad_competitor_survives_curved_localization(self) -> None:
         from tools.tests.test_broad_material_association_contract import _broad_point
@@ -801,7 +804,7 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
         self,
     ) -> None:
         gray = np.zeros((20, 30), dtype=np.uint8)
-        field = PhotoBoundaryMeasurementField(gray, "horizontal")
+        field = make_native_test_field(gray, "horizontal")
         self.assertFalse(field.source_gray.flags.writeable)
         query = PhotoBoundaryMeasurementQuery(
             query_id="query:test",
@@ -852,7 +855,7 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
     def test_overlapping_query_halos_emit_transition_once(self) -> None:
         gray = np.zeros((4, 30), dtype=np.uint8)
         gray[:, 15:] = 255
-        field = PhotoBoundaryMeasurementField(gray, "horizontal")
+        field = make_native_test_field(gray, "horizontal")
         common = dict(
             lane_id="lane:0",
             purpose=QueryPurpose.SEQUENCE_ANCHOR_WINDOW,
@@ -910,7 +913,7 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
     ) -> None:
         gray = np.full((40, 6), 200, dtype=np.uint8)
         gray[15:17, :] = 0
-        field = PhotoBoundaryMeasurementField(gray, "horizontal")
+        field = make_native_test_field(gray, "horizontal")
 
         def query(purpose: QueryPurpose, registration_index: int):
             return PhotoBoundaryMeasurementQuery(

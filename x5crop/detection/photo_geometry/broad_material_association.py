@@ -466,11 +466,27 @@ def associate_broad_material(
                 words()
                 data = mask.to_bytes((q + 7) // 8, 'little')
                 result = []
-                byte_bits = (1, 2, 4, 8, 16, 32, 64, 128)
-                for rank, index in enumerate(component):
+                sparse = False
+                if limbs > 1:
+                    words()
+                    sparse = len(data) + 4 * mask.bit_count() < q
+                if not sparse:
+                    byte_bits = (1, 2, 4, 8, 16, 32, 64, 128)
+                    for rank, index in enumerate(component):
+                        charge('dominance_member_check_count')
+                        if data[rank // 8] & byte_bits[rank % 8]:
+                            result.append(index)
+                    return result
+                for byte_rank, value in enumerate(data):
                     charge('dominance_member_check_count')
-                    if data[rank // 8] & byte_bits[rank % 8]:
-                        result.append(index)
+                    while value:
+                        # These operations act on one byte, not a growing
+                        # component mask. Visit only present raw identities,
+                        # in the same ascending order as the dense scan.
+                        charge('dominance_member_check_count', 4)
+                        low = value & -value
+                        result.append(component[8 * byte_rank + low.bit_length() - 1])
+                        value ^= low
                 return result
 
             def contained(mask, other):

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tools.tests.photo_geometry_support import make_native_test_field
 
 from dataclasses import replace
 from copy import deepcopy
@@ -66,7 +67,7 @@ class CrossNormalizationBaselineContractTest(unittest.TestCase):
         for outer_edge in (None, 1926, 1980):
             source = self._source(outer_edge)
             bottom, baseline = measure_registered_queries(
-                PhotoBoundaryMeasurementField(source, "horizontal"), self._queries(),
+                make_native_test_field(source, "horizontal"), self._queries(),
             )
             self.assertEqual(baseline.transitions, ())
             self.assertEqual(baseline.cross_height_transitions, ())
@@ -94,7 +95,7 @@ class CrossNormalizationBaselineContractTest(unittest.TestCase):
 
     def test_cross_windows_require_exactly_one_matching_baseline(self):
         bottom, baseline = self._queries()
-        field = PhotoBoundaryMeasurementField(self._source(1926), "horizontal")
+        field = make_native_test_field(self._source(1926), "horizontal")
         with self.assertRaisesRegex(ValueError, "baseline"):
             measure_registered_queries(field, (bottom,))
         with self.assertRaisesRegex(ValueError, "baseline"):
@@ -116,7 +117,7 @@ class CrossNormalizationBaselineContractTest(unittest.TestCase):
         source = self._source(None)
         source[1000:1200] = 200
         bottom, baseline = measure_registered_queries(
-            PhotoBoundaryMeasurementField(source, "horizontal"), self._queries(),
+            make_native_test_field(source, "horizontal"), self._queries(),
         )
         self.assertEqual(baseline.transitions, ())
         self.assertTrue(all(t.coordinate_px >= 1824.0 for t in bottom.transitions))
@@ -129,7 +130,7 @@ class CrossNormalizationBaselineContractTest(unittest.TestCase):
             if vertical:
                 source = source.T.copy()
                 queries = tuple(replace(query, boundary_axis=BoundaryAxis.X) for query in queries)
-            field = PhotoBoundaryMeasurementField(source, "vertical" if vertical else "horizontal")
+            field = make_native_test_field(source, "vertical" if vertical else "horizontal")
             for lower in (1800.0, 1824.3751429638355, 1840.0):
                 bottom, baseline = queries
                 window = FiniteInterval(lower, 1997.0)
@@ -144,7 +145,7 @@ class CrossNormalizationBaselineContractTest(unittest.TestCase):
 
     def test_batch_memory_counts_all_traces_but_not_window_views_twice(self):
         queries = self._queries()
-        field = PhotoBoundaryMeasurementField(self._source(1926), "horizontal")
+        field = make_native_test_field(self._source(1926), "horizontal")
         bottom, baseline = measure_registered_queries(field, queries)
         # Eight returned float64 arrays plus one int32 coordinate array per
         # baseline trace; 26 pixels at each source end are outside the kernel.
@@ -184,7 +185,7 @@ class CrossNormalizationBaselineContractTest(unittest.TestCase):
 
         with patch.object(registered_measurement, "_premeasure_registered_windows", side_effect=observe):
             records = measure_registered_queries(
-                PhotoBoundaryMeasurementField(self._source(1926), "horizontal"),
+                make_native_test_field(self._source(1926), "horizontal"),
                 (bottom, baseline, sequence_baseline, sequence_window),
             )
         self.assertEqual(calls, [QueryPurpose.CROSS_BASELINE, QueryPurpose.SEQUENCE_BASELINE])
@@ -206,11 +207,11 @@ class CrossNormalizationBaselineContractTest(unittest.TestCase):
         window = replace(sequence, query_id="sequence-window", registration_index=4,
                          purpose=QueryPurpose.SEQUENCE_ANCHOR_WINDOW)
         measured = measure_registered_queries(
-            PhotoBoundaryMeasurementField(self._source(1926), "horizontal"),
+            make_native_test_field(self._source(1926), "horizontal"),
             (top, bottom, baseline, sequence, window),
         )
         exterior = measure_exterior_region(
-            PhotoBoundaryMeasurementField(self._source(1926), "horizontal"),
+            make_native_test_field(self._source(1926), "horizontal"),
             ExteriorRegionQuery("lane:0", "horizontal", Box(0, 0, 51, 1998), 81.5144220962, "plan:test"),
         )
         record = {
@@ -286,7 +287,7 @@ class CrossNormalizationBaselineContractTest(unittest.TestCase):
                     # Recomputed internally consistent facts cannot change
                     # the registered source scale or parent plan identity.
                     regions[0] = typed_read_model(measure_exterior_region(
-                        PhotoBoundaryMeasurementField(self._source(1926), "horizontal"), query,
+                        make_native_test_field(self._source(1926), "horizontal"), query,
                     ))
             relink_work(invalid)
             if fault == "ledger":

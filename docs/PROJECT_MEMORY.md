@@ -1,5 +1,7 @@
 # 项目记忆
 
+本工作树是原生 coarse/Cross 证据实验快照，未并入 main，不能当作发布版本。
+
 更新：2026-10-02。现场 Git、原 TIFF、source SHA、current report 与最新验证高于本文件。
 长期合同见 [ARCHITECTURE.md](ARCHITECTURE.md)，人工权限见
 [MANUAL_ANNOTATION.md](MANUAL_ANNOTATION.md)，协作规则见 [AGENTS.md](../AGENTS.md)。
@@ -120,7 +122,11 @@ frame domains 不能反向授权新像素 query。不同材料层与 blank ends 
    同一纯端点归约重放窗口，峰坐标与数量绑定原单 profile；不能缩窗后隐藏 native 竞争。
    Retained singleton 按完整 candidate 身份复用，新增实际拟合即使几何去重仍计费。
    当前工程检查 1069 tests OK、2 skipped；10 项 native 合同测试覆盖物理域、孤立侧、完整 raw、
-   缩窗隐藏竞争、实际拟合次数和聚合峰越域。上述最后补强尚未重跑完整 110-task，不能借用前次 manifest。
+   缩窗隐藏竞争、实际拟合次数和聚合峰越域。最终 5 张重点 TIFF 全部完成、0 analysis errors、
+   2 safe auto、0 unsafe auto，记录在 `native_h_cross_owner_20261002_proof_final_targets`。
+   当前 detector manifest 为 `072cf1b5be59e96fc80217a57d8adeaef1883afeba2ec05e948b87f99b012177`，
+   comparator 为 `b5d54a203850959866af74e67a040bc41874998865ab622958b34d9e8ce0b12c`。
+   上述最后补强尚未重跑完整 110-task，不能借用前次 manifest。
    下一步在现有共同输出 owner 内证明全部 enclosing-support 成员的完整性、同状态中心风险、对齐预算及
    source/content 约束；不能删除 S094/S095 竞争或直接复用 aperture-only 权限。S094 phase resolved、
    membership complete、4 个 support pair、local refinement scope 为 0；可先研究完整集合的共同输出。

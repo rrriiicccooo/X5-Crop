@@ -22,6 +22,7 @@ from .template_aspect_ratio_model import (
     unavailable_aperture_aspect_ratio_authority,
 )
 from .template_model import TemplateSpec
+from .coarse_enclosing_model import CoarseEnclosingSideFact, CoarseEnclosingTrack, CoarseSideRegistrationReceipt
 
 
 def cross_role_authorized_by_measurement(
@@ -545,7 +546,25 @@ class CrossRoleBinding:
     conditional_family_ids: tuple[str, ...] = ()
     physical_line_region: PhysicalLineRegion | None = None
 
+    coarse_side_fact: CoarseEnclosingSideFact | None = None
+    coarse_side_track: CoarseEnclosingTrack | None = None
+
     def __post_init__(self) -> None:
+        if (self.coarse_side_fact is None) != (self.coarse_side_track is None):
+            raise ValueError("coarse binding requires both its raw path and fitted track")
+        if self.coarse_side_fact is not None:
+            if (not isinstance(self.coarse_side_fact, CoarseEnclosingSideFact)
+                    or not isinstance(self.coarse_side_track, CoarseEnclosingTrack)
+                    or self.role_authorized
+                    or self.observation_id != self.coarse_side_track.observation_id):
+                raise ValueError("coarse side cannot grant aperture authority")
+            fact, track = self.coarse_side_fact, self.coarse_side_track
+            if (self.role.value != ("top" if fact.side.value == "minimum" else "bottom")
+                    or track.side != fact.side or track.reference_trace_px != fact.reference_trace_px
+                    or track.measurement_basis.value != "broad_material"
+                    or track.trace_coordinates_px != tuple(item.trace_coordinate_px for item in fact.observations)
+                    or track.trace_position_intervals_px != tuple(item.physical_position_interval_px for item in fact.observations)):
+                raise ValueError("coarse binding changed its complete raw support")
         if self.role not in {BoundaryRole.TOP, BoundaryRole.BOTTOM}:
             raise ValueError("cross role binding requires top or bottom")
         if self.physical_line_region is not None and not isinstance(self.physical_line_region, PhysicalLineRegion):
@@ -815,6 +834,7 @@ class TemplateCrossInput:
     registered_bottom_run_count: int | None = None
     fitted_observation_count: int | None = None
     minimum_shared_trace_support: int = 2
+    coarse_side_registration: CoarseSideRegistrationReceipt | None = None
     aperture_aspect_ratio_authority: ApertureAspectRatioAuthority = field(
         default_factory=unavailable_aperture_aspect_ratio_authority
     )
@@ -887,10 +907,12 @@ class TemplateCrossInput:
         if any(not isinstance(value, int) or value <= 0 for value in bounds):
             raise ValueError("cross work bounds must be positive integers")
         binding_top_run_count = len(
-            {item.run_id for item in self.top_bindings if not item.conditional_family_ids}
+            {item.run_id for item in self.top_bindings if not item.conditional_family_ids
+             and item.coarse_side_fact is None and item.enclosing_pair_id is None}
         )
         binding_bottom_run_count = len(
-            {item.run_id for item in self.bottom_bindings if not item.conditional_family_ids}
+            {item.run_id for item in self.bottom_bindings if not item.conditional_family_ids
+             and item.coarse_side_fact is None and item.enclosing_pair_id is None}
         )
         observation_count = len(
             {
@@ -957,6 +979,7 @@ class CrossSearchReceipt:
     fitted_observation_bound: int
     compatible_pair_bound: int
     evaluated_fit_bound: int
+    coarse_side_registration: CoarseSideRegistrationReceipt | None = None
 
     def __post_init__(self) -> None:
         values = (
@@ -985,6 +1008,8 @@ class CrossSearchReceipt:
             raise ValueError("cross search receipt bounds must be positive")
 
     def validate_bounds(self) -> None:
+        if self.coarse_side_registration is not None and self.coarse_side_registration.bound_exceeded:
+            raise ValueError("coarse side registration exhausted the shared observation bound")
         if (
             self.registered_top_run_count > self.registered_run_bound_per_role
             or self.registered_bottom_run_count
@@ -1331,8 +1356,14 @@ class CrossFitCompetition:
     conditional_proposal_failure_kind: CrossFailureKind | None = None
     fit_groups: tuple[CrossFitGroup, ...] = ()
     conditional_fit_groups: tuple[CrossFitGroup, ...] = ()
+    support_pair_bindings: tuple[tuple[CrossRoleBinding, CrossRoleBinding], ...] = ()
 
     def __post_init__(self) -> None:
+        if (any(len(pair) != 2 or pair[0].role != BoundaryRole.TOP
+                or pair[1].role != BoundaryRole.BOTTOM for pair in self.support_pair_bindings)
+                or len(self.support_pair_bindings) > self.receipt.evaluated_fit_count
+                or (self.status == CrossFitStatus.BOUND_EXCEEDED and self.support_pair_bindings)):
+            raise ValueError("Cross support ledger exceeds its complete evaluated work")
         groups = (*self.fit_groups, *self.conditional_fit_groups)
         if any(not isinstance(group, CrossFitGroup) for group in groups):
             raise TypeError("cross competition groups must retain typed support results")

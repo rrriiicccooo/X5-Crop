@@ -401,6 +401,8 @@ prefix/suffix 支撑数筛去不可能属于合格路径的 raw。该筛选只�
 另按实际 seed、extension 与完成路径次数计数。搜索深度至多 `min(P,T)`，完成的极大路径至多 P，
 raw mask 按实际 Python limb 操作计费，存储由运行时 digit 位数和字节数折算成 8-byte 数值槽；
 物理点对缓存至多 P 项，不缓存邻接矩阵或峰组合笛卡尔积。
+多 limb mask 按实际 byte 遍历成本与命中成员数选择稀疏枚举；bit count、转换及逐成员提取均计费，
+密集 mask 保留原逐位置检查。枚举次序和完整路径资格保持，不提高原 `5P²` 上限。
 Mask 使用正数包含／排除运算，初始移位计入进位 limb；补集 AND/XOR 的第三个临时 mask 在运算前
 预留。每个活动栈帧独立预留临时索引空间；递归前
 释放分组数据，只保留已计量的候选池、分支序列与必要状态。跨分量存活的点对缓存按 key 和两个
@@ -462,18 +464,37 @@ resolution、pair、typed failure 和工作量；Debug 不重新测量或求解�
 因此 outer material 不能伪造 adjacency topology。Normal report 与 Debug 分别显示 observation、权限使用
 和冲突；未进入选定 placement 的事实只作 validation。
 
-短轴 coarse owner 使用另一份固定、候选无关的 `COARSE_STRIP_SHORT` 查询：sharp channel 使用 5 条固定
-trace，broad channel 使用 9 条固定 trace（每个长轴区域 3 条），两组坐标先合并为一个 registered union，
-原 TIFF 只读取一次；之后两个 channel 只消费各自固定 view。这里的 broad 只建立 role-free
-`ENCLOSING_SUPPORT_PAIR`，不能建立长轴 START/END、phase 或 ordinal。完整合同为：
+短轴 coarse owner 使用固定、候选无关的 `COARSE_STRIP_SHORT` 查询：sharp channel 使用 5 条固定
+trace，broad channel 使用 9 条固定 trace（每个长轴区域 3 条），两组坐标合并为一个 registered union。
+原 TIFF 只 decode 一次。Sharp 继续使用既有 uint8 gray；coarse broad 从同一 canonical uint16 RGB 的
+已登记 trace 计算 Rec.709 luma（0.2126、0.7152、0.0722），不做 percentile clipping，量化下限为原生
+1 code。双尺度统计、texture/background 判据保持同一单位；其它 broad 和精测继续使用既有 uint8 单位。
+开发报告声明该测量单位和作用范围，不能把单位变化混入原来的灰度噪声下限。
+固定五条 sharp trace 的 uint8 中位 profile 保存全部聚合峰的位置与物理区间，绑定同一 query 与 trace
+ordinal；峰坐标和数量受该单 profile 查询域约束。Runtime 与报告共用唯一端点归约，报告不能用
+自行声明的短轴窗口筛掉原始 broad 竞争。新增保留峰按每峰三个数值槽计入原缓冲上限。
 
-| coarse short 事实 | resolution 与权限 |
+Coarse 只保留全部合格的独立 broad side raw path，不进行 min×max 配对。每侧先在全局 Cross
+512 observation 剩余额度内拟合一次，整批原始 side 数超过额度时不做部分拟合并返回 typed bound。
+原 regular run/family 次数不计入这些 coarse sides；它们计入完整 solver observation 及专用 side receipt。
+现有 Cross support interval sweep 独占配对和共同物理闭合；每次尝试（包括失败）在执行前占用原
+4096 evaluated-fit 共享额度。Canonical/conditional 权限视图复用同一份完整候选池，不重复物理求解。
+保留方案只复用本权限视图中完整 singleton group 身份相同的已有拟合；其它实际物化在执行前计费，
+即使结果几何相同并被去重也不撤销计费。超界不发布部分候选或自动批准结果。
+这里的 broad 只建立 role-free `ENCLOSING_SUPPORT_PAIR`，
+不能建立长轴 START/END、phase 或 ordinal。
+
+| coarse short 事实 | Cross resolution 与权限 |
 |---|---|
-| sharp 或 broad 单独形成唯一完整 pair | `supported`；该 pair 可以进入第 8.2 节 |
-| broad 两侧均为正确 outward background、polarity 一致、各有 3 个独立长轴区域、source-spanning、方向相容且 `H < span <= 1.1H` | broad pair 取得直接像素坐标权限 |
-| sharp 与 broad 的位置、方向和 span 区间等价 | 保留 sharp native coordinate；broad 作为相关 validation，不重复计票 |
-| sharp 与 broad 都完整但不等价 | `non_equivalent_pair_candidates`；typed contradiction，不按 score 选择 |
-| 只有一侧、区域/连续性不足、source 边界不可观察、极性或 background side 冲突、span 不相容 | `pair_unavailable`；不授予 enclosing authority |
+| sharp 或 broad 单独形成唯一完整 pair | 可以进入第 8.2 节 |
+| broad 两侧均为正确 outward background、每侧内部 polarity 一致、各有 3 个独立长轴区域、source-spanning、方向相容且 `H < span <= 1.1H` | broad pair 取得直接像素坐标权限 |
+| 唯一 sharp pair 恰与一份 broad pair 的位置、方向和 span 区间等价 | 保留 sharp native coordinate；两份 raw proof 均保留，只作为一个相关解释 |
+| 两份以上 broad pair 与 sharp 重叠，或仍有其它非等价完整 pair | 保留全部竞争，不能通过不具传递性的区间相交消除歧义 |
+| 只有一侧、区域/连续性不足、source 边界不可观察、侧内极性或 background side 冲突、span 不相容 | 不授予 enclosing authority |
+
+开发报告保留完整 coarse raw side、原 Cross input、所有通过物理闭合的 support pair 及真实尝试数。
+回读从原 query 重建 raw path、单侧拟合和唯一 Cross 竞争；run-local ordinal 只在完整 raw path 一一对应后
+绑定，不能用新的序号掩盖删点、候选遗漏、几何改变或工作量不符。
 
 选中的 pair 仍须通过唯一 cross placement、source containment、content veto 和逐侧 5% 输出预算。任何
 long-axis broad standalone edge 都只保留为 observation；它可能是照片内部构图线，不能单独取得 outer 或
@@ -1971,8 +1992,8 @@ unattributed runtime → TIFF decode → workspace gray → coarse support
 → sampling → TIFF encode/write → readback → publish
 ```
 
-Detector 只消费 8-bit gray、稀疏 aggregate profile 与有界局部窗口；正式输出仍从已验证的原始
-16-bit RGB 通过每-frame 反向 affine ROI 采样，不先旋转整张大图。普通 product path 在 deskew 和
+Detector 消费 8-bit gray、稀疏 aggregate profile 与有界局部窗口；仅 coarse short broad 在同一固定
+trace 上消费原生 16-bit luma（第 6.3 节）。正式输出仍从已验证的原始 16-bit RGB 通过每-frame 反向 affine ROI 采样，不先旋转整张大图。普通 product path 在 deskew 和
 workspace-owned report facts 冻结后、TIFF sampling 前释放 registered gray；development CLI 同样先
 冻结完整 facts 再释放，只有 Debug Analysis 为画图保留。是否继续拆分 decode、优化 detector、
 sampling 或 I/O 只由阶段证据决定。
@@ -2001,7 +2022,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `x5crop/formats/` | format 设计 W/H、统一混合 W/H compatibility、分格式 raw aspect calibration、enclosing-support aperture-center calibration、gap 搜索中心、holder count 与输出保护常量 |
 | `x5crop/configuration/`、`x5crop/runtime/` | format/count/deskew mode 输入、matched-holder resolution 与 source workflow |
 | `x5crop/detection/source_core.py`、`evidence/scan_canvas.py` | source/lane 与 matched-holder authority |
-| `photo_geometry/coarse_strip_support.py`、`coarse_enclosing_model.py`、`coarse_enclosing_support.py` | role-free coarse query、sharp/broad 固定 trace view、粗片带 interval、source-wide 双侧 track、pair resolution 与 receipt |
+| `photo_geometry/coarse_strip_support.py`、`coarse_enclosing_model.py`、`coarse_enclosing_support.py`、`template_coarse_sides.py` | role-free coarse query、sharp/broad 固定 trace view、粗片带 interval、完整 raw side、Cross 内的单侧登记与共同物理闭合 |
 | `photo_geometry/template_measurement_plan*.py` | pixel-free 模板、有限 query intents、停止与工作上界 |
 | `photo_geometry/exterior_region_measurement.py` | 固定外侧带的全列区域／弱信号事实、注册身份与实际工作账本；不授予片夹或输出权限 |
 | `photo_geometry/constructed_enclosure.py` | 全部约束上的有界平行外框几何构造；构造方向与实测照片方向分开 |

@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 class PhotoBoundaryMeasurementField:
     source_gray: np.ndarray = field(repr=False, compare=False)
     layout: str
+    source_rgb: np.ndarray = field(repr=False, compare=False, kw_only=True)
     source_extent: WorkspaceExtent = field(init=False)
     provenance: MeasurementProvenance = field(init=False)
 
@@ -44,11 +45,18 @@ class PhotoBoundaryMeasurementField:
             or min(self.source_gray.shape) <= 0
         ):
             raise ValueError("photo-boundary field requires source uint8 gray")
+        if (
+            not isinstance(self.source_rgb, np.ndarray)
+            or self.source_rgb.dtype != np.uint16
+            or self.source_rgb.shape != (*self.source_gray.shape, 3)
+        ):
+            raise ValueError("native measurement requires canonical uint16 RGB")
         if self.layout not in {"horizontal", "vertical"}:
             raise ValueError(
                 "photo-boundary field requires a canonical layout"
             )
         self.source_gray.flags.writeable = False
+        self.source_rgb.flags.writeable = False
         object.__setattr__(
             self,
             "source_extent",
@@ -63,10 +71,10 @@ class PhotoBoundaryMeasurementField:
             MeasurementProvenance(
                 root_measurement=MeasurementIdentity.PHOTO_BOUNDARY,
                 observation_id=ObservationId("photo_boundary:source_gray"),
-                dependencies=(MeasurementIdentity.BASE_GRAY,),
+                dependencies=(MeasurementIdentity.BASE_GRAY, MeasurementIdentity.NATIVE_RGB),
                 description=(
-                    "immutable source-coordinate gray with streaming local "
-                    "photo-boundary query authority"
+                    "immutable canonical gray and native RGB with fixed "
+                    "registered photo-boundary query authority"
                 ),
             ),
         )
@@ -456,6 +464,35 @@ class PhotoBoundaryCoverageReceipt:
 
 
 @dataclass(frozen=True)
+class CoarseAggregatePeak:
+    canonical_coordinate_px: float
+    physical_position_interval_px: FiniteInterval
+
+    def __post_init__(self) -> None:
+        if (not math.isfinite(self.canonical_coordinate_px)
+                or not isinstance(self.physical_position_interval_px, FiniteInterval)
+                or not self.physical_position_interval_px.contains(self.canonical_coordinate_px)):
+            raise ValueError("coarse aggregate peak lost its physical position")
+
+
+@dataclass(frozen=True)
+class CoarseAggregateShortEvidence:
+    """All peaks from the fixed sharp-trace median, before endpoint reduction."""
+
+    query_id: str
+    trace_ordinals: tuple[int, ...]
+    peaks: tuple[CoarseAggregatePeak, ...]
+
+    def __post_init__(self) -> None:
+        if (not self.query_id or not self.trace_ordinals
+                or any(type(value) is not int or value < 0 for value in self.trace_ordinals)
+                or tuple(sorted(set(self.trace_ordinals))) != self.trace_ordinals
+                or any(not isinstance(peak, CoarseAggregatePeak) for peak in self.peaks)
+                or tuple(sorted(self.peaks, key=lambda peak: peak.canonical_coordinate_px)) != self.peaks):
+            raise ValueError("coarse aggregate evidence is incomplete or unordered")
+
+
+@dataclass(frozen=True)
 class PhotoBoundaryMeasurementSet:
     query: PhotoBoundaryMeasurementQuery
     state: EvidenceState
@@ -470,8 +507,23 @@ class PhotoBoundaryMeasurementSet:
         ...,
     ] = ()
     broad_material_association: BroadAssociationResult | None = None
+    coarse_aggregate: CoarseAggregateShortEvidence | None = None
 
     def __post_init__(self) -> None:
+        if self.coarse_aggregate is not None:
+            aggregate = self.coarse_aggregate
+            if (not isinstance(aggregate, CoarseAggregateShortEvidence)
+                    or self.state != EvidenceState.SUPPORTED
+                    or self.query.purpose != QueryPurpose.COARSE_STRIP_SHORT
+                    or aggregate.query_id != self.query.query_id
+                    or aggregate.trace_ordinals[-1] >= len(self.query.trace_positions_px)
+                    or len(set(self.query.search_intervals_px)) != 1):
+                raise ValueError("coarse aggregate lost its registered measurement source")
+            search = self.query.search_intervals_px[0]
+            coordinate_count = max(0, math.floor(search.maximum) - math.ceil(search.minimum) + 1)
+            if (len(aggregate.peaks) > coordinate_count
+                    or any(not search.contains(peak.canonical_coordinate_px) for peak in aggregate.peaks)):
+                raise ValueError("coarse aggregate peak leaves its single registered profile")
         if self.query.query_id != self.coverage.query_id:
             raise ValueError("measurement set query identity disagrees")
         if self.state == EvidenceState.SUPPORTED:

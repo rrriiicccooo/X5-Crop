@@ -22,6 +22,7 @@ from ...domain import (
     PositiveInterval,
 )
 from ...formats import OUTPUT_PROTECTION_SPEC
+from ...image.gray import _luma_u16, BaseGrayParameters
 from ..source_core import SourceLaneEvidence
 from .axis_layout import axis_interval, source_axes
 from .broad_material_transition_measurement import (
@@ -31,13 +32,16 @@ from .broad_material_association import associate_registered_broad_material
 from .corridors import source_lane_box
 from .coarse_enclosing_model import (
     CoarseEnclosingResolution,
+    CoarseEnclosingSideFact,
     CoarseEnclosingSupport,
     CoarseSharedDirection,
 )
 from .coarse_enclosing_support import (
     observe_coarse_short_axis_tracks,
+    observe_coarse_broad_side_facts,
 )
 from .measurement_model import (
+    CoarseAggregatePeak, CoarseAggregateShortEvidence,
     PhotoBoundaryCoverageReceipt,
     PhotoBoundaryMeasurementField,
     PhotoBoundaryMeasurementQuery,
@@ -49,6 +53,7 @@ from .registered_transition_measurement import (
     measure_trace,
     measured_transition_peaks,
     trace_storage_bytes,
+    broad_material_trace_measurement,
 )
 from .physical_identity import physical_observation_id
 from .template_measurement_plan_model import TemplateMeasurementPlan
@@ -59,6 +64,9 @@ COARSE_STRIP_SUPPORT_REVISION = (
 )
 COARSE_SHARP_TRACE_COUNT = 5
 COARSE_BROAD_REGION_TRACE_COUNT = 3 * 3
+# This floor is expressed in original uint16 Rec.709 code units; it is not
+# one percentile-normalized gray level and does not change sharp measurement.
+NATIVE_COARSE_INTENSITY_QUANTUM = 1.0
 
 
 class CoarseSupportAuthority(str, Enum):
@@ -139,6 +147,7 @@ class CoarseStripSupport:
     enclosing_support: CoarseEnclosingSupport | None
     enclosing_resolution: CoarseEnclosingResolution
     receipt: CoarseStripSupportReceipt
+    enclosing_side_facts: tuple[CoarseEnclosingSideFact, ...] = ()
 
     def __post_init__(self) -> None:
         if (
@@ -166,6 +175,11 @@ class CoarseStripSupport:
             or not isinstance(self.receipt, CoarseStripSupportReceipt)
         ):
             raise ValueError("coarse strip support is invalid")
+        if (not isinstance(self.enclosing_side_facts, tuple)
+                or any(not isinstance(item, CoarseEnclosingSideFact)
+                       or item.query.lane_id != self.lane_id
+                       for item in self.enclosing_side_facts)):
+            raise ValueError("coarse side facts leave their registered lane")
         if (
             self.enclosing_resolution.state == EvidenceState.SUPPORTED
         ) != (self.enclosing_support is not None):
@@ -416,6 +430,8 @@ def _aggregate_measurement_set(
 def _measure_coarse_short_trace_lattice(
     samples: np.ndarray,
     query: PhotoBoundaryMeasurementQuery,
+    *,
+    source_rgb: np.ndarray,
 ) -> tuple[tuple[TraceMeasurement, ...], int]:
     """Measure each registered coarse-short trace once for both channels."""
 
@@ -434,8 +450,29 @@ def _measure_coarse_short_trace_lattice(
             query.search_intervals_px[ordinal],
             query.boundary_axis_scale_px_per_mm.maximum,
             PHOTO_BOUNDARY_MEASUREMENT_SPEC,
-            include_broad_material=True,
+            include_broad_material=False,
         )
+        position = query.trace_positions_px[ordinal]
+        rgb = (source_rgb[position, :, :] if query.boundary_axis == BoundaryAxis.X
+               else source_rgb[:, position, :])
+        luma = np.empty(rgb.shape[0], dtype=np.float32)
+        scratch = np.empty_like(luma)
+        _luma_u16(rgb, luma, scratch, BaseGrayParameters())
+        numeric = luma.astype(np.float64)
+        differences = np.abs(np.diff(numeric))
+        broad = broad_material_trace_measurement(
+            numeric, differences, trace.coordinates,
+            query.boundary_axis_scale_px_per_mm.maximum,
+            PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+            intensity_quantum=NATIVE_COARSE_INTENSITY_QUANTUM,
+        )
+        trace = replace(
+            trace, broad_material=broad,
+            temporary_bytes=(trace.temporary_bytes + broad.temporary_bytes
+                             + luma.nbytes + scratch.nbytes
+                             + numeric.nbytes + differences.nbytes),
+        )
+        del luma, scratch, numeric, differences, broad
         retained_bytes += trace_storage_bytes(trace)
         # Earlier traces remain live for broad association and coarse support.
         # Use the same conservative storage + work allowance as baseline
@@ -527,7 +564,8 @@ def _aggregate_short_hull(
     expected_height_px: FiniteInterval,
     profile: np.ndarray,
     aggregate_temporary: int,
-) -> tuple[FiniteInterval | None, tuple[ObservationId, ...], int, int]:
+    aggregate_trace_ordinals: tuple[int, ...],
+) -> tuple[FiniteInterval | None, tuple[ObservationId, ...], int, int, CoarseAggregateShortEvidence]:
     """Find one bounded whole-strip support without materializing pairs.
 
     This hull only localizes later precision queries.  It cannot authorize a
@@ -546,7 +584,27 @@ def _aggregate_short_hull(
         PHOTO_BOUNDARY_MEASUREMENT_SPEC,
         split_gradient_reversals=True,
     )
-    positions = tuple(item.canonical_coordinate for item in peaks)
+    evidence = CoarseAggregateShortEvidence(query.query_id, aggregate_trace_ordinals,
+        tuple(CoarseAggregatePeak(peak.canonical_coordinate, peak.physical_position_interval) for peak in peaks))
+    direct, lookup_count = aggregate_short_hull_from_evidence(
+        query, evidence, expected_height_px=expected_height_px)
+    identities = () if direct is None else (physical_observation_id(
+        "coarse-short-support", query.query_id, tuple(query.trace_positions_px),
+        f"{direct.minimum:.6f}", f"{direct.maximum:.6f}"),)
+    temporary_bytes = aggregate_temporary + measured.temporary_bytes
+    return direct, identities, temporary_bytes, lookup_count, evidence
+
+
+def aggregate_short_hull_from_evidence(
+    query: PhotoBoundaryMeasurementQuery,
+    evidence: CoarseAggregateShortEvidence,
+    *, expected_height_px: FiniteInterval,
+) -> tuple[FiniteInterval | None, int]:
+    """The sole endpoint reduction used by runtime and report replay."""
+    if query.query_id != evidence.query_id or query.purpose != QueryPurpose.COARSE_STRIP_SHORT:
+        raise ValueError("coarse aggregate endpoint evidence changed query")
+    peaks = evidence.peaks
+    positions = tuple(item.canonical_coordinate_px for item in peaks)
     maximum_span = (
         OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio
         * expected_height_px.maximum
@@ -557,47 +615,33 @@ def _aggregate_short_hull(
     for top_index, top in enumerate(peaks):
         lower = bisect_left(
             positions,
-            top.canonical_coordinate + expected_height_px.minimum,
+            top.canonical_coordinate_px + expected_height_px.minimum,
             lo=top_index + 1,
         )
         upper = bisect_right(
             positions,
-            top.canonical_coordinate + maximum_span,
+            top.canonical_coordinate_px + maximum_span,
             lo=lower,
         )
         lookup_count += 2
         if lower < upper:
             top_indices.append(top_index)
             bottom_indices.append(upper - 1)
-    temporary_bytes = aggregate_temporary + measured.temporary_bytes
     if not top_indices:
-        return None, (), temporary_bytes, lookup_count
+        return None, lookup_count
     direct = FiniteInterval(
         min(
-            peaks[index].physical_position_interval.minimum
+            peaks[index].physical_position_interval_px.minimum
             for index in top_indices
         ),
         max(
-            peaks[index].physical_position_interval.maximum
+            peaks[index].physical_position_interval_px.maximum
             for index in bottom_indices
         ),
     )
     if direct.width > maximum_span:
-        return None, (), temporary_bytes, lookup_count
-    return (
-        direct,
-        (
-            physical_observation_id(
-                "coarse-short-support",
-                query.query_id,
-                tuple(query.trace_positions_px),
-                f"{direct.minimum:.6f}",
-                f"{direct.maximum:.6f}",
-            ),
-        ),
-        temporary_bytes,
-        lookup_count,
-    )
+        return None, lookup_count
+    return direct, lookup_count
 
 
 def _expanded_support(
@@ -730,6 +774,7 @@ def observe_coarse_strip_support(
         _measure_coarse_short_trace_lattice(
             short_samples,
             short_measurement.query,
+            source_rgb=field.source_rgb,
         )
     )
     broad_regions, broad_temporary = (
@@ -757,12 +802,13 @@ def observe_coarse_strip_support(
             frame_width_px=measurement_plan.template_spec.frame_width_px,
         )
     )
-    direct_short, short_ids, aggregate_temporary, endpoint_lookups = (
+    direct_short, short_ids, aggregate_temporary, endpoint_lookups, aggregate_evidence = (
         _aggregate_short_hull(
             measurements[1],
             expected_height_px=measurement_plan.template_spec.frame_height_px,
             profile=short_profile,
             aggregate_temporary=short_temporary,
+            aggregate_trace_ordinals=sharp_trace_ordinals,
         )
     )
     measurements = (
@@ -778,9 +824,11 @@ def observe_coarse_strip_support(
         ),
         replace(
             measurements[1],
+            coarse_aggregate=aggregate_evidence,
             coverage=replace(
                 measurements[1].coverage,
-                peak_temporary_bytes=max(
+                pixel_query_count=4 * measurements[1].coverage.pixel_query_count,
+                peak_temporary_bytes=24 * len(aggregate_evidence.peaks) + max(
                     aggregate_temporary,
                     short_trace_temporary,
                     short_trace_temporary + broad_temporary,
@@ -858,6 +906,11 @@ def observe_coarse_strip_support(
             enclosing_support,
             enclosing_resolution,
             receipt,
+            observe_coarse_broad_side_facts(
+                measurements[1], aggregate_interval_px=direct_short,
+                expected_height_px=template.frame_height_px,
+                reference_trace_px=long_authority.center,
+            ),
         ),
         measurements,
     )

@@ -50,6 +50,7 @@ from .template_cross_model import (
 from .template_cross_support import (
     SupportFitStatus,
     fit_enclosing_support,
+    support_permission_view,
 )
 from .template_aspect_ratio import (
     consume_aperture_aspect_ratio_for_cross,
@@ -110,6 +111,7 @@ def _receipt(
         fitted_observation_bound=inputs.maximum_fitted_observations,
         compatible_pair_bound=inputs.maximum_compatible_pairs,
         evaluated_fit_bound=inputs.maximum_evaluated_fits,
+        coarse_side_registration=inputs.coarse_side_registration,
     )
 
 
@@ -182,11 +184,13 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         raise ValueError("cross observation registered more than once")
     registered_top_runs = max(
         int(inputs.registered_top_run_count),
-        len({item.run_id for item in top if not item.conditional_family_ids}),
+        len({item.run_id for item in top if not item.conditional_family_ids
+             and item.coarse_side_fact is None and item.enclosing_pair_id is None}),
     )
     registered_bottom_runs = max(
         int(inputs.registered_bottom_run_count),
-        len({item.run_id for item in bottom if not item.conditional_family_ids}),
+        len({item.run_id for item in bottom if not item.conditional_family_ids
+             and item.coarse_side_fact is None and item.enclosing_pair_id is None}),
     )
     fitted_observations = max(
         int(inputs.fitted_observation_count),
@@ -206,6 +210,8 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         registered_top_runs > inputs.maximum_registered_runs_per_role
         or registered_bottom_runs > inputs.maximum_registered_runs_per_role
         or fitted_observations > inputs.maximum_fitted_observations
+        or (inputs.coarse_side_registration is not None
+            and inputs.coarse_side_registration.bound_exceeded)
     ):
         return CrossFitCompetition(
             template_id=inputs.template.template_id,
@@ -240,12 +246,42 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             receipt=replace(empty_receipt(), compatible_pair_count=len(pairs.candidates)),
             aperture_aspect_ratio_authority=aspect_ratio_authority,
         )
-    canonical = _select_cross_competition(inputs, pairs, empty_receipt(), canonical_only=True)
+    support_pool = []
+
+    def support_search(available, canonical_only):
+        charged = 0
+        if not support_pool:
+            result = fit_enclosing_support(
+                template=inputs.template, fixed_height=inputs.fixed_height_px,
+                canonical_height_px=float(inputs.canonical_fixed_height_px),
+                reference_trace_px=inputs.lane_reference_trace_px,
+                top_bindings=inputs.top_bindings, bottom_bindings=inputs.bottom_bindings,
+                registered_trace_coordinates_px=inputs.registered_trace_coordinates_px or tuple(sorted({
+                    trace for binding in (*inputs.top_bindings, *inputs.bottom_bindings)
+                    for trace in binding.trace_coordinates_px})),
+                longitudinal_support_domain_groups_px=inputs.longitudinal_support_domain_groups_px,
+                minimum_shared_trace_support=inputs.minimum_shared_trace_support,
+                maximum_evaluated_candidates=max(0, available),
+            )
+            support_pool.append(result)
+            charged = result.evaluated_candidate_count
+        return support_permission_view(support_pool[0], canonical_only=canonical_only), charged
+
+    def with_support_ledger(result):
+        if result.status == CrossFitStatus.BOUND_EXCEEDED or not support_pool:
+            return result
+        return replace(result, support_pair_bindings=tuple(
+            (item.top_binding, item.bottom_binding) for item in support_pool[0].candidates))
+
+    canonical = _select_cross_competition(inputs, pairs, empty_receipt(), canonical_only=True,
+                                         support_search=support_search)
+
     if canonical.status == CrossFitStatus.BOUND_EXCEEDED or not any(
         item.conditional_family_ids for item in (*top, *bottom)
     ):
-        return canonical
-    proposed = _select_cross_competition(inputs, pairs, empty_receipt(), canonical_only=False)
+        return with_support_ledger(canonical)
+    proposed = _select_cross_competition(inputs, pairs, empty_receipt(), canonical_only=False,
+        support_search=support_search, prior_evaluated=canonical.receipt.evaluated_fit_count)
     receipt = replace(
         canonical.receipt,
         compatible_pair_count=len(pairs.candidates),
@@ -264,14 +300,14 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         )
     fit = next((item for item in (proposed.best, proposed.runner_up)
                 if item is not None and item.conditional_family_ids), None)
-    return replace(
+    return with_support_ledger(replace(
         canonical, receipt=receipt, conditional_proposal=fit,
         conditional_fit_groups=proposed.conditional_fit_groups,
         conditional_proposal_failure_kind=(
             CrossFailureKind.FAMILY_ASSIGNMENT_UNRESOLVED if fit is not None else
             proposed.failure_kind or CrossFailureKind.PHYSICAL_GROUP_UNAVAILABLE
         ),
-    )
+    ))
 
 
 def _select_cross_competition(
@@ -280,6 +316,8 @@ def _select_cross_competition(
     registration: CrossSearchReceipt,
     *,
     canonical_only: bool,
+    support_search,
+    prior_evaluated: int = 0,
 ) -> CrossFitCompetition:
     """Select from one measured pool under explicit family permissions."""
 
@@ -347,10 +385,24 @@ def _select_cross_competition(
         )
     )
 
-    def retained_cross_proposal_fits() -> tuple[
+    singleton_fits: dict[_Candidate, CrossFit] = {}
+
+    def singleton_fit(candidate: _Candidate) -> CrossFit:
+        """Reuse only this view's exactly identical complete singleton group."""
+        if candidate not in singleton_fits:
+            singleton_fits[candidate] = _fit_from_group(
+                (candidate,), template=inputs.template,
+                lane_reference_trace_px=inputs.lane_reference_trace_px,
+                registered_trace_coordinates_px=registered_trace_coordinates,
+                longitudinal_support_domain_groups_px=inputs.longitudinal_support_domain_groups_px,
+            )
+        return singleton_fits[candidate]
+
+    def retained_cross_proposal_fits(available: int) -> tuple[
         tuple[CrossFit, ...],
         CrossRetainedProposalBasis | None,
         int,
+        bool,
     ]:
         """Retain one bounded proposal and runner without granting authority."""
 
@@ -424,6 +476,7 @@ def _select_cross_competition(
                         item
                         for item in top
                         if not item.role_authorized
+                        and item.coarse_side_fact is None
                         and item.evidence == CrossEvidence.DIRECT
                         and item.independent_support_region_count
                         >= SPATIAL_SUPPORT_REGION_COUNT
@@ -441,6 +494,7 @@ def _select_cross_competition(
                         item
                         for item in bottom
                         if not item.role_authorized
+                        and item.coarse_side_fact is None
                         and item.evidence == CrossEvidence.DIRECT
                         and item.independent_support_region_count
                         >= SPATIAL_SUPPORT_REGION_COUNT
@@ -500,32 +554,19 @@ def _select_cross_competition(
         )
         if registered_pair_candidates:
             retained_pairs = registered_pair_candidates
+            added = sum(candidate not in singleton_fits for candidate in retained_pairs)
+            if added > available:
+                return (), None, 0, True
             return (
-                tuple(
-                    _fit_from_group(
-                        (candidate,),
-                        template=inputs.template,
-                        lane_reference_trace_px=(
-                            inputs.lane_reference_trace_px
-                        ),
-                        registered_trace_coordinates_px=(
-                            registered_trace_coordinates
-                        ),
-                        longitudinal_support_domain_groups_px=(
-                            inputs.longitudinal_support_domain_groups_px
-                        ),
-                    )
-                    for candidate in retained_pairs
-                ),
+                tuple(singleton_fit(candidate) for candidate in retained_pairs),
                 CrossRetainedProposalBasis
                 .OUTERMOST_ADMISSIBLE_REGISTERED_ROLE_PAIR,
-                sum(
-                    candidate not in candidates
-                    for candidate in retained_pairs
-                ),
+                added,
+                False,
             )
 
         fits: list[CrossFit] = []
+        added = 0
         for anchor in anchors:
             candidate = _retained_grid_candidate(
                 anchor,
@@ -539,15 +580,11 @@ def _select_cross_competition(
             )
             if candidate is None:
                 continue
-            fit = _fit_from_group(
-                (candidate,),
-                template=inputs.template,
-                lane_reference_trace_px=inputs.lane_reference_trace_px,
-                registered_trace_coordinates_px=registered_trace_coordinates,
-                longitudinal_support_domain_groups_px=(
-                    inputs.longitudinal_support_domain_groups_px
-                ),
-            )
+            if candidate not in singleton_fits:
+                if added >= available:
+                    return (), None, added, True
+                added += 1
+            fit = singleton_fit(candidate)
             if any(
                 existing.top_full_interval_px == fit.top_full_interval_px
                 and existing.bottom_full_interval_px
@@ -559,13 +596,15 @@ def _select_cross_competition(
         return (
             tuple(fits),
             retained_basis if fits else None,
-            len(fits),
+            added,
+            False,
         )
 
     enclosing_support_fit: CrossFit | None = None
     support_competition = None
     support_checked = False
     support_receipt_accounted = False
+    support_new_work = 0
     fit_groups: tuple[CrossFitGroup, ...] = ()
 
     def complete_resolution(best, runner, receipt, winner_basis, authority):
@@ -582,41 +621,12 @@ def _select_cross_competition(
             conditional_fit_groups=fit_groups if not canonical_only else (),
         )
 
-    def unique_enclosing_support() -> CrossFit | None:
-        nonlocal enclosing_support_fit, support_competition, support_checked
+    def unique_enclosing_support(available) -> CrossFit | None:
+        nonlocal enclosing_support_fit, support_competition, support_checked, support_new_work
         if support_checked:
             return enclosing_support_fit
         support_checked = True
-        # Prefer one already closed coarse pair. Otherwise the full support
-        # proof, rather than a boundary's background-role flag, determines
-        # whether two measured lines enclose a usable fixed-H photo.
-        explicit_pair_ids = {
-            item.enclosing_pair_id
-            for item in (*top, *bottom)
-            if item.enclosing_pair_id is not None
-        }
-        if explicit_pair_ids:
-            support_top = tuple(
-                item for item in top if item.enclosing_pair_id is not None
-            )
-            support_bottom = tuple(
-                item for item in bottom if item.enclosing_pair_id is not None
-            )
-        else:
-            support_top = top
-            support_bottom = bottom
-        competition = fit_enclosing_support(
-            template=inputs.template,
-            fixed_height=fixed_height,
-            canonical_height_px=float(inputs.canonical_fixed_height_px),
-            reference_trace_px=inputs.lane_reference_trace_px,
-            top_bindings=support_top,
-            bottom_bindings=support_bottom,
-            registered_trace_coordinates_px=registered_trace_coordinates,
-            longitudinal_support_domain_groups_px=inputs.longitudinal_support_domain_groups_px,
-            minimum_shared_trace_support=inputs.minimum_shared_trace_support,
-            maximum_evaluated_candidates=inputs.maximum_evaluated_fits,
-        )
+        competition, support_new_work = support_search(available, canonical_only)
         support_competition = competition
         if competition.status != SupportFitStatus.RESOLVED or competition.best is None:
             return None
@@ -693,11 +703,12 @@ def _select_cross_competition(
         receipt: CrossSearchReceipt,
     ) -> tuple[CrossFitCompetition | None, CrossSearchReceipt]:
         nonlocal support_receipt_accounted
-        support_fit = unique_enclosing_support()
+        support_fit = unique_enclosing_support(
+            inputs.maximum_evaluated_fits - prior_evaluated - receipt.evaluated_fit_count)
         evaluated = (
             0
             if support_competition is None or support_receipt_accounted
-            else support_competition.evaluated_candidate_count
+            else support_new_work
         )
         support_receipt_accounted = True
         receipt = replace(
@@ -973,7 +984,7 @@ def _select_cross_competition(
         single_side_inferences=single_count,
         evaluated_fits=len(candidates),
     )
-    if len(candidates) > inputs.maximum_evaluated_fits:
+    if len(candidates) > inputs.maximum_evaluated_fits - prior_evaluated:
         return CrossFitCompetition(
             template_id=inputs.template.template_id,
             best=None,
@@ -1000,7 +1011,18 @@ def _select_cross_competition(
             retained_fits,
             retained_basis,
             added_evaluation_count,
-        ) = retained_cross_proposal_fits()
+            retained_bound_exceeded,
+        ) = retained_cross_proposal_fits(max(0, inputs.maximum_evaluated_fits
+                                           - prior_evaluated - receipt.evaluated_fit_count))
+        if retained_bound_exceeded:
+            return CrossFitCompetition(
+                template_id=inputs.template.template_id, best=None, runner_up=None,
+                status=CrossFitStatus.BOUND_EXCEEDED, winner_basis=None,
+                reason="cross evaluated-fit bound exceeded",
+                failure_kind=CrossFailureKind.EVALUATED_FIT_BOUND_EXCEEDED,
+                receipt=replace(receipt, evaluated_fit_count=receipt.evaluated_fit_count + added_evaluation_count),
+                aperture_aspect_ratio_authority=aspect_ratio_authority,
+            )
         if not retained_fits:
             return unresolved(
                 receipt,
@@ -1021,7 +1043,7 @@ def _select_cross_competition(
         )
         if (
             retained_receipt.evaluated_fit_count
-            > retained_receipt.evaluated_fit_bound
+            > retained_receipt.evaluated_fit_bound - prior_evaluated
         ):
             return CrossFitCompetition(
                 template_id=inputs.template.template_id,
@@ -1163,6 +1185,8 @@ def _select_cross_competition(
         )
         for group in groups
     )
+    singleton_fits.update((group[0], fit) for group, fit in zip(groups, representative_fits, strict=True)
+                          if len(group) == 1)
 
     def direct_pair_id(
         item: CrossFit,

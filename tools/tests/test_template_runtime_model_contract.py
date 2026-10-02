@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tools.tests.photo_geometry_support import make_native_test_field
 
 from dataclasses import replace
 from contextlib import ExitStack
@@ -174,7 +175,7 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
                 owner + "project_format_placement", side_effect=ValueError("physical projection failure"),
             ))
             result = reconstruct_photo_geometry(
-                PhotoBoundaryMeasurementField(np.zeros((322, 2320), dtype=np.uint8), "horizontal"),
+                make_native_test_field(np.zeros((322, 2320), dtype=np.uint8), "horizontal"),
                 (prepared.lane,), (content,), layout="horizontal",
                 configuration=get_detection_configuration("135"), resolved_slot_count=None,
             )
@@ -228,7 +229,7 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
             ):
                 stack.enter_context(patch(owner + name, return_value=value))
             result = reconstruct_photo_geometry(
-                PhotoBoundaryMeasurementField(np.zeros((322, 2320), dtype=np.uint8), "horizontal"),
+                make_native_test_field(np.zeros((322, 2320), dtype=np.uint8), "horizontal"),
                 (prepared.lane,), (content,), layout="horizontal",
                 configuration=get_detection_configuration("135"), resolved_slot_count=None,
             )
@@ -287,7 +288,7 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
             for measured in prepared.measurement_sets[2:]
         )
         measurements = (*prepared.measurement_sets[:2], *measure_registered_queries(
-            PhotoBoundaryMeasurementField(np.zeros((322, 2320), dtype=np.uint8), "horizontal"),
+            make_native_test_field(np.zeros((322, 2320), dtype=np.uint8), "horizontal"),
             queries, registration_start=2,
         ))
         query = measurements[-1].query

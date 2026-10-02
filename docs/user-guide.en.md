@@ -62,10 +62,12 @@ own a crop coordinate only when three independent height regions agree and uniqu
 Unbound or multiply explained joint lines remain Debug evidence and cannot create another placement.
 
 The shared top and bottom of the whole strip are also observed as both sharp transitions and broad material changes.
-A broad pair can become outer support only when both sides have the correct outward background, one polarity, continuous
-support across three longitudinal regions, compatible direction, and a span that fully encloses fixed H. When sharp and
-broad observations are equivalent, the sharp native coordinates remain canonical. A disagreement, a single side, or
-multiple explanations keeps the whole source in review; signal strength does not choose a winner.
+A broad pair can become outer support only when both sides have the correct outward background, consistent polarity within
+each side, continuous support across three longitudinal regions, compatible direction, and a span that fully encloses fixed H.
+Coarse short-axis measurements retain weak material changes from the original 16-bit data that gray quantization can lose.
+All complete boundary interpretations are checked together. When exactly one broad pair is equivalent to the sharp pair,
+the sharp native coordinates remain canonical. A single side or multiple distinct explanations keeps the source in review;
+signal strength does not choose a winner.
 
 Broad boundary positions come from two-scale measurements on individual sampling traces. Each region requires a majority
 of its original traces to support the same material boundary, including after fitting. Missing traces remain in the

@@ -266,7 +266,11 @@ def broad_material_from_scale_measurements(
     left_texture_by_scale: tuple[np.ndarray, ...],
     right_texture_by_scale: tuple[np.ndarray, ...],
     observable_by_scale: tuple[np.ndarray, ...],
+    *,
+    intensity_quantum: float = REGISTERED_UINT8_QUANTIZATION_STEP,
 ) -> BroadMaterialTraceMeasurement:
+    if not math.isfinite(intensity_quantum) or intensity_quantum <= 0.0:
+        raise ValueError("broad material intensity quantum must be positive")
     if (
         len(window_scales_mm) < 2
         or any(
@@ -285,13 +289,13 @@ def broad_material_from_scale_measurements(
     observable = np.logical_and.reduce(observable_by_scale)
     positive = np.logical_and.reduce(
         tuple(
-            item > REGISTERED_UINT8_QUANTIZATION_STEP
+            item > intensity_quantum
             for item in signed_tone_by_scale
         )
     )
     negative = np.logical_and.reduce(
         tuple(
-            item < -REGISTERED_UINT8_QUANTIZATION_STEP
+            item < -intensity_quantum
             for item in signed_tone_by_scale
         )
     )
@@ -300,7 +304,7 @@ def broad_material_from_scale_measurements(
     polarity[negative] = -1
     left_background = np.logical_and.reduce(
         tuple(
-            left + REGISTERED_UINT8_QUANTIZATION_STEP < right
+            left + intensity_quantum < right
             for left, right in zip(
                 left_texture_by_scale,
                 right_texture_by_scale,
@@ -310,7 +314,7 @@ def broad_material_from_scale_measurements(
     )
     right_background = np.logical_and.reduce(
         tuple(
-            right + REGISTERED_UINT8_QUANTIZATION_STEP < left
+            right + intensity_quantum < left
             for left, right in zip(
                 left_texture_by_scale,
                 right_texture_by_scale,
@@ -337,12 +341,12 @@ def broad_material_from_scale_measurements(
         & (background_side != 0)
         & (
             contrast_lower_bound
-            > background_uniformity + REGISTERED_UINT8_QUANTIZATION_STEP
+            > background_uniformity + intensity_quantum
         )
     )
     contrast_z = positive_mad_z(
         np.where(supported, contrast_lower_bound, 0.0),
-        minimum_scale=REGISTERED_UINT8_QUANTIZATION_STEP,
+        minimum_scale=intensity_quantum,
     )
     broad_index = len(window_scales_mm) - 1
     arrays = (
@@ -387,6 +391,8 @@ def broad_material_trace_measurement(
     coordinates: np.ndarray,
     scale_px_per_mm: float,
     spec: PhotoBoundaryMeasurementSpec,
+    *,
+    intensity_quantum: float = REGISTERED_UINT8_QUANTIZATION_STEP,
 ) -> BroadMaterialTraceMeasurement:
     scales = (spec.local_window_mm, spec.broad_material_window_mm)
     measured = tuple(
@@ -407,6 +413,7 @@ def broad_material_trace_measurement(
         tuple(item[3] for item in measured),
         tuple(item[4] for item in measured),
         tuple(item[5] for item in measured),
+        intensity_quantum=intensity_quantum,
     )
 
 

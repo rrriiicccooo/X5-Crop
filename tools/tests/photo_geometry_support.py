@@ -78,6 +78,12 @@ from x5crop.io.model import ImageProfile, TiffMetadata
 from x5crop.io.orientation import orientation_mapping
 
 
+def make_native_test_field(source_gray: np.ndarray, layout: str) -> PhotoBoundaryMeasurementField:
+    """Give synthetic gray fixtures an explicit matching 16-bit RGB source."""
+    rgb = np.repeat(source_gray[..., None].astype(np.uint16), 3, axis=2) * 257
+    return PhotoBoundaryMeasurementField(source_gray, layout, source_rgb=rgb)
+
+
 def make_profile(shape: tuple[int, int, int]) -> ImageProfile:
     return ImageProfile(
         shape=shape,

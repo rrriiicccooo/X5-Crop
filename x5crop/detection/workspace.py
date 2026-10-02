@@ -259,6 +259,7 @@ def prepare_detection_workspace(
     boundary_measurement_field = make_photo_boundary_measurement_field(
         source_gray,
         layout,
+        source_rgb=arr,
     )
     return DetectionWorkspace(
         source_gray=source_gray,

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tools.tests.photo_geometry_support import make_native_test_field
 from x5crop.detection.photo_geometry.broad_material_association import associate_registered_broad_material
 
 import ast
@@ -34,6 +35,7 @@ from x5crop.detection.photo_geometry.coarse_enclosing_support import (
     _fit_track,
     _shared_tracks,
     observe_coarse_short_axis_tracks,
+    observe_coarse_broad_side_facts,
 )
 from tools.tests.photo_geometry_support import make_side_measurement_set
 from tools.tests.template_runtime_test_support import prepared_template_lane
@@ -80,6 +82,31 @@ from x5crop.detection.source_core import (
     SourceStripValidationDomain,
 )
 from x5crop.domain import Box, EvidenceState, FiniteInterval, ObservationId, PositiveInterval
+
+
+from x5crop.detection.photo_geometry.template_coarse_sides import register_coarse_side_facts, coarse_enclosing_binding
+from x5crop.detection.photo_geometry.template_cross_support import fit_enclosing_support, support_permission_view, SupportFitStatus
+
+
+def _cross_side_competition(measurement, plan, sharp_support=None):
+    reference = 1159.5
+    facts = observe_coarse_broad_side_facts(measurement,
+        aggregate_interval_px=FiniteInterval(30.5, 294.5),
+        expected_height_px=plan.template_spec.frame_height_px,
+        reference_trace_px=reference)
+    top, bottom, work = register_coarse_side_facts(facts, remaining_bound=512)
+    if sharp_support is not None:
+        pair_id = "test:sharp-pair"
+        top = (coarse_enclosing_binding(sharp_support.minimum_track, BoundaryRole.TOP, pair_id=pair_id), *top)
+        bottom = (coarse_enclosing_binding(sharp_support.maximum_track, BoundaryRole.BOTTOM, pair_id=pair_id), *bottom)
+    height = FiniteInterval(plan.template_spec.frame_height_px.minimum, plan.template_spec.frame_height_px.maximum)
+    pool = fit_enclosing_support(template=plan.template_spec, fixed_height=height,
+        canonical_height_px=height.center, reference_trace_px=reference,
+        top_bindings=top, bottom_bindings=bottom,
+        registered_trace_coordinates_px=measurement.query.trace_positions_px,
+        longitudinal_support_domain_groups_px=(), minimum_shared_trace_support=3,
+        maximum_evaluated_candidates=4096)
+    return facts, work, support_permission_view(pool, canonical_only=True)
 
 
 def _unavailable_enclosing_resolution() -> CoarseEnclosingResolution:
@@ -137,7 +164,9 @@ class CoarseStripSupportContractTest(unittest.TestCase):
             lane, layout="horizontal", measurement_plan=plan,
         )[1]
         samples = np.zeros((len(query.trace_positions_px), 322), dtype=np.uint8)
-        measured, peak = _measure_coarse_short_trace_lattice(samples, query)
+        measured, peak = _measure_coarse_short_trace_lattice(
+            samples, query, source_rgb=np.zeros((322, 2320, 3), dtype=np.uint16),
+        )
         self.assertEqual(len(measured), 9)
         buffers = {id(samples): samples.nbytes}
         for trace in measured:
@@ -466,7 +495,7 @@ class CoarseStripSupportContractTest(unittest.TestCase):
             short_extent=short_extent,
         )
         support, _ = observe_coarse_strip_support(
-            make_photo_boundary_measurement_field(pixels, layout),
+            make_native_test_field(pixels, layout),
             lane,
             layout=layout,
             measurement_plan=plan,
@@ -561,7 +590,7 @@ class CoarseStripSupportContractTest(unittest.TestCase):
 
     def test_blank_pixels_keep_one_conservative_path(self) -> None:
         lane, plan = _lane()
-        field = make_photo_boundary_measurement_field(
+        field = make_native_test_field(
             np.zeros((322, 2320), dtype=np.uint8),
             "horizontal",
         )
@@ -823,7 +852,7 @@ class CoarseStripSupportContractTest(unittest.TestCase):
         lane, plan = _lane()
         pixels = np.full((322, 2320), 255, dtype=np.uint8)
         pixels[35:290, 260:2060] = 80
-        field = make_photo_boundary_measurement_field(pixels, "horizontal")
+        field = make_native_test_field(pixels, "horizontal")
 
         support, measurements = observe_coarse_strip_support(
             field,
@@ -874,10 +903,7 @@ class CoarseStripSupportContractTest(unittest.TestCase):
                 item.measurement_basis
                 for item in support.enclosing_resolution.candidates
             ),
-            (
-                CoarseEnclosingMeasurementBasis.BROAD_MATERIAL,
-                CoarseEnclosingMeasurementBasis.SHARP_TRANSITION,
-            ),
+            (CoarseEnclosingMeasurementBasis.SHARP_TRANSITION,),
         )
         assert support.enclosing_resolution.selected_candidate is not None
         self.assertEqual(
@@ -967,15 +993,16 @@ class CoarseStripSupportContractTest(unittest.TestCase):
             reference_trace_px=1159.5,
         )
 
-        self.assertIsNotNone(direction)
-        self.assertIsNotNone(support)
-        assert support is not None
-        self.assertEqual(
-            support.minimum_track.measurement_basis,
-            CoarseEnclosingMeasurementBasis.BROAD_MATERIAL,
-        )
-        self.assertEqual(resolution.state, EvidenceState.SUPPORTED)
-        self.assertEqual(len(resolution.candidates), 1)
+        self.assertIsNone(direction)
+        self.assertIsNone(support)
+        self.assertEqual(resolution.state, EvidenceState.UNAVAILABLE)
+        facts, work, competition = _cross_side_competition(
+            self._short_measurement_set(query, lattice), plan)
+        self.assertEqual(len(facts), 2)
+        self.assertEqual(work.attempted_count, 2)
+        self.assertEqual(competition.status, SupportFitStatus.RESOLVED)
+        self.assertEqual(len(competition.candidates), 1)
+        self.assertEqual(competition.evaluated_candidate_count, 1)
 
     def test_non_equivalent_sharp_and_broad_pairs_are_contradicted(self) -> None:
         lane, plan = _lane()
@@ -1016,14 +1043,14 @@ class CoarseStripSupportContractTest(unittest.TestCase):
             reference_trace_px=1159.5,
         )
 
-        self.assertIsNone(direction)
-        self.assertIsNone(support)
-        self.assertEqual(resolution.state, EvidenceState.CONTRADICTED)
-        self.assertEqual(
-            resolution.failure_kind,
-            CoarseEnclosingResolutionFailureKind.NON_EQUIVALENT_PAIR_CANDIDATES,
-        )
-        self.assertEqual(len(resolution.candidates), 2)
+        self.assertIsNotNone(direction)
+        self.assertIsNotNone(support)
+        self.assertEqual(resolution.state, EvidenceState.SUPPORTED)
+        _, _, competition = _cross_side_competition(
+            self._short_measurement_set(query, broad_lattice), plan, support)
+        self.assertEqual(competition.status, SupportFitStatus.UNRESOLVED)
+        self.assertEqual(len(competition.candidates), 2)
+        self.assertEqual(competition.evaluated_candidate_count, 3)
 
     def test_mixed_broad_material_polarity_cannot_authorize_a_track(self) -> None:
         lane, plan = _lane()

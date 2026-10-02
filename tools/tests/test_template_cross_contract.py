@@ -1761,7 +1761,8 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertIsNotNone(result.best)
         self.assertIsNotNone(result.runner_up)
         self.assertEqual(result.receipt.compatible_pair_count, 2)
-        self.assertEqual(result.receipt.evaluated_fit_count, 2)
+        # Every attempted support proof, including rejected pairs, is charged.
+        self.assertEqual(result.receipt.evaluated_fit_count, 3)
 
     def test_equal_domain_side_tracks_remain_discrete(self) -> None:
         registered = tuple(range(0, 101, 10))
@@ -3022,7 +3023,8 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
         self.assertIsNotNone(result.best)
         self.assertIsNotNone(result.runner_up)
-        self.assertEqual(result.receipt.evaluated_fit_count, 2)
+        # Every attempted support proof, including rejected pairs, is charged.
+        self.assertEqual(result.receipt.evaluated_fit_count, 4)
 
     def test_cross_grid_proposal_survives_pair_support_failure(self) -> None:
         result = fit_template_cross(
@@ -3074,7 +3076,8 @@ class TemplateCrossContractTest(unittest.TestCase):
             (ObservationId("observation:proposal-bottom"),),
         )
         self.assertEqual(result.receipt.single_side_inference_count, 2)
-        self.assertEqual(result.receipt.evaluated_fit_count, 2)
+        # Every attempted support proof, including rejected pairs, is charged.
+        self.assertEqual(result.receipt.evaluated_fit_count, 3)
 
     def test_cross_grid_proposal_keeps_direction_counterevidence(self) -> None:
         result = fit_template_cross(
@@ -3466,7 +3469,8 @@ class TemplateCrossContractTest(unittest.TestCase):
 
         self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
         self.assertIsNone(result.winner_basis)
-        self.assertEqual(result.receipt.evaluated_fit_count, 2)
+        # Every attempted support proof, including rejected pairs, is charged.
+        self.assertEqual(result.receipt.evaluated_fit_count, 4)
 
     def test_enclosing_support_evaluations_share_the_cross_fit_bound(self) -> None:
         result = fit_template_cross(
@@ -3509,7 +3513,8 @@ class TemplateCrossContractTest(unittest.TestCase):
             )
         )
         self.assertEqual(result.status, CrossFitStatus.BOUND_EXCEEDED)
-        self.assertEqual(result.receipt.evaluated_fit_count, 2)
+        # Every attempted support proof, including rejected pairs, is charged.
+        self.assertEqual(result.receipt.evaluated_fit_count, 1)
         self.assertEqual(result.receipt.evaluated_fit_bound, 1)
 
     def test_preclosed_enclosing_pair_cannot_detach_and_recombine(self) -> None:
@@ -3555,7 +3560,8 @@ class TemplateCrossContractTest(unittest.TestCase):
                 ObservationId("observation:support-bottom-a"),
             ),
         )
-        self.assertEqual(result.receipt.evaluated_fit_count, 1)
+        # Every attempted support proof, including rejected pairs, is charged.
+        self.assertEqual(result.receipt.evaluated_fit_count, 2)
 
     def test_enclosing_support_records_straight_model_residual(self) -> None:
         top = replace(
@@ -4114,7 +4120,8 @@ class TemplateCrossContractTest(unittest.TestCase):
             ),
         )
         self.assertEqual(result.receipt.single_side_inference_count, 0)
-        self.assertEqual(result.receipt.evaluated_fit_count, 2)
+        # Every attempted support proof, including rejected pairs, is charged.
+        self.assertEqual(result.receipt.evaluated_fit_count, 4)
 
     def test_unowned_local_pairs_refine_retained_grid_by_calibrated_height(
         self,
@@ -4177,7 +4184,8 @@ class TemplateCrossContractTest(unittest.TestCase):
             ),
         )
         self.assertEqual(result.receipt.single_side_inference_count, 0)
-        self.assertEqual(result.receipt.evaluated_fit_count, 2)
+        # Every attempted support proof, including rejected pairs, is charged.
+        self.assertEqual(result.receipt.evaluated_fit_count, 4)
 
     def test_outermost_top_precedes_smaller_calibrated_height_shift(self) -> None:
         result = fit_template_cross(

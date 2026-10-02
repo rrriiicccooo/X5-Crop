@@ -548,9 +548,18 @@ class RegisteredTemplateLane:
                 if binding.observation_id in coarse_tracks
             ):
                 raise ValueError("coarse binding changed its measured support")
+        native_bindings = tuple(item for item in (*self.top_cross_bindings, *self.bottom_cross_bindings)
+                                if item.coarse_side_fact is not None)
+        from .template_coarse_sides import coarse_enclosing_binding
+        for binding in native_bindings:
+            if (binding.coarse_side_fact not in self.coarse_support.enclosing_side_facts
+                    or binding.enclosing_pair_id is not None
+                    or binding != coarse_enclosing_binding(binding.coarse_side_track, binding.role,
+                                                           side_fact=binding.coarse_side_fact)):
+                raise ValueError("registered coarse side changed its original path or track")
         if bound_ids != {
             item.observation_id for item in self.raw_cross_observations
-        }.union(coarse_ids if uses_enclosing else set()):
+        }.union(coarse_ids if uses_enclosing else set(), {item.observation_id for item in native_bindings}):
             raise ValueError("cross bindings and observations must share identity")
         observation_ids = {
             item.observation_id for item in self.raw_cross_observations
@@ -654,6 +663,17 @@ class PreparedTemplateLane(RegisteredTemplateLane):
             )
         ):
             raise ValueError("prepared solver inputs disagree with registered evidence")
+        side_work = self.cross_input.coarse_side_registration
+        solver_bindings = (*self.cross_input.top_bindings, *self.cross_input.bottom_bindings)
+        native_count = sum(item.coarse_side_fact is not None for item in solver_bindings)
+        if side_work is None:
+            if self.coarse_support.enclosing_side_facts or native_count:
+                raise ValueError("coarse side registration work is missing")
+        elif (side_work.input_count != len(self.coarse_support.enclosing_side_facts)
+              or side_work.fitted_count != native_count
+              or side_work.remaining_bound != max(0, self.cross_input.maximum_fitted_observations
+                                                  - len(solver_bindings) + native_count)):
+            raise ValueError("coarse side registration changed its shared observation budget")
         if not isinstance(self.phase_competition, PhaseFitResult):
             raise TypeError("phase competition must be the canonical phase fit")
         if self.phase_competition.template != self.template_spec:

@@ -1,6 +1,7 @@
 """Prepared-lane fixtures shared by runtime and replay contract tests."""
 
 from __future__ import annotations
+from tools.tests.photo_geometry_support import make_native_test_field
 
 from dataclasses import replace
 import numpy as np
@@ -204,13 +205,13 @@ def prepared_template_lane() -> PreparedTemplateLane:
     measurement_sets = (
         coarse_long, coarse_short,
         *measure_registered_queries(
-            PhotoBoundaryMeasurementField(np.zeros((322, 2320), dtype=np.uint8), "horizontal"),
+            make_native_test_field(np.zeros((322, 2320), dtype=np.uint8), "horizontal"),
             tuple(precision_queries), registration_start=2,
         ),
     )
     coverage = tuple(item.coverage for item in measurement_sets)
     exterior = measure_exterior_region(
-        PhotoBoundaryMeasurementField(np.zeros((322, 2320), dtype=np.uint8), "horizontal"),
+        make_native_test_field(np.zeros((322, 2320), dtype=np.uint8), "horizontal"),
         plan.exterior_region_query,
     )
     registered = RegisteredTemplateLane(

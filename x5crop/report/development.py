@@ -43,6 +43,7 @@ def _measurement_set_read_model(measurement_set: object) -> dict[str, object]:
             measurement_set.broad_material_transitions
         ),
         "broad_material_association": typed_read_model(measurement_set.broad_material_association),
+        "coarse_aggregate": typed_read_model(measurement_set.coarse_aggregate),
     }
 
 
@@ -131,6 +132,7 @@ def development_report_facts(
             {
                 "lane_id": lane.lane_id,
                 "cross_registration_work": typed_read_model(lane.prepared.cross_registration_work),
+                "cross_input": typed_read_model(lane.prepared.cross_input),
                 "template_spec": typed_read_model(lane.prepared.template_spec),
                 "search": {
                     "coarse_strip_support": typed_read_model(

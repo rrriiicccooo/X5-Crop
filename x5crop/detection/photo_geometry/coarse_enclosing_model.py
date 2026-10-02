@@ -12,6 +12,7 @@ import math
 
 from ...domain import EvidenceState, FiniteInterval, ObservationId
 from .model import SPATIAL_SUPPORT_REGION_COUNT
+from .measurement_model import BroadMaterialTraceObservation, PhotoBoundaryMeasurementQuery, MaterialBackgroundSide
 
 
 class CoarseSupportSide(str, Enum):
@@ -19,11 +20,61 @@ class CoarseSupportSide(str, Enum):
     MAXIMUM = "maximum"
 
 
+@dataclass(frozen=True)
+class CoarseEnclosingSideFact:
+    """One complete registered raw path, without pair or aperture authority."""
+
+    query: PhotoBoundaryMeasurementQuery
+    side: CoarseSupportSide
+    observations: tuple[BroadMaterialTraceObservation, ...]
+    reference_trace_px: float
+
+    def __post_init__(self) -> None:
+        from .model import QueryPurpose
+        from .broad_material_transition_measurement import broad_material_trace_support_qualified
+
+        if (not isinstance(self.query, PhotoBoundaryMeasurementQuery)
+                or self.query.purpose != QueryPurpose.COARSE_STRIP_SHORT
+                or not isinstance(self.side, CoarseSupportSide)
+                or not isinstance(self.observations, tuple)
+                or not self.observations or not math.isfinite(self.reference_trace_px)):
+            raise ValueError("coarse side fact requires a complete registered path")
+        expected = (MaterialBackgroundSide.LEFT if self.side == CoarseSupportSide.MINIMUM
+                    else MaterialBackgroundSide.RIGHT)
+        traces = tuple(item.trace_coordinate_px for item in self.observations)
+        if (tuple(sorted(set(traces))) != traces
+                or len({item.polarity for item in self.observations}) != 1
+                or any(item.background_side != expected for item in self.observations)
+                or not broad_material_trace_support_qualified(self.query.trace_positions_px, traces)):
+            raise ValueError("coarse side fact changed raw material support")
+        for observation in self.observations:
+            observation.validate_query(self.query)
+
+
 class CoarseEnclosingMeasurementBasis(str, Enum):
     """Pixel observation family that closed one role-free support pair."""
 
     SHARP_TRANSITION = "sharp_transition"
     BROAD_MATERIAL = "broad_material"
+
+
+@dataclass(frozen=True)
+class CoarseSideRegistrationReceipt:
+    input_count: int
+    attempted_count: int
+    fitted_count: int
+    remaining_bound: int
+
+    def __post_init__(self) -> None:
+        if (any(type(value) is not int or value < 0 for value in (
+                self.input_count, self.attempted_count, self.fitted_count, self.remaining_bound))
+                or self.fitted_count > self.attempted_count
+                or self.attempted_count != (0 if self.bound_exceeded else self.input_count)):
+            raise ValueError("coarse side registration work is incomplete")
+
+    @property
+    def bound_exceeded(self) -> bool:
+        return self.input_count > self.remaining_bound
 
 
 class CoarseEnclosingResolutionFailureKind(str, Enum):

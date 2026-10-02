@@ -13,6 +13,19 @@ from ..detection.photo_geometry.model import (
 from .read_models import typed_read_model
 
 
+def native_coarse_intensity_read_model() -> dict[str, Any]:
+    from ..detection.photo_geometry.coarse_strip_support import NATIVE_COARSE_INTENSITY_QUANTUM
+    from ..image.gray import BaseGrayParameters
+    parameters = BaseGrayParameters()
+    return {
+        "unit": "native_uint16_rec709_code",
+        "quantization_step": NATIVE_COARSE_INTENSITY_QUANTUM,
+        "percentile_clipped": False,
+        "weights": [parameters.red_weight, parameters.green_weight, parameters.blue_weight],
+        "scope": "coarse_strip_short_broad",
+    }
+
+
 def detection_configuration_read_model(
     configuration: DetectionConfiguration,
 ) -> dict[str, Any]:
@@ -26,6 +39,7 @@ def detection_configuration_read_model(
         "frame_physical_spec": typed_read_model(spec.frame),
         "scan_layout": typed_read_model(spec.layout),
         "measurement": {
+            "coarse_broad_intensity": native_coarse_intensity_read_model(),
             "registered_normalization_revision": REGISTERED_NORMALIZATION_REVISION,
             "base_gray": typed_read_model(configuration.base_gray),
             "scan_canvas": typed_read_model(configuration.scan_canvas),
