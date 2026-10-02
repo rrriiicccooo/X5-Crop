@@ -47,12 +47,16 @@ photo_geometry、candidate_gate、decision 完全相同。独立工作区相同�
 为 1060 tests OK、2 skipped（Windows 专属），包含依赖、编译、cohort、shell、输出事务与临时打包合同。
 后续 `7a3abe82` 删除跟踪热循环的恒定调用与重复距离，84 项专项、40 次完整结果对照通过；
 `0dc1dfa7` 在满秩格拟合后跳过被原解覆盖的中位重算，101 项专项、2171 次精确 fit 对照通过，
-覆盖低秩、直接及有界最小二乘。整合后正式 full/24-source 验证待执行。正常 pre-commit Hook 已通过；
+覆盖低秩、直接及有界最小二乘。`9d7d5f0b` 正式平台入口已通过 full，随后在性能 Gate 失败。
+正常 pre-commit Hook 已通过；
 当前未推送，未运行本次提交的远端 CI。
 
-`7e91c1aa` 的隔离 24-source 完整用户路径平均 5.5830757829 秒，未达到 5 秒 Gate；失败记录保存在
-`Test/gold_analysis/local_release_isolated_20261002/performance_receipt.json`。S101 profile 的关联耗时
-由 2.54495 降至 1.70700 秒只属带插桩诊断，不能代替新提交的正式 24-source 结果；后者仍待验证。
+`9d7d5f0bf9964d16e27bc289400245219a1e1b53` 的正式 24-source 完整用户路径平均
+5.6761117587 秒、p95 8.7694719170 秒，未达到 5 秒 Gate；记录保存在
+`Test/gold_analysis/local_release_optimized_20261002/performance_receipt.json`，平台未生成通过证书。
+之前 `7e91c1aa` 的同入口平均为 5.5830757829 秒。带插桩的 registered_measurement 平均由 1.710
+降至 1.547 秒，template_alignment_decision 由 4.672 降至 4.340 秒，但这些数据不能替代正式 Gate，
+本轮结果不支持宣称端到端提速。下一步性能优化仍以完整用户路径为验收。
 主工作区既有 6-source TIFF/metadata、APFS 与临时 HFS+、只读 installer 检查通过，记录在
 `Test/gold_analysis/local_release_20261002/`；它们不是最终同提交平台合格证。exFAT 未验证。
 用户已明确暂时没有 Intel Mac 和 Windows x64；两类实机继续列为发布阻碍，本机工作继续。
@@ -112,11 +116,15 @@ frame domains 不能反向授权新像素 query。不同材料层与 blank ends 
    S038/S094 报告异常已修复，专项 S038/S064/S067/S094/S095 均完成，S064/S067 safe auto，
    S094/S095 仍因真实竞争 Review。修复后完整 110-task 复验全部完成、analysis error 0，
    20 safe auto、0 unsafe auto、76 nominal Review，保存在 `native_h_cross_owner_20261002_full_verified`。
-   该分支尚无净覆盖收益，不并入 main；后续回链与预算修复仍须重新核验。
-   最新工程检查 1066 tests OK、2 skipped；7 项 native 合同测试包括物理域覆盖、单侧不可冒充 aperture、
-   完整 raw、预算与省略竞争反例。只读审计发现报告 coarse direct interval 还需绑定原测量 owner，待修。
+   该分支尚无净覆盖收益，不并入 main。之后的 schema95 保存固定 sharp 中位 profile 的全部聚合峰，
+   同一纯端点归约重放窗口，峰坐标与数量绑定原单 profile；不能缩窗后隐藏 native 竞争。
+   Retained singleton 按完整 candidate 身份复用，新增实际拟合即使几何去重仍计费。
+   当前工程检查 1069 tests OK、2 skipped；10 项 native 合同测试覆盖物理域、孤立侧、完整 raw、
+   缩窗隐藏竞争、实际拟合次数和聚合峰越域。上述最后补强尚未重跑完整 110-task，不能借用前次 manifest。
    下一步在现有共同输出 owner 内证明全部 enclosing-support 成员的完整性、同状态中心风险、对齐预算及
-   source/content 约束；不能删除 S094/S095 竞争或直接复用 aperture-only 权限。S095 的 3 解释共同 polygon
+   source/content 约束；不能删除 S094/S095 竞争或直接复用 aperture-only 权限。S094 phase resolved、
+   membership complete、4 个 support pair、local refinement scope 为 0；可先研究完整集合的共同输出。
+   S095 有 1 个局部精修 scope，现有完整性限制继续保留。S095 的 3 解释共同 polygon
    离线检查上下风险最大约 2.150 mm、保守同状态对齐约 2.426 mm，均低于 2.8 mm；这只是可行性诊断，
    不证明搜索完整、最终批准或全部 H 完成。
 2. 在旧 outer 的全任务候选研究上，验证有实际最终输出收益的通用整行区域统计。
