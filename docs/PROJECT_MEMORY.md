@@ -168,6 +168,11 @@ frame domains 不能反向授权新像素 query。不同材料层与 blank ends 
    单次prefix复用提交2cfde09c正式均值5.05095410254秒仍失败，原失败回执保留。点对计费内联继续保持
    原预算检查、失败时刻、全部计数：721个临界用例完整result exact；S101两次association完整结果及报告
    四块exact，诊断累计0.856211→0.666934秒，不代替正式性能验收。
+   17b1c65b的v15完整110项回归0异常、21safe auto/0unsafe auto、75nominal Review；校准身份全部通过，
+   与51535b7e的最终决定、proposal/candidate安全分类和中心观测完全一致。证据
+   `Test/gold_analysis/calibration_v15_20261002_full`。
+   本机复现输出目录TOCTOU：最终检查后出现的空target可被旧POSIX rename替换。现改原子no-replace，
+   保留同名目录/文件/symlink，取消只删本次staging并可重试；待最终工程、APFS/HFS+与性能复验。
 2. 在旧 outer 的全任务候选研究上，验证有实际最终输出收益的通用整行区域统计。
    同时保护原生弱／异色内容、全部物理线族与角点；保留当前 fixed query、材料身份、来源、
    构造／实测分离、Gate 与预算。仍无材料权限时保持 unavailable，不把研究候选接成自动输出。

@@ -2034,6 +2034,9 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 
 输出先写同父目录 staging，全部完成后一次 rename 到尚不存在的 target。程序不覆盖、接管、遍历或
 删除旧 target。
+发布采用操作系统的原子不替换语义：macOS `renamex_np(RENAME_EXCL)`、Windows `os.rename`，
+Linux开发/CI使用`renameat2(RENAME_NOREPLACE)`。目标在最终检查之后才出现也必须拒绝；平台或文件系统
+不支持时安全失败，不回退到可覆盖的POSIX rename。取消和发布失败只清理本次staging，允许随后重试。
 
 ## 13. 源码 owner
 
