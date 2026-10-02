@@ -1585,7 +1585,6 @@ def _linear_fit(
         ],
         dtype=np.float64,
     )
-    solution = None
     fit_basis = LatticeParameterFitBasis.TEMPLATE_INTERVAL_CENTER
     if len(fit_matches) >= 3 and np.linalg.matrix_rank(matrix) == 3:
         solution = _bounded_lattice_least_squares(
@@ -1597,6 +1596,7 @@ def _linear_fit(
             phase_authority=phase_authority,
         )
         phase, width, pitch, fit_basis = solution
+        return float(phase), width, pitch, fit_basis
     offsets = tuple(
         coefficients(role)[1] * width
         + coefficients(role)[2] * pitch
@@ -1608,9 +1608,7 @@ def _linear_fit(
         for offset, (_role, anchor) in zip(offsets, fit_matches, strict=True)
     )
     phase = float(phase_values[len(phase_values) // 2])
-    if solution is not None:
-        phase = float(solution[0])
-    elif phase_authority is not None:
+    if phase_authority is not None:
         phase = min(
             max(phase, phase_authority.minimum),
             phase_authority.maximum,

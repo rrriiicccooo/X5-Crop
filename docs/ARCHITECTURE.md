@@ -544,7 +544,8 @@ Grid 始终可以生成一个待检验的默认 placement，但它不能仅凭�
 - 其它 unresolved/conflict 状态、失败的 candidate projection、direct-role 未闭合或 rank 0–2 继续使用
   原模型包络；不得借条件几何掩盖已知反证或冒充 full direct closure。
 - Rank 3 直接坐标系统由 `template_phase_candidates.py` 在同一个连续 placement 内联合拟合
-  `(phase, W, source_pitch)`。无约束最小二乘若落在已编译的 phase、W、pitch 与
+  `(phase, W, source_pitch)`。已有满秩有界解时直接返回该解，不再计算随后被覆盖的中位 phase；
+  rank 不足的中位估计与原 phase 区间约束保持。无约束最小二乘若落在已编译的 phase、W、pitch 与
   `pitch-W` 全部区间内，记录 `direct_least_squares`；若只越过这些硬区间，求解器在同一可行集合内取得
   最近的 `bounded_direct_least_squares`，不能把 W/pitch 整体退回 catalog 中心后继续沿用不相容的
   phase。同一离散 placement 经候选无关 source pitch 或 local advance 重拟合时，报告保留该连续
