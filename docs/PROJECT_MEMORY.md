@@ -40,12 +40,15 @@ Windows x64 实机验收；跨平台待验不阻塞本阶段开发，也不算�
 `659d1847` 进一步保留粗测 broad 的完整原始支撑约束。本轮补齐粗测九条 trace 同时保留的数组计量，
 与 baseline 共用底层数组去重 owner，原资源上限不变。合成输入实际保留 500274 bytes，原 receipt
 仅 53194 bytes，修正后保守峰值为 550570 bytes；这不等于进程 RSS 或全路径 heap 证明。
-当前 main 为 `5f9761c1e78d60fb8767d0232e6a9d6976bb248c`：`bed402b5` 补齐保留数组计量，
+本轮 main 已整合以下本地开发改动：`bed402b5` 补齐保留数组计量，
 `7e91c1aa` 在性能 Gate 失败前保存完整测量记录，`5f9761c1` 将初始关联点对谓词内联，保持每次计费、
 完整路径与原上限。后者的 81 份 oracle 结果和完整工作账本逐项等价，S101 正式报告的 measurement、
 photo_geometry、candidate_gate、decision 完全相同。独立工作区相同源码的 `tools/verify full`
 为 1060 tests OK、2 skipped（Windows 专属），包含依赖、编译、cohort、shell、输出事务与临时打包合同。
-正常 pre-commit Hook 已通过；当前未推送，未运行本次提交的远端 CI。
+后续 `7a3abe82` 删除跟踪热循环的恒定调用与重复距离，84 项专项、40 次完整结果对照通过；
+`0dc1dfa7` 在满秩格拟合后跳过被原解覆盖的中位重算，101 项专项、2171 次精确 fit 对照通过，
+覆盖低秩、直接及有界最小二乘。整合后正式 full/24-source 验证待执行。正常 pre-commit Hook 已通过；
+当前未推送，未运行本次提交的远端 CI。
 
 `7e91c1aa` 的隔离 24-source 完整用户路径平均 5.5830757829 秒，未达到 5 秒 Gate；失败记录保存在
 `Test/gold_analysis/local_release_isolated_20261002/performance_receipt.json`。S101 profile 的关联耗时
@@ -107,7 +110,9 @@ frame domains 不能反向授权新像素 query。不同材料层与 blank ends 
    交给唯一 Cross 支撑 sweep，保留全部原始路径、预算和竞争；禁止采用另一个 `x5-native-h` 原型中的
    独立 min×max 配对。第一次 110-task 诊断为 20 safe auto、0 unsafe auto、2 analysis errors；
    S038/S094 报告异常已修复，专项 S038/S064/S067/S094/S095 均完成，S064/S067 safe auto，
-   S094/S095 仍因真实竞争 Review。当前完整 110-task 复验尚在运行，不将该分支当作发布改善。
+   S094/S095 仍因真实竞争 Review。修复后完整 110-task 复验全部完成、analysis error 0，
+   20 safe auto、0 unsafe auto、76 nominal Review，保存在 `native_h_cross_owner_20261002_full_verified`。
+   该分支尚无净覆盖收益，不并入 main；后续回链与预算修复仍须重新核验。
    最新工程检查 1066 tests OK、2 skipped；7 项 native 合同测试包括物理域覆盖、单侧不可冒充 aperture、
    完整 raw、预算与省略竞争反例。只读审计发现报告 coarse direct interval 还需绑定原测量 owner，待修。
    下一步在现有共同输出 owner 内证明全部 enclosing-support 成员的完整性、同状态中心风险、对齐预算及
