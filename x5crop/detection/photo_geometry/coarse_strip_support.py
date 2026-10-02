@@ -48,6 +48,7 @@ from .registered_transition_measurement import (
     TraceMeasurement,
     measure_trace,
     measured_transition_peaks,
+    trace_storage_bytes,
 )
 from .physical_identity import physical_observation_id
 from .template_measurement_plan_model import TemplateMeasurementPlan
@@ -424,20 +425,24 @@ def _measure_coarse_short_trace_lattice(
         or samples.shape[0] != len(query.trace_positions_px)
     ):
         raise ValueError("coarse short trace lattice is invalid")
-    measured = tuple(
-        measure_trace(
+    measured: list[TraceMeasurement] = []
+    retained_bytes = samples.nbytes
+    peak_bytes = retained_bytes
+    for ordinal in range(len(query.trace_positions_px)):
+        trace = measure_trace(
             samples[ordinal],
             query.search_intervals_px[ordinal],
             query.boundary_axis_scale_px_per_mm.maximum,
             PHOTO_BOUNDARY_MEASUREMENT_SPEC,
             include_broad_material=True,
         )
-        for ordinal in range(len(query.trace_positions_px))
-    )
-    return measured, int(
-        samples.nbytes
-        + max((item.temporary_bytes for item in measured), default=0)
-    )
+        retained_bytes += trace_storage_bytes(trace)
+        # Earlier traces remain live for broad association and coarse support.
+        # Use the same conservative storage + work allowance as baseline
+        # measurement; a single-trace maximum cannot describe this batch.
+        peak_bytes = max(peak_bytes, retained_bytes + trace.temporary_bytes)
+        measured.append(trace)
+    return tuple(measured), int(peak_bytes)
 
 
 def _close_short_gaps(mask: np.ndarray, maximum_gap: int) -> np.ndarray:

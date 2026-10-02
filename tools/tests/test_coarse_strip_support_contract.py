@@ -13,6 +13,7 @@ from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.evidence.scan_canvas import observe_scan_canvas
 from x5crop.detection.photo_geometry.coarse_strip_support import (
     _coarse_short_trace_lattices,
+    _measure_coarse_short_trace_lattice,
     _long_axis_search_support,
     _sparse_positions,
     CoarseAxisSupport,
@@ -62,6 +63,7 @@ from x5crop.detection.photo_geometry.model import (
 from x5crop.detection.photo_geometry.registered_transition_measurement import (
     TraceMeasurement,
     measure_trace,
+    trace_storage_bytes,
 )
 from x5crop.detection.photo_geometry.registered_measurement import (
     make_photo_boundary_measurement_field,
@@ -129,6 +131,41 @@ def _lane(
 
 
 class CoarseStripSupportContractTest(unittest.TestCase):
+    def test_coarse_peak_covers_all_retained_trace_arrays(self) -> None:
+        lane, plan = _lane()
+        query = registered_coarse_support_queries(
+            lane, layout="horizontal", measurement_plan=plan,
+        )[1]
+        samples = np.zeros((len(query.trace_positions_px), 322), dtype=np.uint8)
+        measured, peak = _measure_coarse_short_trace_lattice(samples, query)
+        self.assertEqual(len(measured), 9)
+        buffers = {id(samples): samples.nbytes}
+        for trace in measured:
+            self.assertIsNotNone(trace.broad_material)
+            for record in (trace, trace.broad_material):
+                for field in fields(record):
+                    value = getattr(record, field.name)
+                    for array in value if isinstance(value, tuple) else (value,):
+                        if not isinstance(array, np.ndarray):
+                            continue
+                        while isinstance(array.base, np.ndarray):
+                            array = array.base
+                        buffers[id(array)] = array.nbytes
+        retained = sum(buffers.values())
+        self.assertGreaterEqual(peak, retained)
+        self.assertGreater(retained, samples.nbytes + max(
+            trace.temporary_bytes for trace in measured
+        ))
+
+    def test_trace_storage_counts_shared_backing_array_once(self) -> None:
+        backing = np.zeros(100, dtype=np.float64)
+        trace = TraceMeasurement(
+            **{field.name: backing[10:30] for field in fields(TraceMeasurement)
+               if field.name not in {"temporary_bytes", "broad_material"}},
+            temporary_bytes=0,
+        )
+        self.assertEqual(trace_storage_bytes(trace), backing.nbytes)
+
     def test_broad_track_keeps_complete_feasible_raw_family(self) -> None:
         measurements = make_side_measurement_set(tuple(
             () if coordinate is None else (coordinate,)

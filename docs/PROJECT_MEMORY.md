@@ -1,6 +1,6 @@
 # 项目记忆
 
-更新：2026-10-01。现场 Git、原 TIFF、source SHA、current report 与最新验证高于本文件。
+更新：2026-10-02。现场 Git、原 TIFF、source SHA、current report 与最新验证高于本文件。
 长期合同见 [ARCHITECTURE.md](ARCHITECTURE.md)，人工权限见
 [MANUAL_ANNOTATION.md](MANUAL_ANNOTATION.md)，协作规则见 [AGENTS.md](../AGENTS.md)。
 
@@ -8,6 +8,9 @@
 
 已从暂停的“V5发布”会话 `01a07f23-208e-7871-ab28-65270d32dc9e` 交接至
 `01a0e15e-4384-7972-9455-cd3a9af52ee0`，后者持有持续目标；不唤醒前者。
+最新用户要求是在当前 Apple Silicon Mac 完成全部适用发布标准后，再由用户安排 Intel Mac 和
+Windows x64 实机验收；跨平台待验不阻塞本阶段开发，也不算已通过。当前只授权本地开发和验证，
+不推送、发布、部署、合并或建立公开包。原任务停在 `659d1847`，本轮从干净主工作区继续。
 
 1. 先完成 H，验收对象是最终安全、留边合格、直接可用的裁切。当前优先识别外侧大面积纯色、低纹理
    或规律纹理片夹区域，再沿其内缘保留照片。保护给定 TIFF 中已经记录的可见内容，不恢复被片夹
@@ -34,20 +37,24 @@
 本轮关联减少重复搜索：已完成路径的包含传播、经原向外算术证明的三 raw 冲突、固定物理宽度调度，
 并按现场 CPython digit 载荷计量 mask 存储。完整 raw、互不包含解释与最终闭集物理 owner 均保持。
 `5P²`、`2PT+2T`、路径数量、深度、几何状态、区域分母及原自动批准标准均未提高。
-最终工程结果由正常 pre-push 的 `tools/verify full` 验收；Git 交付以现场 HEAD 与 origin/main 为准。
+`659d1847` 进一步保留粗测 broad 的完整原始支撑约束。本轮补齐粗测九条 trace 同时保留的数组计量，
+与 baseline 共用底层数组去重 owner，原资源上限不变。合成输入实际保留 500274 bytes，原 receipt
+仅 53194 bytes，修正后保守峰值为 550570 bytes；这不等于进程 RSS 或全路径 heap 证明。
+最新 `tools/verify full` 为 1059 tests OK、2 skipped（Windows 专属），含依赖、编译、cohort、
+shell、输出事务与临时打包启动合同。当前未推送，未运行本次提交的远端 CI。
 
 最新完整生产开发诊断：
 
-- 命令：`tools/verify diagnostic --gold-analysis --output-root Test/gold_analysis/h_assoc_optimization_20261001_final_full`。
+- 命令：`tools/verify diagnostic --gold-analysis --output-root Test/gold_analysis/coarse_trace_memory_20261002_full`。
 - 完成 110/110，analysis error 0，21 safe auto、0 unsafe auto；nominal 21/96 自动批准，75 Review，
-  challenge 14 项均 Review。最终存储修正前后全部非耗时字段相同；相对此前 19-auto 基线，
-  所有 primary 逐帧几何相同。
-- Detector manifest：`2a92bbfa939c01905e6933461a9839bf394da372a022a675589499a30083c94a`。
-- Comparator manifest：`8eaa13741d3ac9a472b8728d9d2c1340b55b074c48b19f205aa916be4b3e24aa`。
+  challenge 14 项均 Review。与 `h_coarse_full_raw_fix_20261001_full` 的全部非耗时记录完全相同；
+  `release_detection_gate_ready=false`，本机检测能力尚未达到发布门槛。
+- Detector manifest：`4aef7cdb2cf2b0d5883d5c87a13fdb0dd6eceb9d1f7d42669481c1b583b241b6`。
+- Comparator manifest：`b1e90275fa6dfba89449c5b4a04de8088003e4ff931df6a374be1cad0e54ce1e`。
 - Cohort SHA：`c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`。
-- 该运行在隔离工作树的 `8f23232e` dirty tree 执行；整合以完整 detector/comparator manifest
+- 该运行在主工作区的 `659d1847` dirty tree 执行；整合以完整 detector/comparator manifest
   与 cohort SHA 的精确一致为准。它是绑定源码字节的开发证据，不是 release receipt。
-- Report revision 为 `x5crop_v5_template_report_92`。现场依赖为 Python 3.14.7、NumPy 2.5.3、
+- Report revision 为 `x5crop_v5_template_report_92`。现场依赖为 Python 3.14.8、NumPy 2.5.3、
   SciPy 1.18.1、OpenCV 5.0.0、tifffile 2026.9.20、imagecodecs 2026.8.16、Pillow 12.3.0。
 
 S078/S082 已由 producer-bound Review 恢复为 safe auto，当前 21-auto 集合与旧已接受

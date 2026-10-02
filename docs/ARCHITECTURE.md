@@ -1950,6 +1950,8 @@ candidate-dependent query 或 content-driven placement；概率层也只能消�
 临时测量缓冲，不代表进程 RSS。Cross 与 sequence 两组 baseline 顺序测量，一组全部窗口消费完后释放
 其像素数组，再测量下一组。Receipt 计入整组所有 trace 同时保留的底层数组和处理缓冲，slice view 不
 重复计入底层存储；baseline 像素测量与窗口消费分别计数，不以单 trace 峰值代替整组峰值。
+粗测短轴同样累计九条 trace 的全部保留数组，并叠加逐条处理缓冲；与 baseline 共用底层数组计量
+owner。Sharp/broad 的别名和切片只计一次；原总资源上限不变，该 receipt 不证明 Python heap 或 RSS。
 Profiler 将完整路径拆成：
 
 ```text

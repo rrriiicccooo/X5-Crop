@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import fields, replace
+from dataclasses import replace
 import math
 
 import numpy as np
@@ -32,6 +32,7 @@ from .registered_transition_measurement import (
     TraceMeasurement,
     measure_trace,
     measured_transition_peaks,
+    trace_storage_bytes,
 )
 from .physical_identity import physical_observation_id
 
@@ -314,25 +315,6 @@ def _slice_trace_measurement(
     )
 
 
-def _trace_storage_bytes(measured: TraceMeasurement) -> int:
-    """Count retained NumPy storage once; slices and broad aliases are views."""
-
-    buffers: dict[int, int] = {}
-    for record in (measured, measured.broad_material):
-        if record is None:
-            continue
-        for field in fields(record):
-            value = getattr(record, field.name)
-            for array in (value if isinstance(value, tuple) else (value,)):
-                if not isinstance(array, np.ndarray):
-                    continue
-                root = array
-                while isinstance(root.base, np.ndarray):
-                    root = root.base
-                buffers[id(root)] = root.nbytes
-    return sum(buffers.values())
-
-
 def _premeasure_registered_windows(
     field: PhotoBoundaryMeasurementField,
     baseline: PhotoBoundaryMeasurementQuery,
@@ -360,7 +342,7 @@ def _premeasure_registered_windows(
             spec,
             include_broad_material=baseline.purpose == QueryPurpose.SEQUENCE_BASELINE,
         )
-        retained_bytes += _trace_storage_bytes(measured)
+        retained_bytes += trace_storage_bytes(measured)
         # All earlier traces remain live. The per-trace work allowance is
         # additional to retained storage, conservatively covering overlap
         # during construction/consumption rather than pretending one trace

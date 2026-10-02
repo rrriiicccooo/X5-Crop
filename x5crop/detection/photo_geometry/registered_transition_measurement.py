@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 import math
 
 import numpy as np
@@ -35,6 +35,25 @@ class TraceMeasurement:
     right_texture: np.ndarray
     temporary_bytes: int
     broad_material: "BroadMaterialTraceMeasurement | None" = None
+
+
+def trace_storage_bytes(measured: TraceMeasurement) -> int:
+    """Count retained NumPy storage once; slices and broad aliases are views."""
+
+    buffers: dict[int, int] = {}
+    for record in (measured, measured.broad_material):
+        if record is None:
+            continue
+        for field in fields(record):
+            value = getattr(record, field.name)
+            for array in (value if isinstance(value, tuple) else (value,)):
+                if not isinstance(array, np.ndarray):
+                    continue
+                root = array
+                while isinstance(root.base, np.ndarray):
+                    root = root.base
+                buffers[id(root)] = root.nbytes
+    return sum(buffers.values())
 
 
 @dataclass(frozen=True)
