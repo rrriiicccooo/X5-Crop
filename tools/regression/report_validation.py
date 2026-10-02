@@ -1236,6 +1236,65 @@ def _validate_native_coarse_side_support(lane, query_records, registered, source
     return {str(item.observation_id) for item in native}
 
 
+def _validate_local_cross_refinement_scopes(lane, query_records, receipt, registered, raw):
+    """Reproduce every original scope, including rejected or unavailable fits."""
+    from x5crop.detection.photo_geometry.template_registration import (
+        local_cross_refinement_anchors, evaluate_local_cross_refinement, _canonical_cross_run,
+    )
+    from x5crop.detection.photo_geometry.template_cross_model import CrossEvidence
+    if "cross_input" not in lane:
+        if receipt.local_refinement_scope_count or receipt.local_refinement_scopes:
+            raise ValueError("local Cross scope lost its original fixed-H input")
+        return
+    inputs = _read_common_proof(lane["cross_input"], TemplateCrossInput)
+    local_ids = {identity for identity, value in registered.items()
+                 if value["evidence"] == CrossEvidence.TEMPLATE_LOCAL_REFINEMENT.value}
+    original_observations = tuple(_read_common_proof(item, PhotoBoundaryObservation)
+        for item in raw if item["observation_id"] not in local_ids)
+    original_ids = {str(item.observation_id) for item in original_observations}
+    bindings = tuple(sorted((_read_common_proof(value, CrossRoleBinding)
+        for identity, value in registered.items() if identity in original_ids),
+        key=lambda binding: (binding.coordinate_interval_px.center, str(binding.observation_id))))
+    anchors = local_cross_refinement_anchors(
+        tuple(b for b in bindings if b.role == BoundaryRole.TOP),
+        tuple(b for b in bindings if b.role == BoundaryRole.BOTTOM),
+        inputs.fixed_height_px, inputs.longitudinal_support_domain_groups_px)
+    if (len(anchors) != receipt.local_refinement_scope_count
+            or tuple(scope.anchor for scope in receipt.local_refinement_scopes) != anchors):
+        raise ValueError("local Cross scope omitted or changed a registered anchor")
+    measurements = {item["query"]["purpose"]: item for item in query_records
+        if item["query"]["lane_id"] == lane["lane_id"]
+        and item["query"]["purpose"] in ("top_corridor", "bottom_corridor")}
+    for anchor, actual in zip(anchors, receipt.local_refinement_scopes, strict=True):
+        purpose = "bottom_corridor" if anchor.role == BoundaryRole.TOP else "top_corridor"
+        measurement_record = measurements[purpose]
+        measurement = _read_common_proof({
+            field.name: measurement_record[field.name]
+            for field in fields(PhotoBoundaryMeasurementSet)
+        }, PhotoBoundaryMeasurementSet)
+        height_axis = measurement.query.boundary_axis
+        width_axis = BoundaryAxis.X if height_axis == BoundaryAxis.Y else BoundaryAxis.Y
+        expected = evaluate_local_cross_refinement(anchor, measurement,
+            width_axis=width_axis, height_axis=height_axis,
+            height_scale_px_per_mm=measurement.query.boundary_axis_scale_px_per_mm,
+            lane_reference_trace_px=inputs.lane_reference_trace_px,
+            fixed_height_px=inputs.fixed_height_px, canonical_height_px=inputs.canonical_fixed_height_px,
+            registered_observations=original_observations)
+        if expected.fitted_observation is not None and actual.fitted_observation is not None:
+            observation = replace(expected.fitted_observation, observation_id=actual.fitted_observation.observation_id)
+            binding = CrossRoleBinding.from_measurement(_canonical_cross_run(observation, measurement),
+                observation, lane_reference_trace_px=inputs.lane_reference_trace_px, boundary_axis=height_axis)
+            binding = replace(binding, run_id=actual.fitted_binding.run_id)
+            expected = replace(expected, fitted_observation=observation, fitted_binding=binding)
+        if actual != expected:
+            raise ValueError("local Cross trace selection or structural rejection is not reproducible")
+        if actual.can_register:
+            expected_binding = replace(actual.fitted_binding, evidence=CrossEvidence.TEMPLATE_LOCAL_REFINEMENT)
+            if (registered.get(str(expected_binding.observation_id)) != typed_read_model(expected_binding)
+                    or typed_read_model(actual.fitted_observation) not in raw):
+                raise ValueError("valid local Cross refinement was omitted from the original ledger")
+
+
 def _validate_cross_measurement_support(
     lane: dict[str, Any], query_records: list[dict[str, Any]],
     *, native_ids: frozenset[str] | set[str] = frozenset(),
@@ -1250,7 +1309,7 @@ def _validate_cross_measurement_support(
     work = lane.get("cross_registration_work")
     if not isinstance(work, dict) or set(work) != {field.name for field in fields(CrossRegistrationWorkReceipt)}:
         raise ValueError("Cross registration work is incomplete")
-    receipt = CrossRegistrationWorkReceipt(**{**work, 'membership': _read_membership_receipt(work['membership'])})
+    receipt = _read_common_proof(work, CrossRegistrationWorkReceipt)
     if (
         receipt.raw_observation_count != len(raw)
         or receipt.local_fragment_count != sum(
@@ -1455,6 +1514,7 @@ def _validate_cross_measurement_support(
             if replayed != scope:
                 raise ValueError("membership enumeration or actual work is not reproducible from original measurements")
             remaining -= replayed.work.visited_count
+    _validate_local_cross_refinement_scopes(lane, query_records, receipt, registered, raw)
     evaluations = complete_family_evaluations(tuple(families))
     if (
         receipt.constrained_fit_attempt_count != len(evaluations)
@@ -3765,7 +3825,7 @@ def _read_common_proof(value: Any, model: type) -> Any:
     if model not in (CommonHOutput, CommonHOutputAuthority, PhaseFitResult,
                      CrossFitCompetition, CrossRoleBinding, PhotoBoundaryObservation,
                      SourceScanGeometry, HolderFillAssessment, FormatPlacement, ExteriorRegionMeasurement,
-                     TemplateCrossInput, CoarseStripSupport, PhotoBoundaryMeasurementSet):
+                     TemplateCrossInput, CoarseStripSupport, PhotoBoundaryMeasurementSet, CrossRegistrationWorkReceipt):
         raise ValueError("unsupported common-output proof root")
 
     def read(raw: Any, kind: Any) -> Any:
@@ -3926,9 +3986,7 @@ def _validate_common_authority_provenance(lane, production_lane, query_records) 
     phase = _read_common_proof(lane["phase_competition"], PhaseFitResult)
     cross = _read_common_proof(lane["cross_competition"], CrossFitCompetition)
     raw_work = lane["cross_registration_work"]
-    registration = CrossRegistrationWorkReceipt(**{
-        **raw_work, "membership": _read_membership_receipt(raw_work["membership"]),
-    })
+    registration = _read_common_proof(raw_work, CrossRegistrationWorkReceipt)
     observations = tuple(_read_common_proof(item, PhotoBoundaryObservation)
                          for item in lane["observations"]["raw_top_bottom_lines"])
     bindings = project_cross_solver_bindings(tuple(_read_common_proof(item, CrossRoleBinding)

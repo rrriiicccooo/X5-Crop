@@ -173,8 +173,7 @@ def _validate_common_h_output(value, extent, cross, registration, phase) -> None
             from x5crop.detection.photo_geometry.template_registration import CrossRegistrationWorkReceipt
             if registration is None:
                 raise ValueError("common H Cross proof requires its complete registration")
-            typed_registration = CrossRegistrationWorkReceipt(**{
-                **registration, "membership": _read_membership_receipt(registration["membership"])})
+            typed_registration = _read_common_proof(registration, CrossRegistrationWorkReceipt)
             expected = common_h_fit_members(_read_common_proof(cross, CrossFitCompetition), typed_registration)
             if expected is None or mapping != typed_read_model(expected[1]) or [p["cross_fit"] for p in placements] != typed_read_model(expected[0]):
                 raise ValueError("common H changed or omitted a retained Cross group")
@@ -196,14 +195,14 @@ def _validate_common_h_output(value, extent, cross, registration, phase) -> None
                 expected_mapping.append(indices)
             if mapping != expected_mapping or [p["cross_fit"] for p in placements] != fits:
                 raise ValueError("common H changed or omitted a retained Cross group")
-    if registration is not None and (
-        not isinstance(registration, dict)
-        or type(registration.get("local_refinement_scope_count")) is not int
-        or registration["local_refinement_scope_count"] != 0
-        or not isinstance(registration.get("membership"), dict)
-        or registration["membership"].get("state") != "complete"
-    ):
-        raise ValueError("common H registration has no complete unrefined membership")
+    if registration is not None:
+        from .report_validation import _read_common_proof
+        from x5crop.detection.photo_geometry.template_registration import CrossRegistrationWorkReceipt, local_cross_refinements_closed
+        from x5crop.detection.photo_geometry.template_family_membership import MembershipState
+        work_receipt = _read_common_proof(registration, CrossRegistrationWorkReceipt)
+        if (not local_cross_refinements_closed(work_receipt) or work_receipt.membership is None
+                or work_receipt.membership.state != MembershipState.COMPLETE):
+            raise ValueError("common H registration has no complete unrefined membership")
     outputs = value["output_footprints"]
     if (not isinstance(outputs, list)
             or work.output_evaluation_count > work.projection_count * count
@@ -224,9 +223,8 @@ def _validate_common_h_output(value, extent, cross, registration, phase) -> None
     from .report_validation import _read_common_proof
     from x5crop.detection.photo_geometry.template_feasible_geometry import project_format_placement
     typed = _read_common_proof(value, CommonHOutput)
-    from x5crop.detection.photo_geometry.template_common_output import common_member_center_authority
-    if any(p.enclosing_support_aperture_authority != common_member_center_authority(p.cross_fit)
-           for p in typed.placements):
+    from x5crop.detection.photo_geometry.template_common_output import common_member_center_authority_matches
+    if not all(common_member_center_authority_matches(p) for p in typed.placements):
         raise ValueError("common H member center authority does not reproduce its physical support")
     projections = tuple(project_format_placement(p) for p in typed.placements) if (
         first["cross_fit"]["boundary_use"] == "enclosing_support_pair") else ()

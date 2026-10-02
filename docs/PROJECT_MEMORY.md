@@ -125,13 +125,26 @@ frame domains 不能反向授权新像素 query。不同材料层与 blank ends 
    `c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`。
    S095 仍有真实 local refinement scope 1：bottom:98 是唯一 anchor，55 traces 中13个唯一最近点、
    40个歧义、2个无候选；拟合收敛但 role 不获权，方向也与anchor不相交，所以被拒。原selected输入
-   全部仍在原raw observations中。下一步保留scope计数，补完整原owner receipt与可重放结构拒绝证明，
-   不能清零、删除guard或把数值失败当作闭合。Canonical/proposed 单侧bottom组完全相同，可按完整
+   全部仍在原raw observations中。Schema97 已保留完整逐 trace receipt，并从原查询重放 anchor、选择、
+   歧义和真实拟合；只有无歧义、完整 raw 覆盖的结构拒绝能闭合。S095 的40条歧义扫描线仍阻断，
+   不能清零、删除guard或把数值失败当作闭合。其144个可能最近点中52无raw（16单trace、35低于原
+   tone/texture门槛、1被稳健拟合剔除），65仅单区域未进solver。现有nearest tracking没有穷尽替代
+   连接的证明；解释既有track的拒绝原因不能代替完整性。Canonical/proposed 单侧bottom组完全相同，可按完整
    fit身份证明没有新增解释，不能凭组名称丢弃真正不同的conditional解释。
    Main 已新增本地性能提交 `37f0607397e04f19410042dab3ae5ce8d4a7c2d2`：精确证明组外严格多数零值
    中位数。Main full 1063 tests OK、2 skipped；S101 12131次计算全部与原median一致，10280次可省
-   partition；measurement/photo_geometry/candidate_gate/decision与优化前完全一致。正式性能正在单独
-   运行，未宣布<=5s通过。该优化未进入此工作树；两处仍须按已验证范围串行整合，不推送。
+   partition；measurement/photo_geometry/candidate_gate/decision与优化前完全一致。该提交正式性能均值
+   5.1710271234秒，仍未过5秒；证据主库 `Test/gold_analysis/local_release_20261002/performance_37f06073_5_171.json`。
+   Main 后续 `702c78f7` 复用同一格约束矩阵与秩，S101 5387次fit及报告四块与原值完全相同，1063 full
+   通过、2 Windows skipped；未另跑正式性能。上述性能改动未进入本实验，待串行整合，不推送。
+   Schema97 full 1078 tests通过、2 Windows skipped，新增第五项歧义反例另通过；S095原记录重放及
+   7类篡改（删除/清零scope、改歧义、覆盖、query、role、方向）全部按预期通过/拒绝。
+   `Test/gold_analysis/local_scope_20261002_full` 完成110项、0分析异常，21 safe auto/0 unsafe auto、
+   75 nominal Review/14 challenge Review；与schema96最终决定完全相同。detector
+   `b18652f3fd231a559765a0f5dfdc6a31824107b6f285b84a1fa54257cf35506a`，comparator
+   `58cda26698568612264985697beb55c5a3a63621ca834d1bcd1ff4c25b6214ed`，cohort同上。
+   S048 membership仍耗尽4096 visit；临时已证superset剪枝未完成原bound，不采用。纯NumPy融合RGB
+   采样虽逐像素相同但实测慢2.19倍且多约103MiB临时内存，也不采用。
 2. 在旧 outer 的全任务候选研究上，验证有实际最终输出收益的通用整行区域统计。
    同时保护原生弱／异色内容、全部物理线族与角点；保留当前 fixed query、材料身份、来源、
    构造／实测分离、Gate 与预算。仍无材料权限时保持 unavailable，不把研究候选接成自动输出。

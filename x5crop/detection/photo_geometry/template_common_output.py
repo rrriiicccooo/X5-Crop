@@ -33,13 +33,21 @@ from .template_direct_role_aperture_domain import (
 from .template_family_membership import MembershipProjectionCoverage
 from .template_phase_model import PhaseFitResult, PhaseFitStatus
 from .template_placement import FormatPlacement
-from .template_registration import CrossRegistrationWorkReceipt
+from .template_registration import CrossRegistrationWorkReceipt, local_cross_refinements_closed
 
 
 def common_member_center_authority(fit: CrossFit) -> EnclosingSupportApertureAuthority:
     # The frozen calibration was validated for selected unique support pairs.
     # An unresolved member must retain its entire physical center interval.
     return derive_enclosing_support_aperture_authority(fit, calibration=None)
+
+
+def common_member_center_authority_matches(placement: FormatPlacement) -> bool:
+    actual = placement.enclosing_support_aperture_authority
+    expected = common_member_center_authority(placement.cross_fit)
+    # Authority IDs are allocated within a run. Replay must reproduce every
+    # physical field, while references in the saved proof retain the saved ID.
+    return actual == replace(expected, authority_id=actual.authority_id)
 
 
 @dataclass(frozen=True)
@@ -204,7 +212,7 @@ def assess_common_h_output_authority(
     requires_domain = direct is not None and bool(direct.aperture_domain_required_role_indices)
     support_mode = common.placements[0].cross_fit.boundary_use == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
     centers = tuple(p.enclosing_support_aperture_authority for p in common.placements)
-    if centers != tuple(common_member_center_authority(p.cross_fit) for p in common.placements):
+    if not all(common_member_center_authority_matches(p) for p in common.placements):
         raise ValueError("common H member center authority changed its physical support")
     aspects = tuple(reconcile_direct_aperture_height(
         cross.aperture_aspect_ratio_authority, placement.cross_fit.height_compatibility_px,
@@ -264,13 +272,14 @@ def common_h_fit_members(
 ) -> tuple[tuple[CrossFit, ...], tuple[tuple[int, ...], tuple[int, ...]]] | None:
     """Retain all groups or none; a display winner cannot define this set."""
     if (cross.status != CrossFitStatus.UNRESOLVED
-            or registration.local_refinement_scope_count
+            or not local_cross_refinements_closed(registration)
             or registration.membership is None
             or registration.membership.state != MembershipState.COMPLETE):
         return None
     cross.receipt.validate_bounds()
     if (cross.support_output_eligible and 1 < len(cross.enclosing_support_fits) <= MAX_CROSS_PAIRS
-            and not cross.conditional_fit_groups
+            and all(group in cross.fit_groups and not group.fit.conditional_family_ids
+                    for group in cross.conditional_fit_groups)
             and not any(group.independently_supported and group.fit.direct_pair
                         for group in cross.fit_groups)
             and tuple(fit.direct_bindings for fit in cross.enclosing_support_fits) == cross.support_pair_bindings

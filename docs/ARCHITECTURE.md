@@ -1550,8 +1550,13 @@ TIFF 截断和内部 lane 越界复用 native output 的同一合同，截断不
 输入数量受原 `MAX_CROSS_PAIRS` 限制，缺项、重复、不同 W/slot/source 权限或混合边界用途均拒绝。
 该核算只证明所给集合的需求与预算。`template_common_output` 现从同一 Cross 求解器的两种完整分组
 视图生成共同输出：固定已确定的 W，完整 `CrossFit` 相同才复用；任一组支持不足、归属搜索未完整
-结束、经过局部精修或不是直接 aperture pair 时不生成共同解释集。`local_refinement_scope_count` 记录
-实际进入的精修作用域，即使该作用域没有拟合出新线也计数；零次不代表全部物理解释已穷尽。
+结束或边界用途不一致时不生成共同解释集。`local_refinement_scope_count` 记录实际进入的精修作用域，
+即使该作用域没有拟合出新线也计数；零次不代表全部物理解释已穷尽。每个局部作用域保存原 anchor、
+完整 query 与逐 trace 的唯一最近选择、歧义或无候选状态，以及实际拟合和已登记 raw 覆盖。
+只有完整查询、无歧义、所有选择点已被原 raw 观察覆盖，且真实拟合被原角色/方向条件结构性拒绝时，
+该作用域才不再阻断共同输出。数值拟合失败、新增有效精修、未覆盖点或任何歧义继续阻断；重放相同
+nearest 筛选不能代替对未选择竞争者的穷尽证明。报告从原查询重建全部 anchors、逐 trace 决策与拟合；
+仅对运行内分配的标识做对应，其余物理字段必须完全一致。
 每次 composition、实际或复用的 projection、逐帧输出及逐成员预算工作分别记账，继续受原 Cross pair
 及 slot 上限约束。任一成员投影失败则共同输出整体不可用，保留全部成员和失败前实际工作；超预算成员
 也完整保留。普通及开发报告保存同一诊断，校验器核对完整映射、源域和逐成员预算，不能借用原生预算。
@@ -1564,7 +1569,7 @@ fixed/canonical H，逐 pair 至多一次核验。存在 enclosing-support 解�
 共同 enclosing 输出另从 Cross 已完成的完整 support candidate 集物化 `enclosing_support_fits`，不重新配对。
 Canonical Cross 必须显式授予 `support_output_eligible`；仅 conditional 视图产生的 ledger 不能授予该资格，
 唯一直接 aperture 的比例冲突分支也不允许被替代。新共同路径还要求全部成员无 conditional 依赖、无独立
-获权 direct aperture 竞争组，完整 membership 且局部精修作用域为零。该收紧不改变原唯一 support 优先级。
+获权 direct aperture 竞争组、完整 membership，且全部局部精修作用域按上述条件闭合。该条件不改变原唯一 support 优先级。
 每个成员恰好投影一次，完整 joint states 供全部 slot 复用；不复用缺少原投影的 native 输出缓存。各自的
 support span、共同 requested 对完整物理 aperture 中心范围的四边 expansion、同状态原 raw departure
 与 pixel-center alignment padding 分别按原合同核验。解释/位置不确定性只计入完整 expansion，不能重复

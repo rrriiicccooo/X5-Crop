@@ -147,6 +147,8 @@ and passes all evidence and source-wide safety checks. The top/bottom boundaries
 For a common enclosing-support crop, every fully verified interpretation is protected and its padding is checked against
 its complete physical aperture-center range. Center calibration restricted to a uniquely selected pair is not reused.
 Incomplete interpretations or failed checks still require Review.
+Local refinement preserves ambiguous measurements and failed fits in the report. An unresolved alternative still
+requires Review even when the selected measurements would permit a crop.
 Cross-axis crop protection accounts for the relationship between measured position and direction, the statistical fit,
 and local edge departures. Top and bottom protection uses the actual reachable longitudinal ends to reduce excess
 padding. The existing per-side expansion budgets and automatic approval conditions still apply.

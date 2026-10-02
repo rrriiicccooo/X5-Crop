@@ -263,6 +263,61 @@ def validate_membership_registration(
 
 
 @dataclass(frozen=True)
+class LocalCrossRefinementTraceSelection:
+    trace_coordinate_px: int
+    selected_transition_id: ObservationId | None
+    ambiguous: bool
+
+    def __post_init__(self) -> None:
+        if (type(self.trace_coordinate_px) is not int or type(self.ambiguous) is not bool
+                or self.selected_transition_id is not None and (
+                    not isinstance(self.selected_transition_id, ObservationId) or self.ambiguous)):
+            raise ValueError("local Cross trace decision is invalid")
+
+
+@dataclass(frozen=True)
+class LocalCrossRefinementScope:
+    anchor: CrossRoleBinding
+    query_id: str
+    query_complete: bool
+    trace_selections: tuple[LocalCrossRefinementTraceSelection, ...]
+    covered_observation_ids: tuple[ObservationId, ...]
+    fitted_observation: PhotoBoundaryObservation | None
+    fitted_binding: CrossRoleBinding | None
+
+    def __post_init__(self) -> None:
+        selected = self.selected_transition_ids
+        if (not self.query_id or type(self.query_complete) is not bool
+                or len({x.trace_coordinate_px for x in self.trace_selections}) != len(self.trace_selections)
+                or len(set(selected)) != len(selected)
+                or len(set(self.covered_observation_ids)) != len(self.covered_observation_ids)
+                or (self.fitted_observation is None) != (self.fitted_binding is None)
+                or self.fitted_observation is not None and (
+                    self.fitted_observation.observation_id != self.fitted_binding.observation_id
+                    or not set(self.fitted_observation.transition_ids).issubset(selected))):
+            raise ValueError("local Cross scope lost its complete input or fit")
+
+    @property
+    def selected_transition_ids(self) -> tuple[ObservationId, ...]:
+        return tuple(x.selected_transition_id for x in self.trace_selections if x.selected_transition_id is not None)
+
+    @property
+    def can_register(self) -> bool:
+        binding = self.fitted_binding
+        return (binding is not None and binding.role_authorized
+            and binding.full_direction_interval_degrees is not None
+            and self.anchor.full_direction_interval_degrees is not None
+            and max(binding.full_direction_interval_degrees.minimum, self.anchor.full_direction_interval_degrees.minimum)
+                <= min(binding.full_direction_interval_degrees.maximum, self.anchor.full_direction_interval_degrees.maximum) + 1.0e-9)
+
+    @property
+    def closed_structural_rejection(self) -> bool:
+        return (self.query_complete and bool(self.covered_observation_ids)
+                and not any(item.ambiguous for item in self.trace_selections)
+                and self.fitted_binding is not None and not self.can_register)
+
+
+@dataclass(frozen=True)
 class CrossRegistrationWorkReceipt:
     fit_attempt_count: int
     raw_observation_count: int
@@ -273,6 +328,7 @@ class CrossRegistrationWorkReceipt:
     constrained_fit_event_count: int = 0
     membership: MembershipReceipt | None = None
     local_refinement_scope_count: int = 0
+    local_refinement_scopes: tuple[LocalCrossRefinementScope, ...] = ()
 
     def __post_init__(self) -> None:
         if (
@@ -289,6 +345,8 @@ class CrossRegistrationWorkReceipt:
             or self.constrained_fit_edge_count < 0
             or self.constrained_fit_event_count < 0
             or self.local_refinement_scope_count < 0
+            or len(self.local_refinement_scopes) > self.local_refinement_scope_count
+            or any(not isinstance(scope, LocalCrossRefinementScope) for scope in self.local_refinement_scopes)
             or (self.constrained_fit_attempt_count == 0 and (
                 self.constrained_fit_edge_count or self.constrained_fit_event_count
             ))
@@ -347,6 +405,7 @@ class RegisteredCrossEvidence:
     family_compatibility_evaluation_count: int = 0
     membership_receipt: MembershipReceipt | None = None
     local_refinement_scope_count: int = 0
+    local_refinement_scopes: tuple[LocalCrossRefinementScope, ...] = ()
 
     @property
     def work_receipt(self) -> CrossRegistrationWorkReceipt:
@@ -366,6 +425,7 @@ class RegisteredCrossEvidence:
             constrained_fit_event_count=sum(item.work.event_count for item in evaluations),
             membership=self.membership_receipt,
             local_refinement_scope_count=self.local_refinement_scope_count,
+            local_refinement_scopes=self.local_refinement_scopes,
         )
 
     def __post_init__(self) -> None:
@@ -408,6 +468,8 @@ class RegisteredCrossEvidence:
             or type(self.family_compatibility_evaluation_count) is not int
             or type(self.local_refinement_scope_count) is not int
             or self.local_refinement_scope_count < 0
+            or len(self.local_refinement_scopes) > self.local_refinement_scope_count
+            or any(not isinstance(scope, LocalCrossRefinementScope) for scope in self.local_refinement_scopes)
             or not 0 <= self.family_compatibility_evaluation_count <= sum(
                 2 * count * (count + 1)
                 for count in (registered_top_run_count, registered_bottom_run_count)
@@ -1163,41 +1225,13 @@ def register_cross_evidence(
     )
 
 
-def register_template_local_cross_refinements(
-    registered: RegisteredCrossEvidence,
-    *,
-    top_measurement: PhotoBoundaryMeasurementSet,
-    bottom_measurement: PhotoBoundaryMeasurementSet,
-    width_axis: BoundaryAxis,
-    height_axis: BoundaryAxis,
-    height_scale_px_per_mm: PositiveInterval,
-    lane_reference_trace_px: float,
-    fixed_height_px: FiniteInterval,
-    canonical_height_px: float,
-    longitudinal_support_domain_groups_px: tuple[tuple[FiniteInterval, ...], ...],
-) -> RegisteredCrossEvidence:
-    """Refine the missing cross side inside a template-projected local window.
-
-    The measurements were registered and completed before placement fitting.
-    A source-wide, role-authorized direct side plus fixed H predicts one finite
-    corridor on the opposite measurement.  At each trace only a uniquely
-    nearest physical transition may enter the single robust refit.  Therefore
-    this pass neither rereads pixels nor turns the template into evidence.
-    """
-
-    if not isinstance(registered, RegisteredCrossEvidence):
-        raise TypeError("cross refinement requires registered evidence")
-    if fixed_height_px.minimum <= 0.0:
-        raise ValueError("cross refinement height must be positive")
-    if not fixed_height_px.contains(canonical_height_px, epsilon=1.0e-9):
-        raise ValueError("canonical cross height leaves physical authority")
-    domains = tuple(longitudinal_support_domain_groups_px)
+def local_cross_refinement_anchors(top_bindings, bottom_bindings, fixed_height_px, domains):
+    """Return every scope of the existing generator before its single fit."""
     if not domains:
-        return registered
-
+        return ()
     anchors = tuple(
         binding
-        for binding in (*registered.top_bindings, *registered.bottom_bindings)
+        for binding in (*top_bindings, *bottom_bindings)
         if binding.role_authorized
         and not binding.conditional_family_ids
         and binding.canonical_direction_degrees is not None
@@ -1211,14 +1245,12 @@ def register_template_local_cross_refinements(
             )
         )
     )
-    if not anchors:
-        return registered
 
     def has_direct_opposite_closure(anchor: CrossRoleBinding) -> bool:
         opposites = (
-            registered.bottom_bindings
+            bottom_bindings
             if anchor.role == BoundaryRole.TOP
-            else registered.top_bindings
+            else top_bindings
         )
         expected = (
             _add(anchor.full_interval_px, fixed_height_px)
@@ -1258,15 +1290,94 @@ def register_template_local_cross_refinements(
             return True
         return False
 
-    height_radius_px = max(
-        canonical_height_px - fixed_height_px.minimum,
-        fixed_height_px.maximum - canonical_height_px,
-    )
-    local_radius_px = (
-        PHOTO_BOUNDARY_MEASUREMENT_SPEC.local_window_mm
-        * height_scale_px_per_mm.maximum
-    )
-    refinement_radius_px = height_radius_px + local_radius_px
+    return tuple(anchor for anchor in anchors if not has_direct_opposite_closure(anchor))
+
+
+def evaluate_local_cross_refinement(
+    anchor: CrossRoleBinding, measurement: PhotoBoundaryMeasurementSet,
+    *, width_axis: BoundaryAxis, height_axis: BoundaryAxis,
+    height_scale_px_per_mm: PositiveInterval, lane_reference_trace_px: float,
+    fixed_height_px: FiniteInterval, canonical_height_px: float,
+    registered_observations: tuple[PhotoBoundaryObservation, ...],
+) -> LocalCrossRefinementScope:
+    """Replay the original nearest-transition generator once, preserving rejection."""
+    refinement_radius_px = max(canonical_height_px - fixed_height_px.minimum,
+        fixed_height_px.maximum - canonical_height_px) + (
+        PHOTO_BOUNDARY_MEASUREMENT_SPEC.local_window_mm * height_scale_px_per_mm.maximum)
+    opposite_role = BoundaryRole.BOTTOM if anchor.role == BoundaryRole.TOP else BoundaryRole.TOP
+    by_trace = {}
+    for transition in measurement.transitions:
+        by_trace.setdefault(transition.trace_coordinate_px, []).append(transition)
+    decisions = []
+    for trace in measurement.query.trace_positions_px:
+        expected = _project_cross_anchor(anchor, trace_coordinate_px=trace,
+            lane_reference_trace_px=lane_reference_trace_px, canonical_height_px=canonical_height_px)
+        local = []
+        for transition in by_trace.get(trace, ()):
+            distance = _interval_distance(transition.physical_position_interval_px, expected)
+            if distance[0] <= refinement_radius_px:
+                local.append((distance, transition))
+        distances = sorted(local, key=lambda item: (item[0][0], item[0][1], str(item[1].transition_id)))
+        ambiguous = bool(len(distances) > 1 and distances[0][0][1] >= distances[1][0][0] - 1.0e-9)
+        selected = distances[0][1].transition_id if distances and not ambiguous else None
+        decisions.append(LocalCrossRefinementTraceSelection(trace, selected, ambiguous))
+    selected = tuple(x.selected_transition_id for x in decisions if x.selected_transition_id is not None)
+    covered = tuple(item for item in registered_observations if set(item.transition_ids).intersection(selected))
+    covered_ids = tuple(sorted((item.observation_id for item in covered), key=str)) if (
+        selected and set(selected).issubset({raw for item in covered for raw in item.transition_ids})) else ()
+    observation = fit_format_bound_boundary_observation(measurement, transition_ids=selected,
+        role=opposite_role, source_axis_long=width_axis,
+        boundary_axis_scale_px_per_mm=height_scale_px_per_mm,
+        minimum_independent_support_regions=MINIMUM_INDEPENDENT_SUPPORT_REGIONS) if selected else None
+    binding = None if observation is None else CrossRoleBinding.from_measurement(
+        _canonical_cross_run(observation, measurement), observation,
+        lane_reference_trace_px=lane_reference_trace_px, boundary_axis=height_axis)
+    return LocalCrossRefinementScope(anchor, measurement.query.query_id, measurement.coverage.complete,
+        tuple(decisions), covered_ids, observation, binding)
+
+
+def local_cross_refinements_closed(receipt: CrossRegistrationWorkReceipt) -> bool:
+    """Only complete, independently reproducible structural rejections close a scope."""
+    return (len(receipt.local_refinement_scopes) == receipt.local_refinement_scope_count
+            and all(scope.closed_structural_rejection for scope in receipt.local_refinement_scopes))
+
+
+def register_template_local_cross_refinements(
+    registered: RegisteredCrossEvidence,
+    *,
+    top_measurement: PhotoBoundaryMeasurementSet,
+    bottom_measurement: PhotoBoundaryMeasurementSet,
+    width_axis: BoundaryAxis,
+    height_axis: BoundaryAxis,
+    height_scale_px_per_mm: PositiveInterval,
+    lane_reference_trace_px: float,
+    fixed_height_px: FiniteInterval,
+    canonical_height_px: float,
+    longitudinal_support_domain_groups_px: tuple[tuple[FiniteInterval, ...], ...],
+) -> RegisteredCrossEvidence:
+    """Refine the missing cross side inside a template-projected local window.
+
+    The measurements were registered and completed before placement fitting.
+    A source-wide, role-authorized direct side plus fixed H predicts one finite
+    corridor on the opposite measurement.  At each trace only a uniquely
+    nearest physical transition may enter the single robust refit.  Therefore
+    this pass neither rereads pixels nor turns the template into evidence.
+    """
+
+    if not isinstance(registered, RegisteredCrossEvidence):
+        raise TypeError("cross refinement requires registered evidence")
+    if fixed_height_px.minimum <= 0.0:
+        raise ValueError("cross refinement height must be positive")
+    if not fixed_height_px.contains(canonical_height_px, epsilon=1.0e-9):
+        raise ValueError("canonical cross height leaves physical authority")
+    domains = tuple(longitudinal_support_domain_groups_px)
+    if not domains:
+        return registered
+
+    anchors = local_cross_refinement_anchors(registered.top_bindings, registered.bottom_bindings,
+        fixed_height_px, domains)
+    if not anchors:
+        return registered
     observations = {
         str(item.observation_id): item for item in registered.observations
     }
@@ -1277,99 +1388,19 @@ def register_template_local_cross_refinements(
     fit_attempt_count = registered.fit_attempt_count
     local_refinement_scope_count = registered.local_refinement_scope_count
 
+    scopes = list(registered.local_refinement_scopes)
     for anchor in anchors:
-        # This pass only fills a physically missing opposite side.  Re-fitting
-        # transitions after a direct top+bottom closure already exists would
-        # duplicate the same structure under a new observation identity and
-        # manufacture a discrete runner-up from non-independent evidence.
-        if has_direct_opposite_closure(anchor):
-            continue
         local_refinement_scope_count += 1
-        opposite_role = (
-            BoundaryRole.BOTTOM
-            if anchor.role == BoundaryRole.TOP
-            else BoundaryRole.TOP
-        )
-        measurement = (
-            bottom_measurement
-            if opposite_role == BoundaryRole.BOTTOM
-            else top_measurement
-        )
-        by_trace: dict[int, list[object]] = {}
-        for transition in measurement.transitions:
-            by_trace.setdefault(transition.trace_coordinate_px, []).append(
-                transition
-            )
-        selected = []
-        for trace in measurement.query.trace_positions_px:
-            expected = _project_cross_anchor(
-                anchor,
-                trace_coordinate_px=trace,
-                lane_reference_trace_px=lane_reference_trace_px,
-                canonical_height_px=canonical_height_px,
-            )
-            local = []
-            for transition in by_trace.get(trace, ()):
-                distance = _interval_distance(
-                    transition.physical_position_interval_px,
-                    expected,
-                )
-                if distance[0] <= refinement_radius_px:
-                    local.append((distance, transition))
-            distances = tuple(
-                sorted(
-                    local,
-                    key=lambda item: (
-                        item[0][0],
-                        item[0][1],
-                        str(item[1].transition_id),
-                    ),
-                )
-            )
-            if not distances:
-                continue
-            if (
-                len(distances) > 1
-                and distances[0][0][1] >= distances[1][0][0] - 1.0e-9
-            ):
-                continue
-            selected.append(distances[0][1].transition_id)
-        if not selected:
+        scope = evaluate_local_cross_refinement(anchor,
+            bottom_measurement if anchor.role == BoundaryRole.TOP else top_measurement,
+            width_axis=width_axis, height_axis=height_axis, height_scale_px_per_mm=height_scale_px_per_mm,
+            lane_reference_trace_px=lane_reference_trace_px, fixed_height_px=fixed_height_px,
+            canonical_height_px=canonical_height_px, registered_observations=registered.observations)
+        scopes.append(scope)
+        fit_attempt_count += bool(scope.selected_transition_ids)
+        if not scope.can_register:
             continue
-        fit_attempt_count += 1
-        observation = fit_format_bound_boundary_observation(
-            measurement,
-            transition_ids=tuple(selected),
-            role=opposite_role,
-            source_axis_long=width_axis,
-            boundary_axis_scale_px_per_mm=height_scale_px_per_mm,
-            minimum_independent_support_regions=(
-                MINIMUM_INDEPENDENT_SUPPORT_REGIONS
-            ),
-        )
-        if observation is None:
-            continue
-        run = _canonical_cross_run(observation, measurement)
-        binding = CrossRoleBinding.from_measurement(
-            run,
-            observation,
-            lane_reference_trace_px=lane_reference_trace_px,
-            boundary_axis=height_axis,
-        )
-        if (
-            not binding.role_authorized
-            or binding.full_direction_interval_degrees is None
-            or max(
-                binding.full_direction_interval_degrees.minimum,
-                anchor.full_direction_interval_degrees.minimum,
-            )
-            > min(
-                binding.full_direction_interval_degrees.maximum,
-                anchor.full_direction_interval_degrees.maximum,
-            )
-            + 1.0e-9
-        ):
-            continue
+        observation, binding = scope.fitted_observation, scope.fitted_binding
         binding = replace(
             binding,
             evidence=CrossEvidence.TEMPLATE_LOCAL_REFINEMENT,
@@ -1408,4 +1439,5 @@ def register_template_local_cross_refinements(
         ),
         membership_receipt=registered.membership_receipt,
         local_refinement_scope_count=local_refinement_scope_count,
+        local_refinement_scopes=tuple(scopes),
     )
