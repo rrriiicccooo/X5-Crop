@@ -138,5 +138,50 @@ class RuntimeTerminalContractTests(unittest.TestCase):
             self.assertEqual(keep.read_text(encoding="utf-8"), "keep")
 
 
+    def test_cancel_after_atomic_rename_keeps_complete_output(self) -> None:
+        from unittest.mock import patch
+        from x5crop.output.publication import _rename_without_replacing
+
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "output"
+            def renamed_then_interrupted(source, destination):
+                _rename_without_replacing(source, destination)
+                raise KeyboardInterrupt
+            with self.assertRaises(KeyboardInterrupt):
+                with FreshOutputDirectory(target) as publication:
+                    staging = publication.staging
+                    assert staging is not None
+                    (staging / "result").write_text("complete", encoding="utf-8")
+                    with patch("x5crop.output.publication._rename_without_replacing", renamed_then_interrupted):
+                        publication.publish()
+            self.assertFalse(staging.exists())
+            self.assertEqual((target / "result").read_text(encoding="utf-8"), "complete")
+            with self.assertRaises(FreshOutputError):
+                with FreshOutputDirectory(target):
+                    pass
+
+    def test_unsupported_native_publication_has_no_overwrite_fallback(self) -> None:
+        import ctypes
+        import errno
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
+
+        for error in (None, errno.EINVAL, errno.ENOTSUP, errno.ENOSYS):
+            with self.subTest(error=error), tempfile.TemporaryDirectory() as directory:
+                target = Path(directory) / "output"
+                library = SimpleNamespace() if error is None else SimpleNamespace(renamex_np=Mock(return_value=-1))
+                with self.assertRaises(FreshOutputError):
+                    with FreshOutputDirectory(target) as publication:
+                        staging = publication.staging
+                        with patch("x5crop.output.publication.sys.platform", "darwin"), \
+                             patch.object(ctypes, "CDLL", return_value=library), \
+                             patch.object(ctypes, "get_errno", return_value=error), \
+                             patch("x5crop.output.publication.os.rename", side_effect=AssertionError("unsafe fallback")):
+                            publication.publish()
+                assert staging is not None
+                self.assertFalse(staging.exists())
+                self.assertFalse(target.exists())
+
+
 if __name__ == "__main__":
     unittest.main()

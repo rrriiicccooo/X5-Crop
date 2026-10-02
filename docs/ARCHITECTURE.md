@@ -2036,7 +2036,8 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 删除旧 target。
 发布采用操作系统的原子不替换语义：macOS `renamex_np(RENAME_EXCL)`、Windows `os.rename`，
 Linux开发/CI使用`renameat2(RENAME_NOREPLACE)`。目标在最终检查之后才出现也必须拒绝；平台或文件系统
-不支持时安全失败，不回退到可覆盖的POSIX rename。取消和发布失败只清理本次staging，允许随后重试。
+不支持时安全失败，不回退到可覆盖的POSIX rename。发布前取消或发布失败只清理本次staging，允许随后重试。
+原子发布已成功后收到取消则保留完整target，再次运行须另选新目录。
 
 ## 13. 源码 owner
 

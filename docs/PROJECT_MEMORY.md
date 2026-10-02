@@ -173,6 +173,9 @@ frame domains 不能反向授权新像素 query。不同材料层与 blank ends 
    `Test/gold_analysis/calibration_v15_20261002_full`。
    本机复现输出目录TOCTOU：最终检查后出现的空target可被旧POSIX rename替换。现改原子no-replace，
    保留同名目录/文件/symlink，取消只删本次staging并可重试；待最终工程、APFS/HFS+与性能复验。
+   原子发布6d93de05 full为1086通过、2 Windows skipped；正式性能均值5.04698495667秒仍未过5秒，
+   失败回执在`local_atomic_6d93de05/performance_6d93de05.json`。若原子发布已完成后才收到取消，完整target
+   必须保留并拒绝同路径重试；补测该窗口及native API不支持时无覆盖fallback。
 2. 在旧 outer 的全任务候选研究上，验证有实际最终输出收益的通用整行区域统计。
    同时保护原生弱／异色内容、全部物理线族与角点；保留当前 fixed query、材料身份、来源、
    构造／实测分离、Gate 与预算。仍无材料权限时保持 unavailable，不把研究候选接成自动输出。
