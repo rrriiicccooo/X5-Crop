@@ -8,58 +8,65 @@
 
 ## 当前验收快照
 
-以下完整验收快照仍绑定此前生产提交 `546f99f766d851965e127f9a5cf31b62f5976e1d`，未推送。
-点对固定块优化保持全部逻辑与裁切结果，真实额外数组计入原动态内存上限，不保留邻接矩阵。
-正式24源完整用户路径平均 **4.86315074658秒**，5秒Gate通过；p50为4.52145031250秒、
-p95为6.89960504200秒，最慢S091为8.12499220800秒；3秒挑战未达到。
-证据 `Test/gold_analysis/local_vector_546f99f7/performance_546f99f7.json`。
+当前生产提交为 `9600156b5cd871290b460232c3c84953af67b112`，本地 main，未推送。
+本轮修复 phase 同几何桶的冲突身份误删、仅补全首选造成的假唯一，以及晚到缺绑定桥接绕过竞争
+检查的问题。冲突 seed 用同生成器两遍重放恢复；全部 eligible 候选采用保守补全支持上界，按必要
+绑定身份、phase 和 role 区间分量归约。同 observation ID 先取 hull，保留其桥接 None 的可能性。
+只有绑定身份、phase-anchor 用途、coverage 与五类合并区间已被首选包含的原候选才跳过检查。
+不增加拟合、坐标组合、像素查询或原工作预算；新增索引存储计入 receipt。
 
-同提交完整110项黄金回归0分析异常，21 safe auto、0 unsafe auto、75 nominal Review、14 challenge
-Review；校准与源码身份均通过，准确性发布Gate仍失败。全部110条记录除耗时外，与17b的v15回归
-完全相同。证据 `Test/gold_analysis/vector_546f99f7_20261002_full`；detector manifest为
-`9544e19c304b76d2041ab1b454e9a5042c41c3c8f57c55f7f4817f3c38046470`，comparator与cohort身份未变。
-该基线的`tools/verify full`完整1091项通过（2项Windows专属跳过），包含精确ULP反例；
-日志归档于`material_identity_gap_20261002/engineering-full.log`。
-后续若只更新文档，以上回执仍绑定546f99f7，不重新标成新commit的发布证书。
-同提交六源TIFF/metadata、Orientation3/8、APFS/HFS+竞争/取消/重试、只读依赖安装检查通过，
-记录在`local_atomic_546f99f7/`；不是完整三平台发布证书。
+同提交 `tools/verify full` 运行1112项测试（1110通过、2项Windows专属跳过），依赖、编译、cohort、shell
+与版本检查通过。反例覆盖同坐标不同身份、第三组补全、720种顺序、同ID区间桥接，以及晚到桥接后
+互斥身份与未吸收保护范围。它们证明 owner 缺口，不等于完整TIFF流程曾触发 unsafe auto。
+工程日志及独立反例归档于 `Test/gold_analysis/local_phase_9600156b/`。
 
-本机临时exFAT镜像已实际测试：原子不替换rename返回ENOTSUP(45)，程序安全停止、无target、
-staging清理、镜像卸载。证据 `local_vector_546f99f7/exfat.json`，不能称exFAT输出通过。
-公共手册说明先输出到APFS/HFS+。Intel Mac与Windows x64设备暂缺是用户确认的发布阻碍；
-本机准确性未完成是独立开发缺口，不得误称只差跨平台签收。
+本轮相位修复后的完整用户路径在cdb99027上测得5.178709793秒，5秒Gate失败；固定四源ABBA同环境对照为
+旧546代码6.07957秒、cdb代码6.07191秒，未支持phase变化造成主要变慢；对照不是24源验收。
+完整CLI剖析定位逐线跟踪全列表扫描。当前提交用保守二分窗预筛已排序候选，半径与端点均向外
+nextafter后，仍由原距离谓词最终判断，不建新数组或扩大连接门槛。59次真实输入重放输出和相同
+身份作用域中的ID精确一致；独立236592点浮点审计零漏点，包含只扩张结果端点会失败的消去反例。
+旧失败回执和ABBA证据保留在 `local_phase_cdb99027/`，不覆盖、不用局部提速冒充正式Gate。
 
-最新H排查没有授权新的自动路径：S031完整12成员、原始区间和输出与9月23日记录一致，共同保护
-仍必需1.38746/1.75574mm，超过1.2mm。S052完整登记3个enclosing解释，并非漏用coarse；全部
-共同输出仍需TOP 1.85–2.27mm、BOTTOM 1.43–2.23mm，且phase未闭合，不能只放开common入口。
-S073/S079/S090的H inward轴标签来自W错位的短角边，不是独立H漏保护证据；严格黄金判定保持。
-这些失败不授权删除成员、变更边界用途、缩小物理区间或提高留边上限。下一步仍是下文材料身份、
-完整弱边与物理竞争的通用机制。材料判读等待期间，最新指令已允许继续独立的W、phase、anchor与邻接算法工作。
-原TIFF原生16-bit逐通道RGB全列种子延续性实验已完成，固定median/6MAD、257原码底限与原
-persistence，保留灰度弱边和完整物理线族：六源仍为1个H满足、4个外扩超限、1个不可用，没有
-新增自动通过。24组本实验标量对照及独立160组对照一致；源边照片、1–3行等亮异色与材料渐变
-反例阻止授予材料身份。旧`native_prefix_guard_probe.py`虽读uint8，但此前另有原生RGB/257实验，
-不能把该文件的限制误写为全部历史未做RGB。实验与三个待人工判读窗口归档在
-`Test/gold_analysis/material_identity_gap_20261002/`，详见[研究记录](BOUNDARY_FEATURE_RESEARCH.md)。
-当前材料排除路线缺独立材料身份和内缘角色标签。最小首批为S064两个新位置及S006一个底部窗口；
-已有S003/S047/S064局部正确接触与S016错误接触确认保留，不重复询问。新标签只可验证局部材料
-假设，不能授予整源覆盖、缩小原物理保护或保证96项nominal通过。这是该路线的证据缺口，不能
-据此宣称其它准确性问题都只能靠新增数据解决；其余准确性路线继续按原物理与工作预算推进。
+完整110项正式gold回归为0分析异常、21 safe auto、0 unsafe auto、75 nominal Review、
+14 challenge Review。源码身份与校准检查通过，发布准确性Gate失败。
+结果见 `phase_9600156b_20261002_full/gold_analysis_summary.json`，
+与546f99f7的逐字段及几何差异见 `local_phase_9600156b/gold_comparison.json`。
+本轮跟踪优化与cdb99027的完整110条记录除耗时外逐字段一致，凭据为
+`local_phase_9600156b/tracking_full_gold_equivalence.json`，没有增加或减少自动批准。
+当前仍未达到全部96项nominal安全自动处理的标准；不得把安全Review写为nominal能力已完成。
+中心校准按原资格与固定公式刷新为v16，S030失去唯一phase资格，来源为S043/S053/S064/S074四源；
+数值区间仍为 `[-0.007H,+0.010H]`，不按最终批准挑样，不证明sealed泛化。
 
-S046递归存储独立实验已结束，未整合。55296种完整选择的oracle得到6个极大解释；省略required
-重复区间、释放最后子分支前的父pool，各自仍超462槽；合用仅得到3个中间解释即触及原2000次
-工作预算，安全返回不完整。70个小型oracle对照保留全部已完成路径，活动容器审计通过，但没有
-真实完整搜索或输出收益。证据`Test/gold_analysis/s046_recursive_storage_20261002/`；不继续围绕
-该负面方案调阈值或预算。材料路线仍等待三窗局部判读，其余准确性缺口仍如上，未归因于设备缺失。
+同提交24源完整用户路径平均 **4.90273492358秒**，5秒Gate通过；p50为4.67058508350秒，
+p95为6.88408400000秒，最慢S091为8.34165641600秒。3秒非阻断挑战未达到。
+回执为 `local_phase_9600156b/performance_9600156b.json`；不把旧546f99f7的4.863秒重标成本次结果。
+后续纯文档提交不改变上述回执绑定的生产commit。
 
-本轮phase修复恢复同几何桶内被不同观察身份冲突误删的原始种子；采用两遍同生成器重放，只恢复冲突桶，
-不保存全部相容recipes或生成笛卡尔积，保留原`H × max(6,R)`上限。另以全部eligible解释的同身份、
-相交phase区间连通分量计算支持上界，避免best-only合并对未补全runner或第三组产生假唯一。
-106项phase专项通过；S024/S065/S096共10次真实输入重放无额外超限。五源正式gold路径专项为
-2 safe auto、3 Review、0 unsafe、0分析异常；S094只减少报告中的absolute-phase约束来源，裁切几何
-不变，其余四项除耗时完全相同。最终工程1103项通过（2项Windows跳过），包含720种候选顺序与同活跃存储回归。
-尚待同提交110项gold与性能验证，不能把上述旧回执
-重标为本轮修复的完成证据。纯内存反例证明的是phase owner缺口，不外推为完整Gate曾有unsafe auto。
+此前546f99f7上的六源TIFF/metadata、Orientation3/8、APFS/HFS+竞争/取消/重试、只读依赖安装检查
+通过，记录在 `local_atomic_546f99f7/`，不是当前提交或完整三平台的发布证书。exFAT实测原子不替换
+rename返回ENOTSUP(45)，安全停止且staging清理；不能称exFAT输出通过。公共手册说明先输出到
+APFS/HFS+。Intel Mac与Windows x64设备暂缺是用户确认的发布阻碍，本机准确性缺口独立存在。
+发布打包、三平台签收与最终Hook/CI仍须在准确性完成后绑定同一最终提交；不创建RC或公开包。
+
+用户已明确M1/M2黑色是外部材料，其余是照片；M3白色是外部材料，其余是照片。原话、消息来源、
+窗口与哈希保存在 `material_identity_gap_20261002/review/human_semantics_20261002.json`。
+不再等待或要求重复确认这三个区域；精确过渡带仍未标注，不自动生成mask或改gold。
+固定RGB种子延续法在M1/M2材料内部停止，不能把停止点授予照片内缘角色。后续先冻结的仿射延续
+实验仍会漏掉无噪线性种子后的弱照片前沿，没有安全外推包络；不整合、不沿失败结果调阈值。
+三窗和19组反例及可重放脚本见 `material_identity_gap_20261002/human_semantics_followup/`。
+这些局部语义不授予通用RGB材料分类权限；separator灰度证据也不能直接转成跨域材料身份。
+
+独立W研究：S040第4邻接即使采用同一W的最有利相关计算仍需比独立合法W下限小80.68px，不能靠
+撤回已获权edge125、产生负gap或改成overlap消除冲突。S032/S034已保留proposal共同范围满足必要
+逐侧预算，S065不满足；现有best/runner/conditional不是全部解释，不能直接开启common-W。
+完整membership仍缺seed处置、去重包含、合并叶子以及后续refit到最终几何的闭合映射；长期保留各pass
+全部fit还会改变共存存储。只增加诊断账本不能算输出改进，需先完成受原预算约束的闭合证明。
+凭据在 `local_phase_b632c2ff/`，该目录包含c39生成集合上的必要条件研究，不是最终自动权限。
+
+S046递归存储独立实验未整合：55296种完整选择oracle得到6个极大解释；两项压缩合用仍只产生3个
+中间解释便触及2000次工作预算，不能声称完整搜索。证据 `s046_recursive_storage_20261002/`。
+S031/S052的共同H保护仍超过原1.2mm预算；S073/S079/S090的短角边失败不能归为独立H漏检。
+以上负结果不证明其它准确性路线都无法继续；W、phase、anchor与邻接独立研究仍在授权范围。
 
 ## 当前目标与执行顺序
 
@@ -75,7 +82,7 @@ Windows x64 实机验收；跨平台待验不阻塞本阶段开发，也不算�
    遮挡且没有记录的内容；人工黄金源内 polygon、逐侧 5% 上限及倾斜角点保护仍有效。
 2. 区域身份、内缘位置、方向、H 与输出预算在现有模型和联合求解中闭合。低纹理或外侧位置本身不能
    证明片夹；照片贴到源边时不能凭空建立背景种子。允许无害不确定性，不为已可用样片继续精修。
-3. 材料判读等待期间继续 W 的逐张左右边归属、phase、anchor、间隔、接触、重叠与截断，再完成此前全部能力。
+3. 继续 W 的逐张左右边归属、phase、anchor、间隔、接触、重叠与截断，再完成此前全部能力。
    最新指令已解除原先H完成前的W开发顺序限制；物理权限、黄金语义、预算和最终验收保持。
 4. 最终当前 development nominal 全部正确 `approved_auto`，所有角色
    `unsafe_approved_auto = 0`；challenge 尽量安全自动通过，安全 Review 不替代 nominal 能力。
@@ -88,11 +95,11 @@ Windows x64 实机验收；跨平台待验不阻塞本阶段开发，也不算�
 新机制须改善最终输出或解决具体证明缺口；只增加峰、解释数或中间精度不是整合依据。
 同源 task 按 source SHA 组织研究；黄金只用于离线研究和评价，不进入运行时选边。
 
-## 当前源码与验证身份
+## 已整合的实现与历史验证
 
 本轮三项独立实验已串行进入本地 main：`34a13e01` 原生 coarse/Cross 证据、`2f655640` 完整共同
 enclosing 输出、`cfbe9b00` 可重放的局部精修记录。原 `702c78f7` 及之前的性能修复完整保留；
-整合后正在重新验证同一源码的工程、正式性能与完整金标，不能借用独立工作树结果宣称最终通过。
+当前验收以本文件开头绑定的生产提交为准，不能借用独立工作树结果宣称最终通过。
 `x5-association` 的 `8b1a280a` 是对应独立实验快照；`x5-native-h` 的独立 min×max 原型未采用。
 
 完整逐 trace broad 修正已在 `40435b3d232706dbc8e4fe1ceb02fa7cd86af0df` 整合：真实峰坐标、
@@ -172,80 +179,25 @@ frame domains 不能反向授权新像素 query。不同材料层与 blank ends 
 
 ## 精确下一步与开放风险
 
-1. 原生 16-bit coarse-short 与共同 enclosing 输出保存在独立 worktree
-   `/Users/zhyoung/Documents/Codex/2026-10-02/task/x5-association`，现已按上述提交进入本地 main。
-   Schema96 由 canonical Cross 显式授予共同 support 资格，保留完整候选 fits；所有成员使用完整物理
-   aperture 中心范围，不扩大 unique-pair 校准的适用域。共同 polygon 逐成员重算风险，alignment
-   只计原 raw departure/pixel-center 保护，不重复计入解释/位置不确定性。报告独立重放资格、完整
-   fits、物理中心权限与预算。S094 已恢复 safe auto，S064/S067 保持 safe auto。
-   当前 full 为 1074 tests OK、2 Windows skipped；完整 110-task 全部完成、0 analysis errors，
-   21 safe auto、0 unsafe auto、75 nominal Review、14 challenge Review。
-   证据：`Test/gold_analysis/common_support_20261002_full`；detector
-   `213c5b6b0b2d725579f01b855c7aa62aa5071766fb121756edf10a880fee30e6`，comparator
-   `efc6294f2b1b15bde4d74899a7ae4d2abd3485cfd408bbd2ef7b8b1c1aecc97b`，cohort
-   `c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f`。
-   S095 仍有真实 local refinement scope 1：bottom:98 是唯一 anchor，55 traces 中13个唯一最近点、
-   40个歧义、2个无候选；拟合收敛但 role 不获权，方向也与anchor不相交，所以被拒。原selected输入
-   全部仍在原raw observations中。Schema97 已保留完整逐 trace receipt，并从原查询重放 anchor、选择、
-   歧义和真实拟合；只有无歧义、完整 raw 覆盖的结构拒绝能闭合。S095 的40条歧义扫描线仍阻断，
-   不能清零、删除guard或把数值失败当作闭合。其144个可能最近点中52无raw（16单trace、35低于原
-   tone/texture门槛、1被稳健拟合剔除），65仅单区域未进solver。现有nearest tracking没有穷尽替代
-   连接的证明；解释既有track的拒绝原因不能代替完整性。Canonical/proposed 单侧bottom组完全相同，可按完整
-   fit身份证明没有新增解释，不能凭组名称丢弃真正不同的conditional解释。
-   Main 已新增本地性能提交 `37f0607397e04f19410042dab3ae5ce8d4a7c2d2`：精确证明组外严格多数零值
-   中位数。Main full 1063 tests OK、2 skipped；S101 12131次计算全部与原median一致，10280次可省
-   partition；measurement/photo_geometry/candidate_gate/decision与优化前完全一致。该提交正式性能均值
-   5.1710271234秒，仍未过5秒；证据主库 `Test/gold_analysis/local_release_20261002/performance_37f06073_5_171.json`。
-   Main 后续 `702c78f7` 复用同一格约束矩阵与秩，S101 5387次fit及报告四块与原值完全相同，1063 full
-   通过、2 Windows skipped；这些性能改动保留在已整合的main中，独立实验快照未包含它们。不推送。
-   Schema97 full 1078 tests通过、2 Windows skipped，新增第五项歧义反例另通过；S095原记录重放及
-   7类篡改（删除/清零scope、改歧义、覆盖、query、role、方向）全部按预期通过/拒绝。
-   `Test/gold_analysis/local_scope_20261002_full` 完成110项、0分析异常，21 safe auto/0 unsafe auto、
-   75 nominal Review/14 challenge Review；与schema96最终决定完全相同。detector
-   `b18652f3fd231a559765a0f5dfdc6a31824107b6f285b84a1fa54257cf35506a`，comparator
-   `58cda26698568612264985697beb55c5a3a63621ca834d1bcd1ff4c25b6214ed`，cohort同上。
-   S048 membership仍耗尽4096 visit；临时已证superset剪枝未完成原bound，不采用。纯NumPy融合RGB
-   采样虽逐像素相同但实测慢2.19倍且多约103MiB临时内存，也不采用。
-   整合后 main `51535b7e` 的110项完整回归同样为21 safe auto、0 unsafe auto、75 nominal Review；
-   正式24源性能均值5.09040885775秒，仍失败。证据 `Test/gold_analysis/local_integrated_20261002_full`
-   与 `local_integrated_20261002/performance_51535b7e.json`。独立六源metadata、Orientation3/8像素一致性、
-   APFS/HFS+输出事务、只读安装检查通过；exFAT未验证，用户暂无Intel/Windows设备，保留发布阻碍。
-   当前单次fit复用slot prefix，空prefix保留原空求和；S101的5387次fit和报告四块完全一致，
-   另1280组涵盖低秩/直接/受限拟合与all/mixed/no straight证据，逐浮点位相同，40组prefix含类型相同。
-   S048 anchor-only完整物理超集仍比已有enclosing向外多860.532/646.096px，按其135、H24mm及
-   最小scale换算10.260/7.703mm，超过1.2mm限额。这只证明上界证书太宽，不能删除真实竞争。
-   Unique enclosing中心校准按原固定资格与公式重建为v15：完整110项产生5源，135三源、120-66两源，
-   其中4项本身Review，未按结果挑样；raw hull向外量化为[-0.007,+0.010]，与旧15源导出值相同。
-   v14的18源中S044因grid冲突、S057/S058/S059因producer bound退出，新增S053；15→5再因新增竞争、
-   反证或改为common排除11源，新增S064。旧校准与三期完整观测保存在
-   `local_integrated_20261002/center_calibration_v15_rebuild.json`；不改5%Gate，不证明sealed泛化。
-   共同enclosing使用完整物理中心，不消费此unique校准。待最终完整回归确认校准identity与全部unsafe=0。
-   单次prefix复用提交2cfde09c正式均值5.05095410254秒仍失败，原失败回执保留。点对计费内联继续保持
-   原预算检查、失败时刻、全部计数：721个临界用例完整result exact；S101两次association完整结果及报告
-   四块exact，诊断累计0.856211→0.666934秒，不代替正式性能验收。
-   17b1c65b的v15完整110项回归0异常、21safe auto/0unsafe auto、75nominal Review；校准身份全部通过，
-   与51535b7e的最终决定、proposal/candidate安全分类和中心观测完全一致。证据
-   `Test/gold_analysis/calibration_v15_20261002_full`。
-   本机复现输出目录TOCTOU：最终检查后出现的空target可被旧POSIX rename替换。现改原子no-replace，
-   保留同名目录/文件/symlink，取消只删本次staging并可重试；待最终工程、APFS/HFS+与性能复验。
-   原子发布6d93de05 full为1086通过、2 Windows skipped；正式性能均值5.04698495667秒仍未过5秒，
-   失败回执在`local_atomic_6d93de05/performance_6d93de05.json`。若原子发布已完成后才收到取消，完整target
-   必须保留并拒绝同路径重试；补测该窗口及native API不支持时无覆盖fallback。
-   7ff51b53的六源metadata、Orientation3/8、APFS/HFS+竞争与取消、只读安装检查通过；真实CLI收到
-   SIGINT后退出-2且清理staging，同路径重试0/approved_auto，再次重试3且已有输出inode与内容不变。
-   证据`local_atomic_7ff51b53/`，仍是独立本机检查，不是完整平台发布证书。
-   初始点对固定块优化保留全部逻辑计费和union次序，新增数组在原动态引用上限内如实计量、DFS前释放。
-   原型879个预算/随机/ULP/类型对照及S101两次owner通过；真实owner诊断0.64725→0.15288秒，
-   四大报告块相同。完整工程1090项通过、2 Windows skipped；新增精确ULP连接边界另做专项检查。
-   尚待最终同提交24源正式性能与110项金标，诊断提速不代表5秒已通过。
-2. 在旧 outer 的全任务候选研究上，验证有实际最终输出收益的通用整行区域统计。
-   同时保护原生弱／异色内容、全部物理线族与角点；保留当前 fixed query、材料身份、来源、
-   构造／实测分离、Gate 与预算。仍无材料权限时保持 unavailable，不把研究候选接成自动输出。
-3. 只围绕实际 H 内切、外扩、预算和安全批准缺口推进；H 合格项继续回归，不以提高中间精度替代
-   最终裁切验收。材料判读等待期间，继续有独立可证伪假设的W、phase与邻接算法工作。
-4. 当前所有 receipt 均为 development；尚无 sealed cohort，xpan/120-645/135-dual 未被黄金覆盖。
-   正式性能、TIFF/metadata、安装、三目标实机及打包验收仍须绑定同一最终 release commit。
-   当前未启用概率选择；若启用，须独立 calibration/sealed 合同。未经用户确认不创建 RC/tag/Release。
+1. 准确性仍以96项nominal全部安全自动通过为目标。H继续验证有实际最终裁切收益的通用材料／区域
+   机制；三窗人工语义已到，固定RGB与仿射前缀已被反例否定，不再重复请求这三个标签或调节这些
+   失败假设的阈值。保护原生弱／异色内容、全部合法物理线族与角点，保留fixed query与原预算。
+2. W、phase、anchor与邻接工作可继续。Common-W必须先证明完整解释与后续几何的闭合，不能用
+   best/runner/conditional或支持上界分量冒充全部成员。S032/S034只是已保留集合的必要预算检查
+   通过；S040不能靠撤销获权边界或把负gap命名为overlap解决。区间包含、角色身份、权限用途及
+   后续refit lineage应由其既有owner统一证明，存储计入真实共存峰值。
+3. Local refinement保持完整查询、歧义与raw覆盖回链。S095的既有研究显示大量最近点歧义、无raw
+   和单区域支持，解释某条track的拒绝原因不等于穷尽其它连接；对当前报告确认缺口后再修改owner。
+   不清零scope、删除guard、覆盖原证据或把数值失败当成闭合。现有完整receipt及篡改回归继续保留。
+4. S046存储压缩未完成原搜索，S048 membership仍有4096 visit界限，不能通过返回前缀集合、缩小
+   区域多数分母或增加预算制造完整性。必要上界太宽也不能据此删除真实竞争。新机制先证明具体最终
+   输出或权限证明收益，再进入生产；已有负面实验不继续围绕同一参数枚举。
+5. 当前回执均为development；尚无sealed cohort，xpan/120-645/135-dual未被黄金覆盖。当前未启用
+   概率选择；若启用，须满足独立calibration/sealed合同。当前通过与失败结果以本文件开头和对应
+   生产commit为准，旧提交的统计、失败尝试及原始证据保留在Git历史和Test归档。
+6. 准确性完成后，正式性能、TIFF/metadata、安装、三目标实机、打包与Hook/CI仍须绑定同一最终
+   release commit。Intel Mac与Windows x64暂不可用是已确认发布阻碍，不阻止本机适用开发。
+   未经用户发布确认不创建RC/tag/Release，不推送或部署。
 
 ## 延后任务：共同 W 与逐 Frame 真实变化审计
 
