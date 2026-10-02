@@ -286,6 +286,8 @@ There is no `--overwrite`. The target must not exist. Use different fresh direct
 cropping; an official run always rereads the source TIFF.
 If another operation creates the target during processing, it is preserved and publication reports an output error;
 retry with a new directory. Publication also stops if the filesystem cannot guarantee atomic no-replace behavior.
+The current macOS exFAT implementation was found to reject this publication operation. Write to a fresh directory on
+APFS/HFS+; if needed, copy the completed output directory to exFAT afterward.
 
 ## Status, Output, And Exit Codes
 

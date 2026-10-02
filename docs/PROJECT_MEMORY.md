@@ -6,6 +6,39 @@
 长期合同见 [ARCHITECTURE.md](ARCHITECTURE.md)，人工权限见
 [MANUAL_ANNOTATION.md](MANUAL_ANNOTATION.md)，协作规则见 [AGENTS.md](../AGENTS.md)。
 
+## 当前验收快照
+
+当前生产源码最后变更为本地 `546f99f766d851965e127f9a5cf31b62f5976e1d`，未推送。
+点对固定块优化保持全部逻辑与裁切结果，真实额外数组计入原动态内存上限，不保留邻接矩阵。
+正式24源完整用户路径平均 **4.86315074658秒**，5秒Gate通过；p50为4.52145031250秒、
+p95为6.89960504200秒，最慢S091为8.12499220800秒；3秒挑战未达到。
+证据 `Test/gold_analysis/local_vector_546f99f7/performance_546f99f7.json`。
+
+同提交完整110项黄金回归0分析异常，21 safe auto、0 unsafe auto、75 nominal Review、14 challenge
+Review；校准与源码身份均通过，准确性发布Gate仍失败。全部110条记录除耗时外，与17b的v15回归
+完全相同。证据 `Test/gold_analysis/vector_546f99f7_20261002_full`；detector manifest为
+`9544e19c304b76d2041ab1b454e9a5042c41c3c8f57c55f7f4817f3c38046470`，comparator与cohort身份未变。
+此前full1090项运行成功（2项Windows专属跳过），补充精确ULP反例后的关联专项18项通过。
+后续若只更新文档，以上回执仍绑定546f99f7，不重新标成新commit的发布证书。
+同提交六源TIFF/metadata、Orientation3/8、APFS/HFS+竞争/取消/重试、只读依赖安装检查通过，
+记录在`local_atomic_546f99f7/`；不是完整三平台发布证书。
+
+本机临时exFAT镜像已实际测试：原子不替换rename返回ENOTSUP(45)，程序安全停止、无target、
+staging清理、镜像卸载。证据 `local_vector_546f99f7/exfat.json`，不能称exFAT输出通过。
+公共手册说明先输出到APFS/HFS+。Intel Mac与Windows x64设备暂缺是用户确认的发布阻碍；
+本机准确性未完成是独立开发缺口，不得误称只差跨平台签收。
+
+最新H排查没有授权新的自动路径：S031完整12成员、原始区间和输出与9月23日记录一致，共同保护
+仍必需1.38746/1.75574mm，超过1.2mm。S052完整登记3个enclosing解释，并非漏用coarse；全部
+共同输出仍需TOP 1.85–2.27mm、BOTTOM 1.43–2.23mm，且phase未闭合，不能只放开common入口。
+S073/S079/S090的H inward轴标签来自W错位的短角边，不是独立H漏保护证据；严格黄金判定保持。
+这些失败不授权删除成员、变更边界用途、缩小物理区间或提高留边上限。下一步仍是下文材料身份、
+完整弱边与物理竞争的通用机制；H通过前继续冻结无关W算法。
+当前具体实验是原TIFF原生16-bit逐通道RGB的全列种子延续性，固定median/6MAD与原persistence，
+保留原弱边与完整物理线族，先做1–3px/异色/源边照片反例和既有六源必要输出检查。旧
+`native_prefix_guard_probe.py`实际读取uint8 registered gray，只是未平滑，不能当作原生RGB结论。
+该假设尚不证明片夹身份，未经反例与独立权限验证不进入生产输出。
+
 ## 当前目标与执行顺序
 
 已从暂停的“V5发布”会话 `01a07f23-208e-7871-ab28-65270d32dc9e` 交接至
