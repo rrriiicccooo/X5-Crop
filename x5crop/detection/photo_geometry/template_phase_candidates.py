@@ -1569,15 +1569,18 @@ def _linear_fit(
         [coefficients(role) for role, _anchor in straight],
         dtype=np.float64,
     )
-    fit_matches = (
-        straight
-        if len(straight) >= 3 and np.linalg.matrix_rank(straight_matrix) == 3
-        else matches
-    )
-    matrix = np.asarray(
-        [coefficients(role) for role, _anchor in fit_matches],
-        dtype=np.float64,
-    )
+    straight_full_rank = len(straight) >= 3 and np.linalg.matrix_rank(straight_matrix) == 3
+    if straight_full_rank or len(straight) == len(matches):
+        fit_matches = straight
+        matrix = straight_matrix
+        full_rank = straight_full_rank
+    else:
+        fit_matches = matches
+        matrix = np.asarray(
+            [coefficients(role) for role, _anchor in fit_matches],
+            dtype=np.float64,
+        )
+        full_rank = len(fit_matches) >= 3 and np.linalg.matrix_rank(matrix) == 3
     values = np.asarray(
         [
             anchor.coordinate_px - direction * fixed_delta(role)
@@ -1586,7 +1589,7 @@ def _linear_fit(
         dtype=np.float64,
     )
     fit_basis = LatticeParameterFitBasis.TEMPLATE_INTERVAL_CENTER
-    if len(fit_matches) >= 3 and np.linalg.matrix_rank(matrix) == 3:
+    if full_rank:
         solution = _bounded_lattice_least_squares(
             matrix,
             values,
