@@ -831,6 +831,8 @@ def adjacency_prefix_coefficients(
 
     if slot_index < 0:
         raise ValueError("adjacency prefix slot must be non-negative")
+    if not relations or slot_index == 0:
+        return 0, slot_index, 0
     applicable = relations[: min(slot_index, len(relations))]
     measured_count = sum(
         isinstance(item, (ContactRelation, OverlapRelation))

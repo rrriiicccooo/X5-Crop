@@ -151,6 +151,16 @@ frame domains 不能反向授权新像素 query。不同材料层与 blank ends 
    `58cda26698568612264985697beb55c5a3a63621ca834d1bcd1ff4c25b6214ed`，cohort同上。
    S048 membership仍耗尽4096 visit；临时已证superset剪枝未完成原bound，不采用。纯NumPy融合RGB
    采样虽逐像素相同但实测慢2.19倍且多约103MiB临时内存，也不采用。
+   整合后 main `51535b7e` 的110项完整回归同样为21 safe auto、0 unsafe auto、75 nominal Review；
+   正式24源性能均值5.09040885775秒，仍失败。证据 `Test/gold_analysis/local_integrated_20261002_full`
+   与 `local_integrated_20261002/performance_51535b7e.json`。独立六源metadata、Orientation3/8像素一致性、
+   APFS/HFS+输出事务、只读安装检查通过；exFAT未验证，用户暂无Intel/Windows设备，保留发布阻碍。
+   当前单次fit复用slot prefix，空prefix保留原空求和；S101的5387次fit和报告四块完全一致，
+   另1280组涵盖低秩/直接/受限拟合与all/mixed/no straight证据，逐浮点位相同，40组prefix含类型相同。
+   S048 anchor-only完整物理超集仍比已有enclosing向外多860.532/646.096px，按其135、H24mm及
+   最小scale换算10.260/7.703mm，超过1.2mm限额。这只证明上界证书太宽，不能删除真实竞争。
+   Unique enclosing中心校准身份已有阻碍：登记18源，整合前实际15源、当前5源，配置匹配为false；
+   不能以缩窄区间或删除校验消除它。共同enclosing使用完整物理中心，不消费此unique校准。
 2. 在旧 outer 的全任务候选研究上，验证有实际最终输出收益的通用整行区域统计。
    同时保护原生弱／异色内容、全部物理线族与角点；保留当前 fixed query、材料身份、来源、
    构造／实测分离、Gate 与预算。仍无材料权限时保持 unavailable，不把研究候选接成自动输出。

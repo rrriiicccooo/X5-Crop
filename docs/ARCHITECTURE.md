@@ -2020,6 +2020,8 @@ Affine sampler 独占每格 contiguous 输出缓冲，writer 完成一格后才�
 存活；vertical deskew 使用灰度转置 view，registered interval 使用连续 slice view。Transition-line
 cache 只在单个 source 内复用并在 source 结束时清空。这些优化不得改变 observation、placement、
 winner/runner、provenance、footprint 或输出像素。
+单次 lattice fit 内，同一 slot 的不可变 adjacency prefix 系数只计算一次，供 START/END、矩阵、
+固定 delta 与低秩 offset 复用；空 prefix 直接返回原空求和结果。缓存随该次 fit 释放，不跨候选或 source。
 
 正式输入限于单页 unsigned 16-bit、RGB 三通道、contiguous TIFF；压缩接受 `NONE`、`LZW`、
 `DEFLATE` / `ADOBE_DEFLATE` 或 `ZSTD`。Orientation 1–8 在 decode boundary 规范化，输出写

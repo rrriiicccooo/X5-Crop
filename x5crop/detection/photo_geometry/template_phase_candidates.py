@@ -1546,10 +1546,16 @@ def _linear_fit(
         item for item in matches if item[1].line_evidence is not None
     )
 
+    # Relations stay fixed during this fit; START/END reuse the same slot prefix.
+    prefix_by_slot = {}
+    for role, _anchor in matches:
+        if role.slot_index not in prefix_by_slot:
+            prefix_by_slot[role.slot_index] = adjacency_prefix_coefficients(
+                relations, role.slot_index
+            )
+
     def coefficients(role: TemplateRole) -> tuple[float, float, float]:
-        width_count, pitch_count, _fixed_delta = (
-            adjacency_prefix_coefficients(relations, role.slot_index)
-        )
+        width_count, pitch_count, _fixed_delta = prefix_by_slot[role.slot_index]
         return (
             1.0,
             float(
@@ -1560,10 +1566,7 @@ def _linear_fit(
         )
 
     def fixed_delta(role: TemplateRole) -> float:
-        return adjacency_prefix_coefficients(
-            relations,
-            role.slot_index,
-        )[2]
+        return prefix_by_slot[role.slot_index][2]
 
     straight_matrix = np.asarray(
         [coefficients(role) for role, _anchor in straight],
