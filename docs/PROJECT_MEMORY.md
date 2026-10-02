@@ -40,8 +40,19 @@ Windows x64 实机验收；跨平台待验不阻塞本阶段开发，也不算�
 `659d1847` 进一步保留粗测 broad 的完整原始支撑约束。本轮补齐粗测九条 trace 同时保留的数组计量，
 与 baseline 共用底层数组去重 owner，原资源上限不变。合成输入实际保留 500274 bytes，原 receipt
 仅 53194 bytes，修正后保守峰值为 550570 bytes；这不等于进程 RSS 或全路径 heap 证明。
-最新 `tools/verify full` 为 1059 tests OK、2 skipped（Windows 专属），含依赖、编译、cohort、
-shell、输出事务与临时打包启动合同。当前未推送，未运行本次提交的远端 CI。
+当前 main 为 `5f9761c1e78d60fb8767d0232e6a9d6976bb248c`：`bed402b5` 补齐保留数组计量，
+`7e91c1aa` 在性能 Gate 失败前保存完整测量记录，`5f9761c1` 将初始关联点对谓词内联，保持每次计费、
+完整路径与原上限。后者的 81 份 oracle 结果和完整工作账本逐项等价，S101 正式报告的 measurement、
+photo_geometry、candidate_gate、decision 完全相同。独立工作区相同源码的 `tools/verify full`
+为 1060 tests OK、2 skipped（Windows 专属），包含依赖、编译、cohort、shell、输出事务与临时打包合同。
+正常 pre-commit Hook 已通过；当前未推送，未运行本次提交的远端 CI。
+
+`7e91c1aa` 的隔离 24-source 完整用户路径平均 5.5830757829 秒，未达到 5 秒 Gate；失败记录保存在
+`Test/gold_analysis/local_release_isolated_20261002/performance_receipt.json`。S101 profile 的关联耗时
+由 2.54495 降至 1.70700 秒只属带插桩诊断，不能代替新提交的正式 24-source 结果；后者仍待验证。
+主工作区既有 6-source TIFF/metadata、APFS 与临时 HFS+、只读 installer 检查通过，记录在
+`Test/gold_analysis/local_release_20261002/`；它们不是最终同提交平台合格证。exFAT 未验证。
+用户已明确暂时没有 Intel Mac 和 Windows x64；两类实机继续列为发布阻碍，本机工作继续。
 
 最新完整生产开发诊断：
 
@@ -91,11 +102,18 @@ frame domains 不能反向授权新像素 query。不同材料层与 blank ends 
 
 ## 精确下一步与开放风险
 
-1. 优先推进实际 H 缺口。S064/S052/S106 的原生 luma 与 RGB 研究复用正式 coarse-short 完整 query，
-   已核验 source SHA、布局和 gray capture；仅增加原生峰不构成整合依据。下一步按原关联、完整区域
-   多数及物理闭合核对全部观测表示，确认是否取得最终输出收益；RGB 通道不能作为独立投票。
-   五项残余关联超界与全部 raw query 仍在 `Test/gold_analysis/h_remaining_bounds_20261001/`；
-   后续优化只按具体输出阻断推进，保持机械等价，不用假较小输入或提高 cap。
+1. 原生 16-bit coarse-short broad 的开发保存在独立 worktree
+   `/Users/zhyoung/Documents/Codex/2026-10-02/task/x5-association`，未并入 main。它将完整 side facts
+   交给唯一 Cross 支撑 sweep，保留全部原始路径、预算和竞争；禁止采用另一个 `x5-native-h` 原型中的
+   独立 min×max 配对。第一次 110-task 诊断为 20 safe auto、0 unsafe auto、2 analysis errors；
+   S038/S094 报告异常已修复，专项 S038/S064/S067/S094/S095 均完成，S064/S067 safe auto，
+   S094/S095 仍因真实竞争 Review。当前完整 110-task 复验尚在运行，不将该分支当作发布改善。
+   最新工程检查 1066 tests OK、2 skipped；7 项 native 合同测试包括物理域覆盖、单侧不可冒充 aperture、
+   完整 raw、预算与省略竞争反例。只读审计发现报告 coarse direct interval 还需绑定原测量 owner，待修。
+   下一步在现有共同输出 owner 内证明全部 enclosing-support 成员的完整性、同状态中心风险、对齐预算及
+   source/content 约束；不能删除 S094/S095 竞争或直接复用 aperture-only 权限。S095 的 3 解释共同 polygon
+   离线检查上下风险最大约 2.150 mm、保守同状态对齐约 2.426 mm，均低于 2.8 mm；这只是可行性诊断，
+   不证明搜索完整、最终批准或全部 H 完成。
 2. 在旧 outer 的全任务候选研究上，验证有实际最终输出收益的通用整行区域统计。
    同时保护原生弱／异色内容、全部物理线族与角点；保留当前 fixed query、材料身份、来源、
    构造／实测分离、Gate 与预算。仍无材料权限时保持 unavailable，不把研究候选接成自动输出。
