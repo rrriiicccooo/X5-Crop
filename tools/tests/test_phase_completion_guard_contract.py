@@ -12,7 +12,7 @@ from x5crop.detection.photo_geometry.template_model import (
     LatticeParameterFitBasis, SequenceBindingUse,
 )
 from x5crop.detection.photo_geometry.template_nominal_grid_model import CalibratedNominalGridFitState
-from x5crop.detection.photo_geometry.template_phase_candidates import _BoundFit, _clear_winner_basis
+from x5crop.detection.photo_geometry.template_phase_candidates import _BoundFit, _clear_winner_basis, _rank
 
 
 def full_fit(phase=10):
@@ -37,6 +37,65 @@ def part(full, group, roles, local_roles=()):
 
 
 class CompletionGuardTests(unittest.TestCase):
+    def test_late_unbound_bridge_cannot_hide_conflicting_completions(self):
+        def make(phase, group, roles, bridge=False):
+            bound = part(full_fit(phase), group, roles)
+            fit = bound.fit
+            return replace(bound, fit=replace(
+                fit,
+                phase_lattice_fit=replace(
+                    fit.phase_lattice_fit,
+                    cycle_phase_interval_px=FiniteInterval(0, 60),
+                    absolute_phase_interval_px=FiniteInterval(0, 60),
+                ),
+                model_full_role_intervals_px=(
+                    FiniteInterval(0, 60) if bridge else fit.model_full_role_intervals_px[0],
+                    *(FiniteInterval(0, 1000) for _ in range(9)),
+                ),
+            ))
+        initial = make(10, 'unused', (1,3,5,7,9))
+        a = make(40, 'A', (0,1,3))
+        b = make(40, 'B', (0,1,3))
+        bridge = make(10, 'unused', (1,3), True)
+        self.assertFalse(m._same_continuous_placement(initial.fit, a.fit))
+        for records in permutations((initial, a, b, bridge)):
+            ordered = tuple(sorted(records, key=_rank, reverse=True))
+            best = ordered[0]
+            discrete = []
+            for candidate in ordered[1:]:
+                if m._same_continuous_placement(best.fit, candidate.fit):
+                    best = m._merge_continuous_placement(best, candidate)
+                else:
+                    discrete.append(candidate)
+            self.assertEqual(len(discrete), 2)
+            self.assertIsNotNone(_clear_winner_basis(best, discrete[0]))
+            a_complete = m._merge_continuous_placement(best, a)
+            b_complete = m._merge_continuous_placement(best, b)
+            self.assertEqual(a_complete.fit.phase_support_count, 6)
+            self.assertEqual(b_complete.fit.phase_support_count, 6)
+            self.assertFalse(m._same_continuous_placement(a_complete.fit, b_complete.fit))
+            self.assertIsNone(_clear_winner_basis(a_complete, b_complete))
+            self.assertIsNotNone(m._unseparated_completion_competitor(best, ordered))
+
+    def test_absorbed_state_retains_geometry_and_anchor_authority(self):
+        best = full_fit()
+        self.assertTrue(m._continuous_state_is_absorbed(best, best))
+        for field in ('model_role_intervals_px', 'model_full_role_intervals_px'):
+            intervals = list(getattr(best, field))
+            intervals[0] = FiniteInterval(intervals[0].minimum - 1, intervals[0].maximum + 1)
+            retained = (
+                replace(best, model_full_role_intervals_px=tuple(intervals))
+                if field == 'model_role_intervals_px' else best
+            )
+            expanded = replace(retained, **{field: tuple(intervals)})
+            self.assertTrue(m._same_continuous_placement(retained, expanded))
+            self.assertFalse(m._continuous_state_is_absorbed(retained, expanded))
+        bindings = list(best.role_bindings)
+        bindings[0] = replace(bindings[0], use=SequenceBindingUse.LOCAL_REFINEMENT)
+        local = replace(best, role_bindings=tuple(bindings), phase_support_coverage=5.)
+        self.assertTrue(m._same_continuous_placement(local, best))
+        self.assertFalse(m._continuous_state_is_absorbed(local, best))
+
     @classmethod
     def setUpClass(cls):
         cls.full = full_fit()

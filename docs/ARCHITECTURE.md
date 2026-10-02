@@ -184,6 +184,9 @@ observation ID分区；连续合并不能删除或替换该绑定，因此不能
 分量之间的间隙不能由连续 hull 合并跨越；分区数量不超过候选数。区间排序和索引归约不生成
 新 fit、坐标组合或像素查询；
 忽略观察冲突只使上界更保守，不赋予任何观察新的权限。临时分量索引计入原内存 receipt。
+最终与首选连续的原候选，只有其绑定身份、phase-anchor 用途、coverage 及所有合并区间已被首选
+完整包含时才跳过。晚到的缺绑定桥接可能让此前离散候选变成可合并；仍可能互相冲突或扩展保护
+范围，必须保留补全竞争检查，不以最终两两连续性冒充闭合。
 
 Edge-family registration 是 `observation_id` 的 owner；`template_phase_candidates.py` 只把已登记的
 separator material/component 映射成 `evidence_group_id`，并由 `SequenceRoleBinding` 同时保存两种身份。

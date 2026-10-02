@@ -439,6 +439,40 @@ def _merge_continuous_placement(
     )
 
 
+def _continuous_state_is_absorbed(best: SequenceFit, candidate: SequenceFit) -> bool:
+    """A continuous candidate is redundant only after its full state is retained."""
+    if not _same_continuous_placement(best, candidate):
+        return False
+    for retained, incoming in zip(best.role_bindings, candidate.role_bindings, strict=True):
+        if incoming is not None and (
+            retained is None
+            or retained.observation_id != incoming.observation_id
+            or (
+                incoming.use == SequenceBindingUse.PHASE_ANCHOR
+                and retained.use != SequenceBindingUse.PHASE_ANCHOR
+            )
+        ):
+            return False
+    retained_intervals = (
+        best.phase_lattice_fit.cycle_phase_interval_px,
+        best.phase_lattice_fit.absolute_phase_interval_px,
+        best.pitch_fit.pitch_interval_px,
+        *best.model_role_intervals_px,
+        *best.model_full_role_intervals_px,
+    )
+    incoming_intervals = (
+        candidate.phase_lattice_fit.cycle_phase_interval_px,
+        candidate.phase_lattice_fit.absolute_phase_interval_px,
+        candidate.pitch_fit.pitch_interval_px,
+        *candidate.model_role_intervals_px,
+        *candidate.model_full_role_intervals_px,
+    )
+    return all(
+        retained.minimum <= incoming.minimum and incoming.maximum <= retained.maximum
+        for retained, incoming in zip(retained_intervals, incoming_intervals, strict=True)
+    ) and best.phase_support_coverage >= candidate.phase_support_coverage
+
+
 def _unseparated_completion_competitor(
     best: _BoundFit,
     candidates: Sequence[_BoundFit],
@@ -544,7 +578,10 @@ def _unseparated_completion_competitor(
                 bounds[member] = bound
     for index, candidate in enumerate(candidates):
         fit = candidate.fit
-        if _same_continuous_placement(best.fit, fit):
+        # A late interval bridge can make previously discrete records mergeable
+        # with the final best. They may add mutually conflicting identities or
+        # extend its required hull; continuity alone does not absorb either fact.
+        if _continuous_state_is_absorbed(best.fit, fit):
             continue
         support_count, coverage, count = bounds[index]
         if count == 1:
