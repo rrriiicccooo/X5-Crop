@@ -1945,6 +1945,8 @@ candidate-dependent query 或 content-driven placement；概率层也只能消�
 性能合同是 24-source 完整用户路径平均不超过 5 秒；同一均值不超过 3 秒是明确记录但不阻断
 提交、发布或平台 receipt 的 challenge。正式性能验证属于发布验收，绑定同一 release commit；
 开发提交默认不运行该验证，也不要求每次提交生成性能 receipt。
+平台入口与独立性能入口均先保存完整测量记录再验证 Gate；失败数据保留供诊断，但不能生成通过的
+平台回执，也不在重试时静默覆盖已有失败记录。
 正式计时子进程同时由外部观察未插桩 peak RSS；该值与
 带 cProfile 的阶段归因 RSS 分开记录。`runtime_peak_temporary_bytes` 只描述 detector 自报的有界
 临时测量缓冲，不代表进程 RSS。Cross 与 sequence 两组 baseline 顺序测量，一组全部窗口消费完后释放

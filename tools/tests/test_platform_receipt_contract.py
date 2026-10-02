@@ -104,6 +104,21 @@ def _receipt(target: str, performance_name: str, performance_sha: str) -> dict:
 
 
 class PlatformReceiptContractTests(unittest.TestCase):
+    def test_failed_performance_gate_preserves_completed_evidence(self) -> None:
+        record = {"git_commit": COMMIT, "production_gate": {"passed": False}}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "nested" / "performance.json"
+            with (
+                mock.patch("tools.regression.platform_receipt.build_receipt", return_value=record) as build,
+                mock.patch("tools.regression.platform_receipt.validate_receipt", side_effect=ValueError("Gate failed")),
+            ):
+                with self.assertRaisesRegex(ValueError, "Gate failed"):
+                    _load_or_build_performance(path, COMMIT)
+                self.assertEqual(json.loads(path.read_text(encoding="utf-8")), record)
+                with self.assertRaisesRegex(ValueError, "Gate failed"):
+                    _load_or_build_performance(path, COMMIT)
+                build.assert_called_once_with()
+
     def test_existing_performance_receipt_is_never_silently_rebuilt(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "performance.json"

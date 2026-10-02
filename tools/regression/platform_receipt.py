@@ -124,12 +124,15 @@ def _load_or_build_performance(path: Path, commit: str) -> dict[str, Any]:
         validate_receipt(record, expected_commit=commit)
         return record
     record = build_receipt()
-    validate_receipt(record, expected_commit=commit)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(record, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+    # Keep completed measurements even when their Gate fails, matching the
+    # standalone performance entrypoint. Validation still blocks the platform
+    # receipt; a failed run must not discard its profiling evidence.
+    validate_receipt(record, expected_commit=commit)
     return record
 
 
