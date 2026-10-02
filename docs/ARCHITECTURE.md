@@ -242,6 +242,9 @@ sequence baseline；top/bottom 共用覆盖 lane work box 完整短轴的 `CROSS
 小窗口计算 median/MAD。两组 baseline 都在像素读取前登记；trace、两轴尺度和 lane 必须与窗口一致，
 原窗口的 transition ownership 与源边 kernel 可观测性保持不变。Baseline 不产生任何 transition 或
 placement evidence，也不能把源边未观测区域补成背景；它只提供候选无关的共同信号归一化。
+峰组 local noise 仍取组外完整信号中位数；只有有限数组中，精确扣除本组零值后，组外严格多数为零时，
+可直接返回同一零中位数，避免每峰重复创建整条 trace 的 mask 和 partition。恰好一半为零、非有限数组
+与组外为空均保留原统计语义；gradient、secondary、broad 各自计数，不共享统计或更改阈值。
 `registered_normalization_revision` 绑定计划与报告身份。开发报告重建登记合同，拒绝基线缺失、额外
 边界证据、lane 范围漂移或不完整工作账本；不保留旧小窗口归一化路径。
 

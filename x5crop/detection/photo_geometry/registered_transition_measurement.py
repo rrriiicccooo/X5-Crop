@@ -505,6 +505,26 @@ def measure_trace(
     )
 
 
+def _zero_median_statistics(values: np.ndarray) -> tuple[bool, int]:
+    return bool(np.all(np.isfinite(values))), values.size - int(np.count_nonzero(values))
+
+
+def _group_local_noise(values: np.ndarray, group: np.ndarray, statistics: tuple[bool, int]) -> float:
+    """Exactly reproduce the outside-group median; groups contain unique indices."""
+    outside_count = values.size - group.size
+    if outside_count:
+        finite, zero_count = statistics
+        outside_zeros = zero_count - (group.size - int(np.count_nonzero(values[group])))
+        # A strict majority pins both middle order statistics to zero. Equality
+        # is insufficient for an even-sized sample; nonfinite values fall back.
+        if finite and outside_zeros > outside_count // 2:
+            return 0.0
+        outside = np.ones(values.size, dtype=bool)
+        outside[group] = False
+        return float(np.median(values[outside]))
+    return float(np.min(values[group]))
+
+
 def measured_transition_peaks(
     measurement: TraceMeasurement,
     spec: PhotoBoundaryMeasurementSpec,
@@ -525,6 +545,7 @@ def measured_transition_peaks(
     split_at = np.flatnonzero(np.diff(indices) > 1) + 1
     groups = np.split(indices, split_at)
     secondary = np.maximum(measurement.tone_z, measurement.texture_z)
+    noise_statistics = {}
     records: list[MeasuredTransitionPeak] = []
     for group in groups:
         if group.size == 0:
@@ -576,13 +597,12 @@ def measured_transition_peaks(
             )
         )
         localization = measurement.gradient_z if polarity_runs else secondary
-        outside = np.ones(localization.size, dtype=bool)
-        outside[group] = False
-        local_noise = float(
-            np.median(localization[outside])
-            if np.any(outside)
-            else np.min(localization[group])
-        )
+        key = bool(polarity_runs)
+        statistics = noise_statistics.get(key)
+        if statistics is None:
+            statistics = _zero_median_statistics(localization)
+            noise_statistics[key] = statistics
+        local_noise = _group_local_noise(localization, group, statistics)
         for ordinal, peak_index in enumerate(peak_candidates):
             prominence = max(0.0, float(localization[peak_index]) - local_noise)
             half_height = (
@@ -713,6 +733,7 @@ def measured_broad_material_peaks(
         )
     ) + 1
     groups = np.split(indices, split_at)
+    noise_statistics = _zero_median_statistics(material.contrast_z)
     records: list[MeasuredBroadMaterialPeak] = []
     for group in groups:
         if group.size == 0:
@@ -720,13 +741,7 @@ def measured_broad_material_peaks(
         peak_index = int(
             group[int(np.argmax(material.contrast_z[group]))]
         )
-        outside = np.ones(material.contrast_z.size, dtype=bool)
-        outside[group] = False
-        local_noise = float(
-            np.median(material.contrast_z[outside])
-            if np.any(outside)
-            else np.min(material.contrast_z[group])
-        )
+        local_noise = _group_local_noise(material.contrast_z, group, noise_statistics)
         prominence = max(
             0.0,
             float(material.contrast_z[peak_index]) - local_noise,
