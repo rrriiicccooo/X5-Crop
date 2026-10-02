@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from bisect import bisect_left
 from dataclasses import replace
-from typing import Sequence
+from typing import Callable, Sequence
 
 from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
 from .measurement_model import PhotoBoundaryMeasurementSet
@@ -439,6 +439,84 @@ def _merge_continuous_placement(
     )
 
 
+def _unseparated_completion_competitor(
+    best: _BoundFit,
+    candidates: Sequence[_BoundFit],
+) -> int | None:
+    """Check every discrete interpretation without materializing completions.
+
+    Continuous merging can add anchors from several partial fits. Ranking a
+    merged winner against an uncompleted runner compares a support total to a
+    lower bound. Static identity groups provide an intentionally loose upper
+    bound over connected phase-interval components. Coordinate conflicts can
+    only reduce support. Sorting plus indexed passes avoids pairwise scans and
+    Cartesian products; an interval gap cannot be crossed by continuous merges.
+    """
+
+    def identity(fit: SequenceFit) -> tuple[object, ...]:
+        return (
+            fit.template,
+            fit.lattice_parameter_fit_basis,
+            fit.calibrated_nominal_grid_fit_state,
+            fit.phase_lattice_fit.integer_slot_offset,
+            fit.adjacency_relations,
+        )
+
+    groups: dict[tuple[object, ...], list[int]] = {}
+    for index, candidate in enumerate(candidates):
+        groups.setdefault(identity(candidate.fit), []).append(index)
+    bounds: dict[int, tuple[int, float, int]] = {}
+    for indices in groups.values():
+        component: list[int] = []
+        locations: set[int] = set()
+        coverage = 0.0
+        maximum = -float("inf")
+
+        def finish_component() -> None:
+            bound = (len(locations), coverage, len(component))
+            for member in component:
+                bounds[member] = bound
+
+        for index in sorted(
+            indices,
+            key=lambda item: candidates[item].fit.phase_lattice_fit
+            .absolute_phase_interval_px.minimum,
+        ):
+            fit = candidates[index].fit
+            interval = fit.phase_lattice_fit.absolute_phase_interval_px
+            if component and interval.minimum > maximum:
+                finish_component()
+                component.clear()
+                locations.clear()
+                coverage = 0.0
+                maximum = -float("inf")
+            component.append(index)
+            locations.update(fit.phase_support_locations)
+            coverage = max(coverage, fit.phase_support_coverage)
+            maximum = max(maximum, interval.maximum)
+        finish_component()
+    for index, candidate in enumerate(candidates):
+        fit = candidate.fit
+        if _same_continuous_placement(best.fit, fit):
+            continue
+        support_count, coverage, count = bounds[index]
+        if count == 1:
+            if _clear_winner_basis(best, candidate) is None:
+                return index
+            continue
+        if best.fit.phase_support_count > support_count:
+            continue
+        if (
+            best.fit.phase_support_count == support_count
+            and best.fit.phase_support_coverage >= coverage + 0.35
+        ):
+            continue
+        # A completion's residual cannot be assumed positive. Its lower bound
+        # is zero, so residual separation cannot reject it without a full fit.
+        return index
+    return None
+
+
 def fit_template_phase(
     observations: Sequence[BoundaryEdgeObservation],
     template: TemplateSpec,
@@ -591,6 +669,8 @@ def fit_template_phase(
         + prefixes[-1]
     )
     span_window = max(3.0, pitch0 * 0.35)
+    maximum_hypotheses = max(1, len(facts)) * max(6, len(roles))
+    seed_registration_overflow = False
     seed_values: dict[
         tuple[float, float, tuple[AdjacencyRelation, ...]],
         _PhaseSeed | None,
@@ -613,7 +693,7 @@ def fit_template_phase(
         )
     )
 
-    def register_seed(seed: _PhaseSeed) -> None:
+    def prepare_seed(seed: _PhaseSeed) -> _PhaseSeed | None:
         if nonseparator_required_bindings:
             try:
                 seed = replace(
@@ -629,9 +709,19 @@ def fit_template_phase(
                     ),
                 )
             except ValueError:
-                return
+                return None
+        return seed
+
+    def register_seed(seed: _PhaseSeed) -> None:
+        nonlocal seed_registration_overflow
+        seed = prepare_seed(seed)
+        if seed is None:
+            return
         key = (seed.phase_px, seed.pitch_px, seed.adjacency_relations)
         if key not in seed_values:
+            if len(seed_values) >= maximum_hypotheses:
+                seed_registration_overflow = True
+                return
             seed_values[key] = seed
             return
         current = seed_values[key]
@@ -659,183 +749,210 @@ def fit_template_phase(
         except ValueError:
             seed_values[key] = None
 
-    existing_contact = any(
-        isinstance(item, ContactRelation) for item in relations
-    )
-    existing_overlap = any(
-        isinstance(item, OverlapRelation) for item in relations
-    )
-    ordinary_topology = not (existing_contact or existing_overlap)
-    if ordinary_topology:
-        for seed in _separator_phase_seeds(
-                phase_separator_bands,
+    def generate_seeds(register_seed: Callable[[_PhaseSeed], None]) -> None:
+        existing_contact = any(
+            isinstance(item, ContactRelation) for item in relations
+        )
+        existing_overlap = any(
+            isinstance(item, OverlapRelation) for item in relations
+        )
+        ordinary_topology = not (existing_contact or existing_overlap)
+        if ordinary_topology:
+            for seed in _separator_phase_seeds(
+                    phase_separator_bands,
+                    direct,
+                    roles,
+                    template,
+                    width=width0,
+                    pitch=pitch0,
+                    prefixes=prefixes,
+                ):
+                register_seed(replace(seed, adjacency_relations=relations))
+        if not relations or existing_contact:
+            for seed in _contact_phase_seeds(
+                contact_edges,
                 direct,
                 roles,
                 template,
-                width=width0,
-                pitch=pitch0,
-                prefixes=prefixes,
+                width=width,
+                pitch=pitch_authority,
+                base_relations=relations,
             ):
-            register_seed(replace(seed, adjacency_relations=relations))
-    if not relations or existing_contact:
-        for seed in _contact_phase_seeds(
-            contact_edges,
-            direct,
-            roles,
-            template,
-            width=width,
-            pitch=pitch_authority,
-            base_relations=relations,
-        ):
-            register_seed(seed)
-    if not relations or existing_overlap:
-        for seed in _overlap_phase_seeds(
-            overlap_pairs,
-            direct,
-            roles,
-            template,
-            width=width,
-            pitch=pitch_authority,
-            base_relations=relations,
-        ):
-            register_seed(seed)
-    # Count-one templates have no pitch relation.  Their START and END seeds
-    # already close the fixed-width pair below; treating every nearby END as a
-    # second full-span origin would merge distinct physical edge alternatives
-    # into one seed identity.
-    if not ordinary_topology:
-        pass
-    elif template.count == 1:
-        pass
-    elif template.direction > 0:
-        for first in direct:
-            if BoundaryRole.START not in first.qualified_anchor_roles:
-                continue
-            target = first.coordinate_px + nominal_span
-            insertion = bisect_left(coordinates, target)
-            for index in (insertion - 2, insertion - 1, insertion, insertion + 1):
-                if not 0 <= index < len(direct):
+                register_seed(seed)
+        if not relations or existing_overlap:
+            for seed in _overlap_phase_seeds(
+                overlap_pairs,
+                direct,
+                roles,
+                template,
+                width=width,
+                pitch=pitch_authority,
+                base_relations=relations,
+            ):
+                register_seed(seed)
+        # Count-one templates have no pitch relation.  Their START and END seeds
+        # already close the fixed-width pair below; treating every nearby END as a
+        # second full-span origin would merge distinct physical edge alternatives
+        # into one seed identity.
+        if not ordinary_topology:
+            pass
+        elif template.count == 1:
+            pass
+        elif template.direction > 0:
+            for first in direct:
+                if BoundaryRole.START not in first.qualified_anchor_roles:
                     continue
-                last = direct[index]
-                if BoundaryRole.END not in last.qualified_anchor_roles:
-                    continue
-                if abs(last.coordinate_px - target) > span_window:
-                    continue
-                if template.count > 1:
-                    derived_pitch = (
-                        last.coordinate_px
-                        - first.coordinate_px
-                        - width0
-                        - prefixes[-1]
-                    ) / (template.count - 1)
-                    if not pitch_authority.contains(derived_pitch):
+                target = first.coordinate_px + nominal_span
+                insertion = bisect_left(coordinates, target)
+                for index in (insertion - 2, insertion - 1, insertion, insertion + 1):
+                    if not 0 <= index < len(direct):
                         continue
-                else:
-                    derived_pitch = pitch0
+                    last = direct[index]
+                    if BoundaryRole.END not in last.qualified_anchor_roles:
+                        continue
+                    if abs(last.coordinate_px - target) > span_window:
+                        continue
+                    if template.count > 1:
+                        derived_pitch = (
+                            last.coordinate_px
+                            - first.coordinate_px
+                            - width0
+                            - prefixes[-1]
+                        ) / (template.count - 1)
+                        if not pitch_authority.contains(derived_pitch):
+                            continue
+                    else:
+                        derived_pitch = pitch0
+                    register_seed(
+                        _PhaseSeed(
+                            round(first.coordinate_px, 9),
+                            round(derived_pitch, 9),
+                            (
+                                (roles[0].role_index, first.observation_id),
+                                (roles[-1].role_index, last.observation_id),
+                            ),
+                            relations,
+                        )
+                    )
+        else:
+            for first in reversed(direct):
+                if BoundaryRole.START not in first.qualified_anchor_roles:
+                    continue
+                target = first.coordinate_px - nominal_span
+                insertion = bisect_left(coordinates, target)
+                for index in (insertion - 2, insertion - 1, insertion, insertion + 1):
+                    if not 0 <= index < len(direct):
+                        continue
+                    last = direct[index]
+                    if BoundaryRole.END not in last.qualified_anchor_roles:
+                        continue
+                    if abs(last.coordinate_px - target) > span_window:
+                        continue
+                    if template.count > 1:
+                        derived_pitch = (
+                            first.coordinate_px
+                            - last.coordinate_px
+                            - width0
+                            - prefixes[-1]
+                        ) / (template.count - 1)
+                        if not pitch_authority.contains(derived_pitch):
+                            continue
+                    else:
+                        derived_pitch = pitch0
+                    register_seed(
+                        _PhaseSeed(
+                            round(first.coordinate_px, 9),
+                            round(derived_pitch, 9),
+                            (
+                                (roles[0].role_index, first.observation_id),
+                                (roles[-1].role_index, last.observation_id),
+                            ),
+                            relations,
+                        )
+                    )
+        # Missing or dark outer frames are common.  A direct role-qualified edge
+        # therefore seeds every compatible indexed role.  The pixel observation
+        # remains the phase authority; the template contributes only the finite
+        # ordinal alternatives.  Different ordinal mappings survive as discrete
+        # placements and can never be averaged or selected by coarse support.
+        for anchor in direct if ordinary_topology else ():
+            for role in roles:
+                if anchor.role_index is not None and anchor.role_index != role.role_index:
+                    continue
+                if (
+                    anchor.qualified_anchor_roles
+                    and role.role not in anchor.qualified_anchor_roles
+                ):
+                    continue
+                relative = role.slot_index * pitch0 + prefixes[role.slot_index]
+                if role.role == BoundaryRole.END:
+                    relative += width0
                 register_seed(
                     _PhaseSeed(
-                        round(first.coordinate_px, 9),
-                        round(derived_pitch, 9),
-                        (
-                            (roles[0].role_index, first.observation_id),
-                            (roles[-1].role_index, last.observation_id),
+                        round(
+                            anchor.coordinate_px
+                            - template.direction * relative,
+                            9,
                         ),
+                        round(pitch0, 9),
+                        ((role.role_index, anchor.observation_id),),
                         relations,
                     )
                 )
-    else:
-        for first in reversed(direct):
-            if BoundaryRole.START not in first.qualified_anchor_roles:
-                continue
-            target = first.coordinate_px - nominal_span
-            insertion = bisect_left(coordinates, target)
-            for index in (insertion - 2, insertion - 1, insertion, insertion + 1):
-                if not 0 <= index < len(direct):
-                    continue
-                last = direct[index]
-                if BoundaryRole.END not in last.qualified_anchor_roles:
-                    continue
-                if abs(last.coordinate_px - target) > span_window:
-                    continue
-                if template.count > 1:
-                    derived_pitch = (
-                        first.coordinate_px
-                        - last.coordinate_px
-                        - width0
-                        - prefixes[-1]
-                    ) / (template.count - 1)
-                    if not pitch_authority.contains(derived_pitch):
-                        continue
-                else:
-                    derived_pitch = pitch0
-                register_seed(
-                    _PhaseSeed(
-                        round(first.coordinate_px, 9),
-                        round(derived_pitch, 9),
-                        (
-                            (roles[0].role_index, first.observation_id),
-                            (roles[-1].role_index, last.observation_id),
-                        ),
-                        relations,
-                    )
-                )
-    # Missing or dark outer frames are common.  A direct role-qualified edge
-    # therefore seeds every compatible indexed role.  The pixel observation
-    # remains the phase authority; the template contributes only the finite
-    # ordinal alternatives.  Different ordinal mappings survive as discrete
-    # placements and can never be averaged or selected by coarse support.
-    for anchor in direct if ordinary_topology else ():
-        for role in roles:
-            if anchor.role_index is not None and anchor.role_index != role.role_index:
-                continue
-            if (
-                anchor.qualified_anchor_roles
-                and role.role not in anchor.qualified_anchor_roles
-            ):
-                continue
-            relative = role.slot_index * pitch0 + prefixes[role.slot_index]
-            if role.role == BoundaryRole.END:
-                relative += width0
+        if phase_authority_px is not None and ordinary_topology:
             register_seed(
                 _PhaseSeed(
-                    round(
-                        anchor.coordinate_px
-                        - template.direction * relative,
-                        9,
-                    ),
+                    round(phase_authority_px.center, 9),
                     round(pitch0, 9),
-                    ((role.role_index, anchor.observation_id),),
-                    relations,
+                    adjacency_relations=relations,
                 )
             )
-    if phase_authority_px is not None and ordinary_topology:
-        register_seed(
-            _PhaseSeed(
-                round(phase_authority_px.center, 9),
-                round(pitch0, 9),
-                adjacency_relations=relations,
-            )
-        )
-    seeds = tuple(
-        seed
-        for seed in seed_values.values()
-        if seed is not None
-    )
-    maximum_hypotheses = max(1, len(facts)) * max(6, len(roles))
-    if len(seeds) > maximum_hypotheses:
+    generate_seeds(register_seed)
+    retained_seeds = {
+        seed: None for seed in seed_values.values() if seed is not None
+    }
+
+    def retain_conflicting_seed(seed: _PhaseSeed) -> None:
+        nonlocal seed_registration_overflow
+        seed = prepare_seed(seed)
+        if seed is None:
+            return
+        key = (seed.phase_px, seed.pitch_px, seed.adjacency_relations)
+        if key not in seed_values or seed_values[key] is not None:
+            return
+        if seed in retained_seeds:
+            return
+        if len(retained_seeds) >= maximum_hypotheses:
+            seed_registration_overflow = True
+            return
+        retained_seeds[seed] = None
+
+    # Replay the same deterministic generators only when a geometric bucket
+    # contains incompatible coordinate identities. Compatible buckets retain
+    # their original union. No Cartesian product or new pixel query is needed.
+    if not seed_registration_overflow and any(
+        seed is None for seed in seed_values.values()
+    ):
+        generate_seeds(retain_conflicting_seed)
+    seeds = tuple(retained_seeds)
+    seed_peak_bytes = (len(seed_values) + len(seeds)) * len(roles) * 32
+    seed_values.clear()
+    retained_seeds.clear()
+    if seed_registration_overflow:
+        rejected_seed_count = maximum_hypotheses + 1
         receipt = TemplateSearchReceipt(
             observation_count=len(facts),
             role_count=len(roles),
-            phase_lookup_count=len(seeds),
+            phase_lookup_count=rejected_seed_count,
             role_binding_count=0,
             adjacency_relation_evaluation_count=len(relations),
             local_refinement_lookup_count=0,
             local_refinement_binding_count=0,
-            phase_hypothesis_count=len(seeds),
-            phase_offset_lookup_count=len(seeds),
+            phase_hypothesis_count=rejected_seed_count,
+            phase_offset_lookup_count=rejected_seed_count,
             direct_observation_count=len(direct),
             inferred_role_count=0,
-            peak_temporary_bytes=len(seeds) * len(roles) * 32,
+            peak_temporary_bytes=seed_peak_bytes,
         )
         return PhaseFitResult(
             template,
@@ -1105,7 +1222,10 @@ def fit_template_phase(
         phase_offset_lookup_count=len(seeds),
         direct_observation_count=len(direct),
         inferred_role_count=(0 if best is None else len(best.fit.unbound_role_indices)),
-        peak_temporary_bytes=len(seeds) * len(roles) * 32,
+        peak_temporary_bytes=max(
+            seed_peak_bytes,
+            len(seeds) * len(roles) * 32 + len(ordered) * len(roles) * 64,
+        ),
         candidate_direct_role_authority_evaluation_count=len(
             candidate_authorities
         ),
@@ -1356,6 +1476,13 @@ def fit_template_phase(
             winner_basis = PhaseWinnerBasis.UNIQUE_DIRECT_ROLE_AUTHORITY
     else:
         winner_basis = _clear_winner_basis(best, runner)
+    if winner_basis is not None:
+        competitor_index = _unseparated_completion_competitor(
+            best, tuple(record[0] for record in ordered),
+        )
+        if competitor_index is not None:
+            runner, runner_projection = ordered[competitor_index]
+            winner_basis = None
     if winner_basis is not None:
         status = PhaseFitStatus.RESOLVED
         reason = None

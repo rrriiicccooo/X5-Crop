@@ -129,6 +129,8 @@ Narrow material at a photo edge also preserves existing boundary-role candidates
 against the whole-strip constraints.
 When discrete positions remain ambiguous, each candidate's local boundaries are checked independently, and each review
 footprint obeys its own jointly supported direct coordinates; this does not remove the Review requirement.
+Boundary interpretations with distinct observation identities are retained even at the same position. An incomplete
+alternative is not rejected solely because its currently collected support is smaller.
 Shared cross-axis boundaries must meet the existing coverage requirements for each candidate's photo regions independently;
 additional candidates do not add evidence strength.
 Runtime acceptability scoring is not yet enabled; this is a current selection limit, not a requirement to prove one uniquely true crop.

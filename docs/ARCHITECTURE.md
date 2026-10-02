@@ -167,6 +167,19 @@ Sequence 的坐标身份与证据相关性是两种不同事实。`observation_i
 | 不同 `observation_id`、相同 `evidence_group_id` | 两个物理坐标 | 相关，只计一组独立 evidence | 保留离散竞争，不得合并 |
 | 不同 `observation_id`、不同 `evidence_group_id` | 两个物理坐标 | 独立 | 保留离散竞争并分别计证据 |
 
+Phase seed 的几何桶 `(phase, pitch, adjacency relations)` 不能代表观察身份。桶内必要绑定全部相容时
+沿用原联合绑定；同一 role 出现不同 observation ID 时，重新遍历同一确定性生成器，只恢复该冲突桶
+原本生成的独立 seed，不合成角色组合。几何桶和最终待拟合 seed 都受原 `H × max(6,R)` 上限约束；
+任一超限在拟合前返回 typed failure，不输出前缀结果。相容桶不保存全部原始 recipe；桶与最终 seed
+同时存活的临时量计入 receipt，后续拟合前释放登记表。
+
+连续合并可为首选补齐多个局部解释，因此不能把未补全竞争者的当前支持数当作完整支持数。选择 owner
+对全部已生成且 eligible 的候选，按连续合并必需的静态身份及 absolute-phase 区间连通分量计算支持上界：
+anchor 位置取并集，coverage 取最大值，残差下界为零。首选必须依原明确分离条件压过每个离散竞争者的
+上界；不能证明时保留真实竞争者和 `discrete_phase_ambiguous`。静态身份包含 template、lattice basis、
+Grid state、integer offset 和 adjacency relations。区间排序和索引归约不生成新 fit、坐标组合或像素查询；
+忽略观察冲突只使上界更保守，不赋予任何观察新的权限。临时分量索引计入原内存 receipt。
+
 Edge-family registration 是 `observation_id` 的 owner；`template_phase_candidates.py` 只把已登记的
 separator material/component 映射成 `evidence_group_id`，并由 `SequenceRoleBinding` 同时保存两种身份。
 `template_phase.py` 只读取 coordinate identity 判断连续 placement；phase、pitch、W 与 lattice rank
