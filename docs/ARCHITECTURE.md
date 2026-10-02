@@ -1678,8 +1678,10 @@ Enclosing support 本身只证明真实 aperture 位于两条 support 之间，�
 center_offset_ratio = (gold_aperture_center - support_midpoint) / H
 ```
 
-当前 calibration 只纳入 18 个 selected unique enclosing pair、且黄金 top/bottom 均为 `directly_visible` 的 source；
-同源 count 先取中位数，再对 source hull 以 `0.001H` 向外量化，得到 `[-0.008H, +0.010H]`。Calibration
+当前 v15 calibration 按完整 development cohort 的同一资格规则纳入 5 个 selected unique enclosing pair、
+且黄金 top/bottom 均为 `directly_visible` 的 source（135 三源、120-66 两源，不以最终批准或预算筛选）；
+同源 count 先取中位数，再对 source hull 以 `0.001H` 向外量化，得到 `[-0.007H, +0.010H]`。它只用于
+唯一已选 support，不适用于共同包络；该有限 development 支持尚不证明 sealed 或未见来源泛化。Calibration
 同时绑定 development cohort SHA、eligibility revision 和精确 observation-set SHA；source 数量相同但成员、
 观测值或 detector 权限变化时同样视为 calibration drift。该 authority
 为 rank 0 correlated inference：不把 support 变成 direct aperture、不增加 constraint rank、不参与 pair 或

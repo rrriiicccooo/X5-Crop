@@ -159,8 +159,15 @@ frame domains 不能反向授权新像素 query。不同材料层与 blank ends 
    另1280组涵盖低秩/直接/受限拟合与all/mixed/no straight证据，逐浮点位相同，40组prefix含类型相同。
    S048 anchor-only完整物理超集仍比已有enclosing向外多860.532/646.096px，按其135、H24mm及
    最小scale换算10.260/7.703mm，超过1.2mm限额。这只证明上界证书太宽，不能删除真实竞争。
-   Unique enclosing中心校准身份已有阻碍：登记18源，整合前实际15源、当前5源，配置匹配为false；
-   不能以缩窄区间或删除校验消除它。共同enclosing使用完整物理中心，不消费此unique校准。
+   Unique enclosing中心校准按原固定资格与公式重建为v15：完整110项产生5源，135三源、120-66两源，
+   其中4项本身Review，未按结果挑样；raw hull向外量化为[-0.007,+0.010]，与旧15源导出值相同。
+   v14的18源中S044因grid冲突、S057/S058/S059因producer bound退出，新增S053；15→5再因新增竞争、
+   反证或改为common排除11源，新增S064。旧校准与三期完整观测保存在
+   `local_integrated_20261002/center_calibration_v15_rebuild.json`；不改5%Gate，不证明sealed泛化。
+   共同enclosing使用完整物理中心，不消费此unique校准。待最终完整回归确认校准identity与全部unsafe=0。
+   单次prefix复用提交2cfde09c正式均值5.05095410254秒仍失败，原失败回执保留。点对计费内联继续保持
+   原预算检查、失败时刻、全部计数：721个临界用例完整result exact；S101两次association完整结果及报告
+   四块exact，诊断累计0.856211→0.666934秒，不代替正式性能验收。
 2. 在旧 outer 的全任务候选研究上，验证有实际最终输出收益的通用整行区域统计。
    同时保护原生弱／异色内容、全部物理线族与角点；保留当前 fixed query、材料身份、来源、
    构造／实测分离、Gate 与预算。仍无材料权限时保持 unavailable，不把研究候选接成自动输出。

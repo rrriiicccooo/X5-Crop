@@ -232,10 +232,11 @@ def associate_broad_material(
     p, t = len(ordered), len(queried_traces)
     counters = {field.name: 0 for field in fields(BroadAssociationWork)}
     charged = 0
+    charged_limit = 5 * p * p
 
     def charge(field: str, count: int = 1) -> None:
         nonlocal charged
-        if charged + count > 5 * p * p:
+        if charged + count > charged_limit:
             raise _BoundExceeded("charged_work_bound")
         charged += count
         counters[field] += count
@@ -423,7 +424,10 @@ def associate_broad_material(
                 delta = orders[second] - first_order
                 if delta > maximum_missing_lattice_steps + 1:
                     break
-                charge('point_pair_check_count')
+                if charged + 1 > charged_limit:
+                    raise _BoundExceeded("charged_work_bound")
+                charged += 1
+                counters['point_pair_check_count'] += 1
                 if delta == 0:
                     continue
                 b = ordered[second]
