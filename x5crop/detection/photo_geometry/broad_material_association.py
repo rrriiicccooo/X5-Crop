@@ -410,11 +410,27 @@ def associate_broad_material(
                 index = parent[index]
             return index
 
+        # This is the dominant point-pair loop. Inline the same linked
+        # predicate and retain every charge in its original order, including
+        # same-trace rejections; no adjacency or completed path is skipped.
         for first in range(p):
+            a = ordered[first]
+            a_polarity = a.transition.polarity
+            a_background = a.transition.background_side
+            a_coordinate, a_trace = a.coordinate, a.trace
+            first_order = orders[first]
             for second in range(first + 1, p):
-                if orders[second] - orders[first] > maximum_missing_lattice_steps + 1:
+                delta = orders[second] - first_order
+                if delta > maximum_missing_lattice_steps + 1:
                     break
-                if linked(first, second):
+                charge('point_pair_check_count')
+                if delta == 0:
+                    continue
+                b = ordered[second]
+                if (a_polarity == b.transition.polarity
+                        and a_background == b.transition.background_side
+                        and abs(a_coordinate - b.coordinate)
+                        <= abs(a_trace - b.trace) * maximum_slope + connection_px + 1.0e-12):
                     parent[root(second)] = root(first)
         components: dict[int, list[int]] = {}
         for index in range(p):
