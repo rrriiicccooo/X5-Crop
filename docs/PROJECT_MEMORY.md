@@ -18,7 +18,8 @@ p95为6.89960504200秒，最慢S091为8.12499220800秒；3秒挑战未达到。
 Review；校准与源码身份均通过，准确性发布Gate仍失败。全部110条记录除耗时外，与17b的v15回归
 完全相同。证据 `Test/gold_analysis/vector_546f99f7_20261002_full`；detector manifest为
 `9544e19c304b76d2041ab1b454e9a5042c41c3c8f57c55f7f4817f3c38046470`，comparator与cohort身份未变。
-此前full1090项运行成功（2项Windows专属跳过），补充精确ULP反例后的关联专项18项通过。
+最新`tools/verify full`完整1091项通过（2项Windows专属跳过），包含精确ULP反例；
+日志归档于`material_identity_gap_20261002/engineering-full.log`。
 后续若只更新文档，以上回执仍绑定546f99f7，不重新标成新commit的发布证书。
 同提交六源TIFF/metadata、Orientation3/8、APFS/HFS+竞争/取消/重试、只读依赖安装检查通过，
 记录在`local_atomic_546f99f7/`；不是完整三平台发布证书。
@@ -34,10 +35,16 @@ staging清理、镜像卸载。证据 `local_vector_546f99f7/exfat.json`，不�
 S073/S079/S090的H inward轴标签来自W错位的短角边，不是独立H漏保护证据；严格黄金判定保持。
 这些失败不授权删除成员、变更边界用途、缩小物理区间或提高留边上限。下一步仍是下文材料身份、
 完整弱边与物理竞争的通用机制；H通过前继续冻结无关W算法。
-当前具体实验是原TIFF原生16-bit逐通道RGB的全列种子延续性，固定median/6MAD与原persistence，
-保留原弱边与完整物理线族，先做1–3px/异色/源边照片反例和既有六源必要输出检查。旧
-`native_prefix_guard_probe.py`实际读取uint8 registered gray，只是未平滑，不能当作原生RGB结论。
-该假设尚不证明片夹身份，未经反例与独立权限验证不进入生产输出。
+原TIFF原生16-bit逐通道RGB全列种子延续性实验已完成，固定median/6MAD、257原码底限与原
+persistence，保留灰度弱边和完整物理线族：六源仍为1个H满足、4个外扩超限、1个不可用，没有
+新增自动通过。24组本实验标量对照及独立160组对照一致；源边照片、1–3行等亮异色与材料渐变
+反例阻止授予材料身份。旧`native_prefix_guard_probe.py`虽读uint8，但此前另有原生RGB/257实验，
+不能把该文件的限制误写为全部历史未做RGB。实验与三个待人工判读窗口归档在
+`Test/gold_analysis/material_identity_gap_20261002/`，详见[研究记录](BOUNDARY_FEATURE_RESEARCH.md)。
+当前材料排除路线缺独立材料身份和内缘角色标签。最小首批为S064两个新位置及S006一个底部窗口；
+已有S003/S047/S064局部正确接触与S016错误接触确认保留，不重复询问。新标签只可验证局部材料
+假设，不能授予整源覆盖、缩小原物理保护或保证96项nominal通过。这是该路线的证据缺口，不能
+据此宣称其它准确性问题都只能靠新增数据解决；H未完成，W算法继续冻结。
 
 ## 当前目标与执行顺序
 
