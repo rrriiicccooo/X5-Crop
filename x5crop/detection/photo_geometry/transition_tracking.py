@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
 from collections import defaultdict
 from dataclasses import dataclass
 import math
+from operator import attrgetter
 
 import numpy as np
 
@@ -37,6 +39,24 @@ from .robust_line_fit import physical_line_region
 class _SideTrack:
     points: list[TransitionPoint]
     last_trace_index: int
+
+
+_POINT_COORDINATE = attrgetter("coordinate")
+
+
+def _coordinate_window(
+    points: list[TransitionPoint], coordinate: float, distance_limit: float,
+) -> range:
+    """Conservatively index sorted points; the original distance test is final."""
+    # Expand the radius before endpoint arithmetic: C - radius can cancel, so
+    # moving only that endpoint by one ULP would not cover subtraction rounding.
+    radius = math.nextafter(distance_limit, math.inf)
+    lower = math.nextafter(coordinate - radius, -math.inf)
+    upper = math.nextafter(coordinate + radius, math.inf)
+    return range(
+        bisect_left(points, lower, key=_POINT_COORDINATE),
+        bisect_right(points, upper, key=_POINT_COORDINATE),
+    )
 
 
 def _unique_nearest(
@@ -328,13 +348,24 @@ def _track_transition_regions(
                         abs(float(trace) - last.trace) * maximum_slope
                         + connection_px
                     )
+                    distance_limit = allowance + 1.0e-12
                     distances = [
                         (distance, point_index)
-                        for point_index, point in enumerate(current)
+                        for point_index in _coordinate_window(
+                            current, last.coordinate, distance_limit,
+                        )
                         if point_index not in connected_points
-                        and (is_direct_trace or point.transition.polarity == last.transition.polarity)
-                        and (distance := abs(point.coordinate - last.coordinate))
-                        <= allowance + 1.0e-12
+                        and (
+                            is_direct_trace
+                            or current[point_index].transition.polarity
+                            == last.transition.polarity
+                        )
+                        and (
+                            distance := abs(
+                                current[point_index].coordinate - last.coordinate
+                            )
+                        )
+                        <= distance_limit
                     ]
                     nearest = _unique_nearest(distances, tie_tolerance)
                     nearest_by_track[track_index] = nearest

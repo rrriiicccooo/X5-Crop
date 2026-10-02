@@ -79,6 +79,8 @@ remains subject to the existing Review conditions.
 Association avoids repeated checks so that some safe strips can finish within the original computation bound. Distinct
 valid interpretations remain intact. Automatic approval still requires content protection, compliant margins on each
 side, and complete evidence.
+Edge tracking limits candidate scans to the existing connection range while preserving the same distance, polarity,
+missing-trace, and equal-distance ambiguity rules.
 
 When a complete safe output footprint cannot be generated, the whole source enters Review and the diagnostic report
 retains the specific reason.
