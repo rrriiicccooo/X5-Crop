@@ -373,6 +373,8 @@ polarity 与 background side；分母始终是该区域全部 registered traces�
 完整登记的全长 baseline；新增数组和计算完整进入工作量检查。峰提取的数值 scratch 保守计入每坐标
 64 bytes，并与同时保留的 trace 缓冲相加；该数值缓冲预算不冒充进程 RSS。固定 trace 上的全部峰各
 提取一次。原 cross-height 弱梯度聚合与 sharp 最近邻跟踪保持独立。
+最近邻跟踪的热循环只计算一次候选距离，预先区分 direct 与 aggregate 极性要求；仍按原 trace、
+gap、候选次序和互为唯一最近邻条件遍历，同距歧义、缺测规则与全部计费不变。
 
 `broad_material_association.py` 在测量完成时对每个 query 运行一次，reference 为完整 lattice 两端的中点；
 后续跟踪只消费 receipt 中的路径。先按原连接规则划分连通分量，再以深度优先顺序检查路径；分量没有

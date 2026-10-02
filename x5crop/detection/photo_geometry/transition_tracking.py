@@ -274,15 +274,7 @@ def _track_transition_regions(
                 if points:
                     completed.append(_SideTrack(points, trace_to_index[int(points[-1].trace)]))
     else:
-        def same_aggregate_material_state(
-            point: TransitionPoint,
-            last: TransitionPoint,
-        ) -> bool:
-            if measurement_basis == TransitionRegionMeasurementBasis.DIRECT_TRACE:
-                return True
-            if point.transition.polarity != last.transition.polarity:
-                return False
-            return True
+        is_direct_trace = measurement_basis == TransitionRegionMeasurementBasis.DIRECT_TRACE
 
         active: list[_SideTrack] = []
         completed: list[_SideTrack] = []
@@ -337,11 +329,11 @@ def _track_transition_regions(
                         + connection_px
                     )
                     distances = [
-                        (abs(point.coordinate - last.coordinate), point_index)
+                        (distance, point_index)
                         for point_index, point in enumerate(current)
                         if point_index not in connected_points
-                        and same_aggregate_material_state(point, last)
-                        and abs(point.coordinate - last.coordinate)
+                        and (is_direct_trace or point.transition.polarity == last.transition.polarity)
+                        and (distance := abs(point.coordinate - last.coordinate))
                         <= allowance + 1.0e-12
                     ]
                     nearest = _unique_nearest(distances, tie_tolerance)
