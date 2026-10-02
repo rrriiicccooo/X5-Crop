@@ -123,3 +123,64 @@ class CompletionGuardTests(unittest.TestCase):
         B = calibrated(part(self.full, 'B', (0,1)), 'other')
         B2 = calibrated(part(self.full, 'B', (0,3)), 'other')
         self.assertIsNone(m._unseparated_completion_competitor(best, (best,B,B2)))
+
+    def test_shared_bound_identity_cannot_lend_coverage_to_its_rival(self):
+        def covered(group, roles, coverage):
+            result = part(self.full, group, roles)
+            return replace(result, fit=replace(result.fit, phase_support_coverage=coverage))
+        best = covered('A', (0,1,3,5,7,9), 5.9)
+        partial = covered('A', (0,1,3,5,7), 4.9)
+        rival = covered('B', (0,1,3,5,7,9), 5.2)
+        rival_partial = covered('B', (0,1,3,5,7), 4.2)
+        self.assertIsNotNone(_clear_winner_basis(best, rival))
+        for records in permutations((best, partial, rival, rival_partial)):
+            self.assertIsNone(m._unseparated_completion_competitor(best, records))
+
+    def test_disjoint_unbound_role_cannot_borrow_winner_support(self):
+        def widened(bound):
+            return replace(bound, fit=replace(
+                bound.fit,
+                phase_lattice_fit=replace(
+                    bound.fit.phase_lattice_fit,
+                    cycle_phase_interval_px=FiniteInterval(0, 60),
+                    absolute_phase_interval_px=FiniteInterval(0, 60),
+                ),
+            ))
+        best = widened(part(self.full, 'A', (0,1,3,5,7,9)))
+        partial = widened(part(self.full, 'A', (0,1,3,5,7)))
+        rival = widened(part(self.shifted, 'B', (1,3,5,7,9)))
+        self.assertFalse(m._same_continuous_placement(best.fit, rival.fit))
+        self.assertIsNotNone(_clear_winner_basis(best, rival))
+        for records in permutations((best, partial, rival)):
+            self.assertIsNone(m._unseparated_completion_competitor(best, records))
+
+    def test_same_identity_hull_preserves_an_unbound_bridge(self):
+        def partial(phase, roles):
+            bound = part(full_fit(phase), 'A', roles)
+            fit = bound.fit
+            return replace(bound, fit=replace(
+                fit,
+                phase_lattice_fit=replace(
+                    fit.phase_lattice_fit,
+                    cycle_phase_interval_px=FiniteInterval(0, 60),
+                    absolute_phase_interval_px=FiniteInterval(0, 60),
+                ),
+                model_full_role_intervals_px=(
+                    fit.model_full_role_intervals_px[0],
+                    *(FiniteInterval(0, 1000) for _ in range(9)),
+                ),
+            ))
+        left = partial(10, (0,1,3))
+        right = partial(40, (0,1,3))
+        bridge = partial(25, (5,7,9))
+        best = part(full_fit(150), 'D', (0,1,3,5,7))
+        self.assertTrue(m._same_continuous_placement(left.fit, right.fit))
+        self.assertFalse(m._same_continuous_placement(left.fit, bridge.fit))
+        self.assertFalse(m._same_continuous_placement(right.fit, bridge.fit))
+        merged = m._merge_continuous_placement(left, right)
+        self.assertTrue(m._same_continuous_placement(merged.fit, bridge.fit))
+        completed = m._merge_continuous_placement(merged, bridge)
+        self.assertEqual(completed.fit.phase_support_count, 6)
+        self.assertEqual(best.fit.phase_support_count, 5)
+        for records in permutations((best, left, right, bridge)):
+            self.assertIsNotNone(m._unseparated_completion_competitor(best, records))

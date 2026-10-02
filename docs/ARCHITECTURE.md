@@ -177,7 +177,12 @@ Phase seed 的几何桶 `(phase, pitch, adjacency relations)` 不能代表观察
 对全部已生成且 eligible 的候选，按连续合并必需的静态身份及 absolute-phase 区间连通分量计算支持上界：
 anchor 位置取并集，coverage 取最大值，残差下界为零。首选必须依原明确分离条件压过每个离散竞争者的
 上界；不能证明时保留真实竞争者和 `discrete_phase_ambiguous`。静态身份包含 template、lattice basis、
-Grid state、integer offset 和 adjacency relations。区间排序和索引归约不生成新 fit、坐标组合或像素查询；
+Grid state、integer offset 和 adjacency relations。同一静态组先取全体候选均有绑定的role，按这些role的
+observation ID分区；连续合并不能删除或替换该绑定，因此不能跨区借用支持。缺绑定不能单独分区，
+以免切断合法补全。每个身份分区再依次按 absolute-phase 及各 role 的完整区间连通分量细分；
+同 role 的同 observation ID 先取区间 hull，以保留它们合并后可桥接缺绑定候选的可能性。
+分量之间的间隙不能由连续 hull 合并跨越；分区数量不超过候选数。区间排序和索引归约不生成
+新 fit、坐标组合或像素查询；
 忽略观察冲突只使上界更保守，不赋予任何观察新的权限。临时分量索引计入原内存 receipt。
 
 Edge-family registration 是 `observation_id` 的 owner；`template_phase_candidates.py` 只把已登记的
@@ -1696,9 +1701,10 @@ Enclosing support 本身只证明真实 aperture 位于两条 support 之间，�
 center_offset_ratio = (gold_aperture_center - support_midpoint) / H
 ```
 
-当前 v15 calibration 按完整 development cohort 的同一资格规则纳入 5 个 selected unique enclosing pair、
-且黄金 top/bottom 均为 `directly_visible` 的 source（135 三源、120-66 两源，不以最终批准或预算筛选）；
-同源 count 先取中位数，再对 source hull 以 `0.001H` 向外量化，得到 `[-0.007H, +0.010H]`。它只用于
+当前 v16 calibration 按完整 development cohort 的同一资格规则纳入 4 个 selected unique enclosing pair、
+且黄金 top/bottom 均为 `directly_visible` 的 source（135 两源、120-66 两源，不以最终批准或预算筛选）；
+同源 count 先取中位数，再对 source hull 以 `0.001H` 向外量化，得到 `[-0.007H, +0.010H]`。
+phase 完整竞争检查移除一个不再具备唯一 placement 的来源；数值区间与 v15 相同。它只用于
 唯一已选 support，不适用于共同包络；该有限 development 支持尚不证明 sealed 或未见来源泛化。Calibration
 同时绑定 development cohort SHA、eligibility revision 和精确 observation-set SHA；source 数量相同但成员、
 观测值或 detector 权限变化时同样视为 calibration drift。该 authority

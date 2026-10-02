@@ -448,7 +448,7 @@ def _unseparated_completion_competitor(
     Continuous merging can add anchors from several partial fits. Ranking a
     merged winner against an uncompleted runner compares a support total to a
     lower bound. Static identity groups provide an intentionally loose upper
-    bound over connected phase-interval components. Coordinate conflicts can
+    bound over connected phase and role-interval components. Coordinate conflicts can
     only reduce support. Sorting plus indexed passes avoids pairwise scans and
     Cartesian products; an interval gap cannot be crossed by continuous merges.
     """
@@ -465,36 +465,83 @@ def _unseparated_completion_competitor(
     groups: dict[tuple[object, ...], list[int]] = {}
     for index, candidate in enumerate(candidates):
         groups.setdefault(identity(candidate.fit), []).append(index)
+    # A role bound in every member can never lose its identity in a merge.
+    # Partition on these shared roles before taking loose support unions, so
+    # evidence from an irreconcilable observed endpoint cannot inflate a rival.
+    partitions: dict[tuple[int, tuple[ObservationId, ...]], list[int]] = {}
+    for group_index, indices in enumerate(groups.values()):
+        common_roles = [
+            role for role, binding in enumerate(candidates[indices[0]].fit.role_bindings)
+            if binding is not None
+        ]
+        for index in indices[1:]:
+            common_roles = [
+                role for role in common_roles
+                if candidates[index].fit.role_bindings[role] is not None
+            ]
+        for index in indices:
+            signature = []
+            for role in common_roles:
+                binding = candidates[index].fit.role_bindings[role]
+                assert binding is not None
+                signature.append(binding.observation_id)
+            partitions.setdefault((group_index, tuple(signature)), []).append(index)
+    groups.clear()
     bounds: dict[int, tuple[int, float, int]] = {}
-    for indices in groups.values():
-        component: list[int] = []
-        locations: set[int] = set()
-        coverage = 0.0
-        maximum = -float("inf")
-
-        def finish_component() -> None:
+    for indices in partitions.values():
+        components = [indices]
+        for role in range(-1, len(candidates[indices[0]].fit.role_bindings)):
+            refined: list[list[int]] = []
+            for members in components:
+                if len(members) == 1:
+                    refined.append(members)
+                    continue
+                intervals = {
+                    index: (
+                        candidates[index].fit.phase_lattice_fit.absolute_phase_interval_px
+                        if role == -1
+                        else candidates[index].fit.model_full_role_intervals_px[role]
+                    )
+                    for index in members
+                }
+                if role >= 0:
+                    identity_hulls: dict[ObservationId, FiniteInterval] = {}
+                    for index in members:
+                        binding = candidates[index].fit.role_bindings[role]
+                        if binding is not None:
+                            previous = identity_hulls.get(binding.observation_id)
+                            identity_hulls[binding.observation_id] = (
+                                intervals[index] if previous is None
+                                else _interval_hull(previous, intervals[index])
+                            )
+                    for index in members:
+                        binding = candidates[index].fit.role_bindings[role]
+                        if binding is not None:
+                            # Same coordinate identity may merge even when its
+                            # model intervals differ. Its hull can then bridge
+                            # an unbound candidate, so retain that possibility.
+                            intervals[index] = identity_hulls[binding.observation_id]
+                component: list[int] = []
+                maximum = -float("inf")
+                for index in sorted(members, key=lambda item: intervals[item].minimum):
+                    interval = intervals[index]
+                    if component and interval.minimum > maximum:
+                        refined.append(component)
+                        component = []
+                        maximum = -float("inf")
+                    component.append(index)
+                    maximum = max(maximum, interval.maximum)
+                refined.append(component)
+            components = refined
+        for component in components:
+            locations = {
+                location for index in component
+                for location in candidates[index].fit.phase_support_locations
+            }
+            coverage = max(candidates[index].fit.phase_support_coverage for index in component)
             bound = (len(locations), coverage, len(component))
             for member in component:
                 bounds[member] = bound
-
-        for index in sorted(
-            indices,
-            key=lambda item: candidates[item].fit.phase_lattice_fit
-            .absolute_phase_interval_px.minimum,
-        ):
-            fit = candidates[index].fit
-            interval = fit.phase_lattice_fit.absolute_phase_interval_px
-            if component and interval.minimum > maximum:
-                finish_component()
-                component.clear()
-                locations.clear()
-                coverage = 0.0
-                maximum = -float("inf")
-            component.append(index)
-            locations.update(fit.phase_support_locations)
-            coverage = max(coverage, fit.phase_support_coverage)
-            maximum = max(maximum, interval.maximum)
-        finish_component()
     for index, candidate in enumerate(candidates):
         fit = candidate.fit
         if _same_continuous_placement(best.fit, fit):
@@ -1224,7 +1271,7 @@ def fit_template_phase(
         inferred_role_count=(0 if best is None else len(best.fit.unbound_role_indices)),
         peak_temporary_bytes=max(
             seed_peak_bytes,
-            len(seeds) * len(roles) * 32 + len(ordered) * len(roles) * 64,
+            len(seeds) * len(roles) * 32 + len(ordered) * len(roles) * 96,
         ),
         candidate_direct_role_authority_evaluation_count=len(
             candidate_authorities
