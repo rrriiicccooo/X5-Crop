@@ -115,6 +115,42 @@ class PlacementRankingContractTest(unittest.TestCase):
         self.assertEqual(before["fold_models"], after["fold_models"])
         self.assertEqual(before["development_fit_model"], after["development_fit_model"])
 
+    def test_conditional_scores_stay_separate_from_canonical_selection(self):
+        records = self._records()
+        for record in records:
+            for candidate in record["retained_placement_gold_labels"]:
+                candidate["geometry_conformance"] = "unsafe"
+            conditional = deepcopy(record["retained_placement_gold_labels"][1])
+            conditional["role"] = "conditional"
+            conditional["placement_id"] = "placement:conditional"
+            conditional["acceptability_features"]["placement_id"] = "placement:conditional"
+            conditional["acceptability_features"]["values"][0]["value"] = 1.0
+            record["retained_placement_gold_labels"][1]["acceptability_features"]["values"][0]["value"] = 0.5
+            conditional["geometry_conformance"] = "safe"
+            record["retained_placement_gold_labels"].append(conditional)
+        artifact = build_development_ranking(records)
+        for task in artifact["source_grouped_oof"]["tasks"]:
+            self.assertEqual(task["ranked_role"], "conditional")
+            self.assertEqual(task["ranked_geometry_conformance"], "safe")
+            self.assertEqual(task["canonical_ranked_role"], "runner")
+            self.assertEqual(task["canonical_ranked_geometry_conformance"], "unsafe")
+            self.assertFalse(task["canonical_at_least_one_safe_retained"])
+        self.assertEqual(artifact["development_fit_model"]["training_candidate_count"], 30)
+        self.assertFalse(artifact["admission_enabled"])
+        validate_development_ranking(artifact, records)
+
+    def test_conditional_scope_and_canonical_results_cannot_be_relabelled(self):
+        records = self._records()
+        baseline = build_development_ranking(records)
+        altered = deepcopy(baseline)
+        altered["conditional_role_scope"] = "automatic_output"
+        with self.assertRaises(ValueError):
+            validate_development_ranking(altered, records)
+        altered = deepcopy(baseline)
+        altered["source_grouped_oof"]["tasks"][0]["canonical_ranked_placement_id"] = "different"
+        with self.assertRaises(ValueError):
+            validate_development_ranking(altered, records)
+
     def test_validator_rejects_rehashed_wrong_fit_predictions_and_contract_tampering(self):
         records = self._records()
         baseline = build_development_ranking(records)

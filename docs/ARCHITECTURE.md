@@ -1496,6 +1496,10 @@ geometry 和 output identity 保留为 provenance，不编码为数值特征；s
 开发排序继续复用 `template_selection.py` 的有界竞争身份，黄金标签仍由
 `tools/regression/gold_geometry.py` 独占，集合分析由现有 `gold_analysis.py` 扩展，不另建 detector 或黄金池。
 离线排序由 `tools/regression/placement_ranking.py` 独占，使用当前源码绑定、无分析错误的黄金报告；
+入口为 `tools/verify diagnostic --placement-ranking --analysis-root <gold-root> --output-root <new-root>`。
+`x5crop_development_placement_ranking_v2` 同时评价 primary、runner 与 conditional 的已生成提案；
+全体最高分与只含 primary/runner 的最高分分别保存。有条件提案只提供开发标签与分数，不取得
+canonical selection 或自动输出权限；无完整 footprint 的候选不进入排序。
 至少需要五个 source group。方法在查看该轮结果前冻结为
 `source_balanced_standardized_ridge_ranking_v1`：source SHA 排序后循环分配五折，同源 count 变体同折；
 每个 source 总权重相等，其内已生成候选等权。仅用训练折拟合各特征的观测均值与标准差；

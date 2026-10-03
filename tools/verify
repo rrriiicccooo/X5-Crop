@@ -92,6 +92,9 @@ case "${1:-}" in
         elif [ "${1:-}" = "--gold-analysis" ]; then
             shift
             "$PYTHON" -m tools.regression.gold_analysis "$@"
+        elif [ "${1:-}" = "--placement-ranking" ]; then
+            shift
+            "$PYTHON" -m tools.regression.placement_ranking "$@"
         else
             "$PYTHON" -m tools.regression.diagnostic_cohort "$@"
         fi
