@@ -173,6 +173,13 @@ Phase seed 的几何桶 `(phase, pitch, adjacency relations)` 不能代表观察
 任一超限在拟合前返回 typed failure，不输出前缀结果。相容桶不保存全部原始 recipe；桶与最终 seed
 同时存活的临时量计入 receipt，后续拟合前释放登记表。
 
+初次拟合后的去重只删除完全相等的 `_BoundFit`；权限投影后的去重只删除完整 fit 与
+`PhaseCandidateAuthorityProjection` 均相等的记录。相同绑定、integer offset、local relation 或相同
+rank 不证明联合状态、保护区间、晚期角色走廊或权限来源等价，不能据此保留一份排名较高的代表。
+不同记录继续进入既有连续合并与离散选择；该保留不宣称后续解释已穷尽。候选及投影记录数不超过
+原 seed 数，完整记录的哈希与索引工作为 `O(HR)`，临时去重索引在生成 tuple 后释放，保留集合按实际
+数量进入原有 receipt 与内存上限，不增加拟合或像素查询预算。
+
 连续合并可为首选补齐多个局部解释，因此不能把未补全竞争者的当前支持数当作完整支持数。选择 owner
 对全部已生成且 eligible 的候选，按连续合并必需的静态身份及 absolute-phase 区间连通分量计算支持上界：
 anchor 位置取并集，coverage 取最大值，残差下界为零。首选必须依原明确分离条件压过每个离散竞争者的

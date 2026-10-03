@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import numpy as np
 
+from x5crop.detection.photo_geometry import template_phase as phase_owner
 from tools.tests.template_test_support import (
     calibrated_nominal_grid_prior,
     phase_edge as edge,
@@ -3267,6 +3268,111 @@ class TemplatePhaseContractTest(unittest.TestCase):
         unanchored = fit_template_phase((), spec)
         self.assertIsNone(unanchored.best)
         self.assertIsNone(unanchored.retained_proposal_basis)
+
+    def test_equal_bindings_preserve_each_full_protection_interval(self) -> None:
+        observations = tuple(
+            edge(f"dedup-role:{index}", coordinate)
+            for index, coordinate in enumerate((40.0, 140.0, 160.0, 260.0))
+        )
+        spec = template(2)
+        baseline = fit_template_phase(observations, spec).best
+        assert baseline is not None
+        protected = replace(
+            baseline,
+            model_full_role_intervals_px=(
+                *baseline.model_full_role_intervals_px[:-1],
+                FiniteInterval(240.0, 280.0),
+            ),
+        )
+        for measured in (False, True):
+            with self.subTest(measured=measured):
+                calls = 0
+
+                def fitted_seed(*args, **kwargs):
+                    nonlocal calls
+                    calls += 1
+                    return _BoundFit(baseline if calls % 2 else protected, True)
+
+                with patch.object(phase_owner, "_fit_seed", side_effect=fitted_seed):
+                    result = fit_template_phase(
+                        observations,
+                        spec,
+                        sequence_measurement_sets=(
+                            (phase_sequence_measurement(
+                                "dedup-protection", FiniteInterval(0.0, 300.0),
+                            ),) if measured else ()
+                        ),
+                    )
+                self.assertGreaterEqual(calls, 2)
+                self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+                assert result.best is not None
+                self.assertEqual(
+                    result.best.binding_observation_ids, baseline.binding_observation_ids,
+                )
+                self.assertEqual(
+                    result.best.model_full_role_intervals_px[-1],
+                    FiniteInterval(240.0, 280.0),
+                )
+                result.receipt.validate_bounds()
+
+    def test_equal_projected_fits_keep_distinct_weak_role_provenance(self) -> None:
+        observations = tuple(
+            replace(
+                edge(identity, coordinate),
+                qualified_anchor_roles=(role,),
+                trace_coordinates_px=(10, 20) if weak else (0, 10, 20),
+                support_fraction=2.0 / 3.0 if weak else 1.0,
+                continuous_support_fraction=2.0 / 3.0 if weak else 1.0,
+            )
+            for identity, coordinate, role, weak in (
+                ("dedup:start:1", 40.0, BoundaryRole.START, False),
+                ("dedup:start:2", 160.0, BoundaryRole.START, False),
+                ("dedup:start:3", 280.0, BoundaryRole.START, False),
+                ("dedup:weak:1", 140.0, BoundaryRole.END, True),
+                ("dedup:weak:2", 140.0, BoundaryRole.END, True),
+            )
+        )
+        spec = template(3)
+        projections = []
+        project = phase_owner.project_candidate_to_authorized_direct_roles
+
+        def project_record(*args, **kwargs):
+            record = project(*args, **kwargs)
+            projections.append(record)
+            return record
+
+        with patch.object(
+            phase_owner, "project_candidate_to_authorized_direct_roles",
+            side_effect=project_record,
+        ), patch.object(
+            phase_owner, "_unseparated_completion_competitor",
+            wraps=phase_owner._unseparated_completion_competitor,
+        ) as completion:
+            result = fit_template_phase(
+                observations, spec,
+                phase_authority_px=FiniteInterval.exact(40.0),
+                calibrated_nominal_grid_prior=calibrated_nominal_grid_prior(spec),
+                sequence_measurement_sets=(phase_sequence_measurement(
+                    "dedup-provenance", FiniteInterval(0.0, 380.0),
+                ),),
+            )
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        assert result.best is not None
+        matching = [
+            (candidate, projection)
+            for candidate, projection in projections
+            if candidate is not None and candidate.fit == result.best
+        ]
+        self.assertEqual(len(matching), 3)
+        self.assertEqual(
+            {tuple(item.observation_id for item in projection.projected_out_bindings)
+             for _, projection in matching},
+            {(), (ObservationId("dedup:weak:1"),), (ObservationId("dedup:weak:2"),)},
+        )
+        retained = completion.call_args.args[1]
+        self.assertEqual(sum(candidate.fit == result.best for candidate in retained), 3)
+        self.assertEqual(result.receipt.candidate_direct_role_authority_evaluation_count, 4)
+        result.receipt.validate_bounds()
 
     def test_direct_phase_authority_preserves_calibrated_placement(self) -> None:
         observations = (

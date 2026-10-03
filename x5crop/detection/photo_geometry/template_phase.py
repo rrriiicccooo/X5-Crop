@@ -1097,24 +1097,9 @@ def fit_template_phase(
             )
         )
     )
-    by_binding: dict[
-        tuple[
-            int,
-            tuple[ObservationId | None, ...],
-            tuple[AdjacencyRelation, ...],
-        ],
-        _BoundFit,
-    ] = {}
-    for candidate in local_candidates:
-        key = (
-            candidate.fit.phase_lattice_fit.integer_slot_offset,
-            candidate.fit.binding_observation_ids,
-            candidate.fit.adjacency_relations,
-        )
-        current = by_binding.get(key)
-        if current is None or _rank(candidate) > _rank(current):
-            by_binding[key] = candidate
-    candidates = tuple(by_binding.values())
+    # A binding tuple does not identify its joint state, protection intervals
+    # or later local-role lookup. Only identical complete fits are duplicates.
+    candidates = tuple(dict.fromkeys(local_candidates))
     measurement_sets = tuple(sequence_measurement_sets)
     candidate_authorities = (
         assess_direct_role_binding_authorities(
@@ -1243,25 +1228,9 @@ def fit_template_phase(
             ),
         )
 
-    projected_by_binding: dict[
-        tuple[
-            int,
-            tuple[ObservationId | None, ...],
-            tuple[AdjacencyRelation, ...],
-        ],
-        tuple[_BoundFit, PhaseCandidateAuthorityProjection | None],
-    ] = {}
-    for record in eligible_records:
-        candidate, _projection = record
-        key = (
-            candidate.fit.phase_lattice_fit.integer_slot_offset,
-            candidate.fit.binding_observation_ids,
-            candidate.fit.adjacency_relations,
-        )
-        current = projected_by_binding.get(key)
-        if current is None or record_rank(record) > record_rank(current):
-            projected_by_binding[key] = record
-    canonical_records = tuple(projected_by_binding.values())
+    # Equal projected geometry can still have different authority provenance.
+    # Continuous merging and selection below own any further reduction.
+    canonical_records = tuple(dict.fromkeys(eligible_records))
     compatible = tuple(
         record for record in canonical_records if record[0].residual_compatible
     )

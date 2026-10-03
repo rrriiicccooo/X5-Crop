@@ -133,6 +133,8 @@ When discrete positions remain ambiguous, each candidate's local boundaries are 
 footprint obeys its own jointly supported direct coordinates; this does not remove the Review requirement.
 Boundary interpretations with distinct observation identities are retained even at the same position. An incomplete
 alternative is not rejected solely because its currently collected support is smaller.
+When the same boundaries permit different feasible ranges, each protective range and its evidence are retained for
+the safety checks of the whole source.
 Shared cross-axis boundaries must meet the existing coverage requirements for each candidate's photo regions independently;
 additional candidates do not add evidence strength.
 Runtime acceptability scoring is not yet enabled; this is a current selection limit, not a requirement to prove one uniquely true crop.
