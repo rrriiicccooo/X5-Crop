@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import fields
-import math
+from dataclasses import fields, replace
 from typing import Any
 
 from x5crop.domain import Box, WorkspaceExtent
@@ -26,10 +25,6 @@ def _record(value: Any, cls: type) -> dict[str, Any]:
     if not isinstance(value, dict) or set(value) != {field.name for field in fields(cls)}:
         raise ValueError(f"common H {cls.__name__} fields are invalid")
     return value
-
-
-def _number(value: Any) -> bool:
-    return type(value) in (int, float) and math.isfinite(value)
 
 
 def _identity(value: Any) -> bool:
@@ -69,6 +64,9 @@ def _output(value: Any, placements: list[dict], ordinal: int, extent: WorkspaceE
         physical = typed.placements[index]
         projection = projections[index]
         expected_envelope = joint_placement_envelope(physical, projection, ordinal)
+        # Projection IDs come from a process-local allocator. Cached runtime
+        # projections can have different counters from offline replay.
+        expected_envelope = replace(expected_envelope, projection_id=envelope["projection_id"])
         expected_mandatory = _footprint(physical, physical.frames[ordinal - 1], projection, apply_residual=True)
         if (member["envelope"] != typed_read_model(expected_envelope)
                 or member["mandatory_source_footprint"] != typed_read_model(expected_mandatory)):

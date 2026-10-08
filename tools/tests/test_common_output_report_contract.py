@@ -204,6 +204,12 @@ class CommonOutputReportContractTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "complete physical protection"):
             self.validate(typed_read_model(forged))
 
+    def test_cached_projection_counter_does_not_change_physical_replay(self):
+        value = deepcopy(self.value)
+        for output in value["output_footprints"]:
+            output["members"][1]["envelope"]["projection_id"] = "joint-placement-projection:999"
+        self.validate(value)
+
 
 if __name__ == "__main__":
     unittest.main()
