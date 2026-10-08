@@ -13,7 +13,7 @@ from .template_model import ContactRelation, OverlapRelation, SequenceBindingUse
 from .template_placement import FormatPlacement
 
 
-PLACEMENT_FEATURE_SCHEMA = "x5crop_placement_acceptability_features_v1"
+PLACEMENT_FEATURE_SCHEMA = "x5crop_placement_acceptability_features_v2"
 
 
 class PlacementFeatureUnit(str, Enum):
@@ -60,7 +60,7 @@ PLACEMENT_FEATURE_DEFINITIONS = (
     PlacementFeatureDefinition("cross_residual_relative", PlacementFeatureUnit.RATIO, ("cross_fit.residual_sum_px", "cross_fit.direct_bindings", "cross_fit.top_canonical_px", "cross_fit.bottom_canonical_px")),
     PlacementFeatureDefinition("contact_relation_fraction", PlacementFeatureUnit.FRACTION, ("sequence_fit.adjacency_relations", "output_slot_count")),
     PlacementFeatureDefinition("overlap_relation_fraction", PlacementFeatureUnit.FRACTION, ("sequence_fit.adjacency_relations", "output_slot_count")),
-    PlacementFeatureDefinition("output_maximum_budget_ratio", PlacementFeatureUnit.RATIO, ("direct_use_budget_assessments.edge_assessments.expansion_mm", "direct_use_budget_assessments.edge_assessments.limit_mm")),
+    PlacementFeatureDefinition("output_maximum_budget_ratio", PlacementFeatureUnit.RATIO, ("direct_use_budget_assessments.edge_assessments.required_extent_px", "direct_use_budget_assessments.edge_assessments.available_extent_px")),
     PlacementFeatureDefinition("output_supported_budget_fraction", PlacementFeatureUnit.FRACTION, ("direct_use_budget_assessments.state",)),
     PlacementFeatureDefinition("output_saturation_count", PlacementFeatureUnit.COUNT, ("output_footprints.saturation_facts",)),
     PlacementFeatureDefinition("cross_statistical_projection", PlacementFeatureUnit.INDICATOR, ("cross_fit.line_projection_basis",)),
@@ -144,7 +144,7 @@ def build_placement_acceptability_features(
         len(outputs) not in {0, placement.output_slot_count}
         or tuple(item.geometry_id for item in outputs) != tuple(item.geometry_id for item in budgets)
         or any(item.envelope.placement_id != placement.placement_id for item in outputs)
-        or any(edge.limit_mm <= 0.0 for item in budgets for edge in item.edge_assessments)
+        or any(edge.available_extent_px <= 0.0 for item in budgets for edge in item.edge_assessments)
     ):
         raise ValueError("placement features require the same complete proposal and budget")
     sequence = placement.sequence_fit
@@ -204,7 +204,7 @@ def build_placement_acceptability_features(
             if count > 1 else absent("overlap_relation_fraction", not_applicable)
         ),
         "output_maximum_budget_ratio": (
-            max(edge.expansion_mm / edge.limit_mm for item in budgets for edge in item.edge_assessments)
+            max(edge.required_extent_px / edge.available_extent_px for item in budgets for edge in item.edge_assessments)
             if budgets else absent("output_maximum_budget_ratio", no_proposal)
         ),
         "output_supported_budget_fraction": (

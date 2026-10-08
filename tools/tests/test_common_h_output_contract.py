@@ -54,7 +54,7 @@ class CommonHOutputContractTest(unittest.TestCase):
 
     def test_over_budget_member_is_retained_in_generated_common_geometry(self):
         first = _placement()
-        second = translated_h(first, 20)
+        second = translated_h(first, 30)
         result = materialize_common_h_output((first, second), ((0, 1), ()), lane=_lane(), layout='horizontal')
         self.assertIsNone(result.failure)
         self.assertFalse(result.output_footprints[0].budget_supported)

@@ -76,8 +76,6 @@ def _supported_aspect_ratio(
         width_observation_ids=tuple(
             ObservationId(f"test-width:{index}") for index in range(4)
         ),
-        minimum_output_expansion_mm=0.0,
-        output_expansion_limit_mm=1.0,
         failure_kind=None,
         failure_detail=None,
     )
@@ -1435,10 +1433,8 @@ class TemplateCrossContractTest(unittest.TestCase):
         contradicted_ratio = replace(
             _supported_aspect_ratio(FiniteInterval(238.0, 242.0)),
             state=EvidenceState.CONTRADICTED,
-            minimum_output_expansion_mm=2.0,
-            output_expansion_limit_mm=1.0,
-            failure_kind=ApertureAspectRatioFailureKind.BUDGET_EXHAUSTED,
-            failure_detail="ratio H uncertainty exceeds the output budget",
+            failure_kind=ApertureAspectRatioFailureKind.PHYSICAL_PRIOR_CONFLICT,
+            failure_detail="ratio H does not intersect the physical prior",
         )
         result = fit_template_cross(
             _TemplateCrossInput(

@@ -60,32 +60,68 @@ class CommonOutputContractTest(unittest.TestCase):
         self.assertGreater(max(y for _, y in common.required_source_footprint), max(y for _, y in native[0].required_source_footprint))
         reversed_common = common_h_output_footprint((second, first), tuple(reversed(native)))
         self.assertEqual(reversed_common.geometry_id, common.geometry_id)
+        self.assertEqual(reversed_common.requested_source_footprint, common.requested_source_footprint)
         self.assertEqual(reversed_common.required_source_footprint, common.required_source_footprint)
+        self.assertEqual(reversed_common.fixed_size, common.fixed_size)
+        self.assertEqual(reversed_common.width_axis, common.width_axis)
+        self.assertEqual(reversed_common.sequence_direction, common.sequence_direction)
+        self.assertAlmostEqual(
+            common.requested_source_footprint[1][0]
+            - common.requested_source_footprint[0][0],
+            common.fixed_size.output_width_px,
+        )
+        self.assertAlmostEqual(
+            common.requested_source_footprint[2][1]
+            - common.requested_source_footprint[1][1],
+            common.fixed_size.output_height_px,
+        )
+        mandatory_x = tuple(x for x, _ in common.mandatory_source_footprint)
+        mandatory_y = tuple(y for _, y in common.mandatory_source_footprint)
+        requested_x = tuple(x for x, _ in common.requested_source_footprint)
+        requested_y = tuple(y for _, y in common.requested_source_footprint)
+        self.assertAlmostEqual(
+            (min(requested_x) + max(requested_x)) / 2.0,
+            (min(mandatory_x) + max(mandatory_x)) / 2.0,
+        )
+        self.assertAlmostEqual(
+            (min(requested_y) + max(requested_y)) / 2.0,
+            (min(mandatory_y) + max(mandatory_y)) / 2.0,
+        )
         self.assertEqual(tuple(reversed(reversed_common.member_budgets)), common.member_budgets)
         with self.assertRaisesRegex(ValueError, "every native member"):
             replace(common, member_budgets=common.member_budgets[:1])
-        with self.assertRaisesRegex(ValueError, "lost a native member"):
+        with self.assertRaisesRegex(ValueError, "fixed output window"):
             replace(common, requested_source_footprint=native[0].requested_source_footprint)
 
     def test_individually_safe_outputs_can_have_an_over_budget_common_crop(self):
         first = _placement()
-        second = translated_h(first, 20)
+        second = translated_h(first, 30)
         native = (native_output(first), native_output(second))
         self.assertTrue(all(template_direct_use_budget_assessment(p, o).state == EvidenceState.SUPPORTED
                             for p, o in zip((first, second), native)))
         common = common_h_output_footprint((first, second), native)
         self.assertFalse(common.budget_supported)
         self.assertEqual(len(common.member_budgets), 2)
+        self.assertAlmostEqual(
+            common.requested_source_footprint[2][1]
+            - common.requested_source_footprint[1][1],
+            common.fixed_size.output_height_px,
+        )
         self.assertTrue(any(not edge.within_limit for member in common.member_budgets for edge in member.assessment.edge_assessments))
 
-    def test_source_clipping_does_not_erase_requested_budget_risk(self):
+    def test_source_clipping_preserves_fixed_request_and_visible_mandatory_budget(self):
         first = _placement()
         second = translated_h(first, -20)
         common = common_h_output_footprint((first, second), (native_output(first), native_output(second)))
         self.assertTrue(common.source_authority_supported)
         self.assertTrue(common.saturation_facts)
         self.assertLess(min(y for _, y in common.requested_source_footprint), min(y for _, y in common.required_source_footprint))
-        self.assertFalse(common.budget_supported)
+        self.assertTrue(common.budget_supported)
+        self.assertAlmostEqual(
+            common.requested_source_footprint[2][1]
+            - common.requested_source_footprint[1][1],
+            common.fixed_size.output_height_px,
+        )
 
     def test_internal_lane_edge_is_not_clipped_into_approval(self):
         first = _placement()
@@ -106,8 +142,14 @@ class CommonOutputContractTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "identical W ownership"):
             common_h_output_footprint((first, second), (native, native_output(second)))
         enclosing = _enclosing_support_placement()
-        with self.assertRaisesRegex(ValueError, "complete member projection"):
-            common_h_output_footprint((enclosing,), (native_output(enclosing),))
+        common = common_h_output_footprint((enclosing,), (native_output(enclosing),))
+        self.assertTrue(common.budget_supported)
+        with self.assertRaisesRegex(ValueError, "identity or order"):
+            common_h_output_footprint(
+                (enclosing,),
+                (native_output(enclosing),),
+                projections=(project_format_placement(first),),
+            )
 
     def test_missing_or_over_bound_members_cannot_be_silently_truncated(self):
         from x5crop.detection.photo_geometry.template_measurement_plan_model import MAX_CROSS_PAIRS

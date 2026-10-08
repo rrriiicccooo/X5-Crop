@@ -174,9 +174,6 @@ def select_lane_template_placement(
                 ApertureAspectRatioFailureKind.DIRECT_CONFLICT: (
                     GateGap.APERTURE_ASPECT_RATIO_DIRECT_CONFLICT
                 ),
-                ApertureAspectRatioFailureKind.BUDGET_EXHAUSTED: (
-                    GateGap.APERTURE_ASPECT_RATIO_BUDGET_EXHAUSTED
-                ),
             }.get(aspect.failure_kind)
             if aspect.blocks_cross_resolution
             else None

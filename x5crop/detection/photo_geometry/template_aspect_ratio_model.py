@@ -13,7 +13,6 @@ class ApertureAspectRatioFailureKind(str, Enum):
     AUTHORITY_UNAVAILABLE = "aperture_aspect_ratio_authority_unavailable"
     PHYSICAL_PRIOR_CONFLICT = "aperture_aspect_ratio_physical_prior_conflict"
     DIRECT_CONFLICT = "aperture_aspect_ratio_direct_conflict"
-    BUDGET_EXHAUSTED = "aperture_aspect_ratio_budget_exhausted"
 
 
 @dataclass(frozen=True)
@@ -36,8 +35,6 @@ class ApertureAspectRatioAuthority:
     effective_height_px: FiniteInterval | None
     canonical_height_px: float | None
     width_observation_ids: tuple[ObservationId, ...]
-    minimum_output_expansion_mm: float | None
-    output_expansion_limit_mm: float | None
     failure_kind: ApertureAspectRatioFailureKind | None
     failure_detail: str | None
     consumed_for_cross_inference: bool = False
@@ -77,8 +74,6 @@ class ApertureAspectRatioAuthority:
                 self.inferred_height_px,
                 self.effective_height_px,
                 self.canonical_height_px,
-                self.minimum_output_expansion_mm,
-                self.output_expansion_limit_mm,
             )
             if (
                 any(value is None for value in required)
@@ -106,11 +101,9 @@ class ApertureAspectRatioAuthority:
             self.height_guard_mm,
             self.width_guard_ratio,
             self.height_guard_ratio,
-            self.minimum_output_expansion_mm,
-            self.output_expansion_limit_mm,
         ):
             if value is not None and (not math.isfinite(value) or value < 0.0):
-                raise ValueError("aspect-ratio output budget must be non-negative")
+                raise ValueError("aspect-ratio guard must be non-negative")
         for value in (self.width_guard_ratio, self.height_guard_ratio):
             if value is not None and not 0.0 < value < 1.0:
                 raise ValueError("aspect-ratio axis guard ratio is invalid")
@@ -125,24 +118,7 @@ class ApertureAspectRatioAuthority:
             )
         ):
             raise ValueError("aspect-ratio guard does not contain raw calibration")
-        if (
-            self.state == EvidenceState.SUPPORTED
-            and self.minimum_output_expansion_mm is not None
-            and self.output_expansion_limit_mm is not None
-            and self.minimum_output_expansion_mm
-            > self.output_expansion_limit_mm
-        ):
-            raise ValueError("supported aspect ratio exceeds output budget")
-        if (
-            self.failure_kind == ApertureAspectRatioFailureKind.BUDGET_EXHAUSTED
-            and (
-                self.minimum_output_expansion_mm is None
-                or self.output_expansion_limit_mm is None
-                or self.minimum_output_expansion_mm
-                <= self.output_expansion_limit_mm
-            )
-        ):
-            raise ValueError("aspect-ratio budget failure is not exhausted")
+
 
 
 def unavailable_aperture_aspect_ratio_authority(
@@ -165,8 +141,6 @@ def unavailable_aperture_aspect_ratio_authority(
         effective_height_px=None,
         canonical_height_px=None,
         width_observation_ids=(),
-        minimum_output_expansion_mm=None,
-        output_expansion_limit_mm=None,
         failure_kind=ApertureAspectRatioFailureKind.AUTHORITY_UNAVAILABLE,
         failure_detail=detail,
     )

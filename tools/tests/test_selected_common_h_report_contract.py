@@ -8,7 +8,7 @@ from tools.regression.report_validation import (
     _common_authority_comparison_record, _read_common_proof,
     _validate_common_authority_provenance, _validate_finalization,
     _validate_holder_fill_identity, _validate_holder_fill_provenance,
-    _validate_nominal_grid_authority, _validate_selected_contact_protection,
+    _validate_nominal_grid_authority,
     _validate_selected_output_reuse, _validate_sequence_output_line_provenance,
 )
 from tools.tests.affine_tiff_support import make_deskew_observation
@@ -200,16 +200,6 @@ class SelectedCommonHReportContractTest(unittest.TestCase):
                     support["best"]["top_binding"]["fit_residual_px"] += 1.0
                 changed = _read_common_proof(changed, CommonHOutputAuthority)
                 self.assertNotEqual(_common_authority_comparison_record(changed), baseline)
-
-    def test_contact_protection_cannot_be_completed_by_other_member(self):
-        outputs = deepcopy(self.lane["output_footprints"])
-        for member in outputs[0]["members"]:
-            member["boundary_protections"][1]["topology_relation_id"] = "contact:1"
-        expected = {("contact:1", 1, "end")}
-        _validate_selected_contact_protection(outputs, expected, common=True)
-        outputs[0]["members"][1]["boundary_protections"][1]["topology_relation_id"] = None
-        with self.assertRaisesRegex(ValueError, "topology protection"):
-            _validate_selected_contact_protection(outputs, expected, common=True)
 
     def test_common_only_member_sequence_line_provenance_is_checked(self):
         lane = deepcopy(self.development)

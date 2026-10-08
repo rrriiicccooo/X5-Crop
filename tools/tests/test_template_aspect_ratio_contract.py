@@ -230,20 +230,15 @@ class TemplateAspectRatioContractTest(unittest.TestCase):
                 ApertureAspectRatioFailureKind.AUTHORITY_UNAVAILABLE,
             )
 
-    def test_ratio_uncertainty_that_spends_five_percent_is_typed(self) -> None:
+    def test_wide_ratio_uncertainty_waits_for_fixed_window_coverage(self) -> None:
         authority = _derive(
             _source(4.0, 5.0, design_height_mm=8.0)
         )
 
-        self.assertEqual(authority.state, EvidenceState.CONTRADICTED)
-        self.assertEqual(
-            authority.failure_kind,
-            ApertureAspectRatioFailureKind.BUDGET_EXHAUSTED,
-        )
-        self.assertGreater(
-            authority.minimum_output_expansion_mm,
-            authority.output_expansion_limit_mm,
-        )
+        self.assertEqual(authority.state, EvidenceState.SUPPORTED)
+        self.assertIsNone(authority.failure_kind)
+        self.assertGreater(authority.effective_height_px.width, 0.1 * authority.canonical_height_px)
+        self.assertTrue(consume_aperture_aspect_ratio_for_cross(authority).consumed_for_cross_inference)
         direct = reconcile_direct_aperture_height(
             authority,
             FiniteInterval(790.0, 810.0),
@@ -487,12 +482,6 @@ class TemplateAspectRatioContractTest(unittest.TestCase):
             (
                 _derive(_source(10.0, 12.0)),
                 GateGap.APERTURE_ASPECT_RATIO_PHYSICAL_PRIOR_CONFLICT,
-            ),
-            (
-                _derive(
-                    _source(4.0, 5.0, design_height_mm=8.0)
-                ),
-                GateGap.APERTURE_ASPECT_RATIO_BUDGET_EXHAUSTED,
             ),
         )
 

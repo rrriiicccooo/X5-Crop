@@ -62,15 +62,33 @@ def make_deskew_observation(
     )
 
 
-def sampling_footprint(authority: Box, source_extent: WorkspaceExtent) -> OutputFootprint:
+def sampling_footprint(authority: Box, source_extent: WorkspaceExtent, *, requested=None, mandatory=None) -> OutputFootprint:
+    from x5crop.detection.photo_geometry.source_geometry import SourceFixedOutputSize
+    from x5crop.detection.photo_geometry.model import BoundaryAxis
     polygon = (
         (float(authority.left), float(authority.top)),
         (float(authority.right - 1), float(authority.top)),
         (float(authority.right - 1), float(authority.bottom - 1)),
         (float(authority.left), float(authority.bottom - 1)),
     )
+    from x5crop.detection.photo_geometry.template_output import _saturation_facts
+    from x5crop.detection.photo_geometry.output_model import sampling_authority_bounds, fixed_output_rectangle
+    from x5crop.geometry.convex import clip_convex_polygon_to_bounds
+    polygon = convex_hull(requested if requested is not None else polygon)
+    protected = convex_hull(mandatory if mandatory is not None else polygon)
+    size = SourceFixedOutputSize("sampling-fixture", (max(x for x, _ in polygon) - min(x for x, _ in polygon)) / 1.1,
+                               (max(y for _, y in polygon) - min(y for _, y in polygon)) / 1.1)
+    center = ((min(x for x, _ in polygon) + max(x for x, _ in polygon)) / 2.0,
+              (min(y for _, y in polygon) + max(y for _, y in polygon)) / 2.0)
+    polygon = fixed_output_rectangle(size, BoundaryAxis.X, protected, source_extent, preferred_center=center)
+    saturation = _saturation_facts(polygon, protected, authority, source_extent)
+    required = clip_convex_polygon_to_bounds(polygon, sampling_authority_bounds(authority, source_extent)) if (
+        saturation and all(f.source_boundary for f in saturation)) else polygon
     return OutputFootprint(
         geometry_id="sampling-fixture",
+        fixed_size=size,
+        width_axis=BoundaryAxis.X,
+        sequence_direction=1,
         envelope=JointPlacementEnvelope(
             placement_id="sampling-fixture",
             projection_id="sampling-fixture",
@@ -85,11 +103,11 @@ def sampling_footprint(authority: Box, source_extent: WorkspaceExtent) -> Output
             ),
             global_lattice_constraint_ids=(),
         ),
-        mandatory_source_footprint=polygon,
+        mandatory_source_footprint=protected,
         requested_source_footprint=polygon,
-        required_source_footprint=polygon,
+        required_source_footprint=required,
         boundary_protections=tuple(
-            BoundaryProtectionFact(role, 0.0, 0.0, 0.0, None, 0.0, 0.0)
+            BoundaryProtectionFact(role, 0.0, 0.0, 0.0)
             for role in (
                 BoundaryRole.START,
                 BoundaryRole.END,
@@ -99,7 +117,7 @@ def sampling_footprint(authority: Box, source_extent: WorkspaceExtent) -> Output
         ),
         maximum_same_state_cross_alignment_padding_px=None,
         enclosing_support_aperture_risk=None,
-        saturation_facts=(),
+        saturation_facts=saturation,
         sampling_authority_box=authority,
         source_extent=source_extent,
         authority_profile_id="sampling-fixture",

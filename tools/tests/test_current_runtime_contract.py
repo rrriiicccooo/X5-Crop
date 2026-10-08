@@ -12,26 +12,40 @@ from tools.regression.diagnostic_cohort import (
 from tools.regression.report_validation import validate_output_footprint_authority
 from x5crop.report.summary import template_alignment_path
 from x5crop.report.read_models import typed_read_model
-from x5crop.domain import WorkspaceExtent
+from x5crop.domain import Box, WorkspaceExtent
+from tools.tests.affine_tiff_support import sampling_footprint
 from x5crop.io.orientation import orientation_mapping
 
 
-def _boundary_protections():
-    return [
-        {
-            "role": role,
-            "measurement_expansion_px": 0.0,
-            "base_bleed_px": 0.0,
-            "topology_protection_px": 0.0,
-            "topology_relation_id": None,
-            "local_boundary_residual_px": 0.0,
-            "joint_expansion_px": 0.0,
-        }
-        for role in ("start", "end", "top", "bottom")
-    ]
-
-
 class CurrentRuntimeContractTest(unittest.TestCase):
+    def test_self_consistent_fixed_size_cannot_replace_source_size(self) -> None:
+        from dataclasses import replace
+        from tools.tests.test_template_output_contract import _placement, _lane
+        from tools.regression.report_validation import _validate_direct_use_budgets
+        from x5crop.detection.photo_geometry.template_feasible_geometry import project_format_placement
+        from x5crop.detection.photo_geometry.template_output import output_footprint_from_template_placement, _saturation_facts
+        from x5crop.detection.photo_geometry.output_model import fixed_output_rectangle, fixed_output_coverage, sampling_authority_bounds
+        from x5crop.geometry.convex import clip_convex_polygon_to_bounds
+
+        placement = _placement()
+        output = output_footprint_from_template_placement(placement, project_format_placement(placement),
+            lane=_lane(), lane_ordinal=1, layout="horizontal")
+        source = typed_read_model(placement.source_scan_geometry)
+        _validate_direct_use_budgets([typed_read_model(fixed_output_coverage(output))], [typed_read_model(output)], source)
+        forged_size = replace(output.fixed_size, frame_width_px=output.fixed_size.frame_width_px + 1.0)
+        canonical = output.envelope.canonical_source_footprint
+        center = ((min(x for x, _ in canonical) + max(x for x, _ in canonical)) / 2.0,
+                  (min(y for _, y in canonical) + max(y for _, y in canonical)) / 2.0)
+        requested = fixed_output_rectangle(forged_size, output.width_axis, output.mandatory_source_footprint,
+                                           output.source_extent, preferred_center=center)
+        facts = _saturation_facts(requested, output.mandatory_source_footprint, output.sampling_authority_box, output.source_extent)
+        required = clip_convex_polygon_to_bounds(requested, sampling_authority_bounds(output.sampling_authority_box, output.source_extent)) if (
+            facts and all(f.source_boundary for f in facts)) else requested
+        forged = replace(output, fixed_size=forged_size, requested_source_footprint=requested,
+                         required_source_footprint=required, saturation_facts=facts)
+        with self.assertRaisesRegex(ValueError, "shared source W/H"):
+            _validate_direct_use_budgets([typed_read_model(fixed_output_coverage(forged))], [typed_read_model(forged)], source)
+
     def test_template_alignment_path_separates_retained_proposal_from_unresolved_fit(
         self,
     ) -> None:
@@ -78,42 +92,9 @@ class CurrentRuntimeContractTest(unittest.TestCase):
         )
 
     def test_diagnostic_validates_current_output_footprint_overflow_facts(self) -> None:
-        output = {
-            "mandatory_source_footprint": [
-                [0.0, 10.0],
-                [80.0, 10.0],
-                [80.0, 90.0],
-                [0.0, 90.0],
-            ],
-            "requested_source_footprint": [
-                [-2.0, 10.0],
-                [80.0, 10.0],
-                [80.0, 90.0],
-                [-2.0, 90.0],
-            ],
-            "required_source_footprint": [
-                [-0.5, 10.0],
-                [80.0, 10.0],
-                [80.0, 90.0],
-                [-0.5, 90.0],
-            ],
-            "source_extent": {"width": 100, "height": 100},
-            "sampling_authority_box": {
-                "left": 0,
-                "top": 0,
-                "right": 100,
-                "bottom": 100,
-            },
-            "boundary_protections": _boundary_protections(),
-            "saturation_facts": [
-                {
-                    "authority_side": "left",
-                    "kind": "source_boundary_optional_bleed",
-                    "requested_overflow_px": 1.5,
-                    "mandatory_overflow_px": 0.0,
-                }
-            ],
-        }
+        output = typed_read_model(sampling_footprint(Box(0, 0, 100, 100), WorkspaceExtent(100, 100),
+            requested=((-2.0, 10.0), (80.0, 10.0), (80.0, 90.0), (-2.0, 90.0)),
+            mandatory=((0.0, 10.0), (80.0, 10.0), (80.0, 90.0), (0.0, 90.0))))
         orientation = orientation_mapping(1, 100, 100)
         report = {
             "input": {"profile": {"shape": [100, 100, 3], "axes": "YXS", "orientation": typed_read_model(orientation)}},
@@ -127,83 +108,15 @@ class CurrentRuntimeContractTest(unittest.TestCase):
         self.assertFalse(_source_geometry_authority_is_explicit(report))
 
     def test_current_report_rejects_duplicate_footprint_authority_sides(self) -> None:
-        output = {
-            "source_extent": {"width": 100, "height": 100},
-            "mandatory_source_footprint": [
-                [-2.0, 10.0],
-                [80.0, 10.0],
-                [80.0, 90.0],
-                [-2.0, 90.0],
-            ],
-            "requested_source_footprint": [
-                [-2.0, 10.0],
-                [80.0, 10.0],
-                [80.0, 90.0],
-                [-2.0, 90.0],
-            ],
-            "required_source_footprint": [
-                [-2.0, 10.0],
-                [80.0, 10.0],
-                [80.0, 90.0],
-                [-2.0, 90.0],
-            ],
-            "sampling_authority_box": {
-                "left": 0,
-                "top": 0,
-                "right": 100,
-                "bottom": 100,
-            },
-            "boundary_protections": _boundary_protections(),
-            "saturation_facts": [
-                {
-                    "authority_side": "left",
-                    "kind": "lane_boundary_joint_protection",
-                    "requested_overflow_px": 2.0,
-                    "mandatory_overflow_px": 2.0,
-                },
-                {
-                    "authority_side": "left",
-                    "kind": "lane_boundary_joint_protection",
-                    "requested_overflow_px": 2.0,
-                    "mandatory_overflow_px": 2.0,
-                },
-            ],
-        }
-
-        with self.assertRaisesRegex(ValueError, "authority side"):
+        output = typed_read_model(sampling_footprint(Box(0, 0, 100, 100), WorkspaceExtent(100, 100),
+            requested=((-2.0, 10.0), (80.0, 10.0), (80.0, 90.0), (-2.0, 90.0))))
+        output["saturation_facts"].append(dict(output["saturation_facts"][0]))
+        with self.assertRaisesRegex(ValueError, "one fact per authority side"):
             validate_output_footprint_authority(output, expected_source_extent=WorkspaceExtent(100, 100))
 
     def test_current_report_needs_only_the_safe_source_footprint(self) -> None:
-        output = {
-            "source_extent": {"width": 100, "height": 100},
-            "mandatory_source_footprint": [
-                [10.0, 10.0],
-                [80.0, 10.0],
-                [80.0, 90.0],
-                [10.0, 90.0],
-            ],
-            "requested_source_footprint": [
-                [10.0, 10.0],
-                [80.0, 10.0],
-                [80.0, 90.0],
-                [10.0, 90.0],
-            ],
-            "required_source_footprint": [
-                [10.0, 10.0],
-                [80.0, 10.0],
-                [80.0, 90.0],
-                [10.0, 90.0],
-            ],
-            "sampling_authority_box": {
-                "left": 0,
-                "top": 0,
-                "right": 100,
-                "bottom": 100,
-            },
-            "boundary_protections": _boundary_protections(),
-            "saturation_facts": [],
-        }
-
+        output = typed_read_model(sampling_footprint(Box(0, 0, 100, 100), WorkspaceExtent(100, 100),
+            requested=((10.0, 10.0), (80.0, 10.0), (80.0, 90.0), (10.0, 90.0))))
         validate_output_footprint_authority(output, expected_source_extent=WorkspaceExtent(100, 100))
 
     def test_diagnostic_verifier_wraps_the_production_cli(self) -> None:
@@ -269,7 +182,7 @@ class CurrentRuntimeContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_ID, "x5crop_detection_report_v5")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "x5crop_v5_template_report_97",
+            "x5crop_v5_template_report_98",
         )
         candidate = candidate_gate_assessment(
             {

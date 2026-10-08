@@ -52,8 +52,8 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record, validate_placement_feature_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v22"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v25"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v23"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v26"
 RETAINED_PLACEMENT_SCOPE = "retained_canonical_pair_and_conditional_cross_proposal"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
@@ -61,6 +61,7 @@ SOURCE_TIMEOUT_SECONDS = 600
 COMPARATOR_SOURCE_PATHS = (
     "tools/manual_annotation/model.py",
     "tools/regression/accuracy.py",
+    "tools/regression/common_output_validation.py",
     "tools/regression/development_run.py",
     "tools/regression/gold_analysis.py",
     "tools/regression/gold_geometry.py",
@@ -1281,15 +1282,14 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
             check for check in report["candidate_gate"]["checks"]
             if check["code"] == "direct_use_budget"
         ),
-        "runtime_ratio_height_budgets": [
+        "runtime_ratio_height_authorities": [
             {
                 "lane_id": lane["lane_id"],
                 **{
                     key: lane["aperture_aspect_ratio_authority"][key]
                     for key in (
                         "state", "failure_kind", "blocks_cross_resolution",
-                        "consumed_for_cross_inference", "minimum_output_expansion_mm",
-                        "output_expansion_limit_mm",
+                        "consumed_for_cross_inference",
                     )
                 },
             }
@@ -2440,8 +2440,6 @@ def _release_detection_gate_failure_category(
         return "candidate_crosses_inward_baseline"
     if "approved output crosses user-confirmed inward baseline" in failure:
         return "approved_output_crosses_inward_baseline"
-    if "exceeds acceptance-baseline direct-use budget" in failure:
-        return "direct_use_budget_exceeded"
     return "analysis_or_contract_failure"
 
 
@@ -2540,18 +2538,12 @@ def _count_variant_diagnostics(
         proposal_frame_states: dict[str, dict[str, str]] = defaultdict(dict)
         for member in members:
             for frame in member["frame_candidate_geometry_diagnostics"]:
-                unsafe = bool(
-                    frame["inward_failure_sides"]
-                    or frame["outward_budget_failure_sides"]
-                )
+                unsafe = bool(frame["inward_failure_sides"])
                 frame_states[str(frame["physical_frame_id"])][
                     str(member["sample_id"])
                 ] = "unsafe" if unsafe else "safe"
             for frame in member["frame_proposal_geometry_diagnostics"]:
-                unsafe = bool(
-                    frame["inward_failure_sides"]
-                    or frame["outward_budget_failure_sides"]
-                )
+                unsafe = bool(frame["inward_failure_sides"])
                 proposal_frame_states[str(frame["physical_frame_id"])][
                     str(member["sample_id"])
                 ] = "unsafe" if unsafe else "safe"
@@ -2706,7 +2698,6 @@ def _summary(
                 frame
                 for frame in record["frame_candidate_geometry_diagnostics"]
                 if frame["inward_failure_sides"]
-                or frame["outward_budget_failure_sides"]
             ],
         }
         for record in completed
@@ -2792,15 +2783,15 @@ def _summary(
             state: dict(sorted(counts.items()))
             for state, counts in sorted(proposal_budget_gate_matrix.items())
         },
-        "ratio_height_budget_diagnostics": [
+        "ratio_height_authority_diagnostics": [
             {
                 "sample_id": record["sample_id"],
                 "proposal_geometry_conformance": record["proposal_geometry_conformance"],
                 **budget,
             }
             for record in completed
-            for budget in record["runtime_ratio_height_budgets"]
-            if budget["failure_kind"] == "aperture_aspect_ratio_budget_exhausted"
+            for budget in record["runtime_ratio_height_authorities"]
+            if budget["failure_kind"] is not None
         ],
         "runtime_pipeline_outcome_counts": _counter(
             records,
@@ -3140,7 +3131,7 @@ def run_gold_analysis(
                 "runtime_budget_state": None,
                 "runtime_budget_assessments": [],
                 "runtime_budget_gate": None,
-                "runtime_ratio_height_budgets": [],
+                "runtime_ratio_height_authorities": [],
                 "unsafe_approved_auto": False,
                 "nominal_auto_goal_passed": False,
                 "challenge_capability_outcome": None,

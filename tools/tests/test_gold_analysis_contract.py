@@ -218,11 +218,10 @@ class GoldAnalysisContractTest(unittest.TestCase):
             "runtime_budget_gate": {
                 "evaluated": False, "blocks": False, "state": "unavailable",
             },
-            "runtime_ratio_height_budgets": [{
+            "runtime_ratio_height_authorities": [{
                 "lane_id": "lane:0",
                 "state": "unavailable", "failure_kind": "aperture_aspect_ratio_authority_unavailable",
                 "blocks_cross_resolution": False, "consumed_for_cross_inference": False,
-                "minimum_output_expansion_mm": None, "output_expansion_limit_mm": None,
             }],
             "release_detection_gate_passed": contract_passed,
             "release_detection_gate_failure": (
@@ -324,7 +323,6 @@ class GoldAnalysisContractTest(unittest.TestCase):
                     "inward_failure_sides": (
                         ["sequence_start"] if proposal_frame_unsafe else []
                     ),
-                    "outward_budget_failure_sides": [],
                 }
             ] if proposal != "not_available" else [],
             "frame_candidate_geometry_diagnostics": [
@@ -334,7 +332,6 @@ class GoldAnalysisContractTest(unittest.TestCase):
                     "inward_failure_sides": (
                         ["sequence_start"] if frame_unsafe else []
                     ),
-                    "outward_budget_failure_sides": [],
                 }
             ] if candidate != "not_available" else [],
             "physical_prior_diagnostic": {
@@ -438,7 +435,7 @@ class GoldAnalysisContractTest(unittest.TestCase):
             1,
         )
 
-    def test_ratio_height_budget_diagnostic_keeps_consumption_and_blocking_distinct(self) -> None:
+    def test_ratio_height_authority_diagnostic_keeps_consumption_and_blocking_distinct(self) -> None:
         records = []
         for index, blocking in enumerate((False, True)):
             record = self._analysis_record(
@@ -446,14 +443,12 @@ class GoldAnalysisContractTest(unittest.TestCase):
                 role="nominal", decision="needs_review", candidate="not_available",
                 proposal="safe", unsafe_auto=False, physical_frame_id="B1|B2",
             )
-            record["runtime_ratio_height_budgets"] = [{
+            record["runtime_ratio_height_authorities"] = [{
                 "lane_id": "lane:0",
                 "state": "contradicted",
-                "failure_kind": "aperture_aspect_ratio_budget_exhausted",
+                "failure_kind": "aperture_aspect_ratio_physical_prior_conflict",
                 "blocks_cross_resolution": blocking,
                 "consumed_for_cross_inference": False,
-                "minimum_output_expansion_mm": 1.5,
-                "output_expansion_limit_mm": 1.2,
             }]
             records.append(record)
 
@@ -463,7 +458,7 @@ class GoldAnalysisContractTest(unittest.TestCase):
             "safe": {"not_evaluated": 2},
         })
         self.assertEqual(
-            [item["blocks_cross_resolution"] for item in summary["ratio_height_budget_diagnostics"]],
+            [item["blocks_cross_resolution"] for item in summary["ratio_height_authority_diagnostics"]],
             [False, True],
         )
 

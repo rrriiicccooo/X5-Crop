@@ -4,24 +4,10 @@ from tools.tests.photo_geometry_support import *
 
 
 class FixedFormatRuntimeContractTest(unittest.TestCase):
-    def test_direct_use_limit_is_closed_and_has_no_positive_epsilon(self) -> None:
-        exact = DirectUseBudgetEdgeAssessment(
-            role=BoundaryRole.START,
-            expansion_px=180.0,
-            expansion_mm=1.8,
-            limit_mm=1.8,
-            limit_applies=True,
-            within_limit=True,
-        )
+    def test_fixed_output_coverage_limit_only_absorbs_float_roundoff(self) -> None:
+        exact = DirectUseBudgetEdgeAssessment(BoundaryRole.START, 180.0, 180.0, True)
         self.assertTrue(exact.within_limit)
-        over = DirectUseBudgetEdgeAssessment(
-            role=BoundaryRole.START,
-            expansion_px=180.000000001,
-            expansion_mm=1.80000000001,
-            limit_mm=1.8,
-            limit_applies=True,
-            within_limit=False,
-        )
+        over = DirectUseBudgetEdgeAssessment(BoundaryRole.START, 180.000001, 180.0, False)
         self.assertFalse(over.within_limit)
 
     def test_matched_holder_default_count_keeps_complete_query_coverage(self) -> None:

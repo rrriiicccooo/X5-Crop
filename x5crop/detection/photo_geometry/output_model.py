@@ -15,9 +15,11 @@ from ...geometry.convex import (
     signed_area,
 )
 from .line_observations import SourceCoordinateLine
+from .source_geometry import SourceFixedOutputSize
 from .template_model import SequenceRoleLineEvidence
 from .model import (
     AuthoritySide,
+    BoundaryAxis,
     BoundaryRole,
     PositionSource,
 )
@@ -313,20 +315,12 @@ class JointPlacementEnvelope:
 
 @dataclass(frozen=True)
 class BoundaryProtectionFact:
-    """One boundary's components and final joint output protection.
-
-    The component values are diagnostic counterfactuals.  They are not added
-    to obtain ``joint_expansion_px`` because their independent extrema need
-    not describe one feasible placement state.
-    """
+    """Physical diagnostics, independent of the fixed output size."""
 
     role: BoundaryRole
     measurement_expansion_px: float
-    base_bleed_px: float
-    topology_protection_px: float
-    topology_relation_id: ObservationId | None
     local_boundary_residual_px: float
-    joint_expansion_px: float
+    required_expansion_px: float
 
     def __post_init__(self) -> None:
         if self.role not in {
@@ -338,28 +332,11 @@ class BoundaryProtectionFact:
             raise ValueError("boundary protection requires an output role")
         values = (
             self.measurement_expansion_px,
-            self.base_bleed_px,
-            self.topology_protection_px,
             self.local_boundary_residual_px,
-            self.joint_expansion_px,
+            self.required_expansion_px,
         )
         if any(not math.isfinite(value) or value < 0.0 for value in values):
             raise ValueError("boundary protection distances must be non-negative")
-        topology_applies = self.topology_protection_px > 0.0
-        if topology_applies != isinstance(
-            self.topology_relation_id,
-            ObservationId,
-        ):
-            raise ValueError(
-                "topology protection requires exactly one typed relation"
-            )
-        if topology_applies and self.role not in {
-            BoundaryRole.START,
-            BoundaryRole.END,
-        }:
-            raise ValueError(
-                "topology protection may affect only sequence boundaries"
-            )
 
 
 @dataclass(frozen=True)
@@ -411,6 +388,66 @@ class EnclosingSupportApertureRisk:
             )
 
 
+def _polygon_bounds(polygon: ConvexPolygon) -> tuple[float, float, float, float]:
+    return (min(x for x, _ in polygon), min(y for _, y in polygon),
+            max(x for x, _ in polygon), max(y for _, y in polygon))
+
+
+def visible_mandatory_footprint(polygon: ConvexPolygon, extent: WorkspaceExtent) -> ConvexPolygon:
+    # Internal lane boundaries never authorize clipping protected content.
+    return clip_convex_polygon_to_bounds(polygon, (-0.5, -0.5, extent.width - 0.5, extent.height - 0.5))
+
+
+def fixed_output_rectangle(
+    size: SourceFixedOutputSize, width_axis: BoundaryAxis,
+    mandatory: ConvexPolygon, source_extent: WorkspaceExtent,
+    *, preferred_center: tuple[float, float] | None = None,
+) -> ConvexPolygon:
+    """Choose position within the containment interval; never change size.
+
+    If containment is impossible, keep a fixed proposal for Review.
+    """
+    visible = visible_mandatory_footprint(mandatory, source_extent)
+    if not visible:
+        raise ValueError("mandatory footprint has no visible TIFF content")
+    left, top, right, bottom = _polygon_bounds(visible)
+    dimensions = ((size.output_width_px, size.output_height_px) if width_axis == BoundaryAxis.X
+                  else (size.output_height_px, size.output_width_px))
+    preferred = preferred_center or ((left + right) / 2.0, (top + bottom) / 2.0)
+    centers = []
+    for minimum, maximum, dimension, target in zip((left, top), (right, bottom), dimensions, preferred, strict=True):
+        lower, upper = maximum - dimension / 2.0, minimum + dimension / 2.0
+        centers.append(min(max(target, lower), upper) if lower <= upper else (minimum + maximum) / 2.0)
+    cx, cy = centers
+    dx, dy = dimensions[0] / 2.0, dimensions[1] / 2.0
+    return convex_hull(((cx - dx, cy - dy), (cx + dx, cy - dy),
+                        (cx + dx, cy + dy), (cx - dx, cy + dy)))
+
+
+def fixed_output_coverage(
+    output: OutputFootprint | CommonOutputFootprint,
+    *, requested: ConvexPolygon | None = None, geometry_id: str | None = None,
+) -> DirectUseBudgetAssessment:
+    """Reproduce containment without a per-side actual outward cap."""
+    window = requested if requested is not None else output.requested_source_footprint
+    left, top, right, bottom = _polygon_bounds(window)
+    ml, mt, mr, mb = _polygon_bounds(visible_mandatory_footprint(output.mandatory_source_footprint, output.source_extent))
+    cx, cy = (left + right) / 2.0, (top + bottom) / 2.0
+    reach = {"left": max(0.0, cx - ml), "right": max(0.0, mr - cx),
+             "top": max(0.0, cy - mt), "bottom": max(0.0, mb - cy)}
+    available = {"left": (right - left) / 2.0, "right": (right - left) / 2.0,
+                 "top": (bottom - top) / 2.0, "bottom": (bottom - top) / 2.0}
+    sequence = ("left", "right") if output.width_axis == BoundaryAxis.X else ("top", "bottom")
+    if output.sequence_direction < 0:
+        sequence = sequence[::-1]
+    cross = ("top", "bottom") if output.width_axis == BoundaryAxis.X else ("left", "right")
+    edges = tuple(DirectUseBudgetEdgeAssessment(role, reach[side], available[side], reach[side] <= available[side] + 1.0e-8)
+                  for role, side in zip((BoundaryRole.START, BoundaryRole.END, BoundaryRole.TOP, BoundaryRole.BOTTOM),
+                                        sequence + cross, strict=True))
+    return DirectUseBudgetAssessment(geometry_id or output.geometry_id, output.boundary_use, edges,
+                                    EvidenceState.SUPPORTED if all(edge.within_limit for edge in edges) else EvidenceState.CONTRADICTED)
+
+
 def _validate_source_requirement(output: OutputFootprint | CommonOutputFootprint) -> None:
     """One source/clipping contract for native and shared output requirements."""
 
@@ -422,6 +459,15 @@ def _validate_source_requirement(output: OutputFootprint | CommonOutputFootprint
         (output.required_source_footprint, "required source footprint"),
     ):
         _validate_continuous_footprint(polygon, name)
+    canonical = output.envelope.canonical_source_footprint if isinstance(output, OutputFootprint) else None
+    preferred = None if canonical is None else (
+        (min(x for x, _ in canonical) + max(x for x, _ in canonical)) / 2.0,
+        (min(y for _, y in canonical) + max(y for _, y in canonical)) / 2.0,
+    )
+    expected_window = fixed_output_rectangle(output.fixed_size, output.width_axis,
+        output.mandatory_source_footprint, output.source_extent, preferred_center=preferred)
+    if output.requested_source_footprint != expected_window:
+        raise ValueError("requested footprint disagrees with the fixed output window")
     if len({fact.authority_side for fact in output.saturation_facts}) != len(output.saturation_facts):
         raise ValueError("saturation facts require one fact per authority side")
     expected_sides = footprint_outside_authority_sides(
@@ -459,20 +505,17 @@ def _validate_source_requirement(output: OutputFootprint | CommonOutputFootprint
 
 @dataclass(frozen=True)
 class OutputFootprint:
-    """Final selected-frame source requirement and its source-edge contract.
+    """Physical requirement and a fixed source-axis crop window.
 
-    ``mandatory_source_footprint`` retains joint measurement uncertainty,
-    line residual and complete pixel-center support.  ``requested`` also adds
-    product bleed.  ``required`` equals that request except where it reaches a
-    true TIFF boundary, which is the absolute limit of available source
-    pixels.  The typed saturation fact preserves whether this bounded optional
-    bleed or joint protection.  Internal lane boundaries are never clipped
-    into approval.  Enclosing support also retains the maximum added line-
-    alignment padding from one feasible state; support-position uncertainty
-    remains owned by the separate per-side expansions.
+    Mandatory retains the complete feasible physical envelope. Requested is
+    exactly 1.1W by 1.1H; required clips it only at true TIFF boundaries.
+    Diagnostic boundary/support distances never resize the window.
     """
 
     geometry_id: str
+    fixed_size: SourceFixedOutputSize
+    width_axis: BoundaryAxis
+    sequence_direction: int
     envelope: JointPlacementEnvelope
     mandatory_source_footprint: ConvexPolygon
     requested_source_footprint: ConvexPolygon
@@ -486,6 +529,10 @@ class OutputFootprint:
     authority_profile_id: str
 
     def __post_init__(self) -> None:
+        if not isinstance(self.fixed_size, SourceFixedOutputSize):
+            raise ValueError("output requires the source fixed-size identity")
+        if not isinstance(self.width_axis, BoundaryAxis) or self.sequence_direction not in {-1, 1}:
+            raise ValueError("fixed output requires source axis ownership")
         if not isinstance(self.envelope, JointPlacementEnvelope):
             raise ValueError("output footprint is invalid")
         _validate_source_requirement(self)
@@ -535,109 +582,38 @@ class OutputFootprint:
 
 @dataclass(frozen=True)
 class DirectUseBudgetEdgeAssessment:
+    """Visible mandatory reach from the fixed window center on one side."""
+
     role: BoundaryRole
-    expansion_px: float
-    expansion_mm: float
-    limit_mm: float
-    limit_applies: bool
+    required_extent_px: float
+    available_extent_px: float
     within_limit: bool
 
     def __post_init__(self) -> None:
-        if (
-            self.role
-            not in {
-                BoundaryRole.START,
-                BoundaryRole.END,
-                BoundaryRole.TOP,
-                BoundaryRole.BOTTOM,
-            }
-            or any(
-                not math.isfinite(value) or value < 0.0
-                for value in (
-                    self.expansion_px,
-                    self.expansion_mm,
-                    self.limit_mm,
-                )
-            )
-            or not isinstance(self.limit_applies, bool)
-            or self.within_limit
-            != (
-                self.expansion_mm <= self.limit_mm
-                if self.limit_applies
-                else True
-            )
-        ):
-            raise ValueError("direct-use edge assessment is invalid")
+        if (self.role not in {BoundaryRole.START, BoundaryRole.END, BoundaryRole.TOP, BoundaryRole.BOTTOM}
+                or not math.isfinite(self.required_extent_px) or self.required_extent_px < 0.0
+                or not math.isfinite(self.available_extent_px) or self.available_extent_px <= 0.0
+                or type(self.within_limit) is not bool
+                or self.within_limit != (self.required_extent_px <= self.available_extent_px + 1.0e-8)):
+            raise ValueError("fixed-output coverage edge is invalid")
 
 
 @dataclass(frozen=True)
 class DirectUseBudgetAssessment:
+    """Containment of visible mandatory content by a fixed output window."""
+
     geometry_id: str
     boundary_use: OutputBoundaryUse
     edge_assessments: tuple[DirectUseBudgetEdgeAssessment, ...]
-    enclosing_support_height_ratio: float | None
-    enclosing_support_within_limit: bool | None
-    maximum_same_state_cross_alignment_padding_mm: float | None
-    maximum_same_state_cross_alignment_padding_within_limit: bool | None
     state: EvidenceState
 
     def __post_init__(self) -> None:
-        supported = all(item.within_limit for item in self.edge_assessments) and (
-            self.enclosing_support_within_limit is not False
-        ) and (
-            self.maximum_same_state_cross_alignment_padding_within_limit
-            is not False
-        )
-        if (
-            not self.geometry_id
-            or not isinstance(self.boundary_use, OutputBoundaryUse)
-            or self.state not in {
-                EvidenceState.SUPPORTED,
-                EvidenceState.CONTRADICTED,
-            }
-            or tuple(item.role for item in self.edge_assessments)
-            != (
-                BoundaryRole.START,
-                BoundaryRole.END,
-                BoundaryRole.TOP,
-                BoundaryRole.BOTTOM,
-            )
-            or (self.state == EvidenceState.SUPPORTED) != supported
-        ):
-            raise ValueError("direct-use budget assessment is invalid")
-        support = self.boundary_use == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
-        if support != (self.enclosing_support_height_ratio is not None) or support != (
-            self.enclosing_support_within_limit is not None
-        ) or support != (
-            self.maximum_same_state_cross_alignment_padding_mm is not None
-        ) or support != (
-            self.maximum_same_state_cross_alignment_padding_within_limit
-            is not None
-        ):
-            raise ValueError("enclosing-support budget fields are inconsistent")
-        if support and (
-            not math.isfinite(float(self.enclosing_support_height_ratio))
-            or float(self.enclosing_support_height_ratio) <= 1.0
-        ):
-            raise ValueError("enclosing-support height ratio is invalid")
-        if support:
-            padding = float(
-                self.maximum_same_state_cross_alignment_padding_mm
-            )
-            cross_limit = min(
-                item.limit_mm
-                for item in self.edge_assessments
-                if item.role in {BoundaryRole.TOP, BoundaryRole.BOTTOM}
-            )
-            if (
-                not math.isfinite(padding)
-                or padding < 0.0
-                or bool(
-                    self.maximum_same_state_cross_alignment_padding_within_limit
-                )
-                != (padding <= cross_limit)
-            ):
-                raise ValueError("same-state cross padding budget is invalid")
+        if (not self.geometry_id or not isinstance(self.boundary_use, OutputBoundaryUse)
+                or self.state not in {EvidenceState.SUPPORTED, EvidenceState.CONTRADICTED}
+                or tuple(item.role for item in self.edge_assessments)
+                != (BoundaryRole.START, BoundaryRole.END, BoundaryRole.TOP, BoundaryRole.BOTTOM)
+                or (self.state == EvidenceState.SUPPORTED) != all(item.within_limit for item in self.edge_assessments)):
+            raise ValueError("fixed-output coverage assessment is invalid")
 
 
 @dataclass(frozen=True)
@@ -663,6 +639,7 @@ class CommonOutputFootprint:
     """
 
     geometry_id: str
+    fixed_size: SourceFixedOutputSize
     members: tuple[OutputFootprint, ...]
     mandatory_source_footprint: ConvexPolygon
     requested_source_footprint: ConvexPolygon
@@ -689,10 +666,13 @@ class CommonOutputFootprint:
             or member.sampling_authority_box != self.sampling_authority_box
             or member.source_extent != self.source_extent
             or member.authority_profile_id != self.authority_profile_id
+            or member.fixed_size != self.fixed_size
+            or member.width_axis != self.members[0].width_axis
+            or member.sequence_direction != self.members[0].sequence_direction
             for member in self.members
         ):
             raise ValueError("common H output changed lane, slot or source authority")
-        for name in ("mandatory_source_footprint", "requested_source_footprint"):
+        for name in ("mandatory_source_footprint",):
             expected = convex_hull(tuple(point for member in self.members for point in getattr(member, name)))
             if getattr(self, name) != expected:
                 raise ValueError("common output lost a native member requirement")
@@ -704,6 +684,14 @@ class CommonOutputFootprint:
         ):
             raise ValueError("common output budgets do not cover every native member")
         _validate_source_requirement(self)
+
+    @property
+    def width_axis(self) -> BoundaryAxis:
+        return self.members[0].width_axis
+
+    @property
+    def sequence_direction(self) -> int:
+        return self.members[0].sequence_direction
 
     @property
     def source_authority_supported(self) -> bool:

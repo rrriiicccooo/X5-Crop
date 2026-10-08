@@ -206,7 +206,7 @@ class CommonHSelectionContractTest(unittest.TestCase):
 
     def test_over_budget_common_retains_every_native_member_and_gate_rejects(self):
         first = _placement()
-        placements = (first, translated_h(first, 20))
+        placements = (first, translated_h(first, 30))
         common = materialize_common_h_output(placements, ((0, 1), ()), lane=_lane(), layout="horizontal")
         self.assertIsNone(common.failure)
         output = common.output_footprints[0]

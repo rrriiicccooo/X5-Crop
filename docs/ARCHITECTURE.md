@@ -10,7 +10,7 @@ X5 Crop 是已知胶片模板的自动对准器，不是通用照片边界检测
 内容保护对象是输入 TIFF 中已经记录、可见的真实照片内容。被片夹遮挡而未记录的画面不属于恢复目标，
 不要求为它重建边界或扩大输出。已可靠识别的片夹区域可以排除；这一权限以材料识别和内缘测量成立为
 前提，不能把低纹理、颜色相似或位于 TIFF 外侧本身当作片夹身份。最终输出仍保护原 TIFF 中的可见
-内容和人工确认的源内 polygon，并满足既有逐侧留边预算。原始 TIFF 与人工 reference 保持不变。
+内容和人工确认的源内 polygon，使用共同 W/H 的固定裁切框。原始 TIFF 与人工 reference 保持不变。
 
 ```text
 用户 format + 用户确认 count
@@ -117,21 +117,21 @@ H_px ∈ W_px × (scale_H / scale_W) / R_guarded
 | ratio calibration、direct source W 或共享 scale identity 不可用 | `aperture_aspect_ratio_authority_unavailable` |
 | ratio 推断与 format H compatibility 不相交 | `aperture_aspect_ratio_physical_prior_conflict` |
 | 已支持的 ratio 推断与唯一 direct H 不相交 | `aperture_aspect_ratio_direct_conflict` |
-| 推断 uncertainty、residual 与 bleed 耗尽逐侧 5% 预算 | `aperture_aspect_ratio_budget_exhausted` |
 
-Direct H 存在时优先承担 cross；ratio authority 的 unavailable、physical-prior conflict 或 budget failure
+Direct H 存在时优先承担 cross；ratio authority 的 unavailable 或 physical-prior conflict
 不会覆盖 direct H。只有一份本来受支持的 ratio interval 与 direct H 真正冲突时才阻断。该 authority
 只能消费既有 source W 与共享 scan-scale identity，不读取新 TIFF、不选择 phase/ordinal、不创造双侧都
 不可见的 Frame。Report 与 Debug 显示 calibration identity、`R_raw/R_guarded`、`gW/gH`、W provenance、
-推导与有效 H interval、预算、是否被 cross 消费、相关性和 typed failure。
+推导与有效 H interval、是否被 cross 消费、相关性和 typed failure。比例阶段不按逐侧 5% 提前拒绝
+不确定性；完整位置、方向与残差传播后，由固定输出窗口统一检查可见内容包含。
 
 Separator 不复用 aperture compatibility。`G_format` 是理论搜索中心；实际 separator gap 由 material
 两侧直接 START/END 与 local advance 拥有。黄金 gap 的局部与跨 source 变化远大于 aperture 轴尺寸，
 用名义 gap 周围的对称混合 guard 会同时过窄又接近零下界；后续如需扩大召回，应单独校准非对称的
 候选无关搜索 coverage，不改变已观察 gap。Holder extent 目前只有独立的片夹设计范围 ±3.5%；同一批
 holder-normalized 黄金尺寸不能反过来独立校准它，除非以后取得外部 holder metrology。`1.1H` enclosing
-support、lattice residual、`max(0.15 mm, 0.7%W)` bleed 与逐侧 5% 输出上限分别拥有输出包络、统计残差、
-产品 bleed 和最终风险预算，不能合并成 aperture tolerance。
+support、lattice residual 与固定 `1.1W × 1.1H` 输出框分别拥有物理搜索范围、统计残差和产品留边，
+不能合并成 aperture tolerance。
 
 ## 3. 几何词汇与权限
 
@@ -144,7 +144,7 @@ support、lattice residual、`max(0.15 mm, 0.7%W)` bleed 与逐侧 5% 输出上�
 - `CanonicalPlacement`：format、count、phase、pitch、cross 和直接 separator 已证明的有界 local
   advances 共同决定的 source-axis 固定矩形集合。
 - `PhotoGroupOuter`：从已选 placement 的 first start 与 last end 推导的长轴范围；不反向参与选位。
-- `OutputFootprint`：联合不确定性、直线残差和产品 bleed 后，在 source 坐标中已经确认安全的区域。
+- `OutputFootprint`：完整物理需求、固定尺寸请求与源边截断后的实际采样区域；是否可输出由 Gate 另行判断。
 
 这些词汇只映射到一套 current type：`CoarseStripSupport` 保存 role-free aggregate observation，
 `OuterBoundaryObservation` 使用 `BoundaryEdgeObservation`，模板绑定后的 `PhotoBoundaryAnchor` 保存在
@@ -310,7 +310,7 @@ query 或无界 hypothesis。
 | content bbox、content runs | 暴露内容穿越、空白、危险裁切与候选异常 | `content_veto`、adjacency continuity、Debug；未来只作冻结的 risk feature | 保留负向事实；永不单独移动或缩放 geometry |
 | confidence / best score | 在多个近似合法解释中聚合 contrast、距离和 residual | 当前 hard competition；下一阶段开发可用性特征与排序，未来为校准可用概率与拒绝选择 | 保留可解释特征，删除旧任意加权终判；开发评估不等待独立数据，正式概率权限须独立验证 |
 | retry、nearby correction、approved polish | 曾隐式补偿 separator 宽度、anchor、aperture、source clipping 或 topology | local relation、source W、aspect authority、clipped-boundary/topology owner | 已迁移的物理修正保留；clipped boundary 仍开放。删除 selection/Gate 后 mutation 与无法解释的 retry |
-| fixed/extra bleed | 对真实边缘误差或异常 topology 提供输出保护 | base physical bleed + typed topology protection，共用每侧 5% 总预算 | 保留已证明关系的定向保护；删除无条件固定像素和借 bleed 掩盖位置错误 |
+| fixed/extra bleed | 对真实边缘误差或异常 topology 提供输出保护 | 完整物理包络 + 固定 `1.1W × 1.1H` 输出框 | 保留 topology 关系证明；固定留边替换旧基础与额外 bleed，不扩大框掩盖内容遗漏 |
 | outer-edge deskew | 用两侧稳健线拟合整理输出方向 | `output_deskew.py` + finalization | 保留有界数值观察；整图旋转晚于 Gate，不恢复 competing enhanced angle 对 placement 的权限 |
 | gray/profile cache、TIFF readback | 候选无关复用与 metadata/像素保真 | workspace/registered measurement、`io/tiff.py`、output publication | 保留一次读取、复用和 readback；删除 candidate-specific 重跑与平行缓存状态 |
 
@@ -534,7 +534,7 @@ Coarse 只保留全部合格的独立 broad side raw path，不进行 min×max �
 回读从原 query 重建 raw path、单侧拟合和唯一 Cross 竞争；run-local ordinal 只在完整 raw path 一一对应后
 绑定，不能用新的序号掩盖删点、候选遗漏、几何改变或工作量不符。
 
-选中的 pair 仍须通过唯一 cross placement、source containment、content veto 和逐侧 5% 输出预算。任何
+选中的 pair 仍须通过唯一 cross placement、source containment、content veto 和固定框内容包含检查。任何
 long-axis broad standalone edge 都只保留为 observation；它可能是照片内部构图线，不能单独取得 outer 或
 phase authority。
 
@@ -766,7 +766,7 @@ source pitch、base relation、direct separator refit、双候选 local completi
   source W 也可以先保留该 native coordinate，再以完整相关 W 推导 opposite；另一侧存在任何观察、同侧
   intrinsic 多解或 source W 不可用时均不得使用。该合同同样适用于 calibrated Grid 生成的 selected fit，
   但 format/Grid W 自身没有这项权限。最终直接角色权限、outer authority、adjacency coverage、
-  counterevidence 与 5% 预算仍须重新完整评估。
+  counterevidence 与固定框包含检查仍须重新完整评估。
 
 | source W 与缺失角色状态 | 结果 |
 |---|---|
@@ -1084,7 +1084,7 @@ format-specific calibrated W/H/pitch intervals
 + 每个使用 local_delta=0 的 adjacency 完整覆盖其合法不确定性走廊
 + 没有 wide/narrow/contact/overlap/conflict 等直接反证
 → Grid 可以生成完整默认 proposal，包括 START/END 都未直接观察的 Frame
-→ eligible placement 的全部相关可行状态进入 source containment、content veto 与 5% 预算
+→ eligible placement 的全部相关可行状态进入 source containment、content veto 与固定框包含检查
 → 只有最坏安全包络仍合格才可 approved_auto
 ```
 
@@ -1117,7 +1117,7 @@ adjacency coverage、typed counterevidence 和最坏输出包络处理，不能�
 | supported / supported | complete | wide/narrow/contact/overlap | 与 relation 相容 | 直接 relation 修正 Grid；不能保持普通 `local_delta=0` |
 | supported / supported | complete | coordinate/material/conflict | 任意 | 直接 evidence 优先；冲突路径 Review |
 | 与 direct coordinate 不相交 / supported | complete | 有 | 任意 | `calibrated_nominal_grid_conflict` → Review |
-| supported / supported | complete | 无 | source containment、content veto 或每侧 5% 最坏包络失败 | 对应 typed Gate failure → Review |
+| supported / supported | complete | 无 | source containment、content veto 或固定框无法包含完整可见物理包络 | 对应 typed Gate failure → Review |
 | supported / supported | complete | 无 | 全部通过 | 才具备 `approved_auto` 条件 |
 
 Nominal pitch 使用冻结 development gold 的 source-level calibration：只接受 nominal source 中一个
@@ -1171,7 +1171,7 @@ inferred binding 的 `CrossEvidence` 必须一致，Debug 和 report 同时显�
 |---|---|
 | 唯一 source-spanning 或完整 selected-domain direct anchor；ratio supported | 使用有界 ratio H，`aperture_aspect_ratio` |
 | 同一唯一 anchor；source W/ratio unavailable | 使用完整 calibrated format H，`calibrated_format_height` |
-| 同一 anchor；ratio 与 format H 或 5% 预算冲突 | 保留 calibrated-format-H proposal 与 typed ratio failure；不得成为 candidate |
+| 同一 anchor；ratio 与 format H 或固定框容量冲突 | 保留 calibrated-format-H proposal 与 typed ratio failure；不得成为 candidate |
 | anchor role、方向、独立区域或完整 domain 不足 | 不生成单侧 cross；`independent_support_unavailable` |
 | 多个非等价完整 anchor | 保留 best/runner，`non_equivalent_fits`；不得按 residual 或 support 选 winner |
 
@@ -1393,7 +1393,7 @@ Normal 校验要求非空域组数量与 phase 状态对应；development 校验
 覆盖与方向检查并唯一闭合后，保留 `APERTURE_PAIR` 及其实测 H；同一对线同时包住 nominal H，不撤销
 已经成立的照片边界角色，也不将实测 H 改为支撑框内的名义高度假设。该直接 H 仍须与已支持的 W/H
 比例相容，冲突保持 Review；通过后才可按原合同校准 source H。完整 raw 区间、物理线族、局部变化、
-正常 cross bleed 与逐侧预算仍由 aperture 输出 owner 保护。此顺序由边界权限决定，不比较两种用途的
+固定留边与完整内容包含仍由输出 owner 负责。此顺序由边界权限决定，不比较两种用途的
 预算或黄金表现来选较容易通过的一种；不再为已唯一闭合的 pair 重做 enclosing 检查或保留相应用途状态。
 不同 ID 的外框不得取代原唯一获权 aperture。背景角色已获权仍不禁止它在 aperture 未闭合时参与完整
 enclosing 证明。
@@ -1486,7 +1486,7 @@ footprint、typed generation failure 与带 physical frame ID 的逐帧诊断。
 Primary 尚无 placement identity 而 runner 已能物化时，集合保留 runner 的原角色，不伪造 primary，也不丢弃该候选。
 
 候选特征由 `template_acceptability_features.py` 独占，冻结为
-`x5crop_placement_acceptability_features_v1` 的 28 个非负数值字段，定义、顺序、单位和来源字段由
+`x5crop_placement_acceptability_features_v2` 的 28 个非负数值字段，定义、顺序、单位和来源字段由
 `PLACEMENT_FEATURE_DEFINITIONS` 统一登记。它只读取同一 placement 的锚点/角色账本、W/H/pitch、
 residual、Cross 支持、Contact/Overlap、direction、saturation 与输出预算；独立锚点按 evidence group
 去重，不能把 best 的角色权限或 coverage 复制到 runner。Observation、evidence group、template、source
@@ -1567,7 +1567,7 @@ OOD 至少覆盖未校准的 format/holder profile/count/topology、必要 featu
 
 不加邻接 gap，不重新搜索，不提供 phase。该事实只约束 `135-dual` 的两条完整 lane。
 
-## 10. 联合输出保护、bleed 与预算
+## 10. 联合物理保护与固定输出框
 
 Runtime 先对保留的 placement 核算完整输出保护，再由选择和 Gate 决定整张 source 是否可输出；
 不要求 placement 是唯一真实解释。第 9.2 节的候选可用性评估复用同一 footprint 与安全计算 owner，
@@ -1586,9 +1586,10 @@ selected placement
 
 `template_output.common_h_output_footprint` 在同一输出 owner 内核算固定 W 归属下的共同
 同一边界用途的需求。输入为各 H 解释自己的 placement 和完整 native output，保留独立 envelope、保护量与
-身份；逐帧分别合并全部 mandatory/requested hull，不再添加 bleed。共同 requested 相对每个解释自己的
-四条 canonical 边和源轴状态重新计算原 5% 预算；不复用 native 预算，也不删除超预算成员。源域、
-TIFF 截断和内部 lane 越界复用 native output 的同一合同，截断不能消除 requested 的预算风险。
+身份；逐帧合并全部 mandatory hull，requested 始终是同一 source 尺寸的一个固定矩形。
+共同中心取可见 mandatory 并集的轴对齐包围框中心，成员换序不改变框。每个成员分别重算实际共同
+窗口对其完整可见 mandatory 的包含，不复用 native 评价、不删除无法容纳的成员，也不扩大输出尺寸。
+源域、TIFF 截断和内部 lane 越界复用 native output 的同一合同。
 输入数量受原 `MAX_CROSS_PAIRS` 限制，缺项、重复、不同 W/slot/source 权限或混合边界用途均拒绝。
 该核算只证明所给集合的需求与预算。`template_common_output` 现从同一 Cross 求解器的两种完整分组
 视图生成共同输出：固定已确定的 W，完整 `CrossFit` 相同才复用；任一组支持不足、归属搜索未完整
@@ -1613,14 +1614,13 @@ Canonical Cross 必须显式授予 `support_output_eligible`；仅 conditional �
 唯一直接 aperture 的比例冲突分支也不允许被替代。新共同路径还要求全部成员无 conditional 依赖、无独立
 获权 direct aperture 竞争组、完整 membership，且全部局部精修作用域按上述条件闭合。该条件不改变原唯一 support 优先级。
 每个成员恰好投影一次，完整 joint states 供全部 slot 复用；不复用缺少原投影的 native 输出缓存。各自的
-support span、共同 requested 对完整物理 aperture 中心范围的四边 expansion、同状态原 raw departure
-与 pixel-center alignment padding 分别按原合同核验。解释/位置不确定性只计入完整 expansion，不能重复
-计入 alignment。共同 hull 不新增 bleed，不用源边界截断消除 requested 风险。
+完整 support 物理需求和局部 raw departure 共同进入 mandatory；共同 requested 对每个成员的
+可见需求作包含检查。支持边的位置不确定性保留在原联合状态中，不能为了固定框而缩窄。
 既有中心校准只适用于已选定唯一 support；共同成员使用 `common_member_center_authority` 的 unavailable
 校准和完整物理中心范围，不扩大旧校准适用域。逐成员 authority 完整保留；Gate 摘要按 contradicted、
 unavailable、supported 顺序取真实成员，不拼接各成员中心区间。报告从完整 Cross input 重放资格、候选
-和原工作量，从各 fit 重推导中心 authority，并按每成员一次投影重算全部共同预算；不信任自填资格、
-删除的竞争成员或缩窄的校准区间。
+和原工作量，从各 fit 重推导中心 authority，并按每成员一次投影重放完整 envelope、mandatory
+保护范围和共同包含检查；不信任自填资格、删除的竞争成员、缩窄的校准区间或保护范围。
 内容 veto 检查实际共同 polygon；逐边预算摘要取全部成员的最坏值，完整成员证明仍保留。Nominal Grid、
 holder fill、最终采样和报告均绑定共同身份；holder outer 覆盖每个成员的 W 区间。原生 proposal 继续用于
 诊断，不冒充共同输出。最终仍须通过原 source、预算、内容及整张 Gate；黄金仅离线比较最终 polygon。
@@ -1654,7 +1654,7 @@ Registration、prepared lane 和 report 绑定同一物理域与原始 trace；�
 保留已经由位置包络覆盖的负余量。令基础长、短轴最大保护量为 `rx, ry`，对应线族最大绝对斜率为
 `M, N`，以 `dx=(rx+M*ry)/(1-M*N)`、`dy=(ry+N*rx)/(1-M*N)` 闭合保护上界；
 要求 `M*N<1`。逐边只消费自己的 departure、斜率和另一轴上界，不能把方向余量抵消掉。
-Mandatory 与含 bleed/topology 的 requested 分别闭合，产品 bleed 只计入一次，原 5% 预算不变。
+只对 mandatory 闭合物理保护；固定 requested 不参与求解、不再添加基础或 topology bleed。
 
 同一 frame 的全部可行 reference 状态共享原始 Cross trace 准入账本，包含中间状态的完整跨度。
 外扩后新进入保护范围的 raw endpoint 保留其完整位置区间，并对全部状态重新求保护；每次继续都必须
@@ -1665,9 +1665,9 @@ Mandatory 与含 bleed/topology 的 requested 分别闭合，产品 bleed 只计
 长轴端点与原 frame span 的并集范围，重新投影完整物理/统计线族，并保留旧共享账本中的全部 raw
 区间。TOP/BOTTOM 直接消费该范围的真实 departure，不再消费对称 `N*dx` 上界；不再次缩短长轴、
 重选 raw、混合不同状态或用旧新结果逐状态截取。每状态新范围包含于旧 `span±dx`，需求不超过原闭合
-上界，所以左右保护仍充分，无须新增闭合轮次。Mandatory/requested 分别使用自身含全部保护的端点。
+上界，所以左右保护仍充分，无须新增闭合轮次。Mandatory 使用自身含全部物理保护的端点。
 
-上述 aperture 上下界证明使用源轴对齐输出。固定 direction、正 W/H 下 bleed/topology 仿射，帧内固定的
+上述 aperture 上下界证明使用源轴对齐输出。固定 direction、正 W/H 下，帧内固定的
 线族、斜率界、sequence extent 与 raw 账本使长轴 expansion 为状态的凸函数，实际左端凹、右端凸。
 任一固定 Cross 直线按斜率符号选择这两个端点，其下界凹、上界凸；完整线族与 raw 并集仍保留该性质。
 直接边的位置抵消、推导 opposite 的有符号同状态 H 都是仿射项，因此最终 TOP 凹、BOTTOM 凸。
@@ -1675,43 +1675,32 @@ Mandatory 与含 bleed/topology 的 requested 分别闭合，产品 bleed 只计
 每帧只增加每状态一次完整线族和原始区间投影，复杂度 `O(N_state * (N_vertex + N_raw))`，
 不增加状态、查询、拟合或通用 solver。
 
-产品 bleed：
+固定输出尺寸由最终共享 `SourceScanGeometry.fixed_output_size` 唯一产生。W/H 分别取对应
+`JointAxisGeometry.canonical_state()` 的可行顶点重心对应的源像素 extent；不用每格 END−START、
+support span、独立区间中点或黄金坐标重新估计。所有 lane、slot、retained placement 与共同输出
+复用同一 `SourceFixedOutputSize`：`source_geometry_id`、`frame_width_px`、`frame_height_px`、
+`margin_ratio_per_side=0.05`。Source 状态无法共同闭合时不能获得整张自动输出权限。
 
 ```text
-sequence：max(0.15 mm, 0.7% W)
-cross：0.25 mm
+requested W = 1.1 × source W
+requested H = 1.1 × source H
 ```
 
-`APERTURE_PAIR` 四边的完整 expansion（联合不确定性 + 直线 residual + bleed）各自不得超过对应
-format 尺寸的 5%。四边不能借额度；刚好达到上限通过。
+5% 是固定留边，替换旧基础 bleed 与 topology extra bleed；不叠加小画幅固定下限。
+`width_axis` 与 `sequence_direction` 明确横竖布局及 START/END 归属。单份 native 输出先使用
+canonical frame 包围框中心，再把中心限制到能够包含全部可见 mandatory 的区间。
+对于轴尺寸 D、可见需求 [a,b]，中心区间为 `[b-D/2, a+D/2]`；无可行区间时仍保留固定尺寸
+proposal，中心取需求中点，并由包含检查产生 `direct_use_budget_exceeded`，不得扩大框。
 
-这是当前 Runtime 风险代理，不等于黄金验收的实际裁切误差。黄金 5% 以人工确认 span 衡量最终实际外扩，
-是产品质量硬标准；Runtime 5% 以模型尺寸衡量 uncertainty/residual/bleed。二者数值相同不意味着同一
-物理量。开发必须交叉报告 proposal 的 gold safe/unsafe 与数值 assessment 的 passed/failed/not evaluated，
-再单列预算 Gate 的 evaluated/blocks 与上游 ratio-H 的实际消费/阻断状态；算出了超限不代表 Gate 已执行。
-未执行不得写成通过，派生状态必须能从原 receipt 复算。真实非法坐标、输入合同、source/lane containment 和已证明的直接反证
-继续优先拒绝；内部包络与阈值策略可以按黄金结果重新校准，但不能隐藏 uncertainty、人工收窄区间、读取
-黄金坐标或直接整体关闭预算。本阶段保持现有 Runtime 阈值与 Gate 行为，只拆开职责和诊断。
+`DirectUseBudgetAssessment` 现在只证明内容包含。每边保存从固定窗口中心到可见 mandatory
+最远点的非负 `required_extent_px`、该轴固定半尺寸 `available_extent_px` 和 `within_limit`。
+比较只吸收 `1e-8 px` 浮点误差；四边全部成立才是 supported。Mandatory 仅与完整真实 TIFF
+像素单元域求交，绝不能先按内部 lane 裁小。实际相对照片边界外扩多少不再作为逐侧上限；
+框内定位偏移不额外处罚。Source/lane 权限、直接反证、内容 veto 与其它 Gate 仍各自独立。
 
-已证明的 Contact/Overlap 只在参与该关系的两侧增加显式 `topology_protection`：前一 Frame 的 END 朝后一格、
-后一 Frame 的 START 朝前一格，其它边仍使用基础 bleed。当前 protection 等于一份同状态的 sequence
-base bleed；它不是新的预算，也不能选择或证明 topology。每侧完整
-可用保护上限仍为：
-
-```text
-max(0, 5% W - joint uncertainty - line residual - base sequence bleed)
-```
-
-因此 Contact/Overlap 可以产生彼此重叠的两个安全 OutputFootprint，但每侧完整 expansion 仍不得超过 5% W。
-source containment、content veto 或剩余预算不能闭合时进入 review；不确定 topology 也不能先按普通
-切分再靠扩大 bleed 自动批准。Debug 与 report 分别保存基础 bleed、topology protection、relation ID、
-uncertainty 与 residual。
-
-`ENCLOSING_SUPPORT_PAIR` 的 top/bottom 使用直接 support 边，不再添加 cross bleed。其预算由三个不重叠的
-合同共同组成：直接 support span 不超过 `1.1H`；top/bottom 各自的完整 expansion 不超过 `5%H`；同一
-可行状态中，为覆盖两条 support 直线局部 departure 与 pixel-center span 而额外加入的 alignment padding
-之和不超过 `5%H`。Support 的位置不确定性已经进入逐侧完整 expansion，不能再次算入 alignment padding；
-也不能把两个不同可行状态的 top/bottom 极值相加。Start/end 使用正常 sequence bleed 和各自 5% 预算。
+`BoundaryProtectionFact` 只保留 measurement expansion、local residual 和 mandatory required
+expansion 三项物理诊断，不以它们动态生成输出尺寸。Contact/Overlap 的关系与角色证明仍在
+原 topology owner 中完成；固定留边不能代替关系证明。
 
 Enclosing support 本身只证明真实 aperture 位于两条 support 之间，不能证明 fixed `H` 的 aperture 居中。
 唯一 pair 已被选定后，`EnclosingSupportApertureAuthority` 可以用黄金集校准的相关先验收窄剩余中心偏移：
@@ -1734,8 +1723,7 @@ placement 选择，也不修改 output polygon。每个 `JointFrameState` 将该
 
 `EnclosingSupportApertureRisk` 保存 calibration identity/state、实际中心偏移区间、canonical `H`、最大中心
 平移、top/bottom 最坏 expansion 与可行状态数。Requested footprint 与最不利 aperture 必须来自同一状态；
-既不能把互斥状态的极值相加，也不能挑选最有利中心。两项逐侧 expansion 取代 support line 自身距离参与
-cross 预算，但不改变正式采样 geometry。
+既不能把互斥状态的极值相加，也不能挑选最有利中心。这些距离只作物理诊断，不再作为逐侧外扩预算，也不改变固定窗口。
 
 Support 的共享斜率属于同一个 `JointFrameState`，已经进入该状态的 boundary line 与联合 footprint。
 完整状态保留 `(top, bottom, slope)` 三维可行集合；不能只投影两个位置后保留任意一个斜率解。
@@ -1749,11 +1737,11 @@ Support 的共享斜率属于同一个 `JointFrameState`，已经进入该状态
 仍为两侧 intersection。Straight residual 按完整本侧 raw 与原生中心重算，不能因方向收紧直接删除。
 每侧 N 个 raw interval 的半平面裁剪为 `O(N²)` 工作、`O(N)` 临时空间，不新增 TIFF query。
 Enclosing 风险距离使用短轴坐标单位，与 source-axis H 一致；法向距离除以对应短轴法向分量，避免
-归一化造成区间内部最大风险遗漏。完整包络与逐侧风险均保留完整三维顶点，预算上限不变。
+归一化造成区间内部最大风险遗漏。完整物理包络与风险诊断均保留完整三维顶点。
 外框与 aperture 共用第 10 节的有界保护闭合及原始端点准入账本。外框先以完整状态的实际支撑高度建立
 跨轴保护范围；同一斜率造成的角点位移只进入范围上界，不重复加到上下边保护。方向剩余项只在原实测
-trace 域外计算。Mandatory 与 requested 独立纳入新进入范围的 raw 端点，最多原端点数加一次检查；
-风险和同状态对齐预算直接使用 requested 的同一份保护结果，不再另算较小范围。
+trace 域外计算。Mandatory 纳入新进入物理保护范围的 raw 端点，最多原端点数加一次检查；
+风险诊断读取同一份物理保护与实际固定 requested，不另算较窄保护范围。
 准入闭合后，冻结共同 `dx/dy`、全部状态的 START/END 总保护和共享 raw departure。每个 sequence
 状态取自身实际长轴端点与原 frame span 的范围，只重算域外方向差；不能按新范围撤回旧 raw 或再缩短
 长轴。该范围包含于旧共同 `span±dx`，所以短轴需求不增加，原长轴保护仍充分。每状态只增加两侧各
@@ -1766,8 +1754,8 @@ trace 域外计算。Mandatory 与 requested 独立纳入新进入范围的 raw 
 共享 raw departure 对支撑变量凸且不依赖 `q`。倾斜角点包含 `m*x` 双线性项，不能宣称联合仿射，
 但任意方向的 footprint 支撑函数对两组变量分别凸，因此完整积顶点的 hull 覆盖连续内部状态。
 逐侧风险使用同状态斜率，`m*x` 在输出与 aperture 距离中抵消，剩余支撑高度余量、固定校准偏移
-（或完整物理偏移）与保护量仍分别凸。同状态对齐预算同理。该证明依赖固定 direction、正 W/H、固定
-canonical H、enclosing 无 cross bleed 和当前独立投影；不能移用于非积状态集合或非仿射变量 H。
+（或完整物理偏移）与保护量仍分别凸。该证明依赖固定 direction、正 W/H、固定 canonical H
+和当前独立投影；不能移用于非积状态集合或非仿射变量 H。
 局部 residual 只保留实测 trace 相对这条同状态直线的 outward departure；超出实测 trace 域时，也只传播
 `observed_direction - state_slope` 的方向差。不得把绝对斜率再作为 residual 加一次，或用目标 trace 的
 水平位置与其它 trace 直接比较。`BoundaryProtectionFact.local_boundary_residual_px` 与
@@ -1775,20 +1763,15 @@ canonical H、enclosing 无 cross bleed 和当前独立投影；不能移用于�
 
 | enclosing support / aperture-center 状态 | 结果 |
 |---|---|
-| unique support + calibration 与物理 containment 有交集，逐侧最坏 expansion 与其它预算均成立 | `supported` |
-| calibration 不可用，但完整物理中心区间的最坏 expansion 仍成立 | `supported`，保留 `unavailable` provenance |
+| 合法 support、中心 authority 无矛盾，固定框包含完整可见 mandatory | 继续其它 Gate |
+| 中心 calibration 不可用 | 保留完整物理中心范围和 unavailable provenance |
 | calibration 与直接 support 的物理中心区间无交集 | `enclosing_support_aperture_center_conflict` |
-| 任一边完整 expansion 超过自己的 5% | `direct_use_budget_exceeded` |
-| support span 超过 `1.1H` | `direct_use_budget_exceeded` |
-| 每侧各自成立，但同一状态 alignment padding 合计超过 `5%H` | `direct_use_budget_exceeded` |
-| 只有不同状态的 top/bottom 极值相加才超过 5% | 不据此阻断 |
+| 固定框无法包含任一成员的完整可见 mandatory | `direct_use_budget_exceeded` |
 
-`OutputFootprint` 同时保存三层 source-space polygon，以及
-`maximum_same_state_cross_alignment_padding_px` 和 `enclosing_support_aperture_risk`：
-`mandatory_source_footprint` 含联合测量不确定性、
-直线 residual 与完整 pixel-center span；`requested_source_footprint` 再加入完整产品 bleed；
-`required_source_footprint` 是最终实际采样范围。完整 5% 预算始终按 requested 层评估，不能因源边界而
-收窄或掩盖超预算。
+`OutputFootprint` 保存三层 source-space polygon：`mandatory_source_footprint` 含联合测量
+不确定性、直线 residual 与完整 pixel-center span；`requested_source_footprint` 是固定矩形；
+`required_source_footprint` 是源边截断后的实际采样范围。Enclosing 的 same-state alignment padding
+与 aperture-center risk 仍保留为独立诊断，不以额外逐侧上限重复阻断。
 
 整数坐标仍表示像素中心，真实 TIFF 的连续可用源域为像素单元域
 `[-0.5, width-0.5] × [-0.5, height-0.5]`，不是首末像素中心之间的矩形。
@@ -1800,11 +1783,10 @@ Requested 越过该外缘时，required 明确等于其与该连续源域的交�
 完整 requested/mandatory polygon、越界距离和 Debug 虚线，不伪造 TIFF 外内容，也不因不存在的源像素
 要求 review。双 lane 的内部边界不是 source boundary：`lane_boundary_optional_bleed` 与
 `lane_boundary_joint_protection` 都不得裁小后批准，继续由 Gate 阻断。交集退化、其它 authority 冲突或
-预算失败仍进入 review；任何 saturation 都不得静默发生。
+包含失败仍进入 review；任何 saturation 都不得静默发生。
 
-Content protection 查询的也是同一个最终 `OutputFootprint`，即联合不确定性、局部 residual、完整
-pixel-center span 和 bleed 全部加入后的精确 convex polygon。真实画面位于 nominal frame 之外、但仍
-在最终 bleed 内，不构成 veto；只有可靠内容越过最终 post-bleed crop 边界才否决。Content 不能回头
+Content protection 查询的也是同一个最终 `OutputFootprint`，即固定请求经过合法源边截断后的精确 convex polygon。真实画面位于 nominal frame 之外、但仍
+在最终固定窗口内，不构成 veto；只有可靠内容越过最终固定 crop 边界才否决。Content 不能回头
 移动边界、选择 runner 或创造 phase。
 
 Decision 后 finalization 才执行并评估 lightweight deskew。`needs_review` 不扫描，记录
@@ -1816,7 +1798,8 @@ Decision 后 finalization 才执行并评估 lightweight deskew。`needs_review`
 同一 affine transform，正式轴对齐 box 由旋转后物理 polygon 的像素单元覆盖 AABB 得到：
 每轴下界为 `floor(min+0.5)`，半开上界为 `ceil(max+0.5)`。这使全源恒等采样恰好为 `[0,width) × [0,height)`，
 首末像素完整保留，也使亚像素物理边界由对应输出单元覆盖。采样 box 不反向扩大 required，不能先把 polygon
-扩成 source AABB，也不能继续裁固定 W×H。
+扩成 source AABB，也不能在 deskew 后另裁 W×H。固定合同指原图坐标窗口；最终 TIFF
+像素宽高可以因源边截断、旋转 AABB 和整数取整而不同。
 
 旋转后 AABB 的角落可以位于安全 polygon 之外；这些表示性角落允许写黑色 no-data，不是检测缺口，
 不得回流 `CandidateGate`。Sampling 仍必须保证 polygon 内的已确认区域完整、输出 extent 有界、
@@ -1883,7 +1866,7 @@ Cross authority，不增加 constraint rank，不创建 winner，也不改变原
 
 `CrossLineProjectionBasis` 进一步隔离“物理资格包络”和“Review proposal 的具体画法”。Resolved Cross
 及任何可进入 eligibility 的 fit 必须使用 `complete_physical_direction`：把直接线的完整物理方向区间传播到
-每张 Frame，并由同一 5% 预算承担最坏状态。只有已经明确携带 `CrossRetainedProposalBasis` 的 unresolved
+每张 Frame，并检查固定框对完整最坏物理需求的包含。只有已经明确携带 `CrossRetainedProposalBasis` 的 unresolved
 best proposal 才使用 `retained_review_statistical_fit`：在保留 native reference coordinate 的同时，以该线
 自己的统计拟合方向区间形成一份可比较的具体 Review geometry。完整物理方向区间、原 failure 与 runner
 仍完整保存在 evidence/report 中；统计拟合不能取得 Cross authority、constraint rank、candidate、Gate 或
@@ -1940,7 +1923,6 @@ complete/selected placement 后重复建立同义 Gate fact。它不读取 deske
 - `aperture_aspect_ratio_authority_unavailable`
 - `aperture_aspect_ratio_physical_prior_conflict`
 - `aperture_aspect_ratio_direct_conflict`
-- `aperture_aspect_ratio_budget_exhausted`
 - `enclosing_support_aperture_center_conflict`
 - `direct_use_budget_exceeded`
 - `source_lane_authority_unavailable`
@@ -1996,9 +1978,9 @@ Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决
 - best、runner 及真正不同之处；
 - `APERTURE_PAIR` 或 `ENCLOSING_SUPPORT_PAIR`；
 - aspect calibration identity、`R_raw/R_guarded`、`gW/gH`、W 与推导 H interval、cross 消费状态、
-  输出预算和 typed failure；
+  是否被 Cross 消费和 typed failure；
 - selected-only OutputFootprint，以分帧颜色半透明填充最终 required polygon，不另画白色虚线框，
-  并显示四边 bleed/联合 expansion/预算；enclosing support 另显示 calibration state、有效中心偏移区间与
+  并显示固定尺寸、完整物理保护和四边内容包含；enclosing support 另显示 calibration state、有效中心偏移区间与
   同状态逐侧风险；
 - `DESKEW APPLIED`、`ROTATION NOT NEEDED` 或 typed `DESKEW SKIPPED`；
 - 第一个 blocking Gate gap，或全部事实已支持。
@@ -2104,7 +2086,7 @@ Linux开发/CI使用`renameat2(RENAME_NOREPLACE)`。目标在最终检查之后�
 | `photo_geometry/template_overlap.py` | candidate-independent `OverlapEdgePairObservation`：从既有 authoritative edge ledger 登记唯一反序 END/START pair，不读取像素或选择 ordinal |
 | `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source W/H extent、scan-scale authority 与不增加 direct provenance 的相关 interval 收紧 |
 | `photo_geometry/template_frame_width.py` | canonical `SourceFrameWidthAuthority` 的可靠完整 Frame/direct-lattice 测量；与 placement 消费分离的 W 区间、相关投影/reconciliation、单边 opposite 推导及其 topology assessment；缺失整 Frame 仍归 Grid，scope 不改变资格/runner，不重复增加 rank 或重编译 template |
-| `photo_geometry/template_aspect_ratio_model.py`、`template_aspect_ratio.py` | 校准 W/H 比例的 typed authority、相关 H 推断、direct H 对账与预算失败 |
+| `photo_geometry/template_aspect_ratio_model.py`、`template_aspect_ratio.py` | 校准 W/H 比例的 typed authority、相关 H 推断与 direct H 物理对账 |
 | `photo_geometry/template_model.py` | Sequence coordinate/evidence identity、`AdjacencyRelation` sum type、measured separator 的直接 gap identity 与相关 delta realization，以及统一 O(count) prefix |
 | `photo_geometry/template_phase_model.py`、`template_phase_candidates.py` | role binding、projection outcome/type、phase-authority ceiling、同一离散 identity 的有界投影重拟合，以及 physical/source W 下的有界 native-edge rebind |
 | `photo_geometry/template_phase.py`、`template_pitch.py`、`template_residual.py` | phase/ordinal 求解、连续 placement identity、candidate-bound direct separator relation、Contact/Overlap/Separator 离散竞争、被 local 反证后的 pre-local phase proposal provenance、placement-bound source-W 消费与 resolved-only rebind 调度，以及 source pitch |
@@ -2120,9 +2102,9 @@ Linux开发/CI使用`renameat2(RENAME_NOREPLACE)`。目标在最终检查之后�
 | `photo_geometry/template_placement.py`、`template_selection.py` | source-axis frame 的一次 compose、显式 overlap 的 cross-support 去重，以及 proposal 之后的离散 eligibility/winner/runner |
 | `photo_geometry/template_acceptability_features.py` | 已有 placement 的冻结数值特征、单位、missingness 与 provenance；不求解几何、计算预算、评分或批准 |
 | `photo_geometry/template_holder_fill.py` | selected PhotoGroupOuter 与 W-only fill assessment |
-| `photo_geometry/content_*.py` | 最终 post-bleed polygon 上的二维 negative veto |
+| `photo_geometry/content_*.py` | 最终固定窗口的实际 polygon 上的二维 negative veto |
 | `photo_geometry/template_feasible_geometry.py` | 任一已 compose placement 的低维联合可行集合与 footprint projection；resolved 或第 7 节允许的逐假设 global-lattice direct constraint 在此唯一参与联合投影，不决定 eligibility |
-| `photo_geometry/template_output.py`、`output_model.py` | JointPlacementEnvelope、实际 sequence constraint basis/identity、基础 bleed、Contact/Overlap 两侧 topology protection、enclosing-support aperture-center risk、OutputFootprint 与同一 5% budget |
+| `photo_geometry/template_output.py`、`output_model.py` | JointPlacementEnvelope、实际 sequence constraint basis/identity、固定 source W/H 身份、完整 mandatory、固定 requested、source clipping 与可见内容包含；enclosing risk 只作诊断 |
 | `photo_geometry/template_runtime_model.py`、`detector.py` | `TemplatePlacementProposal` / `TemplateSourceProposal`、eligibility/selection handoff 与顶层编排；proposal 不授权正式输出 |
 | `photo_geometry/template_gate.py` | selected-only CandidateGate facts；不生成、选择或删除 proposal |
 | `x5crop/detection/output_deskew.py` | approved-only 6–24 trace、role-free、candidate-independent 的可选输出角度 observation |
@@ -2142,7 +2124,7 @@ Linux开发/CI使用`renameat2(RENAME_NOREPLACE)`。目标在最终检查之后�
 start/end 或 accuracy polygon。其它 Frame 必须有 `boundary_pair`。同一物理 Frame 在各 count task 中
 必须共享 `slot_kind`。只有 `source_truncated` 可让物理 Frame 越出 TIFF；冻结 polygon 为物理 Frame 与
 raster 像素单元域 `[-0.5,extent-0.5]` 的交集，坐标仍以整数像素中心表示；
-源外区域不参与黄金包含或 5% 预算。若物理 polygon 没有实际越界，则
+源外区域不参与黄金包含。若物理 polygon 没有实际越界，则
 `source_truncated` 标签本身不能通过确认。Orientation 只做可逆显示，持久化始终使用原 TIFF 坐标。
 
 机器拟合、红线导入、有界 JPG 与原 TIFF 窄带精修都只有 proposal 权限。精修不得改变证据基础、物理
@@ -2157,17 +2139,19 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
 
 ## 14. 验证边界
 
-- `x5crop_directional_minimum_acceptable_crop_v1` 是全部当前与以后用户确认黄金共用的
+- `x5crop_fixed_output_directional_minimum_acceptable_crop_v2` 是全部当前与以后用户确认黄金共用的
   accuracy 合同。用户确认 polygon 是尽量贴近该 source 真实有效成像边界的最内侧可接受无 bleed
   基准，基本可视为该 source 的 aperture 尺寸；它仍不是实验室级绝对测量，也不限定 detector 只能产生
   一个逐像素相同的答案。
-- 黄金比较是方向性的：`approved_auto` 的正式 post-bleed `required_source_footprint` 必须完整包含确认
+- 黄金比较是方向性的：`approved_auto` 的正式 `required_source_footprint` 必须完整包含确认
   polygon，边、角点或亚像素位置不得向其内侧越界；任一违例都是危险自动批准。Development diagnostic
   还用同一规则分别检查 pre-Gate proposal 与 eligible candidate，以定位生成、资格和决定三个阶段的根因；
   Review proposal/candidate 的偏差不产生正式输出，因此不能称为用户层危险批准。几何 epsilon 只吸收浮点计算
-  误差。具有向外预算权限的每一侧，其总 expansion 不得超过对应确认 W/H span 的 5% 加命名的 sampling
-  allowance，uncertainty、residual 与 bleed 均消耗该预算。这不是零像素误差或对称接近度要求。
-- H 的验收对象是最终可直接使用的 post-bleed 裁切：保护画面、满足既有外扩及运行时预算，并能安全
+  误差。每份输出还须携带一致的 source 固定尺寸身份，requested 必须是源轴对齐的四角矩形，
+  尺寸严格对应 `1.1W × 1.1H`；缺失或篡改 metadata、不同 slot 使用不同 source W/H 均失败。
+  Gold 独立检查这些几何事实；Runtime report 另从完整 source state 重建尺寸身份。
+  实际向外 expansion 仅作诊断，不再按真实边界每侧 5% 阻断；框内偏移不额外处罚。
+- H 的验收对象是最终可直接使用的固定裁切：保护画面、满足完整包含及运行时权限，并能安全
   批准。检测线与人工指导线的数像素差异、或中间 H 解释尚不唯一，本身不是新增失败条件。若完整合法
   H 解释集能由同一输出覆盖，且共同输出在每个解释下都满足已有几何、预算、源域与内容保护条件，
   可以保留解释差异；不得强行选择唯一边，也不得只相对 primary 证明安全。W 后续还必须证明逐帧归属
@@ -2192,20 +2176,20 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   及 deskew transform 的 source extent 一致。Saturation 的源侧／内部 lane 分类由实际源尺寸复算，不能
   自报较小 source 把 lane 越界冒充 TIFF 截断。Final footprint 必须复用 selected geometry，采样 box 由
   同一物理 polygon 与 affine 重建。黄金仍严格比较 required polygon，不使用有额外单元余量的采样 AABB。
-- 逐线 `review_basis` 分别决定向内包含与向外 5% 预算能否产生阻断 accuracy verdict：
+- 逐线 `review_basis` 决定已确认可见内容的向内包含权限：
 
-  | 证据基础 | 向内越线 | 向外超过 5% |
-  |---|---|---|
-  | `visible_content_limit` | 阻断 | 不阻断 |
-  | `human_width_estimate` | 不阻断 | 不阻断 |
-  | `directly_visible` | 阻断 | 阻断 |
+  | 证据基础 | 向内越线 |
+  |---|---|
+  | `visible_content_limit` | 阻断 |
+  | `human_width_estimate` | 不阻断 |
+  | `directly_visible` | 阻断 |
 
   `directly_visible` 只表示人类从原 TIFF 的可靠像素分界确信该侧是真实内容边缘；分界可以很淡、很短，
   不必覆盖完整 H。它不建立 detector edge/trace 命中、observation identity、证据长度、强度或逐像素坐标
   相等要求。比较只检查 candidate 或正式 `required_source_footprint` 是否满足上表对应的方向性几何
   合同；检测机制不同但最终安全裁切合格时仍通过。
   `visible_content_limit` 是残缺曝光中仍可见内容的最内侧安全保护线：裁切进入该线以内会丢失可见内容，
-  必须阻断；线外没有可见内容证据，因此不能用相对该线的 5% 预算阻断更大的外扩。
+  必须阻断；线外没有可见内容证据，实际向外距离仅作诊断。
   `human_width_estimate` 由同一 source 中其它直接可见边界所确定的一致 Frame 宽度推算；它仍不是该侧
   的直接像素观察，线内、线外均不产生 accuracy verdict。没有足够一致的可见 Frame 宽度时保持未分类，
   不制造估计线。
@@ -2215,8 +2199,8 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
 - 几何 accuracy 只比较带 `boundary_pair` reference 的 Frame ordinal。`blank_exposure` 的
   `not_applicable` 表示没有人工内容边界，不是通配框、估计框或放行特例；它不减少 Runtime count，
   也不改变模板、源内安全和整张 source 决策合同。
-- 上述黄金合同不因 `boundary_use` 改变。`enclosing_support_pair` 的总高度不超过 `1.1H` 仍是 runtime
-  自动决策合同，但在黄金 accuracy 中还必须满足逐侧 5% 外扩上限，不能用总 span 隐藏单侧过度外扩。
+- 上述固定尺寸和内容包含合同不因 `boundary_use` 改变；enclosing 的物理 support 搜索上限
+  不代替最终固定窗口，也不再附加黄金逐侧实际外扩上限。
 - Nominal 的能力目标是安全自动批准；challenge 不预设终态，安全 `approved_auto` 与安全
   `needs_review` 都是合格结果，前者单独记录为能力发现。角色在运行 detector 前按 evaluation task 的
   证据充分性冻结，不读取 detector 输出，也不进入 runtime：只要人工确认的直接证据与
@@ -2277,7 +2261,7 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   runtime、Gate 或黄金 verdict。分层只读取冻结人工事实：结构正常、全部直接可见、`count >= 3` 且人工
   几何对最佳固定 `phase + pitch + W` lattice 的最大 role residual 不超过 `0.02W` 时进入基础 nominal
   分桶，其它 nominal 进入较难分桶，challenge 保持原角色。该 2% 只是优化顺序，不是 runtime 阈值、
-  5% 安全预算或样片白名单。“机器是否看见”必须由每次运行的 observation/binding 事实重新生成，不能
+  固定框包含规则或样片白名单。“机器是否看见”必须由每次运行的 observation/binding 事实重新生成，不能
   写回人工基线。分析结果绑定 HEAD、detector source manifest、comparator source manifest 与 development
   gold SHA，并分别记录两组路径是否与 HEAD 一致。默认 `--gate report` 只要求诊断完整，始终报告 proposal、
   candidate、危险 auto 与 root failure；即使发现危险 auto 也保留成功退出，便于开发修复，但 summary 必须写

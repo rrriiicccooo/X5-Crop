@@ -1,11 +1,38 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cached_property
+import math
 
 from ...domain import FiniteInterval, PositiveInterval
-from ...formats import FramePhysicalSpec
+from ...formats import FramePhysicalSpec, OUTPUT_PROTECTION_SPEC
 from .joint_axis_geometry import JointAxisGeometry
 from .physical_identity import physical_fact_id
+
+
+@dataclass(frozen=True)
+class SourceFixedOutputSize:
+    """One source-wide aperture size with deterministic five-percent margins."""
+
+    source_geometry_id: str
+    frame_width_px: float
+    frame_height_px: float
+    margin_ratio_per_side: float = OUTPUT_PROTECTION_SPEC.margin_ratio_per_side
+
+    def __post_init__(self) -> None:
+        if (not self.source_geometry_id
+                or self.margin_ratio_per_side != OUTPUT_PROTECTION_SPEC.margin_ratio_per_side
+                or any(not math.isfinite(v) or v <= 0.0
+                       for v in (self.frame_width_px, self.frame_height_px))):
+            raise ValueError("fixed output size requires one positive source W/H")
+
+    @property
+    def output_width_px(self) -> float:
+        return self.frame_width_px * (1.0 + 2.0 * self.margin_ratio_per_side)
+
+    @property
+    def output_height_px(self) -> float:
+        return self.frame_height_px * (1.0 + 2.0 * self.margin_ratio_per_side)
 
 
 def centered_short_axis_authority_px(
@@ -40,6 +67,16 @@ class SourceScanGeometry:
     frame_spec: FramePhysicalSpec
     width_state: JointAxisGeometry
     height_state: JointAxisGeometry
+
+    @cached_property
+    def fixed_output_size(self) -> SourceFixedOutputSize:
+        return SourceFixedOutputSize(
+            source_geometry_id=self.geometry_id,
+            frame_width_px=(self.width_state.design_extent_mm
+                            * self.width_state.canonical_state()[1]),
+            frame_height_px=(self.height_state.design_extent_mm
+                             * self.height_state.canonical_state()[1]),
+        )
 
     @classmethod
     def create(

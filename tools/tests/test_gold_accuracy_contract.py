@@ -31,6 +31,7 @@ from tools.regression.gold_analysis import (
 )
 from tools.regression.diagnostic_cohort import DIAGNOSTIC_COHORT_PATH
 from tools.regression.gold_geometry import (
+    GOLD_ACCEPTANCE_CONTRACT,
     gold_frame_diagnostics,
     ordered_gold_mapping,
     validate_approved_geometry,
@@ -46,8 +47,56 @@ def _frame(polygon: list[list[float]]) -> dict[str, object]:
     }
 
 
-def _output(polygon: list[list[float]]) -> dict[str, object]:
-    return {"required_source_footprint": polygon}
+def _output(
+    polygon: list[list[float]],
+    *,
+    frame_width: float = 560.0,
+    frame_height: float = 560.0,
+    center: tuple[float, float] | None = None,
+    strip_orientation: str = "horizontal",
+    source_geometry_id: str = "test-source-geometry",
+    margin_ratio_per_side: float = 0.05,
+) -> dict[str, object]:
+    x_min = min(point[0] for point in polygon)
+    x_max = max(point[0] for point in polygon)
+    y_min = min(point[1] for point in polygon)
+    y_max = max(point[1] for point in polygon)
+    requested_width = frame_width * (1.0 + 2.0 * margin_ratio_per_side)
+    requested_height = frame_height * (1.0 + 2.0 * margin_ratio_per_side)
+    center_x, center_y = (
+        ((x_min + x_max) / 2.0, (y_min + y_max) / 2.0)
+        if center is None else center
+    )
+    if strip_orientation == "vertical":
+        requested_width, requested_height = requested_height, requested_width
+    requested = [
+        [center_x - requested_width / 2.0, center_y - requested_height / 2.0],
+        [center_x + requested_width / 2.0, center_y - requested_height / 2.0],
+        [center_x + requested_width / 2.0, center_y + requested_height / 2.0],
+        [center_x - requested_width / 2.0, center_y + requested_height / 2.0],
+    ]
+    return {
+        "requested_source_footprint": requested,
+        "required_source_footprint": polygon,
+        "fixed_size": {
+            "source_geometry_id": source_geometry_id,
+            "frame_width_px": frame_width,
+            "frame_height_px": frame_height,
+            "margin_ratio_per_side": margin_ratio_per_side,
+        },
+    }
+
+
+def _add_fixed_size_metadata(output: dict[str, object]) -> None:
+    requested = output["requested_source_footprint"]
+    x_values = [float(point[0]) for point in requested]
+    y_values = [float(point[1]) for point in requested]
+    output["fixed_size"] = {
+        "source_geometry_id": "test-retained-source-geometry",
+        "frame_width_px": (max(x_values) - min(x_values)) / 1.1,
+        "frame_height_px": (max(y_values) - min(y_values)) / 1.1,
+        "margin_ratio_per_side": 0.05,
+    }
 
 
 def _basis_line(
@@ -385,12 +434,14 @@ class GoldAccuracyContractTest(unittest.TestCase):
             "count": tracked["count"],
         }
 
+        expected = copy.deepcopy(tracked)
+        expected["acceptance_contract"] = GOLD_ACCEPTANCE_CONTRACT
         self.assertEqual(
             build_gold_cohort_records(
                 [tracked["confirmed_geometry"]],
                 [diagnostic],
             ),
-            (tracked,),
+            (expected,),
         )
 
     def test_incomplete_directional_geometry_is_rejected(self) -> None:
@@ -427,7 +478,8 @@ class GoldAccuracyContractTest(unittest.TestCase):
             diagnostics[0]["inward_failure_sides"],
             ["sequence_start"],
         )
-        self.assertEqual(diagnostics[0]["outward_budget_failure_sides"], [])
+        self.assertNotIn("outward_budget_failure_sides", diagnostics[0])
+        self.assertNotIn("outward_limit_px_by_side", diagnostics[0])
         witness, = diagnostics[0]["inward_failure_witnesses"]
         self.assertEqual(witness["side"], "sequence_start")
         self.assertEqual(witness["cause"], "gold_vertex_outside_output_half_plane")
@@ -435,6 +487,106 @@ class GoldAccuracyContractTest(unittest.TestCase):
         self.assertEqual(witness["output_edge"], [[10.0, 560.0], [10.0, 0.0]])
         self.assertEqual(witness["violating_gold_vertex_indices"], [0, 3])
         self.assertEqual(witness["minimum_signed_distance_px"], -10.0)
+
+    def test_fixed_size_translation_that_contains_content_passes(self) -> None:
+        gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
+        translated = [
+            [0.0, -28.0],
+            [616.0, -28.0],
+            [616.0, 588.0],
+            [0.0, 588.0],
+        ]
+        record = _basis_aware_record(start_basis="directly_visible")
+
+        validate_approved_geometry(record, _approved_report(translated))
+        diagnostics, = gold_frame_diagnostics(record, _approved_report(translated))
+        self.assertGreater(diagnostics["expansion_px_by_side"]["sequence_end"], 0.0)
+
+    def test_fixed_size_dimension_tampering_fails_requested_rectangle_check(self) -> None:
+        gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
+        output = _output(gold)
+        output["fixed_size"]["frame_width_px"] = 561.0
+        record = _basis_aware_record(start_basis="directly_visible")
+
+        with self.assertRaisesRegex(ValueError, "requested_source_footprint"):
+            validate_approved_geometry(
+                record,
+                {"output": {"finalization": {"output_footprints": [output]}}},
+            )
+
+    def test_fixed_size_true_content_cut_still_fails_inward_check(self) -> None:
+        cut = [[10.0, 0.0], [570.0, 0.0], [570.0, 560.0], [10.0, 560.0]]
+        record = _basis_aware_record(start_basis="directly_visible")
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "approved output crosses user-confirmed inward baseline",
+        ):
+            validate_approved_geometry(
+                record,
+                {"output": {"finalization": {"output_footprints": [_output(cut)]}}},
+            )
+
+    def test_missing_fixed_size_metadata_fails_gold_comparison(self) -> None:
+        gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
+        output = _output(gold)
+        del output["fixed_size"]
+        record = _basis_aware_record(start_basis="directly_visible")
+
+        with self.assertRaisesRegex(ValueError, "fixed_size metadata is invalid"):
+            validate_approved_geometry(
+                record,
+                {"output": {"finalization": {"output_footprints": [output]}}},
+            )
+
+    def test_all_slots_share_fixed_size_identity_and_dimensions(self) -> None:
+        gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
+        geometry = _directional_geometry(gold)
+        geometry["slots"].append(
+            {
+                "ordinal": 2,
+                "slot_kind": "blank_exposure",
+                "reference_geometry": {"kind": "not_applicable"},
+            }
+        )
+        second = _output(gold)
+        second["fixed_size"]["source_geometry_id"] = "other-source-geometry"
+        record = {
+            "sample_id": "fixed-size-slots",
+            "format_id": "120-66",
+            "confirmed_geometry": geometry,
+        }
+        report = {
+            "output": {
+                "finalization": {
+                    "output_footprints": [_output(gold), second],
+                }
+            }
+        }
+
+        with self.assertRaisesRegex(ValueError, "differs between output slots"):
+            validate_approved_geometry(record, report)
+
+    def test_vertical_gold_maps_frame_width_to_canonical_sequence_axis(self) -> None:
+        gold = [[100.0, 100.0], [200.0, 100.0], [200.0, 340.0], [100.0, 340.0]]
+        geometry = _directional_geometry(gold)
+        geometry["strip_orientation"] = "vertical"
+        record = {
+            "sample_id": "vertical-fixed-size",
+            "format_id": "120-66",
+            "confirmed_geometry": geometry,
+        }
+        output = _output(
+            gold,
+            frame_width=240.0,
+            frame_height=100.0,
+            strip_orientation="vertical",
+        )
+
+        validate_approved_geometry(
+            record,
+            {"output": {"finalization": {"output_footprints": [output]}}},
+        )
 
     def test_corner_witness_does_not_mistake_side_name_for_contact_error(self) -> None:
         record = _basis_aware_record(start_basis="directly_visible")
@@ -550,18 +702,19 @@ class GoldAccuracyContractTest(unittest.TestCase):
         ):
             validate_release_gold_task_result(_basis_aware_record(), _approved_report(output))
 
-    def test_visible_end_budget_remains_blocking_when_start_is_estimated(
+    def test_outward_expansion_is_non_blocking_when_start_is_estimated(
         self,
     ) -> None:
         output = [[0.0, 0.0], [660.0, 0.0], [660.0, 560.0], [0.0, 560.0]]
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "exceeds acceptance-baseline direct-use budget",
-        ):
-            validate_release_gold_task_result(_basis_aware_record(), _approved_report(output))
+        self.assertEqual(
+            validate_release_gold_task_result(
+                _basis_aware_record(), _approved_report(output)
+            ),
+            "approved_auto",
+        )
 
-    def test_source_truncated_budget_uses_physical_line_axes(self) -> None:
+    def test_source_truncated_outward_expansion_is_non_blocking(self) -> None:
         clipped_gold = [
             [0.0, 0.0],
             [200.0, 0.0],
@@ -583,11 +736,10 @@ class GoldAccuracyContractTest(unittest.TestCase):
             [-45.0, 560.0],
         ]
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "exceeds acceptance-baseline direct-use budget",
-        ):
-            validate_release_gold_task_result(record, _approved_report(output))
+        self.assertEqual(
+            validate_release_gold_task_result(record, _approved_report(output)),
+            "approved_auto",
+        )
 
     def test_source_clipped_gold_contains_itself_for_partial_permissions(self) -> None:
         record = _source_clipped_record()
@@ -814,7 +966,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         ):
             validate_selected_candidate_coverage(record, report)
 
-    def test_review_candidate_that_exceeds_outward_budget_is_rejected(
+    def test_review_candidate_that_exceeds_old_outward_budget_is_retained(
         self,
     ) -> None:
         gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
@@ -840,11 +992,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
             "output": {"finalization": {"output_footprints": []}},
         }
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "exceeds acceptance-baseline direct-use budget",
-        ):
-            validate_selected_candidate_coverage(record, report)
+        self.assertTrue(validate_selected_candidate_coverage(record, report))
 
     def test_review_without_selected_candidate_has_no_geometry_verdict(self) -> None:
         record = {
@@ -892,8 +1040,10 @@ class GoldAccuracyContractTest(unittest.TestCase):
             "confirmed_geometry": _directional_geometry(gold),
         }
         primary = typed_read_model(retained_proposal_fixture("best"))
+        _add_fixed_size_metadata(primary["output_footprints"][0])
         primary["output_footprints"][0]["required_source_footprint"] = gold
         runner = typed_read_model(retained_proposal_fixture("runner"))
+        _add_fixed_size_metadata(runner["output_footprints"][0])
         runner["output_footprints"][0]["required_source_footprint"] = [[-1.0, -1.0], [561.0, -1.0], [561.0, 561.0], [-1.0, 561.0]]
         lane = {
             "placement_proposal": primary,
@@ -914,6 +1064,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         self.assertEqual(summary["task_set_state_counts"], {"multiple_safe": 1})
         self.assertEqual(summary["safe_with_placement_ambiguity_task_ids"], ["retained-set"])
         conditional = typed_read_model(retained_proposal_fixture("conditional"))
+        _add_fixed_size_metadata(conditional["output_footprints"][0])
         conditional["output_footprints"][0]["required_source_footprint"] = gold
         three_labels = _retained_placement_gold_labels(record, {
             **lane, "alternative_placement_proposals": [runner, conditional],
@@ -974,10 +1125,8 @@ class GoldAccuracyContractTest(unittest.TestCase):
         self.assertTrue(validate_proposal_coverage(record, report))
         diagnostics = gold_frame_diagnostics(record, report)
         self.assertEqual(diagnostics[0]["inward_failure_sides"], [])
-        self.assertEqual(
-            diagnostics[0]["outward_budget_failure_sides"],
-            [],
-        )
+        self.assertNotIn("outward_budget_failure_sides", diagnostics[0])
+        self.assertNotIn("outward_limit_px_by_side", diagnostics[0])
         for value in diagnostics[0]["expansion_px_by_side"].values():
             self.assertAlmostEqual(value, 0.0)
 
@@ -1145,7 +1294,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
 
         validate_approved_geometry(record, report)
 
-    def test_enclosing_height_cannot_hide_one_sided_ten_percent_expansion(
+    def test_enclosing_height_expansion_is_non_blocking_diagnostic(
         self,
     ) -> None:
         gold = [[100.0, 100.0], [660.0, 100.0], [660.0, 660.0], [100.0, 660.0]]
@@ -1162,14 +1311,15 @@ class GoldAccuracyContractTest(unittest.TestCase):
         output = _output(one_sided_ten_percent)
         output["envelope"] = {"boundary_use": "enclosing_support_pair"}
         report = {
-            "output": {"finalization": {"output_footprints": [output]}}
+            "photo_geometry": {"lanes": [{"output_footprints": [output]}]},
+            "output": {"finalization": {"output_footprints": [output]}},
         }
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "exceeds acceptance-baseline direct-use budget",
-        ):
-            validate_approved_geometry(record, report)
+        validate_approved_geometry(record, report)
+        diagnostics, = gold_frame_diagnostics(record, report)
+        self.assertGreater(diagnostics["expansion_px_by_side"]["cross_low"], 0.0)
+        self.assertNotIn("outward_budget_failure_sides", diagnostics)
+        self.assertNotIn("outward_limit_px_by_side", diagnostics)
 
     def test_extra_output_is_not_a_valid_gold_mapping(self) -> None:
         gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]

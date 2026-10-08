@@ -64,9 +64,6 @@ class GateGap(str, Enum):
     APERTURE_ASPECT_RATIO_DIRECT_CONFLICT = (
         "aperture_aspect_ratio_direct_conflict"
     )
-    APERTURE_ASPECT_RATIO_BUDGET_EXHAUSTED = (
-        "aperture_aspect_ratio_budget_exhausted"
-    )
     ENCLOSING_SUPPORT_APERTURE_CONFLICT = (
         "enclosing_support_aperture_center_conflict"
     )
@@ -292,11 +289,6 @@ def failure_fact(
         GateGap.APERTURE_ASPECT_RATIO_DIRECT_CONFLICT: (
             FailureRecovery.UNRECOVERABLE,
             MinimumMissingFact.SOURCE_PHYSICAL_COMPATIBILITY,
-            RecoveryAction.REVIEW_PLACEMENT,
-        ),
-        GateGap.APERTURE_ASPECT_RATIO_BUDGET_EXHAUSTED: (
-            FailureRecovery.UNRECOVERABLE,
-            MinimumMissingFact.DIRECT_USE_PRECISION,
             RecoveryAction.REVIEW_PLACEMENT,
         ),
         GateGap.ENCLOSING_SUPPORT_APERTURE_CONFLICT: (

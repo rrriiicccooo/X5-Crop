@@ -6,22 +6,18 @@ from dataclasses import fields
 import math
 from typing import Any
 
-from x5crop.domain import Box, FiniteInterval, WorkspaceExtent
+from x5crop.domain import Box, WorkspaceExtent
 from x5crop.detection.gate_checks import (
     DetectionFailureFact, FailureRecovery, GateGap, MinimumMissingFact, RecoveryAction,
 )
-from x5crop.detection.photo_geometry.line_observations import SourceCoordinateLine
-from x5crop.detection.photo_geometry.model import BoundaryAxis
 from x5crop.detection.photo_geometry.output_model import (
-    CommonOutputFootprint, CommonOutputMemberBudget, DirectUseBudgetAssessment,
-    DirectUseBudgetEdgeAssessment, FootprintSaturationFact, FootprintSaturationKind,
-    FrameBoundaryGeometry, JointPlacementEnvelope, OutputFootprint,
+    CommonOutputFootprint, CommonOutputMemberBudget, FootprintSaturationFact, FootprintSaturationKind,
+    JointPlacementEnvelope, OutputFootprint,
     footprint_outside_authority_sides, footprint_overflow_px,
     sampling_authority_bounds, source_boundary_sides,
 )
 from x5crop.detection.photo_geometry.template_common_output import CommonHOutput, CommonHOutputWork
 from x5crop.detection.photo_geometry.template_placement import FormatPlacement, TemplateFrame
-from x5crop.formats import OUTPUT_PROTECTION_SPEC
 from x5crop.geometry.convex import clip_convex_polygon_to_bounds, convex_hull
 from x5crop.report.read_models import typed_read_model
 
@@ -40,14 +36,14 @@ def _identity(value: Any) -> bool:
     return isinstance(value, str) and bool(value)
 
 
-def _budget(value, placement, native, common, projection) -> None:
+def _budget(value, placement, native, common) -> None:
     from x5crop.detection.photo_geometry.template_output import common_member_budget_assessment
     value = _record(value, CommonOutputMemberBudget)
     if value["placement_id"] != placement.placement_id or value["native_geometry_id"] != native.geometry_id:
         raise ValueError("common H member budget identity changed")
     expected = common_member_budget_assessment(placement, native,
         tuple(tuple(point) for point in common["requested_source_footprint"]),
-        geometry_id=common["geometry_id"], projection=projection)
+        geometry_id=common["geometry_id"])
     if value["assessment"] != typed_read_model(expected):
         raise ValueError("common H member budget does not reproduce the common requested footprint")
 
@@ -55,6 +51,7 @@ def _budget(value, placement, native, common, projection) -> None:
 def _output(value: Any, placements: list[dict], ordinal: int, extent: WorkspaceExtent, typed, projections) -> None:
     # Local import keeps report_validation free to call this helper.
     from .report_validation import validate_output_footprint_authority, _validate_polygon
+    from x5crop.detection.photo_geometry.template_output import _footprint, joint_placement_envelope
 
     value = _record(value, CommonOutputFootprint)
     members = value["members"]
@@ -65,10 +62,17 @@ def _output(value: Any, placements: list[dict], ordinal: int, extent: WorkspaceE
             or not _identity(value["authority_profile_id"])):
         raise ValueError("common H output lost native members or their budgets")
     native_ids = set()
-    for placement, member in zip(placements, members, strict=True):
+    for index, (placement, member) in enumerate(zip(placements, members, strict=True)):
         member = _record(member, OutputFootprint)
         envelope = _record(member["envelope"], JointPlacementEnvelope)
         validate_output_footprint_authority(member, expected_source_extent=extent)
+        physical = typed.placements[index]
+        projection = projections[index]
+        expected_envelope = joint_placement_envelope(physical, projection, ordinal)
+        expected_mandatory = _footprint(physical, physical.frames[ordinal - 1], projection, apply_residual=True)
+        if (member["envelope"] != typed_read_model(expected_envelope)
+                or member["mandatory_source_footprint"] != typed_read_model(expected_mandatory)):
+            raise ValueError("common H member does not reproduce its complete physical protection")
         frame = placement["frames"][ordinal - 1]
         if (not _identity(member["geometry_id"]) or member["geometry_id"] in native_ids
                 or member["geometry_id"] == value["geometry_id"]
@@ -84,7 +88,7 @@ def _output(value: Any, placements: list[dict], ordinal: int, extent: WorkspaceE
                     "sampling_authority_box", "source_extent", "authority_profile_id"))):
             raise ValueError("common H native member identity, slot or source authority changed")
         native_ids.add(member["geometry_id"])
-    for key in ("mandatory_source_footprint", "requested_source_footprint"):
+    for key in ("mandatory_source_footprint",):
         polygon = _validate_polygon(value[key], f"common H {key}")
         expected = convex_hull(tuple(tuple(point) for member in members for point in
             _validate_polygon(member[key], f"native {key}")))
@@ -112,7 +116,7 @@ def _output(value: Any, placements: list[dict], ordinal: int, extent: WorkspaceE
         raise ValueError("common H source clipping or saturation changed")
     for index, budget in enumerate(budgets):
         _budget(budget, typed.placements[index], typed.output_footprints[ordinal - 1].members[index],
-                value, projections[index] if projections else None)
+                value)
 
 
 def validate_common_h_output(
@@ -226,7 +230,6 @@ def _validate_common_h_output(value, extent, cross, registration, phase) -> None
     from x5crop.detection.photo_geometry.template_common_output import common_member_center_authority_matches
     if not all(common_member_center_authority_matches(p) for p in typed.placements):
         raise ValueError("common H member center authority does not reproduce its physical support")
-    projections = tuple(project_format_placement(p) for p in typed.placements) if (
-        first["cross_fit"]["boundary_use"] == "enclosing_support_pair") else ()
+    projections = tuple(project_format_placement(p) for p in typed.placements)
     for ordinal, output in enumerate(outputs, 1):
         _output(output, placements, ordinal, extent, typed, projections)

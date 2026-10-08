@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from ...domain import EvidenceState, FiniteInterval, PositiveInterval
-from ...formats import APERTURE_COMPATIBILITY_SPEC, OUTPUT_PROTECTION_SPEC
+from ...formats import APERTURE_COMPATIBILITY_SPEC
 from .interval_math import intersect
 from .physical_identity import physical_fact_id
 from .source_geometry import SourceScanGeometry
@@ -113,11 +113,6 @@ def derive_aperture_aspect_ratio_authority(
             effective_height_px=None,
             canonical_height_px=None,
             width_observation_ids=width_ids,
-            minimum_output_expansion_mm=None,
-            output_expansion_limit_mm=(
-                source_geometry.frame_spec.frame_height_mm
-                * OUTPUT_PROTECTION_SPEC.maximum_expansion_ratio_per_side
-            ),
             failure_kind=(
                 ApertureAspectRatioFailureKind.PHYSICAL_PRIOR_CONFLICT
             ),
@@ -126,45 +121,6 @@ def derive_aperture_aspect_ratio_authority(
             ),
         )
     canonical = effective.center
-    uncertainty_px = max(
-        canonical - effective.minimum,
-        effective.maximum - canonical,
-    )
-    minimum_expansion_mm = (
-        source_geometry.height_state.worst_case_mm(uncertainty_px)
-        + OUTPUT_PROTECTION_SPEC.cross_bleed_mm
-    )
-    limit_mm = (
-        source_geometry.frame_spec.frame_height_mm
-        * OUTPUT_PROTECTION_SPEC.maximum_expansion_ratio_per_side
-    )
-    if minimum_expansion_mm > limit_mm:
-        return ApertureAspectRatioAuthority(
-            authority_id=authority_id,
-            state=EvidenceState.CONTRADICTED,
-            calibration_id=spec.calibration_id,
-            axis_guard_calibration_id=(
-                APERTURE_COMPATIBILITY_SPEC.calibration_id
-            ),
-            raw_width_over_height=raw_ratio,
-            guarded_width_over_height=ratio,
-            width_guard_mm=width_guard_mm,
-            height_guard_mm=height_guard_mm,
-            width_guard_ratio=width_guard_ratio,
-            height_guard_ratio=height_guard_ratio,
-            scale_height_over_width=scale_ratio,
-            source_width_px=width,
-            inferred_height_px=inferred,
-            effective_height_px=effective,
-            canonical_height_px=canonical,
-            width_observation_ids=width_ids,
-            minimum_output_expansion_mm=minimum_expansion_mm,
-            output_expansion_limit_mm=limit_mm,
-            failure_kind=ApertureAspectRatioFailureKind.BUDGET_EXHAUSTED,
-            failure_detail=(
-                "ratio H uncertainty plus minimum cross bleed exceeds 5%"
-            ),
-        )
     return ApertureAspectRatioAuthority(
         authority_id=authority_id,
         state=EvidenceState.SUPPORTED,
@@ -182,8 +138,6 @@ def derive_aperture_aspect_ratio_authority(
         effective_height_px=effective,
         canonical_height_px=canonical,
         width_observation_ids=width_ids,
-        minimum_output_expansion_mm=minimum_expansion_mm,
-        output_expansion_limit_mm=limit_mm,
         failure_kind=None,
         failure_detail=None,
     )

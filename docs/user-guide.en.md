@@ -12,8 +12,15 @@ Official TIFFs are written only when every slot in the source has a directly usa
 entire source becomes `needs_review`; individual slots are never salvaged.
 
 Cropping protects photograph content already visible in the input TIFF. Image content hidden by the holder and
-absent from the TIFF is outside the recovery scope. Visible content, including tilted corners, must be retained
-within the existing margin limits.
+absent from the TIFF is outside the recovery scope. Visible content, including tilted corners, must be retained.
+Each source TIFF shares one W/H size; every Frame requests one fixed source-space window
+of `1.1W × 1.1H`, with a fixed 5% margin on each side. The script selects the window position only and never
+adjusts its size. The fixed margin includes base protection; no additional fixed-size border is added.
+
+When credible evidence requires a complete physical envelope that cannot fit inside the fixed box, the whole source
+remains in `needs_review`; the highest score cannot force automatic approval. Shared H candidates use the same fixed
+box and cannot enlarge it by taking a union. A true TIFF edge may be source-clipped, but an internal lane or other
+authority boundary cannot be bypassed by shrinking the window.
 
 ### Format And Count
 
@@ -46,7 +53,7 @@ A missing start/end side may be inferred only after source W is closed by comple
 independent direct constraints, and that Frame still has its opposite direct side. Inference cannot override an observed
 edge or discard counterevidence. A Frame whose two sides are both unseen may be generated only when the calibrated Grid
 has a reliable absolute anchor, the corresponding adjacencies were fully checked, and no counterevidence exists; the
-complete envelope and five-percent budget still apply. Reliable local W measurements survive incomplete distant
+complete physical envelope and fixed-box checks still apply. Reliable local W measurements survive incomplete distant
 coverage or an unresolved placement. A fully unobserved Frame does not prevent other single-sided Frames from using
 common W. Available measurements do not grant automatic output: counterevidence, ambiguity, and risk checks remain.
 Direct W and H retain separate evidence. A gold-calibrated
@@ -54,7 +61,7 @@ aspect-ratio authority may let W constrain H with full uncertainty. Every
 format uses the same physical-millimetre-floor plus relative-ratio method for W/H compatibility, while the propagated
 axis guards produce a bounded ratio interval specific to that format. This authority cannot impersonate direct
 top/bottom, add independent evidence, or apply the nominal ratio as an exact conversion. Missing calibration, a true
-conflict, or exhaustion of the per-side five-percent budget keeps the entire source in review. Direct top/bottom always
+conflict, or inability to fit the fixed box keeps the entire source in review. Direct top/bottom always
 retains its native position and priority.
 
 Within one registered window, weak gradient, tone, and texture signals are also checked jointly across height. They may
@@ -77,8 +84,8 @@ finish within its computation bound, the whole source enters Review and the repo
 Variation in broad localization peaks does not remove a physically valid boundary interpretation. Unresolved competition
 remains subject to the existing Review conditions.
 Association avoids repeated checks so that some safe strips can finish within the original computation bound. Distinct
-valid interpretations remain intact. Automatic approval still requires content protection, compliant margins on each
-side, and complete evidence.
+valid interpretations remain intact. Automatic approval still requires the fixed box to protect all content and complete
+evidence.
 Edge tracking limits candidate scans to the existing connection range while preserving the same distance, polarity,
 missing-trace, and equal-distance ambiguity rules.
 
@@ -100,10 +107,10 @@ A direct top/bottom pair that already meets shared-support and longitudinal-cove
 geometry when one side gains more complete source-spanning support. A local opposite edge must still meet the existing
 coverage rules, and multiple legal pairs remain in Review.
 
-When independent evidence uniquely establishes both photo edges, the crop keeps the measured height and normal
-protective margins. Enclosing the nominal height with those same edges does not replace that measurement with an
-inferred height inside the frame. A conflict with a supported aspect-ratio constraint still requires review. When direct
-photo edges cannot be established, complete outer-support evidence can still authorize a crop under the existing budget.
+When independent evidence uniquely establishes both photo edges, the program uses those measured edges to choose the
+fixed-box position rather than replacing the measured height with an inferred height inside the frame. A conflict with a
+supported aspect-ratio constraint still requires review. When direct photo edges cannot be established, complete
+outer-support evidence can still authorize a crop under the fixed-box policy.
 
 Short fragments of the same photo edge are retained and checked together. They may become an authorized direct boundary
 only when the complete measurement supports at least two independent regions; several photo slots covering the same
@@ -147,91 +154,68 @@ When fragment membership is ambiguous, the system preserves the original complet
 whole-group combinations. If search or batch fitting exceeds its work limit, the report records the reason and retains
 the existing crop proposals. An individual conditional combination does not gain automatic approval.
 When photo ownership is fixed and multiple complete top/bottom interpretations remain, the report may also record
-a common crop and the padding budget under each interpretation. This checks whether boundary differences affect
-the usable crop. A common crop can be approved when it protects every interpretation within the padding budgets
-and passes all evidence and source-wide safety checks. The top/bottom boundaries need not be unique.
-For a common enclosing-support crop, every fully verified interpretation is protected and its padding is checked against
-its complete physical aperture-center range. Center calibration restricted to a uniquely selected pair is not reused.
-Incomplete interpretations or failed checks still require Review.
+a common fixed box and the coverage result under each interpretation. Shared H candidates use the same `1.1W × 1.1H`
+window and cannot enlarge it by taking a union. Every fully verified interpretation must be protected by that fixed box
+and pass all evidence and source-wide safety checks. Incomplete interpretations, a physical envelope that does not fit,
+or failed checks still require Review; the highest score cannot replace these conditions.
 Local refinement preserves ambiguous measurements and failed fits in the report. An unresolved alternative still
 requires Review even when the selected measurements would permit a crop.
 Cross-axis crop protection accounts for the relationship between measured position and direction, the statistical fit,
-and local edge departures. Top and bottom protection uses the actual reachable longitudinal ends to reduce excess
-padding. The existing per-side expansion budgets and automatic approval conditions still apply.
+and local edge departures. Top and bottom protection uses the actual reachable longitudinal ends to select the fixed-box
+position; the script does not change the fixed window size. Automatic approval still requires complete content protection
+and complete evidence.
 Development gold analysis evaluates each footprint independently, allows multiple safe results, and separates unsafe from
-unavailable geometry. Each retained crop also records its numeric budget and physical features with units, provenance,
-and explicit missing reasons. Numeric budget assessment remains separate from final approval conditions.
-These records do not change automatic approval conditions. Offline development ranking groups evaluation by source image
-and separates out-of-fold from in-sample results; its scores are not safety probabilities and do not select actual crops. Contact and
-overlap are challenge cases, not predetermined outcomes: the standard detector and Gate may
-approve them when direct-use admission is satisfied, while safe review remains correct when evidence is insufficient. V5 does
-not enable a second detector or a separate bleed budget for them. A proven relation adds topology protection only to
-the participating END/START boundaries, still inside the same per-side five-percent budget; that protection cannot
-prove the topology.
+unavailable geometry. Each retained crop also records its fixed-box position, physical features, provenance, and explicit
+missing reasons. These records do not change automatic approval conditions.
+Offline development ranking groups evaluation by source image and separates out-of-fold from in-sample results; its scores
+are not safety probabilities and do not select actual crops. Contact and overlap are challenge cases, not predetermined
+outcomes: the standard detector and Gate may approve them when direct-use admission is satisfied, while safe review remains
+correct when evidence is insufficient. V5 does not enable a second detector for them. A proven relation can participate in
+the evidence for the adjacent END/START boundaries. The fixed margin cannot establish the relation by itself or enlarge
+the fixed box.
 
 Holder fill is assessed only after placement by asking whether another W fits beyond either outer. It never searches
 for or centers a placement. Both lanes of 135-dual must be complete.
 
-## Safe Cropping, Bleed, And Deskew
+## Fixed Source-Space Window, Content Protection, And Deskew
 
-Product bleed for photo-aperture output is:
+Each source TIFF uses one common W/H size. Every Frame requests one fixed window:
 
 ```text
-start/end = max(0.15 mm, 0.7% W)
-top/bottom = 0.25 mm
+source-space window = 1.1W × 1.1H
+per-side margin = 5%
 ```
 
-Measurement uncertainty, local residual, and bleed share a maximum 5% W/H outward budget per side. Sides cannot
-borrow budget from one another. Photo-aperture protection includes slanted-edge displacement at all four corners
-and the interaction between expansion along the two axes. The complete protection and bleed share each side's budget.
-This is a model-risk budget, not a direct measurement of true boundary error.
-Development gold separately checks directional containment and actual five-percent expansion against human baselines;
-the detector need not reproduce each annotated line. Source-truncated frames are compared against the actual confirmed,
-clipped polygon. Per-side diagnostics agree with full containment and do not require nonexistent content outside the TIFF.
+The fixed box permits the script to select a position only; measurement, residual, direction, or score cannot change
+its size. It must contain all visible TIFF content, including tilted corners. When credible evidence requires a complete
+physical envelope that cannot fit inside the box, the whole source enters `needs_review`. In-box offset is not separately
+penalized, and development gold no longer uses actual per-side expansion relative to the true boundary as a 5% blocking
+criterion. V5 remains an unreleased development preview. Release acceptance still requires zero false accepts,
+safe automatic approval of all nominal tasks, and performance and platform validation.
 
-When one uniquely established top/bottom photo-boundary pair also meets the complete enclosing-support conditions,
-the output uses those measured boundaries and retains all position and slope uncertainty.
-A directly observed continuous outer-support pair may also replace unavailable aperture
-top/bottom when it fully encloses fixed H and its total height is no greater than `1.1H`; this direct pair does not
-depend on W/H ratio inference. Each side must have continuous strip-wide support or measured coverage bracketing the
-complete output extent; observing only the beginning of the final photo does not authorize extrapolating the whole support.
-That mode adds no 0.25 mm cross bleed, while per-side and joint alignment padding remain
-inside their 5% budgets. The joint term uses line-alignment padding from one feasible state only; support-position
-uncertainty remains in the per-side budgets and incompatible top/bottom extrema are never added. Every legal shared slope
-contributes to corner protection, and risk distances use the same short-axis units as photo height. Direction padding uses
-the longitudinal range actually reached by each feasible state, preserving measured protection while reducing excess border.
-Each coarse support side retains its own measured direction margin and the complete shared direction range, preventing
-extra uncertainty from the opposite side from increasing its border.
-Each side also retains all accepted endpoint measurements as geometric constraints, even where the opposite side has
-no measurement. Pairing still requires the original shared-region support.
-Broad outer support retains every original measurement in its complete association path. Residuals from the representative
-line do not remove constraints; the support remains unavailable when no line satisfies all physical intervals.
-After one unique support pair is selected, a gold-calibrated aperture-centre offset interval with full uncertainty may narrow the worst-case risk;
-it does not turn support into a photo boundary. Missing calibration retains the complete physically possible centre
-range. A conflict with direct support or expansion beyond 5% keeps the source in review. A true TIFF edge explicitly
-bounds sampling to source pixels that actually exist; the report says whether bleed alone or joint protection reached
-that edge, while the complete unbounded request still owns the 5% budget. Source edges use the outer cell boundaries of
-the first and last pixels; identity sampling retains every edge row and column. This does not expand internal photo
-boundaries, and gold validation still checks the physical polygon strictly. Crossing an internal dual-lane boundary or any
-other authority still enters review, and no bounding is silent.
+When independent evidence uniquely establishes both photo edges, the program uses those coordinates to choose the fixed
+box position rather than replacing the measured height with an inferred height inside the frame. Continuous outer support
+can provide position evidence only when the credible complete physical envelope fits in the fixed box; local support does
+not authorize extrapolating the whole strip, and calibration does not turn support into a photo boundary. Missing,
+conflicting, or unresolved evidence still requires Review.
 
-Two-dimensional content is a conservative veto on the final post-bleed polygon. Picture structure inside bleed may be
-retained; reliable content crossing the final crop boundary blocks automatic output. Dust, aliasing, and tiny corner
-grazes do not independently move a boundary or select another placement.
+A true TIFF edge may be source-clipped, and the report records that fact. Edge clipping is limited to source pixels that
+actually exist; it never expands or shrinks an internal photo boundary. Crossing an internal lane or other authority
+boundary still enters review and cannot be bypassed by shrinking the window. The fixed box cannot be enlarged by taking a
+union.
 
-When one edge and the common width infer the opposite edge, the crop protects corner displacement from width
-uncertainty and edge slope together. The full boundary-position range retains the positions allowed by the same
-measurements; the statistical centre and narrow fit interval do not exclude those possible positions.
-Local boundaries with established coordinate support remain available when other weak boundaries are reassessed,
-preventing detection from stopping because their measurement identities were lost.
-Displacement already covered by the position interval is not added twice;
-the complete protection remains subject to the existing 5% budget on each side.
+Two-dimensional content is a conservative veto on the final fixed box: reliable content crossing its boundary blocks
+automatic output, while an in-box offset does not independently move the position. When one edge and the common width
+infer the opposite edge, the complete allowed position range is used to select the fixed box; the window is not shrunk and
+content protection is not bypassed. Local boundaries with established coordinate support remain available when weak
+boundaries are reassessed.
 
 Deskew is optional cleanup after automatic approval and never participates in detection or the Gate. `--deskew auto`
 rotates only when both sides support one stable small angle; missing, conflicting, or excessive evidence preserves the
 source orientation. `--deskew off` skips observation. When rotation is applied, the source and already-safe polygons use
-the same affine transform before an axis-aligned envelope is taken. Small black no-data corners may remain, but
-protected content cannot be cut.
+the same affine transform before an axis-aligned envelope is taken. Small black no-data corners may remain, but protected
+content cannot be cut. Deskew's axis-aligned envelope, true-TIFF edge clipping, and integer rounding can change final
+pixel width and height. The fixed dimensions apply in source coordinates.
 
 ## Install The Development Source
 
@@ -304,8 +288,8 @@ Each input has exactly one terminal state:
 - `runtime_error`: this input failed while other inputs continue.
 
 Debug Analysis shows the template, observations, winner/runner, raw and guarded aspect-ratio intervals, inferred H,
-the final footprint, per-edge measurement/bleed/residual budget, and first blocking reason. A shared support slope is
-counted once in its joint state rather than again as a residual. It also shows
+the fixed source-space window's size and position, content-protection evidence, and first blocking reason. A shared
+support slope is counted once in its joint state rather than again as a residual. It also shows
 plus `DESKEW APPLIED`, `ROTATION NOT NEEDED`, or a typed `DESKEW SKIPPED`. It reads the same detection facts and
 never solves geometry again.
 

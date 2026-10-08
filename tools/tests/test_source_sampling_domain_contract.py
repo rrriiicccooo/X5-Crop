@@ -47,13 +47,7 @@ class SourceSamplingDomainContractTest(unittest.TestCase):
         self.assertEqual(bounds, (-0.5, -0.5, 6.5, 4.5))
         required = clip_convex_polygon_to_bounds(requested, bounds)
         self.assertEqual(required, rectangle(-0.5, -0.5, 6.5, 4.5))
-        output = replace(
-            sampling_footprint(authority, extent),
-            mandatory_source_footprint=requested,
-            requested_source_footprint=requested,
-            required_source_footprint=required,
-            saturation_facts=_saturation_facts(requested, requested, authority, extent),
-        )
+        output = sampling_footprint(authority, extent, requested=requested)
         validate_output_footprint_authority(
             typed_read_model(output), expected_source_extent=extent
         )

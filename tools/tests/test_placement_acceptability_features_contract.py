@@ -58,7 +58,7 @@ class PlacementAcceptabilityFeaturesContractTest(unittest.TestCase):
         self.assertEqual(values["cross_direct_role_fraction"].value, 1.0)
         self.assertEqual(values["unobserved_frame_fraction"].value, 0.0)
         self.assertEqual(values["output_maximum_budget_ratio"].value, max(
-            edge.expansion_mm / edge.limit_mm for item in budgets for edge in item.edge_assessments
+            edge.required_extent_px / edge.available_extent_px for item in budgets for edge in item.edge_assessments
         ))
         self.assertTrue(set(placement.sequence_fit.bound_observation_ids) <= set(features.observation_ids))
         self.assertTrue(all(item.observation_id in features.observation_ids for item in placement.cross_fit.direct_bindings))

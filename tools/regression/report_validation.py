@@ -18,6 +18,7 @@ from x5crop.detection.photo_geometry.template_common_output import (
     CommonHOutput, CommonHOutputAuthority, assess_common_h_output_authority,
 )
 from x5crop.detection.photo_geometry.template_output import common_direct_use_budget_assessment
+from x5crop.detection.photo_geometry.output_model import OutputFootprint, fixed_output_coverage
 from x5crop.detection.photo_geometry.template_holder_fill import HolderFillAssessment
 from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
 
@@ -167,24 +168,6 @@ _SOURCE_PROPOSAL_FIELDS = {
     "state",
     "failure",
 }
-_DIRECT_USE_BUDGET_FIELDS = {
-    "geometry_id",
-    "boundary_use",
-    "edge_assessments",
-    "enclosing_support_height_ratio",
-    "enclosing_support_within_limit",
-    "maximum_same_state_cross_alignment_padding_mm",
-    "maximum_same_state_cross_alignment_padding_within_limit",
-    "state",
-}
-_DIRECT_USE_EDGE_FIELDS = {
-    "role",
-    "expansion_px",
-    "expansion_mm",
-    "limit_mm",
-    "limit_applies",
-    "within_limit",
-}
 _DESKEW_SKIP_REASONS = tuple(item.value for item in DeskewSkipReason)
 _PHASE_FAILURE_KINDS = {None, *(item.value for item in PhaseFailureKind)}
 _PHASE_STATUSES = {item.value for item in PhaseFitStatus}
@@ -266,8 +249,6 @@ _APERTURE_ASPECT_RATIO_FIELDS = {
     "effective_height_px",
     "canonical_height_px",
     "width_observation_ids",
-    "minimum_output_expansion_mm",
-    "output_expansion_limit_mm",
     "failure_kind",
     "failure_detail",
     "consumed_for_cross_inference",
@@ -1835,8 +1816,6 @@ def _validate_aperture_aspect_ratio_authority(value: object) -> None:
         "height_guard_mm",
         "width_guard_ratio",
         "height_guard_ratio",
-        "minimum_output_expansion_mm",
-        "output_expansion_limit_mm",
     ):
         if value[key] is not None and (
             not _finite_number(value[key]) or float(value[key]) < 0.0
@@ -1862,8 +1841,6 @@ def _validate_aperture_aspect_ratio_authority(value: object) -> None:
                 )
             )
             or not _finite_number(value["canonical_height_px"])
-            or not _finite_number(value["minimum_output_expansion_mm"])
-            or not _finite_number(value["output_expansion_limit_mm"])
             or value["failure_kind"] is not None
             or value["failure_detail"] is not None
             or len(value["width_observation_ids"]) < 3
@@ -1875,7 +1852,6 @@ def _validate_aperture_aspect_ratio_authority(value: object) -> None:
             "aperture_aspect_ratio_authority_unavailable",
             "aperture_aspect_ratio_physical_prior_conflict",
             "aperture_aspect_ratio_direct_conflict",
-            "aperture_aspect_ratio_budget_exhausted",
         }
         or not isinstance(value["failure_detail"], str)
         or not value["failure_detail"]
@@ -1898,7 +1874,6 @@ def _validate_aperture_aspect_ratio_authority(value: object) -> None:
                 "height_guard_mm",
                 "width_guard_ratio",
                 "height_guard_ratio",
-                "output_expansion_limit_mm",
             )
         )
     ):
@@ -1918,8 +1893,6 @@ def _validate_aperture_aspect_ratio_authority(value: object) -> None:
             "height_guard_mm",
             "width_guard_ratio",
             "height_guard_ratio",
-            "minimum_output_expansion_mm",
-            "output_expansion_limit_mm",
         )
     ):
         raise ValueError("uncalibrated aspect-ratio failure has derived state")
@@ -3100,236 +3073,12 @@ def _same_polygon(
 
 
 def validate_output_footprint_authority(
-    output: dict[str, Any],
-    *,
-    expected_source_extent: WorkspaceExtent,
+    output: dict[str, Any], *, expected_source_extent: WorkspaceExtent,
 ) -> None:
-    """Validate one serialized output footprint and explicit edge saturation."""
-
-    if not isinstance(output, dict):
-        raise ValueError("output footprint is invalid")
-    mandatory = _validate_polygon(
-        output.get("mandatory_source_footprint"),
-        "mandatory source footprint",
-    )
-    requested = _validate_polygon(
-        output.get("requested_source_footprint"),
-        "requested source footprint",
-    )
-    required = _validate_polygon(
-        output.get("required_source_footprint"),
-        "required source footprint",
-    )
-    authority = _validate_box(
-        output.get("sampling_authority_box"),
-        "sampling authority box",
-    )
-    if (
-        not isinstance(expected_source_extent, WorkspaceExtent)
-        or output.get("source_extent") != typed_read_model(expected_source_extent)
-        or any(type(authority[side]) is not int for side in _AUTHORITY_SIDES)
-    ):
-        raise ValueError("footprint source extent or sampling authority is inconsistent")
-    authority_box = Box(*(authority[side] for side in _AUTHORITY_SIDES))
-    authority_bounds = sampling_authority_bounds(authority_box, expected_source_extent)
-    source_sides = source_boundary_sides(authority_box, expected_source_extent)
-    envelope = output.get("envelope")
-    boundary_use = (
-        envelope.get("boundary_use") if isinstance(envelope, dict) else None
-    )
-    same_state_cross_padding = output.get(
-        "maximum_same_state_cross_alignment_padding_px"
-    )
-    aperture_risk = output.get("enclosing_support_aperture_risk")
-    protections = output.get("boundary_protections")
-    protection_fields = {
-        "role",
-        "measurement_expansion_px",
-        "base_bleed_px",
-        "topology_protection_px",
-        "topology_relation_id",
-        "local_boundary_residual_px",
-        "joint_expansion_px",
-    }
-    if not isinstance(protections, list) or any(
-        not isinstance(item, dict) for item in protections
-    ):
-        raise ValueError("boundary protection facts are invalid")
-    support_output = boundary_use == "enclosing_support_pair"
-    risk_fields = {
-        "aperture_authority_id",
-        "aperture_authority_state",
-        "canonical_height_px",
-        "center_offset_interval_px",
-        "maximum_center_shift_px",
-        "top_expansion_px",
-        "bottom_expansion_px",
-        "feasible_state_count",
-    }
-    if support_output:
-        if (
-            not isinstance(aperture_risk, dict)
-            or set(aperture_risk) != risk_fields
-            or any(
-                not _finite_number(aperture_risk[key])
-                or float(aperture_risk[key]) < 0.0
-                for key in (
-                    "maximum_center_shift_px",
-                    "top_expansion_px",
-                    "bottom_expansion_px",
-                )
-            )
-            or not _finite_number(aperture_risk["canonical_height_px"])
-            or float(aperture_risk["canonical_height_px"]) <= 0.0
-            or not isinstance(aperture_risk["aperture_authority_id"], str)
-            or not aperture_risk["aperture_authority_id"]
-            or aperture_risk["aperture_authority_state"]
-            not in {"supported", "unavailable", "contradicted"}
-            or not _valid_interval(
-                aperture_risk["center_offset_interval_px"]
-            )
-            or not isinstance(aperture_risk["feasible_state_count"], int)
-            or aperture_risk["feasible_state_count"] <= 0
-        ):
-            raise ValueError("enclosing-support aperture risk is invalid")
-        center_interval = aperture_risk["center_offset_interval_px"]
-        expected_shift = max(
-            abs(float(center_interval["minimum"])),
-            abs(float(center_interval["maximum"])),
-        )
-        if (
-            abs(
-                float(aperture_risk["maximum_center_shift_px"])
-                - expected_shift
-            )
-            > 1.0e-8
-        ):
-            raise ValueError(
-                "enclosing-support aperture center risk is inconsistent"
-            )
-    elif aperture_risk is not None:
-        raise ValueError("aperture output carries enclosing-support risk")
-    if (
-        tuple(item.get("role") for item in protections)
-        != ("start", "end", "top", "bottom")
-        or any(
-            set(item) != protection_fields
-            or any(
-                not _finite_number(item[key]) or float(item[key]) < 0.0
-                for key in (
-                    "measurement_expansion_px",
-                    "base_bleed_px",
-                    "topology_protection_px",
-                    "local_boundary_residual_px",
-                    "joint_expansion_px",
-                )
-            )
-            or (float(item["topology_protection_px"]) > 0.0)
-            != (
-                isinstance(item["topology_relation_id"], str)
-                and bool(item["topology_relation_id"])
-            )
-            or item["topology_relation_id"] is not None
-            and item["role"] not in {"start", "end"}
-            or item["topology_relation_id"] is not None
-            and abs(
-                float(item["topology_protection_px"])
-                - float(item["base_bleed_px"])
-            )
-            > 1.0e-8
-            for item in protections
-        )
-    ):
-        raise ValueError("boundary protection facts are invalid")
-    support_output = boundary_use == "enclosing_support_pair"
-    if support_output != _finite_number(same_state_cross_padding) or (
-        support_output and float(same_state_cross_padding) < 0.0
-    ):
-        raise ValueError("same-state cross padding is invalid")
-    expected = {
-        side.value for side in footprint_outside_authority_sides(
-            requested, authority_box, expected_source_extent
-        )
-    }
-    facts = output.get("saturation_facts")
-    if not isinstance(facts, list):
-        raise ValueError("footprint saturation facts are invalid")
-    recorded: set[str] = set()
-    for fact in facts:
-        if (
-            not isinstance(fact, dict)
-            or set(fact)
-            != {
-                "authority_side",
-                "kind",
-                "requested_overflow_px",
-                "mandatory_overflow_px",
-            }
-        ):
-            raise ValueError("footprint saturation fact is invalid")
-        side = fact["authority_side"]
-        kind = fact["kind"]
-        requested_overflow = fact["requested_overflow_px"]
-        mandatory_overflow = fact["mandatory_overflow_px"]
-        if (
-            side not in _AUTHORITY_SIDES
-            or side in recorded
-            or kind not in {item.value for item in FootprintSaturationKind}
-            or not _finite_number(requested_overflow)
-            or float(requested_overflow) <= 0.0
-            or not _finite_number(mandatory_overflow)
-            or float(mandatory_overflow) < 0.0
-            or abs(
-                float(requested_overflow)
-                - footprint_overflow_px(
-                    requested, authority_box, AuthoritySide(side), expected_source_extent
-                )
-            )
-            > 1.0e-8
-            or abs(
-                float(mandatory_overflow)
-                - footprint_overflow_px(
-                    mandatory, authority_box, AuthoritySide(side), expected_source_extent
-                )
-            )
-            > 1.0e-8
-            or (
-                kind
-                in {
-                    FootprintSaturationKind.SOURCE_BOUNDARY_JOINT_PROTECTION.value,
-                    FootprintSaturationKind.LANE_BOUNDARY_JOINT_PROTECTION.value,
-                }
-            )
-            != (float(mandatory_overflow) > 0.0)
-        ):
-            raise ValueError("footprint authority side is invalid")
-        source_kind = kind in {
-            FootprintSaturationKind.SOURCE_BOUNDARY_JOINT_PROTECTION.value,
-            FootprintSaturationKind.SOURCE_BOUNDARY_OPTIONAL_BLEED.value,
-        }
-        if source_kind != (AuthoritySide(side) in source_sides):
-            raise ValueError("footprint authority side does not match the TIFF source extent")
-        recorded.add(side)
-    if recorded != expected:
-        raise ValueError("footprint saturation facts disagree with authority")
-    safely_source_bounded = all(
-        fact["kind"]
-        in {
-            FootprintSaturationKind.SOURCE_BOUNDARY_OPTIONAL_BLEED.value,
-            FootprintSaturationKind.SOURCE_BOUNDARY_JOINT_PROTECTION.value,
-        }
-        for fact in facts
-    )
-    expected_required = (
-        clip_convex_polygon_to_bounds(
-            tuple((float(point[0]), float(point[1])) for point in requested),
-            authority_bounds,
-        )
-        if facts and safely_source_bounded
-        else tuple((float(point[0]), float(point[1])) for point in requested)
-    )
-    if not _same_polygon(required, expected_required):
-        raise ValueError("required source footprint violates saturation contract")
+    """Replay the current typed fixed-window and source-clipping owner."""
+    typed = _read_common_proof(output, OutputFootprint)
+    if typed.source_extent != expected_source_extent:
+        raise ValueError("footprint source extent is inconsistent")
 
 
 def _valid_failure(value: object) -> bool:
@@ -3341,181 +3090,20 @@ def _valid_failure(value: object) -> bool:
 
 
 def _validate_direct_use_budgets(
-    budgets: object,
-    outputs: list[dict[str, Any]],
-    source_geometry: object,
+    budgets: object, outputs: list[dict[str, Any]], source_geometry: object,
 ) -> None:
-    if (
-        not isinstance(budgets, list)
-        or any(not isinstance(item, dict) for item in budgets)
-        or [item.get("geometry_id") for item in budgets]
-        != [item["geometry_id"] for item in outputs]
-    ):
+    if (not isinstance(budgets, list) or any(not isinstance(item, dict) for item in budgets)
+            or [item.get("geometry_id") for item in budgets] != [item["geometry_id"] for item in outputs]):
         raise ValueError("budget does not cover proposal output")
-    outputs_by_id = {item["geometry_id"]: item for item in outputs}
-    for budget in budgets:
-        if (
-            not isinstance(budget, dict)
-            or set(budget) != _DIRECT_USE_BUDGET_FIELDS
-        ):
-            raise ValueError("direct-use budget summary is invalid")
-        edges = budget.get("edge_assessments")
-        if (
-            budget.get("boundary_use")
-            not in {"aperture_pair", "enclosing_support_pair"}
-            or budget.get("state") not in {"supported", "contradicted"}
-            or not isinstance(edges, list)
-            or any(
-                not isinstance(edge, dict)
-                or set(edge) != _DIRECT_USE_EDGE_FIELDS
-                for edge in edges
-            )
-            or tuple(edge["role"] for edge in edges)
-            != ("start", "end", "top", "bottom")
-        ):
-            raise ValueError("direct-use budget summary is invalid")
-        if any(
-            not _finite_number(edge[key]) or float(edge[key]) < 0.0
-            for edge in edges
-            for key in ("expansion_px", "expansion_mm", "limit_mm")
-        ) or any(
-            edge["limit_applies"] is not True
-            or edge["within_limit"]
-            != (float(edge["expansion_mm"]) <= float(edge["limit_mm"]))
-            for edge in edges
-        ):
-            raise ValueError("direct-use edge budget is invalid")
-        support = budget["boundary_use"] == "enclosing_support_pair"
-        support_fields_present = (
-            _finite_number(budget["enclosing_support_height_ratio"])
-            and isinstance(
-                budget["enclosing_support_within_limit"], bool
-            )
-            and _finite_number(
-                budget["maximum_same_state_cross_alignment_padding_mm"]
-            )
-            and isinstance(
-                budget[
-                    "maximum_same_state_cross_alignment_padding_within_limit"
-                ],
-                bool,
-            )
-        )
-        if support != support_fields_present:
-            raise ValueError("enclosing-support budget is invalid")
-        if not support and any(
-            budget[key] is not None
-            for key in (
-                "enclosing_support_height_ratio",
-                "enclosing_support_within_limit",
-                "maximum_same_state_cross_alignment_padding_mm",
-                "maximum_same_state_cross_alignment_padding_within_limit",
-            )
-        ):
-            raise ValueError("aperture budget carries support fields")
-        if support:
-            output = outputs_by_id.get(budget["geometry_id"])
-            height_state = (
-                None
-                if not isinstance(source_geometry, dict)
-                else source_geometry.get("height_state")
-            )
-            height_vertices = (
-                None
-                if not isinstance(height_state, dict)
-                else height_state.get("vertices")
-            )
-            if (
-                not isinstance(output, dict)
-                or not isinstance(height_vertices, list)
-                or not height_vertices
-                or any(
-                    not isinstance(vertex, list)
-                    or len(vertex) != 2
-                    or not _finite_number(vertex[0])
-                    or float(vertex[0]) <= 0.0
-                    for vertex in height_vertices
-                )
-            ):
-                raise ValueError("same-state cross padding source is invalid")
-            aperture_risk = output.get(
-                "enclosing_support_aperture_risk"
-            )
-            edge_by_role = {edge["role"]: edge for edge in edges}
-            if (
-                not isinstance(aperture_risk, dict)
-                or abs(
-                    float(edge_by_role["top"]["expansion_px"])
-                    - float(aperture_risk["top_expansion_px"])
-                )
-                > 1.0e-8
-                or abs(
-                    float(edge_by_role["bottom"]["expansion_px"])
-                    - float(aperture_risk["bottom_expansion_px"])
-                )
-                > 1.0e-8
-            ):
-                raise ValueError(
-                    "enclosing-support aperture risk budget is invalid"
-                )
-            cross_limit = min(
-                float(edge["limit_mm"])
-                for edge in edges
-                if edge["role"] in {"top", "bottom"}
-            )
-            padding_px = output.get(
-                "maximum_same_state_cross_alignment_padding_px"
-            )
-            if not _finite_number(padding_px) or float(padding_px) < 0.0:
-                raise ValueError("same-state cross padding is invalid")
-            expected_padding_mm = float(padding_px) / min(
-                float(vertex[0]) for vertex in height_vertices
-            )
-            if (
-                float(budget["enclosing_support_height_ratio"]) <= 1.0
-                or budget["enclosing_support_within_limit"]
-                != (
-                    float(budget["enclosing_support_height_ratio"])
-                    <= OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio
-                )
-                or abs(
-                    float(
-                        budget[
-                            "maximum_same_state_cross_alignment_padding_mm"
-                        ]
-                    )
-                    - expected_padding_mm
-                )
-                > 1.0e-8
-                or float(
-                    budget[
-                        "maximum_same_state_cross_alignment_padding_mm"
-                    ]
-                )
-                < 0.0
-                or budget[
-                    "maximum_same_state_cross_alignment_padding_within_limit"
-                ]
-                != (
-                    float(
-                        budget[
-                            "maximum_same_state_cross_alignment_padding_mm"
-                        ]
-                    )
-                    <= cross_limit
-                )
-            ):
-                raise ValueError("support cross-alignment budget is invalid")
-        supported = all(edge["within_limit"] for edge in edges) and (
-            budget["enclosing_support_within_limit"] is not False
-        ) and (
-            budget[
-                "maximum_same_state_cross_alignment_padding_within_limit"
-            ]
-            is not False
-        )
-        if (budget["state"] == "supported") != supported:
-            raise ValueError("direct-use budget state is invalid")
+    if not outputs:
+        return
+    source = _read_common_proof(source_geometry, SourceScanGeometry)
+    for output, budget in zip(outputs, budgets, strict=True):
+        typed = _read_common_proof(output, OutputFootprint)
+        if typed.fixed_size != source.fixed_output_size:
+            raise ValueError("fixed output size does not reproduce shared source W/H")
+        if budget != typed_read_model(fixed_output_coverage(typed)):
+            raise ValueError("fixed-output coverage does not reproduce visible content containment")
 
 
 def validate_placement_feature_record(
@@ -3822,7 +3410,7 @@ def _common_proof_field_types(model: type) -> dict[str, Any]:
 
 def _read_common_proof(value: Any, model: type) -> Any:
     """Rehydrate only explicitly allowed current evidence roots for pure owners."""
-    if model not in (CommonHOutput, CommonHOutputAuthority, PhaseFitResult,
+    if model not in (OutputFootprint, CommonHOutput, CommonHOutputAuthority, PhaseFitResult,
                      CrossFitCompetition, CrossRoleBinding, PhotoBoundaryObservation,
                      SourceScanGeometry, HolderFillAssessment, FormatPlacement, ExteriorRegionMeasurement,
                      TemplateCrossInput, CoarseStripSupport, PhotoBoundaryMeasurementSet, CrossRegistrationWorkReceipt):
@@ -3932,22 +3520,6 @@ def _validate_selected_output_reuse(lane: dict[str, Any]) -> bool:
     elif budgets:
         raise ValueError("unselected output cannot expose selected budgets")
     return selected_common
-
-
-def _validate_selected_contact_protection(outputs, expected, *, common: bool) -> None:
-    # Every interpretation must retain the whole topology proof. A union of
-    # partial member ledgers cannot fill another member's missing protection.
-    groups = (
-        [tuple(output["members"][index] for output in outputs)
-         for index in range(len(outputs[0]["members"]))]
-        if outputs and common else [outputs]
-    )
-    for members in groups:
-        actual = {(fact["topology_relation_id"], output["envelope"]["lane_ordinal"], fact["role"])
-                  for output in members for fact in output["boundary_protections"]
-                  if fact["topology_relation_id"] is not None}
-        if members and actual != expected:
-            raise ValueError("output topology protection disagrees with contact relations")
 
 
 def _validate_holder_fill_identity(lane: dict[str, Any]) -> None:
@@ -4256,7 +3828,7 @@ def _validate_geometry(
         proposal_outputs = _validate_placement_proposal(
             lane.get("placement_proposal"),
             lane_id=lane_id,
-            source_geometry=lane.get("source_scan_geometry"),
+            source_geometry=typed_read_model(expected_shared) if expected_shared is not None else lane.get("source_scan_geometry"),
             expected_source_extent=expected_source_extent,
         )
         proposal = lane["placement_proposal"]
@@ -4279,7 +3851,7 @@ def _validate_geometry(
         )
         for alternative, identity in zip(alternatives, alternative_ids):
             alternative_outputs = _validate_placement_proposal(
-                alternative, lane_id=lane_id, source_geometry=lane.get("source_scan_geometry"),
+                alternative, lane_id=lane_id, source_geometry=typed_read_model(expected_shared) if expected_shared is not None else lane.get("source_scan_geometry"),
                 expected_source_extent=expected_source_extent,
             )
             if (
@@ -4632,20 +4204,10 @@ def _validate_geometry(
             output_geometry_ids=set(outputs_by_id),
         )
         if not selected_common:
-            _validate_direct_use_budgets(budgets, outputs, lane.get("source_scan_geometry"))
+            _validate_direct_use_budgets(budgets, outputs, typed_read_model(expected_shared) if expected_shared is not None else lane.get("source_scan_geometry"))
         if not selected_common:
             for output in outputs:
                 validate_output_footprint_authority(output, expected_source_extent=expected_source_extent)
-        expected_contact_sides = {
-            (identity, ordinal, "end")
-            for identity, ordinal in contact_relations.items()
-        }.union(
-            {
-                (identity, ordinal + 1, "start")
-                for identity, ordinal in contact_relations.items()
-            }
-        )
-        _validate_selected_contact_protection(outputs, expected_contact_sides, common=selected_common)
         selected = lane["selected_placement_id"]
         expected_boundary_use = None if not outputs else (
             outputs[0]["members"][0]["envelope"]["boundary_use"] if selected_common else outputs[0]["envelope"]["boundary_use"])

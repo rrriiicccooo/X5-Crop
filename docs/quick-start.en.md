@@ -59,6 +59,13 @@ specified. V5 accepts single-page 16-bit RGB TIFFs with supported lossless
 compression. See the [English User Guide](user-guide.en.md) for the complete
 input contract.
 
+Each source TIFF shares one W/H size. The crop window is fixed at `1.1W × 1.1H`, with 5% margins that include
+base protection. The program selects its position only. If all visible content cannot fit or evidence is insufficient,
+the whole source enters `needs_review`. Multiple valid top/bottom interpretations must also fit within one fixed box.
+
+The fixed dimensions apply in source coordinates. Source-edge clipping, deskew, and integer rounding can change the
+final TIFF pixel dimensions.
+
 ## 3. Inspect Debug Analysis First
 
 Use two different fresh output paths when inspecting detection before a normal

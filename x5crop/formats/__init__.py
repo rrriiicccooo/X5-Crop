@@ -8,7 +8,7 @@ from ..utils import require_positive
 
 
 DEVELOPMENT_GOLD_CALIBRATION_COHORT_SHA256 = (
-    "c4f687b89d9c935eadccd81786476a7e718951b5890a8b421595b7ba3bddd61f"
+    "daaea2ad49564616342051253c8fa67c4922a260d0dcc92f0d187f7b2eb10288"
 )
 
 
@@ -361,42 +361,16 @@ class FramePhysicalSpec:
 
 @dataclass(frozen=True, order=True)
 class OutputProtectionSpec:
-    """One product policy for bleed and automatic-output limits.
+    """Fixed source-wide output margin and physical support-search bound."""
 
-    Bleed is deterministic output geometry.  It is not measurement evidence
-    and never helps select a placement.  The five-percent limit is applied to
-    the complete selected-output requirement on each aperture side.  A
-    directly observed enclosing support pair has its own total-height limit
-    and receives no additional cross-axis bleed.
-    """
-
-    sequence_bleed_minimum_mm: float = 0.15
-    sequence_bleed_frame_ratio: float = 0.007
-    cross_bleed_mm: float = 0.25
-    maximum_expansion_ratio_per_side: float = 0.05
+    margin_ratio_per_side: float = 0.05
     maximum_enclosing_support_height_ratio: float = 1.10
 
     def __post_init__(self) -> None:
-        for name, value in (
-            ("sequence minimum bleed", self.sequence_bleed_minimum_mm),
-            ("cross bleed", self.cross_bleed_mm),
-        ):
-            require_positive(name, value)
-        for name, value in (
-            ("sequence bleed ratio", self.sequence_bleed_frame_ratio),
-            ("maximum per-side expansion", self.maximum_expansion_ratio_per_side),
-        ):
-            if not 0.0 < value < 1.0:
-                raise ValueError(f"{name} must be between zero and one")
+        if self.margin_ratio_per_side != 0.05:
+            raise ValueError("fixed output requires five-percent margins")
         if not 1.0 < self.maximum_enclosing_support_height_ratio < 2.0:
             raise ValueError("enclosing-support height ratio must be between one and two")
-
-    def sequence_bleed_mm(self, frame_width_mm: float) -> float:
-        require_positive("frame width", frame_width_mm)
-        return max(
-            self.sequence_bleed_minimum_mm,
-            self.sequence_bleed_frame_ratio * frame_width_mm,
-        )
 
 
 OUTPUT_PROTECTION_SPEC = OutputProtectionSpec()

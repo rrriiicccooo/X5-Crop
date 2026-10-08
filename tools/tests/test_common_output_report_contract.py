@@ -10,7 +10,9 @@ from tools.tests.test_common_output_contract import native_output, translated_h
 from tools.tests.test_common_h_output_contract import registration
 from tools.tests.test_template_output_contract import _lane, _placement
 from x5crop.detection.photo_geometry.template_common_output import materialize_common_h_output
-from x5crop.detection.photo_geometry.template_output import template_direct_use_budget_assessment
+from x5crop.detection.photo_geometry.template_output import (
+    common_h_output_footprint, template_direct_use_budget_assessment,
+)
 from x5crop.domain import Box
 from x5crop.report.read_models import typed_read_model
 
@@ -41,7 +43,7 @@ class CommonOutputReportContractTest(unittest.TestCase):
         self.validate(self.value, cross_competition=self.cross,
                       cross_registration_work=typed_read_model(registration()),
                       phase_best=typed_read_model(self.result.placements[0].sequence_fit))
-        result, cross = fixture(20)
+        result, cross = fixture(30)
         self.assertFalse(result.output_footprints[0].budget_supported)
         self.validate(typed_read_model(result), cross_competition=cross)
 
@@ -91,25 +93,25 @@ class CommonOutputReportContractTest(unittest.TestCase):
             self.validate(bad)
 
     def test_native_budget_cannot_replace_wider_common_budget(self):
-        result, _ = fixture(20)
+        result, _ = fixture(30)
         bad = typed_read_model(result)
         common = bad["output_footprints"][0]
         for index, placement in enumerate(result.placements):
             assessment = typed_read_model(template_direct_use_budget_assessment(placement, native_output(placement)))
             assessment["geometry_id"] = common["geometry_id"]
             common["member_budgets"][index]["assessment"] = assessment
-        with self.assertRaisesRegex(ValueError, "common requested footprint"):
+        with self.assertRaisesRegex(ValueError, "member budget|common requested footprint"):
             self.validate(bad)
 
     def test_every_budget_field_is_verified(self):
-        for key, value in (("expansion_px", 0), ("expansion_mm", 0), ("limit_mm", 100),
-                           ("limit_applies", False), ("within_limit", 1), ("role", "top")):
+        for key, value in (("required_extent_px", 0), ("available_extent_px", 0),
+                           ("within_limit", 1), ("role", "long_boundary")):
             with self.subTest(key=key):
                 bad = deepcopy(self.value)
                 bad["output_footprints"][0]["member_budgets"][0]["assessment"]["edge_assessments"][0][key] = value
                 with self.assertRaises(ValueError):
                     self.validate(bad)
-        for key, value in (("state", "contradicted"), ("enclosing_support_height_ratio", 1.01),
+        for key, value in (("state", "contradicted"), ("geometry_id", "different"),
                            ("unexpected", True)):
             with self.subTest(key=key):
                 bad = deepcopy(self.value)
@@ -119,8 +121,8 @@ class CommonOutputReportContractTest(unittest.TestCase):
 
     def test_second_member_uses_its_own_budget_and_source_scale(self):
         bad = deepcopy(self.value)
-        bad["output_footprints"][0]["member_budgets"][1]["assessment"]["edge_assessments"][2]["expansion_px"] = 0
-        with self.assertRaisesRegex(ValueError, "common requested footprint"):
+        bad["output_footprints"][0]["member_budgets"][1]["assessment"]["edge_assessments"][2]["required_extent_px"] = 0
+        with self.assertRaisesRegex(ValueError, "member budget|common requested footprint"):
             self.validate(bad)
         bad = deepcopy(self.value)
         for placement in bad["placements"]:
@@ -187,9 +189,20 @@ class CommonOutputReportContractTest(unittest.TestCase):
 
     def test_native_member_authority_validation_is_not_skipped(self):
         bad = deepcopy(self.value)
-        bad["output_footprints"][0]["members"][1]["boundary_protections"][0]["joint_expansion_px"] = -1
+        bad["output_footprints"][0]["members"][1]["boundary_protections"][0]["required_expansion_px"] = -1
         with self.assertRaises(ValueError):
             self.validate(bad)
+
+    def test_self_consistent_smaller_protection_cannot_replace_physical_proof(self):
+        # Keep the fixed windows, unions and budgets internally consistent,
+        # but omit the measured boundary residuals from every native member.
+        outputs = tuple(common_h_output_footprint(self.result.placements, tuple(
+            replace(member, mandatory_source_footprint=member.envelope.feasible_source_footprint)
+            for member in output.members
+        )) for output in self.result.output_footprints)
+        forged = replace(self.result, output_footprints=outputs)
+        with self.assertRaisesRegex(ValueError, "complete physical protection"):
+            self.validate(typed_read_model(forged))
 
 
 if __name__ == "__main__":

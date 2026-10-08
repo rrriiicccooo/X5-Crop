@@ -20,7 +20,6 @@ from x5crop.domain import (
 from x5crop.formats import (
     DEVELOPMENT_GOLD_CALIBRATION_COHORT_SHA256,
     EnclosingSupportApertureCalibrationSpec,
-    OUTPUT_PROTECTION_SPEC,
 )
 from x5crop.formats.scan_canvas import ScanCanvasPhysicalSpec
 from x5crop.detection.gate_checks import GateGap
@@ -645,7 +644,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         ):
             resolved_cross_support_domains_px(unmodeled)
 
-    def test_overlap_protection_applies_only_to_the_two_reversed_sides(
+    def test_overlap_protection_keeps_typed_physical_protection_facts(
         self,
     ) -> None:
         placement = _overlap_placement()
@@ -665,29 +664,32 @@ class TemplateOutputContractTest(unittest.TestCase):
             for output in outputs
             for item in output.boundary_protections
         }
-        relation_id = ObservationId("overlap:test")
-
-        for key in (
-            (1, BoundaryRole.END),
-            (2, BoundaryRole.START),
-        ):
-            fact = protections[key]
-            self.assertEqual(fact.topology_relation_id, relation_id)
-            self.assertAlmostEqual(
-                fact.topology_protection_px,
-                fact.base_bleed_px,
+        self.assertEqual(
+            set(protections),
+            {(ordinal, role) for ordinal in (1, 2) for role in (
+                BoundaryRole.START, BoundaryRole.END,
+                BoundaryRole.TOP, BoundaryRole.BOTTOM,
+            )},
+        )
+        self.assertEqual(
+            tuple(next(iter(protections.values())).__dataclass_fields__),
+            (
+                "role",
+                "measurement_expansion_px",
+                "local_boundary_residual_px",
+                "required_expansion_px",
+            ),
+        )
+        for fact in protections.values():
+            self.assertGreaterEqual(fact.required_expansion_px, fact.measurement_expansion_px)
+            self.assertGreaterEqual(
+                fact.required_expansion_px,
+                fact.local_boundary_residual_px - 1.0e-8,
             )
-            self.assertGreater(fact.topology_protection_px, 0.0)
-        for key, fact in protections.items():
-            if key in {
-                (1, BoundaryRole.END),
-                (2, BoundaryRole.START),
-            }:
-                continue
-            self.assertIsNone(fact.topology_relation_id)
-            self.assertEqual(fact.topology_protection_px, 0.0)
+            self.assertFalse(hasattr(fact, "topology_relation_id"))
+            self.assertFalse(hasattr(fact, "base_bleed_px"))
 
-    def test_contact_protection_applies_only_to_the_two_shared_sides(
+    def test_contact_protection_keeps_typed_physical_protection_facts(
         self,
     ) -> None:
         placement = _contact_placement()
@@ -707,29 +709,23 @@ class TemplateOutputContractTest(unittest.TestCase):
             for output in outputs
             for item in output.boundary_protections
         }
-        relation_id = ObservationId("contact-edge:test")
-
-        for key in (
-            (1, BoundaryRole.END),
-            (2, BoundaryRole.START),
-        ):
-            fact = protections[key]
-            self.assertEqual(fact.topology_relation_id, relation_id)
-            self.assertAlmostEqual(
-                fact.topology_protection_px,
-                fact.base_bleed_px,
+        self.assertEqual(
+            set(protections),
+            {(ordinal, role) for ordinal in (1, 2) for role in (
+                BoundaryRole.START, BoundaryRole.END,
+                BoundaryRole.TOP, BoundaryRole.BOTTOM,
+            )},
+        )
+        for fact in protections.values():
+            self.assertGreaterEqual(fact.required_expansion_px, fact.measurement_expansion_px)
+            self.assertGreaterEqual(
+                fact.required_expansion_px,
+                fact.local_boundary_residual_px - 1.0e-8,
             )
-            self.assertGreater(fact.topology_protection_px, 0.0)
-        for key, fact in protections.items():
-            if key in {
-                (1, BoundaryRole.END),
-                (2, BoundaryRole.START),
-            }:
-                continue
-            self.assertIsNone(fact.topology_relation_id)
-            self.assertEqual(fact.topology_protection_px, 0.0)
+            self.assertFalse(hasattr(fact, "topology_relation_id"))
+            self.assertFalse(hasattr(fact, "base_bleed_px"))
 
-    def test_contact_protection_uses_the_existing_five_percent_budget(
+    def test_contact_protection_is_evaluated_against_the_fixed_window(
         self,
     ) -> None:
         placement = _contact_placement(
@@ -750,8 +746,9 @@ class TemplateOutputContractTest(unittest.TestCase):
             for item in assessment.edge_assessments
             if item.role == BoundaryRole.END
         )
-        self.assertFalse(end.within_limit)
-        self.assertEqual(assessment.state, EvidenceState.CONTRADICTED)
+        self.assertGreater(end.required_extent_px, 0.0)
+        self.assertLessEqual(end.required_extent_px, end.available_extent_px)
+        self.assertEqual(assessment.state, EvidenceState.SUPPORTED)
 
     def test_enclosing_support_keeps_its_same_state_target_projection(self) -> None:
         placement = _enclosing_support_placement(
@@ -845,8 +842,8 @@ class TemplateOutputContractTest(unittest.TestCase):
         self.assertGreaterEqual(max(y for _, y in polygon), 278.0)
 
     def test_support_risk_uses_source_axis_units_at_all_slopes(self) -> None:
-        # Normalized distance at either slope endpoint would be 4.99985,
-        # hiding the 5.0001 maximum at slope zero from a 5px budget.
+        # Normalized distance at either slope endpoint would be 4.99985;
+        # source-axis expansion must retain the 5.0001 maximum at slope zero.
         for axis in (BoundaryAxis.X, BoundaryAxis.Y):
             for slope in (-0.01, 0.0, 0.01):
                 norm = math.hypot(1.0, slope)
@@ -886,20 +883,24 @@ class TemplateOutputContractTest(unittest.TestCase):
                 output = output_footprint_from_template_placement(
                     placement, project_format_placement(placement), lane=_lane(), lane_ordinal=1, layout="horizontal",
                 )
-                for layer, polygon in (("mandatory", output.mandatory_source_footprint),
-                                       ("requested", output.requested_source_footprint)):
-                    top_intercept = min(y - slope * (x - 150.0) for x, y in polygon)
-                    if layer == "mandatory" and width == 300.0:
-                        self.assertLess(max(x for x, _ in polygon), trace)
-                        self.assertAlmostEqual(top_intercept, 26.0)
-                    else:
-                        self.assertGreaterEqual(max(x for x, _ in polygon), trace)
-                        self.assertAlmostEqual(top_intercept, 23.0)
+                polygon = output.mandatory_source_footprint
+                top_intercept = min(y - slope * (x - 150.0) for x, y in polygon)
+                if width == 300.0:
+                    self.assertGreaterEqual(max(x for x, _ in polygon), trace - 1.0)
+                    self.assertAlmostEqual(top_intercept, 26.0)
+                else:
+                    self.assertGreaterEqual(max(x for x, _ in polygon), trace - 1.0)
+                    self.assertAlmostEqual(top_intercept, 23.0)
+                requested = output.requested_source_footprint
+                self.assertAlmostEqual(
+                    max(x for x, _ in requested) - min(x for x, _ in requested),
+                    output.fixed_size.output_width_px,
+                )
                 risk = output.enclosing_support_aperture_risk
                 baseline_risk = baseline.enclosing_support_aperture_risk
                 assert risk is not None and baseline_risk is not None
-                self.assertAlmostEqual(risk.top_expansion_px, baseline_risk.top_expansion_px + 3.0)
-                self.assertAlmostEqual(output.maximum_same_state_cross_alignment_padding_px, 5.0)
+                self.assertGreaterEqual(risk.top_expansion_px, baseline_risk.top_expansion_px)
+                self.assertGreater(output.maximum_same_state_cross_alignment_padding_px, 0.0)
 
     def test_support_and_measured_sequence_protection_close_the_actual_corner(self) -> None:
         slope = 0.06
@@ -974,21 +975,20 @@ class TemplateOutputContractTest(unittest.TestCase):
             placement = _compose(sequence.template,
                                  replace(sequence, role_bindings=(start, end)), placement.cross_fit)
             projection = project_format_placement(placement)
-            for bleed in (False, True):
-                with self.subTest(slope=slope, bleed=bleed):
-                    polygon = _footprint(placement, placement.frames[0], projection,
-                                         apply_residual=True, apply_bleed=bleed)
-                    left, right = min(x for x, _ in polygon), max(x for x, _ in polygon)
-                    self.assertGreater(100.0 - left, right - 400.0)
-                    self.assertGreater(left, 0.0)
-                    # Raw support is exactly the selected line on [0, 300].
-                    # Only the actual right extension has unmeasured direction;
-                    # the larger START protection cannot lengthen that domain.
-                    low, high = (math.tan(math.atan(slope) + math.radians(a))
-                                 for a in (-0.5, 0.5))
-                    intercepts = tuple(y - slope * (x - 150.0) for x, y in polygon)
-                    self.assertAlmostEqual(min(intercepts), 27.0 - 1.0 - (slope - low) * (right - 300.0))
-                    self.assertAlmostEqual(max(intercepts), 277.0 + 1.0 + (high - slope) * (right - 300.0))
+            polygon = _footprint(
+                placement, placement.frames[0], projection, apply_residual=True,
+            )
+            left, right = min(x for x, _ in polygon), max(x for x, _ in polygon)
+            self.assertGreater(100.0 - left, right - 400.0)
+            self.assertGreater(left, 0.0)
+            # Raw support is exactly the selected line on [0, 300].
+            # Only the actual right extension has unmeasured direction;
+            # the larger START protection cannot lengthen that domain.
+            low, high = (math.tan(math.atan(slope) + math.radians(a))
+                         for a in (-0.5, 0.5))
+            intercepts = tuple(y - slope * (x - 150.0) for x, y in polygon)
+            self.assertAlmostEqual(min(intercepts), 27.0 - 1.0 - (slope - low) * (right - 300.0))
+            self.assertAlmostEqual(max(intercepts), 277.0 + 1.0 + (high - slope) * (right - 300.0))
 
     def test_support_product_vertices_cover_mixed_slopes_and_same_state_risk(self) -> None:
         placement = _enclosing_support_placement(frame_width_px=300.0,
@@ -1019,43 +1019,34 @@ class TemplateOutputContractTest(unittest.TestCase):
             *((1 - w) * sequence[0][i] + w * sequence[1][i] for i in range(2)),
             *(sum(a * z[i] for a, z in zip(weights, support, strict=True)) for i in range(3)),
         ) for w in (0.1, 0.5, 0.9) for weights in ((0.2, 0.3, 0.5), (0.5, 0.5, 0.0), (0.0, 0.4, 0.6)))
-        for bleed in (False, True):
-            residuals = _frame_boundary_residuals(placement, frame, vertices, apply_bleed=bleed)
-            all_residuals = _frame_boundary_residuals(placement, frame, vertices + mixed, apply_bleed=bleed)
-            self.assertEqual(residuals, all_residuals[:len(vertices)])
-            if bleed:
-                # Only the far END state reaches raw trace 423. Keep that
-                # interval even for states whose new individual span excludes it.
-                for state, residual in zip(vertices[:3], residuals[:3], strict=True):
-                    self.assertLess(state.sequence_end_px + residual[BoundaryRole.END] + 3.0, 423.0)
-                    self.assertGreaterEqual(residual[BoundaryRole.TOP],
-                        1.0 + state.top_at_lane_reference_px + state.enclosing_support_slope * (423.0 - frame.top.reference_trace_px) + 8.0)
-            polygons = tuple(_state_footprint(placement, frame, state,
-                apply_residual=True, apply_bleed=bleed, residuals=residual,
-            ) for state, residual in zip(vertices + mixed, all_residuals, strict=True))
-            hull = convex_hull(tuple(point for polygon in polygons[:len(vertices)] for point in polygon))
-            for left, right in zip(hull, (*hull[1:], hull[0]), strict=True):
-                for polygon in polygons[len(vertices):]:
-                    for x, y in polygon:
-                        self.assertGreaterEqual((right[0] - left[0]) * (y - left[1])
-                                                - (right[1] - left[1]) * (x - left[0]), -1e-8)
-            if bleed:
-                for offset in (None, FiniteInterval(-1.0, 2.0)):
-                    context = SimpleNamespace(
-                        frame_spec=placement.frame_spec, sequence_fit=placement.sequence_fit,
-                        cross_fit=placement.cross_fit,
-                        enclosing_support_aperture_authority=SimpleNamespace(
-                            authority_id="test-center", effective_center_offset_px=offset,
-                            state=EvidenceState.UNAVAILABLE if offset is None else EvidenceState.SUPPORTED,
-                        ),
-                    )
-                    risk = _enclosing_support_aperture_risk(
-                        context, frame, SimpleNamespace(frame_states=(vertices,)), residuals)
-                    mixed_risk = _enclosing_support_aperture_risk(
-                        context, frame, SimpleNamespace(frame_states=(mixed,)), all_residuals[len(vertices):])
-                    assert risk is not None and mixed_risk is not None
-                    self.assertLessEqual(mixed_risk.top_expansion_px, risk.top_expansion_px + 1e-8)
-                    self.assertLessEqual(mixed_risk.bottom_expansion_px, risk.bottom_expansion_px + 1e-8)
+        residuals = _frame_boundary_residuals(placement, frame, vertices)
+        all_residuals = _frame_boundary_residuals(placement, frame, vertices + mixed)
+        self.assertEqual(residuals, all_residuals[:len(vertices)])
+        polygons = tuple(_state_footprint(
+            placement, frame, state, apply_residual=True, residuals=residual,
+        ) for state, residual in zip(vertices + mixed, all_residuals, strict=True))
+        hull = convex_hull(tuple(point for polygon in polygons[:len(vertices)] for point in polygon))
+        for left, right in zip(hull, (*hull[1:], hull[0]), strict=True):
+            for polygon in polygons[len(vertices):]:
+                for x, y in polygon:
+                    self.assertGreaterEqual((right[0] - left[0]) * (y - left[1])
+                                            - (right[1] - left[1]) * (x - left[0]), -1e-8)
+        for offset in (None, FiniteInterval(-1.0, 2.0)):
+            context = SimpleNamespace(
+                frame_spec=placement.frame_spec, sequence_fit=placement.sequence_fit,
+                cross_fit=placement.cross_fit,
+                enclosing_support_aperture_authority=SimpleNamespace(
+                    authority_id="test-center", effective_center_offset_px=offset,
+                    state=EvidenceState.UNAVAILABLE if offset is None else EvidenceState.SUPPORTED,
+                ),
+            )
+            risk = _enclosing_support_aperture_risk(
+                context, frame, SimpleNamespace(frame_states=(vertices,)), residuals)
+            mixed_risk = _enclosing_support_aperture_risk(
+                context, frame, SimpleNamespace(frame_states=(mixed,)), all_residuals[len(vertices):])
+            assert risk is not None and mixed_risk is not None
+            self.assertLessEqual(mixed_risk.top_expansion_px, risk.top_expansion_px + 1e-8)
+            self.assertLessEqual(mixed_risk.bottom_expansion_px, risk.bottom_expansion_px + 1e-8)
 
     def test_support_direction_span_is_specific_to_each_sequence_state(self) -> None:
         placement = _enclosing_support_placement(frame_width_px=300.0)
@@ -1067,7 +1058,7 @@ class TemplateOutputContractTest(unittest.TestCase):
             context = replace(placement, cross_fit=replace(placement.cross_fit, direct_bindings=tuple(
                 replace(binding, observed_direction_interval_degrees=FiniteInterval(*angles))
                 for binding in placement.cross_fit.direct_bindings)))
-            for direction, bleed in ((1, False), (1, True), (-1, False), (-1, True)):
+            for direction in (1, -1):
                 directed = SimpleNamespace(frame_spec=context.frame_spec, cross_fit=context.cross_fit,
                     sequence_fit=SimpleNamespace(template=SimpleNamespace(direction=direction), adjacency_relations=()))
                 directed_frame = frame if direction == 1 else replace(frame,
@@ -1076,17 +1067,17 @@ class TemplateOutputContractTest(unittest.TestCase):
                 states = vertices if direction == 1 else tuple(replace(state,
                     sequence_start_px=state.sequence_end_px, sequence_end_px=state.sequence_start_px)
                     for state in vertices)
-                residuals = _frame_boundary_residuals(directed, directed_frame, states, apply_bleed=bleed)
+                residuals = _frame_boundary_residuals(directed, directed_frame, states)
                 for state, residual in zip(states, residuals, strict=True):
                     polygon = _state_footprint(directed, directed_frame, state, apply_residual=True,
-                                               apply_bleed=bleed, residuals=residual)
+                                               residuals=residual)
                     right = max(420.0, max(x for x, _ in polygon))
                     self.assertAlmostEqual(residual[BoundaryRole.TOP],
                         1.0 + max(0.0, -math.tan(math.radians(angles[0]))) * (right - 300.0))
                     self.assertAlmostEqual(residual[BoundaryRole.BOTTOM],
                         1.0 + max(0.0, math.tan(math.radians(angles[1]))) * (right - 300.0))
 
-    def test_enclosing_support_uses_no_cross_bleed_and_keeps_per_side_limit(self) -> None:
+    def test_enclosing_support_keeps_physical_diagnostics_separate_from_coverage(self) -> None:
         placement = _enclosing_support_placement()
         output = output_footprint_from_template_placement(
             placement,
@@ -1104,23 +1095,23 @@ class TemplateOutputContractTest(unittest.TestCase):
             for item in output.boundary_protections
             if item.role in {BoundaryRole.TOP, BoundaryRole.BOTTOM}
         )
-        self.assertTrue(
-            all(item.base_bleed_px == 0.0 for item in cross_protections)
+        self.assertEqual(
+            {item.role for item in output.boundary_protections},
+            {
+                BoundaryRole.START, BoundaryRole.END,
+                BoundaryRole.TOP, BoundaryRole.BOTTOM,
+            },
         )
+        self.assertTrue(all(
+            item.required_expansion_px >= item.measurement_expansion_px
+            and item.required_expansion_px >= item.local_boundary_residual_px
+            for item in cross_protections
+        ))
         assessment = template_direct_use_budget_assessment(placement, output)
         self.assertEqual(assessment.state, EvidenceState.SUPPORTED)
-        self.assertLessEqual(
-            assessment.enclosing_support_height_ratio,
-            OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio,
-        )
-        self.assertTrue(assessment.enclosing_support_within_limit)
-        self.assertTrue(
-            all(
-                item.limit_applies
-                for item in assessment.edge_assessments
-                if item.role in {BoundaryRole.TOP, BoundaryRole.BOTTOM}
-            )
-        )
+        self.assertTrue(all(item.within_limit for item in assessment.edge_assessments))
+        self.assertIsNotNone(output.enclosing_support_aperture_risk)
+        self.assertIsNotNone(output.maximum_same_state_cross_alignment_padding_px)
 
     def test_exact_enclosing_height_still_needs_per_side_sampling_headroom(self) -> None:
         placement = _enclosing_support_placement(support_span_px=264.0)
@@ -1135,13 +1126,13 @@ class TemplateOutputContractTest(unittest.TestCase):
         assessment = template_direct_use_budget_assessment(placement, output)
 
         self.assertEqual(assessment.state, EvidenceState.CONTRADICTED)
-        self.assertLessEqual(
-            assessment.enclosing_support_height_ratio,
-            OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio,
-        )
-        self.assertTrue(assessment.enclosing_support_within_limit)
+        self.assertTrue(any(
+            not item.within_limit
+            for item in assessment.edge_assessments
+            if item.role in {BoundaryRole.TOP, BoundaryRole.BOTTOM}
+        ))
 
-    def test_enclosing_height_ratio_does_not_mix_alternative_support_positions(
+    def test_enclosing_position_uncertainty_is_checked_against_fixed_window(
         self,
     ) -> None:
         placement = _enclosing_support_placement(
@@ -1160,13 +1151,13 @@ class TemplateOutputContractTest(unittest.TestCase):
         assessment = template_direct_use_budget_assessment(placement, output)
 
         self.assertEqual(assessment.state, EvidenceState.CONTRADICTED)
-        self.assertAlmostEqual(
-            assessment.enclosing_support_height_ratio,
-            OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio,
-        )
-        self.assertTrue(assessment.enclosing_support_within_limit)
+        self.assertTrue(any(
+            not item.within_limit
+            for item in assessment.edge_assessments
+            if item.role in {BoundaryRole.TOP, BoundaryRole.BOTTOM}
+        ))
 
-    def test_unknown_aperture_center_spends_the_same_per_side_budget(self) -> None:
+    def test_unknown_aperture_center_is_nonblocking_physical_diagnostic(self) -> None:
         placement = _enclosing_support_placement(
             support_span_px=248.0,
             support_position_uncertainty_px=2.0,
@@ -1189,25 +1180,16 @@ class TemplateOutputContractTest(unittest.TestCase):
 
         assessment = template_direct_use_budget_assessment(placement, output)
         edges = {item.role: item for item in assessment.edge_assessments}
-        cross_limit = edges[BoundaryRole.TOP].limit_mm
-
         assert output.enclosing_support_aperture_risk is not None
         self.assertEqual(
             output.enclosing_support_aperture_risk.maximum_center_shift_px,
             6.0,
         )
-        self.assertEqual(edges[BoundaryRole.TOP].expansion_px, 13.0)
-        self.assertEqual(edges[BoundaryRole.BOTTOM].expansion_px, 13.0)
-        self.assertFalse(edges[BoundaryRole.TOP].within_limit)
-        self.assertFalse(edges[BoundaryRole.BOTTOM].within_limit)
-        self.assertLessEqual(
-            assessment.maximum_same_state_cross_alignment_padding_mm,
-            cross_limit,
-        )
-        self.assertTrue(
-            assessment.maximum_same_state_cross_alignment_padding_within_limit
-        )
-        self.assertEqual(assessment.state, EvidenceState.CONTRADICTED)
+        self.assertEqual(edges[BoundaryRole.TOP].required_extent_px, 127.0)
+        self.assertEqual(edges[BoundaryRole.BOTTOM].required_extent_px, 127.0)
+        self.assertTrue(edges[BoundaryRole.TOP].within_limit)
+        self.assertTrue(edges[BoundaryRole.BOTTOM].within_limit)
+        self.assertEqual(assessment.state, EvidenceState.SUPPORTED)
 
     def test_calibrated_aperture_center_narrows_only_the_risk_envelope(
         self,
@@ -1232,8 +1214,8 @@ class TemplateOutputContractTest(unittest.TestCase):
             FiniteInterval(-1.68, 2.0),
         )
         self.assertEqual(risk.maximum_center_shift_px, 2.0)
-        self.assertLess(risk.top_expansion_px, 13.0)
-        self.assertLess(risk.bottom_expansion_px, 13.0)
+        self.assertLess(risk.top_expansion_px, 18.0)
+        self.assertLess(risk.bottom_expansion_px, 18.0)
         self.assertEqual(
             template_direct_use_budget_assessment(placement, output).state,
             EvidenceState.SUPPORTED,
@@ -1289,7 +1271,7 @@ class TemplateOutputContractTest(unittest.TestCase):
             GateGap.ENCLOSING_SUPPORT_APERTURE_CONFLICT,
         )
 
-    def test_same_state_cross_alignment_padding_has_one_joint_limit(self) -> None:
+    def test_same_state_cross_alignment_padding_remains_nonblocking_diagnostic(self) -> None:
         placement = _enclosing_support_placement(
             frame_count=3,
             support_span_px=241.0,
@@ -1308,10 +1290,8 @@ class TemplateOutputContractTest(unittest.TestCase):
 
         self.assertTrue(edges[BoundaryRole.TOP].within_limit)
         self.assertTrue(edges[BoundaryRole.BOTTOM].within_limit)
-        self.assertFalse(
-            assessment.maximum_same_state_cross_alignment_padding_within_limit
-        )
-        self.assertEqual(assessment.state, EvidenceState.CONTRADICTED)
+        self.assertGreater(output.maximum_same_state_cross_alignment_padding_px, 0.0)
+        self.assertEqual(assessment.state, EvidenceState.SUPPORTED)
 
     def test_selected_placement_produces_supported_output_footprint(self) -> None:
         placement = _placement()
@@ -1326,7 +1306,13 @@ class TemplateOutputContractTest(unittest.TestCase):
             output.envelope.canonical_source_footprint,
             placement.frames[0].canonical_source_polygon,
         )
-        self.assertEqual(output.saturation_facts, ())
+        self.assertTrue(output.saturation_facts)
+        self.assertTrue(all(item.source_boundary for item in output.saturation_facts))
+        self.assertAlmostEqual(
+            output.requested_source_footprint[1][0]
+            - output.requested_source_footprint[0][0],
+            output.fixed_size.output_width_px,
+        )
         assessment = template_direct_use_budget_assessment(
             placement,
             output,
@@ -1341,7 +1327,82 @@ class TemplateOutputContractTest(unittest.TestCase):
                 BoundaryRole.BOTTOM,
             ),
         )
+        self.assertEqual(
+            tuple(assessment.edge_assessments[0].__dataclass_fields__),
+            ("role", "required_extent_px", "available_extent_px", "within_limit"),
+        )
+        self.assertEqual(
+            tuple(assessment.__dataclass_fields__),
+            ("geometry_id", "boundary_use", "edge_assessments", "state"),
+        )
         self.assertEqual(assessment.geometry_id, output.geometry_id)
+
+    def test_source_fixed_size_is_stable_when_physical_residuals_change(self) -> None:
+        base_placement = _contact_placement()
+        base = output_footprint_from_template_placement(
+            base_placement,
+            project_format_placement(base_placement),
+            lane=_lane(),
+            lane_ordinal=1,
+            layout="horizontal",
+        )
+        residual = _contact_placement(shared_direction_uncertainty_degrees=10.0)
+        changed = output_footprint_from_template_placement(
+            residual,
+            project_format_placement(residual),
+            lane=_lane(),
+            lane_ordinal=1,
+            layout="horizontal",
+        )
+        self.assertEqual(base.fixed_size, changed.fixed_size)
+        self.assertEqual(base.fixed_size.source_geometry_id, changed.fixed_size.source_geometry_id)
+        self.assertEqual(
+            tuple(base.fixed_size.__dataclass_fields__),
+            ("source_geometry_id", "frame_width_px", "frame_height_px", "margin_ratio_per_side"),
+        )
+        self.assertEqual(base.fixed_size.margin_ratio_per_side, 0.05)
+        self.assertEqual(base.width_axis, BoundaryAxis.X)
+        self.assertEqual(base.sequence_direction, 1)
+        self.assertNotEqual(base.boundary_protections, changed.boundary_protections)
+        for output in (base, changed):
+            self.assertAlmostEqual(
+                max(x for x, _ in output.requested_source_footprint)
+                - min(x for x, _ in output.requested_source_footprint),
+                output.fixed_size.output_width_px,
+            )
+            self.assertAlmostEqual(
+                max(y for _, y in output.requested_source_footprint)
+                - min(y for _, y in output.requested_source_footprint),
+                output.fixed_size.output_height_px,
+            )
+
+    def test_small_source_canvas_has_no_absolute_output_floor(self) -> None:
+        placement = _placement()
+        small_lane = _lane()
+        small_lane = replace(
+            small_lane,
+            domain=replace(small_lane.domain, work_box=Box(0, 0, 500, 80)),
+            scan_canvas=replace(small_lane.scan_canvas, observed_short_axis_px=80),
+        )
+        output = output_footprint_from_template_placement(
+            placement,
+            project_format_placement(placement),
+            lane=small_lane,
+            lane_ordinal=1,
+            layout="horizontal",
+        )
+        self.assertAlmostEqual(
+            max(y for _, y in output.requested_source_footprint)
+            - min(y for _, y in output.requested_source_footprint),
+            output.fixed_size.output_height_px,
+        )
+        self.assertEqual(
+            output.required_source_footprint,
+            ((-0.5, -0.5), (348.0, -0.5), (348.0, 79.5), (-0.5, 79.5)),
+        )
+        self.assertIn(AuthoritySide.BOTTOM, tuple(
+            item.authority_side for item in output.saturation_facts
+        ))
 
     def test_mandatory_lane_overflow_is_explicit_and_never_clipped(self) -> None:
         placement = _placement()
@@ -1394,7 +1455,7 @@ class TemplateOutputContractTest(unittest.TestCase):
             "top:lane_boundary_joint_protection",
         )
 
-    def test_true_source_edge_reduces_only_unavailable_optional_bleed(self) -> None:
+    def test_true_source_edge_clips_only_unavailable_optional_content(self) -> None:
         placement = _placement()
         lane = _lane()
         lane = replace(
@@ -1411,9 +1472,14 @@ class TemplateOutputContractTest(unittest.TestCase):
             layout="horizontal",
         )
 
-        self.assertEqual(len(output.saturation_facts), 1)
-        saturation = output.saturation_facts[0]
-        self.assertEqual(saturation.authority_side, AuthoritySide.BOTTOM)
+        self.assertIn(
+            AuthoritySide.BOTTOM,
+            tuple(item.authority_side for item in output.saturation_facts),
+        )
+        saturation = next(
+            item for item in output.saturation_facts
+            if item.authority_side == AuthoritySide.BOTTOM
+        )
         self.assertEqual(
             saturation.kind,
             FootprintSaturationKind.SOURCE_BOUNDARY_OPTIONAL_BLEED,
@@ -1439,7 +1505,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         self.assertEqual(gate_fact.state, EvidenceState.SUPPORTED)
 
-    def test_true_source_edge_bounds_joint_protection_without_hiding_it(self) -> None:
+    def test_true_source_edge_keeps_mandatory_overflow_visible(self) -> None:
         placement = _placement()
         lane = _lane()
         lane = replace(
@@ -1456,9 +1522,14 @@ class TemplateOutputContractTest(unittest.TestCase):
             layout="horizontal",
         )
 
-        self.assertEqual(len(output.saturation_facts), 1)
-        saturation = output.saturation_facts[0]
-        self.assertEqual(saturation.authority_side, AuthoritySide.BOTTOM)
+        self.assertIn(
+            AuthoritySide.BOTTOM,
+            tuple(item.authority_side for item in output.saturation_facts),
+        )
+        saturation = next(
+            item for item in output.saturation_facts
+            if item.authority_side == AuthoritySide.BOTTOM
+        )
         self.assertEqual(
             saturation.kind,
             FootprintSaturationKind.SOURCE_BOUNDARY_JOINT_PROTECTION,
@@ -1479,7 +1550,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         self.assertEqual(gate_fact.state, EvidenceState.SUPPORTED)
 
-    def test_internal_lane_edge_cannot_reduce_optional_bleed(self) -> None:
+    def test_internal_lane_edge_cannot_clip_mandatory_content(self) -> None:
         placement = _placement()
         lane = _lane()
         lane = replace(
@@ -1495,10 +1566,13 @@ class TemplateOutputContractTest(unittest.TestCase):
             layout="horizontal",
         )
 
-        self.assertEqual(len(output.saturation_facts), 1)
-        self.assertEqual(
-            output.saturation_facts[0].kind,
+        self.assertIn(
             FootprintSaturationKind.LANE_BOUNDARY_OPTIONAL_BLEED,
+            tuple(item.kind for item in output.saturation_facts),
+        )
+        self.assertIn(
+            AuthoritySide.BOTTOM,
+            tuple(item.authority_side for item in output.saturation_facts),
         )
         self.assertFalse(output.source_authority_supported)
         self.assertEqual(
@@ -1525,16 +1599,36 @@ class TemplateOutputContractTest(unittest.TestCase):
             layout="horizontal",
         )
 
-        self.assertEqual(output.saturation_facts, ())
+        self.assertTrue(output.saturation_facts)
+        self.assertTrue(all(item.source_boundary for item in output.saturation_facts))
         self.assertFalse(hasattr(output, "sampling_source_footprint"))
         self.assertFalse(hasattr(output, "mapped_output_box"))
 
-    def test_joint_measurement_expansion_above_five_percent_is_rejected(self) -> None:
+    def test_mandatory_content_that_cannot_fit_keeps_fixed_proposal_for_review(self) -> None:
         placement = _placement()
+        top, bottom = placement.cross_fit.direct_bindings
+        top = replace(
+            top,
+            coordinate_interval_px=FiniteInterval.exact(-20.0),
+            fit_interval_px=FiniteInterval.exact(-20.0),
+            full_interval_px=FiniteInterval.exact(-20.0),
+        )
+        bottom = replace(
+            bottom,
+            coordinate_interval_px=FiniteInterval.exact(250.0),
+            fit_interval_px=FiniteInterval.exact(250.0),
+            full_interval_px=FiniteInterval.exact(250.0),
+        )
         cross = replace(
             placement.cross_fit,
-            top_full_interval_px=FiniteInterval(-20.0, 10.0),
-            bottom_full_interval_px=FiniteInterval(220.0, 250.0),
+            fixed_height_px=FiniteInterval.exact(270.0),
+            top_canonical_px=-20.0,
+            bottom_canonical_px=250.0,
+            top_fit_interval_px=FiniteInterval.exact(-20.0),
+            bottom_fit_interval_px=FiniteInterval.exact(250.0),
+            top_full_interval_px=FiniteInterval.exact(-20.0),
+            bottom_full_interval_px=FiniteInterval.exact(250.0),
+            direct_bindings=(top, bottom),
         )
         placement = replace(placement, cross_fit=cross)
         output = output_footprint_from_template_placement(
@@ -1546,6 +1640,16 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         assessment = template_direct_use_budget_assessment(placement, output)
         self.assertEqual(assessment.state, EvidenceState.CONTRADICTED)
+        self.assertAlmostEqual(
+            output.requested_source_footprint[1][0]
+            - output.requested_source_footprint[0][0],
+            output.fixed_size.output_width_px,
+        )
+        self.assertAlmostEqual(
+            output.requested_source_footprint[2][1]
+            - output.requested_source_footprint[1][1],
+            output.fixed_size.output_height_px,
+        )
         top = next(
             item
             for item in assessment.edge_assessments
@@ -1621,15 +1725,12 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         assessment = template_direct_use_budget_assessment(placement, output)
         budget = {item.role: item for item in assessment.edge_assessments}
-        self.assertGreaterEqual(
+        self.assertGreater(
             max(
-                budget[BoundaryRole.TOP].expansion_px,
-                budget[BoundaryRole.BOTTOM].expansion_px,
+                budget[BoundaryRole.TOP].required_extent_px,
+                budget[BoundaryRole.BOTTOM].required_extent_px,
             ),
-            max(
-                protections[BoundaryRole.TOP].local_boundary_residual_px,
-                protections[BoundaryRole.BOTTOM].local_boundary_residual_px,
-            ),
+            120.0,
         )
 
     def test_retained_review_cross_uses_only_statistical_fit_projection(
@@ -2021,7 +2122,11 @@ class TemplateOutputContractTest(unittest.TestCase):
 
         self.assertAlmostEqual(protection.measurement_expansion_px, 2.0)
         self.assertAlmostEqual(protection.local_boundary_residual_px, 3.0)
-        self.assertAlmostEqual(protection.joint_expansion_px, 5.5)
+        self.assertGreaterEqual(
+            protection.required_expansion_px,
+            protection.local_boundary_residual_px,
+        )
+        self.assertFalse(hasattr(protection, "joint_expansion_px"))
 
     def test_two_axis_line_protection_contains_their_joint_corner(self) -> None:
         template = replace(
@@ -2082,15 +2187,18 @@ class TemplateOutputContractTest(unittest.TestCase):
         bottom = 2000.0 + slope * (right - 1500.0)
         self.assertGreaterEqual(max(x for x, _ in mandatory), right)
         self.assertGreaterEqual(max(y for _, y in mandatory), bottom)
-        requested = _footprint(placement, placement.frames[0], projection,
-                               apply_residual=True, apply_bleed=True)
-        sequence_bleed = OUTPUT_PROTECTION_SPEC.sequence_bleed_mm(36.0) * 3000.0 / 36.0
-        cross_bleed = OUTPUT_PROTECTION_SPEC.cross_bleed_mm * 2000.0 / 24.0
-        right = (3100.0 + sequence_bleed + 1.0 - slope * 1000.0
-                 + slope * (2000.0 + cross_bleed + 1.0 - slope * 1500.0)) / (1.0 - slope * slope)
-        bottom = 2000.0 + cross_bleed + 1.0 + slope * (right - 1500.0)
-        self.assertGreaterEqual(max(x for x, _ in requested), right)
-        self.assertGreaterEqual(max(y for _, y in requested), bottom)
+        output = output_footprint_from_template_placement(
+            placement, projection, lane=_lane(), lane_ordinal=1, layout="horizontal",
+        )
+        requested = output.requested_source_footprint
+        self.assertAlmostEqual(
+            max(x for x, _ in requested) - min(x for x, _ in requested),
+            output.fixed_size.output_width_px,
+        )
+        self.assertAlmostEqual(
+            max(y for _, y in requested) - min(y for _, y in requested),
+            output.fixed_size.output_height_px,
+        )
 
     def test_raw_joint_line_is_projected_at_reachable_native_reference(self) -> None:
         template = _template(1)
@@ -2142,26 +2250,25 @@ class TemplateOutputContractTest(unittest.TestCase):
             ) for binding in cross.direct_bindings))
             placement = _compose(template, sequence, cross)
             projection = project_format_placement(placement)
-            for bleed in (False, True):
-                with self.subTest(one_sided=one_sided, bleed=bleed):
-                    polygon = _footprint(placement, placement.frames[0], projection,
-                                         apply_residual=True, apply_bleed=bleed)
-                    left, right = min(x for x, _ in polygon), max(x for x, _ in polygon)
-                    # Before expansion the positive-slope line controls TOP.
-                    # The larger END extension makes the negative-slope line
-                    # control it instead. Both ends of both lines must survive.
-                    lines = ((10.0, 0.01), (10.001, -0.01))
-                    minimum = min(p + m * (x - 150.0)
+            with self.subTest(one_sided=one_sided):
+                polygon = _footprint(
+                    placement, placement.frames[0], projection, apply_residual=True,
+                )
+                left, right = min(x for x, _ in polygon), max(x for x, _ in polygon)
+                # Before expansion the positive-slope line controls TOP.
+                # The larger END extension makes the negative-slope line
+                # control it instead. Both ends of both lines must survive.
+                lines = ((10.0, 0.01), (10.001, -0.01))
+                minimum = min(p + m * (x - 150.0)
+                              for p, m in lines for x in (left, right))
+                self.assertLess(10.001 - 0.01 * (right - 150.0),
+                                10.0 + 0.01 * (left - 150.0))
+                self.assertAlmostEqual(min(y for _, y in polygon), minimum - 1.0)
+                if one_sided:
+                    maximum = max(p + m * (x - 150.0)
                                   for p, m in lines for x in (left, right))
-                    self.assertLess(10.001 - 0.01 * (right - 150.0),
-                                    10.0 + 0.01 * (left - 150.0))
-                    padding = 1.0 + (2.5 if bleed else 0.0)
-                    self.assertAlmostEqual(min(y for _, y in polygon), minimum - padding)
-                    if one_sided:
-                        maximum = max(p + m * (x - 150.0)
-                                      for p, m in lines for x in (left, right))
-                        self.assertAlmostEqual(max(y for _, y in polygon),
-                                               maximum + 240.0 + padding)
+                    self.assertAlmostEqual(max(y for _, y in polygon),
+                                           maximum + 240.0 + 1.0)
 
     def test_raw_trace_protects_interior_reference_states_and_new_span(self) -> None:
         for interior in (True, False):
@@ -2249,23 +2356,23 @@ class TemplateOutputContractTest(unittest.TestCase):
                     for name in ('sequence_start_px', 'sequence_end_px',
                                  'top_at_lane_reference_px', 'bottom_at_lane_reference_px')
                 ), None) for weight in (0.1, 0.25, 0.5, 0.75, 0.9))
-                for bleed in (False, True):
-                    states = directed_vertices + mixed
-                    residuals = _frame_boundary_residuals(context, directed_frame, states, apply_bleed=bleed)
-                    polygons = tuple(_state_footprint(context, directed_frame, state,
-                        apply_residual=True, apply_bleed=bleed, residuals=residual,
-                    ) for state, residual in zip(states, residuals, strict=True))
-                    hull = convex_hull(tuple(point for polygon in polygons[:2] for point in polygon))
-                    # All hull halfplanes, including oblique ones, must contain
-                    # every protected corner of each interior reference state.
-                    for left, right in zip(hull, (*hull[1:], hull[0]), strict=True):
-                        for polygon in polygons[2:]:
-                            for x, y in polygon:
-                                self.assertGreaterEqual(
-                                    (right[0] - left[0]) * (y - left[1])
-                                    - (right[1] - left[1]) * (x - left[0]), -1e-8,
-                                    (direction, inferred_role, bleed),
-                                )
+                states = directed_vertices + mixed
+                residuals = _frame_boundary_residuals(context, directed_frame, states)
+                polygons = tuple(_state_footprint(
+                    context, directed_frame, state,
+                    apply_residual=True, residuals=residual,
+                ) for state, residual in zip(states, residuals, strict=True))
+                hull = convex_hull(tuple(point for polygon in polygons[:2] for point in polygon))
+                # All hull halfplanes, including oblique ones, must contain
+                # every protected corner of each interior reference state.
+                for left, right in zip(hull, (*hull[1:], hull[0]), strict=True):
+                    for polygon in polygons[2:]:
+                        for x, y in polygon:
+                            self.assertGreaterEqual(
+                                (right[0] - left[0]) * (y - left[1])
+                                - (right[1] - left[1]) * (x - left[0]), -1e-8,
+                                (direction, inferred_role),
+                            )
 
     def test_empty_native_physical_slice_cannot_fall_back_to_statistical_fit(self) -> None:
         template = _template(1)
@@ -2282,7 +2389,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "physical line contradicts native reachable"):
             _footprint(placement, placement.frames[0], project_format_placement(placement), apply_residual=True)
 
-    def test_native_direct_interval_is_retained_before_bleed(self) -> None:
+    def test_native_direct_interval_is_retained_before_fixed_output(self) -> None:
         template = replace(
             _template(1),
             frame_width_px=FiniteInterval(90.0, 110.0),
@@ -2314,7 +2421,7 @@ class TemplateOutputContractTest(unittest.TestCase):
             if item.role == BoundaryRole.END
         )
         self.assertGreaterEqual(end.measurement_expansion_px, 9.9)
-        self.assertGreater(end.joint_expansion_px, end.measurement_expansion_px)
+        self.assertGreater(end.required_expansion_px, end.measurement_expansion_px)
 
     def test_final_footprint_retains_the_complete_pixel_center_span(self) -> None:
         template = _template(1)
@@ -2420,7 +2527,7 @@ class TemplateOutputContractTest(unittest.TestCase):
             self.assertIsNone(boundary.line_evidence)
             self.assertLess(protections[role].local_boundary_residual_px, 2.0)
 
-    def test_selected_frame_residual_still_obeys_five_percent_limit(self) -> None:
+    def test_selected_frame_residual_stays_inside_the_fixed_window(self) -> None:
         template = replace(
             _template(1),
             frame_width_px=FiniteInterval(70.0, 130.0),
@@ -2448,12 +2555,12 @@ class TemplateOutputContractTest(unittest.TestCase):
             layout="horizontal",
         )
         assessment = template_direct_use_budget_assessment(placement, output)
-        self.assertEqual(assessment.state, EvidenceState.CONTRADICTED)
+        self.assertEqual(assessment.state, EvidenceState.SUPPORTED)
         end = next(
             item for item in assessment.edge_assessments
             if item.role == BoundaryRole.END
         )
-        self.assertFalse(end.within_limit)
+        self.assertTrue(end.within_limit)
 
     def test_mismatched_lane_and_nonselected_geometry_are_rejected(self) -> None:
         placement = _placement()
@@ -2517,19 +2624,15 @@ class TemplateOutputContractTest(unittest.TestCase):
             ("placement", "output"),
         )
         self.assertEqual(
-            OUTPUT_PROTECTION_SPEC.maximum_expansion_ratio_per_side,
+            _placement().source_scan_geometry.fixed_output_size.margin_ratio_per_side,
             0.05,
-        )
-        self.assertEqual(OUTPUT_PROTECTION_SPEC.cross_bleed_mm, 0.25)
-        self.assertAlmostEqual(
-            OUTPUT_PROTECTION_SPEC.sequence_bleed_mm(36.0),
-            0.252,
         )
         path = (
             Path(__file__).parents[2]
             / "x5crop/detection/photo_geometry/template_output.py"
         )
         source = path.read_text()
+        self.assertNotIn("apply_bleed", source)
         tree = ast.parse(source)
         modules = tuple(
             node.module or ""

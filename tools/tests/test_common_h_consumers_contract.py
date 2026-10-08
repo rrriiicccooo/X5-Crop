@@ -42,7 +42,7 @@ class CommonHConsumersContractTest(unittest.TestCase):
             common,
             tuple(output.required_source_footprint for output in common.output_footprints),
             build_content_topology_index(
-                make_observation(Box(120, 5, 130, 10)),
+                make_observation(Box(120, 260, 130, 270)),
                 layout="horizontal",
             ),
         )
@@ -52,7 +52,7 @@ class CommonHConsumersContractTest(unittest.TestCase):
             content_veto_assessment(
                 common,
                 (((0.0, 0.0), (500.0, 0.0), (500.0, 400.0), (0.0, 400.0)),),
-                build_content_topology_index(make_observation(Box(120, 5, 130, 10)), layout="horizontal"),
+                build_content_topology_index(make_observation(Box(120, 260, 130, 270)), layout="horizontal"),
             )
         self.assertEqual(
             {item.reason for item in assessment.facts},

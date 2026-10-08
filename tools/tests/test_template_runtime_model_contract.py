@@ -689,6 +689,8 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
         self.assertEqual(selection.lane_ids, ())
 
 def _output_footprint():
+    from x5crop.detection.photo_geometry.source_geometry import SourceFixedOutputSize
+    from x5crop.detection.photo_geometry.model import BoundaryAxis
     polygon = ((0.0, 0.0), (9.0, 0.0), (9.0, 9.0), (0.0, 9.0))
     envelope = JointPlacementEnvelope(
         placement_id="placement:0",
@@ -706,12 +708,15 @@ def _output_footprint():
     )
     return OutputFootprint(
         geometry_id="geometry:0",
+        fixed_size=SourceFixedOutputSize("geometry:0", 9.0 / 1.1, 9.0 / 1.1),
+        width_axis=BoundaryAxis.X,
+        sequence_direction=1,
         envelope=envelope,
         mandatory_source_footprint=polygon,
         requested_source_footprint=polygon,
         required_source_footprint=polygon,
         boundary_protections=tuple(
-            BoundaryProtectionFact(role, 0.0, 0.0, 0.0, None, 0.0, 0.0)
+            BoundaryProtectionFact(role, 0.0, 0.0, 0.0)
             for role in (
                 BoundaryRole.START,
                 BoundaryRole.END,

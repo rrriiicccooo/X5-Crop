@@ -31,12 +31,12 @@ class CommonEnclosingOutputContractTest(unittest.TestCase):
         validate_common_h_output(typed_read_model(common), expected_source_extent=output.source_extent)
         for index in range(2):
             bad = typed_read_model(common)
-            bad['output_footprints'][0]['member_budgets'][index]['assessment']['maximum_same_state_cross_alignment_padding_mm'] = 0
+            bad['output_footprints'][0]['member_budgets'][index]['assessment']['edge_assessments'][2]['required_extent_px'] = 0
             with self.assertRaises(ValueError):
                 validate_common_h_output(bad, expected_source_extent=output.source_extent)
 
     def test_individually_safe_supports_cannot_lend_native_budgets_to_common_crop(self):
-        common = self.common(20)
+        common = self.common(30)
         output = common.output_footprints[0]
         self.assertFalse(output.budget_supported)
         for p, native in zip(common.placements, output.members, strict=True):
@@ -46,7 +46,7 @@ class CommonEnclosingOutputContractTest(unittest.TestCase):
             budget = typed_read_model(template_direct_use_budget_assessment(p, native))
             budget['geometry_id'] = output.geometry_id
             bad['output_footprints'][0]['member_budgets'][index]['assessment'] = budget
-        with self.assertRaisesRegex(ValueError, 'common requested footprint'):
+        with self.assertRaisesRegex(ValueError, 'member budget'):
             validate_common_h_output(bad, expected_source_extent=output.source_extent)
 
     def test_position_uncertainty_is_not_counted_again_as_alignment_padding(self):
@@ -55,8 +55,10 @@ class CommonEnclosingOutputContractTest(unittest.TestCase):
         p = _enclosing_support_placement(support_position_uncertainty_px=2)
         native = native_output(p)
         common = common_h_output_footprint((p,), (native,), projections=(project_format_placement(p),))
-        self.assertEqual(common.member_budgets[0].assessment.maximum_same_state_cross_alignment_padding_mm,
-                         template_direct_use_budget_assessment(p, native).maximum_same_state_cross_alignment_padding_mm)
+        self.assertEqual(
+            common.member_budgets[0].assessment.edge_assessments,
+            template_direct_use_budget_assessment(p, native).edge_assessments,
+        )
 
     def test_forged_narrow_center_interval_is_rejected_before_budget_replay(self):
         common = self.common(1)

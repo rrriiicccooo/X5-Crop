@@ -638,7 +638,7 @@ def alignment_summary(detection: FinalDetection) -> str:
 
 
 def selected_output_safety_summary(detection: FinalDetection) -> str:
-    """Name boundary ownership and the largest final per-side budget use."""
+    """Describe fixed-window content coverage and source clipping."""
 
     geometry = detection.candidate.geometry
     outputs = detection.output_footprints
@@ -654,19 +654,9 @@ def selected_output_safety_summary(detection: FinalDetection) -> str:
         )
     )
     ratios = tuple(
-        edge.expansion_mm / edge.limit_mm
+        edge.required_extent_px / edge.available_extent_px
         for budget in budgets
         for edge in budget.edge_assessments
-        if edge.limit_applies and edge.limit_mm > 0.0
-    ) + tuple(
-        float(budget.maximum_same_state_cross_alignment_padding_mm)
-        / min(
-            edge.limit_mm
-            for edge in budget.edge_assessments
-            if edge.role.value in {"top", "bottom"}
-        )
-        for budget in budgets
-        if budget.maximum_same_state_cross_alignment_padding_mm is not None
     )
     protections = tuple(
         protection
@@ -681,29 +671,6 @@ def selected_output_safety_summary(detection: FinalDetection) -> str:
     residual = max(
         (item.local_boundary_residual_px for item in protections),
         default=0.0,
-    )
-    sequence_bleed = max(
-        (
-            item.base_bleed_px
-            for item in protections
-            if item.role.value in {"start", "end"}
-        ),
-        default=0.0,
-    )
-    cross_bleed = max(
-        (
-            item.base_bleed_px
-            for item in protections
-            if item.role.value in {"top", "bottom"}
-        ),
-        default=0.0,
-    )
-    topology_protection = max(
-        (item.topology_protection_px for item in protections),
-        default=0.0,
-    )
-    topology_side_count = sum(
-        item.topology_relation_id is not None for item in protections
     )
     enclosing_risks = tuple(
         output.enclosing_support_aperture_risk
@@ -746,9 +713,7 @@ def selected_output_safety_summary(detection: FinalDetection) -> str:
     )
     return (
         f"SELECTED OUTPUT SAFETY · {uses} · JOINT {measurement:.1f}px · "
-        f"RESIDUAL {residual:.1f}px · BLEED S{sequence_bleed:.1f}/"
-        f"C{cross_bleed:.1f}px · TOPOLOGY {topology_protection:.1f}px/"
-        f"{topology_side_count} SIDES · MAX 5% BUDGET USE {maximum}"
+        f"RESIDUAL {residual:.1f}px · FIXED 1.1W × 1.1H · COVERAGE USE {maximum}"
         f"{enclosing_risk}{saturation}"
     )
 
