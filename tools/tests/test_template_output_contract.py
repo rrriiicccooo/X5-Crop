@@ -39,6 +39,7 @@ from x5crop.detection.photo_geometry.output_model import (
     FootprintSaturationKind,
     fixed_output_rectangle,
     OutputBoundaryUse,
+    sampling_authority_bounds,
 )
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossFit,
@@ -59,6 +60,7 @@ from x5crop.detection.photo_geometry.template_output import (
     _footprint,
     _frame_boundary_residuals,
     _line_outward_expansion_px,
+    _saturation_facts,
     _state_footprint,
     output_footprint_from_template_placement,
     template_direct_use_budget_assessment,
@@ -69,7 +71,7 @@ from x5crop.detection.photo_geometry.template_feasible_geometry import (
     _support_cross_vertices,
     project_format_placement,
 )
-from x5crop.geometry.convex import convex_hull
+from x5crop.geometry.convex import clip_convex_polygon_to_bounds, convex_hull
 from x5crop.detection.photo_geometry.template_enclosing_support_aperture import (
     derive_enclosing_support_aperture_authority,
     unavailable_enclosing_support_aperture_authority,
@@ -378,11 +380,13 @@ def _enclosing_support_placement(
     return _compose(template, _sequence(template), cross)
 
 
-def _lane(lane_id: str = "lane:test") -> SourceLaneEvidence:
+def _lane(
+    lane_id: str = "lane:test", *, long_axis_px: int = 500, short_axis_px: int = 400,
+) -> SourceLaneEvidence:
     profile = ScanCanvasPhysicalSpec(
         profile_id="template-output-holder",
-        short_axis_mm=40.0,
-        long_axis_mm=50.0,
+        short_axis_mm=short_axis_px / 10.0,
+        long_axis_mm=long_axis_px / 10.0,
     )
     shared_scale = PositiveInterval.exact(10.0)
     scales = CanvasAxisScaleIntervals(
@@ -394,8 +398,8 @@ def _lane(lane_id: str = "lane:test") -> SourceLaneEvidence:
     )
     scan_canvas = ScanCanvasEvidence(
         outcome=ScanCanvasOutcome.SUPPORTED,
-        observed_long_axis_px=500,
-        observed_short_axis_px=400,
+        observed_long_axis_px=long_axis_px,
+        observed_short_axis_px=short_axis_px,
         matches=(
             ScanCanvasProfileMatch(
                 profile=profile,
@@ -415,7 +419,7 @@ def _lane(lane_id: str = "lane:test") -> SourceLaneEvidence:
     return SourceLaneEvidence(
         domain=SourceStripValidationDomain(
             lane_id=lane_id,
-            work_box=Box(0, 0, 500, 400),
+            work_box=Box(0, 0, long_axis_px, short_axis_px),
             source_axis_long="x",
             authority_profile_id=profile.profile_id,
         ),
@@ -1655,12 +1659,12 @@ class TemplateOutputContractTest(unittest.TestCase):
             - output.requested_source_footprint[1][1],
             output.fixed_size.output_height_px,
         )
-        top = next(
+        bottom = next(
             item
             for item in assessment.edge_assessments
-            if item.role == BoundaryRole.TOP
+            if item.role == BoundaryRole.BOTTOM
         )
-        self.assertFalse(top.within_limit)
+        self.assertFalse(bottom.within_limit)
 
     def test_uncontainable_axis_keeps_fitted_position_and_full_protection(self) -> None:
         placement = _placement()
@@ -1685,14 +1689,19 @@ class TemplateOutputContractTest(unittest.TestCase):
             original.fixed_size, original.width_axis, mandatory, extent,
             preferred_center=center,
         )
+        authority = Box(0, 0, 1000, 1000)
+        saturation = _saturation_facts(requested, mandatory, authority, extent)
+        required = clip_convex_polygon_to_bounds(
+            requested, sampling_authority_bounds(authority, extent),
+        ) if saturation else requested
         output = replace(
             original,
             mandatory_source_footprint=mandatory,
             requested_source_footprint=requested,
-            required_source_footprint=requested,
-            sampling_authority_box=Box(0, 0, 1000, 1000),
+            required_source_footprint=required,
+            sampling_authority_box=authority,
             source_extent=extent,
-            saturation_facts=(),
+            saturation_facts=saturation,
         )
 
         self.assertAlmostEqual(
@@ -2236,7 +2245,9 @@ class TemplateOutputContractTest(unittest.TestCase):
         self.assertGreaterEqual(max(x for x, _ in mandatory), right)
         self.assertGreaterEqual(max(y for _, y in mandatory), bottom)
         output = output_footprint_from_template_placement(
-            placement, projection, lane=_lane(), lane_ordinal=1, layout="horizontal",
+            placement, projection,
+            lane=_lane(long_axis_px=5000, short_axis_px=3000),
+            lane_ordinal=1, layout="horizontal",
         )
         requested = output.requested_source_footprint
         self.assertAlmostEqual(

@@ -3246,6 +3246,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             scale_px_per_mm=None,
             holder_span_px=FiniteInterval(0.0, 300.0),
             phase_authority_px=FiniteInterval.exact(40.0),
+            calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(spec),
             sequence_measurement_sets=(phase_sequence_measurement(
                 "restored-width-complete", FiniteInterval(0.0, 300.0),
             ),),
@@ -3257,7 +3258,15 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 status=PhaseFitStatus.UNRESOLVED,
                 failure_kind=PhaseFailureKind.FIXED_TEMPLATE_MISMATCH,
                 ambiguity_reason="local counterevidence rejects eligibility",
-                winner_basis=None, direct_role_binding_authority=None,
+                winner_basis=None,
+                best_phase_candidate_authority_projection=None,
+                runner_phase_candidate_authority_projection=None,
+                calibrated_nominal_grid_evidence=None,
+                adjacency_observation_coverage=(),
+                adjacency_continuity_observations=(),
+                direct_role_binding_authority=None,
+                outer_frame_observation_authority=None,
+                source_frame_width_topology_assessment=None,
                 global_lattice_authority=None,
             )
 
