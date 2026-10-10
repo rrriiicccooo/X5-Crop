@@ -183,6 +183,11 @@ rank 不证明联合状态、保护区间、晚期角色走廊或权限来源等
 区间相交不能隐藏不同 role observation 的反证 runner；保留该 runner 时撤销 winner 并保持歧义，
 原 pitch 区间不相交的反证检查继续保留。不因此放宽残差、模板硬区间或候选权限。
 
+全部 projection 已终止而仍有 residual-compatible raw 诊断提案时，首选及既有同类备选顺序不变。
+仅当诊断 runner 槽为空，才从其余已生成 terminal records 中按原 rank 补入一个不同连续 identity 的
+解释，并携带其原失败 projection。该 pair 始终为 `unresolved`、`winner_basis=None`，不能把终止诊断
+变成 eligible 竞争者，也不替换已占用的物理竞争位置；不增加 fit、runner 上限或像素查询。
+
 连续合并可为首选补齐多个局部解释，因此不能把未补全竞争者的当前支持数当作完整支持数。选择 owner
 对全部已生成且 eligible 的候选，按连续合并必需的静态身份及 absolute-phase 区间连通分量计算支持上界：
 anchor 位置取并集，coverage 取最大值，残差下界为零。首选必须依原明确分离条件压过每个离散竞争者的
@@ -380,6 +385,11 @@ edge、band、多条 trace 和全部梯度像素仍是一份物理证据，不�
 配对账本逐条保留实际相邻的 trace；材料采样、独立区域计数及 band 的 transition provenance 只消费
 这些 trace 与两侧 edge 实际支撑的交集。同一对 edge 在别处相邻不能授权跨越当前 trace 的中间
 transition；已经登记但未成功拟合为 edge 的 run 同样构成屏障。固定的三个空间区域不因过滤而重划。
+相邻次序以当前 trace 的原生 transition 坐标为准，不用 run 的全局代表坐标代替。相同原生坐标若
+仍对应多个不同 family，则该 trace 无唯一邻接，不按 identity 排序挑选。登记 transition 构成的逐线
+索引只在当前 owner 内存活，空间为 `O(N)`，逐线排序总工作不超过 `O(N log N)`；不增加像素读取。
+配对端点还必须与该 edge 实际保留的原生采样点一致；同 family 中被拟合剔除的点继续作为已登记
+变化形成屏障，不能替换采样端点后跨过它读取材料。
 
 每个高度区域只有在 oriented material contrast 的完整下界同时高于 uint8 量化步长与该区域 core
 texture 上界时才为 `supported`；否则明确为 `tone_unresolved` 或 `material_non_uniform`。不同区域不能各自

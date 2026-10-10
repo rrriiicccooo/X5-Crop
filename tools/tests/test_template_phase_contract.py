@@ -3377,6 +3377,69 @@ class TemplatePhaseContractTest(unittest.TestCase):
                     self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
                     self.assertIsNone(result.runner_up)
 
+    def test_empty_diagnostic_runner_retains_an_incompatible_terminal_fit(
+        self,
+    ) -> None:
+        spec = template(3)
+        sparse = placement_sequence(spec, missing=(1, 2, 3, 4, 5))
+        complete = placement_sequence(spec)
+        first = complete.role_bindings[0]
+        assert first is not None
+        complete = replace(
+            complete,
+            role_bindings=(
+                replace(first, observation_id=ObservationId("terminal:other")),
+                *complete.role_bindings[1:],
+            ),
+            residual_sum_px=50.0,
+        )
+        observations = (
+            edge("sequence:0", 100.0),
+            *(edge(str(binding.observation_id), binding.canonical_position_px)
+              for binding in complete.role_bindings if binding is not None),
+        )
+        calls = 0
+
+        def fitted_seed(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            return (
+                _BoundFit(sparse, True)
+                if calls == 1 else _BoundFit(complete, False)
+            )
+
+        def terminal_projection(candidate, authority, *args, **kwargs):
+            return None, PhaseCandidateAuthorityProjection(
+                input_direct_role_authority=authority,
+                outcome=PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID_CONFLICT,
+                basis=None,
+                projected_out_bindings=(),
+                retained_direct_constraint_rank=direct_role_constraint_rank(
+                    candidate.fit, authority.supported_role_indices,
+                ),
+                reason="registered Grid conflicts with this diagnostic fit",
+            )
+
+        with patch.object(phase_owner, "_fit_seed", side_effect=fitted_seed), patch.object(
+            phase_owner, "project_candidate_to_authorized_direct_roles",
+            side_effect=terminal_projection,
+        ):
+            result = fit_template_phase(
+                observations, spec,
+                sequence_measurement_sets=(phase_sequence_measurement(
+                    "terminal-diagnostics", FiniteInterval(0.0, 500.0),
+                ),),
+            )
+
+        self.assertIs(result.best, sparse)
+        self.assertIs(result.runner_up, complete)
+        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
+        self.assertIsNone(result.winner_basis)
+        self.assertEqual(result.failure_kind, PhaseFailureKind.CALIBRATED_NOMINAL_GRID_CONFLICT)
+        assert result.runner_phase_candidate_authority_projection is not None
+        self.assertFalse(result.runner_phase_candidate_authority_projection.eligible)
+        self.assertEqual(result.receipt.candidate_direct_role_projection_success_count, 0)
+
     def test_equal_bindings_preserve_each_full_protection_interval(self) -> None:
         observations = tuple(
             edge(f"dedup-role:{index}", coordinate)

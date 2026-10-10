@@ -58,7 +58,7 @@ When photo ownership is established and several complete top/bottom interpretati
 them all. Automatic approval requires every interpretation to pass content containment and source-wide safety checks.
 Touching or overlapping photos use the same checks and remain in review when evidence is insufficient.
 
-Separator material support comes from scan lines where its two boundaries are adjacent. A line with an intervening
+Separator material is checked for adjacency using the actual coordinates on each scan line. A line with an intervening
 boundary does not support the outer pair. Local and source-wide separator relationships are checked separately;
 relationships with insufficient evidence remain subject to review.
 
@@ -72,6 +72,8 @@ position for inspection. The report preserves the full protection envelope and f
 output of that proposal.
 When more direct boundaries support a different placement whose residual is incompatible, the report retains that
 runner and the ambiguity reason for inspection.
+Diagnostic runners retain their original failure reasons. Displaying an interpretation does not grant it crop or
+automatic output authority.
 
 Holder fill is assessed only after placement by asking whether another W fits beyond either outer. It never searches
 for or centers a placement. Both lanes of 135-dual must be complete.

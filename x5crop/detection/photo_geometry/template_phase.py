@@ -1345,10 +1345,14 @@ def fit_template_phase(
         )
         if raw_compatible and measurement_sets:
             diagnostic_best, best_projection = raw_compatible[0]
-            diagnostic_runner = next(
+            diagnostic_runner_record = next(
                 (
-                    item
-                    for item, _projection in raw_compatible[1:]
+                    (item, projection)
+                    for pool in (
+                        raw_compatible[1:],
+                        sorted(terminal_records, key=record_rank, reverse=True),
+                    )
+                    for item, projection in pool
                     if not _same_continuous_placement(
                         diagnostic_best.fit,
                         item.fit,
@@ -1356,13 +1360,13 @@ def fit_template_phase(
                 ),
                 None,
             )
-            runner_projection = next(
-                (
-                    projection
-                    for item, projection in raw_compatible[1:]
-                    if item is diagnostic_runner
-                ),
-                None,
+            diagnostic_runner = (
+                None if diagnostic_runner_record is None
+                else diagnostic_runner_record[0]
+            )
+            runner_projection = (
+                None if diagnostic_runner_record is None
+                else diagnostic_runner_record[1]
             )
             return PhaseFitResult(
                 template=template,

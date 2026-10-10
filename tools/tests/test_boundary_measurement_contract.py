@@ -432,6 +432,9 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
         *,
         non_uniform_traces: tuple[int, ...] = (),
         intervening_traces: tuple[int, ...] = (),
+        intervening_coordinates: tuple[tuple[int, float], ...] = (),
+        intervening_reference_px: float = 110.0,
+        extra_left_coordinates: tuple[tuple[int, float], ...] = (),
     ):
         traces = (0, 50, 100)
         pixels = np.full((101, 240), 20, dtype=np.uint8)
@@ -471,6 +474,28 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
             for trace_ordinal, trace in enumerate(traces)
             for side in ("left", "right")
         )
+        interior_positions = dict.fromkeys(intervening_traces, 110.0)
+        interior_positions.update(intervening_coordinates)
+        transition_values += tuple(
+            replace(
+                transition("left", traces.index(trace), trace),
+                transition_id=ObservationId(f"transition:interior:{trace}"),
+                canonical_coordinate_px=coordinate,
+                localization_interval_px=FiniteInterval.exact(coordinate),
+                physical_position_interval_px=FiniteInterval.exact(coordinate),
+            )
+            for trace, coordinate in interior_positions.items()
+        )
+        transition_values += tuple(
+            replace(
+                transition("left", traces.index(trace), trace),
+                transition_id=ObservationId(f"transition:left-extra:{trace}"),
+                canonical_coordinate_px=coordinate,
+                localization_interval_px=FiniteInterval.exact(coordinate),
+                physical_position_interval_px=FiniteInterval.exact(coordinate),
+            )
+            for trace, coordinate in extra_left_coordinates
+        )
         transition_by_id = {
             str(item.transition_id): item for item in transition_values
         }
@@ -499,11 +524,23 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
 
         left_run = run("left", 100.0)
         right_run = run("right", 119.0)
+        if extra_left_coordinates:
+            left_run = replace(left_run, transition_ids=(
+                *left_run.transition_ids,
+                *(ObservationId(f"transition:left-extra:{trace}")
+                  for trace, _ in extra_left_coordinates),
+            ))
         runs = (left_run, right_run)
-        if intervening_traces:
+        if interior_positions:
             # This registered transition has no successfully fitted edge. It
             # must still block the outer pair on the traces where it appears.
-            runs = (left_run, run("interior", 110.0, intervening_traces), right_run)
+            runs = tuple(sorted(
+                (*runs, run(
+                    "interior", intervening_reference_px,
+                    tuple(sorted(interior_positions)),
+                )),
+                key=lambda item: (item.coordinate_interval_px.center, item.run_id),
+            ))
 
         def edge(value: ProfileRun, polarity: int):
             interval = value.coordinate_interval_px
@@ -515,7 +552,10 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
                 canonical_position_px=interval.center,
                 fit_position_interval_px=interval,
                 full_position_interval_px=interval,
-                transition_ids=value.transition_ids,
+                transition_ids=tuple(
+                    identity for identity in value.transition_ids
+                    if not str(identity).startswith("transition:left-extra:")
+                ),
                 trace_coordinates_px=traces,
                 polarity=polarity,
                 support_fraction=1.0,
@@ -586,6 +626,53 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
             (),
         )
 
+    def test_separator_adjacency_uses_native_trace_order(self) -> None:
+        (band,) = self._separator_material_fixture(
+            intervening_coordinates=((0, 90.0), (50, 130.0), (100, 110.0)),
+        )
+        self.assertEqual(
+            tuple(item.region_index for item in band.material_regions), (0, 1),
+        )
+        self.assertEqual(band.material_support_region_count, 2)
+
+    def test_native_middle_blocks_even_when_run_reference_is_outside(self) -> None:
+        self.assertEqual(
+            self._separator_material_fixture(
+                intervening_coordinates=((0, 110.0), (50, 110.0), (100, 110.0)),
+                intervening_reference_px=80.0,
+            ),
+            (),
+        )
+
+    def test_rejected_point_cannot_replace_the_retained_separator_edge(self) -> None:
+        self.assertEqual(
+            self._separator_material_fixture(
+                extra_left_coordinates=((0, 110.0), (50, 110.0), (100, 110.0)),
+            ),
+            (),
+        )
+
+    def test_coincident_families_do_not_choose_a_separator_by_identity(self) -> None:
+        self.assertEqual(
+            self._separator_material_fixture(
+                intervening_coordinates=((0, 100.0), (50, 100.0), (100, 100.0)),
+            ),
+            (),
+        )
+
+    @staticmethod
+    def _separator_pairing_transitions(profile):
+        return {
+            str(identity): SimpleNamespace(
+                canonical_coordinate_px=run.coordinate_interval_px.center,
+                trace_coordinate_px=trace,
+            )
+            for run in profile.runs
+            for identity, trace in zip(
+                run.transition_ids, run.trace_coordinates_px, strict=True,
+            )
+        }
+
     def test_non_uniform_photo_interior_light_band_cannot_be_source_wide(
         self,
     ) -> None:
@@ -639,11 +726,10 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
         traces = (0, 50, 100)
 
         def profile_run(name: str, coordinate: float) -> ProfileRun:
-            identity = ObservationId(f"transition:{name}")
             return ProfileRun(
                 run_id=name,
                 coordinate_interval_px=FiniteInterval.exact(coordinate),
-                transition_ids=(identity,),
+                transition_ids=tuple(ObservationId(f"transition:{name}:{trace}") for trace in traces),
                 trace_coordinates_px=traces,
                 role_hint=None,
                 qualified_anchor_roles=(),
@@ -695,7 +781,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
             result = build_format_separator_bands(
                 profile,
                 (edge(left_run, -1), edge(right_run, 1)),
-                {},
+                self._separator_pairing_transitions(profile),
                 mock.Mock(),
                 BoundaryAxis.X,
                 PositiveInterval(900.0, 920.0),
@@ -711,11 +797,10 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
         traces = (0, 50, 100)
 
         def run(name: str, coordinate: float) -> ProfileRun:
-            identity = ObservationId(f"transition:{name}")
             return ProfileRun(
                 run_id=name,
                 coordinate_interval_px=FiniteInterval.exact(coordinate),
-                transition_ids=(identity,),
+                transition_ids=tuple(ObservationId(f"transition:{name}:{trace}") for trace in traces),
                 trace_coordinates_px=traces,
                 role_hint=None,
                 qualified_anchor_roles=(),
@@ -765,7 +850,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
             result = build_format_separator_bands(
                 profile,
                 (edge(left_run, -1), edge(right_run, 1)),
-                {},
+                self._separator_pairing_transitions(profile),
                 mock.Mock(),
                 BoundaryAxis.X,
                 PositiveInterval(700.0, 720.0),
@@ -859,11 +944,10 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
         traces = (0, 50, 100)
 
         def run(name: str, coordinate: float) -> ProfileRun:
-            identity = ObservationId(f"transition:{name}")
             return ProfileRun(
                 run_id=name,
                 coordinate_interval_px=FiniteInterval.exact(coordinate),
-                transition_ids=(identity,),
+                transition_ids=tuple(ObservationId(f"transition:{name}:{trace}") for trace in traces),
                 trace_coordinates_px=traces,
                 role_hint=None,
                 qualified_anchor_roles=(),
@@ -939,7 +1023,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
             result = build_format_separator_bands(
                 profile,
                 edges,
-                {},
+                self._separator_pairing_transitions(profile),
                 mock.Mock(),
                 BoundaryAxis.X,
                 PositiveInterval(250.0, 260.0),

@@ -331,15 +331,44 @@ def build_format_separator_bands(
         raise TypeError("separator frame-width authority must be positive")
     runs_by_id = {run.run_id: run for run in profile.runs}
     edges_by_run_id = {edge.run_id: edge for edge in ordered}
+    edge_native_positions = {
+        edge.run_id: {
+            transitions[str(identity)].trace_coordinate_px:
+            transitions[str(identity)].canonical_coordinate_px
+            for identity in edge.transition_ids
+        }
+        for edge in ordered
+    }
+    native_runs_by_trace: dict[int, dict[float, set[str]]] = {}
+    for run in profile.runs:
+        for identity in run.transition_ids:
+            transition = transitions[str(identity)]
+            native_runs_by_trace.setdefault(
+                transition.trace_coordinate_px, {},
+            ).setdefault(transition.canonical_coordinate_px, set()).add(run.run_id)
     candidate_pairs: dict[tuple[str, str], list[int]] = {}
     for trace in profile.trace_coordinates_px:
-        trace_runs = profile.runs_at_trace(trace)
-        for left_run, right_run in zip(trace_runs, trace_runs[1:]):
-            left = edges_by_run_id.get(left_run.run_id)
-            right = edges_by_run_id.get(right_run.run_id)
+        native_runs = native_runs_by_trace.get(trace, {})
+        coordinates = sorted(native_runs)
+        for left_coordinate, right_coordinate in zip(coordinates, coordinates[1:]):
+            left_ids = native_runs[left_coordinate]
+            right_ids = native_runs[right_coordinate]
+            if len(left_ids) != 1 or len(right_ids) != 1:
+                # Coincident, distinct families have no unique neighbour on
+                # this trace. Their registration owner must resolve identity.
+                continue
+            left = edges_by_run_id.get(next(iter(left_ids)))
+            right = edges_by_run_id.get(next(iter(right_ids)))
             if left is None or right is None:
                 # An unfitted registered transition still separates the two
                 # fitted edge families on this trace.
+                continue
+            if (
+                edge_native_positions[left.run_id].get(trace) != left_coordinate
+                or edge_native_positions[right.run_id].get(trace) != right_coordinate
+            ):
+                # A registered point rejected by the edge fit remains a
+                # barrier; it cannot stand in for the retained sampling point.
                 continue
             if (left.polarity, right.polarity) in {(-1, 1), (1, -1)}:
                 candidate_pairs.setdefault((left.run_id, right.run_id), []).append(
