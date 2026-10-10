@@ -14,6 +14,7 @@ from x5crop.domain import (
     FiniteInterval,
     MeasurementIdentity,
     MeasurementProvenance,
+    WorkspaceExtent,
     ObservationId,
     PositiveInterval,
 )
@@ -36,6 +37,7 @@ from x5crop.detection.photo_geometry.model import (
 )
 from x5crop.detection.photo_geometry.output_model import (
     FootprintSaturationKind,
+    fixed_output_rectangle,
     OutputBoundaryUse,
 )
 from x5crop.detection.photo_geometry.template_cross_model import (
@@ -43,7 +45,6 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     CrossFitStatus,
     CrossHeightProjectionBasis,
     CrossLineProjectionBasis,
-    CrossPairSupportMode,
     EnclosingSupportPair,
 )
 from x5crop.detection.photo_geometry.template_gate import build_template_gate
@@ -1031,6 +1032,10 @@ class TemplateOutputContractTest(unittest.TestCase):
                 for x, y in polygon:
                     self.assertGreaterEqual((right[0] - left[0]) * (y - left[1])
                                             - (right[1] - left[1]) * (x - left[0]), -1e-8)
+        requested = fixed_output_rectangle(
+            placement.source_scan_geometry.fixed_output_size, placement.width_axis,
+            hull, WorkspaceExtent(500, 400),
+        )
         for offset in (None, FiniteInterval(-1.0, 2.0)):
             context = SimpleNamespace(
                 frame_spec=placement.frame_spec, sequence_fit=placement.sequence_fit,
@@ -1041,9 +1046,9 @@ class TemplateOutputContractTest(unittest.TestCase):
                 ),
             )
             risk = _enclosing_support_aperture_risk(
-                context, frame, SimpleNamespace(frame_states=(vertices,)), residuals)
+                context, frame, SimpleNamespace(frame_states=(vertices,)), requested=requested)
             mixed_risk = _enclosing_support_aperture_risk(
-                context, frame, SimpleNamespace(frame_states=(mixed,)), all_residuals[len(vertices):])
+                context, frame, SimpleNamespace(frame_states=(mixed,)), requested=requested)
             assert risk is not None and mixed_risk is not None
             self.assertLessEqual(mixed_risk.top_expansion_px, risk.top_expansion_px + 1e-8)
             self.assertLessEqual(mixed_risk.bottom_expansion_px, risk.bottom_expansion_px + 1e-8)
@@ -1376,7 +1381,7 @@ class TemplateOutputContractTest(unittest.TestCase):
                 output.fixed_size.output_height_px,
             )
 
-    def test_small_source_canvas_has_no_absolute_output_floor(self) -> None:
+    def test_source_clipping_preserves_requested_fixed_size(self) -> None:
         placement = _placement()
         small_lane = _lane()
         small_lane = replace(

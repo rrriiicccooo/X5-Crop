@@ -265,7 +265,7 @@ class SequenceProjectionConstraintBasis(str, Enum):
 
 @dataclass(frozen=True)
 class JointPlacementEnvelope:
-    """All retained states of one selected placement, before product bleed."""
+    """All retained states of one selected placement, before fixed-window placement."""
 
     placement_id: str
     projection_id: str
@@ -408,8 +408,6 @@ def fixed_output_rectangle(
     If containment is impossible, keep a fixed proposal for Review.
     """
     visible = visible_mandatory_footprint(mandatory, source_extent)
-    if not visible:
-        raise ValueError("mandatory footprint has no visible TIFF content")
     left, top, right, bottom = _polygon_bounds(visible)
     dimensions = ((size.output_width_px, size.output_height_px) if width_axis == BoundaryAxis.X
                   else (size.output_height_px, size.output_width_px))
@@ -672,10 +670,9 @@ class CommonOutputFootprint:
             for member in self.members
         ):
             raise ValueError("common H output changed lane, slot or source authority")
-        for name in ("mandatory_source_footprint",):
-            expected = convex_hull(tuple(point for member in self.members for point in getattr(member, name)))
-            if getattr(self, name) != expected:
-                raise ValueError("common output lost a native member requirement")
+        expected = convex_hull(tuple(point for member in self.members for point in member.mandatory_source_footprint))
+        if self.mandatory_source_footprint != expected:
+            raise ValueError("common output lost a native member requirement")
         if (
             tuple((b.placement_id, b.native_geometry_id) for b in self.member_budgets) != identities
             or any(b.assessment.geometry_id != self.geometry_id

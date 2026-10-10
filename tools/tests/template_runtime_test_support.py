@@ -21,7 +21,6 @@ from x5crop.detection.photo_geometry.coarse_enclosing_model import (
 from x5crop.detection.photo_geometry.measurement_model import (
     PhotoBoundaryCoverageReceipt,
     PhotoBoundaryMeasurementQuery,
-    PhotoBoundaryMeasurementField,
     PhotoBoundaryMeasurementSet,
 )
 from x5crop.detection.photo_geometry.model import BoundaryAxis, QueryPurpose

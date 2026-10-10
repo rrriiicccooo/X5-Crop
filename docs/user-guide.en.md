@@ -43,136 +43,24 @@ It does not remove, merge, or reorder blank slots. V5 has no full/partial mode.
 
 ### Automatic Approval And Review
 
-V5 first establishes coarse support and a common direction from the whole strip. It then compiles format/count into a
-bounded W/H template and makes bounded local measurements only near theoretical outer, separator, and top/bottom
-positions. Format dimensions are cross-camera priors, not an identical gate size imposed on every camera. Direct edges
-may independently measure that source's common W and H while retaining their native positions.
-Pixel evidence aligns or rejects the template; it cannot invent format, count, or placement authority.
+The program builds a physical template with a common W/H from the supplied format/count, then locates it using
+whole-strip and local-edge evidence. Directly observed photo boundaries retain their native coordinates. Missing
+boundaries may be inferred only from established common dimensions, position anchors, and checked adjacency relations.
+Aspect-ratio information or outer support may help locate the crop, but cannot impersonate a direct photo boundary
+or override counterevidence.
 
-A missing start/end side may be inferred only after source W is closed by complete direct Frames or a full-rank set of
-independent direct constraints, and that Frame still has its opposite direct side. Inference cannot override an observed
-edge or discard counterevidence. A Frame whose two sides are both unseen may be generated only when the calibrated Grid
-has a reliable absolute anchor, the corresponding adjacencies were fully checked, and no counterevidence exists; the
-complete physical envelope and fixed-box checks still apply. Reliable local W measurements survive incomplete distant
-coverage or an unresolved placement. A fully unobserved Frame does not prevent other single-sided Frames from using
-common W. Available measurements do not grant automatic output: counterevidence, ambiguity, and risk checks remain.
-Direct W and H retain separate evidence. A gold-calibrated
-aspect-ratio authority may let W constrain H with full uncertainty. Every
-format uses the same physical-millimetre-floor plus relative-ratio method for W/H compatibility, while the propagated
-axis guards produce a bounded ratio interval specific to that format. This authority cannot impersonate direct
-top/bottom, add independent evidence, or apply the nominal ratio as an exact conversion. Missing calibration, a true
-conflict, or inability to fit the fixed box keeps the entire source in review. Direct top/bottom always
-retains its native position and priority.
+Every output slot must have complete visible-content protection, sufficient position evidence, and a safe output
+footprint. The entire source enters `needs_review` if content is missing, an internal boundary is crossed, a required
+boundary is unknown, evidence conflicts, or an interpretation cannot be fully verified and protected.
+A score cannot replace these conditions or enlarge the fixed box.
 
-Within one registered window, weak gradient, tone, and texture signals are also checked jointly across height. They may
-own a crop coordinate only when three independent height regions agree and uniquely reinforce the same direct edge.
-Unbound or multiply explained joint lines remain Debug evidence and cannot create another placement.
+When photo ownership is established and several complete top/bottom interpretations remain, one fixed box may protect
+them all. Automatic approval requires every interpretation to pass content containment and source-wide safety checks.
+Touching or overlapping photos use the same checks and remain in review when evidence is insufficient.
 
-The shared top and bottom of the whole strip are also observed as both sharp transitions and broad material changes.
-A broad pair can become outer support only when both sides have the correct outward background, consistent polarity within
-each side, continuous support across three longitudinal regions, compatible direction, and a span that fully encloses fixed H.
-Coarse short-axis measurements retain weak material changes from the original 16-bit data that gray quantization can lose.
-All complete boundary interpretations are checked together. When exactly one broad pair is equivalent to the sharp pair,
-the sharp native coordinates remain canonical. A single side or multiple distinct explanations keeps the source in review;
-signal strength does not choose a winner.
-
-Broad boundary positions come from two-scale measurements on individual sampling traces. Each region requires a majority
-of its original traces to support the same material boundary, including after fitting. Missing traces remain in the
-denominator. A region's averaged signal is not treated as a measured coordinate on an individual trace.
-When measured material peaks admit several valid connections, each interpretation is retained. If association cannot
-finish within its computation bound, the whole source enters Review and the report retains the raw measurements and reason.
-Variation in broad localization peaks does not remove a physically valid boundary interpretation. Unresolved competition
-remains subject to the existing Review conditions.
-Association avoids repeated checks so that some safe strips can finish within the original computation bound. Distinct
-valid interpretations remain intact. Automatic approval still requires the fixed box to protect all content and complete
-evidence.
-Edge tracking limits candidate scans to the existing connection range while preserving the same distance, polarity,
-missing-trace, and equal-distance ambiguity rules.
-
-When a complete safe output footprint cannot be generated, the whole source enters Review and the diagnostic report
-retains the specific reason.
-
-Top and bottom use one signal baseline across the lane's full short axis, so each local query window does not independently
-set the scale used to assess edge strength. Boundaries still require complete observations inside their registered windows;
-the baseline creates no boundary evidence and does not treat missing regions beyond the source as background.
-
-Direct top and bottom evidence need not occur on the same sampling trace. They may close one complementary direct pair
-when each side has at least two independent support regions, their union covers the longitudinal domain of every output
-Frame, and direction and fixed H agree. Shared support is still reported as zero. Incomplete coverage, a template-inferred
-side, or multiple equally legal pairs keeps the entire source in `needs_review`. A complete pair also cannot win when the
-same opposite closes against a strictly farther-out local direct edge. Likewise, one source-spanning edge cannot project
-an opposite edge that is visible only locally across the whole strip.
-
-A direct top/bottom pair that already meets shared-support and longitudinal-coverage requirements retains its measured
-geometry when one side gains more complete source-spanning support. A local opposite edge must still meet the existing
-coverage rules, and multiple legal pairs remain in Review.
-
-When independent evidence uniquely establishes both photo edges, the program uses those measured edges to choose the
-fixed-box position rather than replacing the measured height with an inferred height inside the frame. A conflict with a
-supported aspect-ratio constraint still requires review. When direct photo edges cannot be established, complete
-outer-support evidence can still authorize a crop under the fixed-box policy.
-
-Short fragments of the same photo edge are retained and checked together. They may become an authorized direct boundary
-only when the complete measurement supports at least two independent regions; several photo slots covering the same
-small fragment do not add evidence strength. Unauthorized fragments remain boundary hypotheses without moving a crop
-or preventing further checks of missing edges, and do not consume the global boundary quota. Reports preserve each
-direct boundary's original region count and distinguish complete measurements from boundaries used by the global solver.
-Existing complete edge groups may also form a crop proposal for review. Every group's original measurements remain
-intact. When fragment membership has multiple interpretations, the report records the grouping condition and retains the
-new crop for review. The existing primary and runner crops keep their approval conditions. More fragments alone do not
-authorize automatic output.
-
-Normal strips use one shared pitch. Every directly proven, ordinal-unique separator may constrain its own wide or narrow
-gap; later Frames apply that measured delta once. Multiple proven gap changes still use one bounded pass. An ambiguous
-gap, missing authority, inability to reliably choose among legal answers, or an unknown required Frame remains `needs_review`.
-A measured narrow gap need not reach the format's nominal gap lower bound. If measured relations cannot independently
-determine every template parameter, the existing calibrated bounds test the same placement. Missing or conflicting
-calibration keeps the image in Review; authorized direct coordinates remain unchanged.
-Fit compatibility uses the current model and direct anchors, not an earlier residual verdict. Local boundary refinements
-do not alter the global residual calculation.
-A narrow material strip at a film-strip end can lie inside or outside the photo. Existing evidence for both edges is retained;
-the strip alone does not force selection of the inner edge.
-An edge signal cut off by the source or query range cannot alone provide a precise boundary position;
-unmeasured regions are not treated as confirmed background.
-Narrow material at a photo edge also preserves existing boundary-role candidates; possible interpretations are checked
-against the whole-strip constraints.
-When discrete positions remain ambiguous, each candidate's local boundaries are checked independently, and each review
-footprint obeys its own jointly supported direct coordinates; this does not remove the Review requirement.
-Boundary interpretations with distinct observation identities are retained even at the same position. An incomplete
-alternative is not rejected solely because its currently collected support is smaller.
-When the same boundaries permit different feasible ranges, each protective range and its evidence are retained for
-the safety checks of the whole source.
-Shared cross-axis boundaries must meet the existing coverage requirements for each candidate's photo regions independently;
-additional candidates do not add evidence strength.
-Runtime acceptability scoring is not yet enabled; this is a current selection limit, not a requirement to prove one uniquely true crop.
-Reports retain each lane's existing primary and single runner crop footprint, or the specific reason it could not be generated.
-If the sequence alternative cannot form a distinct crop, the existing cross-axis alternative is still considered.
-At most one additional conditional cross-axis proposal is retained separately from the primary and runner.
-When a fit satisfies the physical limits for a complete group of boundary measurements, this proposal can preserve
-an interpretation that the original fit could not retain, for manual review. Automatic approval conditions remain unchanged.
-When fragment membership is ambiguous, the system preserves the original complete measurement groups and examines
-whole-group combinations. If search or batch fitting exceeds its work limit, the report records the reason and retains
-the existing crop proposals. An individual conditional combination does not gain automatic approval.
-When photo ownership is fixed and multiple complete top/bottom interpretations remain, the report may also record
-a common fixed box and the coverage result under each interpretation. Shared H candidates use the same `1.1W × 1.1H`
-window and cannot enlarge it by taking a union. Every fully verified interpretation must be protected by that fixed box
-and pass all evidence and source-wide safety checks. Incomplete interpretations, a physical envelope that does not fit,
-or failed checks still require Review; the highest score cannot replace these conditions.
-Local refinement preserves ambiguous measurements and failed fits in the report. An unresolved alternative still
-requires Review even when the selected measurements would permit a crop.
-Cross-axis crop protection accounts for the relationship between measured position and direction, the statistical fit,
-and local edge departures. Top and bottom protection uses the actual reachable longitudinal ends to select the fixed-box
-position; the script does not change the fixed window size. Automatic approval still requires complete content protection
-and complete evidence.
-Development gold analysis evaluates each footprint independently, allows multiple safe results, and separates unsafe from
-unavailable geometry. Each retained crop also records its fixed-box position, physical features, provenance, and explicit
-missing reasons. These records do not change automatic approval conditions.
-Offline development ranking groups evaluation by source image and separates out-of-fold from in-sample results; its scores
-are not safety probabilities and do not select actual crops. Contact and overlap are challenge cases, not predetermined
-outcomes: the standard detector and Gate may approve them when direct-use admission is satisfied, while safe review remains
-correct when evidence is insufficient. V5 does not enable a second detector for them. A proven relation can participate in
-the evidence for the adjacent END/START boundaries. The fixed margin cannot establish the relation by itself or enlarge
-the fixed box.
+Debug Analysis shows the primary, runner, and retained proposals with their evidence, coverage results, and blocking
+reasons for inspection. Reports do not change crop coordinates or approval conditions. The current Runtime does not
+use development ranking scores to select crops.
 
 Holder fill is assessed only after placement by asking whether another W fits beyond either outer. It never searches
 for or centers a placement. Both lanes of 135-dual must be complete.
@@ -188,10 +76,7 @@ per-side margin = 5%
 
 The fixed box permits the script to select a position only; measurement, residual, direction, or score cannot change
 its size. It must contain all visible TIFF content, including tilted corners. When credible evidence requires a complete
-physical envelope that cannot fit inside the box, the whole source enters `needs_review`. In-box offset is not separately
-penalized, and development gold no longer uses actual per-side expansion relative to the true boundary as a 5% blocking
-criterion. V5 remains an unreleased development preview. Release acceptance still requires zero false accepts,
-safe automatic approval of all nominal tasks, and performance and platform validation.
+physical envelope that cannot fit inside the box, the whole source enters `needs_review`. An offset within the fixed box is not independently rejected when all visible photograph content remains protected.
 
 When independent evidence uniquely establishes both photo edges, the program uses those coordinates to choose the fixed
 box position rather than replacing the measured height with an inferred height inside the frame. Continuous outer support
@@ -230,8 +115,9 @@ The V5 development source supports Python 3.12–3.14:
 
 The same installers are under `install/`, without the `tools/` prefix, in a future V5 Release package.
 
-Setup reuses a suitable global Python and existing dependencies and installs only what is missing. Unknown ownership
-stops before any write. It creates no private `.venv` and does not require Homebrew.
+Setup finds 64-bit Python 3.12–3.14, reuses dependencies that meet the required versions, and installs or updates the rest
+through their recognized package manager. Unknown ownership stops before changes. Homebrew is not required, and no
+private environment is created.
 
 ## Input Contract
 
@@ -248,10 +134,9 @@ official output uses `Orientation=1`.
 
 ## Run
 
-Graphical launch:
-
-- macOS: place TIFFs beside `X5_Crop_Mac.command` and double-click it;
-- Windows: place TIFFs beside `X5_Crop_win.bat` and double-click it.
+In the repository root, run the command with one TIFF or a scan directory. Use
+`python3 X5_Crop.py --interactive` to process TIFFs in the current directory interactively. A future V5 release package
+provides macOS and Windows double-click launchers.
 
 Command-line example:
 
@@ -276,8 +161,8 @@ There is no `--overwrite`. The target must not exist. Use different fresh direct
 cropping; an official run always rereads the source TIFF.
 If another operation creates the target during processing, it is preserved and publication reports an output error;
 retry with a new directory. Publication also stops if the filesystem cannot guarantee atomic no-replace behavior.
-The current macOS exFAT implementation was found to reject this publication operation. Write to a fresh directory on
-APFS/HFS+; if needed, copy the completed output directory to exFAT afterward.
+On macOS, write to a fresh directory on an APFS/HFS+ volume that supports atomic no-replace publication. If needed,
+copy the completed output directory to exFAT afterward.
 
 ## Status, Output, And Exit Codes
 
@@ -288,9 +173,7 @@ Each input has exactly one terminal state:
 - `runtime_error`: this input failed while other inputs continue.
 
 Debug Analysis shows the template, observations, winner/runner, raw and guarded aspect-ratio intervals, inferred H,
-the fixed source-space window's size and position, content-protection evidence, and first blocking reason. A shared
-support slope is counted once in its joint state rather than again as a residual. It also shows
-plus `DESKEW APPLIED`, `ROTATION NOT NEEDED`, or a typed `DESKEW SKIPPED`. It reads the same detection facts and
+the fixed source-space window's size and position, content-protection evidence, and first blocking reason. It also shows `DESKEW APPLIED`, `ROTATION NOT NEEDED`, or a typed `DESKEW SKIPPED`. It reads the same detection facts and
 never solves geometry again.
 
 The development report also records exterior color continuity, weak signals, and measurement availability.

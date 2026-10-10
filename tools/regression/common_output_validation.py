@@ -5,19 +5,17 @@ from __future__ import annotations
 from dataclasses import fields, replace
 from typing import Any
 
-from x5crop.domain import Box, WorkspaceExtent
+from x5crop.domain import WorkspaceExtent
 from x5crop.detection.gate_checks import (
     DetectionFailureFact, FailureRecovery, GateGap, MinimumMissingFact, RecoveryAction,
 )
 from x5crop.detection.photo_geometry.output_model import (
-    CommonOutputFootprint, CommonOutputMemberBudget, FootprintSaturationFact, FootprintSaturationKind,
+    CommonOutputFootprint, CommonOutputMemberBudget,
     JointPlacementEnvelope, OutputFootprint,
-    footprint_outside_authority_sides, footprint_overflow_px,
-    sampling_authority_bounds, source_boundary_sides,
 )
 from x5crop.detection.photo_geometry.template_common_output import CommonHOutput, CommonHOutputWork
 from x5crop.detection.photo_geometry.template_placement import FormatPlacement, TemplateFrame
-from x5crop.geometry.convex import clip_convex_polygon_to_bounds, convex_hull
+from x5crop.geometry.convex import convex_hull
 from x5crop.report.read_models import typed_read_model
 
 
@@ -86,32 +84,6 @@ def _output(value: Any, placements: list[dict], ordinal: int, extent: WorkspaceE
                     "sampling_authority_box", "source_extent", "authority_profile_id"))):
             raise ValueError("common H native member identity, slot or source authority changed")
         native_ids.add(member["geometry_id"])
-    for key in ("mandatory_source_footprint",):
-        polygon = _validate_polygon(value[key], f"common H {key}")
-        expected = convex_hull(tuple(tuple(point) for member in members for point in
-            _validate_polygon(member[key], f"native {key}")))
-        if typed_read_model(polygon) != typed_read_model(expected):
-            raise ValueError("common H footprint does not cover the complete native union")
-    requested = tuple(tuple(point) for point in value["requested_source_footprint"])
-    mandatory = tuple(tuple(point) for point in value["mandatory_source_footprint"])
-    authority = Box(**value["sampling_authority_box"])
-    source_sides = source_boundary_sides(authority, extent)
-    saturation = []
-    for side in footprint_outside_authority_sides(requested, authority, extent):
-        overflow = footprint_overflow_px(requested, authority, side, extent)
-        mandatory_overflow = footprint_overflow_px(mandatory, authority, side, extent)
-        if side in source_sides:
-            kind = (FootprintSaturationKind.SOURCE_BOUNDARY_JOINT_PROTECTION if mandatory_overflow > 0
-                    else FootprintSaturationKind.SOURCE_BOUNDARY_OPTIONAL_BLEED)
-        else:
-            kind = (FootprintSaturationKind.LANE_BOUNDARY_JOINT_PROTECTION if mandatory_overflow > 0
-                    else FootprintSaturationKind.LANE_BOUNDARY_OPTIONAL_BLEED)
-        saturation.append(FootprintSaturationFact(side, kind, overflow, mandatory_overflow))
-    required = clip_convex_polygon_to_bounds(requested, sampling_authority_bounds(authority, extent)) if (
-        saturation and all(fact.source_boundary for fact in saturation)) else requested
-    if (value["saturation_facts"] != typed_read_model(saturation)
-            or value["required_source_footprint"] != typed_read_model(required)):
-        raise ValueError("common H source clipping or saturation changed")
     for index, budget in enumerate(budgets):
         _budget(budget, typed.placements[index], typed.output_footprints[ordinal - 1].members[index],
                 value)
@@ -169,7 +141,7 @@ def _validate_common_h_output(value, extent, cross, registration, phase) -> None
         if not isinstance(cross, dict):
             raise ValueError("common H Cross competition is invalid")
         if first["cross_fit"]["boundary_use"] == "enclosing_support_pair":
-            from .report_validation import _read_common_proof, _read_membership_receipt
+            from .report_validation import _read_common_proof
             from x5crop.detection.photo_geometry.template_cross_model import CrossFitCompetition
             from x5crop.detection.photo_geometry.template_common_output import common_h_fit_members
             from x5crop.detection.photo_geometry.template_registration import CrossRegistrationWorkReceipt

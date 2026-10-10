@@ -20,7 +20,6 @@ from .template_model import (
     AdjacencyRelation,
     ContactRelation,
     FrameWidthInferenceFailureKind,
-    LatticeParameterFitBasis,
     OverlapRelation,
     SeparatorRelation,
     SequenceBindingUse,

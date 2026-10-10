@@ -11,7 +11,6 @@ import hashlib
 import importlib.metadata
 import json
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 

@@ -1,4 +1,4 @@
-"""Interpret content topology against one final post-bleed footprint set."""
+"""Interpret content topology against one final fixed-window footprint set."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ def content_veto_assessment(
     required_source_footprints: tuple[ConvexPolygon, ...],
     content_index: ContentTopologyIndex,
 ) -> ContentVetoAssessment:
-    """Veto only when content crosses the crop after residual and bleed.
+    """Veto only when content crosses the crop after fixed-window placement and legal source clipping.
 
     The polygons are already fixed by the placement or shared common output.
     Content cannot move an edge, select a runner, or create geometry; it can

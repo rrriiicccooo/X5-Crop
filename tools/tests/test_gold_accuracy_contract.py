@@ -652,7 +652,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
             "approved_auto",
         )
 
-    def test_estimated_start_does_not_block_direct_use_budget(self) -> None:
+    def test_outward_expansion_does_not_block_contained_content(self) -> None:
         output = [
             [-100.0, 0.0],
             [560.0, 0.0],

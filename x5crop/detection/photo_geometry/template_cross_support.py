@@ -112,7 +112,7 @@ def _candidate(
     # Boundary use belongs to the selected pair, not permanently to either
     # raw line.  A line that can authorize an aperture may also serve as one
     # side of a directly observed enclosing rectangle.  When this path wins,
-    # both sides are uniformly ENCLOSING_SUPPORT_PAIR (zero aperture bleed);
+    # both sides are uniformly ENCLOSING_SUPPORT_PAIR;
     # no output ever mixes aperture and support semantics edge by edge.
     top_by_trace = dict(
         zip(

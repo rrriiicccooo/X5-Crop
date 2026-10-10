@@ -413,37 +413,3 @@ class JointAxisGeometry:
             sum(point[1] for point in self.vertices) / len(self.vertices)
         )
         return scale, normalized, normalized / scale
-
-    def project_affine(
-        self,
-        *,
-        q_coefficient: float,
-        scale_coefficient: float,
-    ) -> FiniteInterval:
-        if not all(
-            math.isfinite(value)
-            for value in (q_coefficient, scale_coefficient)
-        ):
-            raise ValueError("joint projection coefficients must be finite")
-        values = tuple(
-            q_coefficient * normalized + scale_coefficient * scale
-            for scale, normalized in self.vertices
-        )
-        return FiniteInterval(min(values), max(values))
-
-    def retained_extent_budget_px(
-        self,
-        ratio_per_side: float,
-    ) -> FiniteInterval:
-        if not math.isfinite(ratio_per_side) or ratio_per_side <= 0.0:
-            raise ValueError("direct-use ratio must be positive")
-        extent = self.extent_projection_px()
-        return FiniteInterval(
-            ratio_per_side * extent.minimum,
-            ratio_per_side * extent.maximum,
-        )
-
-    def worst_case_mm(self, distance_px: float) -> float:
-        if not math.isfinite(distance_px) or distance_px < 0.0:
-            raise ValueError("pixel distance must be finite and non-negative")
-        return distance_px / self.feasible_scale_interval().minimum

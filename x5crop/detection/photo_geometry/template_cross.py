@@ -9,13 +9,10 @@ import math
 from ...domain import EvidenceState, FiniteInterval, ObservationId
 from .interval_math import (
     add as _add,
-    intersect as _intersect,
     midpoint as _midpoint_interval,
 )
 from .model import (
     BoundaryRole,
-    MINIMUM_INDEPENDENT_SUPPORT_REGIONS,
-    PHOTO_BOUNDARY_MEASUREMENT_SPEC,
     SPATIAL_SUPPORT_REGION_COUNT,
 )
 from .output_model import OutputBoundaryUse

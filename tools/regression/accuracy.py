@@ -24,7 +24,6 @@ from .file_identity import sha256_file
 from .gold_geometry import (
     GOLD_ACCEPTANCE_CONTRACT,
     validate_approved_geometry,
-    validate_selected_candidate_coverage,
 )
 
 

@@ -11,7 +11,6 @@ from .output_model import OutputBoundaryUse
 from .template_cross_model import CrossFit
 from .template_direct_role_authority import (
     DirectRoleAuthorityBasis,
-    DirectRoleAuthorityFact,
     DirectRoleBindingAuthority,
 )
 from .template_model import SequenceFit

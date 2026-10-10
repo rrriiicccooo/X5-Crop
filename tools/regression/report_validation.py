@@ -28,15 +28,7 @@ from x5crop.detection.output_deskew import DeskewSkipReason
 from x5crop.detection.photo_geometry.coarse_strip_support import (
     CoarseSupportAuthority,
 )
-from x5crop.detection.photo_geometry.output_model import (
-    FootprintSaturationKind,
-    footprint_outside_authority_sides,
-    footprint_overflow_px,
-    sampling_authority_bounds,
-    source_boundary_sides,
-)
 from x5crop.detection.photo_geometry.model import (
-    AuthoritySide,
     BoundaryAxis,
     BoundaryRole,
     MINIMUM_INDEPENDENT_SUPPORT_REGIONS,
@@ -121,9 +113,8 @@ from x5crop.detection.photo_geometry.robust_line_fit import (
     physical_line_region,
 )
 from x5crop.report.read_models import typed_read_model
-from x5crop.formats import OUTPUT_PROTECTION_SPEC
 from x5crop.geometry.affine import AffineCoordinateTransform
-from x5crop.geometry.convex import clip_convex_polygon_to_bounds, mapped_half_open_box
+from x5crop.geometry.convex import mapped_half_open_box
 from x5crop.io.orientation import orientation_mapping
 from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 
@@ -3059,17 +3050,6 @@ def _validate_box(value: object, label: str) -> dict[str, float]:
     ):
         raise ValueError(f"{label} is invalid")
     return value
-
-
-def _same_polygon(
-    left: list[list[float]],
-    right: tuple[tuple[float, float], ...],
-) -> bool:
-    return len(left) == len(right) and all(
-        abs(float(a[0]) - b[0]) <= 1.0e-8
-        and abs(float(a[1]) - b[1]) <= 1.0e-8
-        for a, b in zip(left, right, strict=True)
-    )
 
 
 def validate_output_footprint_authority(

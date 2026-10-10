@@ -12,7 +12,6 @@ from x5crop.detection.photo_geometry.exterior_region_measurement import (
     ExteriorRegionAvailability, ExteriorRegionQuery, _box_sums,
     measure_exterior_region,
 )
-from x5crop.detection.photo_geometry.measurement_model import PhotoBoundaryMeasurementField
 from x5crop.detection.photo_geometry.model import PHOTO_BOUNDARY_MEASUREMENT_SPEC as SPEC
 from x5crop.detection.photo_geometry.registered_transition_measurement import measure_trace
 from x5crop.run_local_identity import source_identity_scope

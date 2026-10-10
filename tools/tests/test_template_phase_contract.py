@@ -30,7 +30,6 @@ from x5crop.detection.photo_geometry.observation_types import (
     SeparatorMaterialRegionState,
 )
 from x5crop.detection.photo_geometry.template_model import (
-    FrameWidthInferenceFailureKind,
     LatticeParameterFitBasis,
     OverlapRelation,
     SeparatorRelationKind,
@@ -61,9 +60,6 @@ from x5crop.detection.photo_geometry.template_adjacency_coverage import (
 )
 from x5crop.detection.photo_geometry.template_adjacency_topology import (
     observe_adjacency_continuity,
-)
-from x5crop.detection.photo_geometry.template_nominal_grid_model import (
-    NominalGridFailureKind,
 )
 from x5crop.detection.photo_geometry.template_phase import (
     _merge_continuous_placement,

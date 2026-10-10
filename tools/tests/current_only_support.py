@@ -3,14 +3,11 @@ from __future__ import annotations
 import contextlib
 import io
 import json
-from dataclasses import fields
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 from unittest import mock
 
-from tools.release.manifest import RELEASE_FILES, RELEASE_PATHS
-from tools.release.standalone import read_sources
 from tools.regression.cohort_count import (
     cohort_slot_count,
     validate_cohort_counts,
@@ -35,13 +32,15 @@ from x5crop.report.identity import (
     REPORT_SCHEMA_REVISION,
 )
 from x5crop.report.read_models import gate_check_read_model
-from x5crop.run_config import DESKEW_CHOICES, DeskewMode, RunConfig
+from x5crop.run_config import (
+    DESKEW_CHOICES,
+    DeskewMode,
+)
 from x5crop.runtime.bootstrap import runtime_invocation_from_options
 from x5crop.runtime.limits import (
     STANDARD_JOB_DEFAULT,
     STANDARD_JOB_LIMIT,
 )
-from x5crop.runtime.options import RuntimeOptions
 
 
 ROOT = Path(__file__).resolve().parents[2]

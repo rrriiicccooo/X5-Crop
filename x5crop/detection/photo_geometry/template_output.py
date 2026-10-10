@@ -19,7 +19,6 @@ from .template_feasible_geometry import (
     JointFrameState,
 )
 from .model import (
-    AuthoritySide,
     BoundaryAxis,
     BoundaryRole,
 )
@@ -204,8 +203,7 @@ def _enclosing_support_aperture_risk(
     placement: FormatPlacement,
     frame: TemplateFrame,
     projection: FeasiblePlacementProjection,
-    protected_states: tuple[dict[BoundaryRole, float], ...],
-    *, requested_override: ConvexPolygon | None = None,
+    *, requested: ConvexPolygon,
 ) -> EnclosingSupportApertureRisk | None:
     """Bound output against every authorized same-state aperture center."""
 
@@ -230,7 +228,7 @@ def _enclosing_support_aperture_risk(
     bottom_expansion = 0.0
     offset_minimum = math.inf
     offset_maximum = -math.inf
-    for state, residuals in zip(states, protected_states, strict=True):
+    for state in states:
         span = (
             state.bottom_at_lane_reference_px
             - state.top_at_lane_reference_px
@@ -248,13 +246,6 @@ def _enclosing_support_aperture_risk(
         support_midpoint = 0.5 * (
             state.top_at_lane_reference_px
             + state.bottom_at_lane_reference_px
-        )
-        requested = requested_override if requested_override is not None else _state_footprint(
-            placement,
-            frame,
-            state,
-            apply_residual=True,
-            residuals=residuals,
         )
         slope = state.enclosing_support_slope
         if slope is None:
@@ -923,8 +914,7 @@ def output_footprint_from_template_placement(
         placement,
         frame,
         projection,
-        protected,
-        requested_override=requested,
+        requested=requested,
     )
     return OutputFootprint(
         geometry_id=run_local_id(

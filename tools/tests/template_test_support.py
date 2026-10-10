@@ -71,7 +71,7 @@ def unavailable_nominal_grid_prior(
     *,
     format_id: str = "test-format",
 ) -> CalibratedNominalGridPrior:
-    """Explicitly disable calibrated Grid authority in legacy unit scenarios."""
+    """Build fixtures with explicitly unavailable calibrated Grid authority."""
 
     return CalibratedNominalGridPrior(
         prior_id=f"nominal-grid-prior:unavailable:{template.template_id}",

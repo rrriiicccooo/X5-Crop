@@ -26,7 +26,8 @@ from x5crop.detection.photo_geometry.detector import (
     _materialize_placement_proposal, reconstruct_photo_geometry,
 )
 from x5crop.detection.photo_geometry.measurement_model import (
-    PhotoBoundaryMeasurementField, BroadMaterialTraceObservation, MaterialBackgroundSide,
+    BroadMaterialTraceObservation,
+    MaterialBackgroundSide,
 )
 from x5crop.detection.photo_geometry.broad_material_association import (
     BroadAssociationResult, BroadAssociationState, BroadAssociationWork,

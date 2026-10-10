@@ -84,7 +84,7 @@ def make_frame(
     )
 
 
-def make_content_placement(frames: tuple[object, ...], _relations: tuple[object, ...]):
+def make_content_placement(frames: tuple[object, ...]):
     return SimpleNamespace(
         placement_id="placement:content",
         output_slot_count=len(frames),
@@ -96,26 +96,26 @@ def make_content_placement(frames: tuple[object, ...], _relations: tuple[object,
 def required_footprints(
     frames: tuple[object, ...],
     *,
-    sequence_bleed: float = 0.0,
-    cross_bleed: float = 0.0,
+    sequence_margin: float = 0.0,
+    cross_margin: float = 0.0,
 ):
     return tuple(
         (
             (
-                frame.start.canonical_position_px - sequence_bleed,
-                frame.top.canonical_position_px - cross_bleed,
+                frame.start.canonical_position_px - sequence_margin,
+                frame.top.canonical_position_px - cross_margin,
             ),
             (
-                frame.end.canonical_position_px + sequence_bleed,
-                frame.top.canonical_position_px - cross_bleed,
+                frame.end.canonical_position_px + sequence_margin,
+                frame.top.canonical_position_px - cross_margin,
             ),
             (
-                frame.end.canonical_position_px + sequence_bleed,
-                frame.bottom.canonical_position_px + cross_bleed,
+                frame.end.canonical_position_px + sequence_margin,
+                frame.bottom.canonical_position_px + cross_margin,
             ),
             (
-                frame.start.canonical_position_px - sequence_bleed,
-                frame.bottom.canonical_position_px + cross_bleed,
+                frame.start.canonical_position_px - sequence_margin,
+                frame.bottom.canonical_position_px + cross_margin,
             ),
         )
         for frame in frames
@@ -126,16 +126,16 @@ def assess(
     frames: tuple[object, ...],
     observation: ContentOccupancyObservationSet,
     *,
-    sequence_bleed: float = 0.0,
-    cross_bleed: float = 0.0,
+    sequence_margin: float = 0.0,
+    cross_margin: float = 0.0,
 ):
-    placement = make_content_placement(frames, ())
+    placement = make_content_placement(frames)
     return content_veto_assessment(
         placement,
         required_footprints(
             frames,
-            sequence_bleed=sequence_bleed,
-            cross_bleed=cross_bleed,
+            sequence_margin=sequence_margin,
+            cross_margin=cross_margin,
         ),
         build_content_topology_index(observation, layout="horizontal"),
     )
@@ -210,7 +210,7 @@ class ContentVetoContractTest(unittest.TestCase):
             {item.reason for item in assessment.facts},
         )
 
-    def test_content_inside_final_bleed_is_not_vetoed(self) -> None:
+    def test_content_inside_final_footprint_is_not_vetoed(self) -> None:
         observation = make_observation(Box(12, 8, 16, 14))
         self.assertTrue(
             assess((make_frame(10.0, 20.0),), observation).vetoed
@@ -218,38 +218,38 @@ class ContentVetoContractTest(unittest.TestCase):
         assessment = assess(
             (make_frame(10.0, 20.0),),
             observation,
-            cross_bleed=2.0,
+            cross_margin=2.0,
         )
         self.assertFalse(assessment.vetoed)
 
-    def test_content_beyond_final_bleed_is_vetoed(self) -> None:
+    def test_content_beyond_final_footprint_is_vetoed(self) -> None:
         assessment = assess(
             (make_frame(10.0, 20.0),),
             make_observation(Box(12, 6, 16, 12)),
-            cross_bleed=2.0,
+            cross_margin=2.0,
         )
         self.assertEqual(
             {item.reason for item in assessment.facts},
             {ContentVetoReason.SLOT_CONTENT_CROPPED_IN},
         )
 
-    def test_outer_content_is_judged_against_final_sequence_bleed(self) -> None:
+    def test_outer_content_is_judged_against_final_sequence_margin(self) -> None:
         observation = make_observation(Box(18, 12, 24, 16))
-        without_bleed = assess((make_frame(10.0, 20.0),), observation)
-        with_bleed = assess(
+        without_margin = assess((make_frame(10.0, 20.0),), observation)
+        with_margin = assess(
             (make_frame(10.0, 20.0),),
             observation,
-            sequence_bleed=4.0,
+            sequence_margin=4.0,
         )
 
         self.assertEqual(
-            {item.reason for item in without_bleed.facts},
+            {item.reason for item in without_margin.facts},
             {ContentVetoReason.OUTER_SLOT_CONTENT_OMITTED},
         )
-        self.assertFalse(with_bleed.vetoed)
+        self.assertFalse(with_margin.vetoed)
 
     def test_sloped_edge_uses_the_exact_final_polygon(self) -> None:
-        placement = make_content_placement((make_frame(10.0, 20.0),), ())
+        placement = make_content_placement((make_frame(10.0, 20.0),))
         footprint = (
             (10.0, 10.0),
             (20.0, 14.0),

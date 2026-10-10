@@ -15,7 +15,6 @@ from .observation_types import (
     BasicAxisProfile,
     BoundaryEdgeMeasurementBasis,
     BoundaryEdgeObservation,
-    ProfileRun,
 )
 from .sequence_direction_measurement import sequence_run_line_measurement
 from .broad_material_transition_measurement import broad_material_trace_support_qualified

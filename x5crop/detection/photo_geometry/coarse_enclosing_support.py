@@ -17,7 +17,6 @@ from scipy.optimize import linprog
 from ...domain import (
     EvidenceState,
     FiniteInterval,
-    ObservationId,
     PositiveInterval,
 )
 from ...formats import OUTPUT_PROTECTION_SPEC

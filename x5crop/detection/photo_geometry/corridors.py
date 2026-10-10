@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from dataclasses import replace
 import math
-from typing import TYPE_CHECKING
 
-from ...domain import Box, FiniteInterval, PositiveInterval
+from ...domain import (
+    Box,
+    FiniteInterval,
+)
 from ...formats import OUTPUT_PROTECTION_SPEC
 from ..source_core import SourceLaneEvidence
 from .model import BoundaryAxis, BoundaryRole, QueryPurpose
@@ -21,9 +23,6 @@ from .template_measurement_plan_model import (
 )
 from .axis_layout import source_axes
 from ...run_local_identity import run_local_id
-
-if TYPE_CHECKING:
-    from .coarse_strip_support import CoarseStripSupport
 
 
 def source_lane_box(

@@ -67,9 +67,6 @@ from x5crop.detection.photo_geometry.registered_transition_measurement import (
     measure_trace,
     trace_storage_bytes,
 )
-from x5crop.detection.photo_geometry.registered_measurement import (
-    make_photo_boundary_measurement_field,
-)
 from x5crop.detection.photo_geometry.template_measurement_plan import (
     compile_template_measurement_plan,
 )

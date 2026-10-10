@@ -132,7 +132,7 @@ class CommonOutputContractTest(unittest.TestCase):
         self.assertFalse(common.source_authority_supported)
         self.assertEqual(common.required_source_footprint, common.requested_source_footprint)
 
-    def test_members_cannot_change_w_or_borrow_enclosing_support_risk(self):
+    def test_members_require_distinct_identity_shared_w_and_matching_projection(self):
         first = _placement()
         native = native_output(first)
         with self.assertRaisesRegex(ValueError, "repeats a placement"):

@@ -11,12 +11,15 @@ production detector、公开界面或发布包；机器 proposal、红线导入�
 绝对测量，也不是 detector 唯一正确答案。相机片门、走片、胶片平整度与扫描状态造成的小幅个体差异
 属于物理事实，不应自动判为标注错误。
 
-Accuracy 采用方向性包含合同：
+Accuracy 采用可见内容包含合同：
 
-- candidate 与正式 `required_source_footprint` 必须完整包住确认 polygon；任何边或角点向内越界都失败。
-- 每侧最多向外使用对应确认 W/H span 的 5%；uncertainty、residual、bleed 与命名的 sampling allowance
-  共用这份预算，不能跨边借用。
-- `enclosing_support_pair` 仍须满足 runtime 的 `1.1H` 合同，同时满足黄金逐侧包含与外扩限制。
+- 源图共用固定的 `1.1W × 1.1H` 请求窗口；程序只选择位置，四边固定 5% 留边包含基础保护。
+- candidate 与正式 `required_source_footprint` 必须完整保护人工确认的可见内容，任何受保护边或角点
+  向内越界都失败。`human_width_estimate` 不授予可见内容权限，具体依据见下文。
+- 向外扩张只作诊断，不另设相对真实边界的逐侧 5% 上限，也不单独处罚框内定位偏移。
+- 所有 boundary use 共用上述合同；只有真实 TIFF 外缘允许源边截断，内部边界不得缩框绕过。
+
+精确比较、reference 权限和发布验收以 [ARCHITECTURE.md 第 14 节](ARCHITECTURE.md#14-验证边界) 为准。
 
 只有带 `boundary_pair` 的内容 Frame 进入几何 accuracy。`blank_exposure` 没有可见内容边界，必须使用
 `reference_geometry: not_applicable`：人工不画线、不确认虚构位置，但 slot ordinal 与显式 count 仍保留，
@@ -27,8 +30,8 @@ accuracy polygon 使用“物理 Frame 与 TIFF 栅格的交集”，并沿 TIFF
 Frame 必须完整位于源内；只有类型标签、没有实际越界几何的记录不能确认。该规则对四条外缘和
 Orientation 1–8 一致，不建立样片特例。
 
-活动数据只有 `Test/manual_review/gold_calibration/<format>/` 这一套用户红线校准草稿；不区分 v1/v2，
-也不建立 archive。原始 source TIFF 才是像素 authority，草稿只供红线导入与恢复，工具不得改写。一个
+活动数据只有 `Test/manual_review/gold_calibration/<format>/` 这一套用户红线校准草稿，不建立并行校准池。
+原始 source TIFF 才是像素 authority，草稿只供红线导入与恢复，工具不得改写。一个
 source SHA 只有一套物理几何，同源多 count 分别保留 task mapping。只有当前
 `user_confirmed` 记录具备黄金权限；确认集合为空时，accuracy 必须报告
 `calibration is incomplete`，不能回退旧 cohort。
@@ -85,7 +88,7 @@ tools/verify accuracy
 - `unclassified`：依据尚未确认，阻止 source 审核与最终确认。
 - `directly_visible`：人类能从原 TIFF 的可靠亮度或颜色分界确信真实内容边缘。证据可以很淡、很短，
   不要求覆盖完整 H，也不要求 detector 检出同一线；验收只看最终裁切是否满足黄金合同。
-- `visible_content_limit`：仍可见内容的极限。裁切进入线内会阻断；相对该线向外不受 5% 阻断。
+- `visible_content_limit`：仍可见内容的极限。裁切进入线内会阻断；向外扩张只作诊断。
 - `human_width_estimate`：由同源直接可见 Frame 的一致宽度推算。该侧线内线外都不阻断 accuracy。
 
 `origin` 只记录坐标来自机器、红线、精修还是人工移动，与 `review_basis` 独立。移动坐标不得发明可见

@@ -14,10 +14,7 @@ from x5crop.detection.photo_geometry.exterior_region_measurement import (
     ExteriorRegionQuery, measure_exterior_region,
 )
 from x5crop.report.read_models import typed_read_model
-from x5crop.detection.photo_geometry.measurement_model import (
-    PhotoBoundaryMeasurementField,
-    PhotoBoundaryMeasurementQuery,
-)
+from x5crop.detection.photo_geometry.measurement_model import PhotoBoundaryMeasurementQuery
 from x5crop.detection.photo_geometry.model import (
     BoundaryAxis,
     PHOTO_BOUNDARY_MEASUREMENT_SPEC,

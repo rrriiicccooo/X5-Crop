@@ -64,7 +64,6 @@ from x5crop.detection.photo_geometry.separator_observations import (
 from x5crop.detection.photo_geometry.output_model import (
     DirectUseBudgetEdgeAssessment,
     ResolvedOutputSlots,
-    SharedStripDirection,
 )
 from x5crop.detection.pipeline import choose_detection
 from x5crop.detection.workspace import prepare_detection_workspace

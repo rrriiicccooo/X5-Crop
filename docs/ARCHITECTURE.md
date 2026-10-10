@@ -1,7 +1,7 @@
 # X5 Crop V5 架构
 
 本文是 V5 已确认产品合同、运行流、数值合同和源码 owner 的唯一说明。版本变化见
-[CHANGELOG.md](CHANGELOG.md)。V5 尚未发布，公开稳定版仍为 `v4.2.8`。
+[CHANGELOG.md](CHANGELOG.md)。V5 尚未发布，公共版本入口见 [README.md](../README.md)。
 
 ## 1. 产品定义与输入 authority
 
@@ -108,7 +108,7 @@ H_px ∈ W_px × (scale_H / scale_W) / R_guarded
 
 `135`、`half`、`120-66` 与 `120-67` 已注册 development calibration；没有合格黄金 observation 的
 `xpan`、`120-645` 保持 unavailable，`135-dual` 复用同一 135 Frame 物理定义。不同 format 得到不同
-数值，但只能通过上述同一公式复算。旧的固定 `0.01`、统一 `1%` 外扩和按名义比例零误差换算都不存在。
+数值，但只能通过上述同一公式复算，不能以统一比例外扩或名义比例零误差换算代替。
 
 | 证据状态 | 结果 |
 |---|---|
@@ -158,8 +158,7 @@ Sequence 的坐标身份与证据相关性是两种不同事实。`observation_i
 能够表示同一物理坐标的 identity；`evidence_group_id` 只表示多条 edge 共享同一 material/transition
 证据，需要在 phase、pitch、W 与 constraint rank 中去重。一个 separator 的左右两侧拥有不同
 `observation_id`，但可以共享同一 `evidence_group_id`。相关组不能把两个坐标合并成连续 placement、
-生成中间位置或隐藏 runner；缺少相同 `observation_id` 时必须保持离散竞争。Production 不保留旧的
-`independent_support_id` 同义字段。
+生成中间位置或隐藏 runner；缺少相同 `observation_id` 时必须保持离散竞争。
 
 | 两个 role binding | 坐标关系 | 证据关系 | placement 行为 |
 |---|---|---|---|
@@ -268,7 +267,8 @@ direct coarse observation，或输出 count 只是未知 holder-slot 子集时�
 同一轴的 trace lattice 只建立一次 normalization baseline，再由理论窗口切出局部测量。长轴使用完整
 sequence baseline；top/bottom 共用覆盖 lane work box 完整短轴的 `CROSS_BASELINE`，不再分别用各自
 小窗口计算 median/MAD。两组 baseline 都在像素读取前登记；trace、两轴尺度和 lane 必须与窗口一致，
-原窗口的 transition ownership 与源边 kernel 可观测性保持不变。Baseline 不产生任何 transition 或
+原窗口的 transition ownership、独立区域分母、source-spanning 范围与源边 kernel 可观测性保持不变。
+缩小 query 或只保留原采样点不能证明这些权限仍成立。Baseline 不产生任何 transition 或
 placement evidence，也不能把源边未观测区域补成背景；它只提供候选无关的共同信号归一化。
 峰组 local noise 仍取组外完整信号中位数；只有有限数组中，精确扣除本组零值后，组外严格多数为零时，
 可直接返回同一零中位数，避免每峰重复创建整条 trace 的 mask 和 partition。恰好一半为零、非有限数组
@@ -294,29 +294,40 @@ Registered measurement 始终 candidate-independent；每个已唯一绑定的�
 O(count) 传播中约束自己的 adjacency advance，但不能触发额外像素读取、fit pass、winner-specific
 query 或无界 hypothesis。
 
-### 5.1 v4.2.8 能力迁移边界
+外侧区域测量不授予材料身份。低纹理、源外侧位置、seed 颜色连续、灰度平坦、强梯度、二维纹理、
+同源 separator 颜色或上下同色均不足以证明片夹接触。灰度可能隐藏等亮异色，均值核可能抹去亚核弱内容，
+稀疏 trace 不能排除 trace 间的局部内容，逐行重新拟合会吸收真实前沿。固定 RGB 前缀和仿射 seed 外推
+已被反例否定；调整阈值、核或颜色尺度不产生独立材料权限。
 
-`v4.2.8` tag 只作为已经由真实运行暴露过的能力证据，不是 Runtime 依赖。旧机制必须先识别其物理作用，
-再迁入唯一 current owner；迁移完成后删除旧式决策权、重试路径与兼容表达：
+可重放反例保留在 `Test/gold_analysis/holder_region_20260927/` 的
+`chromatic_material_counterexample.json`、`subkernel_weak_counterexample.json`、
+`localized_weak_front_counterexample.json`、`native_pattern_synthetic.json`，以及
+`Test/gold_analysis/material_identity_gap_20261002/x5_native_rgb_prefix_counterexamples_20261002.json`
+和 `human_semantics_followup/archive_manifest.json`。理想强阶跃的窄 gradient 支持也不能覆盖更早的弱前沿，
+对应反例为 `Test/gold_analysis/h_gradient_support_20260923/measurement_support_counterexamples.json`。
+这些证据只约束测量权限，不改写人工 reference，不将局部研究结果当作当前自动批准。
 
-| 发布版能力 | 有效的像素/物理作用 | V5 canonical 表达 | 处理 |
-|---|---|---|---|
-| theoretical pitch、Grid、equal positions | format/count 给出规则 W、pitch、ordinal 与 nominal adjacency | `formats` + `template_nominal_grid_authority.py` + phase/feasible geometry | 保留校准 Grid；删除 content 区域机械等分、无 anchor/coverage 的 fallback 与 Grid 自证 |
-| separator profile、material band | 在理论间隔附近观察暗/亮材料、均匀性、跨高度一致性 | registered measurement、`separator_material.py`、`separator_observations.py` | 保留并扩展为 typed polarity-complete observation；不恢复 enhanced 平行 detector |
-| `gap.start/end`、edge-pair gap | separator 两侧 native edge 直接决定相邻 END/START | `SeparatorRelation`、direct role binding、source W、一次 local advance | 保留并迁移；禁止 Grid 或 score 覆盖 native coordinate |
-| 局部高度 gap edge + 整体 outer/cross | 局部 separator 只在真实 aperture 内出现；两侧整体 enclosing support 可限定其短轴物理域 | `DirectRoleApertureDomainAuthority` | 只在全部登记支撑落入同一两侧 aperture 域时保留 native coordinate；单侧、越域或域坍缩保持 typed review |
-| robust Grid fit | anchor 后以规则 lattice 补缺失角色并吸收局部 gap 变化 | `CalibratedNominalGridAuthority`、逐 adjacency coverage、相关 uncertainty | 保留生成能力；删除未校准 fit、自身 residual 自证和覆盖直接线 |
-| BW/white/mask outer 与 separator-first outer | 不同极性和跨高度材料变化提供 enclosing/phase 线索 | coarse strip、broad enclosing material、cross 与 outer-frame authority | 保留 polarity-neutral observation；多个 box 不按 score 选。宽缓单边和 clipped outer 的权限仍须按小机制闭合 |
-| content bbox、content runs | 暴露内容穿越、空白、危险裁切与候选异常 | `content_veto`、adjacency continuity、Debug；未来只作冻结的 risk feature | 保留负向事实；永不单独移动或缩放 geometry |
-| confidence / best score | 在多个近似合法解释中聚合 contrast、距离和 residual | 当前 hard competition；下一阶段开发可用性特征与排序，未来为校准可用概率与拒绝选择 | 保留可解释特征，删除旧任意加权终判；开发评估不等待独立数据，正式概率权限须独立验证 |
-| retry、nearby correction、approved polish | 曾隐式补偿 separator 宽度、anchor、aperture、source clipping 或 topology | local relation、source W、aspect authority、clipped-boundary/topology owner | 已迁移的物理修正保留；clipped boundary 仍开放。删除 selection/Gate 后 mutation 与无法解释的 retry |
-| fixed/extra bleed | 对真实边缘误差或异常 topology 提供输出保护 | 完整物理包络 + 固定 `1.1W × 1.1H` 输出框 | 保留 topology 关系证明；固定留边替换旧基础与额外 bleed，不扩大框掩盖内容遗漏 |
-| outer-edge deskew | 用两侧稳健线拟合整理输出方向 | `output_deskew.py` + finalization | 保留有界数值观察；整图旋转晚于 Gate，不恢复 competing enhanced angle 对 placement 的权限 |
-| gray/profile cache、TIFF readback | 候选无关复用与 metadata/像素保真 | workspace/registered measurement、`io/tiff.py`、output publication | 保留一次读取、复用和 readback；删除 candidate-specific 重跑与平行缓存状态 |
+### 5.1 机制的物理职责
 
-迁移分类只有 observation、anchor、local correction、risk feature、veto、protection 与 selection 七类。
-一个旧函数若混合多类权限，必须拆到这些 owner；不能仅因旧名称是 `equal_split`、`content_bbox`、
-`score`、`correction` 或 `bleed` 就整体否认其曾承载的有效事实，也不能因它曾有效就保留旧决策方式。
+稳定版 `v4.2.8` tag 是下列有效物理作用的历史证据；Runtime 只使用对应的 V5 owner。
+清理实现时保留有效观察、修正与保护事实，不恢复无权限的决策方式。
+
+| 机制 | 物理作用与当前 owner | 权限边界 |
+|---|---|---|
+| 规则位置与 Grid | format/count 给出 W、pitch、ordinal；`template_nominal_grid_authority.py` 闭合相关几何 | 需要校准、anchor 与逐 adjacency coverage；不能按 content 等分或 Grid 自证 |
+| separator material | `separator_material.py`、`separator_observations.py` 登记明暗材料与跨高度一致性 | role-free observation，不能单独选择 placement |
+| separator 两侧 edge | `SeparatorRelation`、direct role binding 与 source W 决定相邻 END/START 和一次 local advance | 保留 native coordinate，Grid 或 score 不能覆盖 |
+| 局部 gap 与整体 cross | `DirectRoleApertureDomainAuthority` 限定 separator 的短轴物理域 | 全部登记支撑须落入同一双侧 aperture；单侧、越域或域坍缩进入 Review |
+| outer/cross | coarse strip、broad material 与 outer-frame authority 提供不同极性的 enclosing/phase 线索 | 多个物理解释保留竞争，support 不冒充照片边界 |
+| content runs | `content_veto`、adjacency continuity 与 Debug 暴露内容穿越和候选异常 | 只作负向事实，不单独移动或缩放 geometry |
+| 候选比较 | hard competition 负责当前选择；第 9.2 节负责离线可用性特征与排序 | 开发分数没有自动批准权限，正式概率权限须独立验证 |
+| 局部物理修正 | local relation、source W、aspect authority、source clipping 与 topology owner | 先证明关系与完整保护，selection/Gate 后不再改边或重试拟合 |
+| 输出保护 | 完整物理包络与固定 `1.1W × 1.1H` 窗口 | 固定留边不掩盖遗漏，不代替 topology 证明 |
+| deskew | `output_deskew.py` 与 finalization 整理输出方向 | 有界观察，晚于 Gate，不参与 placement |
+| 像素复用与 TIFF 保真 | workspace、registered measurement、`io/tiff.py` 与 output publication | 一次读取、候选无关复用和 readback，不建立平行缓存或 detector |
+
+同一实现涉及多种权限时，按 observation、anchor、local correction、risk feature、veto、protection 与
+selection 分别归入对应 owner；名称或曾有效的历史都不能替代当前 authority 证明。
 
 ## 6. Observation 与独立证据
 
@@ -1066,11 +1077,6 @@ contact 或 overlap；存在多组合法解释时保持 `adjacency_topology_ambi
 topology、覆盖 direct native coordinate，或把 contact 共用线重复计票。无权 `LOCAL_REFINEMENT` 仍按第 6 节的
 validation-only 合同让位。
 
-剩余能力继续按独立小机制形成检查点。带拒绝选项的概率选择仍只保留设计边界，须等独立 calibration
-与 sealed representative 数据具备后再进入 runtime；校准 Grid 的硬区间路径已经由第 7.2 节拥有。未来
-能力都必须完整交付 type、owner、Gate、Debug、正反例、真实样片和黄金安全验收；尚未闭合的能力
-不授予自动批准权限，也不建立占位 runtime。正式性能合格在发布验收时确认，不逐开发提交运行。
-
 ### 7.2 Calibrated nominal Grid authority
 
 `CalibratedNominalGridAuthority` 是 direct rank-3 之外的显式闭合路径。Format/count 编译时即建立同一个带
@@ -1229,6 +1235,9 @@ gradient、全部顶点的 first-order gap，并要求 `gap <= robust_fit_tolera
 新增拟合都通过预检后才开始，失败保留完整解释及明确的不可用结果，不根据成功次数截取前 N 组。
 `template_family_membership.py` 唯一拥有搜索、极大解释和拟合预检类型，registration 仍独占物化与权限。
 `MembershipReceipt` 保存原观察全集、全部 parent scope、原子与 anchor、完整极大解释、状态和工作量。
+`COMPLETE` 只覆盖实际登记的原子、scope 与进入 solver 的投影，不证明 tracker 未保留的竞争不存在。
+最近连接或精修的身份稳定也不能代替完整关联证明；反例见
+`Test/gold_analysis/h_contact_assessment_20260921/refinement_projection_audit.json`。
 冻结观察必须恰等于最终 raw 账本扣除新增条件线与后续精修线；精修线数量和额外拟合次数也须对账。
 Report 从原 query/transition 重放每个 scope，逐项核对实际计数；Debug 显示分组状态和访问次数。
 这类线可以生成单独的待检查裁切范围，以 `family_assignment_unresolved` 标记其分组权限缺口。
@@ -1437,30 +1446,17 @@ frame；实际可达位置与两轴保护的消费合同见第 10 节。只有�
 这是一项当前实现边界，不是对校准概率选择的永久禁令。未经校准的 score 不得拥有最终决定权；
 合法 runner 也不因“仍然合法”而被定义为永久阻断项。
 
-### 9.2 可用性开发排序与校准概率选择（Runtime 未启用）
+### 9.2 离线可用性排序与自动权限边界
 
-共同 W 检查点后即可用现有有界候选与黄金标签开展特征、排序和开发评估，不以全部 nominal 自动通过
-或独立 calibration/sealed 数据齐备为开发前置条件。正式概率权限仍需独立证据：
+当前离线开发直接评价已有有界候选的最终 footprint，不等待全部 nominal 自动通过或独立校准数据齐备。
+评分不能创建、移动、修补 geometry、重读像素或复活被硬合同淘汰的候选；sample ID、文件名、
+nominal/challenge 角色和黄金答案不能成为 Runtime feature。标签表示候选是否满足统一黄金安全合同，
+允许同一 task 有多份安全候选，不能按候选概率和为 1 或距红线最近强造唯一正例。
 
-```text
-registered evidence
-→ 固定模板生成有界候选
-→ 真正的硬物理合法性、source containment 与直接反证
-→ 明确风险代理的职责，评价每个已有候选的最终 footprint
-→ 对剩余合法候选估计校准后的可接受概率
-→ 经验证的可用性准入 + evidence coverage + OOD + abstention
-→ selected placement，或 abstain / needs_review
-```
-
-概率层不能创建、移动或修补 geometry，不能重新读取像素，不能让被硬合同淘汰的候选复活，也不能
-使用 sample ID、文件名、nominal/challenge 角色或黄金答案作为 runtime feature。这里的训练标签是
-“该候选最终 footprint 是否满足统一的方向性黄金安全合同”；多个候选可以同时可接受，因此候选概率
-不要求总和为 1；排名分数也不是可用概率，不得把最贴近红线的一个候选强行标成唯一正例。危险裁切代价
-远高于 review，正式自动权限使用冻结的可用概率阈值、适用范围、证据覆盖、OOD 和拒绝规则。
-Margin 只是一项可审计特征，不是独立的一票否决条件。多个候选都通过经验证的风险准入时，允许按冻结、
-稳定且简单的规则选其中一个；不要求 winner 显著领先。Runner 始终保留，只有影响可靠性的实质解释才
-参与拒绝判断；合法、坐标不同、分数接近或框相近本身都不能证明危险或安全。不得合并离散候选外包框、
-事后修框或扩大 bleed 消除竞争，也不能让高分抵消真实反证。
+Runtime 仍由第 9.1 节的硬事实选择。排名分数不是可用概率，也不授予自动输出权限。正式概率选择必须有
+冻结的适用范围、风险阈值、证据覆盖、OOD 与拒绝规则；高分不能抵消真实反证。Margin 只作诊断，
+多个候选均通过经验证的准入时可以按稳定规则选择一份，不要求唯一真实边界或显著领先。
+保留 runner，不合并离散候选外包框或事后扩大固定窗口。
 
 开发首先报告有界候选集合的黄金可用率：是否至少一份可用、是否多份可用、可用但被歧义拒绝，以及全部
 不可用的 source。只有前两类可能靠选择改善；所有候选都错时继续修复生成。标签独立评价每份最终
@@ -1523,36 +1519,19 @@ topology OOD；`formal_ood_evaluated=false`、`calibration_id=null`、`admission
 开发排序与标签不反写当前 Runtime Gate；正式
 可用性 assessment 最终仍沿 `CandidateGate → DecisionGate` 单向消费，不建立第二个终态 owner。
 
-准入前必须冻结以下 versioned schema 与 artifact：
+正式概率自动权限须冻结 feature/model/calibration/decision rule 的版本与来源、全部候选的选择 assessment、
+校准 manifest 和工作量 receipt。Assessment 保留候选 identity、带单位和 missingness 的特征、provenance、
+准入、coverage、OOD、拒绝原因与 hard-legality 证明，仍由 `CandidateGate → DecisionGate` 单向消费。
+分数与校准概率分开保存，不能退化为不可解释的低 confidence。
 
-| 合同 | 必需内容 |
-|---|---|
-| score schema | `feature_schema_id`、`model_id`、`calibration_id`、`decision_rule_id`、candidate/placement identity、带单位与 missingness 的 typed features、evidence provenance；ranking score 与 calibrated acceptability probability 分开 |
-| selection assessment | 所有保留候选的可用性、winner/runner identity、margin 诊断、准入、稳定选择规则、coverage、OOD、abstention 和 hard-legality receipt；runner 始终保留 |
-| calibration manifest | source-SHA 分区、同 SHA count 绑定、候选生成 commit、label contract、拟合方法、样本量、阈值、可靠性曲线、自动区危险率的单侧上界与适用 format/profile/topology |
-| work receipt | 合法候选数、feature 数、feature evaluation、OOD evaluation、临时内存和编译上界 |
+独立 calibration 与 sealed acceptance 的 source-SHA 分区、盲测及失效规则由第 14 节拥有。准入前须声明
+风险预算、校准样本量、可靠性曲线和自动区域危险率的单侧上界；阈值不能从 development 或 sealed 单张
+结果反调。OOD 至少覆盖未校准的 format/profile/count/topology、必要特征缺失、measurement saturation、
+超出校准支持范围的连续特征与未知候选结构，任一命中拒绝自动输出。
 
-现有已查看 source 可用于 feature/model development、排序、训练与反例发现，不证明独立概率校准。
-正式授予概率自动权限前必须补充在查看 scorer 输出前按 source SHA 冻结的新
-calibration source；同 SHA 的全部 count 变体同分区。Calibration 只拟合概率、联合准入规则与风险上界，
-sealed acceptance 不参与拟合、调参或 feature 选择。Sealed 在不暴露逐样片结果的情况下只检查
-全部角色 `unsafe_approved_auto = 0`、sealed nominal 全部安全自动通过、校准可靠性和 OOD/abstention
-合同。Model、feature、decision rule 或物理候选生成任一变化都会使旧 calibration 与 sealed receipt 失效。
-
-OOD 至少覆盖未校准的 format/holder profile/count/topology、必要 feature 缺失、measurement saturation、
-超出校准支持范围的连续 feature 与未知候选结构；任一命中直接 abstain。具体阈值只有在预先声明风险
-预算、校准样本量与可靠性检验后才能冻结，不能从 development 或 sealed 的单张结果反调。
-
-失败以 typed facts 表达：`probability_selector_unavailable`、`probability_contract_mismatch`、
-`probability_out_of_distribution`、`probability_evidence_coverage_insufficient`、
-`probability_below_auto_threshold` 或 `candidate_acceptability_unresolved`。不设置仅因分差不足而触发的固定失败。
-这些事实由 `CandidateGate` 汇总，
-`DecisionGate` 仍独占最终状态；不得退化成“低 confidence”这一条不可解释文案。
-
-评分工作量必须是 `O(K × F)`：`K` 为编译时有界的合法 placement 数，`F` 为冻结 feature 数。不得为
-评分层新增 pixel query、候选笛卡尔积、beam/DP、winner-specific requery 或第二 detector；正式
-24-source mean 仍须 `<= 5s`，`<= 3s` 继续作为优化目标。当前没有 calibration pool、sealed cohort
-与准入 receipt，因此当前只允许开发评分评估，不授予概率自动批准权限。
+评分工作量限于 `O(K × F)`：K 为编译时有界 placement 数，F 为冻结特征数。不得新增 pixel query、
+候选笛卡尔积、beam/DP、winner-specific requery 或第二 detector，仍须满足第 12、14 节工作与性能合同。
+当前缺少独立 calibration、sealed cohort 与准入 receipt，因此只允许开发评估。
 
 ### 9.3 Holder fill
 
@@ -1686,13 +1665,13 @@ requested W = 1.1 × source W
 requested H = 1.1 × source H
 ```
 
-5% 是固定留边，替换旧基础 bleed 与 topology extra bleed；不叠加小画幅固定下限。
+5% 是全部固定留边，包含基础保护与 topology 输出保护；不叠加额外留边或小画幅固定下限。
 `width_axis` 与 `sequence_direction` 明确横竖布局及 START/END 归属。单份 native 输出先使用
 canonical frame 包围框中心，再把中心限制到能够包含全部可见 mandatory 的区间。
 对于轴尺寸 D、可见需求 [a,b]，中心区间为 `[b-D/2, a+D/2]`；无可行区间时仍保留固定尺寸
 proposal，中心取需求中点，并由包含检查产生 `direct_use_budget_exceeded`，不得扩大框。
 
-`DirectUseBudgetAssessment` 现在只证明内容包含。每边保存从固定窗口中心到可见 mandatory
+`DirectUseBudgetAssessment` 只证明内容包含。每边保存从固定窗口中心到可见 mandatory
 最远点的非负 `required_extent_px`、该轴固定半尺寸 `available_extent_px` 和 `within_limit`。
 比较只吸收 `1e-8 px` 浮点误差；四边全部成立才是 supported。Mandatory 仅与完整真实 TIFF
 像素单元域求交，绝不能先按内部 lane 裁小。实际相对照片边界外扩多少不再作为逐侧上限；
@@ -1712,8 +1691,7 @@ center_offset_ratio = (gold_aperture_center - support_midpoint) / H
 当前 v16 calibration 按完整 development cohort 的同一资格规则纳入 4 个 selected unique enclosing pair、
 且黄金 top/bottom 均为 `directly_visible` 的 source（135 两源、120-66 两源，不以最终批准或预算筛选）；
 同源 count 先取中位数，再对 source hull 以 `0.001H` 向外量化，得到 `[-0.007H, +0.010H]`。
-phase 完整竞争检查移除一个不再具备唯一 placement 的来源；数值区间与 v15 相同。它只用于
-唯一已选 support，不适用于共同包络；该有限 development 支持尚不证明 sealed 或未见来源泛化。Calibration
+该先验只用于唯一已选 support，不适用于共同包络；有限 development 支持尚不证明 sealed 或未见来源泛化。Calibration
 同时绑定 development cohort SHA、eligibility revision 和精确 observation-set SHA；source 数量相同但成员、
 观测值或 detector 权限变化时同样视为 calibration drift。该 authority
 为 rank 0 correlated inference：不把 support 变成 direct aperture、不增加 constraint rank、不参与 pair 或
@@ -1722,8 +1700,9 @@ placement 选择，也不修改 output polygon。每个 `JointFrameState` 将该
 完整物理区间，不能静默假设居中。
 
 `EnclosingSupportApertureRisk` 保存 calibration identity/state、实际中心偏移区间、canonical `H`、最大中心
-平移、top/bottom 最坏 expansion 与可行状态数。Requested footprint 与最不利 aperture 必须来自同一状态；
-既不能把互斥状态的极值相加，也不能挑选最有利中心。这些距离只作物理诊断，不再作为逐侧外扩预算，也不改变固定窗口。
+平移、top/bottom 最坏 expansion 与可行状态数。风险核算对每个可行状态复用同一个实际 requested 固定框；
+该状态的 aperture 位置和方向共同核算，不把互斥状态的极值相加，也不挑选最有利中心。
+这些距离只作物理诊断，不构成逐侧外扩预算，也不改变固定窗口。
 
 Support 的共享斜率属于同一个 `JointFrameState`，已经进入该状态的 boundary line 与联合 footprint。
 完整状态保留 `(top, bottom, slope)` 三维可行集合；不能只投影两个位置后保留任意一个斜率解。
@@ -2076,7 +2055,6 @@ Linux开发/CI使用`renameat2(RENAME_NOREPLACE)`。目标在最终检查之后�
 | `photo_geometry/coarse_strip_support.py`、`coarse_enclosing_model.py`、`coarse_enclosing_support.py`、`template_coarse_sides.py` | role-free coarse query、sharp/broad 固定 trace view、粗片带 interval、完整 raw side、Cross 内的单侧登记与共同物理闭合 |
 | `photo_geometry/template_measurement_plan*.py` | pixel-free 模板、有限 query intents、停止与工作上界 |
 | `photo_geometry/exterior_region_measurement.py` | 固定外侧带的全列区域／弱信号事实、注册身份与实际工作账本；不授予片夹或输出权限 |
-| `photo_geometry/constructed_enclosure.py` | 全部约束上的有界平行外框几何构造；构造方向与实测照片方向分开 |
 | `photo_geometry/corridors.py` | 候选无关 top/bottom 与完整 `W/pitch` sequence 查询走廊 |
 | `photo_geometry/registered_*.py`、`observations.py`、`separator_*.py` | 一次性 measurement、role-free edge 与 material band |
 | `photo_geometry/cross_height_transition_measurement.py`、`broad_material_transition_measurement.py`、`broad_material_association.py` | 同一 registered baseline 上的三区域局部弱信号、逐线双尺度宽缓 material 测量及有界完整关联 |
@@ -2247,7 +2225,7 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
 - 未来新增 source 必须在查看 detector 结果前按 source SHA 固定为 development 或 sealed acceptance；
   同 SHA 的全部 count task 同分区。日常开发命令不得读取或输出 sealed 的逐样片结果，只能在里程碑生成
   aggregate receipt。显式打开 sealed source 调试后，该 source 永久转入 development，并补充新的 sealed
-  source。分区共享同一 reference authority，不建立 v1/v2 或其它平行校准池。当前尚无 sealed cohort，
+  source。分区共享同一 reference authority，不建立平行校准池。当前尚无 sealed cohort，
   因而不能作未见 X5 扫描的泛化或发布准确性声明；这一事实须在发布说明中披露，但不阻断首版发布。
 - 生产中发现的危险自动裁切不是新的 validation partition。该 source 完成人工 reference 后永久加入
   `development_gold`，作为 incident regression 参与此后每次机制验证；同类修复必须是通用物理能力，
@@ -2275,6 +2253,10 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   保留开发分析产物使用 `tools/verify diagnostic --gold-analysis --output-root <path>`，可用重复的
   `--sample-id` 进行专项诊断；该入口只薄调用同一 analysis owner，不复制验证或改变默认 `report` gate。
   `tools/verify accuracy` 继续负责完整 release detection gate。
+- 边界特征研究使用 `tools/verify diagnostic --gold-boundary-features --axes HW --output-root <new-root>`。
+  黄金只限定离线窗口，不修改 reference 或参与 Runtime 选边；同 source SHA 的全部 count task 一起绑定。
+  依据保留 `directly_visible`、`visible_content_limit` 与 `human_width_estimate` 的区别，平移窗口只是未裁决
+  比较，不能自动标为负例。测量参数和原生像素归一化由 `tools/regression/gold_boundary_features.py` 独占。
 - 同一分析按 source SHA 去重验证 runtime 物理先验，并分别统计同源与跨 source 的 W/H、separator gap、
   pitch，以及 scan-canvas/profile 和 top/bottom corridor。黄金红线是人工确认、尽量贴近该 source 真实
   有效成像边界的最内侧可接受基准，基本可作为 source aperture 的真实尺寸观测；因此它可以校准物理

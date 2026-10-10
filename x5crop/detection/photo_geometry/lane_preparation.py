@@ -6,7 +6,6 @@ from dataclasses import replace
 import math
 
 from ...configuration.model import DetectionConfiguration, ResolvedSlotCount
-from ...domain import FiniteInterval
 from ...formats import OUTPUT_PROTECTION_SPEC
 from ..source_core import SourceLaneEvidence
 from .axis_layout import axis_interval, coordinate_count, source_axes
@@ -19,10 +18,7 @@ from .corridors import (
 from .coarse_strip_support import observe_coarse_strip_support
 from .template_coarse_sides import coarse_enclosing_binding as _coarse_enclosing_binding, register_coarse_side_facts
 from .exterior_region_measurement import measure_exterior_region
-from .coarse_enclosing_model import (
-    CoarseEnclosingTrack,
-    CoarseSharedDirection,
-)
+from .coarse_enclosing_model import CoarseSharedDirection
 from .measurement_model import (
     PhotoBoundaryMeasurementField,
     PhotoBoundaryMeasurementSet,
@@ -72,7 +68,7 @@ from .template_cross import (
     calibrate_source_frame_height,
     fit_template_cross,
 )
-from .template_cross_model import CrossRoleBinding, TemplateCrossInput
+from .template_cross_model import TemplateCrossInput
 from .template_contact import observe_contact_edges
 from .template_overlap import observe_overlap_edge_pairs
 from .template_model import (
@@ -89,7 +85,6 @@ from .template_phase import (
 from .template_phase_model import (
     GlobalLatticeAuthorityEvidence,
     PhaseFailureKind,
-    PhaseFitResult,
     PhaseFitStatus,
     TemplatePhaseInput,
 )
