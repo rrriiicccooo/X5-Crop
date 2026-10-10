@@ -103,9 +103,9 @@ class DependencyInstallerContractTest(unittest.TestCase):
                 (
                     "imagecodecs",
                     "imagecodecs",
-                    "2026.8.16",
+                    "2026.10.10",
                     "imagecodecs",
-                    "2026.8.16",
+                    "2026.10.10",
                     None,
                 ),
                 ("pillow", "PIL", "12.3.0", "Pillow", "12.3.0", "pillow"),
