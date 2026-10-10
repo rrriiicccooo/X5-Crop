@@ -2645,14 +2645,16 @@ def fit_template_phase_candidate_with_adjacency_relations(
         phase_input,
     )
     if normal.status != PhaseFitStatus.RESOLVED or normal.best is None:
+        # Source W is measured immediately after this handoff. Its typed
+        # facts must describe the restored native fit, not the empty result.
+        normal = retain_pre_local_phase_proposal(
+            normal,
+            prior=pre_local_proposal,
+        )
         assessed = _attach_selected_candidate_authorities(
             normal,
             phase_input,
             directly_observed_ordinals=(),
-        )
-        assessed = retain_pre_local_phase_proposal(
-            assessed,
-            prior=pre_local_proposal,
         )
         return TemplatePhaseCandidateCompetition(assessed, ())
     assert normal.best is not None
@@ -2791,14 +2793,14 @@ def fit_template_phase_candidate_with_adjacency_relations(
         adjusted,
         phase_input,
     )
+    adjusted = retain_pre_local_phase_proposal(
+        adjusted,
+        prior=normal,
+    )
     assessed = _attach_selected_candidate_authorities(
         adjusted,
         phase_input,
         directly_observed_ordinals=directly_observed_ordinals,
-    )
-    assessed = retain_pre_local_phase_proposal(
-        assessed,
-        prior=normal,
     )
     return TemplatePhaseCandidateCompetition(
         assessed,

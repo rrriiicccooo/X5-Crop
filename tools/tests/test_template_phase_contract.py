@@ -44,9 +44,12 @@ from x5crop.detection.photo_geometry.template_model import (
 )
 from x5crop.detection.photo_geometry.template_frame_width import (
     apply_placement_source_frame_width,
+    calibrate_source_frame_width,
     SourceFrameWidthAuthority,
     SourceFrameWidthAuthorityPlacementScope,
 )
+from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
+from x5crop.formats import FramePhysicalSpec
 from x5crop.detection.photo_geometry.template_overlap import (
     observe_overlap_edge_pairs,
 )
@@ -3229,6 +3232,53 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         self.assertIsNone(not_retained.best)
         self.assertIsNone(not_retained.retained_proposal_basis)
+
+    def test_restored_proposal_measures_width_before_final_eligibility(self) -> None:
+        spec = template(2)
+        observations = tuple(
+            edge(f"restored-width:{index}", coordinate)
+            for index, coordinate in enumerate((40.0, 140.0, 160.0, 260.0))
+        )
+        phase_input = TemplatePhaseInput(
+            observations=observations,
+            separator_bands=(),
+            template=spec,
+            scale_px_per_mm=None,
+            holder_span_px=FiniteInterval(0.0, 300.0),
+            phase_authority_px=FiniteInterval.exact(40.0),
+            sequence_measurement_sets=(phase_sequence_measurement(
+                "restored-width-complete", FiniteInterval(0.0, 300.0),
+            ),),
+        )
+
+        def reject_local(result, *_args, **_kwargs):
+            return replace(
+                result, best=None, runner_up=None,
+                status=PhaseFitStatus.UNRESOLVED,
+                failure_kind=PhaseFailureKind.FIXED_TEMPLATE_MISMATCH,
+                ambiguity_reason="local counterevidence rejects eligibility",
+                winner_basis=None, direct_role_binding_authority=None,
+                global_lattice_authority=None,
+            )
+
+        with patch.object(phase_owner, "_refine_selected_roles_with_candidate_elimination",
+                          side_effect=reject_local):
+            candidate = fit_template_phase_candidate_with_adjacency_relations(phase_input)
+        result = candidate.result
+        source = SourceScanGeometry.create(
+            FramePhysicalSpec(10.0, 24.0, None),
+            width_scale_px_per_mm=PositiveInterval.exact(10.0),
+            height_scale_px_per_mm=PositiveInterval.exact(10.0),
+        )
+        _, width = calibrate_source_frame_width(source, result, observations)
+
+        self.assertIsNotNone(result.direct_role_binding_authority)
+        self.assertEqual(width.state, EvidenceState.SUPPORTED)
+        self.assertEqual(width.placement_scope,
+                         SourceFrameWidthAuthorityPlacementScope.RETAINED_UNRESOLVED_PROPOSAL)
+        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(result.failure_kind, PhaseFailureKind.FIXED_TEMPLATE_MISMATCH)
+        self.assertIsNone(result.winner_basis)
 
     def test_residual_counterevidence_retains_bounded_phase_proposal(
         self,

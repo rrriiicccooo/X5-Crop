@@ -63,6 +63,9 @@ reasons for inspection. Reports do not change crop coordinates or approval condi
 use development ranking scores to select crops.
 If the primary cannot form a complete crop but the runner already has a complete proposal, the report retains that
 runner for inspection with the original blocking reasons.
+When a native proposal's complete protection envelope cannot fit in the fixed box, it retains the fitted photograph
+position for inspection. The report preserves the full protection envelope and failed budget, which blocks automatic
+output of that proposal.
 
 Holder fill is assessed only after placement by asking whether another W fits beyond either outer. It never searches
 for or centers a placement. Both lanes of 135-dual must be complete.

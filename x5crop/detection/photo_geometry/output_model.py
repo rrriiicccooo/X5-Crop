@@ -405,7 +405,8 @@ def fixed_output_rectangle(
 ) -> ConvexPolygon:
     """Choose position within the containment interval; never change size.
 
-    If containment is impossible, keep a fixed proposal for Review.
+    If containment is impossible, retain the fitted position for Review.
+    The complete mandatory footprint still blocks the output budget.
     """
     visible = visible_mandatory_footprint(mandatory, source_extent)
     left, top, right, bottom = _polygon_bounds(visible)
@@ -415,7 +416,7 @@ def fixed_output_rectangle(
     centers = []
     for minimum, maximum, dimension, target in zip((left, top), (right, bottom), dimensions, preferred, strict=True):
         lower, upper = maximum - dimension / 2.0, minimum + dimension / 2.0
-        centers.append(min(max(target, lower), upper) if lower <= upper else (minimum + maximum) / 2.0)
+        centers.append(min(max(target, lower), upper) if lower <= upper else target)
     cx, cy = centers
     dx, dy = dimensions[0] / 2.0, dimensions[1] / 2.0
     return convex_hull(((cx - dx, cy - dy), (cx + dx, cy - dy),

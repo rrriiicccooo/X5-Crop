@@ -726,7 +726,9 @@ source pitch、base relation、direct separator refit、双候选 local completi
   refinement 必须使用 format 编译的完整物理 W interval，不能用正在受检验的 fitted Grid W 过滤自己的
   反证；source-wide 与跨高度联合 edge 优先尝试唯一闭合，不能唯一时仍保留全部注册观察参与冲突判断。
   共同 W 的校准先验从模板生成时即生效；可靠配对形成后，不论 retained proposal 是否已取得 placement
-  资格，唯一 `SourceFrameWidthAuthority` 都可以从局部直接事实测量该 source 的 W。测量、消费与自动输出
+  资格，唯一 `SourceFrameWidthAuthority` 都可以从局部直接事实测量该 source 的 W。恢复 pre-local
+  proposal 后，先按恢复的 native binding 重评直接角色、lattice 与 coverage，再测量 W；不能用恢复前
+  空 fit 的权限摘要跳过已存在的直接事实。原 phase failure、runner 与资格阻断继续保留。测量、消费与自动输出
   是三个职责：远处 coverage、全局 phase/rank 或另一角色的反证不得抹去已可靠测得的局部宽度。它有两类
   基础闭合：至少两张具有独立直接双边的完整 Frame 形成 `independent_complete_frames`；或全部保留的
   direct-role 坐标系统已使 `(phase,W,pitch)` 达到 rank 3 时，把同一线性系统对 W 的有界投影记录为
@@ -1669,7 +1671,9 @@ requested H = 1.1 × source H
 `width_axis` 与 `sequence_direction` 明确横竖布局及 START/END 归属。单份 native 输出先使用
 canonical frame 包围框中心，再把中心限制到能够包含全部可见 mandatory 的区间。
 对于轴尺寸 D、可见需求 [a,b]，中心区间为 `[b-D/2, a+D/2]`；无可行区间时仍保留固定尺寸
-proposal，中心取需求中点，并由包含检查产生 `direct_use_budget_exceeded`，不得扩大框。
+proposal，该轴保留原 canonical frame 中心，不用不确定性包络中点改写已拟合的位置；完整 mandatory
+原样保留，由包含检查产生 `direct_use_budget_exceeded`，不得扩大框或取得输出资格。共同输出没有单一
+canonical frame 中心，仍使用完整可见需求中点。
 
 `DirectUseBudgetAssessment` 只证明内容包含。每边保存从固定窗口中心到可见 mandatory
 最远点的非负 `required_extent_px`、该轴固定半尺寸 `available_extent_px` 和 `within_limit`。

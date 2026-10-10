@@ -1662,6 +1662,49 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         self.assertFalse(top.within_limit)
 
+    def test_uncontainable_axis_keeps_fitted_position_and_full_protection(self) -> None:
+        placement = _placement()
+        original = output_footprint_from_template_placement(
+            placement,
+            project_format_placement(placement),
+            lane=_lane(),
+            lane_ordinal=1,
+            layout="horizontal",
+        )
+        canonical = original.envelope.canonical_source_footprint
+        center = (
+            (min(x for x, _ in canonical) + max(x for x, _ in canonical)) / 2.0,
+            (min(y for _, y in canonical) + max(y for _, y in canonical)) / 2.0,
+        )
+        # Asymmetric uncertainty extends far past one side of the fitted
+        # photograph. It is a failed protection budget, not a new position.
+        mandatory = convex_hull(((0.0, 100.0), (400.0, 100.0),
+                                 (400.0, 200.0), (0.0, 200.0)))
+        extent = WorkspaceExtent(1000, 1000)
+        requested = fixed_output_rectangle(
+            original.fixed_size, original.width_axis, mandatory, extent,
+            preferred_center=center,
+        )
+        output = replace(
+            original,
+            mandatory_source_footprint=mandatory,
+            requested_source_footprint=requested,
+            required_source_footprint=requested,
+            sampling_authority_box=Box(0, 0, 1000, 1000),
+            source_extent=extent,
+            saturation_facts=(),
+        )
+
+        self.assertAlmostEqual(
+            (min(x for x, _ in requested) + max(x for x, _ in requested)) / 2.0,
+            center[0],
+        )
+        self.assertEqual(output.mandatory_source_footprint, mandatory)
+        self.assertEqual(
+            template_direct_use_budget_assessment(placement, output).state,
+            EvidenceState.CONTRADICTED,
+        )
+
     def test_local_cross_departure_is_retained_in_output_budget(self) -> None:
         template = _template(1)
         sequence = _sequence(template)
