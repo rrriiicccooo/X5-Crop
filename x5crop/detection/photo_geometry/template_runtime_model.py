@@ -887,6 +887,24 @@ class TemplatePlacementProposal:
             raise ValueError("proposal features must describe its retained placement")
 
 
+def source_lane_proposal(
+    primary: TemplatePlacementProposal,
+    alternatives: tuple[TemplatePlacementProposal, ...],
+    *,
+    runner_id: str | None,
+) -> TemplatePlacementProposal:
+    """Reference existing complete geometry without changing its eligibility."""
+
+    if primary.state == TemplateProposalState.GENERATED:
+        return primary
+    return next(
+        (item for item in alternatives
+         if item.placement_id == runner_id
+         and item.state == TemplateProposalState.GENERATED),
+        primary,
+    )
+
+
 @dataclass(frozen=True)
 class TemplateSourceProposal:
     """Source-level completeness of all lane-local pre-Gate proposals."""
@@ -983,6 +1001,13 @@ class TemplateLaneReconstruction:
     @property
     def common_h_output(self) -> CommonHOutput | None:
         return self.placement_competition.common_h_output
+
+    @property
+    def source_proposal(self) -> TemplatePlacementProposal:
+        return source_lane_proposal(
+            self.placement_proposal, self.alternative_placement_proposals,
+            runner_id=self.placement_competition.runner_up_placement_id,
+        )
 
     def __post_init__(self) -> None:
         if not self.lane_id or self.prepared.lane.domain.lane_id != self.lane_id:
@@ -1237,8 +1262,8 @@ class PhotoGeometryDetectionResult:
         if proposal.lane_ids != lane_ids:
             raise ValueError("source proposal lane order disagrees with result")
         proposal_ids = tuple(
-            item.placement_proposal.placement_id
-            if item.placement_proposal.state == TemplateProposalState.GENERATED
+            item.source_proposal.placement_id
+            if item.source_proposal.state == TemplateProposalState.GENERATED
             else None
             for item in self.lane_reconstructions
         )

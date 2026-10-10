@@ -893,13 +893,21 @@ def _source_proposal_outputs(
     report: dict[str, object],
 ) -> tuple[dict[str, object], ...]:
     geometry = report["photo_geometry"]
-    if geometry["source_placement_proposal"]["state"] != "generated":
+    source = geometry["source_placement_proposal"]
+    if source["state"] != "generated":
         return ()
-    return tuple(
-        output
-        for lane in geometry["lanes"]
-        for output in lane["placement_proposal"]["output_footprints"]
-    )
+    outputs = []
+    for lane, placement_id in zip(geometry["lanes"], source["placement_ids"], strict=True):
+        retained = (lane["placement_proposal"], *lane["alternative_placement_proposals"])
+        proposal = next(
+            (item for item in retained if item["placement_id"] == placement_id
+             and item["state"] == "generated"),
+            None,
+        )
+        if proposal is None:
+            raise ValueError("source proposal references an unavailable lane placement")
+        outputs.extend(proposal["output_footprints"])
+    return tuple(outputs)
 
 
 def _gold_frame_diagnostics(

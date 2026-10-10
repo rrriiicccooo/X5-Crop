@@ -138,7 +138,7 @@ def selection_summary(detection: FinalDetection) -> str:
     )
     vetoes = sum(len(item.content_veto_facts) for item in lanes)
     proposed = sum(
-        item.placement_proposal.state.value == "generated" for item in lanes
+        item.source_proposal.state.value == "generated" for item in lanes
     )
     sequence_envelopes = {
         (
@@ -146,7 +146,7 @@ def selection_summary(detection: FinalDetection) -> str:
             len(output.envelope.global_lattice_constraint_ids),
         )
         for lane in lanes
-        for output in lane.placement_proposal.output_footprints
+        for output in lane.source_proposal.output_footprints
     }
     envelope_summary = (
         "NONE"

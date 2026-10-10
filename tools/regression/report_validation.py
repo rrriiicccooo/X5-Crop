@@ -3841,9 +3841,15 @@ def _validate_geometry(
             ):
                 raise ValueError("alternative proposal identity or slot count is invalid")
         lane_ids.append(lane_id)
+        source_lane_proposal = next(
+            (item for item in (proposal, *alternatives)
+             if item["state"] == "generated"
+             and item["placement_id"] in {proposal["placement_id"], runner_id}),
+            proposal,
+        )
         lane_proposal_ids.append(
-            proposal["placement_id"]
-            if proposal["state"] == "generated"
+            source_lane_proposal["placement_id"]
+            if source_lane_proposal["state"] == "generated"
             else None
         )
         outputs = lane["output_footprints"]

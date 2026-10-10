@@ -1801,6 +1801,13 @@ format/count 有效且固定模板已编译
 或自动批准，不应反向删除已经形成的 proposal；坐标非法、format/count 无效或根本无法形成完整 footprint
 时才保留 typed proposal unavailable。
 
+Source proposal 按 lane 引用已经物化的完整几何：优先保留 canonical primary；primary 无完整 footprint 而
+canonical runner 已完整时，引用该 runner 的原 placement ID。Lane 的 primary、runner、原失败与各自
+黄金标签保持原身份，每份 retained placement 仍恰好物化一次；conditional proposal 不替代 canonical
+runner。任一 lane 无完整方案或共享 source geometry 不可用时，source proposal 仍为 unavailable。
+普通 report、Debug 的 proposal 完整性摘要与黄金比较读取这份明确引用；它不选择 winner、不取得
+eligibility、不增加投影或预算计算，也不改变 selected-only 输出复用 primary 的合同。
+
 长轴 phase 同样遵守这项分层。`template_phase.py` 中的 `PhaseRetainedProposalBasis` 只记录一份有 absolute
 anchor、已形成全部 role 坐标，但尚无 eligibility 的完整 phase proposal。它可以是随后被 local evidence
 否决的 pre-local direct/calibrated-Grid fit，也可以是全部有界 fit 都超过 direct residual compatibility

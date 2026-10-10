@@ -61,6 +61,8 @@ Touching or overlapping photos use the same checks and remain in review when evi
 Debug Analysis shows the primary, runner, and retained proposals with their evidence, coverage results, and blocking
 reasons for inspection. Reports do not change crop coordinates or approval conditions. The current Runtime does not
 use development ranking scores to select crops.
+If the primary cannot form a complete crop but the runner already has a complete proposal, the report retains that
+runner for inspection with the original blocking reasons.
 
 Holder fill is assessed only after placement by asking whether another W fits beyond either outer. It never searches
 for or centers a placement. Both lanes of 135-dual must be complete.

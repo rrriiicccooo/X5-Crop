@@ -68,6 +68,7 @@ from .template_runtime_model import (
     TemplateProposalState,
     TemplateSourceProposal,
     TemplateSourceSelection,
+    source_lane_proposal,
 )
 from .template_selection import (
     select_lane_template_placement,
@@ -504,7 +505,13 @@ def reconstruct_photo_geometry(
             )
         )
 
-    lane_proposals = tuple(item.proposal for item in provisional)
+    lane_proposals = tuple(
+        source_lane_proposal(
+            item.proposal, item.alternatives,
+            runner_id=item.competition.runner_up_placement_id,
+        )
+        for item in provisional
+    )
     source_proposal_failure = next(
         (
             item.failure

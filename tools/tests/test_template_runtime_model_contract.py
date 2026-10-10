@@ -78,6 +78,7 @@ from x5crop.detection.photo_geometry.template_runtime_model import (
     TemplateProposalState,
     TemplateSourceProposal,
     TemplateSourceSelection,
+    source_lane_proposal,
 )
 from x5crop.domain import Box, EvidenceState, WorkspaceExtent
 def _unresolved_result() -> PhotoGeometryDetectionResult:
@@ -149,6 +150,64 @@ def _unresolved_result() -> PhotoGeometryDetectionResult:
 
 
 class TemplateRuntimeModelContractTest(unittest.TestCase):
+    def test_complete_runner_forms_source_proposal_without_acquiring_eligibility(self) -> None:
+        prepared = _prepared()
+        template = placement_template(1)
+        runner = placement_compose(
+            template, placement_sequence(template),
+            placement_cross(template, direction=placement_direction()), lane_id="lane:0",
+        )
+        failure = failure_fact(GateGap.PHASE_TEMPLATE_MISMATCH)
+        competition = TemplatePlacementCompetition(
+            (runner,), None, runner.placement_id, EvidenceState.UNAVAILABLE, failure,
+        )
+        content = ContentOccupancyObservationSet("lane:0", (), None, None, 0, 0, 0, None, None)
+        owner = "x5crop.detection.photo_geometry.detector."
+        with ExitStack() as stack:
+            for name, value in (
+                ("resolve_output_slots", ResolvedOutputSlots((1,))),
+                ("prepare_template_lane", prepared),
+                ("_shared_geometry", runner.source_scan_geometry),
+                ("_placements", (None, runner, None)),
+                ("select_lane_template_placement", competition),
+            ):
+                stack.enter_context(patch(owner + name, return_value=value))
+            result = reconstruct_photo_geometry(
+                make_native_test_field(np.zeros((322, 2320), dtype=np.uint8), "horizontal"),
+                (prepared.lane,), (content,), layout="horizontal",
+                configuration=get_detection_configuration("135"), resolved_slot_count=None,
+            )
+        lane = result.lane_reconstructions[0]
+        self.assertEqual(result.source_placement_proposal.state, TemplateProposalState.GENERATED)
+        self.assertEqual(result.source_placement_proposal.placement_ids, (runner.placement_id,))
+        self.assertEqual(lane.placement_proposal.state, TemplateProposalState.UNAVAILABLE)
+        self.assertIs(lane.source_proposal, lane.alternative_placement_proposals[0])
+        self.assertEqual(lane.placement_competition, competition)
+        self.assertEqual(result.source_placement_selection.failure, failure)
+        self.assertIs(lane.prepared.phase_competition, prepared.phase_competition)
+        self.assertIsNone(lane.selected_placement)
+        self.assertEqual(result.output_footprints, ())
+        self.assertEqual(lane.direct_use_budget_assessments, ())
+        self.assertEqual(lane.work.proposal_projection_count, 1)
+        self.assertEqual(lane.work.proposal_output_evaluation_count, 1)
+        with self.assertRaisesRegex(ValueError, "source proposal disagrees"):
+            replace(result, source_placement_proposal=replace(
+                result.source_placement_proposal, placement_ids=("unknown:placement",),
+            ))
+
+    def test_source_proposal_keeps_primary_and_excludes_incomplete_or_conditional_runner(self) -> None:
+        from tools.tests.template_runtime_test_support import retained_proposal_fixture
+
+        primary = retained_proposal_fixture("primary")
+        runner = retained_proposal_fixture("runner")
+        missing = retained_proposal_fixture("primary", generated=False)
+        unavailable_runner = retained_proposal_fixture("runner", generated=False)
+        conditional = retained_proposal_fixture("conditional")
+        self.assertIs(source_lane_proposal(primary, (runner,), runner_id="runner"), primary)
+        self.assertIs(source_lane_proposal(missing, (runner,), runner_id="runner"), runner)
+        self.assertIs(source_lane_proposal(missing, (unavailable_runner, conditional), runner_id="runner"), missing)
+        self.assertIs(source_lane_proposal(missing, (conditional,), runner_id=None), missing)
+
     def test_failed_primary_projection_withholds_otherwise_selected_winner(self) -> None:
         prepared = _prepared()
         template = placement_template(1)

@@ -1018,12 +1018,14 @@ class GoldAccuracyContractTest(unittest.TestCase):
         }
         report = {
             "photo_geometry": {
-                "source_placement_proposal": {"state": "generated"},
+                "source_placement_proposal": {"state": "generated", "placement_ids": ["primary"]},
                 "lanes": [
                     {
                         "placement_proposal": {
+                            "placement_id": "primary", "state": "generated",
                             "output_footprints": [_output(gold)]
                         },
+                        "alternative_placement_proposals": [],
                         "output_footprints": [],
                     }
                 ]
@@ -1032,6 +1034,25 @@ class GoldAccuracyContractTest(unittest.TestCase):
 
         self.assertTrue(validate_proposal_coverage(record, report))
         self.assertFalse(validate_selected_candidate_coverage(record, report))
+
+    def test_source_proposal_compares_the_referenced_complete_runner(self) -> None:
+        gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
+        record = {"sample_id": "runner-proposal", "format_id": "120-66",
+                  "confirmed_geometry": _directional_geometry(gold)}
+        runner = {"placement_id": "runner", "state": "generated", "output_footprints": [_output(gold)]}
+        report = {"photo_geometry": {
+            "source_placement_proposal": {"state": "generated", "placement_ids": ["runner"]},
+            "lanes": [{"placement_proposal": {"placement_id": None, "state": "unavailable", "output_footprints": []},
+                       "alternative_placement_proposals": [runner], "output_footprints": []}],
+        }}
+        self.assertTrue(validate_proposal_coverage(record, report))
+        self.assertFalse(validate_selected_candidate_coverage(record, report))
+        runner["output_footprints"] = [_output([[0.0, 0.0], [560.0, 0.0], [560.0, 559.0], [0.0, 559.0]])]
+        with self.assertRaisesRegex(ValueError, "proposal crosses user-confirmed inward baseline"):
+            validate_proposal_coverage(record, report)
+        report["photo_geometry"]["source_placement_proposal"]["placement_ids"] = ["unknown"]
+        with self.assertRaisesRegex(ValueError, "unavailable lane placement"):
+            validate_proposal_coverage(record, report)
 
     def test_retained_placements_allow_multiple_gold_positives_and_unknown(self) -> None:
         gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
@@ -1110,12 +1131,14 @@ class GoldAccuracyContractTest(unittest.TestCase):
         }
         report = {
             "photo_geometry": {
-                "source_placement_proposal": {"state": "generated"},
+                "source_placement_proposal": {"state": "generated", "placement_ids": ["primary"]},
                 "lanes": [
                     {
                         "placement_proposal": {
+                            "placement_id": "primary", "state": "generated",
                             "output_footprints": [_output(canonical)]
                         },
+                        "alternative_placement_proposals": [],
                         "output_footprints": [_output(canonical)],
                     }
                 ],
@@ -1138,10 +1161,11 @@ class GoldAccuracyContractTest(unittest.TestCase):
         }
         report = {
             "photo_geometry": {
-                "source_placement_proposal": {"state": "generated"},
+                "source_placement_proposal": {"state": "generated", "placement_ids": ["primary"]},
                 "lanes": [
                     {
                         "placement_proposal": {
+                            "placement_id": "primary", "state": "generated",
                             "output_footprints": [
                                 _output(
                                     [
@@ -1152,7 +1176,8 @@ class GoldAccuracyContractTest(unittest.TestCase):
                                     ]
                                 )
                             ]
-                        }
+                        },
+                        "alternative_placement_proposals": [],
                     }
                 ],
             }
@@ -1173,10 +1198,11 @@ class GoldAccuracyContractTest(unittest.TestCase):
         }
         report = {
             "photo_geometry": {
-                "source_placement_proposal": {"state": "generated"},
+                "source_placement_proposal": {"state": "generated", "placement_ids": ["primary"]},
                 "lanes": [
                     {
                         "placement_proposal": {
+                            "placement_id": "primary", "state": "generated",
                             "output_footprints": [
                                 _output(
                                     [
@@ -1187,7 +1213,8 @@ class GoldAccuracyContractTest(unittest.TestCase):
                                     ]
                                 )
                             ]
-                        }
+                        },
+                        "alternative_placement_proposals": [],
                     }
                 ]
             }
