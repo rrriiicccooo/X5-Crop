@@ -8,6 +8,7 @@ from unittest.mock import patch
 import numpy as np
 
 from x5crop.detection.photo_geometry import template_phase as phase_owner
+from x5crop.detection.photo_geometry import template_phase_candidates as candidate_owner
 from tools.tests.template_test_support import (
     calibrated_nominal_grid_prior,
     phase_edge as edge,
@@ -3849,6 +3850,91 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(result.best.phase_support_count, 4)
         self.assertEqual(result.runner_up.phase_support_count, 4)
         self.assertAlmostEqual(result.runner_up.residual_sum_px, 9.0)
+
+    def test_terminal_refit_closes_new_outliers_without_rematching(self) -> None:
+        compiled = template(6)
+        observations = tuple(
+            edge(f"cascade:{index}", 10.0 + 120.0 * index + departure)
+            for index, departure in enumerate((0.0, 0.0, 0.0, 3.0, 6.0, 7.0))
+        )
+        facts = _facts(observations)
+        matches = tuple(
+            (compiled.roles[2 * index], fact)
+            for index, fact in enumerate(facts)
+        )
+        seed = candidate_owner._PhaseSeed(
+            10.0, 120.0, ((0, observations[0].observation_id),),
+        )
+        arguments = (
+            seed, facts, (), compiled.roles, compiled, (),
+            FiniteInterval.exact(120.0), None, None,
+        )
+        with patch.object(candidate_owner, "_match_roles", return_value=matches), patch.object(
+            candidate_owner, "_linear_fit", wraps=candidate_owner._linear_fit,
+        ) as linear:
+            result = candidate_owner._fit_seed(*arguments)
+        self.assertEqual(linear.call_count, 4)
+        assert result is not None
+        self.assertTrue(result.residual_compatible)
+        self.assertEqual(
+            tuple(identity for identity in result.fit.binding_observation_ids if identity is not None),
+            tuple(item.observation_id for item in observations[:4]),
+        )
+        self.assertEqual(
+            tuple(binding.canonical_position_px for binding in result.fit.role_bindings if binding),
+            tuple(item.canonical_position_px for item in observations[:4]),
+        )
+        with patch.object(candidate_owner, "_match_roles", return_value=matches[:4]):
+            independent = candidate_owner._fit_seed(*arguments)
+        assert independent is not None
+        self.assertEqual(result, independent)
+
+        # The second outlier was inside the first fit's threshold. It cannot
+        # be removed after refitting when it is part of the required identity.
+        required = replace(seed, required_bindings=((8, observations[4].observation_id),))
+        with patch.object(candidate_owner, "_match_roles", return_value=matches), patch.object(
+            candidate_owner, "_linear_fit", wraps=candidate_owner._linear_fit,
+        ) as linear:
+            rejected = candidate_owner._fit_seed(required, *arguments[1:])
+        self.assertIsNone(rejected)
+        self.assertEqual(linear.call_count, 3)
+
+    def test_terminal_refit_rejects_an_empty_retained_set(self) -> None:
+        compiled = template(1)
+        facts = _facts((edge("empty-trim", 10.0),))
+        with patch.object(
+            candidate_owner, "_match_roles", return_value=((compiled.roles[0], facts[0]),),
+        ):
+            result = candidate_owner._fit_seed(
+                candidate_owner._PhaseSeed(0.0, 120.0), facts, (), compiled.roles,
+                compiled, (), FiniteInterval.exact(120.0), FiniteInterval.exact(0.0), None,
+            )
+        self.assertIsNone(result)
+
+    def test_terminal_refit_closes_after_all_matching_passes(self) -> None:
+        compiled = template(6)
+        observations = tuple(
+            edge(f"bounded-cascade:{index}", 10.0 + 120.0 * index + departure)
+            for index, departure in enumerate((0.0, 0.0, 0.0, 3.0, 6.0, 7.0))
+        )
+        facts = _facts(observations)
+        matches = tuple((compiled.roles[2 * index], fact) for index, fact in enumerate(facts))
+        reversed_matches = tuple(reversed(matches))
+        with patch.object(
+            candidate_owner, "_match_roles", side_effect=(matches, reversed_matches, matches, reversed_matches),
+        ), patch.object(candidate_owner, "_linear_fit", wraps=candidate_owner._linear_fit) as linear:
+            result = candidate_owner._fit_seed(
+                candidate_owner._PhaseSeed(10.0, 120.0), facts, (), compiled.roles,
+                compiled, (), FiniteInterval.exact(120.0), None, None,
+            )
+        self.assertEqual(linear.call_count, 6)
+        self.assertLessEqual(linear.call_count, len(matches) + 3)
+        assert result is not None
+        self.assertTrue(result.residual_compatible)
+        self.assertEqual(
+            tuple(identity for identity in result.fit.binding_observation_ids if identity is not None),
+            tuple(item.observation_id for item in observations[:4]),
+        )
 
     def test_fixed_width_pair_rejects_nearer_interior_end_edge(self) -> None:
         observations = (

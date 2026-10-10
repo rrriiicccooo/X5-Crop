@@ -1914,25 +1914,31 @@ def _fit_seed(
             pitch_px=pitch,
         )
         prefixes = adjacency_prefix_positions(relations, template.count)
-    residual_limit = max(3.0, width * 0.035)
-    retained = tuple(
-        (role, anchor)
-        for role, anchor in matches
-        if abs(
-            anchor.coordinate_px
-            - template_role_position(
-                role,
-                phase=phase,
-                width=width,
-                pitch=pitch,
-                direction=template.direction,
-                prefixes=prefixes,
+    # Refitting a retained subset can expose another outlier. Close that
+    # subset monotonically. Each refit deletes at least one optional binding;
+    # at most R - 1 terminal solves follow the four matching solves. No role
+    # rematch, new seed, native coordinate, or authority is introduced.
+    for _trim_iteration in range(len(matches)):
+        residual_limit = max(3.0, width * 0.035)
+        retained = tuple(
+            (role, anchor)
+            for role, anchor in matches
+            if abs(
+                anchor.coordinate_px
+                - template_role_position(
+                    role,
+                    phase=phase,
+                    width=width,
+                    pitch=pitch,
+                    direction=template.direction,
+                    prefixes=prefixes,
+                )
             )
+            <= residual_limit
         )
-        <= residual_limit
-    )
-    if retained and retained != matches:
-        if not retains_seed_identity(retained):
+        if retained == matches:
+            break
+        if not retained or not retains_seed_identity(retained):
             return None
         phase, width, pitch, retained_basis = _linear_fit(
             retained,

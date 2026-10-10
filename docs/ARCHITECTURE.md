@@ -647,6 +647,17 @@ Grid 始终可以生成一个待检验的默认 placement，但它不能仅凭�
   权限，不能改变 lineage、ordinal、winner 或 runner。受约束后仍存在另一离散
   ordinal/edge 解释时保留 runner 并产生 `discrete_phase_ambiguous`；连续最小二乘不能充当 best-score。
 
+初次 seed 拟合的终端 outlier 筛选使用当前几何的 `max(3 px, 3.5% W)`。剔除后重拟合必须再次核查
+同一阈值，直到保留子集闭合；每轮只能删除原 optional binding，不重新匹配已退出的 identity，不改变
+required seed、投影权限 ceiling 或 template 的硬区间。空子集或必需 binding 被剔除时，该 seed 无解。
+Matching 最多 4 次；若初始匹配数为 M，每次终端重拟合至少删除一个 binding，因此最多 M−1 次
+终端求解、M 次子集扫描。每个 seed 的 `_linear_fit` 上界从固定 5 次改为 `R+3`（R 为已编译 role
+数），完整 pass 仍受原 seed 和 role 上限约束；求解处理最多 R 行，N_seed 份候选的工作上界为
+`O(N_seed × R²)`，N_seed 不超过原 `H × max(6,R)`。
+不增加 seed、role lookup、TIFF query 或 retained runner；投影的获权 anchor 全部属于 required，不能
+借该筛选删除已授权坐标。循环耗尽后不可能有未核查子集：每轮严格缩小，空集会立即拒绝，非空闭合集
+会立即结束，不截断候选前缀。
+
 每次直接或 calibrated Grid 重拟合后，residual compatibility 都按当前 `PHASE_ANCHOR` 的 native coordinate
 相对当前 model role 的绝对残差均值重评，阈值保持 `max(2 px, 1.5% W)`，只吸收既有数值 epsilon。
 不能继承旧几何的合格或不合格标志；`LOCAL_REFINEMENT` 不参与该全局均值，也不按 evidence group 去重。

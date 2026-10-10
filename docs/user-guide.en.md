@@ -67,6 +67,8 @@ reasons for inspection. Reports do not change crop coordinates or approval condi
 use development ranking scores to select crops.
 If the primary cannot form a complete crop but the runner already has a complete proposal, the report retains that
 runner for inspection with the original blocking reasons.
+Position fitting rechecks the remaining boundaries after removing outliers. Required boundaries and position
+interpretations remain subject to the same evidence checks.
 When a native proposal's complete protection envelope cannot fit in the fixed box, it retains the fitted photograph
 position for inspection. The report preserves the full protection envelope and failed budget, which blocks automatic
 output of that proposal.
