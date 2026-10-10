@@ -39,7 +39,10 @@
 - comparator manifest：`911e23f8e60b72c037f02c0f8f8498ab8f90f4b263020174d6dca21603a848f9`
 - development cohort：`daaea2ad49564616342051253c8fa67c4922a260d0dcc92f0d187f7b2eb10288`
 
-工程检查、黄金准确性与发布资格分别验收；死代码和文档清理不重标旧黄金或性能 receipt。
+最近工程验收绑定 `e4638fea`：正常 pre-push Hook 完成 `tools/verify full`，1120 项测试中 1118 项通过、
+2 项 Windows 专属跳过，依赖、编译、cohort、shell 与版本检查通过。证据为
+`Test/gold_analysis/cleanup_20261010/engineering_e4638fea.log`，该实现已推送到 `origin/main`。
+工程检查、黄金准确性与发布资格分别验收；清理不重标旧黄金或性能 receipt。
 
 ## 保留的人工局部事实
 
