@@ -1477,12 +1477,9 @@ def fit_template_phase(
             for record in incompatible
             for item in (record[0],)
             if item.fit.phase_support_count > best.fit.phase_support_count
-            and not (
-                _intervals_overlap(
-                    item.fit.phase_lattice_fit.absolute_phase_interval_px,
-                    best.fit.phase_lattice_fit.absolute_phase_interval_px,
-                )
-                and _intervals_overlap(
+            and (
+                not _same_continuous_placement(item.fit, best.fit)
+                or not _intervals_overlap(
                     FiniteInterval(
                         item.fit.pitch_fit.pitch_interval_px.minimum,
                         item.fit.pitch_fit.pitch_interval_px.maximum,

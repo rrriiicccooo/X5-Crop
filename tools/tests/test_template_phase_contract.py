@@ -3324,6 +3324,59 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertIsNone(unanchored.best)
         self.assertIsNone(unanchored.retained_proposal_basis)
 
+    def test_overlapping_marginals_do_not_hide_a_distinct_residual_runner(
+        self,
+    ) -> None:
+        spec = template(3)
+        complete = placement_sequence(spec)
+        sparse = placement_sequence(spec, missing=(1, 2, 3, 4, 5))
+        sparse = replace(
+            sparse,
+            phase_lattice_fit=replace(
+                sparse.phase_lattice_fit,
+                absolute_phase_interval_px=FiniteInterval(-100.0, 300.0),
+            ),
+        )
+        observations = tuple(
+            edge(f"seed:{index}", position)
+            for index, position in enumerate(complete.model_role_positions_px)
+        )
+        for distinct in (False, True):
+            with self.subTest(distinct_coordinate_identity=distinct):
+                binding = complete.role_bindings[0]
+                assert binding is not None
+                rival = replace(
+                    complete,
+                    role_bindings=(
+                        replace(binding, observation_id=ObservationId("other:start"))
+                        if distinct else binding,
+                        *complete.role_bindings[1:],
+                    ),
+                )
+                calls = 0
+
+                def fitted_seed(*args, **kwargs):
+                    nonlocal calls
+                    calls += 1
+                    return (
+                        _BoundFit(sparse, True)
+                        if calls == 1 else _BoundFit(rival, False)
+                    )
+
+                with patch.object(phase_owner, "_fit_seed", side_effect=fitted_seed):
+                    result = fit_template_phase(observations, spec)
+
+                self.assertGreater(calls, 1)
+                self.assertIs(result.best, sparse)
+                if distinct:
+                    self.assertEqual(result.status, PhaseFitStatus.AMBIGUOUS)
+                    self.assertIsNone(result.winner_basis)
+                    self.assertIs(result.runner_up, rival)
+                    self.assertIn("higher-support", result.ambiguity_reason or "")
+                else:
+                    self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+                    self.assertIsNone(result.runner_up)
+
     def test_equal_bindings_preserve_each_full_protection_interval(self) -> None:
         observations = tuple(
             edge(f"dedup-role:{index}", coordinate)

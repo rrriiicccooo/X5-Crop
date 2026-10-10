@@ -93,6 +93,7 @@ def _separator_band_from_edges(
     boundary_axis: BoundaryAxis,
     frame_width_px: PositiveInterval,
     measurement_basis: SeparatorBandMeasurementBasis,
+    adjacent_trace_coordinates_px: tuple[int, ...],
 ) -> SeparatorBandObservation | None:
     """Build one directly observed band from two physical edge families."""
 
@@ -108,7 +109,11 @@ def _separator_band_from_edges(
     if polarity is None:
         return None
     shared_traces = tuple(
-        sorted(set(left.trace_coordinates_px) & set(right.trace_coordinates_px))
+        sorted(
+            set(left.trace_coordinates_px)
+            & set(right.trace_coordinates_px)
+            & set(adjacent_trace_coordinates_px)
+        )
     )
     support_region_count = independent_spatial_support_count(
         profile.trace_coordinates_px,
@@ -326,18 +331,20 @@ def build_format_separator_bands(
         raise TypeError("separator frame-width authority must be positive")
     runs_by_id = {run.run_id: run for run in profile.runs}
     edges_by_run_id = {edge.run_id: edge for edge in ordered}
-    candidate_pairs: set[tuple[str, str]] = set()
+    candidate_pairs: dict[tuple[str, str], list[int]] = {}
     for trace in profile.trace_coordinates_px:
-        trace_runs = tuple(
-            run
-            for run in profile.runs_at_trace(trace)
-            if run.run_id in edges_by_run_id
-        )
+        trace_runs = profile.runs_at_trace(trace)
         for left_run, right_run in zip(trace_runs, trace_runs[1:]):
-            left = edges_by_run_id[left_run.run_id]
-            right = edges_by_run_id[right_run.run_id]
+            left = edges_by_run_id.get(left_run.run_id)
+            right = edges_by_run_id.get(right_run.run_id)
+            if left is None or right is None:
+                # An unfitted registered transition still separates the two
+                # fitted edge families on this trace.
+                continue
             if (left.polarity, right.polarity) in {(-1, 1), (1, -1)}:
-                candidate_pairs.add((left.run_id, right.run_id))
+                candidate_pairs.setdefault((left.run_id, right.run_id), []).append(
+                    trace
+                )
 
     values: dict[str, SeparatorBandObservation] = {}
     for left_run_id, right_run_id in sorted(candidate_pairs):
@@ -360,6 +367,9 @@ def build_format_separator_bands(
             boundary_axis=boundary_axis,
             frame_width_px=frame_width_px,
             measurement_basis=measurement_basis,
+            adjacent_trace_coordinates_px=tuple(
+                candidate_pairs[(left_run_id, right_run_id)]
+            ),
         )
         if candidate is not None:
             values[str(candidate.observation_id)] = candidate

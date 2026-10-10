@@ -431,6 +431,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
     def _separator_material_fixture(
         *,
         non_uniform_traces: tuple[int, ...] = (),
+        intervening_traces: tuple[int, ...] = (),
     ):
         traces = (0, 50, 100)
         pixels = np.full((101, 240), 20, dtype=np.uint8)
@@ -474,15 +475,20 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
             str(item.transition_id): item for item in transition_values
         }
 
-        def run(side: str, coordinate: float):
+        def run(
+            side: str,
+            coordinate: float,
+            support_traces: tuple[int, ...] = traces,
+        ):
             identities = tuple(
-                ObservationId(f"transition:{side}:{trace}") for trace in traces
+                ObservationId(f"transition:{side}:{trace}")
+                for trace in support_traces
             )
             return ProfileRun(
                 run_id=f"run:{side}",
                 coordinate_interval_px=FiniteInterval.exact(coordinate),
                 transition_ids=identities,
-                trace_coordinates_px=traces,
+                trace_coordinates_px=support_traces,
                 role_hint=None,
                 qualified_anchor_roles=(),
                 support_fraction=1.0,
@@ -493,6 +499,11 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
 
         left_run = run("left", 100.0)
         right_run = run("right", 119.0)
+        runs = (left_run, right_run)
+        if intervening_traces:
+            # This registered transition has no successfully fitted edge. It
+            # must still block the outer pair on the traces where it appears.
+            runs = (left_run, run("interior", 110.0, intervening_traces), right_run)
 
         def edge(value: ProfileRun, polarity: int):
             interval = value.coordinate_interval_px
@@ -522,7 +533,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
             "sequence",
             pixels.shape[1],
             traces,
-            (left_run, right_run),
+            runs,
         )
         bands = build_format_separator_bands(
             profile,
@@ -545,6 +556,34 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
                 item.state == SeparatorMaterialRegionState.SUPPORTED
                 for item in band.material_regions
             )
+        )
+
+    def test_separator_material_uses_only_traces_with_adjacent_boundaries(
+        self,
+    ) -> None:
+        (band,) = self._separator_material_fixture(intervening_traces=(50,))
+
+        self.assertEqual(band.material_support_region_count, 2)
+        self.assertEqual(
+            tuple(item.region_index for item in band.material_regions),
+            (0, 2),
+        )
+        self.assertEqual(
+            set(map(str, band.transition_ids)),
+            {
+                "transition:left:0",
+                "transition:right:0",
+                "transition:left:100",
+                "transition:right:100",
+            },
+        )
+
+    def test_unfitted_intermediate_transition_blocks_separator_authority(
+        self,
+    ) -> None:
+        self.assertEqual(
+            self._separator_material_fixture(intervening_traces=(0, 50)),
+            (),
         )
 
     def test_non_uniform_photo_interior_light_band_cannot_be_source_wide(
