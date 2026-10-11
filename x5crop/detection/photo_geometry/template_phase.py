@@ -102,6 +102,10 @@ from .template_native_retention import (
     select_native_phase_retention,
 )
 from .template_source_domain import PhaseSourceDomain, source_clipped_terminal_roles
+from .template_source_clipped import (
+    carry_source_clipped_phase_retention,
+    select_source_clipped_phase_retention,
+)
 from .template_nominal_grid_model import (
     CalibratedNominalGridEvidence,
     CalibratedNominalGridPrior,
@@ -1253,6 +1257,11 @@ def fit_template_phase(
     native_retention = select_native_phase_retention(
         projection_records, template=template,
     )
+    source_clipped_retention = select_source_clipped_phase_retention(
+        projection_records, template=template, source_domain=source_domain,
+    )
+    if not source_clipped_retention.record_scan_count:
+        source_clipped_retention = None
 
     def respects_phase_anchor_authority_ceiling(
         candidate: _BoundFit,
@@ -1430,6 +1439,7 @@ def fit_template_phase(
                 direct_ids,
                 PhaseFailureKind.FIXED_TEMPLATE_MISMATCH,
                 _native_phase_retention=native_retention,
+                _source_clipped_phase_retention=source_clipped_retention,
             )
         raw_compatible = tuple(
             sorted(
@@ -1489,6 +1499,7 @@ def fit_template_phase(
                 best_phase_candidate_authority_projection=best_projection,
                 runner_phase_candidate_authority_projection=runner_projection,
                 _native_phase_retention=native_retention,
+                _source_clipped_phase_retention=source_clipped_retention,
             )
         # A bounded, anchored fit remains useful as a pre-Gate proposal even
         # when every complete interpretation carries direct residual
@@ -1565,6 +1576,7 @@ def fit_template_phase(
                     runner_projection
                 ),
                 _native_phase_retention=native_retention,
+                _source_clipped_phase_retention=source_clipped_retention,
             )
         return PhaseFitResult(
             template,
@@ -1576,6 +1588,7 @@ def fit_template_phase(
             direct_ids,
             PhaseFailureKind.FIXED_TEMPLATE_MISMATCH,
             _native_phase_retention=native_retention,
+            _source_clipped_phase_retention=source_clipped_retention,
         )
     contradictory_runner_record = max(
         (
@@ -1692,6 +1705,7 @@ def fit_template_phase(
         best_phase_candidate_authority_projection=best_projection,
         runner_phase_candidate_authority_projection=runner_projection,
         _native_phase_retention=native_retention,
+        _source_clipped_phase_retention=source_clipped_retention,
         _terminal_diagnostic=(
             None
             if terminal_diagnostic_record is None
@@ -2732,7 +2746,10 @@ def _carry_native_phase_diagnostic(
     """Carry the independent Review record only within one template identity."""
 
     if result.status == PhaseFitStatus.BOUND_EXCEEDED:
-        return replace(result, _native_phase_retention=None)
+        return replace(
+            result, _native_phase_retention=None,
+            _source_clipped_phase_retention=None,
+        )
     if result.template != prior.template:
         return result
     retention = carry_native_phase_retention(
@@ -2741,7 +2758,18 @@ def _carry_native_phase_diagnostic(
         template=result.template,
         registered_direct_observation_ids=result.registered_direct_observation_ids,
     )
-    return replace(result, _native_phase_retention=retention)
+    source_retention = carry_source_clipped_phase_retention(
+        prior._source_clipped_phase_retention,
+        result._source_clipped_phase_retention,
+        template=result.template,
+        registered_direct_observation_ids=result.registered_direct_observation_ids,
+    )
+    if not source_retention.record_scan_count:
+        source_retention = None
+    return replace(
+        result, _native_phase_retention=retention,
+        _source_clipped_phase_retention=source_retention,
+    )
 
 
 def _retain_empty_terminal_diagnostic_runner(result: PhaseFitResult) -> PhaseFitResult:

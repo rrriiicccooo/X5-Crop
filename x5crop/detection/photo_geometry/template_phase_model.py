@@ -32,6 +32,7 @@ from .template_nominal_grid_model import (
     CalibratedNominalGridPrior,
 )
 from .template_source_domain import PhaseSourceDomain
+from .template_source_clipped import SourceClippedPhaseRetention
 
 
 @dataclass(frozen=True)
@@ -1060,8 +1061,29 @@ class PhaseFitResult:
     _native_phase_retention: NativePhaseRetention | None = field(
         default=None, repr=False, compare=False,
     )
+    _source_clipped_phase_retention: SourceClippedPhaseRetention | None = field(
+        default=None, repr=False, compare=False,
+    )
 
     def __post_init__(self) -> None:
+        from .template_source_clipped import SourceClippedPhaseRetention
+
+        source_retention = self._source_clipped_phase_retention
+        if source_retention is not None:
+            if not isinstance(source_retention, SourceClippedPhaseRetention):
+                raise TypeError("source-clipped phase retention is invalid")
+            if self.status == PhaseFitStatus.BOUND_EXCEEDED or (
+                source_retention.record_scan_count
+                and source_retention.template != self.template
+            ):
+                raise ValueError("source-clipped retention leaves its registered template")
+            for source_diagnostic in source_retention.diagnostics:
+                if source_diagnostic.fit.template != self.template or not {
+                    identity
+                    for identity in source_diagnostic.fit.binding_observation_ids
+                    if identity is not None
+                }.issubset(self.registered_direct_observation_ids):
+                    raise ValueError("source-clipped retention escaped registered observations")
         diagnostic = self._terminal_diagnostic
         if diagnostic is not None and (
             not isinstance(diagnostic, _TerminalPhaseDiagnostic)

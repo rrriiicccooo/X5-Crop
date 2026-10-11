@@ -886,6 +886,7 @@ def prepare_template_lane(
                 runner_up=None,
                 status=PhaseFitStatus.BOUND_EXCEEDED,
                 _native_phase_retention=None,
+                _source_clipped_phase_retention=None,
                 ambiguity_reason=(
                     "separator lattice hypothesis bound exceeded"
                 ),
