@@ -73,6 +73,9 @@ Spacing proposed by two separator bands also requires an independent, verified p
 a successful weak-edge match does not grant crop authority.
 Position fitting rechecks the remaining boundaries after removing outliers. Required boundaries and position
 interpretations remain subject to the same evidence checks.
+Direct boundaries spanning the registered scan area may propose a position from their measured physical line range.
+Statistical residuals remain in the report, and additional edge matching keeps its existing limits. Role, photo
+position, and full protection are still checked; insufficient evidence keeps the source in review.
 When a native proposal's complete protection envelope cannot fit in the fixed box, it retains the fitted photograph
 position for inspection. The report preserves the full protection envelope and failed budget, which blocks automatic
 output of that proposal.

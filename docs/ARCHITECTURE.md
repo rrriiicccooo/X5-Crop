@@ -365,6 +365,12 @@ Registered measurement 一次生成 role-free、候选无关、数量有界的�
 该联合集合在 reference 上的完整投影，不能保留某个方向却删除其可行位置。
 原 `line_connection_allowance` 不扩 raw physical 约束，不把空集改成闭合；残差恢复分支仍无方向
 权限，也不产生 physical region。一个 region 仍只是一份相关测量，不增加角色权限或独立 rank。
+Phase 的 required seed binding 可消费这份闭合事实：只有 `DIRECT_TRACE`、覆盖三个独立区域且按
+原 registered trace lattice 连续跨幅的 family，才可在非空 `PhysicalLineRegion` 证明下测试自己的
+seed，不因统计代表 residual 超过连线距离而提前删除。Optional matching 仍遵守原 residual 门槛，
+不让额外粗糙边缘改写其它 anchor 的假说；局部短线、aggregate、宽缓材料与无物理证明的恢复线
+不享有该豁免。Native full interval、角色资格、全局 phase residual、独立权限、完整保护及 Gate
+继续分别核查，不以物理直线闭合代替照片边界权限。该路径复用原 seed 与拟合上限。
 实现从一条原始 interval 与原 slope 上限得到有界初始矩形，顺序裁剪全部 `2N` 半平面；
 每边最多 `2N+4` 顶点，时间 `O(N²)`、存储 `O(N)`，与原斜率可行性检查同阶，不增加 query、
 TIFF 读取、候选或 LP。闭区间比较仅沿用 `1e-9 px` 数值容差，防止大坐标相消丢掉相切顶点。

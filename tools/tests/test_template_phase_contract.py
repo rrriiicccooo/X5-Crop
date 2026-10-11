@@ -23,6 +23,7 @@ from x5crop.detection.photo_geometry.model import (
     BoundaryEvidenceState,
     BoundaryRole,
 )
+from x5crop.detection.photo_geometry.line_observations import PhysicalLineRegion
 from x5crop.detection.photo_geometry.observation_types import (
     BoundaryEdgeMeasurementBasis,
     BoundaryEdgeObservation,
@@ -823,6 +824,67 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
 
         self.assertEqual(matches, ())
+
+    def test_physical_line_seed_requires_complete_direct_family(
+        self,
+    ) -> None:
+        compiled = template(1)
+        for closed, spanning, basis in (
+            (False, True, BoundaryEdgeMeasurementBasis.DIRECT_TRACE),
+            (True, True, BoundaryEdgeMeasurementBasis.DIRECT_TRACE),
+            (True, False, BoundaryEdgeMeasurementBasis.DIRECT_TRACE),
+            (True, True, BoundaryEdgeMeasurementBasis.BROAD_MATERIAL_TRACE),
+        ):
+            for required in (False, True):
+                with self.subTest(
+                    closed=closed, spanning=spanning, basis=basis,
+                    required=required,
+                ):
+                    observation = replace(
+                        edge("rough:start", 100.0),
+                        qualified_anchor_roles=(BoundaryRole.START,),
+                        fit_residual_px=12.0,
+                        canonical_direction_degrees=0.0,
+                        fit_direction_interval_degrees=FiniteInterval.exact(0.0),
+                        full_direction_interval_degrees=FiniteInterval.exact(0.0),
+                        trace_coordinates_px=(
+                            tuple(range(21)) if spanning else (0, 10, 20)
+                        ),
+                        measurement_basis=basis,
+                        physical_line_region=(
+                            PhysicalLineRegion(10.0, ((100.0, 0.0),))
+                            if closed else None
+                        ),
+                    )
+                    matches = _match_roles(
+                        _facts(
+                            (observation,),
+                            registered_trace_positions_px=tuple(range(21)),
+                        ),
+                        compiled.roles,
+                        (),
+                        phase=100.0,
+                        width=100.0,
+                        pitch=120.0,
+                        direction=1,
+                        prefixes=(0.0,),
+                        frame_width=compiled.frame_width_px,
+                        fit_residual_limit_px=7.5,
+                        required_bindings=(
+                            ((0, observation.observation_id),) if required else ()
+                        ),
+                    )
+                    accepted = (
+                        closed and spanning and required
+                        and basis == BoundaryEdgeMeasurementBasis.DIRECT_TRACE
+                    )
+                    self.assertEqual(bool(matches), accepted)
+                    if accepted:
+                        self.assertEqual(
+                            matches[0][1].line_evidence.physical_line_region,
+                            observation.physical_line_region,
+                        )
+                        self.assertEqual(matches[0][1].fit_residual_px, 12.0)
 
     def test_separator_roles_cannot_form_an_unobserved_mixed_pair(self) -> None:
         observations = (

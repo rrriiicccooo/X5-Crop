@@ -646,6 +646,10 @@ def fit_template_phase(
     facts = _facts(
         observations,
         separator_support_ids=separator_support_ids,
+        registered_trace_positions_px=(
+            sequence_measurement_sets[0].query.trace_positions_px
+            if sequence_measurement_sets else ()
+        ),
     )
     direct = tuple(item for item in facts if item.direct)
     separator_pairs = _separator_pair_facts(
@@ -1973,6 +1977,10 @@ def _project_late_local_candidate(
     facts = _facts(
         qualified_observations,
         separator_support_ids=separator_support_ids,
+        registered_trace_positions_px=(
+            phase_input.sequence_measurement_sets[0].query.trace_positions_px
+            if phase_input.sequence_measurement_sets else ()
+        ),
     )
     direct = tuple(item for item in facts if item.direct)
     separator_pairs = _separator_pair_facts(

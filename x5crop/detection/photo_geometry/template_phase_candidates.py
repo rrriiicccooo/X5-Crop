@@ -16,8 +16,18 @@ from ...domain import (
     ObservationId,
     PositiveInterval,
 )
-from .model import BoundaryRole
-from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
+from .model import (
+    BoundaryRole,
+    PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+    SPATIAL_SUPPORT_REGION_COUNT,
+    independent_spatial_support_count,
+)
+from .observation_types import (
+    BoundaryEdgeMeasurementBasis,
+    BoundaryEdgeObservation,
+    SeparatorBandObservation,
+)
+from .trace_support import source_spanning_continuous_trace_support
 from .separator_material import normal_separator_material_bands
 from .template_contact import ContactEdgeObservation
 from .template_overlap import OverlapEdgePairObservation
@@ -87,6 +97,7 @@ class _AnchorFact:
     line_evidence: SequenceRoleLineEvidence | None
     polarity: int
     qualified_anchor_roles: tuple[BoundaryRole, ...]
+    source_spanning_direct_line: bool = False
 
     @property
     def coordinate_px(self) -> float:
@@ -190,6 +201,7 @@ def _facts(
     observations: Sequence[BoundaryEdgeObservation],
     *,
     separator_support_ids: dict[ObservationId, ObservationId] | None = None,
+    registered_trace_positions_px: tuple[float, ...] = (),
 ) -> tuple[_AnchorFact, ...]:
     separator_support_ids = separator_support_ids or {}
     result: list[_AnchorFact] = []
@@ -230,6 +242,19 @@ def _facts(
                 ),
                 polarity=observation.polarity,
                 qualified_anchor_roles=observation.qualified_anchor_roles,
+                source_spanning_direct_line=(
+                    observation.measurement_basis
+                    == BoundaryEdgeMeasurementBasis.DIRECT_TRACE
+                    and independent_spatial_support_count(
+                        registered_trace_positions_px,
+                        observation.trace_coordinates_px,
+                    ) == SPATIAL_SUPPORT_REGION_COUNT
+                    and source_spanning_continuous_trace_support(
+                        registered_trace_positions_px,
+                        observation.trace_coordinates_px,
+                        spec=PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+                    )
+                ),
             )
         )
     if len({item.observation_id for item in result}) != len(result):
@@ -1222,6 +1247,20 @@ def _match_roles(
         if isinstance(item, ContactRelation)
     }
 
+    def seed_line_fit_compatible(item: _AnchorFact) -> bool:
+        # A complete direct family can test its own seed from the raw physical
+        # proof. Optional matching keeps the statistical connection contract:
+        # a rough line must not silently rewrite another anchor's hypothesis.
+        return (
+            fit_residual_limit_px is None
+            or item.fit_residual_px <= fit_residual_limit_px
+            or (
+                item.source_spanning_direct_line
+                and item.line_evidence is not None
+                and item.line_evidence.physical_line_region is not None
+            )
+        )
+
     def candidates(
         role: TemplateRole,
         expected: float,
@@ -1314,10 +1353,7 @@ def _match_roles(
         )
         if (
             abs(anchor.coordinate_px - expected) > corridor
-            or (
-                fit_residual_limit_px is not None
-                and anchor.fit_residual_px > fit_residual_limit_px
-            )
+            or not seed_line_fit_compatible(anchor)
             or (anchor.role_index is not None and anchor.role_index != role_index)
             or (
                 anchor.qualified_anchor_roles
