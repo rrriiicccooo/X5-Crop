@@ -288,6 +288,53 @@ class IntrinsicPhaseReviewRefitContractTests(unittest.TestCase):
         self.assertIsNone(incompatible.failure)
         self.assertFalse(incompatible.diagnostic.residual_compatible)
 
+    def test_validation_only_fact_must_be_registered_in_phase_input_ledger(self):
+        phase_input, original = self._fixture()
+        foreign_id = ObservationId("foreign:validation-only")
+        foreign_binding = replace(
+            original.fit.role_bindings[2],
+            observation_id=foreign_id,
+        )
+        foreign_fit = self._unsafe_fit_replace(
+            original.fit,
+            role_bindings=tuple(
+                foreign_binding if index == 2 else binding
+                for index, binding in enumerate(original.fit.role_bindings)
+            ),
+        )
+        foreign_facts = tuple(
+            replace(fact, observation_id=foreign_id)
+            if fact.role_index == 2
+            else fact
+            for fact in original.projection.input_direct_role_authority.facts
+        )
+        foreign_authority = replace(
+            original.projection.input_direct_role_authority,
+            facts=foreign_facts,
+        )
+        foreign_projection = replace(
+            original.projection,
+            input_direct_role_authority=foreign_authority,
+        )
+        foreign_original = replace(
+            original,
+            fit=foreign_fit,
+            projection=foreign_projection,
+        )
+
+        with patch(
+            "x5crop.detection.photo_geometry.template_intrinsic_review_refit._phase_candidates._fit_seed"
+        ) as fitter:
+            result = build_intrinsic_phase_refit(phase_input, foreign_original)
+
+        self.assertEqual(
+            result.failure.kind,
+            IntrinsicPhaseRefitFailureKind.ORIGINAL_LEDGER_UNAVAILABLE,
+        )
+        self.assertEqual(result.work.fit_seed_call_count, 0)
+        self.assertEqual(result.work.fit_iteration_bound, 0)
+        fitter.assert_not_called()
+
     def test_full_interval_counterevidence_is_retained_without_center_comparison(self):
         phase_input, original = self._fixture(contradicted=False)
         success = build_intrinsic_phase_refit(phase_input, original)
@@ -330,6 +377,22 @@ class IntrinsicPhaseReviewRefitContractTests(unittest.TestCase):
         self.assertIsNone(result.failure)
         with self.assertRaises(ValueError):
             replace(result.work, fit_seed_call_count=2)
+        with self.assertRaises(ValueError):
+            replace(result.work, fit_seed_call_count=0, fit_iteration_bound=4)
+        with self.assertRaises(ValueError):
+            replace(
+                result,
+                work=replace(
+                    result.work,
+                    fit_seed_call_count=1,
+                    fit_iteration_bound=0,
+                ),
+            )
+        with self.assertRaises(ValueError):
+            replace(
+                result,
+                work=replace(result.work, role_count=result.work.role_count - 1),
+            )
         assert result.diagnostic is not None
         with self.assertRaises(ValueError):
             replace(

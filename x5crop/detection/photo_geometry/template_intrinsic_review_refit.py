@@ -117,6 +117,10 @@ class IntrinsicPhaseRefitWorkReceipt:
             raise ValueError("intrinsic phase refit repeated _fit_seed")
         if self.fit_iteration_bound > _FIT_ITERATION_BOUND:
             raise ValueError("intrinsic phase refit fitter bound is too large")
+        if self.fit_seed_call_count == 0 and self.fit_iteration_bound != 0:
+            raise ValueError(
+                "intrinsic phase refit without _fit_seed must have zero bound"
+            )
         if self.counterevidence_check_count > self.validation_only_fact_count:
             raise ValueError("intrinsic phase refit counterevidence exceeds ledger")
         if self.fit_seed_call_count and self.fit_iteration_bound != _FIT_ITERATION_BOUND:
@@ -308,6 +312,9 @@ class IntrinsicPhaseRefitResult:
                 != len(self.diagnostic.validation_only_facts)
                 or self.work.counterevidence_check_count
                 != len(self.diagnostic.validation_only_facts)
+                or self.work.fit_seed_call_count != 1
+                or self.work.fit_iteration_bound != _FIT_ITERATION_BOUND
+                or self.work.role_count != len(self.diagnostic.fit.role_bindings)
             )
         ):
             raise ValueError("intrinsic phase refit result is invalid")
@@ -413,6 +420,9 @@ def build_intrinsic_phase_refit(
         )
 
     original_facts = original.projection.input_direct_role_authority.facts
+    registered_direct_observation_ids = frozenset(
+        observation.observation_id for observation in phase_input.observations
+    )
     fact_identities: set[tuple[int, ObservationId]] = set()
     for fact in original_facts:
         identity = (fact.role_index, fact.observation_id)
@@ -421,6 +431,14 @@ def build_intrinsic_phase_refit(
                 original,
                 IntrinsicPhaseRefitFailureKind.ORIGINAL_LEDGER_UNAVAILABLE,
                 "native diagnostic authority ledger is not role-indexed",
+                observation_count=len(phase_input.observations),
+                role_count=role_count,
+            )
+        if fact.observation_id not in registered_direct_observation_ids:
+            return _failed(
+                original,
+                IntrinsicPhaseRefitFailureKind.ORIGINAL_LEDGER_UNAVAILABLE,
+                "native diagnostic fact leaves the registered phase observations",
                 observation_count=len(phase_input.observations),
                 role_count=role_count,
             )
