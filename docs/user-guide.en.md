@@ -76,6 +76,10 @@ When more direct boundaries support a different placement whose residual is inco
 runner and the ambiguity reason for inspection.
 Diagnostic runners retain their original failure reasons. Displaying an interpretation does not grant it crop or
 automatic output authority.
+If later checks fail and the runner slot is empty, the report can retain an earlier generated diagnostic proposal.
+A late refit that exceeds the existing residual limit retains the position before projection for review. When a
+short-strip material-spacing hypothesis fails independent position checks, the original template proposal remains
+available for inspection and the hypothesis cannot authorize automatic output.
 
 Holder fill is assessed only after placement by asking whether another W fits beyond either outer. It never searches
 for or centers a placement. Both lanes of 135-dual must be complete.

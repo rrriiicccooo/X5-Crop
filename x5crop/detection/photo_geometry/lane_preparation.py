@@ -91,6 +91,7 @@ from .template_phase_model import (
 from .template_pitch import (
     calibrate_template_source_pitch,
     close_separator_phase_hypothesis,
+    resolve_separator_pitch_hypothesis,
 )
 from .template_placement import retained_cross_support_domain_groups_px
 from .source_geometry import SourceScanGeometry
@@ -686,12 +687,9 @@ def prepare_template_lane(
         scale_px_per_mm=scales.width_axis_px_per_mm,
         holder_span_px=width_authority,
     )
-    # The broad provisional template only brings direct material bands into a
-    # finite neighbourhood. Once two independent separator locations establish
-    # one source pitch, that measured pitch must replace the format gap seed
-    # before the narrowed-W template is rebound. Requiring the nominal gap to
-    # survive first would make the template prove the measurement it is meant
-    # only to locate.
+    # The broad template locates material bands. Test the proposed short-strip
+    # pitch in its own compiled neighbourhood before committing it; an
+    # independent closure must survive without the format gap proving it.
     pitch_calibration = calibrate_template_source_pitch(
         template,
         provisional_phase,
@@ -726,6 +724,14 @@ def prepare_template_lane(
             pitch_calibration,
             proposed_base_phase,
         )
+        pitch_calibration = resolve_separator_pitch_hypothesis(
+            pitch_calibration,
+            proposed_base_phase,
+            original_template=measurement_plan.template_spec,
+        )
+        template = pitch_calibration.template
+        registered_pitch_authority_ids = pitch_calibration.pitch_observation_ids
+    unclosed_separator_pitch_hypothesis = pitch_calibration.pitch_hypothesis_withheld
     if proposed_base_phase is not None and base_phase_authority is not None:
         base_phase = proposed_base_phase
     else:
@@ -749,9 +755,10 @@ def prepare_template_lane(
     # the search space or letting an inferred role delete its own runner.
     # Measuring local W does not require global rank or remote coverage;
     # those remain placement-consumption and eligibility assessments.
-    phase_search_authority = close_separator_phase_hypothesis(
-        pitch_calibration,
-        base_phase,
+    phase_search_authority = (
+        None
+        if unclosed_separator_pitch_hypothesis
+        else close_separator_phase_hypothesis(pitch_calibration, base_phase)
     )
     phase_authority_observation_ids = (
         ()
@@ -868,6 +875,28 @@ def prepare_template_lane(
         phase_input,
         source_frame_width_authority=source_frame_width_authority,
     )
+    if (
+        unclosed_separator_pitch_hypothesis
+        and phase.status != PhaseFitStatus.BOUND_EXCEEDED
+    ):
+        phase = replace(
+            phase,
+            status=(
+                PhaseFitStatus.UNRESOLVED
+                if phase.status == PhaseFitStatus.RESOLVED else phase.status
+            ),
+            failure_kind=(
+                PhaseFailureKind.ADJACENCY_TOPOLOGY_UNRESOLVED
+                if phase.status == PhaseFitStatus.RESOLVED else phase.failure_kind
+            ),
+            ambiguity_reason=(
+                ("" if phase.ambiguity_reason is None else phase.ambiguity_reason + "; ")
+                + "two-separator pitch hypothesis lacks independent ordinal "
+                "and phase closure: "
+                + ", ".join(map(str, pitch_calibration.direct_separator_ids))
+            ),
+            winner_basis=None,
+        )
     phase = account_prior_phase_fit(phase, base_phase)
     phase = account_prior_phase_fit(phase, provisional_phase)
     phase = replace(

@@ -99,6 +99,7 @@ from x5crop.detection.photo_geometry.template_phase_model import (
     GlobalLatticeAuthorityEvidence,
     GlobalLatticeAuthorityBasis,
     PhaseCandidateAuthorityProjection,
+    PhaseCandidateProjectedBinding,
     PhaseCandidateProjectionBasis,
     PhaseCandidateProjectionOutcome,
     PhaseFailureKind,
@@ -106,6 +107,7 @@ from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseRetainedProposalBasis,
     PhaseWinnerBasis,
     TemplatePhaseInput,
+    _TerminalPhaseDiagnostic,
 )
 from x5crop.detection.photo_geometry.template_placement import (
     retained_cross_support_domain_groups_px,
@@ -2964,6 +2966,137 @@ class TemplatePhaseContractTest(unittest.TestCase):
             reason="validation-only line left the direct lattice envelope",
         )
         self.assertFalse(counterevidence.eligible)
+
+    def test_late_incompatible_refit_retains_input_and_failed_projection(self) -> None:
+        spec = template(3)
+        observations = (*self._phase_candidate_group("late-residual", 0.0),
+            replace(edge("late-residual:last-start", 280.0),
+                qualified_anchor_roles=(BoundaryRole.START,), polarity=1))
+        weak = replace(edge("late-residual:weak-end", 381.0),
+            qualified_anchor_roles=(BoundaryRole.END,), polarity=-1,
+            trace_coordinates_px=(10, 20), support_fraction=2.0 / 3.0,
+            continuous_support_fraction=2.0 / 3.0, fit_residual_px=20.0)
+        registered = (*observations, weak)
+        measurement = (phase_sequence_measurement(
+            "late-residual-measurement", FiniteInterval(0.0, 480.0)),)
+        raw = fit_template_phase(registered, spec,
+            scale_px_per_mm=PositiveInterval.exact(100.0),
+            holder_span_px=FiniteInterval(0.0, 400.0))
+        assert raw.best is not None
+        weak_fact = _facts((weak,))[0]
+        binding = SequenceRoleBinding(
+            use=SequenceBindingUse.LOCAL_REFINEMENT,
+            observation_id=weak.observation_id, evidence_group_id=weak.observation_id,
+            canonical_position_px=weak.canonical_position_px,
+            fit_position_interval_px=weak.fit_position_interval_px,
+            full_position_interval_px=weak.full_position_interval_px,
+            line_evidence=weak_fact.line_evidence,
+        )
+        refined = replace(raw, best=replace(raw.best,
+            role_bindings=(*raw.best.role_bindings[:5], binding),
+            model_role_intervals_px=(*raw.best.model_role_intervals_px[:5],
+                FiniteInterval(379.0, 382.0)),
+            model_full_role_intervals_px=(*raw.best.model_full_role_intervals_px[:5],
+                FiniteInterval(379.0, 382.0)),
+        ))
+        self.assertEqual(refined.best.role_bindings[5].use, SequenceBindingUse.LOCAL_REFINEMENT)
+        authority = assess_direct_role_binding_authority(refined.best, registered, (), measurement)
+        self.assertEqual(authority.unsupported_role_indices, (5,))
+        # A real bounded solve keeps every native phase anchor while its mean
+        # residual exceeds 1.5% W, below the 3.5% individual trim threshold.
+        facts = _facts(observations)
+        refit = candidate_owner._fit_seed(
+            candidate_owner._PhaseSeed(43.0, 120.0,
+                tuple((index, binding.observation_id)
+                    for index, binding in enumerate(refined.best.role_bindings)
+                    if binding is not None and binding.use == SequenceBindingUse.PHASE_ANCHOR)),
+            facts, (), spec.roles, spec, (), FiniteInterval.exact(120.0),
+            FiniteInterval.exact(43.0), None,
+        )
+        assert refit is not None
+        self.assertFalse(refit.residual_compatible)
+        projection = PhaseCandidateAuthorityProjection(
+            authority, PhaseCandidateProjectionOutcome.PROJECTED,
+            PhaseCandidateProjectionBasis.DIRECT_RANK_THREE,
+            (PhaseCandidateProjectedBinding(5, weak.observation_id),), 3, None,
+        )
+        phase_input = TemplatePhaseInput(
+            observations=registered, separator_bands=(), template=spec,
+            scale_px_per_mm=None, holder_span_px=None, phase_authority_px=None,
+            calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(spec),
+            sequence_measurement_sets=measurement,
+        )
+        with patch.object(phase_owner, "project_candidate_to_authorized_direct_roles",
+            return_value=(refit, projection)):
+            result = _project_retained_late_local_refinements(
+                refined, phase_input, allow_direct_rank=True)
+        self.assertEqual(result.best, refined.best)
+        self.assertEqual(result.status, PhaseFitStatus.UNRESOLVED)
+        self.assertEqual(result.failure_kind, PhaseFailureKind.FIXED_TEMPLATE_MISMATCH)
+        self.assertIsNone(result.winner_basis)
+        failed = result.best_phase_candidate_authority_projection
+        assert failed is not None
+        self.assertFalse(failed.eligible)
+        self.assertEqual(failed.outcome, PhaseCandidateProjectionOutcome.REFIT_UNAVAILABLE)
+        self.assertEqual(failed.projected_out_bindings, projection.projected_out_bindings)
+
+    def test_late_empty_runner_restores_only_existing_failed_diagnostic(self) -> None:
+        spec = template(2)
+        current_edges = self._phase_candidate_group("current-diagnostic", 0.0)
+        diagnostic_edges = self._phase_candidate_group("terminal-diagnostic", 400.0)
+        current = fit_template_phase(current_edges, spec,
+            holder_span_px=FiniteInterval(0.0, 300.0))
+        terminal = fit_template_phase(diagnostic_edges, spec,
+            holder_span_px=FiniteInterval(400.0, 700.0))
+        assert terminal.best is not None
+        authority = assess_direct_role_binding_authority(
+            terminal.best, diagnostic_edges, (),
+            (phase_sequence_measurement("terminal-measurement", FiniteInterval(0.0, 800.0)),))
+        failed = PhaseCandidateAuthorityProjection(
+            authority, PhaseCandidateProjectionOutcome.REFIT_UNAVAILABLE,
+            None, (), 3, "original terminal failure",
+        )
+        diagnostic = _TerminalPhaseDiagnostic(terminal.best, failed)
+        unresolved = replace(current,
+            registered_direct_observation_ids=tuple(
+                fact.observation_id for fact in _facts((*current_edges, *diagnostic_edges))),
+            status=PhaseFitStatus.UNRESOLVED,
+            failure_kind=PhaseFailureKind.CALIBRATED_NOMINAL_GRID_CONFLICT,
+            ambiguity_reason="later local counterevidence", winner_basis=None,
+            runner_up=None, runner_phase_candidate_authority_projection=None,
+            _terminal_diagnostic=diagnostic,
+        )
+        restored = phase_owner._retain_empty_terminal_diagnostic_runner(unresolved)
+        self.assertEqual(restored.best, unresolved.best)
+        self.assertEqual(restored.runner_up, terminal.best)
+        self.assertIs(restored.runner_phase_candidate_authority_projection, failed)
+        self.assertEqual(restored.failure_kind, unresolved.failure_kind)
+        self.assertEqual(restored.ambiguity_reason, unresolved.ambiguity_reason)
+        self.assertIsNone(restored.winner_basis)
+        self.assertEqual(restored.receipt, unresolved.receipt)
+        self.assertIsNone(restored._terminal_diagnostic)
+        # A real competing runner, a resolved result, and a producer bound
+        # never yield their slot to a failed diagnostic.
+        for protected in (
+            replace(unresolved, runner_up=terminal.best),
+            replace(unresolved, status=current.status, failure_kind=None,
+                ambiguity_reason=None, winner_basis=current.winner_basis),
+            replace(unresolved, status=PhaseFitStatus.BOUND_EXCEEDED, best=None,
+                failure_kind=PhaseFailureKind.HYPOTHESIS_BOUND_EXCEEDED),
+        ):
+            result = phase_owner._retain_empty_terminal_diagnostic_runner(protected)
+            self.assertEqual(result.best, protected.best)
+            self.assertEqual(result.runner_up, protected.runner_up)
+            self.assertEqual(result.status, protected.status)
+            self.assertEqual(result.failure_kind, protected.failure_kind)
+        with self.assertRaisesRegex(ValueError, "registered template"):
+            replace(unresolved, registered_direct_observation_ids=current.registered_direct_observation_ids)
+        with self.assertRaisesRegex(ValueError, "registered template"):
+            replace(unresolved, template=replace(spec, template_id="different-template"))
+        with self.assertRaisesRegex(ValueError, "failed projection"):
+            _TerminalPhaseDiagnostic(terminal.best, replace(failed,
+                outcome=PhaseCandidateProjectionOutcome.UNCHANGED,
+                basis=PhaseCandidateProjectionBasis.DIRECT_BINDINGS, reason=None))
 
     def test_rank_three_fit_uses_nearest_joint_physical_solution(self) -> None:
         matrix = np.asarray(

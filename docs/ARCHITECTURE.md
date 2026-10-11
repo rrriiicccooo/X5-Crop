@@ -188,6 +188,14 @@ rank 不证明联合状态、保护区间、晚期角色走廊或权限来源等
 解释，并携带其原失败 projection。该 pair 始终为 `unresolved`、`winner_basis=None`，不能把终止诊断
 变成 eligible 竞争者，也不替换已占用的物理竞争位置；不增加 fit、runner 上限或像素查询。
 
+同一次 registered phase flow 可将最高原 rank 的一份 terminal record 连同原失败 projection 有界携带到
+local/topology 与最终 lattice 评估之后。仅当最终为 `unresolved`、best 已定位且 runner 为空时，才将其
+原样回填为诊断 runner；不能替换真实竞争、改变原 status/failure/winner 或继承当前 topology、source W
+与直接权限。Template 与 registered observation ledger 必须相同；不同 source 的 flow 不共享该临时记录。
+该 handoff 不属于第三份 retained/output candidate，消费后即释放；正常报告只在回填后按原 runner schema
+显示 fit 和失败 provenance。每 pass 保留记录及其 authority ledger 按 `128R` 数值槽字节计入 peak；
+跨 pass 合并只比较至多两份已有失败记录，仍保留一份，不增加拟合、role lookup 或像素查询。
+
 连续合并可为首选补齐多个局部解释，因此不能把未补全竞争者的当前支持数当作完整支持数。选择 owner
 对全部已生成且 eligible 的候选，按连续合并必需的静态身份及 absolute-phase 区间连通分量计算支持上界：
 anchor 位置取并集，coverage 取最大值，残差下界为零。首选必须依原明确分离条件压过每个离散竞争者的
@@ -662,6 +670,9 @@ Matching 最多 4 次；若初始匹配数为 M，每次终端重拟合至少删
 相对当前 model role 的绝对残差均值重评，阈值保持 `max(2 px, 1.5% W)`，只吸收既有数值 epsilon。
 不能继承旧几何的合格或不合格标志；`LOCAL_REFINEMENT` 不参与该全局均值，也不按 evidence group 去重。
 Report/feature 的总 residual 仍保留自己的既有口径，不拿包含 local 的总量替代 phase compatibility。
+晚期直接投影没有新一轮离散竞争来隔离不合格 refit，因此输出仍超过该残差上限时记录
+`refit_unavailable`，不能消费 `projected` 的 eligibility 或 rank-3 联合包络。投影前已经定位的原 fit
+继续作为诊断几何，原退出 binding、失败原因、Review 与候选次序保留。
 
 Production phase competition 在离散比较前，对每个去重后的 bounded candidate 对称执行
 `DirectRoleBindingAuthority` 和 `PhaseCandidateAuthorityProjection`。`contradicted` 表示直接物理反证，
@@ -740,9 +751,13 @@ source pitch、base relation、direct separator refit、双候选 local completi
 | 受约束后两个离散 fit 均合法且不能等价合并 | 两者各保留自己的参数与证据 | `discrete_phase_ambiguous`，不得强选 |
 - Source pitch 必须由至少两个不同直接 separator 位置或独立同角色 advance 支持。一个 separator
   只能证明自己所在 adjacency。
-- 两个 separator 可以收紧 pitch，但不能用同一对事实自证 absolute phase。短片条中的两点投影
-  只是一项 phase hypothesis；只有该区间内的完整合法 fit 还绑定了不属于这两个 separator 的独立
-  direct support，才可晋升为 phase authority。长片条中的两点还可能跨过一个或多个已测 local advance，
+- 两个 separator 可以提出 pitch，但不能用同一对事实自证照片 ordinal 或 absolute phase。短片条先在
+  该 pitch 编译的模板内执行既有两点 phase hypothesis 检查；只有该区间内的完整合法 fit 还绑定了
+  不属于这两个 separator 的独立 direct support，才提交该 pitch 与 phase authority。独立闭合失败时，
+  `TemplatePitchCalibration.pitch_hypothesis_withheld` 保留原材料 identity 和 hypothesis，pitch observation
+  authority 为空；既有后续 pass 使用原编译模板，不再消费该 hypothesis，且整体保持 Review。已有
+  phase failure 不被覆盖；原本 resolved 的结果记为 `adjacency_topology_unresolved`。Producer bound 不能
+  被当作闭合失败再退回搜索；fit pass、hypothesis、role 与查询上限不增加。长片条中的两点还可能跨过一个或多个已测 local advance，
   只能缩小 pitch 搜索。至少三个独立 material 位置形成周期闭环后，separator lattice 才能自行收紧
   absolute phase；不同解释仍保留为离散 placement。
 - 未标 ordinal 的 separator lattice 只枚举 `直接 band 对 × 有限 ordinal distance`，并在循环前

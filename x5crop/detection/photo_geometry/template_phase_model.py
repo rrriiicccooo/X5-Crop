@@ -686,6 +686,30 @@ class PhaseCandidateAuthorityProjection:
 
 
 @dataclass(frozen=True)
+class _TerminalPhaseDiagnostic:
+    """One already generated failed mapping awaiting an empty Review slot."""
+
+    fit: SequenceFit
+    projection: PhaseCandidateAuthorityProjection
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.fit, SequenceFit)
+            or not isinstance(self.projection, PhaseCandidateAuthorityProjection)
+            or self.projection.eligible
+        ):
+            raise ValueError("terminal phase diagnostic requires a failed projection")
+        for fact in self.projection.input_direct_role_authority.facts:
+            if (
+                not 0 <= fact.role_index < len(self.fit.role_bindings)
+                or self.fit.role_bindings[fact.role_index] is None
+                or self.fit.role_bindings[fact.role_index].observation_id
+                != fact.observation_id
+            ):
+                raise ValueError("terminal diagnostic projection lost its input mapping")
+
+
+@dataclass(frozen=True)
 class PhaseFitResult:
     template: TemplateSpec
     best: SequenceFit | None
@@ -721,8 +745,24 @@ class PhaseFitResult:
     source_frame_width_topology_assessment: (
         SourceFrameWidthTopologyAssessment | None
     ) = None
+    # Transient handoff, not a third retained/output candidate. The report
+    # read model excludes private fields; if consumed, the original fit and
+    # failed projection become the ordinary runner and are reported there.
+    _terminal_diagnostic: _TerminalPhaseDiagnostic | None = field(
+        default=None, repr=False, compare=False,
+    )
 
     def __post_init__(self) -> None:
+        diagnostic = self._terminal_diagnostic
+        if diagnostic is not None and (
+            not isinstance(diagnostic, _TerminalPhaseDiagnostic)
+            or diagnostic.fit.template != self.template
+            or not {
+                identity for identity in diagnostic.fit.binding_observation_ids
+                if identity is not None
+            }.issubset(self.registered_direct_observation_ids)
+        ):
+            raise ValueError("terminal phase diagnostic leaves its registered template")
         if (
             len(set(self.registered_direct_observation_ids))
             != len(self.registered_direct_observation_ids)

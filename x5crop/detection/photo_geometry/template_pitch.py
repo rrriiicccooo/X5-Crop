@@ -30,6 +30,7 @@ class TemplatePitchCalibration:
     pitch_observation_ids: tuple[ObservationId, ...]
     lattice_hypothesis_count: int
     bound_exceeded: bool
+    pitch_hypothesis_withheld: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.template, TemplateSpec):
@@ -78,6 +79,16 @@ class TemplatePitchCalibration:
             or self.direct_separator_ids
         ):
             raise ValueError("bounded-out pitch calibration cannot carry authority")
+        if not isinstance(self.pitch_hypothesis_withheld, bool) or (
+            self.pitch_hypothesis_withheld
+            and (
+                self.phase_hypothesis_px is None
+                or self.phase_authority_px is not None
+                or self.pitch_observation_ids
+                or self.bound_exceeded
+            )
+        ):
+            raise ValueError("withheld pitch hypothesis cannot carry authority")
 
 
 @dataclass(frozen=True)
@@ -103,6 +114,8 @@ def close_separator_phase_hypothesis(
         raise TypeError("separator phase closure requires pitch calibration")
     if not isinstance(phase, PhaseFitResult):
         raise TypeError("separator phase closure requires a phase fit")
+    if calibration.pitch_hypothesis_withheld:
+        return None
     if calibration.phase_authority_px is not None:
         return calibration.phase_authority_px
     hypothesis = calibration.phase_hypothesis_px
@@ -122,6 +135,36 @@ def close_separator_phase_hypothesis(
     ):
         return None
     return hypothesis
+
+
+def resolve_separator_pitch_hypothesis(
+    calibration: TemplatePitchCalibration,
+    proposed_phase: PhaseFitResult,
+    *,
+    original_template: TemplateSpec,
+) -> TemplatePitchCalibration:
+    """Commit a short-strip material pitch only after independent closure."""
+
+    if (
+        proposed_phase.template != calibration.template
+        or original_template.template_id != calibration.template.template_id
+        or original_template.count != calibration.template.count
+        or original_template.direction != calibration.template.direction
+        or original_template.frame_width_px != calibration.template.frame_width_px
+    ):
+        raise ValueError("separator pitch closure crosses template identity")
+    if (
+        calibration.phase_hypothesis_px is None
+        or proposed_phase.status == PhaseFitStatus.BOUND_EXCEEDED
+        or close_separator_phase_hypothesis(calibration, proposed_phase) is not None
+    ):
+        return calibration
+    return replace(
+        calibration,
+        template=original_template,
+        pitch_observation_ids=(),
+        pitch_hypothesis_withheld=True,
+    )
 
 
 def _advance_interval(

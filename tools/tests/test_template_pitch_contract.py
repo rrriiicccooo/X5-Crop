@@ -21,6 +21,11 @@ from x5crop.detection.photo_geometry.template_phase import fit_template_phase
 from x5crop.detection.photo_geometry.template_pitch import (
     calibrate_template_source_pitch,
     close_separator_phase_hypothesis,
+    resolve_separator_pitch_hypothesis,
+)
+from x5crop.detection.photo_geometry.template_phase_model import (
+    PhaseFailureKind,
+    PhaseFitStatus,
 )
 from x5crop.domain import FiniteInterval, ObservationId
 
@@ -192,6 +197,27 @@ class TemplatePitchContractTest(unittest.TestCase):
         self.assertIsNone(
             close_separator_phase_hypothesis(calibrated, lattice_self_fit)
         )
+        withheld = resolve_separator_pitch_hypothesis(
+            calibrated, lattice_self_fit, original_template=compiled)
+        self.assertIs(withheld.template, compiled)
+        self.assertTrue(withheld.pitch_hypothesis_withheld)
+        self.assertEqual(withheld.pitch_observation_ids, ())
+        self.assertEqual(withheld.direct_separator_ids, calibrated.direct_separator_ids)
+        self.assertEqual(withheld.phase_hypothesis_px, calibrated.phase_hypothesis_px)
+        self.assertIsNone(close_separator_phase_hypothesis(withheld, independently_closed))
+        self.assertIs(resolve_separator_pitch_hypothesis(
+            calibrated, independently_closed, original_template=compiled), calibrated)
+        bounded = replace(lattice_self_fit, status=PhaseFitStatus.BOUND_EXCEEDED,
+            best=None, runner_up=None, winner_basis=None,
+            failure_kind=PhaseFailureKind.HYPOTHESIS_BOUND_EXCEEDED,
+            ambiguity_reason="producer bound exceeded",
+            best_phase_candidate_authority_projection=None,
+            runner_phase_candidate_authority_projection=None)
+        self.assertIs(resolve_separator_pitch_hypothesis(
+            calibrated, bounded, original_template=compiled), calibrated)
+        with self.assertRaisesRegex(ValueError, "template identity"):
+            resolve_separator_pitch_hypothesis(calibrated, lattice_self_fit,
+                original_template=replace(compiled, template_id="another-template"))
         incompatible = replace(
             calibrated,
             phase_hypothesis_px=FiniteInterval(1_000.0, 1_010.0),

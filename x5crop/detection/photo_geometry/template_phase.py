@@ -41,6 +41,7 @@ from .template_phase_candidates import (
     _fit_seed,
     _holder_limits,
     _overlap_phase_seeds,
+    _phase_residual_compatible,
     _positive,
     project_candidate_to_authorized_direct_roles,
     _rank,
@@ -89,6 +90,7 @@ from .template_phase_model import (
     PhaseWinnerBasis,
     TemplatePhaseCandidateCompetition,
     TemplatePhaseInput,
+    _TerminalPhaseDiagnostic,
 )
 from .template_nominal_grid_authority import (
     failed_nominal_grid_evidence,
@@ -1277,7 +1279,7 @@ def fit_template_phase(
         peak_temporary_bytes=max(
             seed_peak_bytes,
             len(seeds) * len(roles) * 32 + len(ordered) * len(roles) * 96,
-        ),
+        ) + (len(roles) * 128 if terminal_records else 0),
         candidate_direct_role_authority_evaluation_count=len(
             candidate_authorities
         ),
@@ -1563,6 +1565,9 @@ def fit_template_phase(
             if topology_ambiguous
             else PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS
         )
+    terminal_diagnostic_record = max(
+        terminal_records, key=record_rank, default=None,
+    )
     return PhaseFitResult(
         template,
         best.fit,
@@ -1575,6 +1580,14 @@ def fit_template_phase(
         winner_basis,
         best_phase_candidate_authority_projection=best_projection,
         runner_phase_candidate_authority_projection=runner_projection,
+        _terminal_diagnostic=(
+            None
+            if terminal_diagnostic_record is None
+            else _TerminalPhaseDiagnostic(
+                terminal_diagnostic_record[0].fit,
+                terminal_diagnostic_record[1],
+            )
+        ),
     )
 
 
@@ -2005,6 +2018,21 @@ def _project_late_local_candidate(
             and binding.use == SequenceBindingUse.PHASE_ANCHOR
         ),
     )
+    if projected is not None and not projected.residual_compatible:
+        # Initial competition separates compatible and incompatible refits.
+        # A late refit has no new competition pass, so it cannot silently
+        # turn the latter into an eligible direct-rank projection. Keep the
+        # positioned input as Review geometry through the caller's existing
+        # failed-projection retention path.
+        return None, replace(
+            projection,
+            outcome=PhaseCandidateProjectionOutcome.REFIT_UNAVAILABLE,
+            basis=None,
+            reason=(
+                "late authorized direct coordinates exceed the fixed "
+                "template phase residual compatibility limit"
+            ),
+        )
     return None if projected is None else projected.fit, projection
 
 
@@ -2536,6 +2564,70 @@ def _apply_final_lattice_contract(
     return result
 
 
+def _carry_terminal_phase_diagnostic(
+    result: PhaseFitResult,
+    prior: PhaseFitResult,
+) -> PhaseFitResult:
+    """Carry at most one failed record across the same registered phase flow."""
+
+    if result.template != prior.template or (
+        result.registered_direct_observation_ids
+        != prior.registered_direct_observation_ids
+    ):
+        raise ValueError("terminal diagnostic crosses registered phase input")
+    records = tuple(
+        item for item in (prior._terminal_diagnostic, result._terminal_diagnostic)
+        if item is not None
+    )
+    if not records:
+        return result
+
+    def rank(item: _TerminalPhaseDiagnostic) -> tuple[object, ...]:
+        return (
+            *_rank(_BoundFit(item.fit, _phase_residual_compatible(item.fit))),
+            0,
+            -len(item.projection.projected_out_bindings),
+            tuple(
+                (binding.role_index, str(binding.observation_id))
+                for binding in item.projection.projected_out_bindings
+            ),
+        )
+
+    # The original rank is used only within failed diagnostic records.
+    # A retained record costs O(R), including its original authority ledger.
+    receipt = replace(
+        result.receipt,
+        peak_temporary_bytes=max(
+            result.receipt.peak_temporary_bytes,
+            prior.receipt.peak_temporary_bytes,
+        ) + result.receipt.role_count * 128,
+    )
+    receipt.validate_bounds()
+    return replace(
+        result, _terminal_diagnostic=max(records, key=rank), receipt=receipt,
+    )
+
+
+def _retain_empty_terminal_diagnostic_runner(result: PhaseFitResult) -> PhaseFitResult:
+    """Fill a late empty Review slot with an existing failed proposal."""
+
+    diagnostic = result._terminal_diagnostic
+    if (
+        diagnostic is None
+        or result.status != PhaseFitStatus.UNRESOLVED
+        or result.best is None
+        or result.runner_up is not None
+        or _same_continuous_placement(result.best, diagnostic.fit)
+    ):
+        return replace(result, _terminal_diagnostic=None)
+    return replace(
+        result,
+        runner_up=diagnostic.fit,
+        runner_phase_candidate_authority_projection=diagnostic.projection,
+        _terminal_diagnostic=None,
+    )
+
+
 def retain_pre_local_phase_proposal(
     result: PhaseFitResult,
     *,
@@ -2790,6 +2882,7 @@ def fit_template_phase_candidate_with_adjacency_relations(
             analysis.evaluated_adjacency_count
         ),
     )
+    adjusted = _carry_terminal_phase_diagnostic(adjusted, normal)
     adjusted = _project_retained_late_local_refinements(
         adjusted,
         phase_input,
@@ -2834,14 +2927,14 @@ def finalize_template_phase_candidate(
         or result.failure_kind
         != PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE
     ):
-        return result
+        return _retain_empty_terminal_diagnostic_runner(result)
     projected = _project_retained_late_local_refinements(
         candidate.result,
         phase_input,
         source_frame_width_authority=source_frame_width_authority,
         allow_direct_rank=True,
     )
-    return _apply_final_lattice_contract(
+    result = _apply_final_lattice_contract(
         projected,
         phase_input,
         directly_observed_ordinals=(
@@ -2849,6 +2942,7 @@ def finalize_template_phase_candidate(
         ),
         source_frame_width_authority=source_frame_width_authority,
     )
+    return _retain_empty_terminal_diagnostic_runner(result)
 
 
 def fit_template_phase_with_adjacency_relations(
