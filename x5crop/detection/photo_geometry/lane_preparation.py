@@ -691,7 +691,8 @@ def prepare_template_lane(
     )
     # The broad template locates material bands. Test the proposed short-strip
     # pitch in its own compiled neighbourhood before committing it; an
-    # independent closure must survive without the format gap proving it.
+    # independent closure must survive typed coordinate-authority projection.
+    # A raw resolved fit can still depend entirely on unavailable weak edges.
     pitch_calibration = (
         TemplatePitchCalibration(template, None, None, (), (), 0, False)
         if provisional_phase.status == PhaseFitStatus.BOUND_EXCEEDED
@@ -722,6 +723,10 @@ def prepare_template_lane(
             scale_px_per_mm=scales.width_axis_px_per_mm,
             holder_span_px=width_authority,
             phase_authority_px=base_phase_hypothesis,
+            sequence_measurement_sets=sequence_measurement_sets,
+            calibrated_nominal_grid_prior=(
+                measurement_plan.calibrated_nominal_grid_prior
+            ),
         )
     )
     base_phase_authority = pitch_calibration.phase_authority_px

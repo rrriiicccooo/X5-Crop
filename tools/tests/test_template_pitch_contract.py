@@ -6,6 +6,11 @@ from unittest.mock import patch
 
 import numpy as np
 
+from tools.tests.template_test_support import (
+    calibrated_nominal_grid_prior,
+    phase_sequence_measurement,
+)
+
 from x5crop.detection.photo_geometry.observation_types import (
     BoundaryEdgeMeasurementBasis,
     BoundaryEdgeObservation,
@@ -238,11 +243,25 @@ class TemplatePitchContractTest(unittest.TestCase):
             (ObservationId("separator:1"), ObservationId("separator:2")),
         )
         assert calibrated.phase_hypothesis_px is not None
+        raw_independent = fit_template_phase(
+            (phase_edges[0], *band_edges),
+            calibrated.template,
+            separator_bands=bands,
+            phase_authority_px=calibrated.phase_hypothesis_px,
+        )
+        self.assertEqual(raw_independent.status, PhaseFitStatus.RESOLVED)
+        self.assertIsNone(close_separator_phase_hypothesis(calibrated, raw_independent))
+        measurements = (
+            phase_sequence_measurement("pitch-closure", FiniteInterval(0.0, 400.0)),
+        )
+        prior = calibrated_nominal_grid_prior(calibrated.template)
         independently_closed = fit_template_phase(
             (phase_edges[0], *band_edges),
             calibrated.template,
             separator_bands=bands,
             phase_authority_px=calibrated.phase_hypothesis_px,
+            sequence_measurement_sets=measurements,
+            calibrated_nominal_grid_prior=prior,
         )
         self.assertEqual(
             close_separator_phase_hypothesis(
@@ -251,12 +270,37 @@ class TemplatePitchContractTest(unittest.TestCase):
             ),
             calibrated.phase_hypothesis_px,
         )
+        weak_independent = fit_template_phase(
+            (
+                replace(
+                    phase_edges[0],
+                    trace_coordinates_px=(0, 10),
+                    support_fraction=2.0 / 3.0,
+                    continuous_support_fraction=2.0 / 3.0,
+                ),
+                *band_edges,
+            ),
+            calibrated.template,
+            separator_bands=bands,
+            phase_authority_px=calibrated.phase_hypothesis_px,
+            sequence_measurement_sets=measurements,
+            calibrated_nominal_grid_prior=prior,
+        )
+        self.assertIsNone(close_separator_phase_hypothesis(calibrated, weak_independent))
+        weak_withheld = resolve_separator_pitch_hypothesis(
+            calibrated, weak_independent, original_template=compiled
+        )
+        self.assertTrue(weak_withheld.pitch_hypothesis_withheld)
+        self.assertIs(weak_withheld.template, compiled)
         lattice_self_fit = fit_template_phase(
             band_edges,
             calibrated.template,
             separator_bands=bands,
             phase_authority_px=calibrated.phase_hypothesis_px,
+            sequence_measurement_sets=measurements,
+            calibrated_nominal_grid_prior=prior,
         )
+        self.assertEqual(lattice_self_fit.status, PhaseFitStatus.RESOLVED)
         self.assertIsNone(
             close_separator_phase_hypothesis(calibrated, lattice_self_fit)
         )

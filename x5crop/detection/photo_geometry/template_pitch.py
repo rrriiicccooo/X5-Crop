@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Sequence
 
-from ...domain import FiniteInterval, ObservationId
+from ...domain import EvidenceState, FiniteInterval, ObservationId
 from .interval_math import (
     intersect as _intersect,
     subtract as _subtract_interval,
@@ -13,6 +13,7 @@ from .interval_math import (
 from .model import BoundaryRole, SPATIAL_SUPPORT_REGION_COUNT
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_model import (
+    SequenceBindingUse,
     TemplateSpec,
     template_role_refinement_radius_px,
 )
@@ -106,7 +107,8 @@ def close_separator_phase_hypothesis(
 
     The two separator locations may own pitch, but their projected absolute
     phase is not self-authorizing.  It becomes authority only when a complete
-    legal fit inside that interval binds another independent direct support.
+    authority-projected fit inside that interval retains another independent,
+    supported direct phase anchor. Raw matching success alone is not authority.
     Three or more lattice locations already form their own closed authority.
     """
 
@@ -120,6 +122,7 @@ def close_separator_phase_hypothesis(
         return calibration.phase_authority_px
     hypothesis = calibration.phase_hypothesis_px
     fit = phase.best
+    projection = phase.best_phase_candidate_authority_projection
     if (
         hypothesis is None
         or phase.status != PhaseFitStatus.RESOLVED
@@ -129,8 +132,17 @@ def close_separator_phase_hypothesis(
             fit.phase_lattice_fit.absolute_phase_interval_px,
         )
         is None
-        or not set(fit.evidence_group_ids).difference(
-            calibration.direct_separator_ids
+        or projection is None
+        or not projection.eligible
+        or not any(
+            fact.state == EvidenceState.SUPPORTED
+            and fact.evidence_group_id not in calibration.direct_separator_ids
+            and fit.role_bindings[fact.role_index] is not None
+            and fit.role_bindings[fact.role_index].observation_id
+            == fact.observation_id
+            and fit.role_bindings[fact.role_index].use
+            == SequenceBindingUse.PHASE_ANCHOR
+            for fact in projection.input_direct_role_authority.facts
         )
     ):
         return None

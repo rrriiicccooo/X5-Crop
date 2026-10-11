@@ -755,7 +755,11 @@ source pitch、base relation、direct separator refit、双候选 local completi
   只能证明自己所在 adjacency。
 - 两个 separator 可以提出 pitch，但不能用同一对事实自证照片 ordinal 或 absolute phase。短片条先在
   该 pitch 编译的模板内执行既有两点 phase hypothesis 检查；只有该区间内的完整合法 fit 还绑定了
-  不属于这两个 separator 的独立 direct support，才提交该 pitch 与 phase authority。独立闭合失败时，
+  不属于这两个 separator 的独立 direct support，才提交该 pitch 与 phase authority。这次既有检查必须
+  消费原登记 measurement sets 与校准 Grid prior，先完成同一 candidate authority projection；仅 raw
+  `RESOLVED` 不构成权限。独立 support 必须是投影后仍保留的 `PHASE_ANCHOR`，其原
+  `DirectRoleAuthorityFact` 为 `supported`，且 evidence group 不属于这两个 band。退出的弱线、
+  local refinement 或失败 projection 不能闭合该假说。独立闭合失败时，
   `TemplatePitchCalibration.pitch_hypothesis_withheld` 保留原材料 identity 和 hypothesis，pitch observation
   authority 为空；既有后续 pass 使用原编译模板，不再消费该 hypothesis，且整体保持 Review。已有
   phase failure 不被覆盖；原本 resolved 的结果记为 `adjacency_topology_unresolved`。Producer bound 不能
