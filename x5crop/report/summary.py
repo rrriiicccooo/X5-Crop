@@ -178,6 +178,9 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                 "alternative_placement_proposals": typed_read_model(
                     lane.alternative_placement_proposals
                 ),
+                "native_endpoint_review": typed_read_model(
+                    lane.native_endpoint_review
+                ),
                 "direct_role_aperture_domain_authority": typed_read_model(
                     lane.placement_competition
                     .direct_role_aperture_domain_authority

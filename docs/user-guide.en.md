@@ -65,6 +65,9 @@ relationships with insufficient evidence remain subject to review.
 Debug Analysis shows the primary, runner, and retained proposals with their evidence, coverage results, and blocking
 reasons for inspection. Reports do not change crop coordinates or approval conditions. The current Runtime does not
 use development ranking scores to select crops.
+When native boundaries support the first and last photographs, the report may also show one independent
+"Native Endpoint Review" proposal with its original evidence, counterevidence, and failure reasons. It is available
+for manual inspection; automatic cropping continues to require the existing safety checks.
 When top/bottom evidence is insufficient, fixed-height review proposals prefer boundaries with measured support across
 all positioned photographs. The report preserves their original role evidence and blocking reasons for manual review.
 If the primary cannot form a complete crop but the runner already has a complete proposal, the report retains that

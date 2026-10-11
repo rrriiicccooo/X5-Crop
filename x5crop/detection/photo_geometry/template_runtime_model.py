@@ -997,6 +997,7 @@ class TemplateLaneReconstruction:
     holder_fill_assessment: HolderFillAssessment | None
     content_veto_facts: tuple[ContentVetoFact, ...]
     work: TemplatePlacementWorkReceipt
+    native_endpoint_review: "NativeEndpointReview | None" = None
 
     @property
     def common_h_output(self) -> CommonHOutput | None:
@@ -1012,6 +1013,41 @@ class TemplateLaneReconstruction:
     def __post_init__(self) -> None:
         if not self.lane_id or self.prepared.lane.domain.lane_id != self.lane_id:
             raise ValueError("template reconstruction lane authority is invalid")
+        native_review = self.native_endpoint_review
+        if native_review is not None:
+            from .template_native_review import NativeEndpointReview
+
+            if not isinstance(native_review, NativeEndpointReview):
+                raise TypeError("native endpoint review is invalid")
+            if native_review.proposal.lane_id != self.lane_id or (
+                native_review.placement is not None
+                and native_review.placement.lane_id != self.lane_id
+            ):
+                raise ValueError("native endpoint review changed lane authority")
+            canonical_ids = {
+                item.placement_id
+                for item in self.placement_competition.placements
+            }
+            canonical_ids.update(
+                item.placement_id
+                for item in (
+                    self.placement_proposal,
+                    *self.alternative_placement_proposals,
+                )
+                if item.placement_id is not None
+            )
+            if self.selected_placement is not None:
+                canonical_ids.add(self.selected_placement.placement_id)
+            if native_review.placement is not None and (
+                native_review.placement.placement_id in canonical_ids
+            ):
+                raise ValueError(
+                    "native endpoint review placement conflicts with canonical identity"
+                )
+            if native_review.proposal.placement_id in canonical_ids:
+                raise ValueError(
+                    "native endpoint review proposal conflicts with canonical identity"
+                )
         common = self.common_h_output
         if self.work.common_h_composition_count:
             attempted = common_h_fit_members(self.prepared.cross_competition, self.prepared.cross_registration_work)

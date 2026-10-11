@@ -666,6 +666,14 @@ def reconstruct_photo_geometry(
         reconstructed,
         source_selection,
     )
+    # This Review-only branch runs after canonical selection and Gate facts.
+    # It cannot contribute a candidate, source proposal or selected output.
+    from .template_native_review import build_native_endpoint_review
+
+    reconstructed = tuple(
+        replace(lane, native_endpoint_review=build_native_endpoint_review(lane.prepared))
+        for lane in reconstructed
+    )
     return PhotoGeometryDetectionResult(
         resolved_output_slots=resolved,
         lane_reconstructions=reconstructed,

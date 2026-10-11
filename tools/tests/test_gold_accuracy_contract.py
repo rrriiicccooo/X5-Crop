@@ -1070,6 +1070,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
             "placement_proposal": primary,
             "alternative_placement_proposals": [runner],
             "conditional_proposal_placement_id": None,
+            "native_endpoint_review": None,
         }
         labels = _retained_placement_gold_labels(record, lane)
         self.assertEqual([item["geometry_conformance"] for item in labels], ["safe", "safe"])

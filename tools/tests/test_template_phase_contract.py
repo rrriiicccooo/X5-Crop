@@ -3564,6 +3564,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             status=PhaseFitStatus.BOUND_EXCEEDED,
             ambiguity_reason="phase hypothesis bound exceeded",
             failure_kind=PhaseFailureKind.HYPOTHESIS_BOUND_EXCEEDED,
+            _native_phase_retention=None,
         )
         not_retained = retain_pre_local_phase_proposal(
             bounded,

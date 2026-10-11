@@ -4,6 +4,7 @@ from copy import deepcopy
 import unittest
 
 from tools.regression.placement_ranking import (
+    NATIVE_ENDPOINT_ROLE_SCOPE, RANKING_SCHEMA,
     FEATURE_NAMES, RankingExample, _examples, _fit_model, _fold_assignments,
     _model_id, _scores, _source_weights, _training_transform,
     build_development_ranking, validate_development_ranking,
@@ -150,6 +151,44 @@ class PlacementRankingContractTest(unittest.TestCase):
         altered["source_grouped_oof"]["tasks"][0]["canonical_ranked_placement_id"] = "different"
         with self.assertRaises(ValueError):
             validate_development_ranking(altered, records)
+
+    def test_native_endpoint_scores_are_development_only_and_keep_canonical_metrics(self):
+        records = self._records()
+        for record in records:
+            for candidate in record["retained_placement_gold_labels"]:
+                candidate["geometry_conformance"] = "unsafe"
+            native = deepcopy(record["retained_placement_gold_labels"][1])
+            native["role"] = "native_endpoint"
+            native["placement_id"] = "placement:native"
+            native["acceptability_features"]["placement_id"] = "placement:native"
+            native["acceptability_features"]["values"][0]["value"] = 1.0
+            native["geometry_conformance"] = "safe"
+            record["retained_placement_gold_labels"][1]["acceptability_features"]["values"][0]["value"] = 0.5
+            record["retained_placement_gold_labels"].append(native)
+        artifact = build_development_ranking(records)
+        self.assertEqual(artifact["ranking_schema"], RANKING_SCHEMA)
+        self.assertEqual(RANKING_SCHEMA, "x5crop_development_placement_ranking_v3")
+        self.assertEqual(artifact["native_endpoint_role_scope"], NATIVE_ENDPOINT_ROLE_SCOPE)
+        self.assertFalse(artifact["admission_enabled"])
+        for task in artifact["source_grouped_oof"]["tasks"]:
+            self.assertEqual(task["ranked_role"], "native_endpoint")
+            self.assertEqual(task["ranked_geometry_conformance"], "safe")
+            self.assertEqual(task["canonical_ranked_role"], "runner")
+            self.assertEqual(task["canonical_ranked_geometry_conformance"], "unsafe")
+            self.assertFalse(task["canonical_at_least_one_safe_retained"])
+        self.assertEqual(artifact["source_grouped_oof"]["summary"]["native_endpoint_ranked_task_ids"],
+                         [record["sample_id"] for record in records])
+        validate_development_ranking(artifact, records)
+        for field, value in (
+            ("native_endpoint_role_scope", "automatic_output"),
+            ("ranking_schema", "x5crop_development_placement_ranking_v2"),
+            ("label_record_schema", "x5crop_development_gold_analysis_record_v23"),
+            ("retained_placement_scope", "retained_canonical_pair_and_conditional_cross_proposal"),
+        ):
+            altered = deepcopy(artifact)
+            altered[field] = value
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                validate_development_ranking(altered, records)
 
     def test_validator_rejects_rehashed_wrong_fit_predictions_and_contract_tampering(self):
         records = self._records()

@@ -238,6 +238,9 @@ def development_report_facts(
                 "alternative_placement_proposals": typed_read_model(
                     lane.alternative_placement_proposals
                 ),
+                "native_endpoint_review": typed_read_model(
+                    lane.native_endpoint_review
+                ),
                 "common_h_output": typed_read_model(lane.common_h_output),
                 "common_h_authority": typed_read_model(lane.placement_competition.common_h_authority),
                 "winner_basis": {

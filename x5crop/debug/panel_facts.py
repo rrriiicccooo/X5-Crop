@@ -94,6 +94,28 @@ def conditional_geometry_by_identity(
     return _placement_geometry_by_identity(detection, placement_ids)
 
 
+def native_endpoint_geometry_by_identity(
+    detection: FinalDetection,
+) -> tuple[tuple[int, TemplateFrame], ...]:
+    """Read the independent Review wrapper; never search canonical placements."""
+
+    global_ordinals = {
+        (item.lane_id, item.lane_ordinal): item.global_output_ordinal
+        for item in detection.output_slot_identities
+    }
+    values: list[tuple[int, TemplateFrame]] = []
+    for lane in detection.candidate.geometry.lane_reconstructions:
+        review = lane.native_endpoint_review
+        placement = None if review is None else review.placement
+        if placement is None:
+            continue
+        for frame in placement.frames:
+            ordinal = global_ordinals.get((placement.lane_id, frame.lane_ordinal))
+            if ordinal is not None:
+                values.append((ordinal, frame))
+    return tuple(sorted(values, key=lambda item: (item[0], item[1].lane_ordinal)))
+
+
 def output_footprints(
     detection: FinalDetection,
 ) -> tuple[OutputFootprint | CommonOutputFootprint, ...]:

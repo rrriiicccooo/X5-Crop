@@ -346,6 +346,11 @@ class V5PerformanceContractTest(unittest.TestCase):
         }
 
         self.assertTrue(bounded_work(report, source_pixels=100))
+        lane = report["development"]["lanes"][0]
+        lane["native_endpoint_review"] = {"work": {"peak_temporary_bytes": 2 ** 30}}
+        self.assertFalse(bounded_work(report, source_pixels=100))
+        lane["native_endpoint_review"]["work"]["peak_temporary_bytes"] = 1024
+        self.assertTrue(bounded_work(report, source_pixels=100))
         work["adjacency_relation_evaluation_count"] = 5
         self.assertFalse(bounded_work(report, source_pixels=100))
 

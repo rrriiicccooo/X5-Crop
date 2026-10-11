@@ -27,8 +27,9 @@ from .gold_analysis import (
 from .report_validation import validate_placement_feature_record
 
 
-RANKING_SCHEMA = "x5crop_development_placement_ranking_v2"
+RANKING_SCHEMA = "x5crop_development_placement_ranking_v3"
 CONDITIONAL_ROLE_SCOPE = "development_label_and_score_only"
+NATIVE_ENDPOINT_ROLE_SCOPE = "development_label_and_score_only"
 MODEL_SPEC = "source_balanced_standardized_ridge_ranking_v1"
 RANKING_RULE = "maximum_score_then_retained_order_v1"
 FOLD_COUNT = 5
@@ -51,7 +52,7 @@ class RankingExample:
         if (
             not self.sample_id or not self.placement_id
             or not _SOURCE_SHA.fullmatch(self.source_sha256)
-            or self.role not in {"primary", "runner", "conditional"}
+            or self.role not in {"primary", "runner", "conditional", "native_endpoint"}
             or type(self.gold_safe) is not bool
             or len(self.features) != _FEATURE_COUNT
             or any(value is not None and (
@@ -235,7 +236,7 @@ def _evaluate(
         candidates = by_task[record["sample_id"]]
         model = model_by_source[record["source_sha256"]]
         scores = _scores(candidates, model)
-        # max returns the first equal score: the original primary/runner order.
+        # max returns the first equal score in the retained proposal order.
         ranked_index = max(range(len(candidates)), key=lambda index: scores[index]) if candidates else None
         ranked = None if ranked_index is None else candidates[ranked_index]
         canonical_indices = [index for index, item in enumerate(candidates)
@@ -272,6 +273,7 @@ def _evaluate(
         "canonical_ranked_geometry_conformance_counts": dict(sorted(Counter(item["canonical_ranked_geometry_conformance"] for item in tasks).items())),
         "canonical_at_least_one_safe_retained_task_count": sum(item["canonical_at_least_one_safe_retained"] for item in tasks),
         "conditional_ranked_task_ids": [item["sample_id"] for item in tasks if item["ranked_role"] == "conditional"],
+        "native_endpoint_ranked_task_ids": [item["sample_id"] for item in tasks if item["ranked_role"] == "native_endpoint"],
         "canonical_improvement_task_ids": [item["sample_id"] for item in tasks if item["primary_geometry_conformance"] != "safe" and item["canonical_ranked_geometry_conformance"] == "safe"],
         "canonical_regression_task_ids": [item["sample_id"] for item in tasks if item["primary_geometry_conformance"] == "safe" and item["canonical_ranked_geometry_conformance"] != "safe"],
         "safe_ranked_with_support_issue_task_ids": [item["sample_id"] for item in tasks if item["ranked_geometry_conformance"] == "safe"
@@ -294,6 +296,7 @@ def build_development_ranking(records: Sequence[dict[str, Any]]) -> dict[str, An
         "score_semantics": "unbounded_linear_ranking_score_not_probability",
         "calibration_id": None, "admission_enabled": False, "formal_ood_evaluated": False,
         "conditional_role_scope": CONDITIONAL_ROLE_SCOPE,
+        "native_endpoint_role_scope": NATIVE_ENDPOINT_ROLE_SCOPE,
         "support_check_scope": "numeric_feature_ranges_and_missingness_only",
         "ranking_rule_id": RANKING_RULE, "fold_count": FOLD_COUNT,
         "weighting": "equal_source_total_weight_then_equal_generated_candidate_weight_within_source",
@@ -318,6 +321,7 @@ def validate_development_ranking(artifact: dict[str, Any], records: Sequence[dic
         or artifact.get("calibration_id") is not None or artifact.get("admission_enabled") is not False
         or artifact.get("formal_ood_evaluated") is not False
         or artifact.get("conditional_role_scope") != CONDITIONAL_ROLE_SCOPE
+        or artifact.get("native_endpoint_role_scope") != NATIVE_ENDPOINT_ROLE_SCOPE
         or artifact.get("ranking_rule_id") != RANKING_RULE
         or artifact.get("fold_count") != FOLD_COUNT or artifact.get("fold_assignment") != folds
         or len(artifact.get("fold_models", ())) != FOLD_COUNT

@@ -28,6 +28,7 @@ from x5crop.debug.panel_facts import (
     axis_authority_summaries,
     competition_summary,
     conditional_geometry_by_identity,
+    native_endpoint_geometry_by_identity,
     output_footprints,
     primary_geometry_by_identity,
     root_gate_summary,
@@ -301,9 +302,10 @@ class DebugAnalysisContractTest(unittest.TestCase):
                 )
         self.assertEqual(detected.call_count, 1)
         self.assertEqual(primary.call_count, 1)
-        self.assertEqual(runner.call_count, 2)
+        self.assertEqual(runner.call_count, 3)
         self.assertEqual(runner.call_args_list[0].args[-1], configuration.diagnostics.style.competitor_color)
         self.assertEqual(runner.call_args_list[1].args[-1], configuration.diagnostics.style.conditional_proposal_color)
+        self.assertEqual(runner.call_args_list[2].args[-1], configuration.diagnostics.style.native_endpoint_review_color)
 
     def test_long_axis_panel_draws_every_detected_transition(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -530,6 +532,74 @@ class DebugAnalysisContractTest(unittest.TestCase):
             ),
         )
 
+    def test_native_endpoint_geometry_stays_outside_canonical_and_selected_facts(self) -> None:
+        canonical_frame = SimpleNamespace(lane_ordinal=1)
+        native_frame = SimpleNamespace(lane_ordinal=1)
+        canonical = SimpleNamespace(
+            placement_id="canonical", lane_id="lane:0", frames=(canonical_frame,),
+        )
+        native = SimpleNamespace(
+            placement_id="native", lane_id="lane:0", frames=(native_frame,),
+        )
+        lane = SimpleNamespace(
+            placement_competition=SimpleNamespace(
+                placements=(canonical,), runner_up_placement_id=None,
+                conditional_proposal_placement_id=None,
+            ),
+            placement_proposal=SimpleNamespace(placement_id="canonical"),
+            native_endpoint_review=SimpleNamespace(scope="review_only", placement=native),
+        )
+        selected_outputs = (object(),)
+        detection = SimpleNamespace(
+            output_slot_identities=(SimpleNamespace(
+                lane_id="lane:0", lane_ordinal=1, global_output_ordinal=7,
+            ),),
+            candidate=SimpleNamespace(geometry=SimpleNamespace(lane_reconstructions=(lane,))),
+            output_footprints=selected_outputs,
+        )
+        self.assertEqual(native_endpoint_geometry_by_identity(detection), ((7, native_frame),))
+        self.assertEqual(primary_geometry_by_identity(detection), ((7, canonical_frame),))
+        self.assertEqual(runner_geometry_by_identity(detection), ())
+        self.assertEqual(conditional_geometry_by_identity(detection), ())
+        self.assertIs(output_footprints(detection), selected_outputs)
+        lane.native_endpoint_review.placement = None
+        self.assertEqual(native_endpoint_geometry_by_identity(detection), ())
+        lane.native_endpoint_review = None
+        self.assertEqual(native_endpoint_geometry_by_identity(detection), ())
+        del lane.native_endpoint_review
+        with self.assertRaises(AttributeError):
+            native_endpoint_geometry_by_identity(detection)
+
+    def test_native_endpoint_overlay_uses_its_own_color_and_review_label(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            configuration, _profile, workspace, detection = _fixture(Path(temporary))
+            native_frames = primary_geometry_by_identity(detection)
+            self.assertTrue(native_frames)
+            style = configuration.diagnostics.style
+            self.assertNotEqual(style.native_endpoint_review_color, style.competitor_color)
+            self.assertNotEqual(style.native_endpoint_review_color, style.conditional_proposal_color)
+            with (
+                mock.patch("x5crop.debug.axis_panels.native_endpoint_geometry_by_identity",
+                           return_value=native_frames),
+                mock.patch("x5crop.debug.axis_panels._draw_alternative_top_bottom",
+                           wraps=debug_axis_panels._draw_alternative_top_bottom) as cross,
+                mock.patch("x5crop.debug.axis_panels._draw_alternative_start_end",
+                           wraps=debug_axis_panels._draw_alternative_start_end) as sequence,
+                mock.patch("x5crop.debug.axis_panels.draw_label_chip",
+                           wraps=debug_axis_panels.draw_label_chip) as labels,
+            ):
+                cross_axis_panel(workspace, detection, style, DebugRenderCache(), _grid(workspace, style))
+                long_axis_panel(workspace, detection, style, DebugRenderCache(), _grid(workspace, style))
+            self.assertEqual(cross.call_args_list[-1].args[-1], style.native_endpoint_review_color)
+            self.assertEqual(sequence.call_args_list[-1].args[-1], style.native_endpoint_review_color)
+            native_labels = [call for call in labels.call_args_list
+                             if call.args[2] == "NATIVE ENDPOINT REVIEW"]
+            self.assertEqual(len(native_labels), 2)
+            self.assertTrue(all(call.args[3] == style.native_endpoint_review_color
+                                for call in native_labels))
+            with self.assertRaisesRegex(ValueError, "RGB byte triples"):
+                DebugStyleParameters(native_endpoint_review_color=(256, 124, 184))
+
     def test_winner_runner_and_official_output_are_separate_facts(self) -> None:
         winner_frame = SimpleNamespace(lane_ordinal=1)
         runner_frame = SimpleNamespace(lane_ordinal=1)
@@ -558,6 +628,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
             lane_reconstructions=(
                 SimpleNamespace(
                     placement_competition=competition,
+                    native_endpoint_review=None,
                     placement_proposal=SimpleNamespace(
                         placement_id="winner"
                     ),

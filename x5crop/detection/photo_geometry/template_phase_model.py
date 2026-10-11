@@ -17,7 +17,10 @@ from .template_adjacency_coverage import AdjacencyObservationCoverage
 from .template_adjacency_topology import AdjacencyContinuityObservation
 from .template_contact import ContactEdgeObservation
 from .template_overlap import OverlapEdgePairObservation
-from .template_direct_role_authority import DirectRoleBindingAuthority
+from .template_direct_role_authority import (
+    DirectRoleAuthorityBasis,
+    DirectRoleBindingAuthority,
+)
 from .template_outer_frame_authority import OuterFrameObservationAuthority
 from .template_model import (
     SequenceFit,
@@ -709,6 +712,229 @@ class _TerminalPhaseDiagnostic:
                 raise ValueError("terminal diagnostic projection lost its input mapping")
 
 
+class NativeEndpointSelectionBasis(str, Enum):
+    """Physical basis for a retained terminal-native phase explanation."""
+
+    OUTER_MATERIAL_TERMINAL = "outer_material_terminal"
+    INTRINSIC_TERMINAL = "intrinsic_terminal"
+
+
+def _validate_native_projection_fit_mapping(
+    fit: SequenceFit,
+    projection: PhaseCandidateAuthorityProjection,
+) -> None:
+    """Keep the effective fit attached to its exact input authority ledger."""
+
+    facts = projection.input_direct_role_authority.facts
+    facts_by_role: dict[int, object] = {}
+    for fact in facts:
+        role_index = fact.role_index
+        if role_index in facts_by_role:
+            raise ValueError("native projection authority repeats a role")
+        if not 0 <= role_index < len(fit.role_bindings):
+            raise ValueError("native projection authority role leaves its fit")
+        binding = fit.role_bindings[role_index]
+        if binding is None:
+            if not projection.eligible or (
+                role_index,
+                fact.observation_id,
+            ) not in {
+                (item.role_index, item.observation_id)
+                for item in projection.projected_out_bindings
+            }:
+                raise ValueError(
+                    "native projection authority fact is absent from its fit"
+                )
+        elif binding.observation_id != fact.observation_id:
+            raise ValueError(
+                "native projection authority fact changed its fit identity"
+            )
+        facts_by_role[role_index] = fact
+
+    for role_index, binding in enumerate(fit.role_bindings):
+        if binding is None:
+            continue
+        fact = facts_by_role.get(role_index)
+        if fact is None or fact.observation_id != binding.observation_id:
+            raise ValueError(
+                "native effective fit binding lacks its input authority fact"
+            )
+
+    if not projection.eligible and tuple(facts_by_role) != tuple(
+        index for index, binding in enumerate(fit.role_bindings) if binding is not None
+    ):
+        raise ValueError(
+            "failed native projection does not cover the complete input fit"
+        )
+
+
+@dataclass(frozen=True)
+class NativeEndpointPhaseDiagnostic:
+    """One projection record that retains both native terminal-frame proof sides.
+
+    ``fit`` is the single effective fit chosen from a projection record.  The
+    original projection remains attached so a failed projection cannot be
+    mistaken for a supported phase explanation, and all authority facts stay
+    available through its input ledger.
+    """
+
+    fit: SequenceFit
+    projection: PhaseCandidateAuthorityProjection
+    residual_compatible: bool
+    terminal_role_indices: tuple[int, ...]
+    selection_basis: NativeEndpointSelectionBasis
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.fit, SequenceFit)
+            or not isinstance(self.projection, PhaseCandidateAuthorityProjection)
+            or not isinstance(self.residual_compatible, bool)
+            or not isinstance(self.selection_basis, NativeEndpointSelectionBasis)
+            or tuple(sorted(set(self.terminal_role_indices)))
+            != self.terminal_role_indices
+            or any(
+                not isinstance(index, int)
+                or isinstance(index, bool)
+                or index < 0
+                or index >= len(self.fit.role_bindings)
+                for index in self.terminal_role_indices
+            )
+        ):
+            raise ValueError("native endpoint phase diagnostic is invalid")
+
+        _validate_native_projection_fit_mapping(self.fit, self.projection)
+
+        facts = self.projection.input_direct_role_authority.facts
+        facts_by_identity = {
+            (fact.role_index, fact.observation_id): fact
+            for fact in facts
+        }
+        terminal_frame_roles = (
+            tuple(self.fit.template.roles[:2])
+            + tuple(self.fit.template.roles[-2:])
+        )
+        terminal_role_set = {
+            role.role_index
+            for role in terminal_frame_roles
+        }
+        qualifying_roles: set[int] = set()
+        outer_roles: set[int] = set()
+        for role_index in terminal_role_set:
+            binding = self.fit.role_bindings[role_index]
+            if binding is None:
+                continue
+            fact = facts_by_identity.get((role_index, binding.observation_id))
+            if fact is None or not {
+                DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE,
+                DirectRoleAuthorityBasis.AGGREGATE_UNION,
+            }.intersection(fact.bases):
+                continue
+            qualifying_roles.add(role_index)
+            if DirectRoleAuthorityBasis.OUTER_MATERIAL_BOUNDARY in fact.bases:
+                outer_roles.add(role_index)
+
+        if (
+            not qualifying_roles
+            or self.terminal_role_indices != tuple(sorted(qualifying_roles))
+            or not qualifying_roles.intersection(
+                {role.role_index for role in terminal_frame_roles[:2]}
+            )
+            or not qualifying_roles.intersection(
+                {role.role_index for role in terminal_frame_roles[-2:]}
+            )
+            or self.selection_basis
+            != (
+                NativeEndpointSelectionBasis.OUTER_MATERIAL_TERMINAL
+                if outer_roles
+                else NativeEndpointSelectionBasis.INTRINSIC_TERMINAL
+            )
+        ):
+            raise ValueError(
+                "native endpoint phase diagnostic lost terminal authority"
+            )
+
+    @property
+    def rank(self) -> tuple[object, ...]:
+        """Return the existing bounded candidate rank for this effective fit."""
+
+        # Keep the canonical comparator private to its existing owner while
+        # avoiding an import cycle during model-module initialization.
+        from .template_phase_candidates import _BoundFit, _rank
+
+        return _rank(_BoundFit(self.fit, self.residual_compatible))
+
+    @property
+    def selection_key(self) -> tuple[object, ...]:
+        """Prefer a completed projection within the same terminal class.
+
+        A failed raw input may still contain unsupported bindings. Their
+        contribution to the original rank must not displace an explanation
+        whose complete authority projection already succeeded.
+        """
+
+        return (
+            int(
+                self.selection_basis
+                == NativeEndpointSelectionBasis.OUTER_MATERIAL_TERMINAL
+            ),
+            int(self.projection.eligible),
+            *self.rank,
+        )
+
+
+@dataclass(frozen=True)
+class NativePhaseRetention:
+    """Bounded receipt and at-most-one native terminal phase diagnostic."""
+
+    diagnostic: NativeEndpointPhaseDiagnostic | None = None
+    record_scan_count: int = 0
+    fact_check_count: int = 0
+    carry_comparison_count: int = 0
+    peak_temporary_bytes: int = 0
+    role_count: int = 0
+
+    def __post_init__(self) -> None:
+        receipt_values = (
+            self.record_scan_count,
+            self.fact_check_count,
+            self.carry_comparison_count,
+            self.peak_temporary_bytes,
+            self.role_count,
+        )
+        if self.diagnostic is not None and not isinstance(
+            self.diagnostic,
+            NativeEndpointPhaseDiagnostic,
+        ):
+            raise TypeError("native phase retention diagnostic is invalid")
+        if any(
+            not isinstance(value, int)
+            or isinstance(value, bool)
+            or value < 0
+            for value in receipt_values
+        ):
+            raise ValueError("native phase retention receipt is invalid")
+        if self.record_scan_count == 0:
+            if (
+                self.diagnostic is not None
+                or self.role_count != 0
+                or self.fact_check_count != 0
+                or self.carry_comparison_count != 0
+                or self.peak_temporary_bytes != 0
+            ):
+                raise ValueError("empty native phase retention receipt is invalid")
+            return
+        if self.role_count < 2 or self.role_count % 2:
+            raise ValueError("native phase retention role bound is invalid")
+        if self.fact_check_count > self.record_scan_count * self.role_count:
+            raise ValueError("native phase retention fact bound is invalid")
+        if self.carry_comparison_count > self.record_scan_count - 1:
+            raise ValueError("native phase retention carry bound is invalid")
+        if self.diagnostic is not None and self.role_count != len(
+            self.diagnostic.fit.role_bindings
+        ):
+            raise ValueError("native phase retention diagnostic role bound is invalid")
+
+
 @dataclass(frozen=True)
 class PhaseFitResult:
     template: TemplateSpec
@@ -751,6 +977,9 @@ class PhaseFitResult:
     _terminal_diagnostic: _TerminalPhaseDiagnostic | None = field(
         default=None, repr=False, compare=False,
     )
+    _native_phase_retention: NativePhaseRetention | None = field(
+        default=None, repr=False, compare=False,
+    )
 
     def __post_init__(self) -> None:
         diagnostic = self._terminal_diagnostic
@@ -763,6 +992,26 @@ class PhaseFitResult:
             }.issubset(self.registered_direct_observation_ids)
         ):
             raise ValueError("terminal phase diagnostic leaves its registered template")
+        native_retention = self._native_phase_retention
+        if native_retention is not None and not isinstance(
+            native_retention,
+            NativePhaseRetention,
+        ):
+            raise TypeError("native phase retention is invalid")
+        if native_retention is not None and native_retention.diagnostic is not None:
+            native_fit = native_retention.diagnostic.fit
+            if (
+                self.status == PhaseFitStatus.BOUND_EXCEEDED
+                or native_fit.template != self.template
+                or not {
+                    identity
+                    for identity in native_fit.binding_observation_ids
+                    if identity is not None
+                }.issubset(self.registered_direct_observation_ids)
+            ):
+                raise ValueError(
+                    "native phase retention leaves its registered template"
+                )
         if (
             len(set(self.registered_direct_observation_ids))
             != len(self.registered_direct_observation_ids)

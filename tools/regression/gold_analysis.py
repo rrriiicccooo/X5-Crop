@@ -52,9 +52,9 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record, validate_placement_feature_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v23"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v24"
 ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v26"
-RETAINED_PLACEMENT_SCOPE = "retained_canonical_pair_and_conditional_cross_proposal"
+RETAINED_PLACEMENT_SCOPE = "retained_canonical_pair_conditional_cross_and_native_endpoint_review_proposals"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
 SOURCE_TIMEOUT_SECONDS = 600
@@ -922,6 +922,11 @@ def _retained_placement_gold_labels(
         *(("conditional" if item["placement_id"] == lane["conditional_proposal_placement_id"]
            else "runner", item) for item in lane["alternative_placement_proposals"]),
     )
+    native_review = lane["native_endpoint_review"]
+    if native_review is not None:
+        if native_review["scope"] != "review_only":
+            raise ValueError("native endpoint proposal must remain review-only")
+        proposals += (("native_endpoint", native_review["proposal"]),)
     labels = []
     for role, proposal in proposals:
         if proposal["placement_id"] is None:
@@ -960,10 +965,12 @@ def _retained_placement_summary(records: Sequence[dict[str, Any]]) -> dict[str, 
             raise ValueError("invalid retained placement scope")
         labels = record["retained_placement_gold_labels"]
         ids = [item["placement_id"] for item in labels]
+        roles = [item["role"] for item in labels]
+        canonical_roles = roles[:-1] if roles[-1:] == ["native_endpoint"] else roles
         if (
-            len(labels) > 3 or len(set(ids)) != len(ids)
+            len(labels) > 4 or len(set(ids)) != len(ids)
             or any(not isinstance(identity, str) or not identity for identity in ids)
-            or [item["role"] for item in labels]
+            or canonical_roles
             not in ([], ["primary"], ["runner"], ["primary", "runner"],
                     ["conditional"], ["primary", "conditional"], ["runner", "conditional"],
                     ["primary", "runner", "conditional"])

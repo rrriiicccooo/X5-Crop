@@ -21,6 +21,8 @@ from x5crop.detection.photo_geometry.template_output import common_direct_use_bu
 from x5crop.detection.photo_geometry.output_model import OutputFootprint, fixed_output_coverage
 from x5crop.detection.photo_geometry.template_holder_fill import HolderFillAssessment
 from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
+from x5crop.detection.photo_geometry.template_native_review import NativeEndpointReview
+from x5crop.detection.evidence.scan_canvas import MatchedHolder
 
 from x5crop.detection.candidate.assessment.model import CANDIDATE_GATE_CHECK_CODES
 from x5crop.detection.decision.vocabulary import FINAL_REVIEW_REASONS
@@ -3431,7 +3433,8 @@ def _read_common_proof(value: Any, model: type) -> Any:
     if model not in (OutputFootprint, CommonHOutput, CommonHOutputAuthority, PhaseFitResult,
                      CrossFitCompetition, CrossRoleBinding, PhotoBoundaryObservation,
                      SourceScanGeometry, HolderFillAssessment, FormatPlacement, ExteriorRegionMeasurement,
-                     TemplateCrossInput, CoarseStripSupport, PhotoBoundaryMeasurementSet, CrossRegistrationWorkReceipt):
+                     TemplateCrossInput, CoarseStripSupport, PhotoBoundaryMeasurementSet, CrossRegistrationWorkReceipt,
+                     NativeEndpointReview, MatchedHolder):
         raise ValueError("unsupported common-output proof root")
 
     def read(raw: Any, kind: Any) -> Any:
@@ -3744,6 +3747,158 @@ def _validate_finalization(
         raise ValueError("review output contract is incomplete")
 
 
+def _validate_native_endpoint_review(
+    lane: dict[str, Any],
+    *,
+    expected_source_extent: WorkspaceExtent,
+    matched_holder: MatchedHolder | None,
+) -> NativeEndpointReview | None:
+    """Replay the independent Review geometry without selecting it."""
+
+    if "native_endpoint_review" not in lane:
+        raise ValueError("lane lost its independent native endpoint Review record")
+    value = lane["native_endpoint_review"]
+    if value is None:
+        return None
+    review = _read_common_proof(value, NativeEndpointReview)
+    source = _read_common_proof(lane["source_scan_geometry"], SourceScanGeometry)
+    if matched_holder is None:
+        raise ValueError("native endpoint Review lost its scan-canvas scale authority")
+    scales = matched_holder.axis_scales
+    initial = SourceScanGeometry.create(
+        source.frame_spec,
+        width_scale_px_per_mm=scales.width_axis_px_per_mm,
+        height_scale_px_per_mm=scales.height_axis_px_per_mm,
+    )
+    native_source = review.source_scan_geometry
+    if (native_source.frame_spec != initial.frame_spec
+            or native_source.width_state != initial.width_state
+            or native_source.height_state != initial.height_state):
+        raise ValueError("native endpoint Review inherited calibrated source geometry")
+    # Source identities are allocated inside the original processing run.
+    # Replay the complete physical state under that already validated identity.
+    initial = replace(initial, geometry_id=native_source.geometry_id)
+    diagnostic = review.phase_retention.diagnostic
+    if diagnostic is None or diagnostic.fit.template.template_id != lane["template_id"]:
+        raise ValueError("native endpoint Review changed its fixed template")
+    canonical_ids = {
+        item["placement_id"]
+        for item in (lane["placement_proposal"], *lane["alternative_placement_proposals"])
+    } | {lane["selected_placement_id"], lane["runner_up_placement_id"],
+         lane["conditional_proposal_placement_id"]}
+    common = lane["common_h_output"]
+    if common is not None:
+        canonical_ids.update((common["placement_id"], *(item["placement_id"] for item in common["placements"])))
+    if review.proposal.lane_id != lane["lane_id"] or (
+        review.proposal.placement_id is not None
+        and review.proposal.placement_id in canonical_ids
+    ):
+        raise ValueError("native endpoint Review entered canonical placement identities")
+    outputs = _validate_placement_proposal(
+        value["proposal"], lane_id=lane["lane_id"],
+        source_geometry=value["source_scan_geometry"],
+        expected_source_extent=expected_source_extent,
+    )
+    placement = review.placement
+    if placement is None:
+        return review
+    from x5crop.detection.photo_geometry.template_placement import compose_format_placement
+    replay = compose_format_placement(
+        lane_id=placement.lane_id, frame_spec=initial.frame_spec,
+        source_scan_geometry=initial, sequence_fit=diagnostic.fit,
+        global_lattice_authority=None, cross_fit=review.cross_best,
+        width_axis=placement.width_axis, height_axis=placement.height_axis,
+        width_authority_px=placement.width_authority_px,
+        height_authority_px=placement.height_authority_px,
+        template=diagnostic.fit.template, placement_id=placement.placement_id,
+    )
+    replay = replace(replay, enclosing_support_aperture_authority=replace(
+        replay.enclosing_support_aperture_authority,
+        authority_id=placement.enclosing_support_aperture_authority.authority_id,
+    ))
+    if replay != placement:
+        raise ValueError("native endpoint Review composition is not reproducible")
+    from x5crop.detection.photo_geometry.template_feasible_geometry import project_format_placement
+    from x5crop.detection.photo_geometry.template_output import _footprint, joint_placement_envelope
+    try:
+        projection = project_format_placement(placement)
+    except ValueError:
+        if outputs:
+            raise ValueError("native endpoint Review generated an infeasible projection")
+        return review
+    for ordinal, output in enumerate(outputs, 1):
+        envelope = joint_placement_envelope(placement, projection, ordinal)
+        envelope = replace(envelope, projection_id=output["envelope"]["projection_id"])
+        mandatory = _footprint(placement, placement.frames[ordinal - 1], projection, apply_residual=True)
+        if (typed_read_model(envelope) != output["envelope"]
+                or typed_read_model(mandatory) != output["mandatory_source_footprint"]):
+            raise ValueError("native endpoint Review lost complete physical protection")
+    from x5crop.detection.photo_geometry.template_acceptability_features import build_placement_acceptability_features
+    features = build_placement_acceptability_features(
+        placement, review.proposal.output_footprints,
+        review.proposal.direct_use_budget_assessments,
+    )
+    if features != review.proposal.acceptability_features:
+        raise ValueError("native endpoint Review feature facts are not reproducible")
+    return review
+
+
+def _validate_native_endpoint_context(
+    lane: dict[str, Any], production_lane: dict[str, Any],
+) -> None:
+    """Replay the single DIRECT-only Cross context against registered input."""
+
+    value = production_lane["native_endpoint_review"]
+    if value is None:
+        return
+    from x5crop.detection.photo_geometry.template_native_review import (
+        NativeEndpointReviewFailureKind, native_endpoint_cross_input,
+        _NativeEndpointCrossInputError,
+    )
+    review = _read_common_proof(value, NativeEndpointReview)
+    diagnostic = review.phase_retention.diagnostic
+    assert diagnostic is not None
+    phase = _read_common_proof(lane["phase_competition"], PhaseFitResult)
+    registered = set(phase.registered_direct_observation_ids)
+    if diagnostic.fit.template != phase.template or not {
+        identity for identity in diagnostic.fit.binding_observation_ids
+        if identity is not None
+    }.issubset(registered):
+        raise ValueError("native endpoint Review escaped its registered phase template")
+    if review.phase_retention.record_scan_count > (
+        phase.receipt.candidate_direct_role_projection_evaluation_count
+    ):
+        raise ValueError("native endpoint Review invented phase projection records")
+    original = _read_common_proof(lane["cross_input"], TemplateCrossInput)
+    try:
+        expected = native_endpoint_cross_input(original, review.source_scan_geometry, diagnostic.fit)
+    except ValueError as error:
+        kind = (
+            error.kind if isinstance(error, _NativeEndpointCrossInputError)
+            else NativeEndpointReviewFailureKind.CROSS_INPUT_UNAVAILABLE
+        )
+        if review.cross_input is not None or review.failure is None or review.failure.kind != kind:
+            raise ValueError("native endpoint Review concealed its Cross input failure") from error
+        return
+    if review.cross_input != expected:
+        raise ValueError("native endpoint Review changed registered Cross context")
+    replay = fit_template_cross(expected)
+
+    def comparison(fit):
+        result = typed_read_model(fit)
+        if result is not None:
+            if result["selected_direction"] is not None:
+                result["selected_direction"]["direction_id"] = "recomputed-direction"
+            result["longitudinal_projection_authority"]["authority_id"] = "recomputed-projection"
+        return result
+
+    if (replay.status != review.cross_status
+            or replay.failure_kind != review.cross_failure_kind
+            or replay.receipt != review.cross_receipt
+            or comparison(replay.best) != comparison(review.cross_best)):
+        raise ValueError("native endpoint Review Cross best or bounded work is not reproducible")
+
+
 def _validate_geometry(
     record: dict[str, Any], expected_source_extent: WorkspaceExtent
 ) -> None:
@@ -3878,6 +4033,10 @@ def _validate_geometry(
                 or alternative_outputs and len(alternative_outputs) != slot_count
             ):
                 raise ValueError("alternative proposal identity or slot count is invalid")
+        _validate_native_endpoint_review(
+            lane, expected_source_extent=expected_source_extent,
+            matched_holder=None if holder is None else _read_common_proof(holder, MatchedHolder),
+        )
         lane_ids.append(lane_id)
         source_lane_proposal = next(
             (item for item in (proposal, *alternatives)
@@ -4872,6 +5031,8 @@ def _validate_development(record: dict[str, Any]) -> None:
             != production_lane.get("placement_proposal")
             or lane.get("alternative_placement_proposals")
             != production_lane.get("alternative_placement_proposals")
+            or "native_endpoint_review" not in lane
+            or lane["native_endpoint_review"] != production_lane["native_endpoint_review"]
             or "common_h_output" not in lane
             or lane["common_h_output"] != production_lane["common_h_output"]
             or "common_h_authority" not in lane
@@ -4905,6 +5066,7 @@ def _validate_development(record: dict[str, Any]) -> None:
             for proposal in (lane["placement_proposal"], *lane["alternative_placement_proposals"])
             if proposal["placement_id"] is not None
         ]
+        _validate_native_endpoint_context(lane, production_lane)
         placements = placement.get("placements")
         if not isinstance(placements, list) or len(placements) > 3:
             raise ValueError("retained placement set exceeds its compiled bound")

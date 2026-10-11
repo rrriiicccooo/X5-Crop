@@ -97,6 +97,10 @@ from .template_nominal_grid_authority import (
     failed_nominal_grid_evidence,
     nominal_grid_evidence_id,
 )
+from .template_native_retention import (
+    carry_native_phase_retention,
+    select_native_phase_retention,
+)
 from .template_nominal_grid_model import (
     CalibratedNominalGridEvidence,
     CalibratedNominalGridPrior,
@@ -1213,6 +1217,9 @@ def fit_template_phase(
         if candidate_authorities
         else ()
     )
+    native_retention = select_native_phase_retention(
+        projection_records, template=template,
+    )
 
     def respects_phase_anchor_authority_ceiling(
         candidate: _BoundFit,
@@ -1389,6 +1396,7 @@ def fit_template_phase(
                 receipt,
                 direct_ids,
                 PhaseFailureKind.FIXED_TEMPLATE_MISMATCH,
+                _native_phase_retention=native_retention,
             )
         raw_compatible = tuple(
             sorted(
@@ -1447,6 +1455,7 @@ def fit_template_phase(
                 winner_basis=None,
                 best_phase_candidate_authority_projection=best_projection,
                 runner_phase_candidate_authority_projection=runner_projection,
+                _native_phase_retention=native_retention,
             )
         # A bounded, anchored fit remains useful as a pre-Gate proposal even
         # when every complete interpretation carries direct residual
@@ -1522,6 +1531,7 @@ def fit_template_phase(
                 runner_phase_candidate_authority_projection=(
                     runner_projection
                 ),
+                _native_phase_retention=native_retention,
             )
         return PhaseFitResult(
             template,
@@ -1532,6 +1542,7 @@ def fit_template_phase(
             receipt,
             direct_ids,
             PhaseFailureKind.FIXED_TEMPLATE_MISMATCH,
+            _native_phase_retention=native_retention,
         )
     contradictory_runner_record = max(
         (
@@ -1647,6 +1658,7 @@ def fit_template_phase(
         winner_basis,
         best_phase_candidate_authority_projection=best_projection,
         runner_phase_candidate_authority_projection=runner_projection,
+        _native_phase_retention=native_retention,
         _terminal_diagnostic=(
             None
             if terminal_diagnostic_record is None
@@ -2646,6 +2658,7 @@ def _carry_terminal_phase_diagnostic(
         != prior.registered_direct_observation_ids
     ):
         raise ValueError("terminal diagnostic crosses registered phase input")
+    result = _carry_native_phase_diagnostic(result, prior)
     records = tuple(
         item for item in (prior._terminal_diagnostic, result._terminal_diagnostic)
         if item is not None
@@ -2677,6 +2690,25 @@ def _carry_terminal_phase_diagnostic(
     return replace(
         result, _terminal_diagnostic=max(records, key=rank), receipt=receipt,
     )
+
+
+def _carry_native_phase_diagnostic(
+    result: PhaseFitResult,
+    prior: PhaseFitResult,
+) -> PhaseFitResult:
+    """Carry the independent Review record only within one template identity."""
+
+    if result.status == PhaseFitStatus.BOUND_EXCEEDED:
+        return replace(result, _native_phase_retention=None)
+    if result.template != prior.template:
+        return result
+    retention = carry_native_phase_retention(
+        prior._native_phase_retention,
+        result._native_phase_retention,
+        template=result.template,
+        registered_direct_observation_ids=result.registered_direct_observation_ids,
+    )
+    return replace(result, _native_phase_retention=retention)
 
 
 def _retain_empty_terminal_diagnostic_runner(result: PhaseFitResult) -> PhaseFitResult:
@@ -3038,6 +3070,8 @@ def account_prior_phase_fit(
     """Attach a prior calibration fit to the lane's auditable work receipt."""
 
     return _aggregate_phase_work(
-        _inherit_prior_lattice_fit_basis(result, prior),
+        _carry_native_phase_diagnostic(
+            _inherit_prior_lattice_fit_basis(result, prior), prior,
+        ),
         prior.receipt,
     )

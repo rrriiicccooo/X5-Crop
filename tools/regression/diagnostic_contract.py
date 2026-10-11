@@ -77,6 +77,11 @@ def bounded_work(
         lane["work"] for lane in report["development"]["lanes"]
     )
     metrics = aggregate_work(work_rows)
+    native_peaks = tuple(
+        lane["native_endpoint_review"]["work"]["peak_temporary_bytes"]
+        for lane in report["development"]["lanes"]
+        if lane.get("native_endpoint_review") is not None
+    )
     aggregate_identity = all(
         int(metrics[field]) == sum(int(row[field]) for row in work_rows)
         for field in WORK_FIELDS
@@ -117,4 +122,6 @@ def bounded_work(
         and metrics["pixel_query_count"] <= source_pixels * 128
         and metrics["peak_temporary_bytes"]
         <= peak_temporary_limit_bytes(source_pixels)
+        and all(type(value) is int and 0 <= value <= peak_temporary_limit_bytes(source_pixels)
+                for value in native_peaks)
     )

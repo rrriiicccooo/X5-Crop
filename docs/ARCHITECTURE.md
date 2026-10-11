@@ -1604,8 +1604,8 @@ geometry 和 output identity 保留为 provenance，不编码为数值特征；s
 `tools/regression/gold_geometry.py` 独占，集合分析由现有 `gold_analysis.py` 扩展，不另建 detector 或黄金池。
 离线排序由 `tools/regression/placement_ranking.py` 独占，使用当前源码绑定、无分析错误的黄金报告；
 入口为 `tools/verify diagnostic --placement-ranking --analysis-root <gold-root> --output-root <new-root>`。
-`x5crop_development_placement_ranking_v2` 同时评价 primary、runner 与 conditional 的已生成提案；
-全体最高分与只含 primary/runner 的最高分分别保存。有条件提案只提供开发标签与分数，不取得
+`x5crop_development_placement_ranking_v3` 同时评价 primary、runner、conditional 与 native_endpoint 的已生成提案；
+全体最高分与只含 primary/runner 的最高分分别保存。有条件及独立原生端点提案只提供开发标签与分数，不取得
 canonical selection 或自动输出权限；无完整 footprint 的候选不进入排序。
 至少需要五个 source group。方法在查看该轮结果前冻结为
 `source_balanced_standardized_ridge_ranking_v1`：source SHA 排序后循环分配五折，同源 count 变体同折；
@@ -2062,6 +2062,24 @@ geometry 或 final boxes。每个阻止事实
 direct/inferred ledger、content veto 和工作量只属于显式 Debug Analysis 或 verifier。外部 report
 validator 位于 `tools/regression/`，不进入用户 standalone。
 
+每条 lane 可另存最多一份 `native_endpoint_review`。它属于固定 `review_only` scope，独立于 canonical
+competition、alternatives、source proposal、共同 H、selected output 与两级 Gate；普通与 development
+报告保存相同的完整记录。黄金保留集合上限为四份，原 canonical 两份与 conditional 一份的合同不变。
+该记录在既有 phase authority projection 池压缩前单次扫描选出：成功 projection 取其 output fit，失败
+取原 input fit 与原失败 projection；首末 Frame 各须至少有一条相同 role/observation identity 的原始
+`source_wide_edge | aggregate_union` 正 basis。优先具有 `outer_material_boundary` 的终端事实；同类中先保留
+已完成 authority projection 的 output，避免失败 input 中未获角色支持的绑定仅凭数量压过完整投影；再使用原
+`_rank`，完整键相同保留先出现的记录。原 `contradicted` 状态、所有反证与完整联合状态均保留，不授予
+角色或 Grid 权限。同模板跨 pass 只比较 prior/current 两份完整记录；不同模板不携带，不按几何去重。
+
+独立提案用原 frame spec 和 scan-canvas axis scales 新建初始 source W/H，不继承 canonical 校准。
+仅消费既有 Cross input 中 `DIRECT` binding；原 fixed H/center 必须等于初始 H，避免重新解释依赖校准 H
+的粗测分类。它的 longitudinal authority 域为空，Review 域只来自所选 fit；aspect authority unavailable。
+最多运行一次原有界 Cross 数值求解，只取 best，保留原 status/failure/receipt，不改选 runner 或第二候选。
+最多一次 compose，`global_lattice_authority=None`，使用独立 placement ID namespace。该构建发生在
+canonical selection 与 Gate 完成之后；失败仅使独立槽 unavailable，不改变规范路径或自动批准。
+Report validator 重放独立 source、Cross 上下文、compose、完整保护和预算；Debug 只读展示并明确标为 Review。
+
 Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决定、不写正式 TIFF。它必须展示：
 
 - theoretical template、role-free observations 与跨高度联合观察的 typed resolution；
@@ -2118,6 +2136,11 @@ Canonical 部分最多保留两份 placement；primary 复用已有 lattice auth
 direct-role 与 global-lattice 评估。有条件 Cross 提案最多增加一份 placement，复用 primary 的 phase 与
 lattice authority。不新增像素 query 或 phase 搜索；包括第三份提案在内的全部 footprint projection、
 物化和 output evaluation 由同一 receipt 逐次计数。
+独立原生端点 Review 使用自己的 receipt：既有 projection record 数 M、角色数 R 的分类工作为 O(MR)，
+保留状态与临时索引为 O(R)，same-template carry 每次最多比较两份。额外 Cross 调用最多一次，沿用原
+4096-fit 上限；compose/projection 各最多一次，extreme evaluations 不超过 `130F + 64`，output/budget
+各不超过 F，已有 placement 的特征为 28 项。没有新像素、query、注册、phase seed 或 Cartesian 组合。
+独立失败与工作量不写回 canonical receipt；临时内存仍受同一 source 总上限约束。
 两个已有 phase fit 的 local completion 各记录一次 `H × R` lookup 和实际新增 binding，第二次消耗一份
 既有 fit-pass 预算；晚期弱线 projection/nominal solve 按各候选实际调用计数，不扩大 6-pass 上限。
 
@@ -2214,6 +2237,7 @@ Linux开发/CI使用`renameat2(RENAME_NOREPLACE)`。目标在最终检查之后�
 | `photo_geometry/template_feasible_geometry.py` | 任一已 compose placement 的低维联合可行集合与 footprint projection；resolved 或第 7 节允许的逐假设 global-lattice direct constraint 在此唯一参与联合投影，不决定 eligibility |
 | `photo_geometry/template_output.py`、`output_model.py` | JointPlacementEnvelope、实际 sequence constraint basis/identity、固定 source W/H 身份、完整 mandatory、固定 requested、source clipping 与可见内容包含；enclosing risk 只作诊断 |
 | `photo_geometry/template_runtime_model.py`、`detector.py` | `TemplatePlacementProposal` / `TemplateSourceProposal`、eligibility/selection handoff 与顶层编排；proposal 不授权正式输出 |
+| `photo_geometry/template_native_retention.py`、`template_native_review.py` | 从既有 projection 记录按原生终端证据保留一份完整解释、独立初始 source/Cross Review 上下文与有界物化；不参与 canonical competition 或 Gate |
 | `photo_geometry/template_gate.py` | selected-only CandidateGate facts；不生成、选择或删除 proposal |
 | `x5crop/detection/output_deskew.py` | approved-only 6–24 trace、role-free、candidate-independent 的可选输出角度 observation |
 | `x5crop/detection/decision/`、`final/` | 最终决定、Decision 后 deskew assessment 与 approved geometry exposure |

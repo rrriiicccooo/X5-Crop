@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import redirect_stderr, redirect_stdout
+from copy import deepcopy
 from dataclasses import replace
 import io
 import json
@@ -21,6 +22,7 @@ from tools.regression.gold_analysis import (
     _fit_mixed_axis_guard,
     _nominal_pitch_calibration,
     _retained_placement_summary,
+    _retained_placement_gold_labels,
     _round_outward,
     _round_outward_lower,
     _runtime_budget_state,
@@ -554,6 +556,84 @@ class GoldAnalysisContractTest(unittest.TestCase):
         self.assertEqual(summary["at_least_one_safe_task_count"], 1)
         record["retained_placement_gold_labels"] *= 2
         with self.assertRaisesRegex(ValueError, "invalid retained placement identities"):
+            _retained_placement_summary((record,))
+
+    def test_native_endpoint_labels_are_independent_and_optional(self) -> None:
+        gold = {"count": 1, "confirmed_geometry": {"slots": []}}
+        primary = typed_read_model(retained_proposal_fixture("placement:primary"))
+        native = typed_read_model(retained_proposal_fixture("placement:native"))
+        lane = {
+            "placement_proposal": primary,
+            "alternative_placement_proposals": [],
+            "conditional_proposal_placement_id": None,
+            "native_endpoint_review": None,
+        }
+
+        def diagnostic(_record, proposal):
+            safe = proposal["placement_id"] == "placement:native"
+            return {"geometry_conformance": "safe" if safe else "unsafe",
+                    "geometry_failure": None if safe else "unsafe",
+                    "frame_diagnostics": []}
+
+        with patch("tools.regression.gold_analysis.placement_proposal_gold_diagnostics",
+                   side_effect=diagnostic):
+            self.assertEqual([item["role"] for item in
+                              _retained_placement_gold_labels(gold, lane)], ["primary"])
+            lane["native_endpoint_review"] = {"scope": "review_only", "proposal": native}
+            labels = _retained_placement_gold_labels(gold, lane)
+            self.assertEqual([item["role"] for item in labels], ["primary", "native_endpoint"])
+            self.assertEqual([item["geometry_conformance"] for item in labels], ["unsafe", "safe"])
+            self.assertIs(lane["placement_proposal"], primary)
+            self.assertEqual(lane["alternative_placement_proposals"], [])
+            lane["native_endpoint_review"]["scope"] = "automatic_output"
+            with self.assertRaisesRegex(ValueError, "review-only"):
+                _retained_placement_gold_labels(gold, lane)
+
+    def test_native_endpoint_safe_summary_preserves_canonical_roles_and_max_four(self) -> None:
+        record = self._analysis_record(
+            "native-only-safe", source_sha256="c" * 64, role="nominal",
+            decision="needs_review", proposal="unsafe", candidate="not_available",
+            unsafe_auto=False, physical_frame_id="B1|B2",
+        )
+        original = record["retained_placement_gold_labels"][0]
+
+        def label(role):
+            item = deepcopy(original)
+            item["placement_id"] = f"placement:{role}"
+            item["role"] = role
+            item["acceptability_features"]["placement_id"] = item["placement_id"]
+            if role == "native_endpoint":
+                item["geometry_conformance"] = "safe"
+                item["geometry_failure"] = None
+            return item
+
+        roles = ["primary", "runner", "conditional", "native_endpoint"]
+        record["retained_placement_gold_labels"] = [label(role) for role in roles]
+        summary = _retained_placement_summary((record,))
+        self.assertEqual(summary["task_set_state_counts"], {"one_safe": 1})
+        self.assertEqual(summary["placement_label_counts"], {"safe": 1, "unsafe": 3})
+        self.assertEqual(summary["at_least_one_safe_task_count"], 1)
+        self.assertEqual(record["proposal_geometry_conformance"], "unsafe")
+
+        for invalid_roles in (
+            ["primary", "native_endpoint", "runner"],
+            ["primary", "runner", "runner"],
+            ["native_endpoint", "conditional"],
+            [*roles, "native_endpoint"],
+        ):
+            record["retained_placement_gold_labels"] = [label(role) for role in invalid_roles]
+            # Give repeated roles distinct IDs so role/order validation is exercised.
+            for index, item in enumerate(record["retained_placement_gold_labels"]):
+                item["placement_id"] += f":{index}"
+                item["acceptability_features"]["placement_id"] = item["placement_id"]
+            with self.subTest(roles=invalid_roles), self.assertRaisesRegex(
+                    ValueError, "invalid retained placement identities"):
+                _retained_placement_summary((record,))
+
+        record["retained_placement_gold_labels"] = [label("native_endpoint")]
+        self.assertEqual(_retained_placement_summary((record,))["at_least_one_safe_task_count"], 1)
+        record["retained_placement_gold_labels"][0]["output_footprints"] = []
+        with self.assertRaisesRegex(ValueError, "invalid retained placement gold label"):
             _retained_placement_summary((record,))
 
     def test_release_readiness_requires_current_calibration_provenance(
