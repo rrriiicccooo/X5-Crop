@@ -101,6 +101,7 @@ from .template_native_retention import (
     carry_native_phase_retention,
     select_native_phase_retention,
 )
+from .template_source_domain import PhaseSourceDomain, source_clipped_terminal_roles
 from .template_nominal_grid_model import (
     CalibratedNominalGridEvidence,
     CalibratedNominalGridPrior,
@@ -356,6 +357,11 @@ def _merge_continuous_placement(
     right = alternative.fit
     if not _same_continuous_placement(left, right):
         raise ValueError("cannot merge discrete phase placements")
+    if left == right:
+        return _BoundFit(
+            left,
+            selected.residual_compatible and alternative.residual_compatible,
+        )
     role_bindings = _continuous_role_bindings(left, right)
     if role_bindings is None:
         raise ValueError("continuous phase bindings cannot be combined")
@@ -607,6 +613,27 @@ def _unseparated_completion_competitor(
     return None
 
 
+def _candidate_respects_holder_or_terminal_source(
+    fit: SequenceFit,
+    *,
+    holder_span_px: FiniteInterval | None,
+    holder_slack_px: float,
+    source_domain: PhaseSourceDomain | None,
+) -> bool:
+    """Defer only true source-terminal overflow to existing final checks."""
+
+    limits = _holder_limits(holder_span_px)
+    positions = fit.model_role_positions_px
+    if limits is None or (
+        min(positions) >= limits[0] - holder_slack_px
+        and max(positions) <= limits[1] + holder_slack_px
+    ):
+        return True
+    if source_domain is None:
+        return False
+    return source_clipped_terminal_roles(fit, source_domain) is not None
+
+
 def fit_template_phase(
     observations: Sequence[BoundaryEdgeObservation],
     template: TemplateSpec,
@@ -617,6 +644,7 @@ def fit_template_phase(
     ] = (),
     scale_px_per_mm: PositiveInterval | float | None = None,
     holder_span_px: FiniteInterval | None = None,
+    source_domain: PhaseSourceDomain | None = None,
     phase_authority_px: FiniteInterval | None = None,
     adjacency_relations: Sequence[AdjacencyRelation] = (),
     contact_edge_observations: Sequence[ContactEdgeObservation] = (),
@@ -634,6 +662,13 @@ def fit_template_phase(
 
     if max_observations <= 0:
         raise ValueError("phase observation bound must be positive")
+    if source_domain is not None:
+        if not isinstance(source_domain, PhaseSourceDomain):
+            raise TypeError("phase source domain must be typed")
+        source_domain.validate_registration(
+            holder_span_px,
+            tuple(sequence_measurement_sets),
+        )
     registered_observations = tuple(observations)
     phase_separator_bands = normal_separator_material_bands(
         tuple(separator_bands),
@@ -1058,7 +1093,8 @@ def fit_template_phase(
             direct_ids,
             PhaseFailureKind.HYPOTHESIS_BOUND_EXCEEDED,
         )
-    holder_limits = _holder_limits(holder_span_px)
+    # The admission scan is at most R coordinates per existing fitted seed:
+    # O(H * R), without new hypotheses, queries, lookups or fit passes.
     local_candidates = tuple(
         value
         for value in (
@@ -1088,14 +1124,11 @@ def fit_template_phase(
             )
         )
         if value is not None
-        and (
-            holder_limits is None
-            or (
-                min(value.fit.model_role_positions_px)
-                >= holder_limits[0] - width0 * 0.04
-                and max(value.fit.model_role_positions_px)
-                <= holder_limits[1] + width0 * 0.04
-            )
+        and _candidate_respects_holder_or_terminal_source(
+            value.fit,
+            holder_span_px=holder_span_px,
+            holder_slack_px=width0 * 0.04,
+            source_domain=source_domain,
         )
         and (
             phase_authority_px is None
@@ -2802,6 +2835,7 @@ def fit_template_phase_candidate_with_adjacency_relations(
         ),
         scale_px_per_mm=scale_px_per_mm,
         holder_span_px=holder_span_px,
+        source_domain=phase_input.source_domain,
         phase_authority_px=phase_authority_px,
         contact_edge_observations=phase_input.contact_edge_observations,
         overlap_edge_pair_observations=(
@@ -2948,6 +2982,7 @@ def fit_template_phase_candidate_with_adjacency_relations(
         ),
         scale_px_per_mm=scale_px_per_mm,
         holder_span_px=holder_span_px,
+        source_domain=phase_input.source_domain,
         phase_authority_px=phase_authority_px,
         adjacency_relations=analysis.relations,
         contact_edge_observations=phase_input.contact_edge_observations,

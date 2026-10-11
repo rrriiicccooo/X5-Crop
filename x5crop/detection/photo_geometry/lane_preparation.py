@@ -6,6 +6,7 @@ from dataclasses import replace
 import math
 
 from ...configuration.model import DetectionConfiguration, ResolvedSlotCount
+from ...domain import WorkspaceExtent
 from ...formats import OUTPUT_PROTECTION_SPEC
 from ..source_core import SourceLaneEvidence
 from .axis_layout import axis_interval, coordinate_count, source_axes
@@ -89,6 +90,7 @@ from .template_phase_model import (
     TemplatePhaseCandidateCompetition,
     TemplatePhaseInput,
 )
+from .template_source_domain import PhaseSourceDomain
 from .template_pitch import (
     TemplatePitchCalibration,
     calibrate_template_source_pitch,
@@ -270,6 +272,40 @@ def _physical_broad_material_regions(
     )
 
 
+def _phase_source_domain(
+    field: PhotoBoundaryMeasurementField,
+    lane: SourceLaneEvidence,
+    *,
+    layout: str,
+) -> PhaseSourceDomain:
+    if not isinstance(field, PhotoBoundaryMeasurementField):
+        raise TypeError("phase source domain requires the canonical measurement field")
+    width_axis = source_axes(layout)[0]
+    scales = lane.scan_canvas.axis_scales
+    if (
+        field.layout != layout
+        or lane.domain.source_axis_long != width_axis.value
+        or scales is None
+        or scales.source_width_axis != width_axis.value
+    ):
+        raise ValueError("phase source domain axis differs from its registered lane")
+    long_axis = lane.scan_canvas.observed_long_axis_px
+    short_axis = lane.scan_canvas.observed_short_axis_px
+    canvas_extent = (
+        WorkspaceExtent(long_axis, short_axis)
+        if layout == "horizontal"
+        else WorkspaceExtent(short_axis, long_axis)
+    )
+    if canvas_extent != field.source_extent:
+        raise ValueError("phase scan canvas differs from the canonical TIFF extent")
+    return PhaseSourceDomain(
+        lane_id=lane.domain.lane_id,
+        sampling_authority_box=source_lane_box(lane, layout),
+        source_extent=field.source_extent,
+        width_axis=width_axis,
+    )
+
+
 def prepare_template_lane(
     field: PhotoBoundaryMeasurementField,
     lane: SourceLaneEvidence,
@@ -285,6 +321,7 @@ def prepare_template_lane(
     authority = source_lane_box(lane, layout)
     width_authority = axis_interval(authority, width_axis)
     height_authority = axis_interval(authority, height_axis)
+    phase_source_domain = _phase_source_domain(field, lane, layout=layout)
     scales = lane.scan_canvas.axis_scales
     if scales is None:
         raise ValueError("template registration requires scan-canvas scales")
@@ -691,6 +728,7 @@ def prepare_template_lane(
         outer_material_boundaries=outer_material_boundaries,
         scale_px_per_mm=scales.width_axis_px_per_mm,
         holder_span_px=width_authority,
+        source_domain=phase_source_domain,
     )
     # The broad template locates material bands. Test the proposed short-strip
     # pitch in its own compiled neighbourhood before committing it; an
@@ -725,6 +763,7 @@ def prepare_template_lane(
             outer_material_boundaries=outer_material_boundaries,
             scale_px_per_mm=scales.width_axis_px_per_mm,
             holder_span_px=width_authority,
+            source_domain=phase_source_domain,
             phase_authority_px=base_phase_hypothesis,
             sequence_measurement_sets=sequence_measurement_sets,
             calibrated_nominal_grid_prior=(
@@ -761,6 +800,7 @@ def prepare_template_lane(
             outer_material_boundaries=outer_material_boundaries,
             scale_px_per_mm=scales.width_axis_px_per_mm,
             holder_span_px=width_authority,
+            source_domain=phase_source_domain,
             phase_authority_px=base_phase_authority,
         )
         if proposed_base_phase is not None:
@@ -815,6 +855,7 @@ def prepare_template_lane(
         template=template,
         scale_px_per_mm=scales.width_axis_px_per_mm,
         holder_span_px=width_authority,
+        source_domain=phase_source_domain,
         phase_authority_px=phase_search_authority,
         calibrated_nominal_grid_prior=(
             measurement_plan.calibrated_nominal_grid_prior

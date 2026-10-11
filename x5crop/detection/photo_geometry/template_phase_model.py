@@ -31,6 +31,7 @@ from .template_nominal_grid_model import (
     CalibratedNominalGridEvidence,
     CalibratedNominalGridPrior,
 )
+from .template_source_domain import PhaseSourceDomain
 
 
 @dataclass(frozen=True)
@@ -206,6 +207,7 @@ class TemplatePhaseInput:
         default_factory=GlobalLatticeAuthorityEvidence
     )
     max_observations: int = 512
+    source_domain: PhaseSourceDomain | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.template, TemplateSpec):
@@ -240,6 +242,13 @@ class TemplatePhaseInput:
             for item in self.sequence_measurement_sets
         ):
             raise TypeError("phase input sequence measurement ledger is invalid")
+        if self.source_domain is not None:
+            if not isinstance(self.source_domain, PhaseSourceDomain):
+                raise TypeError("phase input source domain must be typed")
+            self.source_domain.validate_registration(
+                self.holder_span_px,
+                self.sequence_measurement_sets,
+            )
         if any(
             not isinstance(item, OuterMaterialBoundaryObservation)
             for item in self.outer_material_boundaries

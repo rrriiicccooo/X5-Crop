@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import fields, replace
 import contextlib
 import io
 from pathlib import Path
@@ -33,6 +34,14 @@ from x5crop.runtime.bootstrap import run_options
 from x5crop.runtime.options import RuntimeOptions
 from x5crop.runtime.outcome import CompletedInput, FailedInput, FailureStage
 from x5crop.runtime.workflow import process_one
+from x5crop.detection.photo_geometry import lane_preparation
+from x5crop.detection.photo_geometry.measurement_model import PhotoBoundaryMeasurementField
+from x5crop.detection.photo_geometry.model import BoundaryAxis
+from x5crop.detection.photo_geometry.template_pitch import TemplatePitchCalibration
+from x5crop.domain import Box, FiniteInterval, ObservationId, WorkspaceExtent
+from x5crop.io.orientation import orientation_mapping
+from tools.tests.photo_geometry_support import make_native_test_field
+from tools.tests.template_runtime_test_support import runtime_lane
 
 
 def _run_config(
@@ -62,6 +71,69 @@ def _run_config(
 def _rgb16(pixels: np.ndarray) -> np.ndarray:
     normalized = np.asarray(pixels, dtype=np.uint16)
     return np.repeat(normalized[..., np.newaxis], 3, axis=2)
+
+
+class PhaseSourceDomainFactoryContractTest(unittest.TestCase):
+    def test_factory_uses_only_the_immutable_canonical_field_extent(self) -> None:
+        lane = runtime_lane()
+        field = make_native_test_field(np.zeros((322, 2320), dtype=np.uint8), "horizontal")
+        proof = lane_preparation._phase_source_domain(field, lane, layout="horizontal")
+        self.assertIs(proof.source_extent, field.source_extent)
+        self.assertEqual(proof.sampling_authority_box, lane.domain.work_box)
+        self.assertEqual(proof.width_axis, BoundaryAxis.X)
+        self.assertFalse(next(item for item in fields(PhotoBoundaryMeasurementField) if item.name == "source_extent").init)
+        with self.assertRaises(TypeError):
+            PhotoBoundaryMeasurementField(field.source_gray, "horizontal", source_rgb=field.source_rgb, source_extent=WorkspaceExtent(1, 1))
+        internal_lane = replace(lane, domain=replace(lane.domain, work_box=Box(0, 0, 1000, 322)))
+        internal = lane_preparation._phase_source_domain(field, internal_lane, layout="horizontal")
+        self.assertIs(internal.source_extent, field.source_extent)
+        self.assertEqual(internal.sampling_authority_box.right, 1000)
+        for changed_lane in (
+            replace(lane, domain=replace(lane.domain, source_axis_long="y")),
+            replace(lane, scan_canvas=replace(lane.scan_canvas, observed_long_axis_px=1000)),
+            replace(lane, scan_canvas=replace(lane.scan_canvas, axis_scales=replace(lane.scan_canvas.axis_scales, source_width_axis="y", source_height_axis="x"))),
+        ):
+            with self.subTest(lane=changed_lane), self.assertRaises(ValueError):
+                lane_preparation._phase_source_domain(field, changed_lane, layout="horizontal")
+        with self.assertRaises(ValueError):
+            lane_preparation._phase_source_domain(field, lane, layout="vertical")
+        with self.assertRaises(TypeError):
+            lane_preparation._phase_source_domain(object(), lane, layout="horizontal")
+
+    def test_orientation6_uses_canonical_dimensions_and_axis(self) -> None:
+        mapping = orientation_mapping(6, raw_width=100, raw_height=80)
+        field = make_native_test_field(np.zeros((mapping.canonical_height, mapping.canonical_width), dtype=np.uint8), "vertical")
+        lane = runtime_lane()
+        lane = replace(lane,
+            domain=replace(lane.domain, work_box=Box(0, 0, 100, 80), source_axis_long="y"),
+            scan_canvas=replace(lane.scan_canvas, observed_long_axis_px=100, observed_short_axis_px=80,
+                axis_scales=replace(lane.scan_canvas.axis_scales, source_width_axis="y", source_height_axis="x")))
+        proof = lane_preparation._phase_source_domain(field, lane, layout="vertical")
+        self.assertEqual(proof.source_extent, WorkspaceExtent(80, 100))
+        self.assertEqual(proof.sampling_authority_box, Box(0, 0, 80, 100))
+        self.assertEqual(proof.width_axis, BoundaryAxis.Y)
+
+    def test_three_preparation_fits_and_registered_input_share_one_proof(self) -> None:
+        field = make_native_test_field(np.zeros((322, 2320), dtype=np.uint8), "horizontal")
+        lane = runtime_lane()
+        configuration = get_detection_configuration("135", 3)
+
+        def unclosed_hypothesis(compiled, *_args, **_kwargs):
+            return TemplatePitchCalibration(compiled, None, FiniteInterval.exact(100.0),
+                (ObservationId("test:band:1"), ObservationId("test:band:2")), (), 0, False)
+
+        with (
+            mock.patch.object(lane_preparation, "fit_template_phase", wraps=lane_preparation.fit_template_phase) as fits,
+            mock.patch.object(lane_preparation, "calibrate_template_source_pitch", side_effect=unclosed_hypothesis),
+            mock.patch.object(lane_preparation, "close_separator_phase_hypothesis", return_value=None),
+            mock.patch.object(lane_preparation, "resolve_separator_pitch_hypothesis", side_effect=lambda value, *_args, **_kwargs: value),
+        ):
+            prepared = lane_preparation.prepare_template_lane(field, lane, layout="horizontal",
+                output_slot_count=3, measurement_slot_count=6, configuration=configuration)
+        self.assertEqual(fits.call_count, 3)
+        proof = prepared.phase_input.source_domain
+        self.assertIsNotNone(proof)
+        self.assertTrue(all(call.kwargs["source_domain"] is proof for call in fits.call_args_list))
 
 
 class SourceCoordinateRuntimeContractTest(unittest.TestCase):
