@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 import unittest
+from unittest.mock import patch
+
+import numpy as np
 
 from x5crop.detection.photo_geometry.observation_types import (
     BoundaryEdgeMeasurementBasis,
@@ -22,6 +25,7 @@ from x5crop.detection.photo_geometry.template_pitch import (
     calibrate_template_source_pitch,
     close_separator_phase_hypothesis,
     resolve_separator_pitch_hypothesis,
+    TemplatePitchCalibration,
 )
 from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseFailureKind,
@@ -114,6 +118,65 @@ def separator(
 
 
 class TemplatePitchContractTest(unittest.TestCase):
+    def test_lane_preserves_phase_producer_bounds_without_retry(self) -> None:
+        from tools.tests.photo_geometry_support import make_native_test_field
+        from tools.tests.template_runtime_test_support import runtime_lane
+        from x5crop.configuration.registry import get_detection_configuration
+        from x5crop.detection.photo_geometry.lane_preparation import prepare_template_lane
+
+        owner = "x5crop.detection.photo_geometry.lane_preparation."
+        fits = []
+
+        def measured_fit(observations, compiled, **kwargs):
+            phase = fit_template_phase(observations, compiled, **kwargs)
+            if len(fits) + 1 == bound_pass:
+                phase = replace(
+                    phase, status=PhaseFitStatus.BOUND_EXCEEDED,
+                    best=None, runner_up=None, winner_basis=None,
+                    failure_kind=PhaseFailureKind.HYPOTHESIS_BOUND_EXCEEDED,
+                    ambiguity_reason=f"phase pass {bound_pass} producer bound exceeded",
+                    best_phase_candidate_authority_projection=None,
+                    runner_phase_candidate_authority_projection=None,
+                )
+            fits.append(phase)
+            return phase
+
+        def proposed_pitch(compiled, *args, **kwargs):
+            return TemplatePitchCalibration(
+                compiled, None, FiniteInterval(40.0, 41.0),
+                (ObservationId("separator:1"), ObservationId("separator:2")),
+                (), 1, False,
+            )
+
+        for bound_pass in (1, 2, 3):
+            with self.subTest(bound_pass=bound_pass):
+                fits.clear()
+                with (
+                    patch(owner + "fit_template_phase", side_effect=measured_fit) as fit,
+                    patch(owner + "calibrate_template_source_pitch", side_effect=proposed_pitch) as calibrate,
+                    patch(owner + "fit_template_phase_candidate_with_adjacency_relations") as retry,
+                ):
+                    prepared = prepare_template_lane(
+                        make_native_test_field(np.zeros((322, 2320), dtype=np.uint8), "horizontal"),
+                        runtime_lane(), layout="horizontal", output_slot_count=3,
+                        measurement_slot_count=6, configuration=get_detection_configuration("135"),
+                    )
+                self.assertEqual(fit.call_count, bound_pass)
+                if bound_pass == 1:
+                    calibrate.assert_not_called()
+                retry.assert_not_called()
+                phase = prepared.phase_competition
+                self.assertEqual(phase.status, PhaseFitStatus.BOUND_EXCEEDED)
+                self.assertEqual(phase.failure_kind, PhaseFailureKind.HYPOTHESIS_BOUND_EXCEEDED)
+                self.assertEqual(phase.ambiguity_reason, fits[-1].ambiguity_reason)
+                self.assertIsNone(phase.best)
+                self.assertIsNone(phase.runner_up)
+                self.assertIsNone(phase.winner_basis)
+                self.assertEqual(phase.receipt.phase_hypothesis_count,
+                    sum(item.receipt.phase_hypothesis_count for item in fits))
+                self.assertEqual(phase.receipt.fit_pass_count,
+                    sum(item.receipt.fit_pass_count for item in fits))
+
     def test_two_adjacent_same_role_advances_authorize_source_pitch(self) -> None:
         observations = (edge("start:1", 40.0), edge("start:2", 160.0), edge("start:3", 280.0))
         phase = fit_template_phase(observations, template())

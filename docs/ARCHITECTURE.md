@@ -757,7 +757,8 @@ source pitch、base relation、direct separator refit、双候选 local completi
   `TemplatePitchCalibration.pitch_hypothesis_withheld` 保留原材料 identity 和 hypothesis，pitch observation
   authority 为空；既有后续 pass 使用原编译模板，不再消费该 hypothesis，且整体保持 Review。已有
   phase failure 不被覆盖；原本 resolved 的结果记为 `adjacency_topology_unresolved`。Producer bound 不能
-  被当作闭合失败再退回搜索；fit pass、hypothesis、role 与查询上限不增加。长片条中的两点还可能跨过一个或多个已测 local advance，
+  被当作闭合失败再退回搜索；provisional、两点检查或 base fit 的 bound 直接进入终态竞争结果，
+  原失败与工作量只传播一次。fit pass、hypothesis、role 与查询上限不增加。长片条中的两点还可能跨过一个或多个已测 local advance，
   只能缩小 pitch 搜索。至少三个独立 material 位置形成周期闭环后，separator lattice 才能自行收紧
   absolute phase；不同解释仍保留为离散 placement。
 - 未标 ordinal 的 separator lattice 只枚举 `直接 band 对 × 有限 ordinal distance`，并在循环前

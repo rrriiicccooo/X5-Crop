@@ -86,9 +86,11 @@ from .template_phase_model import (
     GlobalLatticeAuthorityEvidence,
     PhaseFailureKind,
     PhaseFitStatus,
+    TemplatePhaseCandidateCompetition,
     TemplatePhaseInput,
 )
 from .template_pitch import (
+    TemplatePitchCalibration,
     calibrate_template_source_pitch,
     close_separator_phase_hypothesis,
     resolve_separator_pitch_hypothesis,
@@ -690,13 +692,17 @@ def prepare_template_lane(
     # The broad template locates material bands. Test the proposed short-strip
     # pitch in its own compiled neighbourhood before committing it; an
     # independent closure must survive without the format gap proving it.
-    pitch_calibration = calibrate_template_source_pitch(
-        template,
-        provisional_phase,
-        placement_sequence_edges,
-        separator_bands,
-        holder_span_px=width_authority,
-        max_lattice_hypotheses=measurement_plan.phase_bounds.max_hypotheses,
+    pitch_calibration = (
+        TemplatePitchCalibration(template, None, None, (), (), 0, False)
+        if provisional_phase.status == PhaseFitStatus.BOUND_EXCEEDED
+        else calibrate_template_source_pitch(
+            template,
+            provisional_phase,
+            placement_sequence_edges,
+            separator_bands,
+            holder_span_px=width_authority,
+            max_lattice_hypotheses=measurement_plan.phase_bounds.max_hypotheses,
+        )
     )
     registered_pitch_authority_ids = pitch_calibration.pitch_observation_ids
     pitch_lattice_hypothesis_count = (
@@ -732,7 +738,12 @@ def prepare_template_lane(
         template = pitch_calibration.template
         registered_pitch_authority_ids = pitch_calibration.pitch_observation_ids
     unclosed_separator_pitch_hypothesis = pitch_calibration.pitch_hypothesis_withheld
-    if proposed_base_phase is not None and base_phase_authority is not None:
+    if provisional_phase.status == PhaseFitStatus.BOUND_EXCEEDED:
+        base_phase = provisional_phase
+    elif proposed_base_phase is not None and (
+        base_phase_authority is not None
+        or proposed_base_phase.status == PhaseFitStatus.BOUND_EXCEEDED
+    ):
         base_phase = proposed_base_phase
     else:
         base_phase = fit_template_phase(
@@ -810,8 +821,12 @@ def prepare_template_lane(
             pitch_observation_ids=registered_pitch_authority_ids,
         ),
     )
-    phase_candidate = fit_template_phase_candidate_with_adjacency_relations(
-        phase_input
+    # A producer bound is terminal even when a fresh fit could stay inside
+    # the aggregate receipt limit. Do not restart competition after it.
+    phase_candidate = (
+        TemplatePhaseCandidateCompetition(base_phase, ())
+        if base_phase.status == PhaseFitStatus.BOUND_EXCEEDED
+        else fit_template_phase_candidate_with_adjacency_relations(phase_input)
     )
     if pitch_lattice_bound_exceeded:
         phase_candidate = replace(
@@ -897,8 +912,10 @@ def prepare_template_lane(
             ),
             winner_basis=None,
         )
-    phase = account_prior_phase_fit(phase, base_phase)
-    phase = account_prior_phase_fit(phase, provisional_phase)
+    if base_phase.status != PhaseFitStatus.BOUND_EXCEEDED:
+        phase = account_prior_phase_fit(phase, base_phase)
+    if base_phase is not provisional_phase:
+        phase = account_prior_phase_fit(phase, provisional_phase)
     phase = replace(
         phase,
         receipt=replace(
