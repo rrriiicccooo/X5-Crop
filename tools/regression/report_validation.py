@@ -1171,6 +1171,8 @@ def _validate_native_coarse_side_support(lane, query_records, registered, source
         raise ValueError("Cross input changed its registered trace or source direction authority")
     if "phase_competition" in lane and typed_read_model(inputs.longitudinal_support_domain_groups_px) != _cross_support_domains_from_phase_report(lane["phase_competition"]):
         raise ValueError("Cross input changed its retained longitudinal domain")
+    if "phase_competition" in lane and typed_read_model(inputs.review_support_domain_groups_px) != _cross_review_support_domains_from_phase_report(lane["phase_competition"]):
+        raise ValueError("Cross input changed its retained Review context")
     regular = tuple(item for item in expected_solver if item.coarse_side_fact is None)
     top, bottom, work = register_coarse_side_facts(facts,
         remaining_bound=max(0, MAX_CROSS_FITTED_OBSERVATIONS - len(regular)))
@@ -1194,7 +1196,10 @@ def _validate_native_coarse_side_support(lane, query_records, registered, source
     def support_fits_record(fits):
         record = typed_read_model(fits)
         for fit in record:
-            fit["selected_direction"]["direction_id"] = "recomputed-direction"
+            if fit is None:
+                continue
+            if fit["selected_direction"] is not None:
+                fit["selected_direction"]["direction_id"] = "recomputed-direction"
             fit["longitudinal_projection_authority"]["authority_id"] = "recomputed-projection"
         return record
     recorded = _read_common_proof(competition, CrossFitCompetition)
@@ -1203,7 +1208,11 @@ def _validate_native_coarse_side_support(lane, query_records, registered, source
             or support_fits_record(replay.enclosing_support_fits) != support_fits_record(recorded.enclosing_support_fits)
             or typed_read_model(replay.receipt) != competition["receipt"]
             or replay.status.value != competition["status"]
-            or typed_read_model(replay.winner_basis) != competition["winner_basis"]):
+            or typed_read_model(replay.winner_basis) != competition["winner_basis"]
+            or replay.failure_kind != recorded.failure_kind
+            or replay.retained_proposal_basis != recorded.retained_proposal_basis
+            or support_fits_record((replay.best, replay.runner_up))
+            != support_fits_record((recorded.best, recorded.runner_up))):
         raise ValueError("Cross support competition changed its complete candidates or bounded work")
     return {str(item.observation_id) for item in native}
 
@@ -1727,6 +1736,21 @@ def _cross_support_domains_from_phase_report(
         fits = (phase["best"], phase["runner_up"])
     else:
         return []
+    return _cross_support_domains_from_candidate_reports(fits)
+
+
+def _cross_review_support_domains_from_phase_report(
+    phase: dict[str, Any],
+) -> list[list[dict[str, float]]]:
+    """Replay geometric context without authorizing Cross projection."""
+
+    if phase["best"] is None or phase["status"] == PhaseFitStatus.BOUND_EXCEEDED.value:
+        return []
+    fits = (phase["best"],) if phase["runner_up"] is None else (phase["best"], phase["runner_up"])
+    return _cross_support_domains_from_candidate_reports(fits)
+
+
+def _cross_support_domains_from_candidate_reports(fits) -> list[list[dict[str, float]]]:
     compiled = []
     for fit in fits:
         try:

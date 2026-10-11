@@ -127,6 +127,9 @@ class CrossRetainedProposalBasis(str, Enum):
     CALIBRATED_HEIGHT_FROM_REGISTERED_ROLE_HYPOTHESIS = (
         "calibrated_height_from_registered_role_hypothesis"
     )
+    CALIBRATED_HEIGHT_FROM_COMPLETE_REVIEW_SUPPORT = (
+        "calibrated_height_from_complete_review_support"
+    )
 
 
 class CrossLineProjectionBasis(str, Enum):
@@ -825,6 +828,9 @@ class TemplateCrossInput:
     longitudinal_support_domain_groups_px: tuple[
         tuple[FiniteInterval, ...], ...
     ] = ()
+    review_support_domain_groups_px: tuple[
+        tuple[FiniteInterval, ...], ...
+    ] = ()
     boundary_axis: BoundaryAxis = BoundaryAxis.Y
     maximum_registered_runs_per_role: int = 256
     maximum_fitted_observations: int = 256
@@ -886,18 +892,21 @@ class TemplateCrossInput:
             or any(not isinstance(value, int) for value in registered)
         ):
             raise ValueError("cross registered trace domain is invalid")
-        groups = self.longitudinal_support_domain_groups_px
-        if len(groups) > 2 or any(
-            not isinstance(domains, tuple)
-            or len(domains) != self.template.count
-            or any(not isinstance(item, FiniteInterval) for item in domains)
-            or any(
-                left.maximum > right.minimum
-                for left, right in zip(domains, domains[1:])
-            )
-            for domains in groups
+        for name, groups in (
+            ("longitudinal", self.longitudinal_support_domain_groups_px),
+            ("review", self.review_support_domain_groups_px),
         ):
-            raise ValueError("cross longitudinal support domains are invalid")
+            if len(groups) > 2 or any(
+                not isinstance(domains, tuple)
+                or len(domains) != self.template.count
+                or any(not isinstance(item, FiniteInterval) for item in domains)
+                or any(
+                    left.maximum > right.minimum
+                    for left, right in zip(domains, domains[1:])
+                )
+                for domains in groups
+            ):
+                raise ValueError(f"cross {name} support domains are invalid")
         bounds = (
             self.maximum_registered_runs_per_role,
             self.maximum_fitted_observations,

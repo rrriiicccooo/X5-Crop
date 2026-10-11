@@ -153,6 +153,20 @@ class NativeCoarseOwnerContractTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'aggregate endpoint reduction'):
             _validate_native_coarse_side_support(changed, queries, surviving, sources)
 
+    def test_report_binds_review_context_to_phase_without_promoting_authority(self):
+        from copy import deepcopy
+        from tools.regression.report_validation import _validate_native_coarse_side_support
+        _, inputs, _, lane, queries, registered, sources = self.fixture()
+        lane["phase_competition"] = {"best": None, "runner_up": None, "status": "unresolved"}
+        _validate_native_coarse_side_support(lane, queries, registered, sources)
+        changed = deepcopy(lane)
+        changed["cross_input"]["review_support_domain_groups_px"] = [[
+            {"minimum": 100.0 * ordinal, "maximum": 100.0 * ordinal + 50.0}
+            for ordinal in range(inputs.template.count)
+        ]]
+        with self.assertRaisesRegex(ValueError, "retained Review context"):
+            _validate_native_coarse_side_support(changed, queries, registered, sources)
+
     def test_retained_singleton_fits_are_reused_within_the_actual_work_bound(self):
         from unittest.mock import patch
         import importlib

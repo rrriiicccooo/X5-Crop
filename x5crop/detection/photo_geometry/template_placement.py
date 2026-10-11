@@ -484,6 +484,26 @@ def resolved_cross_support_domains_px(
     )
 
 
+def review_cross_support_domain_groups_px(
+    phase: PhaseFitResult,
+) -> tuple[tuple[FiniteInterval, ...], ...]:
+    """Describe retained geometry for Review selection, without authority.
+
+    An unresolved phase can still position complete diagnostic Frames. Their
+    native coordinates describe which registered Cross traces are relevant;
+    they cannot authorize longitudinal projection or a new measurement.
+    Compilation remains all-or-nothing across both retained interpretations.
+    """
+
+    if phase.best is None or phase.status == PhaseFitStatus.BOUND_EXCEEDED:
+        return ()
+    fits = (phase.best,) if phase.runner_up is None else (phase.best, phase.runner_up)
+    try:
+        return tuple(resolved_cross_support_domains_px(fit) for fit in fits)
+    except ValueError:
+        return ()
+
+
 def compile_cross_support_domains_px(
     *,
     count: int,

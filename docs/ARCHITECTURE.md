@@ -1891,17 +1891,34 @@ coordinate。该顺序只生成 Review proposal，不是 score、winner 或 Cros
 作为 runner/counterevidence，不能仅凭偶然平行移动整条片带。
 
 没有 admissible direct pair、但 source 已有校准 H 时，可以从 registered direct TOP/BOTTOM 保留至多两个
-single-side fixed-H proposal。优先使用 role-authorized、带有界方向的物理最外侧角色；若没有任何这类
-角色，也可使用覆盖至少三个独立高度区域、方向有界但背景侧证据不足的 direct role hypothesis。后者只
-表示机器在预登记角色走廊中稳定看见一条物理线，不取得 aperture role authority。若没有 shared strip
+single-side fixed-H proposal。先检查已登记 line 的实际 trace 是否覆盖每份 retained phase 几何的全部
+Frame；有完整覆盖时只在这些 line 中选择，同一角色内先取 role-authorized，再按原物理最外侧顺序。
+未获权 line 仍须覆盖至少三个独立高度区域，保留背景侧不足的原事实；coarse enclosing binding 不参与
+此优先级。所有入选 line 都须具备原有方向条件。没有完整覆盖 line 时，沿用 role-authorized 优先的原
+选择；若没有任何这类角色，也可使用覆盖至少三个独立高度区域、方向有界但背景侧证据不足的 direct
+role hypothesis。后者只表示机器在预登记角色走廊中稳定看见一条物理线，不取得 aperture role authority。
+若没有 shared strip
 direction，只使用该 observation 自己的完整方向区间，不得由模板虚构方向。完全相同的几何去重，整个
 Cross competition 仍最多保留两个 fit，并继续受原 `evaluated_fit_bound` 约束。
+
+`TemplateCrossInput.review_support_domain_groups_px` 只描述 Review 几何上下文：由 Cross 之前已有的
+phase best/runner，按同一 native coordinate、固定 W 补边和 Overlap midpoint 规则编译至多两组域。
+任一解释无法编译时整组为空；producer bound 时为空。每条 line 必须独立覆盖每组全部 Frame，不能拼接
+line、合并两个解释的覆盖、用支撑跨度代替实际 trace，或选择较容易的一组。它只参与上述单侧提案选位，
+不能进入局部测量、direct pair、longitudinal projection、source H 校准或 Gate。权限仍只消费原
+`longitudinal_support_domain_groups_px`；原 pair 枚举、外侧反证、失败与 winner 状态保持。编译工作为
+`O(R)`；选择检查至多两组，每组 R/2 格、每条 line 至多 T 个已登记 trace，为 `O(B × R × T)`，B/T
+受原登记上限约束。仍先选至多两个 anchor 再求既有 fit，实际 cache miss 继续计入原 receipt。
+Report 回读独立核对两类域与原 phase 的绑定，并重放 retained best/runner 的完整几何、角色身份、依据
+及原失败；Review 上下文不能冒充 projection authority。
 
 `CrossRetainedProposalBasis` 分别记录
 `outermost_admissible_registered_role_pair`、
 `calibrated_height_from_outermost_registered_role` 与
-`calibrated_height_from_registered_role_hypothesis`。三者只说明完整几何如何被保留；都不把局部线升级为
-Cross authority，不增加 constraint rank，不创建 winner，也不改变原 `CrossFailureKind`。Production summary
+`calibrated_height_from_registered_role_hypothesis`；完整 Review 支撑优先的集合使用
+`calibrated_height_from_complete_review_support`，各 fit 仍分别保存自身角色权限。上述依据只说明完整几何
+如何被保留；都不把局部线升级为 Cross authority，不增加 constraint rank，不创建 winner，也不改变原
+`CrossFailureKind`。Production summary
 与 Debug 必须同时显示 retained basis、best/runner 和原失败；placement eligibility 仍要求 Cross
 `RESOLVED`，因此这类 proposal 只能进入黄金比较与 Review，不能成为 candidate 或正式输出。
 

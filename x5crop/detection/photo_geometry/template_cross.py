@@ -49,6 +49,7 @@ from .template_cross_support import (
     fit_enclosing_support,
     support_permission_view,
 )
+from .template_cross_longitudinal import covers_all_template_domains
 from .template_aspect_ratio import (
     consume_aperture_aspect_ratio_for_cross,
     reconcile_direct_aperture_height,
@@ -485,7 +486,7 @@ def _select_cross_competition(
             if inferred_height is not None
             else CrossHeightInferenceBasis.CALIBRATED_FORMAT_HEIGHT
         )
-        authorized_top = tuple(
+        proposal_top = tuple(
             sorted(
                 (
                     item
@@ -500,7 +501,7 @@ def _select_cross_competition(
                 ),
             )
         )
-        authorized_bottom = tuple(
+        proposal_bottom = tuple(
             sorted(
                 (
                     item
@@ -515,22 +516,63 @@ def _select_cross_competition(
                 ),
             )
         )
+        # Complete registered support in every retained raw Frame is relevant
+        # to a source-wide Review proposal even when aperture-role permission
+        # is absent. This context never enters a projection-authority owner.
+        def has_complete_review_support(item: CrossRoleBinding) -> bool:
+            return (
+                item.evidence == CrossEvidence.DIRECT
+                and item.coarse_side_fact is None
+                and item.enclosing_pair_id is None
+                and (inputs.source_direction is not None or (
+                    item.canonical_direction_degrees is not None
+                    and item.full_direction_interval_degrees is not None
+                ))
+                and (item.role_authorized or (
+                    item.independent_support_region_count >= SPATIAL_SUPPORT_REGION_COUNT
+                ))
+                and covers_all_template_domains(
+                    item.trace_coordinates_px, inputs.review_support_domain_groups_px
+                )
+            )
+
+        contextual_top = tuple(item for item in top if has_complete_review_support(item))
+        contextual_bottom = tuple(item for item in bottom if has_complete_review_support(item))
+        use_context = bool(contextual_top or contextual_bottom)
+        if use_context:
+            proposal_top = tuple(sorted(contextual_top, key=lambda item: (
+                not item.role_authorized,
+                item.full_interval_px.minimum,
+                item.full_interval_px.maximum,
+                str(item.observation_id),
+            )))
+            proposal_bottom = tuple(sorted(contextual_bottom, key=lambda item: (
+                not item.role_authorized,
+                -item.full_interval_px.maximum,
+                -item.full_interval_px.minimum,
+                str(item.observation_id),
+            )))
         anchors: list[CrossRoleBinding] = []
         retained_basis = (
             CrossRetainedProposalBasis
             .CALIBRATED_HEIGHT_FROM_OUTERMOST_REGISTERED_ROLE
         )
-        if authorized_top:
-            anchors.append(authorized_top[0])
-        if authorized_bottom:
-            anchors.append(authorized_bottom[0])
+        if proposal_top:
+            anchors.append(proposal_top[0])
+        if proposal_bottom:
+            anchors.append(proposal_bottom[0])
         if len(anchors) < 2:
             remaining = (
-                authorized_top[1:]
-                if authorized_top
-                else authorized_bottom[1:]
+                proposal_top[1:]
+                if proposal_top
+                else proposal_bottom[1:]
             )
             anchors.extend(remaining[: 2 - len(anchors)])
+        if use_context:
+            retained_basis = (
+                CrossRetainedProposalBasis
+                .CALIBRATED_HEIGHT_FROM_COMPLETE_REVIEW_SUPPORT
+            )
 
         if not anchors:
             # A role-specific registered query may produce a stable physical

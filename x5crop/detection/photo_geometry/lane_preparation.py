@@ -95,7 +95,10 @@ from .template_pitch import (
     close_separator_phase_hypothesis,
     resolve_separator_pitch_hypothesis,
 )
-from .template_placement import retained_cross_support_domain_groups_px
+from .template_placement import (
+    retained_cross_support_domain_groups_px,
+    review_cross_support_domain_groups_px,
+)
 from .source_geometry import SourceScanGeometry
 from .transition_tracking import (
     track_broad_material_transition_regions,
@@ -1031,6 +1034,7 @@ def prepare_template_lane(
         source_direction=source_direction,
         registered_trace_coordinates_px=top_measurement.query.trace_positions_px,
         longitudinal_support_domain_groups_px=longitudinal_support_domain_groups_px,
+        review_support_domain_groups_px=review_cross_support_domain_groups_px(phase),
         top_bindings=solver_top,
         bottom_bindings=solver_bottom,
         boundary_axis=height_axis,
