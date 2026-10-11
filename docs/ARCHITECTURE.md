@@ -195,6 +195,8 @@ local/topology 与最终 lattice 评估之后。仅当最终为 `unresolved`、b
 该 handoff 不属于第三份 retained/output candidate，消费后即释放；正常报告只在回填后按原 runner schema
 显示 fit 和失败 provenance。每 pass 保留记录及其 authority ledger 按 `128R` 数值槽字节计入 peak；
 跨 pass 合并只比较至多两份已有失败记录，仍保留一份，不增加拟合、role lookup 或像素查询。
+公共报告的序列化与 proof 重读都只包含非私有字段；公开字段集合仍严格相等，缺失、额外字段及
+注入私有 handoff 均拒绝。Proof 重读不能恢复内部临时诊断记录。
 
 连续合并可为首选补齐多个局部解释，因此不能把未补全竞争者的当前支持数当作完整支持数。选择 owner
 对全部已生成且 eligible 的候选，按连续合并必需的静态身份及 absolute-phase 区间连通分量计算支持上界：

@@ -105,6 +105,23 @@ class SelectedCommonHReportContractTest(unittest.TestCase):
         self.assertEqual(_read_common_proof(typed_read_model(self.common), CommonHOutput), self.common)
         _validate_common_authority_provenance(self.development, self.lane, self.queries)
 
+    def test_phase_proof_round_trip_requires_exact_public_fields(self):
+        value = self.development["phase_competition"]
+        self.assertNotIn("_terminal_diagnostic", value)
+        phase = _read_common_proof(value, PhaseFitResult)
+        self.assertIsNone(phase._terminal_diagnostic)
+        self.assertEqual(typed_read_model(phase), value)
+        for mutate in (
+            lambda v: v.update(_terminal_diagnostic=None),
+            lambda v: v.update(extra=1),
+            lambda v: v.pop("status"),
+        ):
+            with self.subTest(mutate=mutate):
+                changed = deepcopy(value)
+                mutate(changed)
+                with self.assertRaisesRegex(ValueError, "PhaseFitResult fields changed"):
+                    _read_common_proof(changed, PhaseFitResult)
+
     def test_development_competition_does_not_duplicate_common_proofs(self):
         from x5crop.detection.photo_geometry.template_common_output import CommonHOutputAuthority
         authority = _read_common_proof(self.lane["common_h_authority"], CommonHOutputAuthority)

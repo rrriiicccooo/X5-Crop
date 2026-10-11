@@ -3424,7 +3424,7 @@ def _read_common_proof(value: Any, model: type) -> Any:
                 raise ValueError("common-output proof enum must be a string")
             return kind(raw)
         if is_dataclass(kind):
-            declared = fields(kind)
+            declared = tuple(field for field in fields(kind) if not field.name.startswith("_"))
             if not isinstance(raw, dict) or set(raw) != {field.name for field in declared}:
                 raise ValueError(f"common-output {kind.__name__} fields changed")
             types = _common_proof_field_types(kind)
