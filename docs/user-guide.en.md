@@ -73,14 +73,26 @@ Spacing proposed by two separator bands also requires an independent, verified p
 a successful weak-edge match does not grant crop authority.
 Position fitting rechecks the remaining boundaries after removing outliers. Required boundaries and position
 interpretations remain subject to the same evidence checks.
+An independent position proposed by a direct boundary is checked separately; a larger set of additional edges cannot
+erase that interpretation solely by pulling the joint fit away from its defining boundary.
 Direct boundaries spanning the registered scan area may propose a position from their measured physical line range.
 Statistical residuals remain in the report, and additional edge matching keeps its existing limits. Role, photo
 position, and full protection are still checked; insufficient evidence keeps the source in review.
+When separator material and edge texture indicate different roles, the ordered material pair may propose a position
+for review. Automatic cropping still requires verified roles and complete coverage evidence.
+Verified shared edges continue to locate both adjacent photos despite a one-sided texture hint. When material
+supports conflicting roles, its complete counterevidence remains visible and the affected placement requires review.
+When one boundary of an ordinary gap is missing, registered overlap evidence associated with the observed boundary
+still counts as counterevidence. Conflicting ordinary placements are rejected; overlap proposals retain their own
+material checks and review requirements.
 When a native proposal's complete protection envelope cannot fit in the fixed box, it retains the fitted photograph
 position for inspection. The report preserves the full protection envelope and failed budget, which blocks automatic
 output of that proposal.
 When more direct boundaries support a different placement whose residual is incompatible, the report retains that
-runner and the ambiguity reason for inspection.
+runner and the ambiguity reason for inspection, including when its coordinate projection failed. Its original
+failure remains visible and continues to block automatic output.
+More fully observed native placements that conflict with the calibrated position model also remain available for
+inspection.
 Diagnostic runners retain their original failure reasons. Displaying an interpretation does not grant it crop or
 automatic output authority.
 If later checks fail and the runner slot is empty, the report can retain an earlier generated diagnostic proposal.

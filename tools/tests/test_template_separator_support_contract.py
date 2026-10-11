@@ -6,6 +6,13 @@ import unittest
 from tools.tests.template_test_support import (
     phase_edge as edge,
     phase_separator as separator,
+    phase_sequence_measurement,
+    phase_template,
+    placement_sequence,
+)
+from x5crop.detection.photo_geometry.template_direct_role_authority import (
+    DirectRoleAuthorityBasis,
+    assess_direct_role_binding_authority,
 )
 from x5crop.detection.photo_geometry.template_separator_support import (
     SeparatorRoleAuthorityFailureKind,
@@ -16,6 +23,76 @@ from x5crop.domain import EvidenceState, FiniteInterval
 
 
 class TemplateSeparatorSupportContractTest(unittest.TestCase):
+    def test_cancelled_pair_authority_keeps_complete_material_role_counterevidence(self) -> None:
+        def selected_fit(selected):
+            original = placement_sequence(phase_template(2))
+            bindings = [None] * 4
+            for index, observation in selected.items():
+                bindings[index] = replace(
+                    original.role_bindings[index],
+                    observation_id=observation.observation_id,
+                    evidence_group_id=observation.observation_id,
+                    canonical_position_px=observation.canonical_position_px,
+                    fit_position_interval_px=observation.fit_position_interval_px,
+                    full_position_interval_px=observation.full_position_interval_px,
+                )
+            return replace(original, role_bindings=tuple(bindings),
+                           phase_support_coverage=float(len({(i + 1) // 2 for i in selected})))
+
+        a = replace(edge("fork:A", 100.0), qualified_anchor_roles=(BoundaryRole.START,))
+        b = replace(edge("fork:B", 120.0), qualified_anchor_roles=(BoundaryRole.END,))
+        c = replace(edge("fork:C", 140.0), qualified_anchor_roles=(BoundaryRole.START,),
+                    trace_coordinates_px=(0, 10))
+        u = edge("unrelated", 360.0)
+        full = separator("full", a, b, FiniteInterval(19.8, 20.2))
+        partial = separator("partial", b, c, FiniteInterval(19.8, 20.2), region_count=2)
+        measurement = phase_sequence_measurement("fork", FiniteInterval(0.0, 500.0))
+        for selected, expected in (
+            ({1: b}, {1: (full.observation_id,)}),
+            ({1: a, 2: b}, {1: (), 2: ()}),
+            ({0: u}, {0: ()}),
+        ):
+            with self.subTest(selected=tuple(selected)):
+                authority = assess_direct_role_binding_authority(
+                    selected_fit(selected), (a, b, c, u), (full, partial), (measurement,),
+                    authorized_source_frame_width_px=FiniteInterval.exact(100.0),
+                )
+                self.assertEqual({f.role_index: f.blocking_material_conflict_ids
+                                  for f in authority.facts}, expected)
+                if selected == {1: b}:
+                    self.assertEqual(authority.state, EvidenceState.CONTRADICTED)
+                    self.assertEqual(authority.facts[0].bases, (
+                        DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE,
+                    ))
+                elif selected == {1: a, 2: b}:
+                    self.assertEqual(authority.state, EvidenceState.UNAVAILABLE)
+                    self.assertTrue(all(not f.bases for f in authority.facts))
+
+        # Two complete alternatives oppose the shared edge's two roles
+        # separately; agreeing outer endpoints are not blanket-blocked.
+        a = replace(a, qualified_anchor_roles=(BoundaryRole.END,))
+        b = replace(b, qualified_anchor_roles=(BoundaryRole.START,))
+        c = replace(c, trace_coordinates_px=(0, 10, 20))
+        full2 = separator("full2", b, c, FiniteInterval(19.8, 20.2))
+        for selected, expected in (
+            ({2: b}, {2: (full2.observation_id,)}),
+            ({1: b}, {1: (full.observation_id,)}),
+            ({1: a, 2: c}, {1: (), 2: ()}),
+        ):
+            authority = assess_direct_role_binding_authority(
+                selected_fit(selected), (a, b, c), (full, full2), (measurement,),
+            )
+            self.assertEqual({f.role_index: f.blocking_material_conflict_ids
+                              for f in authority.facts}, expected)
+
+        # Neither partial-only material nor an unambiguous complete pair
+        # creates this fork counterevidence path.
+        for bands in ((partial,), (full,)):
+            authority = assess_direct_role_binding_authority(
+                selected_fit({1: b}), (a, b, c), bands, (measurement,),
+            )
+            self.assertFalse(authority.facts[0].blocking_material_conflict_ids)
+
     def test_unique_source_wide_pair_owns_material_roles(self) -> None:
         left = edge("unique:left", 100.0)
         right = edge("unique:right", 120.0)

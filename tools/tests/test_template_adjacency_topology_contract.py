@@ -18,6 +18,7 @@ from x5crop.detection.photo_geometry.template_adjacency_topology import (
     AdjacencyContinuityFailureKind,
     AdjacencyContinuityKind,
     observe_adjacency_continuity,
+    unbound_registered_overlap_counterevidence,
 )
 from x5crop.detection.photo_geometry.template_contact import observe_contact_edges
 from x5crop.detection.photo_geometry.model import (
@@ -115,6 +116,66 @@ def _contact_fit():
 
 
 class TemplateAdjacencyTopologyContractTests(unittest.TestCase):
+    def test_unbound_native_overlap_is_counterevidence_without_a_new_binding(
+        self,
+    ) -> None:
+        edges = tuple(
+            replace(edge, qualified_anchor_roles=(role,))
+            for edge, role in zip(
+                _edges(100.0, 200.0, 195.0, 295.0),
+                (BoundaryRole.START, BoundaryRole.END,
+                 BoundaryRole.START, BoundaryRole.END),
+                strict=True,
+            )
+        )
+        for bound_role in (1, 2):
+            with self.subTest(bound_role=bound_role):
+                fit = placement_sequence(
+                    phase_template(2),
+                    missing=tuple(index for index in range(4) if index != bound_role),
+                )
+                intervals = list(fit.model_full_role_intervals_px)
+                intervals[1:3] = (FiniteInterval(180.0, 240.0),) * 2
+                fit = replace(fit, model_full_role_intervals_px=tuple(intervals))
+                original_bindings = fit.role_bindings
+                (observation,) = _observe(fit, edges)
+                self.assertEqual(observation.state, EvidenceState.UNAVAILABLE)
+                self.assertEqual(
+                    observation.failure_kind,
+                    AdjacencyContinuityFailureKind.UNBOUND_REGISTERED_OVERLAP,
+                )
+                self.assertIsNotNone(observation.overlap_observation_id)
+                self.assertLess(observation.signed_gap_interval_px.maximum, 0.0)
+                self.assertEqual(fit.role_bindings, original_bindings)
+                (incomplete,) = _observe(fit, edges, complete=False)
+                self.assertNotEqual(incomplete.failure_kind, observation.failure_kind)
+                with self.assertRaises(ValueError):
+                    replace(observation, overlap_observation_id=None)
+
+        measurement = phase_sequence_measurement(
+            "overlap-counterevidence", FiniteInterval(0.0, 500.0),
+        )
+        coverage = assess_adjacency_observation_coverage(
+            fit, (measurement,), directly_observed_ordinals=(),
+        )
+        pairs = observe_overlap_edge_pairs(
+            edges, (), (measurement,), direction=1, maximum_overlap_px=12.0,
+        )
+        self.assertEqual(len(pairs), 1)
+        self.assertEqual(
+            unbound_registered_overlap_counterevidence(
+                fit, edges, coverage, (pairs[0], pairs[0]),
+            ),
+            (),
+        )
+        self.assertEqual(
+            unbound_registered_overlap_counterevidence(
+                fit, edges, tuple(replace(item, required_interval_px=FiniteInterval(210.0, 240.0))
+                                 for item in coverage), pairs,
+            ),
+            (),
+        )
+
     def test_overlap_is_refit_in_the_single_grid_and_prefix_model(self) -> None:
         edges = tuple(
             replace(

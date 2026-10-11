@@ -23,7 +23,7 @@ from .separator_material import (
     normal_separator_material_conflicts,
 )
 from .template_separator_support import resolve_separator_support
-from .template_model import SequenceFit
+from .template_model import ContactRelation, SequenceFit
 
 
 class DirectRoleAuthorityBasis(str, Enum):
@@ -88,7 +88,7 @@ class DirectRoleAuthorityFact:
                         DirectRoleAuthorityBasis.PARTIAL_HEIGHT_SEPARATOR_PAIR,
                     )
                     or self.independent_support_region_count
-                    != SPATIAL_SUPPORT_REGION_COUNT - 1
+                    < SPATIAL_SUPPORT_REGION_COUNT - 1
                 )
             )
             or tuple(sorted(set(self.blocking_material_conflict_ids)))
@@ -216,6 +216,10 @@ class _DirectRoleAuthorityLedger:
         tuple[ObservationId, ...],
     ]
     supported_material_roles: frozenset[tuple[ObservationId, BoundaryRole]]
+    contradicted_component_role_conflicts: dict[
+        tuple[ObservationId, BoundaryRole],
+        tuple[ObservationId, ...],
+    ]
     outer_material_by_id: dict[
         ObservationId,
         OuterMaterialBoundaryObservation,
@@ -409,6 +413,27 @@ def _direct_role_authority_ledger(
             if band.observation_id in source_wide_role_band_ids
         }
     )
+    # A fork cancels positive pair authority, but not the complete material
+    # observation that opposes one endpoint's selected role.  The partner is
+    # not assigned an ordinal or treated as a same-role coordinate alternative.
+    contradicted_component_conflict_sets: dict[
+        tuple[ObservationId, BoundaryRole],
+        set[ObservationId],
+    ] = {}
+    for band in role_authority_bands:
+        component = component_by_band_id[band.observation_id]
+        if (
+            band.material_support_region_count != SPATIAL_SUPPORT_REGION_COUNT
+            or component.role_authority_state != EvidenceState.CONTRADICTED
+        ):
+            continue
+        end_id, start_id = _ordered_separator_edge_pair(
+            band, fit.template.direction,
+        )
+        for key in ((end_id, BoundaryRole.START), (start_id, BoundaryRole.END)):
+            contradicted_component_conflict_sets.setdefault(key, set()).add(
+                band.observation_id
+            )
 
     intrinsic_bases = intrinsic_direct_role_authority_bases(
         observations,
@@ -454,9 +479,23 @@ def _direct_role_authority_ledger(
         if band.material_support_region_count != SPATIAL_SUPPORT_REGION_COUNT - 1:
             continue
         end_id, start_id = ordered_pair
-        if end_id in intrinsic_bases:
+        if (
+            end_id in intrinsic_bases
+            and (
+                not by_id[end_id].qualified_anchor_roles
+                or BoundaryRole.END in by_id[end_id].qualified_anchor_roles
+                or (end_id, BoundaryRole.END) in supported_material_roles
+            )
+        ):
             potential_authority_roles.add((start_id, BoundaryRole.START))
-        if start_id in intrinsic_bases:
+        if (
+            start_id in intrinsic_bases
+            and (
+                not by_id[start_id].qualified_anchor_roles
+                or BoundaryRole.START in by_id[start_id].qualified_anchor_roles
+                or (start_id, BoundaryRole.START) in supported_material_roles
+            )
+        ):
             potential_authority_roles.add((end_id, BoundaryRole.END))
 
     conflict_sets: dict[
@@ -498,6 +537,10 @@ def _direct_role_authority_ledger(
             for key, values in reversed_normal_pair_conflict_sets.items()
         },
         supported_material_roles=supported_material_roles,
+        contradicted_component_role_conflicts={
+            key: tuple(sorted(values))
+            for key, values in contradicted_component_conflict_sets.items()
+        },
         outer_material_by_id=outer_material_by_id,
         outer_material_roles={
             key: tuple(sorted(values))
@@ -572,20 +615,47 @@ def _assess_direct_role_binding_authority(
         role_index: ledger.support_region_counts[observation.observation_id]
         for role_index, observation in selected.items()
     }
+    shared_contact_roles: set[int] = set()
+    for relation in fit.adjacency_relations:
+        if not isinstance(relation, ContactRelation):
+            continue
+        indices = (2 * relation.relation_ordinal - 1, 2 * relation.relation_ordinal)
+        bindings = tuple(fit.role_bindings[index] for index in indices)
+        left, right = bindings
+        if (
+            left is not None
+            and right is not None
+            and left.observation_id == right.observation_id
+            == relation.shared_edge_observation_id
+            and left.evidence_group_id == right.evidence_group_id
+            == relation.physical_edge_id
+            and abs(left.canonical_position_px - right.canonical_position_px)
+            <= 1.0e-9
+        ):
+            shared_contact_roles.update(indices)
     for role_index, count in region_counts.items():
         observation = selected[role_index]
+        role = fit.template.roles[role_index].role
+        intrinsic_role_qualified = (
+            not observation.qualified_anchor_roles
+            or role in observation.qualified_anchor_roles
+            or (observation.observation_id, role)
+            in ledger.supported_material_roles
+            or role_index in shared_contact_roles
+        )
         if (
-            count == SPATIAL_SUPPORT_REGION_COUNT
+            intrinsic_role_qualified
+            and count == SPATIAL_SUPPORT_REGION_COUNT
             and observation.measurement_basis
             == BoundaryEdgeMeasurementBasis.DIRECT_TRACE
         ):
             bases[role_index].add(DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE)
         if (
-            observation.measurement_basis
+            intrinsic_role_qualified
+            and observation.measurement_basis
             == BoundaryEdgeMeasurementBasis.DIRECT_WITH_AGGREGATE
         ):
             bases[role_index].add(DirectRoleAuthorityBasis.AGGREGATE_UNION)
-        role = fit.template.roles[role_index].role
         outer_role_index = (
             0 if role == BoundaryRole.START else len(fit.template.roles) - 1
         )
@@ -683,6 +753,9 @@ def _assess_direct_role_binding_authority(
             sorted(
                 set(alternative_conflicts)
                 | set(reversed_pair_conflicts_by_role.get(role_index, ()))
+                | set(ledger.contradicted_component_role_conflicts.get(
+                    (observation.observation_id, selected_role), (),
+                ))
             )
         )
 

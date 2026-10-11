@@ -18,6 +18,7 @@ from ...domain import (
 )
 from .model import (
     BoundaryRole,
+    MINIMUM_INDEPENDENT_SUPPORT_REGIONS,
     PHOTO_BOUNDARY_MEASUREMENT_SPEC,
     SPATIAL_SUPPORT_REGION_COUNT,
     independent_spatial_support_count,
@@ -722,8 +723,14 @@ def _separator_phase_seeds(
         if (
             left is None
             or right is None
-            or BoundaryRole.END not in left.qualified_anchor_roles
-            or BoundaryRole.START not in right.qualified_anchor_roles
+            or (
+                (
+                    BoundaryRole.END not in left.qualified_anchor_roles
+                    or BoundaryRole.START not in right.qualified_anchor_roles
+                )
+                and band.material_support_region_count
+                < MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+            )
         ):
             continue
         for adjacency_index in range(template.count - 1):
@@ -754,7 +761,7 @@ def _separator_pair_facts(
     *,
     maximum_material_gap_px: float,
 ) -> tuple[tuple[_AnchorFact, _AnchorFact], ...]:
-    """Retain exact END/START pairs proved by separator material."""
+    """Retain ordered material-pair hypotheses without granting roles."""
 
     by_id = {item.observation_id: item for item in direct}
     pairs: dict[
@@ -770,8 +777,14 @@ def _separator_pair_facts(
         if (
             left is None
             or right is None
-            or BoundaryRole.END not in left.qualified_anchor_roles
-            or BoundaryRole.START not in right.qualified_anchor_roles
+            or (
+                (
+                    BoundaryRole.END not in left.qualified_anchor_roles
+                    or BoundaryRole.START not in right.qualified_anchor_roles
+                )
+                and band.material_support_region_count
+                < MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+            )
         ):
             continue
         pairs[(left.observation_id, right.observation_id)] = (left, right)
@@ -1228,9 +1241,15 @@ def _match_roles(
     used: set[ObservationId] = set()
     used_supports: set[ObservationId] = set()
     used_roles: set[int] = set()
+    optional_separator_pairs = tuple(
+        (left, right)
+        for left, right in separator_pairs
+        if BoundaryRole.END in left.qualified_anchor_roles
+        and BoundaryRole.START in right.qualified_anchor_roles
+    )
     separator_ids = {
         item.observation_id
-        for pair in separator_pairs
+        for pair in optional_separator_pairs
         for item in pair
     }
     selected: list[tuple[TemplateRole, _AnchorFact]] = []
@@ -1245,6 +1264,21 @@ def _match_roles(
         )
         for item in adjacency_relations
         if isinstance(item, ContactRelation)
+    }
+    separator_pair_ids = {
+        (left.observation_id, right.observation_id)
+        for left, right in separator_pairs
+    }
+    required_by_role = dict(required_bindings)
+    material_seed_roles = {
+        (index, identity)
+        for end_index, end_id in required_bindings
+        if end_index % 2 == 1
+        for start_id in (required_by_role.get(end_index + 1),)
+        if (end_id, start_id) in separator_pair_ids
+        for index, identity in (
+            (end_index, end_id), (end_index + 1, start_id)
+        )
     }
 
     def seed_line_fit_compatible(item: _AnchorFact) -> bool:
@@ -1360,6 +1394,8 @@ def _match_roles(
                 and role.role not in anchor.qualified_anchor_roles
                 and role_index
                 not in contact_roles.get(anchor.observation_id, ())
+                and (role_index, anchor.observation_id)
+                not in material_seed_roles
             )
         ):
             return ()
@@ -1372,10 +1408,6 @@ def _match_roles(
         required_by_support.setdefault(item[1].evidence_group_id, []).append(
             item
         )
-    separator_pair_ids = {
-        (left.observation_id, right.observation_id)
-        for left, right in separator_pairs
-    }
     for group in required_by_support.values():
         if len(group) == 1:
             continue
@@ -1439,7 +1471,7 @@ def _match_roles(
         }
         compatible_pairs = tuple(
             (left, right)
-            for left, right in separator_pairs
+            for left, right in optional_separator_pairs
             if left.observation_id in end_candidates
             and right.observation_id in start_candidates
             and left.evidence_group_id not in used_supports
@@ -1868,6 +1900,7 @@ def _fit_seed(
         template.frame_width_px.minimum
         + template.frame_width_px.maximum
     ) / 2.0
+    seed_width = width
     pitch = seed.pitch_px
     phase = seed.phase_px
     fit_basis = LatticeParameterFitBasis.TEMPLATE_INTERVAL_CENTER
@@ -1952,8 +1985,11 @@ def _fit_seed(
         prefixes = adjacency_prefix_positions(relations, template.count)
     # Refitting a retained subset can expose another outlier. Close that
     # subset monotonically. Each refit deletes at least one optional binding;
-    # at most R - 1 terminal solves follow the four matching solves. No role
-    # rematch, new seed, native coordinate, or authority is introduced.
+    # at most R - 1 subset solves follow the four matching solves. If optional
+    # matches would erase the required identity, its original bounded model
+    # gets one independent check before deleting incompatible optional rows.
+    # No role rematch, new seed, native coordinate, or authority is introduced.
+    seed_identity_replayed = False
     for _trim_iteration in range(len(matches)):
         residual_limit = max(3.0, width * 0.035)
         retained = tuple(
@@ -1975,7 +2011,56 @@ def _fit_seed(
         if retained == matches:
             break
         if not retained or not retains_seed_identity(retained):
-            return None
+            if seed_identity_replayed or not required:
+                return None
+            defining_matches = tuple(
+                (role, anchor)
+                for role, anchor in matches
+                if (role.role_index, anchor.observation_id) in required
+            )
+            phase, width, pitch, fit_basis = _linear_fit(
+                defining_matches,
+                width=seed_width,
+                pitch=seed.pitch_px,
+                direction=template.direction,
+                relations=relations,
+                width_authority=template.frame_width_px,
+                pitch_authority=pitch_authority,
+                gap_authority=template.gap_prior_px,
+                phase_authority=phase_authority,
+            )
+            relations = realize_adjacency_relations(
+                relations,
+                frame_width_interval_px=template.frame_width_px,
+                pitch_interval_px=pitch_authority,
+                frame_width_px=width,
+                pitch_px=pitch,
+            )
+            prefixes = adjacency_prefix_positions(relations, template.count)
+            residual_limit = max(3.0, width * 0.035)
+            retained = tuple(
+                (role, anchor)
+                for role, anchor in matches
+                if abs(
+                    anchor.coordinate_px
+                    - template_role_position(
+                        role,
+                        phase=phase,
+                        width=width,
+                        pitch=pitch,
+                        direction=template.direction,
+                        prefixes=prefixes,
+                    )
+                )
+                <= residual_limit
+            )
+            if (
+                retained == matches
+                or not retained
+                or not retains_seed_identity(retained)
+            ):
+                return None
+            seed_identity_replayed = True
         phase, width, pitch, retained_basis = _linear_fit(
             retained,
             width=width,

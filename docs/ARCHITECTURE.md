@@ -172,6 +172,16 @@ Phase seed 的几何桶 `(phase, pitch, adjacency relations)` 不能代表观察
 任一超限在拟合前返回 typed failure，不输出前缀结果。相容桶不保存全部原始 recipe；桶与最终 seed
 同时存活的临时量计入 receipt，后续拟合前释放登记表。
 
+Normal separator 在至少两个独立高度区域成立时，其实测有序 pair 可以测试既有 required-pair seed，
+即使单边 texture hint 与材料角色相反。豁免只属于同一 adjacency 原子绑定的 `END → START` pair；
+不修改原 observation 的 `qualified_anchor_roles`，不生成反向角色 singleton seed，也不让 optional
+matching 取得该角色。该 pair 仍由原直接角色 ledger 投影；失败的角色保持无权或矛盾，原 Gate 与
+best/runner 上限不变，不把材料假说提升为坐标事实。
+已合法绑定的 observation 若原角色 hint 为空，沿用原中性 intrinsic coordinate 路径；这里只阻止
+显式反向 hint 借 `source_wide_edge | aggregate_union` 自行授权，不为 role-free edge 新开 seed 或 local 入口。
+完整假设池只用于 exact required pair；optional pair 匹配及其端点排除集合只消费两端均已合格的
+`END → START` pair。某端可测试相反材料角色，不因此失去它原有角色的普通匹配资格。
+
 初次拟合后的去重只删除完全相等的 `_BoundFit`；权限投影后的去重只删除完整 fit 与
 `PhaseCandidateAuthorityProjection` 均相等的记录。相同绑定、integer offset、local relation 或相同
 rank 不证明联合状态、保护区间、晚期角色走廊或权限来源等价，不能据此保留一份排名较高的代表。
@@ -665,9 +675,13 @@ Grid 始终可以生成一个待检验的默认 placement，但它不能仅凭�
 
 初次 seed 拟合的终端 outlier 筛选使用当前几何的 `max(3 px, 3.5% W)`。剔除后重拟合必须再次核查
 同一阈值，直到保留子集闭合；每轮只能删除原 optional binding，不重新匹配已退出的 identity，不改变
-required seed、投影权限 ceiling 或 template 的硬区间。空子集或必需 binding 被剔除时，该 seed 无解。
+required seed、投影权限 ceiling 或 template 的硬区间。Optional 联合拟合若使 required 越界，至多一次
+以原 seed 的 W 中心、pitch、同一 relation evidence 与全部硬区间独立拟合 required 集合；required
+自身仍不相容时拒绝。否则只从当前匹配集合删除与该定义模型不相容的 optional，再沿原终端闭合。
+不能恢复已退出的 optional、引入新 binding 或继承被撤销联合拟合的参数依据；完整 observations、
+material 与投影弱线反证仍由原权限 owner 核查。此后再丢 required 或无可删除 optional 时拒绝。
 Matching 最多 4 次；若初始匹配数为 M，每次终端重拟合至少删除一个 binding，因此最多 M−1 次
-终端求解、M 次子集扫描。每个 seed 的 `_linear_fit` 上界从固定 5 次改为 `R+3`（R 为已编译 role
+子集求解，定义模型至多另求解一次；最多 M+1 次子集扫描。每个 seed 的 `_linear_fit` 上界为 `R+4`（R 为已编译 role
 数），完整 pass 仍受原 seed 和 role 上限约束；求解处理最多 R 行，N_seed 份候选的工作上界为
 `O(N_seed × R²)`，N_seed 不超过原 `H × max(6,R)`。
 不增加 seed、role lookup、TIFF query 或 retained runner；投影的获权 anchor 全部属于 required，不能
@@ -698,6 +712,8 @@ Contact/Overlap 必要绑定共同形成 `phase_anchor_authority_ceiling`；sepa
 全局 phase anchor、constraint rank 或无关 role binding。它只让同一候选的局部几何服从已经登记的直接
 gap；任何越过 authority ceiling、改变 ordinal/template/relation evidence 或丢失原 phase anchor 的结果都以
 `fixed_template_mismatch` 终止。
+实测 gap 的完整区间必须严格为正才能构造 measured separator relation；包含 0 的材料观察保留在
+原 ledger，由既有 continuity 合同报告未解决，不能当作 positive advance 或伪造 Contact。
 
 投影后的 candidate 重新按 coordinate identity canonicalize，再与全部其它 eligible candidate 对称竞争。
 同一连续 placement 的互补直接证据仍可合并，非等价 projected/unchanged placement 仍保留 runner。
@@ -712,6 +728,14 @@ opposite，只有该权限仍不可用时才投影晚期弱线，不提前删除
 过程不新增查询、候选或 detector。若所有
 解释都终止，最佳原 candidate 只作为诊断几何保留，并以 projection outcome 说明首个缺口，不得退回
 residual、support 或 Grid 强选。
+
+更高独立位置支持的反证解释若与首选不是同一连续 placement，或 pitch 区间不相交，仍占用原 runner
+槽并阻止唯一胜出。反证包含 residual-incompatible 解释，以及全部 native role 已获权、没有退出 binding
+却与校准 Grid 联合约束冲突的原解释；后者保留已获权坐标对校准模型的反证，不以弱线增加支持数。
+规则同时检查 eligible 与投影已终止的原 candidate，并沿用原 rank；终止解释保留原失败 projection，
+不取得 eligibility。其它 raw-compatible terminal 不适用此规则；支持数不严格更高、同一连续 placement
+且 pitch 相交时，也不能替换已有 runner。
+不增加候选、槽位、拟合或查询，扫描仍受原 bounded candidate 数约束。
 
 投影 owner 的身份账本包含全部 registered facts；初始 phase seed 的 `support_fraction >= 0.35`
 筛选仍只决定搜索资格。已经绑定且由 typed authority 获权的局部坐标，即使采样占比低于该门槛，
@@ -890,8 +914,9 @@ placement；“观察到了”本身不等于“有权决定裁切”。权限�
 
 | edge 空间支持与关系 | 角色坐标权限 |
 |---|---|
-| 同一 edge 直接覆盖三个独立高度区域 | `source_wide_edge`，允许 |
-| 一条局部 direct edge 唯一绑定三区域局部弱信号 aggregate | `aggregate_union`，允许；两者仍是一份相关证据；宽缓 material aggregate 单边不取得该权限 |
+| 同一 edge 直接覆盖三个独立高度区域，且所选角色属于原像素资格或唯一 source-wide material 角色 | `source_wide_edge`，允许 |
+| 一条局部 direct edge 唯一绑定三区域局部弱信号 aggregate，且所选角色已独立合格 | `aggregate_union`，允许；两者仍是一份相关证据；宽缓 material aggregate 单边不取得该权限 |
+| 已登记 Contact 的同一 physical edge 精确共享相邻 END/START、evidence group 与 native coordinate | 共享两侧可使用该 edge 原有的 `source_wide_edge` 或 `aggregate_union`；单侧 raw role hint 不撤销共享资格，弱 edge 不取得新 basis |
 | 同一三区域联合 separator 的 material 与两侧 END/START edge 都覆盖三个独立高度区域 | `separator_pair`，两侧均允许；缺一项则只保留诊断事实 |
 | 同一 source-wide separator 的两侧 edge 原子绑定到一个 adjacency | `separator_pair`，两侧均允许 |
 | normal separator 在两个独立高度区域成立，且两侧原子绑定到同一 adjacency，其中一侧已由上述任一完整闭环授权 | 只向另一侧传递一次 `partial_height_separator_pair`；该 placement 还必须取得下述两侧 aperture-domain authority |
@@ -924,6 +949,12 @@ aperture 边缘内部。Phase 保留原角色与 material 所授角色的并集�
 相关权限传递使用，但不能创造第二份 phase/rank authority。该 owner 不读取新像素、不选择 ordinal、
 placement 或 winner，也不按强度分数消解多解。
 
+Component 的正权限取消不删除完整材料反证：在 `contradicted` component 中，每个三区域 normal pair
+仍分别登记 END 端被选作 START、START 端被选作 END 时的原 band ID。该 selected role 的 intrinsic basis
+可以保留，但 fact 进入 `contradicted`；不绑定缺失伙伴、不推定伙伴 ordinal，也不套同角色替代坐标的 W
+过滤。角色一致、无关联 edge、只有两区域材料或独立无冲突 component 不走这条反证路径；Contact/Overlap
+关系本身不生成材料反证，也不能删除同一 endpoint 已登记的完整材料反解。
+
 局部角色补齐只消费上述唯一获权 pair，并继续检查 ordinal、完整 W 区间和既有 binding；正常材料资格已
 检查 gap 上界，不再把 nominal gap 下界作为原子闭合的附加许可。真实窄 separator 保留自己的实测间距，
 不能用标称间隔覆盖 native endpoint，也不能以此绕过竞争或 partial-height 权限条件。
@@ -939,6 +970,9 @@ local refinement 较晚补出精确反序绑定，该 candidate 产生 `direct_r
 
 短 edge 仍保留为 observation；失败只撤销它的坐标决定权，不删除像素事实。全局 rank 计算必须排除无权
 角色，不能先让短线闭合 lattice，再由该 lattice、catalog W 或同一 Frame 的另一条短线反向证明短线。
+两高度 separator 的 donor 必须在所选角色上独立获权，不能只按 edge identity 借用相反角色的
+intrinsic basis。接收 edge 可以覆盖两个或三个区域；若其目标角色仍只由两高度材料传递，basis 仍为
+`partial_height_separator_pair`，不能因线本身覆盖三区域而改成 `source_wide_edge`。
 两高度 separator 的权限传递只执行一遍，`partial_height_separator_pair` 不能继续为相邻关系播种，也不能
 把同一关系计成另一份独立 rank。它只允许 phase/lattice 暂时保留该 native coordinate；最终 selection 还须
 由 `template_direct_role_aperture_domain.py` 对每条这类 edge 建立独立
@@ -1090,6 +1124,17 @@ containment 与完整输出预算；完整测量 receipt 不能代替该 adjacen
 只把同一对 edge 投影到有限合法 adjacency，selected continuity 再核对完整走廊、原 signed-gap interval 与
 material 冲突。两条边来自同一 identity 时属于 Contact；内容连续或 selected geometry 自身不能创造
 Overlap observation。
+
+普通正 gap 的 Grid 只有一侧已绑定时，也核验该端点的唯一已登记 overlap 伙伴：伙伴尚未绑定其它
+role、两端原角色正确、native 完整区间位于同一完整查询走廊内，且原登记 signed gap 严格为负时，
+它是该 ordinal 的关联反证。单边缺失不能把它登记为 `no_counterevidence_observed`；continuity 保留
+`unbound_registered_overlap`、原 overlap identity 与负 gap，并保持 unresolved。候选投影在既有
+Grid 求解后、压缩 best/runner 前拒绝这份普通解释，使用原 `calibrated_nominal_grid_conflict`；已经
+生成的 overlap 解释继续独立竞争，不合并、不绑定伙伴、不改变 rank，也不覆盖其材料冲突或 Gate。
+多伙伴、伙伴已绑定别处、原角色不符、走廊不完整或 native 区间超出走廊时，不使用此项关联反证。
+每份 Grid 至多检查一次现有 coverage ledger，无新像素查询、求解、seed 或 fit pass；N_seed、R、Q、T
+分别为候选、角色、原查询及 trace 数，工作上界为 `O(N_seed × (H + R × T × Q log Q))`，单次临时 coverage
+与 identity 索引按实际项数计入原 phase peak receipt；全部候选仍受原 `H × max(6,R)` 上限约束。
 
 宽缓/低梯度 material 已在同一 registered baseline owner 内以多尺度 tone、uniformity、texture 与跨高度
 一致性形成 typed observation。Contact/Overlap 只复用这些既有事实，不用 tone、texture 或 content

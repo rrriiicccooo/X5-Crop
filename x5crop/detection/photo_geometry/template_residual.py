@@ -202,6 +202,11 @@ def derive_candidate_separator_relations(
         separator_bands,
         maximum_material_gap_px=fit.template.gap_prior_px.maximum,
     ):
+        # Material support does not establish a strictly positive advance
+        # when the measured interval still includes contact. Keep that raw
+        # band in the ledger; it cannot construct a measured relation.
+        if band.gap_interval_px.minimum <= 0.0:
+            continue
         bands_by_pair.setdefault(
             (
                 band.left_edge_observation_id,

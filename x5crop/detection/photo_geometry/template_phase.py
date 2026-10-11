@@ -66,6 +66,7 @@ from .template_adjacency_coverage import (
 from .template_adjacency_topology import (
     AdjacencyContinuityKind,
     observe_adjacency_continuity,
+    unbound_registered_overlap_counterevidence,
 )
 from .template_lattice_authority import (
     assess_global_lattice_authority,
@@ -1121,6 +1122,8 @@ def fit_template_phase(
     )
     from .template_residual import derive_candidate_separator_relations
 
+    overlap_validation_peak_bytes = 0
+
     def project_record(
         index: int,
         candidate: _BoundFit,
@@ -1129,6 +1132,7 @@ def fit_template_phase(
         _BoundFit | None,
         PhaseCandidateAuthorityProjection,
     ]:
+        nonlocal overlap_validation_peak_bytes
         candidate_relations = derive_candidate_separator_relations(
             candidate.fit,
             candidate_authorities[index],
@@ -1149,6 +1153,53 @@ def fit_template_phase(
             calibrated_nominal_grid_prior,
             effective_phase_anchor_authority_ceiling,
         )
+        if (
+            projected is not None
+            and projection.basis
+            == PhaseCandidateProjectionBasis.CALIBRATED_NOMINAL_GRID
+            and overlap_pairs
+        ):
+            coverage = assess_adjacency_observation_coverage(
+                projected.fit,
+                measurement_sets,
+                directly_observed_ordinals=(),
+            )
+            overlap_validation_peak_bytes = max(
+                overlap_validation_peak_bytes,
+                128 * (len(facts) + len(overlap_pairs) + len(coverage))
+                + sum(
+                    64 + 32 * (
+                        len(trace.covering_query_ids)
+                        + len(trace.covered_intervals_px)
+                    )
+                    for item in coverage
+                    for trace in item.trace_coverage
+                ),
+            )
+            conflicts = unbound_registered_overlap_counterevidence(
+                projected.fit,
+                registered_observations,
+                coverage,
+                overlap_pairs,
+            )
+            if conflicts:
+                projected = None
+                projection = replace(
+                    projection,
+                    outcome=(
+                        PhaseCandidateProjectionOutcome
+                        .CALIBRATED_NOMINAL_GRID_CONFLICT
+                    ),
+                    basis=None,
+                    reason=(
+                        "ordinary calibrated Grid conflicts with unique "
+                        "registered overlap partners: "
+                        + ", ".join(
+                            f"adjacency {ordinal}={pair.observation_id}"
+                            for ordinal, pair in conflicts
+                        )
+                    ),
+                )
         return candidate, projected, projection
 
     projection_records: tuple[
@@ -1283,6 +1334,7 @@ def fit_template_phase(
         peak_temporary_bytes=max(
             seed_peak_bytes,
             len(seeds) * len(roles) * 32 + len(ordered) * len(roles) * 96,
+            overlap_validation_peak_bytes,
         ) + (len(roles) * 128 if terminal_records else 0),
         candidate_direct_role_authority_evaluation_count=len(
             candidate_authorities
@@ -1484,9 +1536,20 @@ def fit_template_phase(
     contradictory_runner_record = max(
         (
             record
-            for record in incompatible
+            for record in (*incompatible, *terminal_records)
             for item in (record[0],)
-            if item.fit.phase_support_count > best.fit.phase_support_count
+            if (
+                not item.residual_compatible
+                or (
+                    record[1] is not None
+                    and record[1].outcome
+                    == PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID_CONFLICT
+                    and record[1].input_direct_role_authority.state
+                    == EvidenceState.SUPPORTED
+                    and not record[1].projected_out_bindings
+                )
+            )
+            and item.fit.phase_support_count > best.fit.phase_support_count
             and (
                 not _same_continuous_placement(item.fit, best.fit)
                 or not _intervals_overlap(

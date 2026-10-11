@@ -886,6 +886,121 @@ class TemplatePhaseContractTest(unittest.TestCase):
                         )
                         self.assertEqual(matches[0][1].fit_residual_px, 12.0)
 
+    def test_material_role_hypothesis_requires_the_exact_seed_pair(self) -> None:
+        left = replace(
+            edge("hypothesis:left", 110.0),
+            qualified_anchor_roles=(BoundaryRole.START,),
+        )
+        right = replace(
+            edge("hypothesis:right", 130.0),
+            qualified_anchor_roles=(BoundaryRole.END,),
+        )
+        band = separator(
+            "hypothesis:material", left, right,
+            FiniteInterval(19.8, 20.2), region_count=2,
+        )
+        spec = template(2)
+        facts = _facts((left, right))
+        pairs = candidate_owner._separator_pair_facts(
+            (band,), facts, maximum_material_gap_px=20.0,
+        )
+        seeds = candidate_owner._separator_phase_seeds(
+            (band,), facts, spec.roles, spec,
+            width=100.0, pitch=120.0, prefixes=(0.0, 0.0),
+        )
+        required = ((1, left.observation_id), (2, right.observation_id))
+        self.assertTrue(seeds)
+        self.assertTrue(all(seed.required_bindings == required for seed in seeds))
+        for bindings in ((), required[:1], required):
+            with self.subTest(bindings=bindings):
+                matches = _match_roles(
+                    facts, spec.roles, pairs,
+                    phase=10.0, width=100.0, pitch=120.0, direction=1,
+                    prefixes=(0.0, 0.0), frame_width=spec.frame_width_px,
+                    fit_residual_limit_px=None, required_bindings=bindings,
+                )
+                self.assertEqual(
+                    tuple((role.role_index, fact.observation_id)
+                          for role, fact in matches),
+                    required if bindings == required else (),
+                )
+        self.assertEqual(left.qualified_anchor_roles, (BoundaryRole.START,))
+        self.assertEqual(right.qualified_anchor_roles, (BoundaryRole.END,))
+
+    def test_material_hypothesis_does_not_reserve_an_opposite_qualified_role(
+        self,
+    ) -> None:
+        left = replace(
+            edge("material-hypothesis:left", 210.0),
+            qualified_anchor_roles=(BoundaryRole.START,),
+        )
+        right = replace(
+            edge("material-hypothesis:right", 230.0),
+            qualified_anchor_roles=(BoundaryRole.END,),
+        )
+        facts = _facts((left, right))
+        by_id = {fact.observation_id: fact for fact in facts}
+        spec = template(2)
+        matches = _match_roles(
+            facts, spec.roles,
+            ((by_id[left.observation_id], by_id[right.observation_id]),),
+            phase=10.0, width=100.0, pitch=120.0, direction=1,
+            prefixes=(0.0, 0.0), frame_width=spec.frame_width_px,
+            fit_residual_limit_px=None,
+        )
+        self.assertEqual(
+            tuple((role.role_index, fact.observation_id)
+                  for role, fact in matches),
+            ((3, right.observation_id),),
+        )
+
+    def test_material_role_hypothesis_cannot_borrow_intrinsic_role_authority(
+        self,
+    ) -> None:
+        original = tuple(
+            replace(edge(f"hypothesis:{index}", coordinate),
+                    qualified_anchor_roles=(role,))
+            for index, coordinate, role in (
+                (0, 10.0, BoundaryRole.START),
+                (1, 110.0, BoundaryRole.END),
+                (2, 130.0, BoundaryRole.START),
+                (3, 230.0, BoundaryRole.END),
+            )
+        )
+        fit = fit_template_phase(original, template(2)).best
+        assert fit is not None
+        for donor in (False, True, None):
+            with self.subTest(donor=donor):
+                observations = list(original)
+                observations[1] = replace(
+                    original[1], qualified_anchor_roles=(
+                        () if donor is None else (
+                            BoundaryRole.END if donor else BoundaryRole.START,
+                        )
+                    ),
+                )
+                observations[2] = replace(
+                    original[2], qualified_anchor_roles=(BoundaryRole.END,),
+                )
+                band = separator(
+                    "hypothesis:partial-transfer", observations[1], observations[2],
+                    FiniteInterval(19.8, 20.2), region_count=2,
+                )
+                authority = assess_direct_role_binding_authority(
+                    fit, tuple(observations), (band,),
+                    (phase_sequence_measurement(
+                        "hypothesis:registered", FiniteInterval(0.0, 260.0),
+                    ),),
+                )
+                facts = {fact.role_index: fact for fact in authority.facts}
+                self.assertEqual(
+                    facts[2].bases,
+                    (DirectRoleAuthorityBasis.PARTIAL_HEIGHT_SEPARATOR_PAIR,)
+                    if donor is not False else (),
+                )
+                if donor is False:
+                    self.assertEqual(facts[1].bases, ())
+
     def test_separator_roles_cannot_form_an_unobserved_mixed_pair(self) -> None:
         observations = (
             replace(
@@ -1610,6 +1725,34 @@ class TemplatePhaseContractTest(unittest.TestCase):
                         projected.fit.role_bindings,
                         initial.best.role_bindings,
                     )
+
+    def test_candidate_separator_relation_requires_strictly_positive_gap(self) -> None:
+        observations = tuple(
+            edge(f"contact-inclusive:{index}", coordinate)
+            for index, coordinate in enumerate((10.0, 110.0, 130.0, 230.0))
+        )
+        measurements = (
+            phase_sequence_measurement(
+                "contact-inclusive", FiniteInterval(0.0, 260.0)
+            ),
+        )
+        initial = fit_template_phase(
+            observations, template(2), sequence_measurement_sets=measurements
+        )
+        assert initial.best is not None
+        for minimum, expected_count in ((0.0, 0), (0.1, 1)):
+            with self.subTest(minimum=minimum):
+                band = separator(
+                    "contact-inclusive:band", observations[1], observations[2],
+                    FiniteInterval(minimum, 20.2),
+                )
+                authority = assess_direct_role_binding_authority(
+                    initial.best, observations, (band,), measurements
+                )
+                relations = derive_candidate_separator_relations(
+                    initial.best, authority, (band,), FiniteInterval.exact(120.0)
+                )
+                self.assertEqual(len(relations), expected_count)
 
     def test_grid_refit_rechecks_current_residuals_in_both_directions(self) -> None:
         spec = template(2)
@@ -3573,6 +3716,118 @@ class TemplatePhaseContractTest(unittest.TestCase):
                     self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
                     self.assertIsNone(result.runner_up)
 
+    def test_stronger_terminal_residual_evidence_survives_occupied_runner(
+        self,
+    ) -> None:
+        spec = template(3)
+        best = placement_sequence(spec, missing=(1, 2, 3, 5))
+        runner = placement_sequence(spec, missing=(1, 2, 3, 4, 5))
+        first = runner.role_bindings[0]
+        assert first is not None
+        runner = replace(
+            runner,
+            role_bindings=(replace(first, observation_id=ObservationId("eligible:other")),
+                           *runner.role_bindings[1:]),
+        )
+        complete = placement_sequence(spec)
+        first = complete.role_bindings[0]
+        assert first is not None
+        complete = replace(
+            complete,
+            role_bindings=(replace(first, observation_id=ObservationId("terminal:other")),
+                           *complete.role_bindings[1:]),
+        )
+        for residual_compatible, stronger, distinct, grid_conflict, native_authorized in (
+            (False, True, True, False, True),
+            (True, True, True, False, True),
+            (False, False, True, False, True),
+            (False, True, False, False, True),
+            (True, True, True, True, True),
+            (True, True, True, True, False),
+        ):
+            with self.subTest(residual_compatible=residual_compatible,
+                              stronger=stronger, distinct=distinct,
+                              grid_conflict=grid_conflict, native_authorized=native_authorized):
+                terminal = complete if stronger else replace(
+                    best, role_bindings=(complete.role_bindings[0], *best.role_bindings[1:]),
+                )
+                if not distinct:
+                    terminal = placement_sequence(spec)
+                # A raw-compatible failed interpretation must never gain the
+                # stronger residual-counterevidence exception.
+                topology_terminal = replace(complete, residual_sum_px=1.0)
+                pool = (_BoundFit(best, True), _BoundFit(runner, True),
+                        _BoundFit(terminal, residual_compatible),
+                        _BoundFit(topology_terminal, True))
+                calls = 0
+
+                def fitted_seed(*args, **kwargs):
+                    nonlocal calls
+                    candidate = pool[min(calls, len(pool) - 1)]
+                    calls += 1
+                    return candidate
+
+                def project(candidate, authority, *args, **kwargs):
+                    eligible = candidate.fit is best or candidate.fit is runner
+                    return (candidate if eligible else None), PhaseCandidateAuthorityProjection(
+                        input_direct_role_authority=authority,
+                        outcome=(PhaseCandidateProjectionOutcome.UNCHANGED if eligible
+                                 else PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID_CONFLICT
+                                 if grid_conflict and candidate.fit is terminal
+                                 else PhaseCandidateProjectionOutcome.REFIT_UNAVAILABLE),
+                        basis=(PhaseCandidateProjectionBasis.DIRECT_BINDINGS if eligible else None),
+                        projected_out_bindings=tuple(
+                            PhaseCandidateProjectedBinding(item.role_index, item.observation_id)
+                            for item in authority.facts if item.state == EvidenceState.UNAVAILABLE
+                        ),
+                        retained_direct_constraint_rank=direct_role_constraint_rank(
+                            candidate.fit, authority.supported_role_indices,
+                        ),
+                        reason=None if eligible else "original failed projection",
+                    )
+
+                observations = tuple(
+                    edge(str(binding.observation_id), binding.canonical_position_px)
+                    for fit in (best, runner, complete)
+                    for binding in fit.role_bindings if binding is not None
+                )
+                observations = tuple({item.observation_id: item for item in observations}.values())
+                if not native_authorized:
+                    observations = tuple(
+                        replace(item, trace_coordinates_px=(0, 10), support_fraction=2.0 / 3.0)
+                        if str(item.observation_id) == "terminal:other" else item
+                        for item in observations
+                    )
+                with patch.object(phase_owner, "_fit_seed", side_effect=fitted_seed), patch.object(
+                    phase_owner, "project_candidate_to_authorized_direct_roles", side_effect=project,
+                ):
+                    result = fit_template_phase(
+                        observations, spec,
+                        sequence_measurement_sets=(phase_sequence_measurement(
+                            "occupied-runner", FiniteInterval(0.0, 500.0),
+                        ),),
+                    )
+                expected = (
+                    (not residual_compatible or grid_conflict and native_authorized)
+                    and stronger and distinct
+                )
+                self.assertIs(result.best, best)
+                self.assertIs(result.runner_up, terminal if expected else runner)
+                projection = result.runner_phase_candidate_authority_projection
+                assert projection is not None
+                self.assertEqual(projection.eligible, not expected)
+                if expected:
+                    self.assertEqual(result.status, PhaseFitStatus.AMBIGUOUS)
+                    self.assertIsNone(result.winner_basis)
+                    self.assertEqual(
+                        projection.outcome,
+                        PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID_CONFLICT
+                        if grid_conflict else PhaseCandidateProjectionOutcome.REFIT_UNAVAILABLE,
+                    )
+                    self.assertEqual(projection.reason, "original failed projection")
+                    self.assertIn("higher-support", result.ambiguity_reason or "")
+                result.receipt.validate_bounds()
+
     def test_empty_diagnostic_runner_retains_an_incompatible_terminal_fit(
         self,
     ) -> None:
@@ -4084,15 +4339,29 @@ class TemplatePhaseContractTest(unittest.TestCase):
         assert independent is not None
         self.assertEqual(result, independent)
 
-        # The second outlier was inside the first fit's threshold. It cannot
-        # be removed after refitting when it is part of the required identity.
+        # The same observed row also defines its own independent seed. Its
+        # identity must survive a fit dominated by incompatible optional rows.
         required = replace(seed, required_bindings=((8, observations[4].observation_id),))
         with patch.object(candidate_owner, "_match_roles", return_value=matches), patch.object(
             candidate_owner, "_linear_fit", wraps=candidate_owner._linear_fit,
         ) as linear:
-            rejected = candidate_owner._fit_seed(required, *arguments[1:])
+            restored = candidate_owner._fit_seed(required, *arguments[1:])
+        assert restored is not None
+        self.assertEqual(linear.call_count, 5)
+        self.assertEqual(
+            tuple(identity for identity in restored.fit.binding_observation_ids
+                  if identity is not None),
+            tuple(item.observation_id for item in observations[3:5]),
+        )
+        self.assertEqual(restored.fit.role_bindings[8].canonical_position_px, 496.0)
+        self.assertTrue(restored.residual_compatible)
+        # A hard phase authority still makes that defining row infeasible.
+        # The independent check cannot move the authority or erase the row.
+        with patch.object(candidate_owner, "_match_roles", return_value=matches):
+            rejected = candidate_owner._fit_seed(
+                required, *arguments[1:7], FiniteInterval.exact(10.0), None,
+            )
         self.assertIsNone(rejected)
-        self.assertEqual(linear.call_count, 3)
 
     def test_terminal_refit_rejects_an_empty_retained_set(self) -> None:
         compiled = template(1)

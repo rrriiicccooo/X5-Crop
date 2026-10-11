@@ -16,6 +16,10 @@ from x5crop.detection.photo_geometry.template_contact import (
     observe_contact_edges,
 )
 from x5crop.detection.photo_geometry.model import BoundaryRole
+from x5crop.detection.photo_geometry.template_direct_role_authority import (
+    DirectRoleAuthorityBasis,
+    assess_direct_role_binding_authority,
+)
 from x5crop.detection.photo_geometry.template_model import ContactRelation
 from x5crop.detection.photo_geometry.template_phase import fit_template_phase
 from x5crop.detection.photo_geometry.template_phase_model import (
@@ -26,6 +30,47 @@ from x5crop.detection.photo_geometry.template_phase_model import (
 
 
 class TemplateContactContractTest(unittest.TestCase):
+    def test_proven_contact_keeps_native_authority_for_both_shared_roles(self) -> None:
+        measurement = phase_sequence_measurement(
+            "one-sided-contact-hint", FiniteInterval(0.0, 220.0),
+        )
+        for hint in (BoundaryRole.START, BoundaryRole.END):
+            with self.subTest(hint=hint):
+                observations = (
+                    phase_edge("outer:start", 10.0),
+                    replace(phase_edge("shared", 110.0),
+                            qualified_anchor_roles=(hint,)),
+                    phase_edge("outer:end", 210.0),
+                )
+                contacts = observe_contact_edges(observations, (), (measurement,))
+                result = fit_template_phase(
+                    observations, phase_template(2),
+                    contact_edge_observations=contacts,
+                )
+                self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+                assert result.best is not None
+                authority = assess_direct_role_binding_authority(
+                    result.best, observations, (), (measurement,),
+                )
+                for fact in authority.facts[1:3]:
+                    self.assertEqual(fact.state, EvidenceState.SUPPORTED)
+                    self.assertEqual(fact.bases, (
+                        DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE,
+                    ))
+                # Keeping the same native measurement in an ordinary role
+                # cannot borrow the Contact pair's role-free qualification.
+                bindings = list(result.best.role_bindings)
+                bindings[2 if hint == BoundaryRole.START else 1] = None
+                ordinary = replace(result.best, role_bindings=tuple(bindings),
+                                   adjacency_relations=(), frame_width_inference=None,
+                                   phase_support_coverage=2.0)
+                ordinary_authority = assess_direct_role_binding_authority(
+                    ordinary, observations, (), (measurement,),
+                )
+                opposite = next(f for f in ordinary_authority.facts
+                                if f.role_index == (1 if hint == BoundaryRole.START else 2))
+                self.assertEqual(opposite.state, EvidenceState.UNAVAILABLE)
+
     def test_positive_separator_edges_cannot_become_contact_candidates(
         self,
     ) -> None:

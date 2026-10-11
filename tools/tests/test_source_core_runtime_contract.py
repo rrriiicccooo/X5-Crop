@@ -304,6 +304,15 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         }
         _validate_direct_role_binding_authority(authority)
 
+        partial = deepcopy(authority)
+        partial["facts"][0]["bases"] = ["partial_height_separator_pair"]
+        for regions in (2, 3):
+            partial["facts"][0]["independent_support_region_count"] = regions
+            _validate_direct_role_binding_authority(partial)
+        partial["facts"][0]["independent_support_region_count"] = 1
+        with self.assertRaisesRegex(ValueError, "direct-role authority fact"):
+            _validate_direct_role_binding_authority(partial)
+
         del authority["facts"][0]["evidence_group_id"]
         with self.assertRaisesRegex(
             ValueError,

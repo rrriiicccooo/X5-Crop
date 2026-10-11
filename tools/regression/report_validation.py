@@ -2100,6 +2100,7 @@ def _validate_adjacency_continuity(value: object) -> None:
                 "separator_role_conflict",
                 "signed_gap_crosses_zero",
                 "overlap_observation_unavailable",
+                "unbound_registered_overlap",
                 "registered_coverage_incomplete",
             }
             or reason is not None
@@ -2138,6 +2139,7 @@ def _validate_adjacency_continuity(value: object) -> None:
                 "separator_role_conflict",
                 "signed_gap_crosses_zero",
                 "overlap_observation_unavailable",
+                "unbound_registered_overlap",
             },
             "coverage_incomplete": {
                 "registered_coverage_incomplete",
@@ -2186,8 +2188,20 @@ def _validate_adjacency_continuity(value: object) -> None:
             raise ValueError("unresolved continuity cannot claim a basis")
         if kind != "contact" and contact_id is not None:
             raise ValueError("non-contact continuity retained contact evidence")
-        if kind != "overlap" and overlap_id is not None:
+        if (
+            kind != "overlap"
+            and failure_kind != "unbound_registered_overlap"
+            and overlap_id is not None
+        ):
             raise ValueError("non-overlap continuity retained overlap evidence")
+        if failure_kind == "unbound_registered_overlap" and (
+            (end_id is None) == (start_id is None)
+            or separator_band_ids
+            or overlap_id is None
+            or signed_gap is None
+            or float(signed_gap["maximum"]) >= -1.0e-7
+        ):
+            raise ValueError("unbound overlap counterevidence is incomplete")
         if kind == "separator_material_unresolved" and (
             not direct_pair
             or not separator_band_ids
@@ -2885,7 +2899,7 @@ def _validate_direct_role_binding_authority(value: object) -> None:
                 "partial_height_separator_pair" in bases
                 and (
                     bases != ["partial_height_separator_pair"]
-                    or fact["independent_support_region_count"] != 2
+                    or fact["independent_support_region_count"] not in {2, 3}
                 )
             )
             or not isinstance(conflicts, list)
@@ -4161,6 +4175,30 @@ def _validate_geometry(
                 raise ValueError(
                     "overlap relation changed its registered reversed edges"
                 )
+        registered_overlap_facts = {
+            item["observation_id"]: item
+            for item in lane["overlap_edge_pair_observations"]
+        }
+        coverage_by_ordinal = {
+            item["relation_ordinal"]: item
+            for item in alignment["adjacency_observation_coverage"]
+        }
+        for item in alignment["adjacency_continuity_observations"]:
+            if item["failure_kind"] != "unbound_registered_overlap":
+                continue
+            pair = registered_overlap_facts.get(item["overlap_observation_id"])
+            if (
+                pair is None
+                or item["end_observation_id"] is not None
+                and item["end_observation_id"] != pair["end_edge_observation_id"]
+                or item["next_start_observation_id"] is not None
+                and item["next_start_observation_id"]
+                != pair["next_start_edge_observation_id"]
+                or item["signed_gap_interval_px"] != pair["signed_gap_interval_px"]
+                or coverage_by_ordinal[item["relation_ordinal"]]["state"]
+                != "complete"
+            ):
+                raise ValueError("unbound overlap left its registered counterevidence")
         if [
             item["relation_ordinal"]
             for item in alignment["adjacency_observation_coverage"]

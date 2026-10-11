@@ -13,14 +13,20 @@ from dataclasses import dataclass
 from enum import Enum
 
 from ...domain import EvidenceState, FiniteInterval, ObservationId
-from .model import BoundaryEvidenceState
+from .model import BoundaryEvidenceState, BoundaryRole
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .physical_identity import physical_fact_id
 from .template_adjacency_coverage import (
     AdjacencyCoverageState,
     AdjacencyObservationCoverage,
 )
-from .template_model import ContactRelation, OverlapRelation, SequenceFit
+from .template_model import (
+    ContactRelation,
+    OverlapRelation,
+    SeparatorRelation,
+    SeparatorRelationKind,
+    SequenceFit,
+)
 from .template_overlap import OverlapEdgePairObservation
 
 
@@ -56,6 +62,7 @@ class AdjacencyContinuityFailureKind(str, Enum):
     SEPARATOR_ROLE_CONFLICT = "separator_role_conflict"
     SIGNED_GAP_CROSSES_ZERO = "signed_gap_crosses_zero"
     OVERLAP_OBSERVATION_UNAVAILABLE = "overlap_observation_unavailable"
+    UNBOUND_REGISTERED_OVERLAP = "unbound_registered_overlap"
     REGISTERED_COVERAGE_INCOMPLETE = "registered_coverage_incomplete"
 
 
@@ -129,6 +136,7 @@ class AdjacencyContinuityObservation:
                 AdjacencyContinuityFailureKind.SEPARATOR_ROLE_CONFLICT,
                 AdjacencyContinuityFailureKind.SIGNED_GAP_CROSSES_ZERO,
                 AdjacencyContinuityFailureKind.OVERLAP_OBSERVATION_UNAVAILABLE,
+                AdjacencyContinuityFailureKind.UNBOUND_REGISTERED_OVERLAP,
             },
             AdjacencyContinuityKind.COVERAGE_INCOMPLETE: {
                 AdjacencyContinuityFailureKind.REGISTERED_COVERAGE_INCOMPLETE,
@@ -190,9 +198,22 @@ class AdjacencyContinuityObservation:
             raise ValueError("non-contact continuity retained contact evidence")
         if (
             self.kind != AdjacencyContinuityKind.OVERLAP
+            and self.failure_kind
+            != AdjacencyContinuityFailureKind.UNBOUND_REGISTERED_OVERLAP
             and self.overlap_observation_id is not None
         ):
             raise ValueError("non-overlap continuity retained overlap evidence")
+        if self.failure_kind == (
+            AdjacencyContinuityFailureKind.UNBOUND_REGISTERED_OVERLAP
+        ) and (
+            (self.end_observation_id is None)
+            == (self.next_start_observation_id is None)
+            or self.separator_band_observation_ids
+            or self.overlap_observation_id is None
+            or self.signed_gap_interval_px is None
+            or self.signed_gap_interval_px.maximum >= -_NUMERIC_EPSILON_PX
+        ):
+            raise ValueError("unbound overlap counterevidence is incomplete")
         if (
             self.kind
             == AdjacencyContinuityKind.SEPARATOR_MATERIAL_UNRESOLVED
@@ -285,6 +306,90 @@ def _bands_by_pair(
     }
 
 
+def unbound_registered_overlap_counterevidence(
+    fit: SequenceFit,
+    sequence_edges: tuple[BoundaryEdgeObservation, ...],
+    coverage: tuple[AdjacencyObservationCoverage, ...],
+    overlap_edge_pairs: tuple[OverlapEdgePairObservation, ...],
+) -> tuple[tuple[int, OverlapEdgePairObservation], ...]:
+    """Associate a unique native overlap with one already bound endpoint.
+
+    This is validation only: the missing partner is never bound, fitted or
+    granted authority. A complete ordinary corridor cannot claim absence of
+    counterevidence when its own endpoint owns a registered negative gap.
+    """
+
+    by_id = {item.observation_id: item for item in sequence_edges}
+    bound_ids = set(fit.bound_observation_ids)
+    pairs_by_endpoint: dict[
+        tuple[BoundaryRole, ObservationId], list[OverlapEdgePairObservation]
+    ] = {}
+    for pair in overlap_edge_pairs:
+        for role, identity in (
+            (BoundaryRole.END, pair.end_edge_observation_id),
+            (BoundaryRole.START, pair.next_start_edge_observation_id),
+        ):
+            pairs_by_endpoint.setdefault((role, identity), []).append(pair)
+    relations = {
+        item.relation_ordinal: item for item in fit.adjacency_relations
+    }
+    values: list[tuple[int, OverlapEdgePairObservation]] = []
+    for item in coverage:
+        ordinal = item.relation_ordinal
+        relation = relations.get(ordinal)
+        if (
+            fit.template.gap_prior_px.minimum <= _NUMERIC_EPSILON_PX
+            or item.state != AdjacencyCoverageState.COMPLETE
+        ) or (
+            relation is not None
+            and (
+                not isinstance(relation, SeparatorRelation)
+                or relation.kind != SeparatorRelationKind.NOMINAL
+            )
+        ):
+            continue
+        end_id = fit.binding_observation_ids[2 * ordinal - 1]
+        start_id = fit.binding_observation_ids[2 * ordinal]
+        if (end_id is None) == (start_id is None):
+            continue
+        key = (
+            (BoundaryRole.END, end_id)
+            if end_id is not None
+            else (BoundaryRole.START, start_id)
+        )
+        pairs = pairs_by_endpoint.get(key, ())
+        if len(pairs) != 1:
+            continue
+        pair = pairs[0]
+        partner = (
+            pair.next_start_edge_observation_id
+            if end_id is not None
+            else pair.end_edge_observation_id
+        )
+        if partner in bound_ids:
+            continue
+        end = by_id.get(pair.end_edge_observation_id)
+        start = by_id.get(pair.next_start_edge_observation_id)
+        if (
+            end is None
+            or start is None
+            or BoundaryRole.END not in end.qualified_anchor_roles
+            or BoundaryRole.START not in start.qualified_anchor_roles
+            or _signed_gap_interval(end, start, fit.template.direction)
+            != pair.signed_gap_interval_px
+            or any(
+                edge.full_position_interval_px.minimum
+                < item.required_interval_px.minimum
+                or edge.full_position_interval_px.maximum
+                > item.required_interval_px.maximum
+                for edge in (end, start)
+            )
+        ):
+            continue
+        values.append((ordinal, pair))
+    return tuple(values)
+
+
 def observe_adjacency_continuity(
     fit: SequenceFit,
     sequence_edges: tuple[BoundaryEdgeObservation, ...],
@@ -292,7 +397,7 @@ def observe_adjacency_continuity(
     coverage: tuple[AdjacencyObservationCoverage, ...],
     overlap_edge_pairs: tuple[OverlapEdgePairObservation, ...] = (),
 ) -> tuple[AdjacencyContinuityObservation, ...]:
-    """Map one selected fit to ordinary-adjacency facts in O(count)."""
+    """Map a selected fit using registered edge, overlap, and coverage indexes."""
 
     if not isinstance(fit, SequenceFit):
         raise TypeError("adjacency continuity requires a sequence fit")
@@ -320,6 +425,11 @@ def observe_adjacency_continuity(
     relations_by_ordinal = {
         item.relation_ordinal: item for item in fit.adjacency_relations
     }
+    unbound_overlaps = dict(
+        unbound_registered_overlap_counterevidence(
+            fit, sequence_edges, coverage, overlap_edge_pairs,
+        )
+    )
     for item in coverage:
         adjacency_index = item.relation_ordinal - 1
         end_id = fit.binding_observation_ids[2 * adjacency_index + 1]
@@ -366,6 +476,10 @@ def observe_adjacency_continuity(
             item.state.value,
             item.covering_query_ids,
         )
+        if item.relation_ordinal in unbound_overlaps:
+            identity_parts += (
+                unbound_overlaps[item.relation_ordinal].observation_id,
+            )
         relation = relations_by_ordinal.get(item.relation_ordinal)
         contact = relation if isinstance(relation, ContactRelation) else None
         overlap = relation if isinstance(relation, OverlapRelation) else None
@@ -408,6 +522,26 @@ def observe_adjacency_continuity(
                 reason=reason,
             )
 
+        unbound_overlap = unbound_overlaps.get(item.relation_ordinal)
+        if unbound_overlap is not None:
+            values.append(
+                observation(
+                    state=EvidenceState.UNAVAILABLE,
+                    kind=AdjacencyContinuityKind.UNRESOLVED,
+                    overlap_observation_id=unbound_overlap.observation_id,
+                    signed_gap_interval_px=(
+                        unbound_overlap.signed_gap_interval_px
+                    ),
+                    failure_kind=(
+                        AdjacencyContinuityFailureKind.UNBOUND_REGISTERED_OVERLAP
+                    ),
+                    reason=(
+                        "ordinary adjacency has a unique registered overlap "
+                        "partner for its bound endpoint"
+                    ),
+                )
+            )
+            continue
         if contact is not None:
             if (
                 end_id != contact.shared_edge_observation_id
