@@ -1,8 +1,7 @@
-"""Independent native-endpoint Review reconstruction for one prepared lane.
+"""Independent reconstruction of the four native endpoint role classes.
 
-The builder consumes one already retained phase diagnostic.  It owns a fresh
-source geometry and one bounded Cross/placement/output attempt, while keeping
-all canonical lane competition and Gate records outside this module.
+Each complete retained diagnostic owns one bounded Review attempt. Canonical
+lane competition and Gate records remain outside this module.
 """
 
 from __future__ import annotations
@@ -59,7 +58,6 @@ _NATIVE_OUTPUT_TEMPORARY_BYTES = 4096
 
 
 def _native_peak_temporary_bound(
-    phase_retention: NativePhaseRetention,
     *,
     cross_call_count: int,
     cross_evaluated_fit_count: int,
@@ -78,11 +76,7 @@ def _native_peak_temporary_bound(
         if placement_projection_count
         else 0
     )
-    return max(
-        phase_retention.peak_temporary_bytes,
-        cross_bound,
-        placement_bound,
-    )
+    return max(cross_bound, placement_bound)
 
 
 class NativeEndpointReviewFailureKind(str, Enum):
@@ -116,9 +110,6 @@ class NativeEndpointReviewFailure:
 class NativeEndpointReviewWorkReceipt:
     """Logical work and bounded temporary storage for one review attempt."""
 
-    phase_record_scan_count: int
-    phase_fact_check_count: int
-    phase_carry_comparison_count: int
     cross_call_count: int
     cross_evaluated_fit_count: int
     compose_call_count: int
@@ -133,9 +124,6 @@ class NativeEndpointReviewWorkReceipt:
 
     def __post_init__(self) -> None:
         values = (
-            self.phase_record_scan_count,
-            self.phase_fact_check_count,
-            self.phase_carry_comparison_count,
             self.cross_call_count,
             self.cross_evaluated_fit_count,
             self.compose_call_count,
@@ -320,7 +308,7 @@ def _unavailable_proposal(
 class NativeEndpointReview:
     """Typed output of one independent native-endpoint reconstruction."""
 
-    phase_retention: NativePhaseRetention
+    phase_diagnostic: NativeEndpointPhaseDiagnostic
     source_scan_geometry: SourceScanGeometry
     cross_input: TemplateCrossInput | None
     cross_best: CrossFit | None
@@ -336,10 +324,8 @@ class NativeEndpointReview:
     def __post_init__(self) -> None:
         if self.scope != "review_only":
             raise ValueError("native endpoint review scope is invalid")
-        if not isinstance(self.phase_retention, NativePhaseRetention):
-            raise TypeError("native endpoint review phase retention is invalid")
-        diagnostic = self.phase_retention.diagnostic
-        if diagnostic is None or not isinstance(
+        diagnostic = self.phase_diagnostic
+        if not isinstance(
             diagnostic,
             NativeEndpointPhaseDiagnostic,
         ):
@@ -353,7 +339,6 @@ class NativeEndpointReview:
         if self.work.output_slot_count != diagnostic.fit.template.count:
             raise ValueError("native endpoint review changed template count")
         if self.work.peak_temporary_bytes < _native_peak_temporary_bound(
-            self.phase_retention,
             cross_call_count=self.work.cross_call_count,
             cross_evaluated_fit_count=self.work.cross_evaluated_fit_count,
             placement_projection_count=self.work.placement_projection_count,
@@ -543,12 +528,6 @@ class NativeEndpointReview:
         elif self.proposal.state != TemplateProposalState.UNAVAILABLE:
             raise ValueError("failed native endpoint review generated a proposal")
 
-        if self.work.phase_record_scan_count != self.phase_retention.record_scan_count or (
-            self.work.phase_fact_check_count != self.phase_retention.fact_check_count
-            or self.work.phase_carry_comparison_count
-            != self.phase_retention.carry_comparison_count
-        ):
-            raise ValueError("native endpoint review lost phase receipt counts")
         if self.cross_receipt is None:
             if self.work.cross_evaluated_fit_count:
                 raise ValueError("native endpoint review lost Cross receipt")
@@ -581,19 +560,14 @@ class NativeEndpointReview:
             raise ValueError("failed native endpoint review retained outputs")
 
 
-def build_native_endpoint_review(
+def _build_native_endpoint_review(
     lane: PreparedTemplateLane,
-) -> NativeEndpointReview | None:
+    diagnostic: NativeEndpointPhaseDiagnostic,
+) -> NativeEndpointReview:
     """Run one bounded independent review reconstruction for a prepared lane."""
 
     if not isinstance(lane, PreparedTemplateLane):
         raise TypeError("native endpoint review requires PreparedTemplateLane")
-    retention = lane.phase_competition._native_phase_retention
-    if retention is None or retention.diagnostic is None:
-        return None
-    if not isinstance(retention, NativePhaseRetention):
-        raise TypeError("native endpoint review phase retention is invalid")
-    diagnostic = retention.diagnostic
     fit = diagnostic.fit
     if fit.template != lane.template_spec:
         raise ValueError("native endpoint review phase fit changed lane template")
@@ -775,16 +749,12 @@ def build_native_endpoint_review(
         )
 
     peak_temporary_bytes = _native_peak_temporary_bound(
-        retention,
         cross_call_count=cross_call_count,
         cross_evaluated_fit_count=cross_evaluated_fit_count,
         placement_projection_count=placement_projection_count,
         output_evaluation_count=output_evaluation_count,
     )
     work = NativeEndpointReviewWorkReceipt(
-        phase_record_scan_count=retention.record_scan_count,
-        phase_fact_check_count=retention.fact_check_count,
-        phase_carry_comparison_count=retention.carry_comparison_count,
         cross_call_count=cross_call_count,
         cross_evaluated_fit_count=cross_evaluated_fit_count,
         compose_call_count=compose_call_count,
@@ -798,7 +768,7 @@ def build_native_endpoint_review(
         peak_temporary_bytes=peak_temporary_bytes,
     )
     return NativeEndpointReview(
-        phase_retention=retention,
+        phase_diagnostic=diagnostic,
         source_scan_geometry=source,
         cross_input=cross_input,
         cross_best=cross_best,
@@ -812,8 +782,70 @@ def build_native_endpoint_review(
     )
 
 
+@dataclass(frozen=True)
+class NativeEndpointReviewPortfolio:
+    """One complete attempt per retained endpoint-role class representative."""
+
+    phase_retention: NativePhaseRetention
+    reviews: tuple[NativeEndpointReview, ...]
+    scope: str = field(default="review_only", init=False)
+    peak_temporary_bytes: int = field(init=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.phase_retention, NativePhaseRetention):
+            raise TypeError("native endpoint portfolio phase retention is invalid")
+        if (
+            not isinstance(self.reviews, tuple)
+            or not 1 <= len(self.reviews) <= 4
+            or any(not isinstance(item, NativeEndpointReview) for item in self.reviews)
+            or tuple(item.phase_diagnostic for item in self.reviews)
+            != self.phase_retention.diagnostics
+        ):
+            raise ValueError("native endpoint portfolio lost complete class representatives")
+        placement_ids = tuple(
+            item.placement.placement_id
+            for item in self.reviews if item.placement is not None
+        )
+        if len(set(placement_ids)) != len(placement_ids):
+            raise ValueError("native endpoint portfolio repeats a placement identity")
+        # Completed attempts remain referenced while the next one runs. Count
+        # their output records and phase facts conservatively in addition to
+        # the largest temporary Cross/projection structure, without repeating
+        # the phase classification receipt for every attempt.
+        retained_bytes = sum(
+            2048
+            + len(item.phase_diagnostic.fit.role_bindings) * 256
+            + item.work.output_count * _NATIVE_OUTPUT_TEMPORARY_BYTES
+            for item in self.reviews
+        )
+        object.__setattr__(self, "peak_temporary_bytes", max(
+            self.phase_retention.peak_temporary_bytes,
+            retained_bytes + max(item.work.peak_temporary_bytes for item in self.reviews),
+        ))
+
+
+def build_native_endpoint_review(
+    lane: PreparedTemplateLane,
+) -> NativeEndpointReviewPortfolio | None:
+    """Materialize every distinct representative of the four physical classes."""
+
+    if not isinstance(lane, PreparedTemplateLane):
+        raise TypeError("native endpoint review requires PreparedTemplateLane")
+    retention = lane.phase_competition._native_phase_retention
+    if retention is None or not retention.diagnostics:
+        return None
+    return NativeEndpointReviewPortfolio(
+        phase_retention=retention,
+        reviews=tuple(
+            _build_native_endpoint_review(lane, diagnostic)
+            for diagnostic in retention.diagnostics
+        ),
+    )
+
+
 __all__ = [
     "NativeEndpointReview",
+    "NativeEndpointReviewPortfolio",
     "NativeEndpointReviewFailure",
     "NativeEndpointReviewFailureKind",
     "NativeEndpointReviewWorkReceipt",

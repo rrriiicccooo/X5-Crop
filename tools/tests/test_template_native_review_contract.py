@@ -33,6 +33,7 @@ from x5crop.detection.photo_geometry.template_native_review import (
     NativeEndpointReviewFailure,
     NativeEndpointReviewFailureKind,
     NativeEndpointReviewWorkReceipt,
+    NativeEndpointReviewPortfolio,
     build_native_endpoint_review,
     native_endpoint_cross_input,
 )
@@ -47,6 +48,7 @@ from x5crop.detection.photo_geometry.template_phase_model import (
     NativeEndpointPhaseDiagnostic,
     NativeEndpointSelectionBasis,
     PhaseCandidateAuthorityProjection,
+    PhaseCandidateProjectedBinding,
     PhaseCandidateProjectionBasis,
     PhaseCandidateProjectionOutcome,
 )
@@ -110,8 +112,8 @@ class NativeReviewContractTests(TestCase):
                 ),
             ),
         )
-        self.assertIsNotNone(retention.diagnostic)
-        self.assertIs(retention.diagnostic.fit, fit)
+        self.assertIsNotNone(retention.diagnostics[0])
+        self.assertIs(retention.diagnostics[0].fit, fit)
         source = SourceScanGeometry.create(
             lane.source_scan_geometry.frame_spec,
             width_scale_px_per_mm=lane.lane.scan_canvas.axis_scales.width_axis_px_per_mm,
@@ -148,6 +150,16 @@ class NativeReviewContractTests(TestCase):
             ),
         )
         return lane
+
+    def _build_single_review(self, lane):
+        portfolio = build_native_endpoint_review(lane)
+        self.assertEqual(len(portfolio.reviews), 1)
+        return portfolio.reviews[0]
+
+    def _portfolio(self, lane, review):
+        return NativeEndpointReviewPortfolio(
+            lane.phase_competition._native_phase_retention, (review,),
+        )
 
     def _cross_competition(self, lane):
         source = SourceScanGeometry.create(
@@ -192,6 +204,66 @@ class NativeReviewContractTests(TestCase):
     def test_no_private_phase_retention_means_no_review(self):
         self.assertIsNone(build_native_endpoint_review(prepared_template_lane()))
 
+    def test_role_class_attempts_preserve_each_failure_and_count_work_once(self):
+        lane = self._retained_lane()
+        original = lane.phase_competition._native_phase_retention.diagnostics[0]
+        records = []
+        for intrinsic_role in (0, 1):
+            facts = tuple(replace(
+                fact,
+                bases=(DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE,)
+                if fact.role_index == intrinsic_role else (),
+                state=EvidenceState.SUPPORTED
+                if fact.role_index == intrinsic_role else EvidenceState.UNAVAILABLE,
+            ) for fact in original.projection.input_direct_role_authority.facts)
+            authority = DirectRoleBindingAuthority(
+                state=EvidenceState.UNAVAILABLE, facts=facts,
+                unsupported_role_indices=(1 - intrinsic_role,),
+                reason="one endpoint role remains unsupported",
+            )
+            projection = PhaseCandidateAuthorityProjection(
+                input_direct_role_authority=authority,
+                outcome=PhaseCandidateProjectionOutcome.REFIT_UNAVAILABLE,
+                basis=None, projected_out_bindings=tuple(
+                    PhaseCandidateProjectedBinding(fact.role_index, fact.observation_id)
+                    for fact in facts if fact.state == EvidenceState.UNAVAILABLE
+                ),
+                retained_direct_constraint_rank=1,
+                reason="diagnostic input only",
+            )
+            records.append((_BoundFit(original.fit, True), None, projection))
+        retention = select_native_phase_retention(tuple(records))
+        self.assertEqual(len(retention.diagnostics), 2)
+        # This focused fixture has synthetic Cross IDs installed after the
+        # prepared-lane registration checks, as in _retained_lane above.
+        object.__setattr__(lane, "phase_competition", replace(
+            lane.phase_competition, _native_phase_retention=retention,
+        ))
+        competition = self._cross_competition(lane)
+        before = (lane.source_scan_geometry, lane.phase_competition.best,
+                  lane.phase_competition.runner_up, lane.cross_competition)
+        with patch(
+            "x5crop.detection.photo_geometry.template_native_review.fit_template_cross",
+            side_effect=(competition, replace(competition, best=None)),
+        ) as cross:
+            portfolio = build_native_endpoint_review(lane)
+        self.assertEqual(cross.call_count, 2)
+        self.assertEqual(tuple(item.phase_diagnostic for item in portfolio.reviews),
+                         retention.diagnostics)
+        self.assertEqual(sum(item.work.cross_call_count for item in portfolio.reviews), 2)
+        self.assertEqual(sum(item.work.compose_call_count for item in portfolio.reviews), 1)
+        self.assertEqual(portfolio.reviews[0].proposal.state.value, "generated")
+        self.assertEqual(portfolio.reviews[1].failure.kind,
+                         NativeEndpointReviewFailureKind.CROSS_BEST_UNAVAILABLE)
+        self.assertGreater(portfolio.peak_temporary_bytes,
+                           max(item.work.peak_temporary_bytes for item in portfolio.reviews))
+        self.assertEqual(before, (lane.source_scan_geometry, lane.phase_competition.best,
+                                  lane.phase_competition.runner_up, lane.cross_competition))
+        with self.assertRaisesRegex(ValueError, "complete class representatives"):
+            replace(portfolio, reviews=portfolio.reviews[::-1])
+        with self.assertRaisesRegex(ValueError, "complete class representatives"):
+            replace(portfolio, reviews=portfolio.reviews[:1])
+
     def test_report_replays_original_holder_axes_before_canonical_scale_intersection(self):
         from tools.regression.report_validation import _validate_native_endpoint_review
         from x5crop.detection.evidence.scan_canvas import MatchedHolder
@@ -215,7 +287,7 @@ class NativeReviewContractTests(TestCase):
             "x5crop.detection.photo_geometry.template_native_review.fit_template_cross",
             return_value=competition,
         ):
-            review = build_native_endpoint_review(lane)
+            review = self._build_single_review(lane)
         self.assertIsNone(review.placement)
         original_source = SourceScanGeometry.create(
             review.source_scan_geometry.frame_spec,
@@ -239,7 +311,7 @@ class NativeReviewContractTests(TestCase):
             axis_scales=original_scales,
         )
         record = {
-            "native_endpoint_review": typed_read_model(review),
+            "native_endpoint_review": typed_read_model(self._portfolio(lane, review)),
             "source_scan_geometry": typed_read_model(canonical_initial),
             "template_id": lane.template_spec.template_id,
             "lane_id": lane.lane.domain.lane_id,
@@ -251,7 +323,7 @@ class NativeReviewContractTests(TestCase):
         self.assertEqual(_validate_native_endpoint_review(
             record, expected_source_extent=WorkspaceExtent(2320, 322),
             matched_holder=holder,
-        ), review)
+        ).reviews[0], review)
         with self.assertRaisesRegex(ValueError, "scan-canvas scale authority"):
             _validate_native_endpoint_review(
                 record, expected_source_extent=WorkspaceExtent(2320, 322),
@@ -362,7 +434,7 @@ class NativeReviewContractTests(TestCase):
             "x5crop.detection.photo_geometry.template_native_review.fit_template_cross",
             return_value=conditional_competition,
         ):
-            review = build_native_endpoint_review(lane)
+            review = self._build_single_review(lane)
         self.assertEqual(review.cross_status, CrossFitStatus.UNRESOLVED)
         self.assertEqual(
             review.cross_input.top_bindings[0].conditional_family_ids,
@@ -380,7 +452,7 @@ class NativeReviewContractTests(TestCase):
             "x5crop.detection.photo_geometry.template_native_review.fit_template_cross",
             return_value=competition,
         ) as fit_cross:
-            review = build_native_endpoint_review(lane)
+            review = self._build_single_review(lane)
         self.assertIsNone(review.failure)
         self.assertIsNotNone(review.placement)
         self.assertEqual(fit_cross.call_count, 1)
@@ -409,7 +481,7 @@ class NativeReviewContractTests(TestCase):
             canvas.matches[0].aspect_error_ratio, canvas.axis_scales,
         )
         record = {
-            "native_endpoint_review": typed_read_model(review),
+            "native_endpoint_review": typed_read_model(self._portfolio(lane, review)),
             "source_scan_geometry": typed_read_model(lane.source_scan_geometry),
             "template_id": lane.template_spec.template_id,
             "lane_id": lane.lane.domain.lane_id,
@@ -426,7 +498,7 @@ class NativeReviewContractTests(TestCase):
             self.assertEqual(_validate_native_endpoint_review(
                 record, expected_source_extent=review.proposal.output_footprints[0].source_extent,
                 matched_holder=holder,
-            ), review)
+            ).reviews[0], review)
 
     def test_cross_owner_programming_error_is_not_typed_as_review_failure(self):
         lane = self._retained_lane()
@@ -443,7 +515,7 @@ class NativeReviewContractTests(TestCase):
             "x5crop.detection.photo_geometry.template_native_review.resolved_cross_support_domains_px",
             side_effect=ValueError("typed support domain unavailable"),
         ):
-            review = build_native_endpoint_review(lane)
+            review = self._build_single_review(lane)
         self.assertEqual(
             review.failure.kind,
             NativeEndpointReviewFailureKind.CROSS_INPUT_UNAVAILABLE,
@@ -469,7 +541,7 @@ class NativeReviewContractTests(TestCase):
             "x5crop.detection.photo_geometry.template_native_review.fit_template_cross",
             return_value=bound,
         ) as fit_cross:
-            review = build_native_endpoint_review(lane)
+            review = self._build_single_review(lane)
         self.assertEqual(fit_cross.call_count, 1)
         self.assertEqual(
             review.failure.kind,
@@ -496,7 +568,7 @@ class NativeReviewContractTests(TestCase):
         with patch(
             "x5crop.detection.photo_geometry.template_native_review.fit_template_cross",
         ) as fit_cross:
-            review = build_native_endpoint_review(lane)
+            review = self._build_single_review(lane)
         self.assertEqual(
             review.failure.kind,
             NativeEndpointReviewFailureKind.INITIAL_HEIGHT_DEPENDENCY_UNAVAILABLE,
@@ -507,9 +579,6 @@ class NativeReviewContractTests(TestCase):
     def test_typed_work_and_failure_cannot_claim_generated_output(self):
         with self.assertRaises(ValueError):
             NativeEndpointReviewWorkReceipt(
-                phase_record_scan_count=1,
-                phase_fact_check_count=2,
-                phase_carry_comparison_count=0,
                 cross_call_count=1,
                 cross_evaluated_fit_count=1,
                 compose_call_count=1,
@@ -524,9 +593,6 @@ class NativeReviewContractTests(TestCase):
             )
         with self.assertRaises(ValueError):
             NativeEndpointReviewWorkReceipt(
-                phase_record_scan_count=1,
-                phase_fact_check_count=2,
-                phase_carry_comparison_count=0,
                 cross_call_count=1,
                 cross_evaluated_fit_count=1,
                 compose_call_count=0,
@@ -545,7 +611,7 @@ class NativeReviewContractTests(TestCase):
             "x5crop.detection.photo_geometry.template_native_review.fit_template_cross",
             return_value=competition,
         ):
-            review = build_native_endpoint_review(lane)
+            review = self._build_single_review(lane)
         with self.assertRaises(ValueError):
             replace(
                 review,

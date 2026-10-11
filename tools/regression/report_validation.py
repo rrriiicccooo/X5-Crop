@@ -21,7 +21,9 @@ from x5crop.detection.photo_geometry.template_output import common_direct_use_bu
 from x5crop.detection.photo_geometry.output_model import OutputFootprint, fixed_output_coverage
 from x5crop.detection.photo_geometry.template_holder_fill import HolderFillAssessment
 from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
-from x5crop.detection.photo_geometry.template_native_review import NativeEndpointReview
+from x5crop.detection.photo_geometry.template_native_review import (
+    NativeEndpointReview, NativeEndpointReviewPortfolio,
+)
 from x5crop.detection.evidence.scan_canvas import MatchedHolder
 
 from x5crop.detection.candidate.assessment.model import CANDIDATE_GATE_CHECK_CODES
@@ -3434,7 +3436,7 @@ def _read_common_proof(value: Any, model: type) -> Any:
                      CrossFitCompetition, CrossRoleBinding, PhotoBoundaryObservation,
                      SourceScanGeometry, HolderFillAssessment, FormatPlacement, ExteriorRegionMeasurement,
                      TemplateCrossInput, CoarseStripSupport, PhotoBoundaryMeasurementSet, CrossRegistrationWorkReceipt,
-                     NativeEndpointReview, MatchedHolder):
+                     NativeEndpointReview, NativeEndpointReviewPortfolio, MatchedHolder):
         raise ValueError("unsupported common-output proof root")
 
     def read(raw: Any, kind: Any) -> Any:
@@ -3747,19 +3749,15 @@ def _validate_finalization(
         raise ValueError("review output contract is incomplete")
 
 
-def _validate_native_endpoint_review(
+def _validate_native_endpoint_attempt(
     lane: dict[str, Any],
+    value: dict[str, Any],
     *,
     expected_source_extent: WorkspaceExtent,
     matched_holder: MatchedHolder | None,
-) -> NativeEndpointReview | None:
+) -> NativeEndpointReview:
     """Replay the independent Review geometry without selecting it."""
 
-    if "native_endpoint_review" not in lane:
-        raise ValueError("lane lost its independent native endpoint Review record")
-    value = lane["native_endpoint_review"]
-    if value is None:
-        return None
     review = _read_common_proof(value, NativeEndpointReview)
     source = _read_common_proof(lane["source_scan_geometry"], SourceScanGeometry)
     if matched_holder is None:
@@ -3778,8 +3776,8 @@ def _validate_native_endpoint_review(
     # Source identities are allocated inside the original processing run.
     # Replay the complete physical state under that already validated identity.
     initial = replace(initial, geometry_id=native_source.geometry_id)
-    diagnostic = review.phase_retention.diagnostic
-    if diagnostic is None or diagnostic.fit.template.template_id != lane["template_id"]:
+    diagnostic = review.phase_diagnostic
+    if diagnostic.fit.template.template_id != lane["template_id"]:
         raise ValueError("native endpoint Review changed its fixed template")
     canonical_ids = {
         item["placement_id"]
@@ -3843,21 +3841,17 @@ def _validate_native_endpoint_review(
     return review
 
 
-def _validate_native_endpoint_context(
-    lane: dict[str, Any], production_lane: dict[str, Any],
+def _validate_native_endpoint_attempt_context(
+    lane: dict[str, Any], value: dict[str, Any],
 ) -> None:
     """Replay the single DIRECT-only Cross context against registered input."""
 
-    value = production_lane["native_endpoint_review"]
-    if value is None:
-        return
     from x5crop.detection.photo_geometry.template_native_review import (
         NativeEndpointReviewFailureKind, native_endpoint_cross_input,
         _NativeEndpointCrossInputError,
     )
     review = _read_common_proof(value, NativeEndpointReview)
-    diagnostic = review.phase_retention.diagnostic
-    assert diagnostic is not None
+    diagnostic = review.phase_diagnostic
     phase = _read_common_proof(lane["phase_competition"], PhaseFitResult)
     registered = set(phase.registered_direct_observation_ids)
     if diagnostic.fit.template != phase.template or not {
@@ -3865,10 +3859,6 @@ def _validate_native_endpoint_context(
         if identity is not None
     }.issubset(registered):
         raise ValueError("native endpoint Review escaped its registered phase template")
-    if review.phase_retention.record_scan_count > (
-        phase.receipt.candidate_direct_role_projection_evaluation_count
-    ):
-        raise ValueError("native endpoint Review invented phase projection records")
     original = _read_common_proof(lane["cross_input"], TemplateCrossInput)
     try:
         expected = native_endpoint_cross_input(original, review.source_scan_geometry, diagnostic.fit)
@@ -3897,6 +3887,44 @@ def _validate_native_endpoint_context(
             or replay.receipt != review.cross_receipt
             or comparison(replay.best) != comparison(review.cross_best)):
         raise ValueError("native endpoint Review Cross best or bounded work is not reproducible")
+
+
+def _validate_native_endpoint_review(
+    lane: dict[str, Any],
+    *,
+    expected_source_extent: WorkspaceExtent,
+    matched_holder: MatchedHolder | None,
+) -> NativeEndpointReviewPortfolio | None:
+    """Validate every complete physical endpoint class without selecting it."""
+
+    if "native_endpoint_review" not in lane:
+        raise ValueError("lane lost its independent native endpoint Review record")
+    value = lane["native_endpoint_review"]
+    if value is None:
+        return None
+    portfolio = _read_common_proof(value, NativeEndpointReviewPortfolio)
+    for review in value["reviews"]:
+        _validate_native_endpoint_attempt(
+            lane, review, expected_source_extent=expected_source_extent,
+            matched_holder=matched_holder,
+        )
+    return portfolio
+
+
+def _validate_native_endpoint_context(
+    lane: dict[str, Any], production_lane: dict[str, Any],
+) -> None:
+    value = production_lane["native_endpoint_review"]
+    if value is None:
+        return
+    portfolio = _read_common_proof(value, NativeEndpointReviewPortfolio)
+    phase = _read_common_proof(lane["phase_competition"], PhaseFitResult)
+    if portfolio.phase_retention.record_scan_count > (
+        phase.receipt.candidate_direct_role_projection_evaluation_count
+    ):
+        raise ValueError("native endpoint Review invented phase projection records")
+    for review in value["reviews"]:
+        _validate_native_endpoint_attempt_context(lane, review)
 
 
 def _validate_geometry(

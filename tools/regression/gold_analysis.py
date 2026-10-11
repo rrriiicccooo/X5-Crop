@@ -52,7 +52,7 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record, validate_placement_feature_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v24"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v25"
 ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v26"
 RETAINED_PLACEMENT_SCOPE = "retained_canonical_pair_conditional_cross_and_native_endpoint_review_proposals"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
@@ -922,11 +922,14 @@ def _retained_placement_gold_labels(
         *(("conditional" if item["placement_id"] == lane["conditional_proposal_placement_id"]
            else "runner", item) for item in lane["alternative_placement_proposals"]),
     )
-    native_review = lane["native_endpoint_review"]
-    if native_review is not None:
-        if native_review["scope"] != "review_only":
+    portfolio = lane["native_endpoint_review"]
+    if portfolio is not None:
+        if portfolio["scope"] != "review_only":
             raise ValueError("native endpoint proposal must remain review-only")
-        proposals += (("native_endpoint", native_review["proposal"]),)
+        proposals += tuple(
+            ("native_endpoint", review["proposal"])
+            for review in portfolio["reviews"]
+        )
     labels = []
     for role, proposal in proposals:
         if proposal["placement_id"] is None:
@@ -966,9 +969,16 @@ def _retained_placement_summary(records: Sequence[dict[str, Any]]) -> dict[str, 
         labels = record["retained_placement_gold_labels"]
         ids = [item["placement_id"] for item in labels]
         roles = [item["role"] for item in labels]
-        canonical_roles = roles[:-1] if roles[-1:] == ["native_endpoint"] else roles
+        native_start = next(
+            (index for index, role in enumerate(roles) if role == "native_endpoint"),
+            len(roles),
+        )
+        canonical_roles = roles[:native_start]
+        native_roles = roles[native_start:]
         if (
-            len(labels) > 4 or len(set(ids)) != len(ids)
+            len(labels) > 7 or len(set(ids)) != len(ids)
+            or len(native_roles) > 4
+            or any(role != "native_endpoint" for role in native_roles)
             or any(not isinstance(identity, str) or not identity for identity in ids)
             or canonical_roles
             not in ([], ["primary"], ["runner"], ["primary", "runner"],

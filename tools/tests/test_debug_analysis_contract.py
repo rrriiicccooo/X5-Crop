@@ -547,7 +547,9 @@ class DebugAnalysisContractTest(unittest.TestCase):
                 conditional_proposal_placement_id=None,
             ),
             placement_proposal=SimpleNamespace(placement_id="canonical"),
-            native_endpoint_review=SimpleNamespace(scope="review_only", placement=native),
+            native_endpoint_review=SimpleNamespace(
+                scope="review_only", reviews=(SimpleNamespace(placement=native),),
+            ),
         )
         selected_outputs = (object(),)
         detection = SimpleNamespace(
@@ -562,7 +564,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertEqual(runner_geometry_by_identity(detection), ())
         self.assertEqual(conditional_geometry_by_identity(detection), ())
         self.assertIs(output_footprints(detection), selected_outputs)
-        lane.native_endpoint_review.placement = None
+        lane.native_endpoint_review.reviews[0].placement = None
         self.assertEqual(native_endpoint_geometry_by_identity(detection), ())
         lane.native_endpoint_review = None
         self.assertEqual(native_endpoint_geometry_by_identity(detection), ())

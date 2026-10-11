@@ -105,14 +105,17 @@ def native_endpoint_geometry_by_identity(
     }
     values: list[tuple[int, TemplateFrame]] = []
     for lane in detection.candidate.geometry.lane_reconstructions:
-        review = lane.native_endpoint_review
-        placement = None if review is None else review.placement
-        if placement is None:
+        portfolio = lane.native_endpoint_review
+        if portfolio is None:
             continue
-        for frame in placement.frames:
-            ordinal = global_ordinals.get((placement.lane_id, frame.lane_ordinal))
-            if ordinal is not None:
-                values.append((ordinal, frame))
+        for review in portfolio.reviews:
+            placement = review.placement
+            if placement is None:
+                continue
+            for frame in placement.frames:
+                ordinal = global_ordinals.get((placement.lane_id, frame.lane_ordinal))
+                if ordinal is not None:
+                    values.append((ordinal, frame))
     return tuple(sorted(values, key=lambda item: (item[0], item[1].lane_ordinal)))
 
 

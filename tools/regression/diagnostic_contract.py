@@ -78,7 +78,7 @@ def bounded_work(
     )
     metrics = aggregate_work(work_rows)
     native_peaks = tuple(
-        lane["native_endpoint_review"]["work"]["peak_temporary_bytes"]
+        lane["native_endpoint_review"]["peak_temporary_bytes"]
         for lane in report["development"]["lanes"]
         if lane.get("native_endpoint_review") is not None
     )
