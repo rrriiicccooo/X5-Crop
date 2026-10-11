@@ -319,7 +319,8 @@ class TemplatePitchContractTest(unittest.TestCase):
             failure_kind=PhaseFailureKind.HYPOTHESIS_BOUND_EXCEEDED,
             ambiguity_reason="producer bound exceeded",
             best_phase_candidate_authority_projection=None,
-            runner_phase_candidate_authority_projection=None)
+            runner_phase_candidate_authority_projection=None,
+            _native_phase_retention=None)
         self.assertIs(resolve_separator_pitch_hypothesis(
             calibrated, bounded, original_template=compiled), calibrated)
         with self.assertRaisesRegex(ValueError, "template identity"):
