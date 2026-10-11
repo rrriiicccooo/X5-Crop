@@ -719,6 +719,11 @@ class NativeEndpointSelectionBasis(str, Enum):
     INTRINSIC_TERMINAL = "intrinsic_terminal"
 
 
+# Compiled Frame role offsets: START=0, END=1, in fixed SS, SE, ES, EE order.
+NATIVE_ENDPOINT_ROLE_CLASSES = ((0, 0), (0, 1), (1, 0), (1, 1))
+NATIVE_ENDPOINT_ROLE_CLASS_COUNT = len(NATIVE_ENDPOINT_ROLE_CLASSES)
+
+
 def _validate_native_projection_fit_mapping(
     fit: SequenceFit,
     projection: PhaseCandidateAuthorityProjection,
@@ -881,15 +886,43 @@ class NativeEndpointPhaseDiagnostic:
             *self.rank,
         )
 
+    @property
+    def role_class_memberships(self) -> tuple[int, ...]:
+        """Return fixed SS, SE, ES, EE classes from the original terminal roles.
+
+        Each compiled Frame has START then END. The same Frame can be both
+        terminals when count is one; only its actual qualifying roles are used.
+        """
+
+        first_roles = self.fit.template.roles[:2]
+        last_roles = self.fit.template.roles[-2:]
+        return tuple(
+            index
+            for index, (first, last) in enumerate(NATIVE_ENDPOINT_ROLE_CLASSES)
+            if first_roles[first].role_index in self.terminal_role_indices
+            and last_roles[last].role_index in self.terminal_role_indices
+        )
+
 
 @dataclass(frozen=True)
 class NativePhaseRetention:
-    """Bounded receipt and at-most-one native terminal phase diagnostic."""
+    """Four role-class representatives with complete-diagnostic deduplication.
 
-    diagnostic: NativeEndpointPhaseDiagnostic | None = None
+    Class indices are SS, SE, ES, EE. Diagnostics appear in the order of their
+    first class reference. Counts describe producer operations; schema checks
+    separately remain bounded by four complete records.
+    """
+
+    diagnostics: tuple[NativeEndpointPhaseDiagnostic, ...] = ()
+    role_class_indices: tuple[int | None, int | None, int | None, int | None] = (
+        None, None, None, None,
+    )
     record_scan_count: int = 0
     fact_check_count: int = 0
+    class_membership_count: int = 0
+    class_comparison_count: int = 0
     carry_comparison_count: int = 0
+    deduplication_comparison_count: int = 0
     peak_temporary_bytes: int = 0
     role_count: int = 0
 
@@ -897,15 +930,44 @@ class NativePhaseRetention:
         receipt_values = (
             self.record_scan_count,
             self.fact_check_count,
+            self.class_membership_count,
+            self.class_comparison_count,
             self.carry_comparison_count,
+            self.deduplication_comparison_count,
             self.peak_temporary_bytes,
             self.role_count,
         )
-        if self.diagnostic is not None and not isinstance(
-            self.diagnostic,
-            NativeEndpointPhaseDiagnostic,
+        if not isinstance(self.diagnostics, tuple) or any(
+            not isinstance(diagnostic, NativeEndpointPhaseDiagnostic)
+            for diagnostic in self.diagnostics
         ):
-            raise TypeError("native phase retention diagnostic is invalid")
+            raise TypeError("native phase retention diagnostics are invalid")
+        if len(self.diagnostics) > NATIVE_ENDPOINT_ROLE_CLASS_COUNT:
+            raise ValueError("native phase retention exceeds four diagnostics")
+        if (
+            not isinstance(self.role_class_indices, tuple)
+            or len(self.role_class_indices) != NATIVE_ENDPOINT_ROLE_CLASS_COUNT
+        ):
+            raise ValueError("native phase retention requires four role classes")
+        referenced: set[int] = set()
+        for role_class, index in enumerate(self.role_class_indices):
+            if index is None:
+                continue
+            if type(index) is not int or not 0 <= index < len(self.diagnostics):
+                raise ValueError("native phase retention class index is invalid")
+            if role_class not in self.diagnostics[index].role_class_memberships:
+                raise ValueError("native phase retention invented a role class")
+            if index not in referenced:
+                if index != len(referenced):
+                    raise ValueError("native phase retention changed first-class order")
+                referenced.add(index)
+        if len(referenced) != len(self.diagnostics):
+            raise ValueError("native phase retention has an unreferenced diagnostic")
+        for index, diagnostic in enumerate(self.diagnostics):
+            if any(diagnostic == prior for prior in self.diagnostics[:index]):
+                raise ValueError("native phase retention repeats a complete diagnostic")
+            if diagnostic.fit.template != self.diagnostics[0].fit.template:
+                raise ValueError("native phase retention mixed template identities")
         if any(
             not isinstance(value, int)
             or isinstance(value, bool)
@@ -915,11 +977,8 @@ class NativePhaseRetention:
             raise ValueError("native phase retention receipt is invalid")
         if self.record_scan_count == 0:
             if (
-                self.diagnostic is not None
-                or self.role_count != 0
-                or self.fact_check_count != 0
-                or self.carry_comparison_count != 0
-                or self.peak_temporary_bytes != 0
+                self.diagnostics
+                or any(value != 0 for value in receipt_values)
             ):
                 raise ValueError("empty native phase retention receipt is invalid")
             return
@@ -927,11 +986,23 @@ class NativePhaseRetention:
             raise ValueError("native phase retention role bound is invalid")
         if self.fact_check_count > self.record_scan_count * self.role_count:
             raise ValueError("native phase retention fact bound is invalid")
-        if self.carry_comparison_count > self.record_scan_count - 1:
-            raise ValueError("native phase retention carry bound is invalid")
-        if self.diagnostic is not None and self.role_count != len(
-            self.diagnostic.fit.role_bindings
+        if (
+            self.class_membership_count > 4 * self.record_scan_count
+            or self.class_comparison_count > self.class_membership_count
+            or self.class_membership_count < sum(
+                index is not None for index in self.role_class_indices
+            )
+            or bool(self.diagnostics) != bool(self.class_membership_count)
         ):
+            raise ValueError("native phase retention class work bound is invalid")
+        if self.carry_comparison_count > 4 * (self.record_scan_count - 1):
+            raise ValueError("native phase retention carry bound is invalid")
+        # A pool build uses at least one scanned record. A binary carry adds
+        # one build; at most 2*M-1 builds therefore contribute at most six
+        # complete-identity comparisons each to an accumulated receipt.
+        if self.deduplication_comparison_count > 6 * (2 * self.record_scan_count - 1):
+            raise ValueError("native phase retention deduplication bound is invalid")
+        if any(self.role_count != len(item.fit.role_bindings) for item in self.diagnostics):
             raise ValueError("native phase retention diagnostic role bound is invalid")
 
 
@@ -998,8 +1069,10 @@ class PhaseFitResult:
             NativePhaseRetention,
         ):
             raise TypeError("native phase retention is invalid")
-        if native_retention is not None and native_retention.diagnostic is not None:
-            native_fit = native_retention.diagnostic.fit
+        for native_diagnostic in (
+            () if native_retention is None else native_retention.diagnostics
+        ):
+            native_fit = native_diagnostic.fit
             if (
                 self.status == PhaseFitStatus.BOUND_EXCEEDED
                 or native_fit.template != self.template
