@@ -20,7 +20,7 @@ from x5crop.io.orientation import orientation_mapping
 class CurrentRuntimeContractTest(unittest.TestCase):
     def test_self_consistent_fixed_size_cannot_replace_source_size(self) -> None:
         from dataclasses import replace
-        from tools.tests.test_template_output_contract import _placement, _lane
+        from tools.tests.output_fixture_support import _placement, _lane
         from tools.regression.report_validation import _validate_direct_use_budgets
         from x5crop.detection.photo_geometry.template_feasible_geometry import project_format_placement
         from x5crop.detection.photo_geometry.template_output import output_footprint_from_template_placement, _saturation_facts

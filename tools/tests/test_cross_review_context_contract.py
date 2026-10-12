@@ -16,7 +16,7 @@ from tools.tests.template_test_support import (
     placement_sequence,
     placement_template,
 )
-from tools.tests.test_template_cross_contract import aspect_input
+from tools.tests.cross_fixture_support import aspect_input
 from x5crop.domain import EvidenceState, FiniteInterval, ObservationId
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.template_cross import fit_template_cross

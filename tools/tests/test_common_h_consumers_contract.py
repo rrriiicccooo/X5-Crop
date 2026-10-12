@@ -3,9 +3,8 @@ from __future__ import annotations
 from dataclasses import replace
 import unittest
 
-from tools.tests.test_common_output_contract import translated_h
-from tools.tests.test_content_veto_contract import make_observation
-from tools.tests.test_template_output_contract import _lane, _placement
+from tools.tests.measurement_fixture_support import make_observation
+from tools.tests.output_fixture_support import _lane, _placement, translated_h
 from x5crop.domain import Box, FiniteInterval
 from x5crop.detection.photo_geometry.content_topology import (
     build_content_topology_index,

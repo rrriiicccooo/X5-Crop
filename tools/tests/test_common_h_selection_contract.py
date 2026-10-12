@@ -9,18 +9,23 @@ from tools.tests.template_test_support import (
     phase_template,
     placement_compose,
 )
-from tools.tests.test_common_h_output_contract import registration
-from tools.tests.test_common_output_contract import translated_h
-from tools.tests.test_template_cross_contract import (
+from tools.tests.cross_fixture_support import (
+    _problem,
     aspect_input,
     binding,
     _supported_aspect_ratio,
 )
-from tools.tests.test_template_family_membership_contract import _problem
-from tools.tests.test_template_output_contract import (
+from tools.tests.output_fixture_support import (
+    _authority,
+    _case,
+    _clear_content,
     _lane,
+    _observation,
     _placement,
+    _select,
     _selected_output_gate_fact,
+    registration,
+    translated_h,
 )
 from x5crop.domain import EvidenceState, FiniteInterval, ObservationId
 from x5crop.formats import FramePhysicalSpec
@@ -55,69 +60,6 @@ from x5crop.detection.photo_geometry.template_selection import (
     select_lane_template_placement,
     select_template_source,
 )
-
-
-def _case(*, support_pair=False, aspect_height=None):
-    spec = phase_template(1)
-    phase = fit_template_phase((phase_edge("start", 40), phase_edge("end", 140)), spec)
-    if support_pair:
-        tops = (binding(BoundaryRole.TOP, "top", 100),)
-        bottoms = tuple(binding(BoundaryRole.BOTTOM, f"bottom:{i}", 350 + i) for i in range(2))
-        tops = tuple(replace(b, trace_position_intervals_px=(b.full_interval_px,) * 3) for b in tops)
-        bottoms = tuple(replace(b, trace_position_intervals_px=(b.full_interval_px,) * 3) for b in bottoms)
-    else:
-        tops = tuple(binding(BoundaryRole.TOP, f"top:{i}", 100 + i) for i in range(2))
-        bottoms = (binding(BoundaryRole.BOTTOM, "bottom", 340),)
-    inputs = aspect_input(
-        template=spec, fixed_height_px=FiniteInterval(230, 260), canonical_fixed_height_px=240,
-        top_bindings=tops, bottom_bindings=bottoms,
-    )
-    if aspect_height is not None:
-        inputs = replace(inputs, aperture_aspect_ratio_authority=_supported_aspect_ratio(aspect_height))
-    cross = fit_template_cross(inputs)
-    members, mapping = common_h_fit_members(cross, registration())
-    placements = tuple(placement_compose(
-        spec, phase.best, fit, frame_spec=FramePhysicalSpec(10.0, 25.0 if support_pair else 24.0, 2.0),
-    ) for fit in members)
-    common = materialize_common_h_output(placements, mapping, lane=_lane(), layout="horizontal")
-    if common.failure is not None:
-        raise AssertionError(common.failure)
-    return phase, cross, inputs, common
-
-
-def _authority(case, *, work=None, coverage=()):
-    phase, cross, inputs, common = case
-    return assess_common_h_output_authority(
-        common, phase=phase, cross=cross, registration=work or registration(),
-        membership_coverage=coverage, cross_input=inputs,
-    )
-
-
-def _select(case, authority, content):
-    phase, cross, _inputs, common = case
-    return select_lane_template_placement(
-        lane_id=common.lane_id, best=common.placements[0], runner_up=common.placements[1],
-        phase=phase, cross=cross, content_assessment=content,
-        common_h_output=common, common_h_authority=authority,
-    )
-
-
-def _clear_content(common):
-    return ContentVetoAssessment("common-content", common.placement_id, ())
-
-
-def _observation(identity, transitions):
-    return PhotoBoundaryObservation(
-        observation_id=ObservationId(identity), role=BoundaryRole.TOP,
-        line=SourceCoordinateLine(0, 1, 100, FiniteInterval(0, 100), BoundaryAxis.X),
-        offset_interval_px=FiniteInterval.exact(100),
-        fit_residual_px=0, angle_interval_degrees=FiniteInterval.exact(0),
-        trace_support_count=len(transitions), queried_trace_count=len(transitions),
-        independent_support_region_count=2, continuous_support_fraction=1,
-        transition_ids=tuple(map(ObservationId, transitions)),
-        fit_receipt=RobustLineFitReceipt("scipy_least_squares_huber", True, 1, 1, 0, 0),
-        left_background_preference_fraction=1,
-    )
 
 
 class CommonHSelectionContractTest(unittest.TestCase):

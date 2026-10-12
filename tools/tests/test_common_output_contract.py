@@ -3,7 +3,13 @@ from __future__ import annotations
 from dataclasses import replace
 import unittest
 
-from tools.tests.test_template_output_contract import _enclosing_support_placement, _lane, _placement
+from tools.tests.output_fixture_support import (
+    _enclosing_support_placement,
+    _lane,
+    _placement,
+    native_output,
+    translated_h,
+)
 from tools.tests.template_test_support import placement_binding, placement_compose, placement_cross_longitudinal_authority
 from x5crop.domain import Box, EvidenceState, FiniteInterval
 from x5crop.detection.photo_geometry.model import BoundaryRole
@@ -12,26 +18,6 @@ from x5crop.detection.photo_geometry.template_output import (
     common_h_output_footprint, output_footprint_from_template_placement,
     template_direct_use_budget_assessment,
 )
-
-
-def translated_h(placement, delta):
-    original = placement.cross_fit
-    top = original.top_canonical_px + delta
-    bottom = original.bottom_canonical_px + delta
-    bindings = (placement_binding(BoundaryRole.TOP, f"top:{delta}", top),
-                placement_binding(BoundaryRole.BOTTOM, f"bottom:{delta}", bottom))
-    fit = replace(original, top_canonical_px=top, bottom_canonical_px=bottom,
-        top_fit_interval_px=FiniteInterval.exact(top), bottom_fit_interval_px=FiniteInterval.exact(bottom),
-        top_full_interval_px=FiniteInterval.exact(top), bottom_full_interval_px=FiniteInterval.exact(bottom),
-        direct_bindings=bindings, direct_provenance_ids=(),
-        selected_direction=replace(original.selected_direction, selected_observation_ids=tuple(b.observation_id for b in bindings)),
-        longitudinal_projection_authority=placement_cross_longitudinal_authority(placement.sequence_fit.template, *bindings))
-    return placement_compose(placement.sequence_fit.template, placement.sequence_fit, fit)
-
-
-def native_output(placement, lane=None):
-    return output_footprint_from_template_placement(placement, project_format_placement(placement),
-        lane=lane or _lane(), lane_ordinal=1, layout="horizontal")
 
 
 class CommonOutputContractTest(unittest.TestCase):

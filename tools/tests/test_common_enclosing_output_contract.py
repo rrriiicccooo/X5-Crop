@@ -2,8 +2,8 @@ from dataclasses import replace
 import unittest
 from unittest.mock import patch
 
-from tools.tests.test_template_output_contract import _enclosing_support_placement, _lane
-from tools.tests.test_common_h_output_contract import registration
+from tools.tests.cross_fixture_support import native_coarse_fixture
+from tools.tests.output_fixture_support import _enclosing_support_placement, _lane, native_output, registration
 from tools.regression.common_output_validation import validate_common_h_output
 from x5crop.domain import EvidenceState
 from x5crop.report.read_models import typed_read_model
@@ -49,7 +49,6 @@ class CommonEnclosingOutputContractTest(unittest.TestCase):
             validate_common_h_output(bad, expected_source_extent=output.source_extent)
 
     def test_position_uncertainty_is_not_counted_again_as_alignment_padding(self):
-        from tools.tests.test_common_output_contract import native_output
         from x5crop.detection.photo_geometry.template_output import common_h_output_footprint
         p = _enclosing_support_placement(support_position_uncertainty_px=2)
         native = native_output(p)
@@ -71,8 +70,7 @@ class CommonEnclosingOutputContractTest(unittest.TestCase):
             validate_common_h_output(bad, expected_source_extent=common.output_footprints[0].source_extent)
 
     def test_all_support_members_and_canonical_permission_are_required(self):
-        from tools.tests.test_native_coarse_precision_contract import NativeCoarseOwnerContractTest
-        _, _, cross, *_ = NativeCoarseOwnerContractTest().fixture()
+        _, _, cross, *_ = native_coarse_fixture()
         self.assertEqual(tuple(f.direct_bindings for f in cross.enclosing_support_fits), cross.support_pair_bindings)
         from x5crop.detection.photo_geometry.template_cross_model import CrossFitStatus, CrossFailureKind
         cross = replace(cross, status=CrossFitStatus.UNRESOLVED, winner_basis=None,

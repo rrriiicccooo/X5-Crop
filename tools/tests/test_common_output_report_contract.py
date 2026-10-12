@@ -6,9 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from tools.regression.common_output_validation import validate_common_h_output
-from tools.tests.test_common_output_contract import native_output, translated_h
-from tools.tests.test_common_h_output_contract import registration
-from tools.tests.test_template_output_contract import _lane, _placement
+from tools.tests.output_fixture_support import _lane, _placement, native_output, registration, translated_h
 from x5crop.detection.photo_geometry.template_common_output import materialize_common_h_output
 from x5crop.detection.photo_geometry.template_output import (
     common_h_output_footprint, template_direct_use_budget_assessment,

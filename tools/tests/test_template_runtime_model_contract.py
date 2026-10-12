@@ -330,7 +330,7 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
             )
 
     def test_source_broad_region_cannot_drop_a_complete_path_member(self) -> None:
-        from tools.tests.test_broad_material_association_contract import _broad_point
+        from tools.tests.measurement_fixture_support import _broad_point
         from x5crop.detection.photo_geometry.broad_material_association import associate_registered_broad_material
         from x5crop.detection.photo_geometry.registered_measurement import measure_registered_queries
         from x5crop.detection.photo_geometry.transition_tracking import track_broad_material_transition_regions

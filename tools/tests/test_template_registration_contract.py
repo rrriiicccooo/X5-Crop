@@ -45,6 +45,10 @@ from x5crop.detection.photo_geometry.template_registration import (
     register_cross_evidence,
     register_template_local_cross_refinements,
 )
+from tools.tests.cross_fixture_support import (
+    registration_bottom_measurement,
+    registration_top_anchor,
+)
 
 
 class TemplateRegistrationContractTest(unittest.TestCase):
@@ -802,50 +806,14 @@ class TemplateRegistrationContractTest(unittest.TestCase):
             original = run()
         self.assertEqual(actual, original)
 
-    @staticmethod
-    def _top_anchor() -> CrossRoleBinding:
-        return CrossRoleBinding(
-            role=BoundaryRole.TOP,
-            run_id="top:source-wide",
-            observation_id=ObservationId("top:source-wide"),
-            coordinate_interval_px=FiniteInterval(19.5, 20.5),
-            trace_coordinates_px=(0, 10, 20, 30, 40, 50),
-            support_fraction=1.0,
-            continuous_support_fraction=1.0,
-            fit_residual_px=0.0,
-            canonical_direction_degrees=0.0,
-            fit_direction_interval_degrees=FiniteInterval(-0.05, 0.05),
-            full_direction_interval_degrees=FiniteInterval(-0.1, 0.1),
-            independent_support_region_count=3,
-            source_spanning_continuous=True,
-            role_authorized=True,
-        )
-
-    @staticmethod
-    def _bottom_measurement(
-        coordinates_by_trace: tuple[tuple[float, ...], ...],
-    ):
-        measurement = make_side_measurement_set(coordinates_by_trace)
-        return replace(
-            measurement,
-            transitions=tuple(
-                replace(
-                    item,
-                    left_texture_mean=5.0,
-                    right_texture_mean=1.0,
-                )
-                for item in measurement.transitions
-            ),
-        )
-
     def _local_cross_refinement(
         self,
         coordinates_by_trace: tuple[tuple[float, ...], ...],
         *,
         local_opposite: CrossRoleBinding | None = None,
     ) -> RegisteredCrossEvidence:
-        top = self._top_anchor()
-        measurement = self._bottom_measurement(coordinates_by_trace)
+        top = registration_top_anchor()
+        measurement = registration_bottom_measurement(coordinates_by_trace)
         return register_template_local_cross_refinements(
             RegisteredCrossEvidence(
                 top_bindings=(top,),
@@ -897,7 +865,7 @@ class TemplateRegistrationContractTest(unittest.TestCase):
 
     def test_one_region_opposite_does_not_block_independent_refinement(self) -> None:
         local = replace(
-            self._top_anchor(), role=BoundaryRole.BOTTOM,
+            registration_top_anchor(), role=BoundaryRole.BOTTOM,
             run_id="bottom:local", observation_id=ObservationId("bottom:local"),
             source_observation_ids=(ObservationId("bottom:local"),),
             coordinate_interval_px=FiniteInterval(99.5, 100.5),
@@ -942,7 +910,7 @@ class TemplateRegistrationContractTest(unittest.TestCase):
         self.assertEqual(refined.work_receipt.local_refinement_scope_count, 1)
 
     def test_template_local_cross_does_not_duplicate_direct_closure(self) -> None:
-        top = self._top_anchor()
+        top = registration_top_anchor()
         bottom = CrossRoleBinding(
             role=BoundaryRole.BOTTOM,
             run_id="bottom:direct",
@@ -958,7 +926,7 @@ class TemplateRegistrationContractTest(unittest.TestCase):
             source_spanning_continuous=True,
             role_authorized=True,
         )
-        measurement = self._bottom_measurement(((100.0,),) * 6)
+        measurement = registration_bottom_measurement(((100.0,),) * 6)
 
         refined = register_template_local_cross_refinements(
             RegisteredCrossEvidence(

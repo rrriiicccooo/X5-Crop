@@ -79,79 +79,15 @@ from x5crop.detection.source_core import (
     SourceStripValidationDomain,
 )
 from x5crop.domain import Box, EvidenceState, FiniteInterval, ObservationId, PositiveInterval
+from tools.tests.cross_fixture_support import (
+    _cross_side_competition,
+    _lane,
+    _unavailable_enclosing_resolution,
+)
 
 
 from x5crop.detection.photo_geometry.template_coarse_sides import register_coarse_side_facts, coarse_enclosing_binding
 from x5crop.detection.photo_geometry.template_cross_support import fit_enclosing_support, support_permission_view, SupportFitStatus
-
-
-def _cross_side_competition(measurement, plan, sharp_support=None):
-    reference = 1159.5
-    facts = observe_coarse_broad_side_facts(measurement,
-        aggregate_interval_px=FiniteInterval(30.5, 294.5),
-        expected_height_px=plan.template_spec.frame_height_px,
-        reference_trace_px=reference)
-    top, bottom, work = register_coarse_side_facts(facts, remaining_bound=512)
-    if sharp_support is not None:
-        pair_id = "test:sharp-pair"
-        top = (coarse_enclosing_binding(sharp_support.minimum_track, BoundaryRole.TOP, pair_id=pair_id), *top)
-        bottom = (coarse_enclosing_binding(sharp_support.maximum_track, BoundaryRole.BOTTOM, pair_id=pair_id), *bottom)
-    height = FiniteInterval(plan.template_spec.frame_height_px.minimum, plan.template_spec.frame_height_px.maximum)
-    pool = fit_enclosing_support(template=plan.template_spec, fixed_height=height,
-        canonical_height_px=height.center, reference_trace_px=reference,
-        top_bindings=top, bottom_bindings=bottom,
-        registered_trace_coordinates_px=measurement.query.trace_positions_px,
-        longitudinal_support_domain_groups_px=(), minimum_shared_trace_support=3,
-        maximum_evaluated_candidates=4096)
-    return facts, work, support_permission_view(pool, canonical_only=True)
-
-
-def _unavailable_enclosing_resolution() -> CoarseEnclosingResolution:
-    return CoarseEnclosingResolution(
-        state=EvidenceState.UNAVAILABLE,
-        candidates=(),
-        selected_candidate=None,
-        failure_kind=(
-            CoarseEnclosingResolutionFailureKind.PAIR_UNAVAILABLE
-        ),
-    )
-
-
-def _lane(
-    *,
-    layout: str = "horizontal",
-    long_extent: int = 2320,
-    short_extent: int = 322,
-) -> tuple[SourceLaneEvidence, object]:
-    configuration = get_detection_configuration("135")
-    canvas = observe_scan_canvas(
-        long_extent,
-        short_extent,
-        layout,
-        configuration.scan_canvas,
-    )
-    lane = SourceLaneEvidence(
-        SourceStripValidationDomain(
-            "lane:0",
-            Box(0, 0, long_extent, short_extent),
-            "x" if layout == "horizontal" else "y",
-            "135_standard",
-        ),
-        canvas,
-    )
-    scales = canvas.axis_scales
-    assert scales is not None
-    plan = compile_template_measurement_plan(
-        format_spec=configuration.physical_spec,
-        frame_spec=configuration.physical_spec.frame,
-        count=6,
-        full_count=6,
-        holder_full_count=6,
-        lane_authority=lane.domain,
-        layout=layout,
-        scale_authority=scales,
-    )
-    return lane, plan
 
 
 class CoarseStripSupportContractTest(unittest.TestCase):

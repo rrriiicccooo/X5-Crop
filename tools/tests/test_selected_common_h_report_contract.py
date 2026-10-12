@@ -13,9 +13,7 @@ from tools.regression.report_validation import (
 )
 from tools.tests.affine_tiff_support import make_deskew_observation
 from tools.tests.template_test_support import placement_compose
-from tools.tests.test_common_h_output_contract import registration
-from tools.tests.test_common_output_contract import translated_h
-from tools.tests.test_template_output_contract import _lane, _placement
+from tools.tests.output_fixture_support import _authority, _case, _lane, _placement, registration, translated_h
 from x5crop.detection.final.deskew import assess_output_deskew
 from x5crop.detection.photo_geometry.model import BoundaryRole, QueryPurpose
 from x5crop.detection.photo_geometry.template_common_output import (
@@ -190,7 +188,6 @@ class SelectedCommonHReportContractTest(unittest.TestCase):
                         _validate_common_authority_provenance(bad, self.lane, self.queries)
 
     def test_support_replay_ignores_generated_names_but_keeps_measurements_and_work(self):
-        from tools.tests.test_common_h_selection_contract import _case, _authority
         from x5crop.detection.photo_geometry.template_common_output import CommonHOutputAuthority
 
         authority = _authority(_case(support_pair=True))

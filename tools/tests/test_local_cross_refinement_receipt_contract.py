@@ -2,7 +2,10 @@ from dataclasses import replace
 import unittest
 from unittest.mock import patch
 
-from tools.tests import test_template_registration_contract as fixtures
+from tools.tests.cross_fixture_support import (
+    registration_bottom_measurement,
+    registration_top_anchor,
+)
 from x5crop.domain import FiniteInterval, PositiveInterval
 from x5crop.detection.photo_geometry.model import BoundaryAxis
 from x5crop.detection.photo_geometry import template_registration as owner
@@ -10,13 +13,12 @@ from x5crop.detection.photo_geometry import template_registration as owner
 
 class LocalCrossRefinementReceiptContractTest(unittest.TestCase):
     def evaluate(self, coordinates=((100.0,),) * 6, *, rejected=True, observations=()):
-        helper = fixtures.TemplateRegistrationContractTest()
-        measurement = helper._bottom_measurement(coordinates)
+        measurement = registration_bottom_measurement(coordinates)
         if rejected:
             measurement = replace(measurement, transitions=tuple(replace(
                 item, left_texture_mean=1.0, right_texture_mean=1.0,
             ) for item in measurement.transitions))
-        return owner.evaluate_local_cross_refinement(helper._top_anchor(), measurement,
+        return owner.evaluate_local_cross_refinement(registration_top_anchor(), measurement,
             width_axis=BoundaryAxis.Y, height_axis=BoundaryAxis.X,
             height_scale_px_per_mm=PositiveInterval.exact(10.0), lane_reference_trace_px=25.0,
             fixed_height_px=FiniteInterval(79.0, 81.0), canonical_height_px=80.0,

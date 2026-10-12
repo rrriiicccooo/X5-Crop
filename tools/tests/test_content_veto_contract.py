@@ -20,34 +20,7 @@ from x5crop.detection.photo_geometry.model import (
 )
 from x5crop.detection.photo_geometry.output_model import FrameBoundaryGeometry
 from x5crop.domain import Box, FiniteInterval, ObservationId
-
-
-def make_observation(box: Box) -> ContentOccupancyObservationSet:
-    identity = ObservationId(
-        f"content:{box.left}:{box.top}:{box.right}:{box.bottom}"
-    )
-    observation = ContentOccupancyObservation(
-        observation_id=identity,
-        lane_id="lane:0",
-        source_box=box,
-        source_cells=tuple(
-            Box(left, top, left + 1, top + 1)
-            for left in range(box.left, box.right)
-            for top in range(box.top, box.bottom)
-        ),
-        reliability=0.95,
-    )
-    return ContentOccupancyObservationSet(
-        lane_id="lane:0",
-        observations=(observation,),
-        long_step_px=1,
-        cross_step_px=1,
-        long_sample_count=16,
-        cross_sample_count=16,
-        occupied_cell_count=box.width * box.height,
-        long_support_depth_px=1,
-        cross_support_depth_px=1,
-    )
+from tools.tests.measurement_fixture_support import make_observation
 
 
 def make_frame(

@@ -641,7 +641,7 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
                 self.assertEqual(closed[0].trace_coordinates_px, measured.query.trace_positions_px)
 
     def test_complete_physical_broad_competitor_survives_curved_localization(self) -> None:
-        from tools.tests.test_broad_material_association_contract import _broad_point
+        from tools.tests.measurement_fixture_support import _broad_point
 
         query = self._broad_material_query()
         traces = query.trace_positions_px

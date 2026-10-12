@@ -13,18 +13,7 @@ from x5crop.detection.photo_geometry.template_family_membership import (
     MembershipAtom, MembershipFitBudget, MembershipReceipt, MembershipState,
     MembershipTransition, enumerate_membership_scope, new_membership_groups,
 )
-
-
-def _problem(groups, anchors, intervals=None):
-    intervals = intervals or {}
-    atoms = tuple(MembershipAtom(ObservationId(name), tuple(ObservationId(f'{name}:{trace}') for trace in traces),
-                                 2 if name in anchors else 1) for name, traces in groups.items())
-    raw = tuple(MembershipTransition(ObservationId(f'{name}:{trace}'), float(trace),
-                                     FiniteInterval(*intervals.get((name, trace), (-1, 1))))
-                for name, traces in groups.items() for trace in traces)
-    return dict(parent_family_id='parent', role=BoundaryRole.TOP, atoms=atoms, transitions=raw,
-                query_trace_positions_px=tuple(sorted({int(point.trace_coordinate_px) for point in raw})),
-                scale_px_per_mm=1.0, remaining_visits=4096)
+from tools.tests.cross_fixture_support import _problem
 
 
 class TemplateFamilyMembershipContractTest(unittest.TestCase):

@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 import numpy as np
 
-from tools.tests.test_coarse_strip_support_contract import _lane
+from tools.tests.cross_fixture_support import _lane, aspect_input, binding, native_coarse_fixture, template
 from x5crop.image.gray import BaseGrayParameters, make_base_gray_u8
 from x5crop.detection.photo_geometry.coarse_strip_support import (
     _measure_coarse_short_trace_lattice,
@@ -52,55 +52,10 @@ class NativeCoarsePrecisionContractTest(unittest.TestCase):
 
 
 class NativeCoarseOwnerContractTest(unittest.TestCase):
-    @staticmethod
-    def fixture():
-        from x5crop.domain import FiniteInterval
-        from tools.tests.photo_geometry_support import make_native_test_field
-        from x5crop.detection.photo_geometry.coarse_strip_support import observe_coarse_strip_support
-        from x5crop.detection.photo_geometry.template_coarse_sides import register_coarse_side_facts, coarse_enclosing_binding
-        from x5crop.detection.photo_geometry.template_cross_model import TemplateCrossInput
-        from x5crop.detection.photo_geometry.template_cross import fit_template_cross
-        from x5crop.detection.photo_geometry.model import BoundaryRole
-        from x5crop.report.read_models import typed_read_model
-        lane, plan = _lane()
-        pixels = np.full((322, 2320), 255, dtype=np.uint8)
-        pixels[35:290, 260:2060] = 80
-        coarse, measurements = observe_coarse_strip_support(make_native_test_field(pixels, "horizontal"),
-            lane, layout="horizontal", measurement_plan=plan)
-        support = coarse.enclosing_support
-        pair_id = f"coarse-enclosing-pair:{support.minimum_track.observation_id}:{support.maximum_track.observation_id}"
-        top = (coarse_enclosing_binding(support.minimum_track, BoundaryRole.TOP, pair_id=pair_id),)
-        bottom = (coarse_enclosing_binding(support.maximum_track, BoundaryRole.BOTTOM, pair_id=pair_id),)
-        native_top, native_bottom, work = register_coarse_side_facts(coarse.enclosing_side_facts, remaining_bound=510)
-        top, bottom = (*top, *native_top), (*bottom, *native_bottom)
-        height = plan.template_spec.frame_height_px
-        from x5crop.detection.photo_geometry.template_registration import project_cross_solver_bindings
-        solver_top, solver_bottom = project_cross_solver_bindings(top), project_cross_solver_bindings(bottom)
-        from x5crop.detection.photo_geometry.lane_preparation import _shared_direction_from_coarse
-        inputs = TemplateCrossInput(template=plan.template_spec, source_direction=_shared_direction_from_coarse(coarse.shared_direction),
-            fixed_height_px=FiniteInterval(height.minimum, height.maximum), lane_reference_trace_px=1159.5,
-            top_bindings=solver_top, bottom_bindings=solver_bottom,
-            registered_trace_coordinates_px=measurements[1].query.trace_positions_px,
-            registered_top_run_count=0, registered_bottom_run_count=0,
-            fitted_observation_count=len(top)+len(bottom), coarse_side_registration=work,
-            maximum_fitted_observations=512, maximum_registered_runs_per_role=512)
-        competition = fit_template_cross(inputs)
-        record = {"lane_id": lane.domain.lane_id, "template_spec": typed_read_model(plan.template_spec),
-            "search": {"coarse_strip_support": typed_read_model(coarse)},
-            "cross_input": typed_read_model(inputs), "cross_competition": typed_read_model(competition)}
-        queries = typed_read_model(measurements)
-        from copy import deepcopy
-        top_query = deepcopy(queries[1]["query"])
-        top_query.update(query_id="fixture:top", purpose="top_corridor")
-        queries.append({"query": top_query})
-        return (coarse, inputs, competition, record, queries,
-                {str(item.observation_id): typed_read_model(item) for item in (*top, *bottom)},
-                [{"domain": typed_read_model(lane.domain)}])
-
     def test_same_physical_sharp_and_native_pair_keeps_both_raw_proofs(self):
         from x5crop.detection.photo_geometry.template_cross_model import CrossFitStatus
         from tools.regression.report_validation import _validate_native_coarse_side_support
-        coarse, inputs, result, lane, queries, registered, sources = self.fixture()
+        coarse, inputs, result, lane, queries, registered, sources = native_coarse_fixture()
         self.assertEqual((inputs.registered_top_run_count, inputs.registered_bottom_run_count), (0, 0))
         self.assertEqual(result.status, CrossFitStatus.RESOLVED)
         self.assertEqual(len(result.support_pair_bindings), 2)
@@ -110,7 +65,7 @@ class NativeCoarseOwnerContractTest(unittest.TestCase):
     def test_report_rejects_omitted_raw_path_and_omitted_competitor(self):
         from copy import deepcopy
         from tools.regression.report_validation import _validate_native_coarse_side_support
-        _, _, _, lane, queries, registered, sources = self.fixture()
+        _, _, _, lane, queries, registered, sources = native_coarse_fixture()
         for key in ("raw_path", "candidate", "work", "budget", "height"):
             changed = deepcopy(lane)
             if key == "raw_path":
@@ -135,7 +90,7 @@ class NativeCoarseOwnerContractTest(unittest.TestCase):
         from x5crop.detection.photo_geometry.template_cross import fit_template_cross
         from x5crop.report.read_models import typed_read_model
         from tools.regression.report_validation import _validate_native_coarse_side_support
-        coarse, inputs, _, lane, queries, registered, sources = self.fixture()
+        coarse, inputs, _, lane, queries, registered, sources = native_coarse_fixture()
         changed = deepcopy(lane)
         top = tuple(item for item in inputs.top_bindings if item.coarse_side_fact is None)
         bottom = tuple(item for item in inputs.bottom_bindings if item.coarse_side_fact is None)
@@ -156,7 +111,7 @@ class NativeCoarseOwnerContractTest(unittest.TestCase):
     def test_report_binds_review_context_to_phase_without_promoting_authority(self):
         from copy import deepcopy
         from tools.regression.report_validation import _validate_native_coarse_side_support
-        _, inputs, _, lane, queries, registered, sources = self.fixture()
+        _, inputs, _, lane, queries, registered, sources = native_coarse_fixture()
         lane["phase_competition"] = {"best": None, "runner_up": None, "status": "unresolved"}
         _validate_native_coarse_side_support(lane, queries, registered, sources)
         changed = deepcopy(lane)
@@ -170,7 +125,6 @@ class NativeCoarseOwnerContractTest(unittest.TestCase):
     def test_retained_singleton_fits_are_reused_within_the_actual_work_bound(self):
         from unittest.mock import patch
         import importlib
-        from tools.tests.test_template_cross_contract import aspect_input, template, binding
         from x5crop.domain import FiniteInterval
         from x5crop.detection.photo_geometry.model import BoundaryRole
         from x5crop.detection.photo_geometry.template_cross_model import CrossFitStatus, CrossFailureKind
@@ -197,7 +151,7 @@ class NativeCoarseOwnerContractTest(unittest.TestCase):
             CoarseAggregatePeak, PhotoBoundaryMeasurementSet,
         )
         from tools.regression.report_validation import _read_common_proof
-        _, _, _, _, queries, *_ = self.fixture()
+        _, _, _, _, queries, *_ = native_coarse_fixture()
         measurement = _read_common_proof(queries[1], PhotoBoundaryMeasurementSet)
         aggregate = measurement.coarse_aggregate
         search = measurement.query.search_intervals_px[0]
@@ -213,7 +167,7 @@ class NativeCoarseOwnerContractTest(unittest.TestCase):
     def test_side_registration_overflow_performs_no_partial_fits(self):
         from unittest.mock import patch
         from x5crop.detection.photo_geometry.template_coarse_sides import register_coarse_side_facts
-        coarse, *_ = self.fixture()
+        coarse, *_ = native_coarse_fixture()
         with patch("x5crop.detection.photo_geometry.template_coarse_sides._fit_track") as fit:
             top, bottom, work = register_coarse_side_facts(coarse.enclosing_side_facts, remaining_bound=1)
         fit.assert_not_called()
@@ -249,7 +203,7 @@ class NativeCoarseOwnerContractTest(unittest.TestCase):
         from dataclasses import replace
         from x5crop.detection.photo_geometry.template_cross import fit_template_cross
         from x5crop.detection.photo_geometry.coarse_enclosing_model import CoarseSideRegistrationReceipt
-        _, inputs, *_ = self.fixture()
+        _, inputs, *_ = native_coarse_fixture()
         top = tuple(b for b in inputs.top_bindings if b.coarse_side_fact is not None)
         result = fit_template_cross(replace(inputs, top_bindings=top, bottom_bindings=(),
             fitted_observation_count=len(top),
@@ -261,7 +215,7 @@ class NativeCoarseOwnerContractTest(unittest.TestCase):
         from dataclasses import replace
         from x5crop.detection.photo_geometry.template_cross import fit_template_cross
         from x5crop.detection.photo_geometry.template_cross_model import CrossFitStatus
-        _, inputs, result, *_ = self.fixture()
+        _, inputs, result, *_ = native_coarse_fixture()
         permuted = fit_template_cross(replace(inputs, top_bindings=tuple(reversed(inputs.top_bindings)),
             bottom_bindings=tuple(reversed(inputs.bottom_bindings))))
         self.assertEqual(permuted, result)

@@ -2,9 +2,8 @@ from dataclasses import replace
 import unittest
 from unittest.mock import patch
 
-from tools.tests.test_common_output_contract import native_output, translated_h
-from tools.tests.test_template_output_contract import _lane, _placement
-from tools.tests.test_template_cross_contract import aspect_input, binding, template
+from tools.tests.cross_fixture_support import aspect_input, binding, template
+from tools.tests.output_fixture_support import _lane, _placement, native_output, registration, translated_h
 from x5crop.domain import FiniteInterval
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.template_common_output import common_h_fit_members, materialize_common_h_output
@@ -12,12 +11,6 @@ from x5crop.detection.photo_geometry.template_cross import fit_template_cross
 from x5crop.detection.photo_geometry.template_family_membership import MembershipFitBudget, MembershipReceipt, MembershipState
 from x5crop.detection.photo_geometry.template_feasible_geometry import project_format_placement
 from x5crop.detection.photo_geometry.template_registration import CrossRegistrationWorkReceipt
-
-
-def registration():
-    membership = MembershipReceipt(MembershipState.COMPLETE, (), tuple(
-        MembershipFitBudget(role, 0, 0, 0, 0) for role in (BoundaryRole.TOP, BoundaryRole.BOTTOM)), ())
-    return CrossRegistrationWorkReceipt(0, 0, 0, membership=membership)
 
 
 class CommonHOutputContractTest(unittest.TestCase):
