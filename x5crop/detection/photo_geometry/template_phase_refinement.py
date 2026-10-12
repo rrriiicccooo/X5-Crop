@@ -63,6 +63,18 @@ from . import (
 )
 
 
+def _local_role_candidates(result: PhaseFitResult) -> tuple[SequenceFit, ...]:
+    if result.best is None:
+        return ()
+    if result.status == PhaseFitStatus.RESOLVED:
+        return (result.best,)
+    if (result.status == PhaseFitStatus.AMBIGUOUS
+            and result.failure_kind == PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS
+            and result.runner_up is not None):
+        return result.best, result.runner_up
+    return ()
+
+
 def _with_local_role_refinement(
     result: PhaseFitResult,
     observations: Sequence[BoundaryEdgeObservation],
@@ -75,16 +87,10 @@ def _with_local_role_refinement(
         tuple[int, ObservationId]
     ] = frozenset(),
 ) -> PhaseFitResult:
-    ambiguous = (
-        result.status == PhaseFitStatus.AMBIGUOUS
-        and result.failure_kind == PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS
-        and result.runner_up is not None
-    )
-    if (
-        result.best is None
-        or result.status != PhaseFitStatus.RESOLVED and not ambiguous
-    ):
+    candidates = _local_role_candidates(result)
+    if not candidates:
         return result
+    ambiguous = len(candidates) == 2
     if ambiguous and frame_width_authority_px is not None:
         raise ValueError("ambiguous local roles cannot share selected source W")
     authority_ids = (
@@ -97,11 +103,6 @@ def _with_local_role_refinement(
         if sequence_measurement_sets
         else frozenset()
     )
-    candidates = (
-        (result.best, result.runner_up)
-        if ambiguous
-        else (result.best,)
-    )
     refinements = tuple(
         _observations._refine_local_role_bindings(
             candidate,
@@ -112,7 +113,6 @@ def _with_local_role_refinement(
             excluded_role_bindings=excluded_role_bindings,
         )
         for candidate in candidates
-        if candidate is not None
     )
     receipt = replace(
         result.receipt,
@@ -425,23 +425,12 @@ def _project_retained_late_local_refinements(
 ) -> PhaseFitResult:
     """Project each retained fit without turning discrete ambiguity into a winner."""
 
-    ambiguous = (
-        result.status == PhaseFitStatus.AMBIGUOUS
-        and result.failure_kind == PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS
-        and result.runner_up is not None
-    )
-    if (
-        result.best is None
-        or result.status != PhaseFitStatus.RESOLVED and not ambiguous
-    ):
+    candidates = _local_role_candidates(result)
+    if not candidates:
         return result
+    ambiguous = len(candidates) == 2
     if ambiguous and source_frame_width_authority is not None:
         raise ValueError("ambiguous local projection cannot share selected source W")
-    candidates = (
-        (result.best, result.runner_up)
-        if ambiguous
-        else (result.best,)
-    )
     records = tuple(
         _project_late_local_candidate(
             candidate,
@@ -450,7 +439,6 @@ def _project_retained_late_local_refinements(
             allow_direct_rank=allow_direct_rank,
         )
         for candidate in candidates
-        if candidate is not None
     )
     projections = tuple(
         projection for _fit, projection in records if projection is not None

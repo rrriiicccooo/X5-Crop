@@ -27,7 +27,7 @@ from .gold_analysis import (
 from .report_validation import validate_placement_feature_record
 
 
-RANKING_SCHEMA = "x5crop_development_placement_ranking_v4"
+RANKING_SCHEMA = "x5crop_development_placement_ranking_v5"
 CONDITIONAL_ROLE_SCOPE = "development_label_and_score_only"
 INDEPENDENT_PHASE_ROLE_SCOPE = "development_label_and_score_only"
 MODEL_SPEC = "source_balanced_standardized_ridge_ranking_v2"
@@ -261,6 +261,13 @@ def _evaluate(
         canonical_index = max(canonical_indices, key=lambda index: scores[index]) if canonical_indices else None
         canonical = None if canonical_index is None else candidates[canonical_index]
         primary = next((item for item in candidates if item.role == "primary"), None)
+        feature_groups: dict[tuple[float | None, ...], list[RankingExample]] = {}
+        for candidate in candidates:
+            feature_groups.setdefault(candidate.features, []).append(candidate)
+        collisions = [
+            [item.placement_id for item in group]
+            for group in feature_groups.values() if len({item.gold_safe for item in group}) > 1
+        ]
         tasks.append({
             "sample_id": record["sample_id"], "source_sha256": record["source_sha256"],
             "cohort_role": record["cohort_role"], "model_id": model["model_id"],
@@ -273,6 +280,7 @@ def _evaluate(
             "primary_geometry_conformance": "not_available" if primary is None else "safe" if primary.gold_safe else "unsafe",
             "ranked_geometry_conformance": "not_available" if ranked is None else "safe" if ranked.gold_safe else "unsafe",
             "at_least_one_safe_retained": any(item.gold_safe for item in candidates),
+            "opposite_label_feature_collisions": collisions,
             "margin": None if len(scores) < 2 else float(sorted(scores)[-1] - sorted(scores)[-2]),
             "candidates": [{
                 "placement_id": item.placement_id, "role": item.role, "ranking_score": float(score),
@@ -287,6 +295,7 @@ def _evaluate(
         "primary_geometry_conformance_counts": dict(sorted(Counter(item["primary_geometry_conformance"] for item in tasks).items())),
         "ranked_geometry_conformance_counts": dict(sorted(Counter(item["ranked_geometry_conformance"] for item in tasks).items())),
         "at_least_one_safe_retained_task_count": sum(item["at_least_one_safe_retained"] for item in tasks),
+        "feature_collision_task_ids": [item["sample_id"] for item in tasks if item["opposite_label_feature_collisions"]],
         "canonical_ranked_geometry_conformance_counts": dict(sorted(Counter(item["canonical_ranked_geometry_conformance"] for item in tasks).items())),
         "canonical_at_least_one_safe_retained_task_count": sum(item["canonical_at_least_one_safe_retained"] for item in tasks),
         "conditional_ranked_task_ids": [item["sample_id"] for item in tasks if item["ranked_role"] == "conditional"],

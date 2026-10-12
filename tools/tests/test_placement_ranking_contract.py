@@ -120,6 +120,7 @@ class PlacementRankingContractTest(unittest.TestCase):
             for candidate in record["retained_placement_gold_labels"]:
                 candidate["geometry_conformance"] = "safe"
                 candidate["acceptability_features"]["values"][0]["value"] = 0.5
+        records[0]["retained_placement_gold_labels"][1]["geometry_conformance"] = "unsafe"
         unknown = records[-1]["retained_placement_gold_labels"][1]
         unknown["generation_state"] = "unavailable"
         unknown["geometry_conformance"] = "not_available"
@@ -128,6 +129,7 @@ class PlacementRankingContractTest(unittest.TestCase):
         artifact = build_development_ranking(records)
         self.assertEqual(artifact["development_fit_model"]["training_candidate_count"], 19)
         self.assertEqual(artifact["source_grouped_oof"]["summary"]["at_least_one_safe_retained_task_count"], 10)
+        self.assertEqual(artifact["source_grouped_oof"]["summary"]["feature_collision_task_ids"], ["S000"])
         for task in artifact["source_grouped_oof"]["tasks"]:
             self.assertEqual(task["ranked_placement_id"], "placement:primary")
         self.assertEqual(artifact["source_grouped_oof"]["tasks"][-1]["unavailable_placement_ids"], ["placement:runner"])
@@ -193,8 +195,7 @@ class PlacementRankingContractTest(unittest.TestCase):
             record["retained_placement_gold_labels"][1]["acceptability_features"]["values"][0]["value"] = 0.5
             record["retained_placement_gold_labels"].append(native)
         artifact = build_development_ranking(records)
-        self.assertEqual(artifact["ranking_schema"], RANKING_SCHEMA)
-        self.assertEqual(RANKING_SCHEMA, "x5crop_development_placement_ranking_v4")
+        self.assertEqual(artifact["ranking_schema"], "x5crop_development_placement_ranking_v5")
         self.assertEqual(
             artifact["independent_phase_role_scope"],
             INDEPENDENT_PHASE_ROLE_SCOPE,
@@ -293,6 +294,7 @@ class PlacementRankingContractTest(unittest.TestCase):
             lambda item: item.update(formal_ood_evaluated=True),
             lambda item: item["fold_assignment"].update({records[0]["source_sha256"]: 4}),
             lambda item: item["source_grouped_oof"]["summary"].update(task_count=99),
+            lambda item: item["source_grouped_oof"]["summary"].update(feature_collision_task_ids=["S000"]),
         )
         for mutate in mutations:
             altered = deepcopy(baseline)

@@ -1625,7 +1625,7 @@ geometry 和 output identity 保留为 provenance，不编码为数值特征；s
 `tools/regression/gold_geometry.py` 独占，集合分析由现有 `gold_analysis.py` 扩展，不另建 detector 或黄金池。
 离线排序由 `tools/regression/placement_ranking.py` 独占，使用当前源码绑定、无分析错误的黄金报告；
 入口为 `tools/verify diagnostic --placement-ranking --analysis-root <gold-root> --output-root <new-root>`。
-`x5crop_development_placement_ranking_v4` 同时评价 primary、runner、conditional 与独立 phase Review 的已生成提案；
+`x5crop_development_placement_ranking_v5` 同时评价 primary、runner、conditional 与独立 phase Review 的已生成提案；
 全体最高分与只含 primary/runner 的最高分分别保存。有条件及独立 phase 提案只提供开发标签与分数，不取得
 canonical selection 或自动输出权限；无完整 footprint 的候选不进入排序。
 至少需要五个 source group。方法在查看该轮结果前冻结为
@@ -1637,6 +1637,9 @@ canonical selection 或自动输出权限；无完整 footprint 的候选不进�
 加权最小二乘使用固定 ridge 系数 0.1，截距不惩罚；不根据本轮结果搜索参数。分数无界，不称为概率。
 每份已有候选独立学习安全标签，多正例不竞争归一化；unavailable 不参与训练或排序。
 最大分数优先，精确同分沿用保留顺序；margin 只报告前两名差值，不授予或否决权限。
+每个 task 的 `opposite_label_feature_collisions` 列出数值特征与缺失模式完全相同、黄金标签却相反的
+候选组，`feature_collision_task_ids` 汇总对应 task。它只诊断现有特征无法区分的候选，不改变分数、
+同分顺序、黄金标签或 Runtime 权限。
 
 Artifact 分开保存 source-grouped out-of-fold 开发结果与全量拟合的 in-sample 结果，记录模型参数、训练
 source、transform、feature/label schema、稳定规则、输入和工具 SHA；验证器核对分组、训练集统计、
