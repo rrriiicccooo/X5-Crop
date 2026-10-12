@@ -1,29 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import fields
-import itertools
-import math
-import random
-import sys
-import unittest
-
-from x5crop.domain import FiniteInterval, ObservationId
-from x5crop.detection.photo_geometry.broad_material_association import (
-    BroadAssociationResult,
-    BroadAssociationState,
-    BroadAssociationWork,
-    associate_broad_material,
-    broad_family_sources_supported,
-)
-from x5crop.detection.photo_geometry.cross_height_transition_measurement import (
-    spatial_region_trace_ordinals,
-)
+from x5crop.domain import FiniteInterval, ObservationId, Box
 from x5crop.detection.photo_geometry.measurement_model import (
     BroadMaterialTraceObservation,
     MaterialBackgroundSide,
 )
 from x5crop.detection.photo_geometry.measurement_points import TransitionPoint
 from x5crop.detection.photo_geometry.model import spatial_support_region_index
+from x5crop.detection.evidence.content_occupancy_model import (
+    ContentOccupancyObservation,
+    ContentOccupancyObservationSet,
+)
 
 
 def _broad_point(
@@ -74,27 +61,6 @@ def _broad_point(
         local_noise=0.1,
     )
     return TransitionPoint(transition, float(trace), coordinate)
-
-from types import SimpleNamespace
-import unittest
-
-from x5crop.detection.evidence.content_occupancy_model import (
-    ContentOccupancyObservation,
-    ContentOccupancyObservationSet,
-)
-from x5crop.detection.photo_geometry.content_topology import (
-    build_content_topology_index,
-)
-from x5crop.detection.photo_geometry.content_veto import content_veto_assessment
-from x5crop.detection.photo_geometry.content_veto_model import ContentVetoReason
-from x5crop.detection.photo_geometry.line_observations import SourceCoordinateLine
-from x5crop.detection.photo_geometry.model import (
-    BoundaryAxis,
-    BoundaryRole,
-    PositionSource,
-)
-from x5crop.detection.photo_geometry.output_model import FrameBoundaryGeometry
-from x5crop.domain import Box, FiniteInterval, ObservationId
 
 
 def make_observation(box: Box) -> ContentOccupancyObservationSet:

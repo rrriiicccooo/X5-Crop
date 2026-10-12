@@ -1,95 +1,52 @@
 from __future__ import annotations
 
-import ast
-from dataclasses import replace
-import inspect
 import math
-from pathlib import Path
+from dataclasses import replace
 from types import SimpleNamespace
-import unittest
-
 from x5crop.domain import (
     Box,
     EvidenceState,
     FiniteInterval,
     MeasurementIdentity,
     MeasurementProvenance,
-    WorkspaceExtent,
     ObservationId,
     PositiveInterval,
 )
-from x5crop.formats import (
-    DEVELOPMENT_GOLD_CALIBRATION_COHORT_SHA256,
-    EnclosingSupportApertureCalibrationSpec,
-)
+from x5crop.formats import FramePhysicalSpec
 from x5crop.formats.scan_canvas import ScanCanvasPhysicalSpec
-from x5crop.detection.gate_checks import GateGap
 from x5crop.detection.evidence.scan_canvas import (
     CanvasAxisScaleIntervals,
     ScanCanvasEvidence,
     ScanCanvasOutcome,
     ScanCanvasProfileMatch,
 )
-from x5crop.detection.photo_geometry.model import (
-    AuthoritySide,
-    BoundaryAxis,
-    BoundaryRole,
-)
-from x5crop.detection.photo_geometry.output_model import (
-    FootprintSaturationKind,
-    fixed_output_rectangle,
-    OutputBoundaryUse,
-    sampling_authority_bounds,
-)
+from x5crop.detection.photo_geometry.model import BoundaryAxis, BoundaryRole
+from x5crop.detection.photo_geometry.output_model import OutputBoundaryUse
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossFit,
     CrossFitStatus,
     CrossHeightProjectionBasis,
-    CrossLineProjectionBasis,
     EnclosingSupportPair,
 )
 from x5crop.detection.photo_geometry.template_gate import build_template_gate
 from x5crop.detection.photo_geometry.template_holder_fill import HolderFillState
-from x5crop.detection.photo_geometry.source_geometry import SourceFixedOutputSize
 from x5crop.detection.photo_geometry.template_phase_model import PhaseFitStatus
 from x5crop.detection.photo_geometry.template_nominal_grid_authority import (
     assess_calibrated_nominal_grid_authority,
 )
-from x5crop.detection.photo_geometry.template_output import (
-    _aperture_binding_positions,
-    _enclosing_support_aperture_risk,
-    _footprint,
-    _frame_boundary_residuals,
-    _line_outward_expansion_px,
-    _saturation_facts,
-    _state_footprint,
-    output_footprint_from_template_placement,
-    template_direct_use_budget_assessment,
+from x5crop.detection.photo_geometry.template_output import output_footprint_from_template_placement
+from x5crop.detection.photo_geometry.template_feasible_geometry import project_format_placement
+from x5crop.detection.photo_geometry.line_observations import (
+    SourceCoordinateLine,
+    PhotoBoundaryObservation,
+    RobustLineFitReceipt,
 )
-from x5crop.detection.photo_geometry.template_feasible_geometry import (
-    JointFrameState,
-    _shared_slope_polygon_vertices,
-    _support_cross_vertices,
-    project_format_placement,
-)
-from x5crop.geometry.convex import clip_convex_polygon_to_bounds, convex_hull
-from x5crop.detection.photo_geometry.template_enclosing_support_aperture import (
-    derive_enclosing_support_aperture_authority,
-    unavailable_enclosing_support_aperture_authority,
-)
-from x5crop.detection.photo_geometry.template_placement import (
-    resolved_cross_support_domains_px,
-)
-from x5crop.detection.photo_geometry.line_observations import PhysicalLineRegion, SourceCoordinateLine
 from x5crop.detection.photo_geometry.template_model import (
     ContactRelation,
     OverlapRelation,
     SequenceRoleLineEvidence,
 )
-from x5crop.detection.source_core import (
-    SourceLaneEvidence,
-    SourceStripValidationDomain,
-)
+from x5crop.detection.source_core import SourceLaneEvidence, SourceStripValidationDomain
 from tools.tests.template_test_support import (
     placement_binding as _binding,
     placement_compose as _compose,
@@ -97,7 +54,33 @@ from tools.tests.template_test_support import (
     placement_direction as _direction,
     placement_sequence as _sequence,
     placement_template as _template,
+    placement_binding,
+    placement_compose,
+    placement_cross_longitudinal_authority,
+    phase_edge,
+    phase_template,
 )
+from tools.tests.cross_fixture_support import (
+    aspect_input,
+    binding,
+    template,
+    _supported_aspect_ratio,
+)
+from x5crop.detection.photo_geometry.template_common_output import (
+    common_h_fit_members,
+    materialize_common_h_output,
+    assess_common_h_output_authority,
+)
+from x5crop.detection.photo_geometry.template_cross import fit_template_cross
+from x5crop.detection.photo_geometry.template_family_membership import (
+    MembershipFitBudget,
+    MembershipReceipt,
+    MembershipState,
+)
+from x5crop.detection.photo_geometry.template_registration import CrossRegistrationWorkReceipt
+from x5crop.detection.photo_geometry.content_veto_model import ContentVetoAssessment
+from x5crop.detection.photo_geometry.template_phase_competition import fit_template_phase
+from x5crop.detection.photo_geometry.template_selection import select_lane_template_placement
 
 
 def _placement():
@@ -485,19 +468,6 @@ def _selected_output_gate_fact(
     )[code]
 
 
-from dataclasses import replace
-import unittest
-
-from tools.tests.template_test_support import placement_binding, placement_compose, placement_cross_longitudinal_authority
-from x5crop.domain import Box, EvidenceState, FiniteInterval
-from x5crop.detection.photo_geometry.model import BoundaryRole
-from x5crop.detection.photo_geometry.template_feasible_geometry import project_format_placement
-from x5crop.detection.photo_geometry.template_output import (
-    common_h_output_footprint, output_footprint_from_template_placement,
-    template_direct_use_budget_assessment,
-)
-
-
 def translated_h(placement, delta):
     original = placement.cross_fit
     top = original.top_canonical_px + delta
@@ -517,19 +487,6 @@ def native_output(placement, lane=None):
     return output_footprint_from_template_placement(placement, project_format_placement(placement),
         lane=lane or _lane(), lane_ordinal=1, layout="horizontal")
 
-from dataclasses import replace
-import unittest
-from unittest.mock import patch
-
-from tools.tests.cross_fixture_support import aspect_input, binding, template
-from x5crop.domain import FiniteInterval
-from x5crop.detection.photo_geometry.model import BoundaryRole
-from x5crop.detection.photo_geometry.template_common_output import common_h_fit_members, materialize_common_h_output
-from x5crop.detection.photo_geometry.template_cross import fit_template_cross
-from x5crop.detection.photo_geometry.template_family_membership import MembershipFitBudget, MembershipReceipt, MembershipState
-from x5crop.detection.photo_geometry.template_feasible_geometry import project_format_placement
-from x5crop.detection.photo_geometry.template_registration import CrossRegistrationWorkReceipt
-
 
 def registration():
     membership = MembershipReceipt(MembershipState.COMPLETE, (), tuple(
@@ -537,55 +494,6 @@ def registration():
     return CrossRegistrationWorkReceipt(0, 0, 0, membership=membership)
 
 """Common-output authority must cover every H interpretation before selection."""
-
-from dataclasses import replace
-from types import SimpleNamespace
-import unittest
-
-from tools.tests.template_test_support import (
-    phase_edge,
-    phase_template,
-    placement_compose,
-)
-from tools.tests.cross_fixture_support import (
-    aspect_input,
-    binding,
-    _supported_aspect_ratio,
-)
-from tools.tests.cross_fixture_support import _problem
-from x5crop.domain import EvidenceState, FiniteInterval, ObservationId
-from x5crop.formats import FramePhysicalSpec
-from x5crop.detection.gate_checks import GateGap
-from x5crop.detection.photo_geometry.content_veto_model import (
-    ContentVetoAssessment,
-    ContentVetoFact,
-    ContentVetoReason,
-)
-from x5crop.detection.photo_geometry.line_observations import (
-    PhotoBoundaryObservation,
-    RobustLineFitReceipt,
-    SourceCoordinateLine,
-)
-from x5crop.detection.photo_geometry.model import BoundaryAxis, BoundaryRole
-from x5crop.detection.photo_geometry.template_common_output import (
-    assess_common_h_output_authority,
-    common_h_fit_members,
-    materialize_common_h_output,
-)
-from x5crop.detection.photo_geometry.template_cross import fit_template_cross
-from x5crop.detection.photo_geometry.template_cross_model import CrossFitStatus
-from x5crop.detection.photo_geometry.template_cross_support import SupportFitStatus
-from x5crop.detection.photo_geometry.template_family_membership import (
-    MembershipState,
-    enumerate_membership_scope,
-)
-from x5crop.detection.photo_geometry.template_output import common_direct_use_budget_assessment
-from x5crop.detection.photo_geometry.template_phase_competition import fit_template_phase
-from x5crop.detection.photo_geometry.template_registration import membership_projection_coverage
-from x5crop.detection.photo_geometry.template_selection import (
-    select_lane_template_placement,
-    select_template_source,
-)
 
 
 def _case(*, support_pair=False, aspect_height=None):
