@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from bisect import bisect_left, bisect_right
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 import math
+from types import MappingProxyType
 from typing import Sequence
 
 import numpy as np
@@ -44,6 +47,69 @@ from . import (
 _LINEAR_CONSTRAINT_EPSILON_PX = 1.0e-7
 
 
+@dataclass(frozen=True, slots=True)
+class _PhaseMatchingIndex:
+    """Read-only O(N + R + P) indices for one exact phase-fitting input."""
+
+    direct: tuple[_candidate_model._AnchorFact, ...]
+    roles: tuple[TemplateRole, ...]
+    separator_pairs: tuple[
+        tuple[_candidate_model._AnchorFact, _candidate_model._AnchorFact], ...
+    ]
+    centers: tuple[float, ...] = field(init=False)
+    optional_separator_pairs: tuple[
+        tuple[_candidate_model._AnchorFact, _candidate_model._AnchorFact], ...
+    ] = field(init=False)
+    separator_ids: frozenset[ObservationId] = field(init=False)
+    has_both_polarities: bool = field(init=False)
+    role_by_index: Mapping[int, TemplateRole] = field(init=False)
+    direct_by_id: Mapping[ObservationId, _candidate_model._AnchorFact] = field(init=False)
+    separator_pair_ids: frozenset[
+        tuple[ObservationId, ObservationId]
+    ] = field(init=False)
+
+    def __post_init__(self) -> None:
+        optional_pairs = tuple(
+            (left, right)
+            for left, right in self.separator_pairs
+            if BoundaryRole.END in left.qualified_anchor_roles
+            and BoundaryRole.START in right.qualified_anchor_roles
+        )
+        object.__setattr__(self, "centers", tuple(item.coordinate_px for item in self.direct))
+        object.__setattr__(self, "optional_separator_pairs", optional_pairs)
+        object.__setattr__(self, "separator_ids", frozenset(
+            item.observation_id for pair in optional_pairs for item in pair
+        ))
+        object.__setattr__(self, "has_both_polarities", {
+            item.polarity for item in self.direct
+        } >= {-1, 1})
+        object.__setattr__(self, "role_by_index", MappingProxyType({
+            item.role_index: item for item in self.roles
+        }))
+        object.__setattr__(self, "direct_by_id", MappingProxyType({
+            item.observation_id: item for item in self.direct
+        }))
+        object.__setattr__(self, "separator_pair_ids", frozenset(
+            (left.observation_id, right.observation_id)
+            for left, right in self.separator_pairs
+        ))
+
+    def validate_input(
+        self,
+        direct: tuple[_candidate_model._AnchorFact, ...],
+        roles: tuple[TemplateRole, ...],
+        separator_pairs: tuple[
+            tuple[_candidate_model._AnchorFact, _candidate_model._AnchorFact], ...
+        ],
+    ) -> None:
+        if (
+            self.direct is not direct
+            or self.separator_pairs is not separator_pairs
+            or self.roles != roles
+        ):
+            raise ValueError("phase matching index belongs to a different input")
+
+
 def _match_roles(
     direct: tuple[_candidate_model._AnchorFact, ...],
     roles: tuple[TemplateRole, ...],
@@ -58,27 +124,21 @@ def _match_roles(
     fit_residual_limit_px: float | None,
     required_bindings: tuple[tuple[int, ObservationId], ...] = (),
     adjacency_relations: tuple[AdjacencyRelation, ...] = (),
+    matching_index: _PhaseMatchingIndex | None = None,
 ) -> tuple[tuple[TemplateRole, _candidate_model._AnchorFact], ...]:
-    centers = tuple(item.coordinate_px for item in direct)
+    index = matching_index or _PhaseMatchingIndex(direct, roles, separator_pairs)
+    index.validate_input(direct, roles, separator_pairs)
+    centers = index.centers
     used: set[ObservationId] = set()
     used_supports: set[ObservationId] = set()
     used_roles: set[int] = set()
-    optional_separator_pairs = tuple(
-        (left, right)
-        for left, right in separator_pairs
-        if BoundaryRole.END in left.qualified_anchor_roles
-        and BoundaryRole.START in right.qualified_anchor_roles
-    )
-    separator_ids = {
-        item.observation_id
-        for pair in optional_separator_pairs
-        for item in pair
-    }
+    optional_separator_pairs = index.optional_separator_pairs
+    separator_ids = index.separator_ids
     selected: list[tuple[TemplateRole, _candidate_model._AnchorFact]] = []
     corridor = template_role_refinement_radius_px(pitch)
-    has_both_polarities = {item.polarity for item in direct} >= {-1, 1}
-    role_by_index = {item.role_index: item for item in roles}
-    direct_by_id = {item.observation_id: item for item in direct}
+    has_both_polarities = index.has_both_polarities
+    role_by_index = index.role_by_index
+    direct_by_id = index.direct_by_id
     contact_roles = {
         item.shared_edge_observation_id: (
             2 * item.relation_ordinal - 1,
@@ -87,10 +147,7 @@ def _match_roles(
         for item in adjacency_relations
         if isinstance(item, ContactRelation)
     }
-    separator_pair_ids = {
-        (left.observation_id, right.observation_id)
-        for left, right in separator_pairs
-    }
+    separator_pair_ids = index.separator_pair_ids
     required_by_role = dict(required_bindings)
     material_seed_roles = {
         (index, identity)
@@ -715,7 +772,12 @@ def _fit_seed(
     phase_anchor_authority_ceiling: (
         frozenset[tuple[int, ObservationId]] | None
     ) = None,
+    *,
+    matching_index: _PhaseMatchingIndex | None = None,
 ) -> _candidate_model._BoundFit | None:
+    matching_roles = template.roles
+    index = matching_index or _PhaseMatchingIndex(direct, matching_roles, separator_pairs)
+    index.validate_input(direct, matching_roles, separator_pairs)
     width = (
         template.frame_width_px.minimum
         + template.frame_width_px.maximum
@@ -749,7 +811,7 @@ def _fit_seed(
     for _iteration in range(4):
         updated_matches = _match_roles(
             direct,
-            template.roles,
+            index.roles,
             separator_pairs,
             phase=phase,
             width=width,
@@ -760,6 +822,7 @@ def _fit_seed(
             fit_residual_limit_px=fit_residual_limit_px,
             required_bindings=seed.required_bindings,
             adjacency_relations=relations,
+            matching_index=index,
         )
         if phase_anchor_authority_ceiling is not None:
             updated_matches = tuple(
@@ -921,7 +984,7 @@ def _fit_seed(
         for role in roles
     )
     by_role = {role.role_index: anchor for role, anchor in matches}
-    direct_by_id = {anchor.observation_id: anchor for anchor in direct}
+    direct_by_id = index.direct_by_id
     local_relation_by_role: dict[int, _candidate_model._AnchorFact] = {}
     global_role_by_observation = {
         anchor.observation_id: role.role_index for role, anchor in matches

@@ -672,6 +672,7 @@ def fit_template_phase(
         )
     # The admission scan is at most R coordinates per existing fitted seed:
     # O(H * R), without new hypotheses, queries, lookups or fit passes.
+    matching_index = _fitting._PhaseMatchingIndex(direct, roles, separator_pairs)
     local_candidates = tuple(
         value
         for value in (
@@ -686,6 +687,7 @@ def fit_template_phase(
                 phase_authority_px,
                 fit_residual_limit_px,
                 effective_phase_anchor_authority_ceiling,
+                matching_index=matching_index,
             )
             for seed in sorted(
                 seeds,
@@ -717,6 +719,7 @@ def fit_template_phase(
             )
         )
     )
+    del matching_index
     # A binding tuple does not identify its joint state, protection intervals
     # or later local-role lookup. Only identical complete fits are duplicates.
     candidates = tuple(dict.fromkeys(local_candidates))
