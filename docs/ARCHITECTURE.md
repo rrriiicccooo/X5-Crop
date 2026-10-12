@@ -2237,6 +2237,8 @@ winner/runner、provenance、footprint 或输出像素。
 `TemplateSpec.roles` 只在该不可变模板实例首次访问时构造；角色顺序与 count 绑定，不缓存拟合结果。
 每次 phase pass 的材料筛选、separator component resolution 与角色准备只执行一次，后续消费者显式
 复用同一 typed resolution；不同 pass、直接观察子集与 source 分别准备，不共享权限结果。
+同一 phase 输入的坐标、角色与 separator 身份以 O(N+R+P) 只读索引供 seed 和迭代复用；索引绑定
+原观察与 pair tuple，随该次 pass 释放。依赖 seed、拟合参数或邻接关系的匹配状态仍逐次计算。
 
 正式输入限于单页 unsigned 16-bit、RGB 三通道、contiguous TIFF；压缩接受 `NONE`、`LZW`、
 `DEFLATE` / `ADOBE_DEFLATE` 或 `ZSTD`。Orientation 1–8 在 decode boundary 规范化，输出写
