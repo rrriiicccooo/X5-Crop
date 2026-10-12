@@ -53,6 +53,8 @@ Every output slot must have complete visible-content protection, sufficient posi
 footprint. The entire source enters `needs_review` if content is missing, an internal boundary is crossed, a required
 boundary is unknown, evidence conflicts, or an interpretation cannot be fully verified and protected.
 A score cannot replace these conditions or enlarge the fixed box.
+Near a true TIFF edge, the program keeps the same-size window inside the source when it can also contain all visible
+protection, preserving more recorded content. Otherwise, the existing source-clipping and content-protection checks apply.
 
 When photo ownership is established and several complete top/bottom interpretations remain, one fixed box may protect
 them all. Automatic approval requires every interpretation to pass content containment and source-wide safety checks.
@@ -68,6 +70,10 @@ use development ranking scores to select crops.
 When native boundaries support the first and last photographs, the report may also show up to four independent
 "Native Endpoint Review" proposals for different endpoint roles, each with its original evidence, counterevidence,
 and failure reasons. They are available for manual inspection; automatic cropping continues to require the existing safety checks.
+When photographs extend beyond a true TIFF edge, the report may show up to six additional source-clipped proposals.
+If a native endpoint interpretation cannot form a complete crop, existing source-wide or aggregate boundaries may
+also produce a fixed refit proposal with the original failure and all remaining boundary counterevidence preserved.
+These independent proposals are marked Review and retain their own protection ranges and budget results.
 When top/bottom evidence is insufficient, fixed-height review proposals prefer boundaries with measured support across
 all positioned photographs. The report preserves their original role evidence and blocking reasons for manual review.
 If the primary cannot form a complete crop but the runner already has a complete proposal, the report retains that

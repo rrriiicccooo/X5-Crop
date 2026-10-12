@@ -188,6 +188,8 @@ rank 不证明联合状态、保护区间、晚期角色走廊或权限来源等
 不同记录继续进入既有连续合并与离散选择；该保留不宣称后续解释已穷尽。候选及投影记录数不超过
 原 seed 数，完整记录的哈希与索引工作为 `O(HR)`，临时去重索引在生成 tuple 后释放，保留集合按实际
 数量进入原有 receipt 与内存上限，不增加拟合或像素查询预算。
+同一连续 placement 的完整 fit 相等时，合并直接复用该 fit，residual compatibility 取两者的合取；
+不再为相同联合状态重建边际 hull。不同 fit 仍按原连续合并合同核查并构建联合状态。
 
 高支持但残差不相容的候选同样按 `_same_continuous_placement` 核查完整身份。Phase 与 pitch 的边际
 区间相交不能隐藏不同 role observation 的反证 runner；保留该 runner 时撤销 winner 并保持歧义，
@@ -633,6 +635,12 @@ role = phase
 `W/H/pitch` 先验、`local_delta = 0` 和 normal adjacency 组成；像素观察随后收紧 source W/H、确定
 absolute phase、保留直接 START/END 的 native coordinate，或给某个 adjacency 增加一次 local advance。
 Grid 始终可以生成一个待检验的默认 placement，但它不能仅凭自己取得 `approved_auto` 权限。
+
+`PhaseSourceDomain` 由已登记 measurement field 的实际整数 TIFF extent、lane sampling authority box
+与长轴方向构成。原 holder 范围筛选失败时，既有 seed 拟合只可借此保留真实源边截断的解释：全部内部
+角色须在 lane 连续域内，越界只允许发生在首 START 或末 END，且对应 lane 侧必须是真实 TIFF 外缘；
+每格须有正向跨度与正的可见交集。反向、内部 lane 越界或整格不可见均拒绝。不移动原坐标、不夹紧 fit，
+不增加 seed、query 或拟合 pass，也不因此取得 source clipping、角色或输出权限。
 
 - 连续小误差保存在一个 placement 的区间中。
 - 不同 ordinal mapping 或相隔明显的 phase 是离散 placements，保留 winner/runner，绝不平均。
@@ -1567,7 +1575,7 @@ Runtime 仍由第 9.1 节的硬事实选择。排名分数不是可用概率，�
 footprint，不读取 Runtime 决定来制造正例。内部预算等风险代理必须先与真实黄金结果对照，不能把代理
 全部永久硬化后再期待评分提高覆盖，也不能未经验证整体关闭它们。
 
-集合范围固定为每条 lane 已组成的 canonical best、单个 runner 与至多一份有条件 Cross 提案，最多三个
+Canonical 集合范围固定为每条 lane 已组成的 best、单个 runner 与至多一份有条件 Cross 提案，最多三个
 placement，不是整个 phase/cross 搜索空间。先尝试已有 phase runner；只有它无法组成 placement 或与 primary 相同时，才用 primary phase
 与已有 Cross runner 填充空缺的备选位置。两种路径各用对应 phase 的原有约束，不能借用另一 phase 的
 source W，也不清除原失败。Canonical 部分最多尝试 primary 与两种既有备选组合，保留数不超过两个。
@@ -1578,7 +1586,8 @@ source W，也不清除原失败。Canonical 部分最多尝试 primary 与两�
 不能选择没有完整 footprint 的方案，也不因此晋升 runner。报告和黄金分析只读取这些同次 runtime facts，不重新求解几何。物化次数与实际逐 slot
 输出评估次数进入工作量 receipt，分别不超过 3 与全部保留 placement 的 slot 总数。
 黄金逐候选标签仍由唯一方向性 comparator 产生；保留集合中没有安全候选，不能外推为所有潜在裁切均不可用。
-Gold record 在同一 source SHA、format/count 身份下保存每份 placement ID、primary/runner/conditional 角色、实际
+第 11 节的独立 phase Review 记录另计，保留集合总上限为十七份，不能进入 canonical selection。
+Gold record 在同一 source SHA、format/count 身份下保存每份 placement ID、canonical 或独立 Review 角色、实际
 footprint、typed generation failure 与带 physical frame ID 的逐帧诊断。集合按 task 计数，不将不同 count
 的同源任务混成一个答案；多正例不归一化，unavailable 不产生负例。可用但有 placement 歧义的统计只消费
 明确的 discrete phase ambiguity 或 non-equivalent Cross fits，不将 coverage 缺口或所有 Review 算作歧义。
@@ -1604,8 +1613,8 @@ geometry 和 output identity 保留为 provenance，不编码为数值特征；s
 `tools/regression/gold_geometry.py` 独占，集合分析由现有 `gold_analysis.py` 扩展，不另建 detector 或黄金池。
 离线排序由 `tools/regression/placement_ranking.py` 独占，使用当前源码绑定、无分析错误的黄金报告；
 入口为 `tools/verify diagnostic --placement-ranking --analysis-root <gold-root> --output-root <new-root>`。
-`x5crop_development_placement_ranking_v3` 同时评价 primary、runner、conditional 与 native_endpoint 的已生成提案；
-全体最高分与只含 primary/runner 的最高分分别保存。有条件及独立原生端点提案只提供开发标签与分数，不取得
+`x5crop_development_placement_ranking_v4` 同时评价 primary、runner、conditional 与独立 phase Review 的已生成提案；
+全体最高分与只含 primary/runner 的最高分分别保存。有条件及独立 phase 提案只提供开发标签与分数，不取得
 canonical selection 或自动输出权限；无完整 footprint 的候选不进入排序。
 至少需要五个 source group。方法在查看该轮结果前冻结为
 `source_balanced_standardized_ridge_ranking_v1`：source SHA 排序后循环分配五折，同源 count 变体同折；
@@ -1776,6 +1785,10 @@ canonical frame 包围框中心，再把中心限制到能够包含全部可见 
 proposal，该轴保留原 canonical frame 中心，不用不确定性包络中点改写已拟合的位置；完整 mandatory
 原样保留，由包含检查产生 `direct_use_budget_exceeded`，不得扩大框或取得输出资格。共同输出没有单一
 canonical frame 中心，仍使用完整可见需求中点。
+可见需求能够容纳时，再与完整固定窗口位于真实 TIFF 像素单元域内的中心区间
+`[D/2−0.5, source_axis_length−0.5−D/2]` 求交。交集非空则在其中保留最接近原首选中心的位置，
+避免将可用固定窗口浪费在未记录的源外区域；交集为空则沿用原可见需求中心区间及合法源边截断。
+该平移不改变尺寸、拟合、完整 mandatory 或权限，不按内部 lane 裁小需求；共同输出使用同一规则。
 
 `DirectUseBudgetAssessment` 只证明内容包含。每边保存从固定窗口中心到可见 mandatory
 最远点的非负 `required_extent_px`、该轴固定半尺寸 `available_extent_px` 和 `within_limit`。
@@ -2062,10 +2075,12 @@ geometry 或 final boxes。每个阻止事实
 direct/inferred ledger、content veto 和工作量只属于显式 Debug Analysis 或 verifier。外部 report
 validator 位于 `tools/regression/`，不进入用户 standalone。
 
-每条 lane 可另存一份 `native_endpoint_review`，含最多四份完整解释。它属于固定 `review_only` scope，独立于 canonical
+每条 lane 可另存一份 `independent_phase_review`，含最多十四份完整解释。它属于固定 `review_only` scope，独立于 canonical
 competition、alternatives、source proposal、共同 H、selected output 与两级 Gate；普通与 development
-报告保存相同的完整记录。黄金保留集合上限为七份，原 canonical 两份与 conditional 一份的合同不变。
-该记录在既有 phase authority projection 池压缩前单次扫描选出：成功 projection 取其 output fit，失败
+报告保存相同的完整记录。黄金保留集合上限为十七份，原 canonical 两份与 conditional 一份的合同不变。
+记录按 `native_endpoint → source_clipped_terminal → intrinsic_refit` 排序，各自上限为四、六、四份。
+
+原生端点记录在既有 phase authority projection 池压缩前单次扫描选出：成功 projection 取其 output fit，失败
 取原 input fit 与原失败 projection；首末 Frame 各须至少有一条相同 role/observation identity 的原始
 `source_wide_edge | aggregate_union` 正 basis。优先具有 `outer_material_boundary` 的终端事实；同类中先保留
 已完成 authority projection 的 output，避免失败 input 中未获角色支持的绑定仅凭数量压过完整投影；再使用原
@@ -2075,6 +2090,23 @@ competition、alternatives、source proposal、共同 H、selected output 与两
 只按完整 fit、projection、residual 与端点事实身份去重，几何相近但原投影不同的解释分别保留。
 同模板跨 pass 每类只比较 prior/current 两份完整记录；不同模板不携带。所有类均保留原歧义，不挑选自动输出。
 
+源截断记录使用同一既有池及完整 input/output projection。`PhaseSourceDomain` 须确认至少一条真实
+源边截断；原 `supported` 的 `source_wide_edge | aggregate_union` 事实须与有效 fit 中同一
+`PHASE_ANCHOR` role/observation 绑定对应，原 direct constraint rank 须可重算且为 1–3。
+首 START 与末 END 各按原 rank 1、2、3 构成六个固定类；同时截断可属于两类。每类依次比较 intrinsic
+outer terminal、原 projection 是否成功与原 `_rank`，相同键保留首条。完整记录按类顺序去重；
+跨 pass 只携带同模板、同源域的对应类。Rank 0、仅 local、仅 partial 或仅矛盾事实不能取得该保留资格；
+混合记录中的反证与 projection 失败保持，不恢复任何权限。
+
+原生端点解释的独立 compose 失败后，才可执行一次固定 `intrinsic_refit`：从原完整 ledger 中保留所有
+具有 intrinsic basis 的原 `PHASE_ANCHOR` 精确绑定（包括原矛盾状态），其余完整事实只作 validation。
+沿用原 template、integer offset、adjacency relations 与 prepared phase authority，使用模板声明的
+W/gap/pitch 交集，单次调用原 `_fit_seed`；全部保留绑定均为 required，不枚举子集或重试。
+输出须保持精确 role/observation 集合和关系。原 compose 失败、原 projection、全部 validation-only
+事实及相对于新 model full interval 的冲突均保存；残差不相容也只作 Review 诊断，不宣称 authority
+projection 成功。不具备 intrinsic 或 validation-only 集合、关系依赖退出绑定、拟合失败或身份改变时，
+保存 typed failure。每个原生解释至多一次，共至多四次；源截断类不触发此重拟合。
+
 独立提案用原 frame spec 和 scan-canvas axis scales 新建初始 source W/H，不继承 canonical 校准。
 仅消费既有 Cross input 中 `DIRECT` binding；原 fixed H/center 必须等于初始 H，避免重新解释依赖校准 H
 的粗测分类。它的 longitudinal authority 域为空，Review 域只来自所选 fit；aspect authority unavailable。
@@ -2082,6 +2114,9 @@ competition、alternatives、source proposal、共同 H、selected output 与两
 每份最多一次 compose，`global_lattice_authority=None`，使用独立 placement ID namespace。该构建发生在
 canonical selection 与 Gate 完成之后；失败仅使独立槽 unavailable，不改变规范路径或自动批准。
 Report validator 重放独立 source、Cross 上下文、compose、完整保护和预算；Debug 只读展示并明确标为 Review。
+失败的阶段调用计数须与 typed failure 对应；compose 失败须从同一 registered source/Cross/fit 真实重放，
+才能触发固定重拟合。Development 保存该重拟合的 prepared phase input，重放核对原 ledger 中全部身份、
+源域与完整已登记 sequence measurement sets，再复现固定拟合及 receipt。
 
 Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决定、不写正式 TIFF。它必须展示：
 
@@ -2139,12 +2174,16 @@ Canonical 部分最多保留两份 placement；primary 复用已有 lattice auth
 direct-role 与 global-lattice 评估。有条件 Cross 提案最多增加一份 placement，复用 primary 的 phase 与
 lattice authority。不新增像素 query 或 phase 搜索；包括第三份提案在内的全部 footprint projection、
 物化和 output evaluation 由同一 receipt 逐次计数。
-独立原生端点 Review 使用自己的 receipt：既有 projection record 数 M、角色数 R 的分类工作为 O(MR)，
+独立 phase Review 使用自己的 receipt：既有 projection record 数 M、角色数 R 的原生分类工作为 O(MR)，
 四个角色类的分类、比较、完整身份去重分别计数；保留状态与临时索引为 O(4R)，same-template carry 每类
 最多比较 prior/current 两份。每份解释最多一次 Cross 调用，沿用原 4096-fit 上限；compose/projection
 各最多一次，extreme evaluations 不超过 `130F + 64`，output/budget 各不超过 F，placement 特征为 28 项。
-总调用数不超过四份；分类工作只记录一次，各构建单独保存 receipt。峰值还计入前序完整提案的保留结构。
-没有新像素、query、注册、phase seed 或搜索组合。独立失败与工作量不写回 canonical receipt；
+源截断分类同为 O(MR)，保留与索引为 O(6R)，每条至多两个类成员、carry 至多 `6(M−1)` 次完整比较，
+完整去重至多 `15(2M−1)` 次；原 rank 重算与全部事实检查单独计数。固定重拟合至多四次，每次
+`_fit_seed` 一次、内部 matching 至多四轮，重建既有 observations/pairs 与完整反证的工作及 O(N+P+R)
+临时量保存独立 receipt。完整解释的 Cross/compose/projection 各至多十四次；分类工作只记录一次，
+各构建单独保存 receipt。峰值还计入前序完整提案与重拟合的保留结构。
+没有新像素、query、注册或搜索组合。独立失败与工作量不写回 canonical receipt；
 临时内存仍受同一 source 总上限约束。
 两个已有 phase fit 的 local completion 各记录一次 `H × R` lookup 和实际新增 binding，第二次消耗一份
 既有 fit-pass 预算；晚期弱线 projection/nominal solve 按各候选实际调用计数，不扩大 6-pass 上限。
@@ -2242,7 +2281,9 @@ Linux开发/CI使用`renameat2(RENAME_NOREPLACE)`。目标在最终检查之后�
 | `photo_geometry/template_feasible_geometry.py` | 任一已 compose placement 的低维联合可行集合与 footprint projection；resolved 或第 7 节允许的逐假设 global-lattice direct constraint 在此唯一参与联合投影，不决定 eligibility |
 | `photo_geometry/template_output.py`、`output_model.py` | JointPlacementEnvelope、实际 sequence constraint basis/identity、固定 source W/H 身份、完整 mandatory、固定 requested、source clipping 与可见内容包含；enclosing risk 只作诊断 |
 | `photo_geometry/template_runtime_model.py`、`detector.py` | `TemplatePlacementProposal` / `TemplateSourceProposal`、eligibility/selection handoff 与顶层编排；proposal 不授权正式输出 |
-| `photo_geometry/template_native_retention.py`、`template_native_review.py` | 从既有 projection 记录按四个原生端点角色类保留完整解释、独立初始 source/Cross Review 上下文与有界物化；不参与 canonical competition 或 Gate |
+| `photo_geometry/template_source_domain.py` | 已登记 lane 与真实 TIFF 外缘的 phase 源域及终端截断判定；不授予裁切权限 |
+| `photo_geometry/template_native_retention.py`、`template_source_clipped.py` | 从既有 projection 记录按四个原生端点类与六个源截断类保留完整解释及分类工作量 |
+| `photo_geometry/template_intrinsic_review_refit.py`、`template_phase_review.py` | 原 compose 失败后的单次固定 intrinsic 重拟合、完整反证、独立初始 source/Cross Review 上下文与有界物化；不参与 canonical competition 或 Gate |
 | `photo_geometry/template_gate.py` | selected-only CandidateGate facts；不生成、选择或删除 proposal |
 | `x5crop/detection/output_deskew.py` | approved-only 6–24 trace、role-free、candidate-independent 的可选输出角度 observation |
 | `x5crop/detection/decision/`、`final/` | 最终决定、Decision 后 deskew assessment 与 approved geometry exposure |

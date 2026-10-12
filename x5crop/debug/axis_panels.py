@@ -17,7 +17,7 @@ from .panel_facts import (
     axis_authority_summaries,
     competition_summary,
     conditional_geometry_by_identity,
-    native_endpoint_geometry_by_identity,
+    independent_phase_geometry_by_identity,
     primary_geometry_by_identity,
     runner_geometry_by_identity,
     selection_summary,
@@ -386,16 +386,16 @@ def cross_axis_panel(
     _draw_alternative_top_bottom(
         draw, conditional, selected_viewport, style, style.conditional_proposal_color,
     )
-    native_review = native_endpoint_geometry_by_identity(detection)
+    native_review = independent_phase_geometry_by_identity(detection)
     if native_review:
         _draw_alternative_top_bottom(
             draw, native_review, selected_viewport, style,
-            style.native_endpoint_review_color,
+            style.independent_phase_review_color,
         )
         draw_label_chip(
             draw, (selected_viewport.target_box[0] + 8,
                    selected_viewport.target_box[1] + 8),
-            "NATIVE ENDPOINT REVIEW", style.native_endpoint_review_color,
+            "PHASE REVIEW", style.independent_phase_review_color,
             style, filled=False,
         )
     fit_runner = set()
@@ -629,15 +629,15 @@ def long_axis_panel(
     _draw_alternative_start_end(
         draw, conditional, selected_viewport, style, style.conditional_proposal_color,
     )
-    native_review = native_endpoint_geometry_by_identity(detection)
+    native_review = independent_phase_geometry_by_identity(detection)
     if native_review:
         _draw_alternative_start_end(
             draw, native_review, selected_viewport, style,
-            style.native_endpoint_review_color,
+            style.independent_phase_review_color,
         )
         draw_label_chip(
             draw, (media_left + 8, media_top + 8),
-            "NATIVE ENDPOINT REVIEW", style.native_endpoint_review_color,
+            "PHASE REVIEW", style.independent_phase_review_color,
             style, filled=False,
         )
     runner_fit = False

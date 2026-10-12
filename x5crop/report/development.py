@@ -238,8 +238,14 @@ def development_report_facts(
                 "alternative_placement_proposals": typed_read_model(
                     lane.alternative_placement_proposals
                 ),
-                "native_endpoint_review": typed_read_model(
-                    lane.native_endpoint_review
+                "independent_phase_review": typed_read_model(
+                    lane.independent_phase_review
+                ),
+                "intrinsic_refit_input": (
+                    None
+                    if lane.independent_phase_review is None
+                    or not lane.independent_phase_review.intrinsic_refits
+                    else typed_read_model(lane.prepared.phase_input)
                 ),
                 "common_h_output": typed_read_model(lane.common_h_output),
                 "common_h_authority": typed_read_model(lane.placement_competition.common_h_authority),

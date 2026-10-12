@@ -29,13 +29,13 @@ from x5crop.detection.photo_geometry.template_direct_role_authority import (
     DirectRoleAuthorityFact,
     DirectRoleBindingAuthority,
 )
-from x5crop.detection.photo_geometry.template_native_review import (
-    NativeEndpointReviewFailure,
-    NativeEndpointReviewFailureKind,
-    NativeEndpointReviewWorkReceipt,
-    NativeEndpointReviewPortfolio,
-    build_native_endpoint_review,
-    native_endpoint_cross_input,
+from x5crop.detection.photo_geometry.template_phase_review import (
+    IndependentPhaseReviewFailure,
+    IndependentPhaseReviewFailureKind,
+    IndependentPhaseReviewWorkReceipt,
+    IndependentPhaseReviewPortfolio,
+    build_independent_phase_review,
+    independent_phase_cross_input,
 )
 from x5crop.detection.photo_geometry.template_measurement_plan_model import (
     MAX_CROSS_PAIRS,
@@ -152,12 +152,12 @@ class NativeReviewContractTests(TestCase):
         return lane
 
     def _build_single_review(self, lane):
-        portfolio = build_native_endpoint_review(lane)
+        portfolio = build_independent_phase_review(lane)
         self.assertEqual(len(portfolio.reviews), 1)
         return portfolio.reviews[0]
 
     def _portfolio(self, lane, review):
-        return NativeEndpointReviewPortfolio(
+        return IndependentPhaseReviewPortfolio(
             lane.phase_competition._native_phase_retention, (review,),
         )
 
@@ -202,7 +202,7 @@ class NativeReviewContractTests(TestCase):
         )
 
     def test_no_private_phase_retention_means_no_review(self):
-        self.assertIsNone(build_native_endpoint_review(prepared_template_lane()))
+        self.assertIsNone(build_independent_phase_review(prepared_template_lane()))
 
     def test_role_class_attempts_preserve_each_failure_and_count_work_once(self):
         lane = self._retained_lane()
@@ -243,10 +243,10 @@ class NativeReviewContractTests(TestCase):
         before = (lane.source_scan_geometry, lane.phase_competition.best,
                   lane.phase_competition.runner_up, lane.cross_competition)
         with patch(
-            "x5crop.detection.photo_geometry.template_native_review.fit_template_cross",
+            "x5crop.detection.photo_geometry.template_phase_review.fit_template_cross",
             side_effect=(competition, replace(competition, best=None)),
         ) as cross:
-            portfolio = build_native_endpoint_review(lane)
+            portfolio = build_independent_phase_review(lane)
         self.assertEqual(cross.call_count, 2)
         self.assertEqual(tuple(item.phase_diagnostic for item in portfolio.reviews),
                          retention.diagnostics)
@@ -254,7 +254,7 @@ class NativeReviewContractTests(TestCase):
         self.assertEqual(sum(item.work.compose_call_count for item in portfolio.reviews), 1)
         self.assertEqual(portfolio.reviews[0].proposal.state.value, "generated")
         self.assertEqual(portfolio.reviews[1].failure.kind,
-                         NativeEndpointReviewFailureKind.CROSS_BEST_UNAVAILABLE)
+                         IndependentPhaseReviewFailureKind.CROSS_BEST_UNAVAILABLE)
         self.assertGreater(portfolio.peak_temporary_bytes,
                            max(item.work.peak_temporary_bytes for item in portfolio.reviews))
         self.assertEqual(before, (lane.source_scan_geometry, lane.phase_competition.best,
@@ -265,7 +265,7 @@ class NativeReviewContractTests(TestCase):
             replace(portfolio, reviews=portfolio.reviews[:1])
 
     def test_report_replays_original_holder_axes_before_canonical_scale_intersection(self):
-        from tools.regression.report_validation import _validate_native_endpoint_review
+        from tools.regression.report_validation import _validate_independent_phase_review
         from x5crop.detection.evidence.scan_canvas import MatchedHolder
         from x5crop.report.read_models import typed_read_model
         from x5crop.domain import WorkspaceExtent
@@ -284,7 +284,7 @@ class NativeReviewContractTests(TestCase):
         )
         competition = replace(self._cross_competition(lane), best=None)
         with patch(
-            "x5crop.detection.photo_geometry.template_native_review.fit_template_cross",
+            "x5crop.detection.photo_geometry.template_phase_review.fit_template_cross",
             return_value=competition,
         ):
             review = self._build_single_review(lane)
@@ -311,7 +311,7 @@ class NativeReviewContractTests(TestCase):
             axis_scales=original_scales,
         )
         record = {
-            "native_endpoint_review": typed_read_model(self._portfolio(lane, review)),
+            "independent_phase_review": typed_read_model(self._portfolio(lane, review)),
             "source_scan_geometry": typed_read_model(canonical_initial),
             "template_id": lane.template_spec.template_id,
             "lane_id": lane.lane.domain.lane_id,
@@ -320,12 +320,12 @@ class NativeReviewContractTests(TestCase):
             "selected_placement_id": None, "runner_up_placement_id": None,
             "conditional_proposal_placement_id": None, "common_h_output": None,
         }
-        self.assertEqual(_validate_native_endpoint_review(
+        self.assertEqual(_validate_independent_phase_review(
             record, expected_source_extent=WorkspaceExtent(2320, 322),
             matched_holder=holder,
         ).reviews[0], review)
         with self.assertRaisesRegex(ValueError, "scan-canvas scale authority"):
-            _validate_native_endpoint_review(
+            _validate_independent_phase_review(
                 record, expected_source_extent=WorkspaceExtent(2320, 322),
                 matched_holder=None,
             )
@@ -338,7 +338,7 @@ class NativeReviewContractTests(TestCase):
                 width_axis_px_per_mm=PositiveInterval.exact(center_scale),
                 height_axis_px_per_mm=PositiveInterval.exact(center_scale),
             )
-            _validate_native_endpoint_review(
+            _validate_independent_phase_review(
                 record, expected_source_extent=WorkspaceExtent(2320, 322),
                 matched_holder=replace(holder, axis_scales=narrowed_scales),
             )
@@ -368,7 +368,7 @@ class NativeReviewContractTests(TestCase):
             top_bindings=(top, local, conditional),
             bottom_bindings=(bottom,),
         )
-        rebuilt = native_endpoint_cross_input(original, source, fit)
+        rebuilt = independent_phase_cross_input(original, source, fit)
         self.assertEqual(rebuilt.top_bindings, (top, conditional))
         self.assertEqual(rebuilt.bottom_bindings, (bottom,))
         self.assertEqual(rebuilt.longitudinal_support_domain_groups_px, ())
@@ -391,9 +391,9 @@ class NativeReviewContractTests(TestCase):
             height_scale_px_per_mm=PositiveInterval.exact(9.9),
         )
         with self.assertRaises(ValueError):
-            native_endpoint_cross_input(original, mismatched_source, fit)
+            independent_phase_cross_input(original, mismatched_source, fit)
         with self.assertRaises(ValueError):
-            native_endpoint_cross_input(
+            independent_phase_cross_input(
                 replace(
                     original,
                     maximum_evaluated_fits=MAX_CROSS_PAIRS + 1,
@@ -431,7 +431,7 @@ class NativeReviewContractTests(TestCase):
             failure_kind=CrossFailureKind.FAMILY_ASSIGNMENT_UNRESOLVED,
         )
         with patch(
-            "x5crop.detection.photo_geometry.template_native_review.fit_template_cross",
+            "x5crop.detection.photo_geometry.template_phase_review.fit_template_cross",
             return_value=conditional_competition,
         ):
             review = self._build_single_review(lane)
@@ -449,7 +449,7 @@ class NativeReviewContractTests(TestCase):
         lane = self._retained_lane()
         competition = self._cross_competition(lane)
         with patch(
-            "x5crop.detection.photo_geometry.template_native_review.fit_template_cross",
+            "x5crop.detection.photo_geometry.template_phase_review.fit_template_cross",
             return_value=competition,
         ) as fit_cross:
             review = self._build_single_review(lane)
@@ -472,7 +472,7 @@ class NativeReviewContractTests(TestCase):
         self.assertEqual(review.placement.height_authority_px, lane.height_authority_px)
         self.assertEqual(review.proposal.state.value, "generated")
 
-        from tools.regression.report_validation import _validate_native_endpoint_review
+        from tools.regression.report_validation import _validate_independent_phase_review
         from x5crop.detection.evidence.scan_canvas import MatchedHolder
         from x5crop.report.read_models import typed_read_model
         canvas = lane.lane.scan_canvas
@@ -481,7 +481,7 @@ class NativeReviewContractTests(TestCase):
             canvas.matches[0].aspect_error_ratio, canvas.axis_scales,
         )
         record = {
-            "native_endpoint_review": typed_read_model(self._portfolio(lane, review)),
+            "independent_phase_review": typed_read_model(self._portfolio(lane, review)),
             "source_scan_geometry": typed_read_model(lane.source_scan_geometry),
             "template_id": lane.template_spec.template_id,
             "lane_id": lane.lane.domain.lane_id,
@@ -495,7 +495,7 @@ class NativeReviewContractTests(TestCase):
             "x5crop.detection.photo_geometry.template_placement.derive_enclosing_support_aperture_authority",
             return_value=replace(authority, authority_id="replayed-authority:999"),
         ):
-            self.assertEqual(_validate_native_endpoint_review(
+            self.assertEqual(_validate_independent_phase_review(
                 record, expected_source_extent=review.proposal.output_footprints[0].source_extent,
                 matched_holder=holder,
             ).reviews[0], review)
@@ -503,22 +503,22 @@ class NativeReviewContractTests(TestCase):
     def test_cross_owner_programming_error_is_not_typed_as_review_failure(self):
         lane = self._retained_lane()
         with patch(
-            "x5crop.detection.photo_geometry.template_native_review.fit_template_cross",
+            "x5crop.detection.photo_geometry.template_phase_review.fit_template_cross",
             side_effect=TypeError("owner programming error"),
         ):
             with self.assertRaises(TypeError):
-                build_native_endpoint_review(lane)
+                build_independent_phase_review(lane)
 
     def test_typed_support_domain_failure_stays_in_review_failure_slot(self):
         lane = self._retained_lane()
         with patch(
-            "x5crop.detection.photo_geometry.template_native_review.resolved_cross_support_domains_px",
+            "x5crop.detection.photo_geometry.template_phase_review.resolved_cross_support_domains_px",
             side_effect=ValueError("typed support domain unavailable"),
         ):
             review = self._build_single_review(lane)
         self.assertEqual(
             review.failure.kind,
-            NativeEndpointReviewFailureKind.CROSS_INPUT_UNAVAILABLE,
+            IndependentPhaseReviewFailureKind.CROSS_INPUT_UNAVAILABLE,
         )
         self.assertEqual(review.work.cross_call_count, 0)
 
@@ -538,14 +538,14 @@ class NativeReviewContractTests(TestCase):
             ),
         )
         with patch(
-            "x5crop.detection.photo_geometry.template_native_review.fit_template_cross",
+            "x5crop.detection.photo_geometry.template_phase_review.fit_template_cross",
             return_value=bound,
         ) as fit_cross:
             review = self._build_single_review(lane)
         self.assertEqual(fit_cross.call_count, 1)
         self.assertEqual(
             review.failure.kind,
-            NativeEndpointReviewFailureKind.CROSS_BOUND_EXCEEDED,
+            IndependentPhaseReviewFailureKind.CROSS_BOUND_EXCEEDED,
         )
         self.assertIsNone(review.placement)
         self.assertEqual(review.work.compose_call_count, 0)
@@ -566,19 +566,52 @@ class NativeReviewContractTests(TestCase):
             ),
         )
         with patch(
-            "x5crop.detection.photo_geometry.template_native_review.fit_template_cross",
+            "x5crop.detection.photo_geometry.template_phase_review.fit_template_cross",
         ) as fit_cross:
             review = self._build_single_review(lane)
         self.assertEqual(
             review.failure.kind,
-            NativeEndpointReviewFailureKind.INITIAL_HEIGHT_DEPENDENCY_UNAVAILABLE,
+            IndependentPhaseReviewFailureKind.INITIAL_HEIGHT_DEPENDENCY_UNAVAILABLE,
         )
         self.assertEqual(fit_cross.call_count, 0)
         self.assertEqual(review.work.cross_call_count, 0)
 
+    def test_compose_failure_requires_a_call_and_replays_the_actual_failure(self):
+        from tools.regression.report_validation import _validate_independent_phase_attempt_context
+        from x5crop.detection.photo_geometry.template_source_domain import PhaseSourceDomain
+        from x5crop.detection.photo_geometry.model import BoundaryAxis
+        from x5crop.domain import Box, WorkspaceExtent
+        from x5crop.report.read_models import typed_read_model
+
+        lane = self._retained_lane()
+        competition = self._cross_competition(lane)
+        with patch(
+            "x5crop.detection.photo_geometry.template_phase_review.fit_template_cross",
+            return_value=competition,
+        ), patch(
+            "x5crop.detection.photo_geometry.template_phase_review.compose_format_placement",
+            side_effect=ValueError("invented compose failure"),
+        ):
+            portfolio = build_independent_phase_review(lane)
+        review = portfolio.reviews[0]
+        self.assertEqual(len(portfolio.intrinsic_refits), 1)
+        self.assertEqual(review.failure.kind, IndependentPhaseReviewFailureKind.COMPOSE_UNAVAILABLE)
+        with self.assertRaisesRegex(ValueError, "bounded stage"):
+            replace(review, work=replace(review.work, compose_call_count=0))
+        context = {
+            "phase_competition": typed_read_model(lane.phase_competition),
+            "cross_input": typed_read_model(lane.cross_input),
+            "lane_id": lane.lane.domain.lane_id,
+        }
+        domain = PhaseSourceDomain(lane.lane.domain.lane_id, Box(0, 0, 500, 400),
+                                   WorkspaceExtent(500, 400), BoundaryAxis.X)
+        with patch("tools.regression.report_validation.fit_template_cross", return_value=competition):
+            with self.assertRaisesRegex(ValueError, "invented its compose failure"):
+                _validate_independent_phase_attempt_context(context, typed_read_model(review), source_domain=domain)
+
     def test_typed_work_and_failure_cannot_claim_generated_output(self):
         with self.assertRaises(ValueError):
-            NativeEndpointReviewWorkReceipt(
+            IndependentPhaseReviewWorkReceipt(
                 cross_call_count=1,
                 cross_evaluated_fit_count=1,
                 compose_call_count=1,
@@ -592,7 +625,7 @@ class NativeReviewContractTests(TestCase):
                 peak_temporary_bytes=1,
             )
         with self.assertRaises(ValueError):
-            NativeEndpointReviewWorkReceipt(
+            IndependentPhaseReviewWorkReceipt(
                 cross_call_count=1,
                 cross_evaluated_fit_count=1,
                 compose_call_count=0,
@@ -608,15 +641,15 @@ class NativeReviewContractTests(TestCase):
         lane = self._retained_lane()
         competition = self._cross_competition(lane)
         with patch(
-            "x5crop.detection.photo_geometry.template_native_review.fit_template_cross",
+            "x5crop.detection.photo_geometry.template_phase_review.fit_template_cross",
             return_value=competition,
         ):
             review = self._build_single_review(lane)
         with self.assertRaises(ValueError):
             replace(
                 review,
-                failure=NativeEndpointReviewFailure(
-                    NativeEndpointReviewFailureKind.OUTPUT_UNAVAILABLE,
+                failure=IndependentPhaseReviewFailure(
+                    IndependentPhaseReviewFailureKind.OUTPUT_UNAVAILABLE,
                     "forced",
                 ),
             )

@@ -997,7 +997,7 @@ class TemplateLaneReconstruction:
     holder_fill_assessment: HolderFillAssessment | None
     content_veto_facts: tuple[ContentVetoFact, ...]
     work: TemplatePlacementWorkReceipt
-    native_endpoint_review: "NativeEndpointReviewPortfolio | None" = None
+    independent_phase_review: "IndependentPhaseReviewPortfolio | None" = None
 
     @property
     def common_h_output(self) -> CommonHOutput | None:
@@ -1013,12 +1013,12 @@ class TemplateLaneReconstruction:
     def __post_init__(self) -> None:
         if not self.lane_id or self.prepared.lane.domain.lane_id != self.lane_id:
             raise ValueError("template reconstruction lane authority is invalid")
-        portfolio = self.native_endpoint_review
+        portfolio = self.independent_phase_review
         if portfolio is not None:
-            from .template_native_review import NativeEndpointReviewPortfolio
+            from .template_phase_review import IndependentPhaseReviewPortfolio
 
-            if not isinstance(portfolio, NativeEndpointReviewPortfolio):
-                raise TypeError("native endpoint review is invalid")
+            if not isinstance(portfolio, IndependentPhaseReviewPortfolio):
+                raise TypeError("independent phase review is invalid")
             canonical_ids = {
                 item.placement_id
                 for item in self.placement_competition.placements
@@ -1038,16 +1038,16 @@ class TemplateLaneReconstruction:
                     native_review.placement is not None
                     and native_review.placement.lane_id != self.lane_id
                 ):
-                    raise ValueError("native endpoint review changed lane authority")
+                    raise ValueError("independent phase review changed lane authority")
                 if native_review.placement is not None and (
                     native_review.placement.placement_id in canonical_ids
                 ):
                     raise ValueError(
-                        "native endpoint review placement conflicts with canonical identity"
+                        "independent phase review placement conflicts with canonical identity"
                     )
                 if native_review.proposal.placement_id in canonical_ids:
                     raise ValueError(
-                        "native endpoint review proposal conflicts with canonical identity"
+                        "independent phase review proposal conflicts with canonical identity"
                     )
         common = self.common_h_output
         if self.work.common_h_composition_count:

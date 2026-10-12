@@ -52,9 +52,9 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record, validate_placement_feature_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v25"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v26"
-RETAINED_PLACEMENT_SCOPE = "retained_canonical_pair_conditional_cross_and_native_endpoint_review_proposals"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v26"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v27"
+RETAINED_PLACEMENT_SCOPE = "retained_canonical_pair_conditional_cross_and_independent_phase_review_proposals"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
 SOURCE_TIMEOUT_SECONDS = 600
@@ -922,12 +922,12 @@ def _retained_placement_gold_labels(
         *(("conditional" if item["placement_id"] == lane["conditional_proposal_placement_id"]
            else "runner", item) for item in lane["alternative_placement_proposals"]),
     )
-    portfolio = lane["native_endpoint_review"]
+    portfolio = lane["independent_phase_review"]
     if portfolio is not None:
         if portfolio["scope"] != "review_only":
-            raise ValueError("native endpoint proposal must remain review-only")
+            raise ValueError("independent phase proposal must remain review-only")
         proposals += tuple(
-            ("native_endpoint", review["proposal"])
+            (review["kind"], review["proposal"])
             for review in portfolio["reviews"]
         )
     labels = []
@@ -969,16 +969,21 @@ def _retained_placement_summary(records: Sequence[dict[str, Any]]) -> dict[str, 
         labels = record["retained_placement_gold_labels"]
         ids = [item["placement_id"] for item in labels]
         roles = [item["role"] for item in labels]
-        native_start = next(
-            (index for index, role in enumerate(roles) if role == "native_endpoint"),
+        independent_kinds = ("native_endpoint", "source_clipped_terminal", "intrinsic_refit")
+        independent_start = next(
+            (index for index, role in enumerate(roles) if role in independent_kinds),
             len(roles),
         )
-        canonical_roles = roles[:native_start]
-        native_roles = roles[native_start:]
+        canonical_roles = roles[:independent_start]
+        independent_roles = roles[independent_start:]
         if (
-            len(labels) > 7 or len(set(ids)) != len(ids)
-            or len(native_roles) > 4
-            or any(role != "native_endpoint" for role in native_roles)
+            len(labels) > 17 or len(set(ids)) != len(ids)
+            or independent_roles != [
+                kind for kind in independent_kinds
+                for role in independent_roles if role == kind
+            ]
+            or any(independent_roles.count(kind) > limit for kind, limit in
+                   zip(independent_kinds, (4, 6, 4), strict=True))
             or any(not isinstance(identity, str) or not identity for identity in ids)
             or canonical_roles
             not in ([], ["primary"], ["runner"], ["primary", "runner"],

@@ -69,7 +69,7 @@ class DebugStyleParameters:
     selected_boundary_color: tuple[int, int, int] = (255, 171, 37)
     competitor_color: tuple[int, int, int] = (197, 111, 255)
     conditional_proposal_color: tuple[int, int, int] = (242, 221, 103)
-    native_endpoint_review_color: tuple[int, int, int] = (255, 124, 184)
+    independent_phase_review_color: tuple[int, int, int] = (255, 124, 184)
     safe_output_color: tuple[int, int, int] = (30, 144, 255)
     approved_color: tuple[int, int, int] = (50, 183, 105)
     review_color: tuple[int, int, int] = (230, 73, 61)
@@ -130,7 +130,7 @@ class DebugStyleParameters:
             self.broad_material_transition_color,
             self.selected_boundary_color,
             self.competitor_color,
-            self.native_endpoint_review_color,
+            self.independent_phase_review_color,
             self.safe_output_color,
             self.approved_color,
             self.review_color,

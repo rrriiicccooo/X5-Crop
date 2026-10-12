@@ -566,7 +566,7 @@ class GoldAnalysisContractTest(unittest.TestCase):
             "placement_proposal": primary,
             "alternative_placement_proposals": [],
             "conditional_proposal_placement_id": None,
-            "native_endpoint_review": None,
+            "independent_phase_review": None,
         }
 
         def diagnostic(_record, proposal):
@@ -579,17 +579,17 @@ class GoldAnalysisContractTest(unittest.TestCase):
                    side_effect=diagnostic):
             self.assertEqual([item["role"] for item in
                               _retained_placement_gold_labels(gold, lane)], ["primary"])
-            lane["native_endpoint_review"] = {"scope": "review_only", "reviews": [{"proposal": native}]}
+            lane["independent_phase_review"] = {"scope": "review_only", "reviews": [{"kind": "native_endpoint", "proposal": native}]}
             labels = _retained_placement_gold_labels(gold, lane)
             self.assertEqual([item["role"] for item in labels], ["primary", "native_endpoint"])
             self.assertEqual([item["geometry_conformance"] for item in labels], ["unsafe", "safe"])
             self.assertIs(lane["placement_proposal"], primary)
             self.assertEqual(lane["alternative_placement_proposals"], [])
-            lane["native_endpoint_review"]["scope"] = "automatic_output"
+            lane["independent_phase_review"]["scope"] = "automatic_output"
             with self.assertRaisesRegex(ValueError, "review-only"):
                 _retained_placement_gold_labels(gold, lane)
 
-    def test_native_endpoint_safe_summary_preserves_canonical_roles_and_max_seven(self) -> None:
+    def test_independent_phase_summary_preserves_order_and_each_class_bound(self) -> None:
         record = self._analysis_record(
             "native-only-safe", source_sha256="c" * 64, role="nominal",
             decision="needs_review", proposal="unsafe", candidate="not_available",
@@ -623,11 +623,24 @@ class GoldAnalysisContractTest(unittest.TestCase):
         self.assertEqual(_retained_placement_summary((record,))["placement_label_counts"],
                          {"safe": 4, "unsafe": 3})
 
+        all_roles = roles[:3] + ["native_endpoint"] * 4 + ["source_clipped_terminal"] * 6 + ["intrinsic_refit"] * 4
+        record["retained_placement_gold_labels"] = [label(role) for role in all_roles]
+        for index, item in enumerate(record["retained_placement_gold_labels"]):
+            item["placement_id"] += f":{index}"
+            item["acceptability_features"]["placement_id"] = item["placement_id"]
+        self.assertEqual(_retained_placement_summary((record,))["placement_label_counts"],
+                         {"safe": 4, "unsafe": 13})
+
         for invalid_roles in (
             ["primary", "native_endpoint", "runner"],
             ["primary", "runner", "runner"],
             ["native_endpoint", "conditional"],
             [*roles, *["native_endpoint"] * 4],
+            ["source_clipped_terminal"] * 7,
+            ["intrinsic_refit"] * 5,
+            ["source_clipped_terminal", "native_endpoint"],
+            ["intrinsic_refit", "source_clipped_terminal"],
+            ["primary", "unknown_phase_kind"],
         ):
             record["retained_placement_gold_labels"] = [label(role) for role in invalid_roles]
             # Give repeated roles distinct IDs so role/order validation is exercised.

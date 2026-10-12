@@ -21,9 +21,15 @@ from x5crop.detection.photo_geometry.template_output import common_direct_use_bu
 from x5crop.detection.photo_geometry.output_model import OutputFootprint, fixed_output_coverage
 from x5crop.detection.photo_geometry.template_holder_fill import HolderFillAssessment
 from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
-from x5crop.detection.photo_geometry.template_native_review import (
-    NativeEndpointReview, NativeEndpointReviewPortfolio,
+from x5crop.detection.photo_geometry.template_phase_review import (
+    IndependentPhaseReview, IndependentPhaseReviewPortfolio,
 )
+from x5crop.detection.photo_geometry.template_intrinsic_review_refit import (
+    build_intrinsic_phase_refit,
+)
+from x5crop.detection.photo_geometry.template_source_clipped import SourceClippedPhaseDiagnostic
+from x5crop.detection.photo_geometry.template_source_domain import PhaseSourceDomain
+from x5crop.detection.photo_geometry.axis_layout import axis_interval
 from x5crop.detection.evidence.scan_canvas import MatchedHolder
 
 from x5crop.detection.candidate.assessment.model import CANDIDATE_GATE_CHECK_CODES
@@ -71,6 +77,7 @@ from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseFitStatus,
     PhaseRetainedProposalBasis,
     PhaseFitResult,
+    TemplatePhaseInput,
 )
 from x5crop.detection.photo_geometry.template_placement import (
     compile_cross_support_domains_px,
@@ -3436,7 +3443,7 @@ def _read_common_proof(value: Any, model: type) -> Any:
                      CrossFitCompetition, CrossRoleBinding, PhotoBoundaryObservation,
                      SourceScanGeometry, HolderFillAssessment, FormatPlacement, ExteriorRegionMeasurement,
                      TemplateCrossInput, CoarseStripSupport, PhotoBoundaryMeasurementSet, CrossRegistrationWorkReceipt,
-                     NativeEndpointReview, NativeEndpointReviewPortfolio, MatchedHolder):
+                     IndependentPhaseReview, IndependentPhaseReviewPortfolio, MatchedHolder, TemplatePhaseInput):
         raise ValueError("unsupported common-output proof root")
 
     def read(raw: Any, kind: Any) -> Any:
@@ -3749,19 +3756,19 @@ def _validate_finalization(
         raise ValueError("review output contract is incomplete")
 
 
-def _validate_native_endpoint_attempt(
+def _validate_independent_phase_attempt(
     lane: dict[str, Any],
     value: dict[str, Any],
     *,
     expected_source_extent: WorkspaceExtent,
     matched_holder: MatchedHolder | None,
-) -> NativeEndpointReview:
+) -> IndependentPhaseReview:
     """Replay the independent Review geometry without selecting it."""
 
-    review = _read_common_proof(value, NativeEndpointReview)
+    review = _read_common_proof(value, IndependentPhaseReview)
     source = _read_common_proof(lane["source_scan_geometry"], SourceScanGeometry)
     if matched_holder is None:
-        raise ValueError("native endpoint Review lost its scan-canvas scale authority")
+        raise ValueError("independent phase Review lost its scan-canvas scale authority")
     scales = matched_holder.axis_scales
     initial = SourceScanGeometry.create(
         source.frame_spec,
@@ -3772,13 +3779,18 @@ def _validate_native_endpoint_attempt(
     if (native_source.frame_spec != initial.frame_spec
             or native_source.width_state != initial.width_state
             or native_source.height_state != initial.height_state):
-        raise ValueError("native endpoint Review inherited calibrated source geometry")
+        raise ValueError("independent phase Review inherited calibrated source geometry")
     # Source identities are allocated inside the original processing run.
     # Replay the complete physical state under that already validated identity.
     initial = replace(initial, geometry_id=native_source.geometry_id)
     diagnostic = review.phase_diagnostic
     if diagnostic.fit.template.template_id != lane["template_id"]:
-        raise ValueError("native endpoint Review changed its fixed template")
+        raise ValueError("independent phase Review changed its fixed template")
+    if isinstance(diagnostic, SourceClippedPhaseDiagnostic) and (
+        diagnostic.source_domain.source_extent != expected_source_extent
+        or diagnostic.source_domain.lane_id != lane["lane_id"]
+    ):
+        raise ValueError("source-clipped Review changed its canonical TIFF domain")
     canonical_ids = {
         item["placement_id"]
         for item in (lane["placement_proposal"], *lane["alternative_placement_proposals"])
@@ -3791,7 +3803,7 @@ def _validate_native_endpoint_attempt(
         review.proposal.placement_id is not None
         and review.proposal.placement_id in canonical_ids
     ):
-        raise ValueError("native endpoint Review entered canonical placement identities")
+        raise ValueError("independent phase Review entered canonical placement identities")
     outputs = _validate_placement_proposal(
         value["proposal"], lane_id=lane["lane_id"],
         source_geometry=value["source_scan_geometry"],
@@ -3815,42 +3827,48 @@ def _validate_native_endpoint_attempt(
         authority_id=placement.enclosing_support_aperture_authority.authority_id,
     ))
     if replay != placement:
-        raise ValueError("native endpoint Review composition is not reproducible")
+        raise ValueError("independent phase Review composition is not reproducible")
     from x5crop.detection.photo_geometry.template_feasible_geometry import project_format_placement
     from x5crop.detection.photo_geometry.template_output import _footprint, joint_placement_envelope
     try:
         projection = project_format_placement(placement)
-    except ValueError:
-        if outputs:
-            raise ValueError("native endpoint Review generated an infeasible projection")
+    except ValueError as error:
+        from x5crop.detection.photo_geometry.template_phase_review import IndependentPhaseReviewFailureKind
+        if (outputs or review.failure is None
+                or review.failure.kind != IndependentPhaseReviewFailureKind.PLACEMENT_PROJECTION_UNAVAILABLE
+                or review.failure.detail != str(error)):
+            raise ValueError("independent phase Review generated an infeasible projection")
         return review
+    if review.failure is not None and review.failure.kind.value == "placement_projection_unavailable":
+        raise ValueError("independent phase Review invented its projection failure")
     for ordinal, output in enumerate(outputs, 1):
         envelope = joint_placement_envelope(placement, projection, ordinal)
         envelope = replace(envelope, projection_id=output["envelope"]["projection_id"])
         mandatory = _footprint(placement, placement.frames[ordinal - 1], projection, apply_residual=True)
         if (typed_read_model(envelope) != output["envelope"]
                 or typed_read_model(mandatory) != output["mandatory_source_footprint"]):
-            raise ValueError("native endpoint Review lost complete physical protection")
+            raise ValueError("independent phase Review lost complete physical protection")
     from x5crop.detection.photo_geometry.template_acceptability_features import build_placement_acceptability_features
     features = build_placement_acceptability_features(
         placement, review.proposal.output_footprints,
         review.proposal.direct_use_budget_assessments,
     )
     if features != review.proposal.acceptability_features:
-        raise ValueError("native endpoint Review feature facts are not reproducible")
+        raise ValueError("independent phase Review feature facts are not reproducible")
     return review
 
 
-def _validate_native_endpoint_attempt_context(
+def _validate_independent_phase_attempt_context(
     lane: dict[str, Any], value: dict[str, Any],
+    *, source_domain: PhaseSourceDomain | None = None,
 ) -> None:
     """Replay the single DIRECT-only Cross context against registered input."""
 
-    from x5crop.detection.photo_geometry.template_native_review import (
-        NativeEndpointReviewFailureKind, native_endpoint_cross_input,
-        _NativeEndpointCrossInputError,
+    from x5crop.detection.photo_geometry.template_phase_review import (
+        IndependentPhaseReviewFailureKind, independent_phase_cross_input,
+        _IndependentPhaseCrossInputError,
     )
-    review = _read_common_proof(value, NativeEndpointReview)
+    review = _read_common_proof(value, IndependentPhaseReview)
     diagnostic = review.phase_diagnostic
     phase = _read_common_proof(lane["phase_competition"], PhaseFitResult)
     registered = set(phase.registered_direct_observation_ids)
@@ -3858,20 +3876,26 @@ def _validate_native_endpoint_attempt_context(
         identity for identity in diagnostic.fit.binding_observation_ids
         if identity is not None
     }.issubset(registered):
-        raise ValueError("native endpoint Review escaped its registered phase template")
+        raise ValueError("independent phase Review escaped its registered phase template")
+    origin = getattr(diagnostic, "original_diagnostic", diagnostic)
+    if not {
+        fact.observation_id
+        for fact in origin.projection.input_direct_role_authority.facts
+    }.issubset(registered):
+        raise ValueError("independent phase Review lost its original registered ledger")
     original = _read_common_proof(lane["cross_input"], TemplateCrossInput)
     try:
-        expected = native_endpoint_cross_input(original, review.source_scan_geometry, diagnostic.fit)
+        expected = independent_phase_cross_input(original, review.source_scan_geometry, diagnostic.fit)
     except ValueError as error:
         kind = (
-            error.kind if isinstance(error, _NativeEndpointCrossInputError)
-            else NativeEndpointReviewFailureKind.CROSS_INPUT_UNAVAILABLE
+            error.kind if isinstance(error, _IndependentPhaseCrossInputError)
+            else IndependentPhaseReviewFailureKind.CROSS_INPUT_UNAVAILABLE
         )
         if review.cross_input is not None or review.failure is None or review.failure.kind != kind:
-            raise ValueError("native endpoint Review concealed its Cross input failure") from error
+            raise ValueError("independent phase Review concealed its Cross input failure") from error
         return
     if review.cross_input != expected:
-        raise ValueError("native endpoint Review changed registered Cross context")
+        raise ValueError("independent phase Review changed registered Cross context")
     replay = fit_template_cross(expected)
 
     def comparison(fit):
@@ -3886,45 +3910,115 @@ def _validate_native_endpoint_attempt_context(
             or replay.failure_kind != review.cross_failure_kind
             or replay.receipt != review.cross_receipt
             or comparison(replay.best) != comparison(review.cross_best)):
-        raise ValueError("native endpoint Review Cross best or bounded work is not reproducible")
+        raise ValueError("independent phase Review Cross best or bounded work is not reproducible")
+    if review.failure is not None and review.failure.kind == IndependentPhaseReviewFailureKind.COMPOSE_UNAVAILABLE:
+        if source_domain is None:
+            raise ValueError("independent phase Review compose failure lacks its source domain")
+        from x5crop.detection.photo_geometry.template_placement import compose_format_placement
+        box = source_domain.sampling_authority_box
+        width_axis = source_domain.width_axis
+        horizontal = width_axis == BoundaryAxis.X
+        try:
+            compose_format_placement(
+                lane_id=lane["lane_id"], frame_spec=review.source_scan_geometry.frame_spec,
+                source_scan_geometry=review.source_scan_geometry, sequence_fit=diagnostic.fit,
+                global_lattice_authority=None, cross_fit=review.cross_best,
+                width_axis=width_axis, height_axis=BoundaryAxis.Y if horizontal else BoundaryAxis.X,
+                width_authority_px=axis_interval(box, width_axis),
+                height_authority_px=axis_interval(box, BoundaryAxis.Y if horizontal else BoundaryAxis.X),
+                template=diagnostic.fit.template, placement_id="review-compose-failure-replay",
+            )
+        except ValueError as error:
+            if str(error) != review.failure.detail:
+                raise ValueError("independent phase Review changed its compose failure") from error
+        else:
+            raise ValueError("independent phase Review invented its compose failure")
 
 
-def _validate_native_endpoint_review(
+def _validate_independent_phase_review(
     lane: dict[str, Any],
     *,
     expected_source_extent: WorkspaceExtent,
     matched_holder: MatchedHolder | None,
-) -> NativeEndpointReviewPortfolio | None:
+) -> IndependentPhaseReviewPortfolio | None:
     """Validate every complete physical endpoint class without selecting it."""
 
-    if "native_endpoint_review" not in lane:
-        raise ValueError("lane lost its independent native endpoint Review record")
-    value = lane["native_endpoint_review"]
+    if "independent_phase_review" not in lane:
+        raise ValueError("lane lost its independent phase Review record")
+    value = lane["independent_phase_review"]
     if value is None:
         return None
-    portfolio = _read_common_proof(value, NativeEndpointReviewPortfolio)
+    portfolio = _read_common_proof(value, IndependentPhaseReviewPortfolio)
     for review in value["reviews"]:
-        _validate_native_endpoint_attempt(
+        _validate_independent_phase_attempt(
             lane, review, expected_source_extent=expected_source_extent,
             matched_holder=matched_holder,
         )
     return portfolio
 
 
-def _validate_native_endpoint_context(
+def _validate_independent_phase_context(
     lane: dict[str, Any], production_lane: dict[str, Any],
+    *, measurement: dict[str, Any], layout: str, source_extent: WorkspaceExtent,
 ) -> None:
-    value = production_lane["native_endpoint_review"]
+    value = production_lane["independent_phase_review"]
     if value is None:
         return
-    portfolio = _read_common_proof(value, NativeEndpointReviewPortfolio)
+    portfolio = _read_common_proof(value, IndependentPhaseReviewPortfolio)
     phase = _read_common_proof(lane["phase_competition"], PhaseFitResult)
-    if portfolio.phase_retention.record_scan_count > (
-        phase.receipt.candidate_direct_role_projection_evaluation_count
+    for retention in (portfolio.native_phase_retention, portfolio.source_clipped_phase_retention):
+        if retention is not None and retention.record_scan_count > (
+            phase.receipt.candidate_direct_role_projection_evaluation_count
+        ):
+            raise ValueError("independent phase Review invented phase projection records")
+    domains = [item for item in measurement["source_lanes"]
+               if item["domain"]["lane_id"] == lane["lane_id"]]
+    if len(domains) != 1:
+        raise ValueError("independent phase Review lost its registered source lane")
+    work = Box(**domains[0]["domain"]["work_box"])
+    if layout == "vertical":
+        work = Box(work.top, work.left, work.bottom, work.right)
+    elif layout != "horizontal":
+        raise ValueError("independent phase Review source layout is invalid")
+    source_domain = PhaseSourceDomain(
+        lane["lane_id"], work, source_extent,
+        BoundaryAxis.X if layout == "horizontal" else BoundaryAxis.Y,
+    )
+    if portfolio.source_clipped_phase_retention is not None and (
+        portfolio.source_clipped_phase_retention.source_domain != source_domain
     ):
-        raise ValueError("native endpoint Review invented phase projection records")
+        raise ValueError("source-clipped Review changed its registered lane domain")
     for review in value["reviews"]:
-        _validate_native_endpoint_attempt_context(lane, review)
+        _validate_independent_phase_attempt_context(lane, review, source_domain=source_domain)
+    refit_input = lane.get("intrinsic_refit_input")
+    if not portfolio.intrinsic_refits:
+        if refit_input is not None:
+            raise ValueError("independent phase Review retained an unused refit input")
+        return
+    phase_input = _read_common_proof(refit_input, TemplatePhaseInput)
+    observations = lane["observations"]
+    if (
+        phase_input.template != phase.template
+        or phase_input.source_domain != source_domain
+        or phase_input.holder_span_px != axis_interval(work, source_domain.width_axis)
+        or typed_read_model(phase_input.observations) != observations["sequence_edges"]
+        or typed_read_model(phase_input.separator_bands) != observations["separator_bands"]
+        or typed_read_model(phase_input.outer_material_boundaries) != observations["outer_material_boundaries"]
+        or typed_read_model(phase_input.contact_edge_observations) != observations["contact_edge_observations"]
+        or typed_read_model(phase_input.overlap_edge_pair_observations) != observations["overlap_edge_pair_observations"]
+        or typed_read_model(phase_input.scale_px_per_mm)
+        != domains[0]["axis_scale_intervals"]["width_axis_px_per_mm"]
+    ):
+        raise ValueError("intrinsic phase Review changed its registered Prepared context")
+    from x5crop.report.development import _measurement_set_read_model
+    registered_sequence = [item for item in measurement["queries"]
+                           if item["query"]["lane_id"] == lane["lane_id"]
+                           and item["query"]["purpose"] == QueryPurpose.SEQUENCE_ANCHOR_WINDOW.value]
+    if [_measurement_set_read_model(item) for item in phase_input.sequence_measurement_sets] != registered_sequence:
+        raise ValueError("intrinsic phase Review changed its registered sequence measurements")
+    for refit in portfolio.intrinsic_refits:
+        if build_intrinsic_phase_refit(phase_input, refit.original_diagnostic) != refit:
+            raise ValueError("intrinsic phase Review refit or work is not reproducible")
 
 
 def _validate_geometry(
@@ -4061,7 +4155,7 @@ def _validate_geometry(
                 or alternative_outputs and len(alternative_outputs) != slot_count
             ):
                 raise ValueError("alternative proposal identity or slot count is invalid")
-        _validate_native_endpoint_review(
+        _validate_independent_phase_review(
             lane, expected_source_extent=expected_source_extent,
             matched_holder=None if holder is None else _read_common_proof(holder, MatchedHolder),
         )
@@ -5059,8 +5153,8 @@ def _validate_development(record: dict[str, Any]) -> None:
             != production_lane.get("placement_proposal")
             or lane.get("alternative_placement_proposals")
             != production_lane.get("alternative_placement_proposals")
-            or "native_endpoint_review" not in lane
-            or lane["native_endpoint_review"] != production_lane["native_endpoint_review"]
+            or "independent_phase_review" not in lane
+            or lane["independent_phase_review"] != production_lane["independent_phase_review"]
             or "common_h_output" not in lane
             or lane["common_h_output"] != production_lane["common_h_output"]
             or "common_h_authority" not in lane
@@ -5094,7 +5188,11 @@ def _validate_development(record: dict[str, Any]) -> None:
             for proposal in (lane["placement_proposal"], *lane["alternative_placement_proposals"])
             if proposal["placement_id"] is not None
         ]
-        _validate_native_endpoint_context(lane, production_lane)
+        _validate_independent_phase_context(
+            lane, production_lane, measurement=development["measurement"],
+            layout=record["measurement"]["layout"],
+            source_extent=WorkspaceExtent(**record["measurement"]["source_extent"]),
+        )
         placements = placement.get("placements")
         if not isinstance(placements, list) or len(placements) > 3:
             raise ValueError("retained placement set exceeds its compiled bound")

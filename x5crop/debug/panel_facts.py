@@ -94,7 +94,7 @@ def conditional_geometry_by_identity(
     return _placement_geometry_by_identity(detection, placement_ids)
 
 
-def native_endpoint_geometry_by_identity(
+def independent_phase_geometry_by_identity(
     detection: FinalDetection,
 ) -> tuple[tuple[int, TemplateFrame], ...]:
     """Read the independent Review wrapper; never search canonical placements."""
@@ -105,7 +105,7 @@ def native_endpoint_geometry_by_identity(
     }
     values: list[tuple[int, TemplateFrame]] = []
     for lane in detection.candidate.geometry.lane_reconstructions:
-        portfolio = lane.native_endpoint_review
+        portfolio = lane.independent_phase_review
         if portfolio is None:
             continue
         for review in portfolio.reviews:
