@@ -641,6 +641,9 @@ Grid 始终可以生成一个待检验的默认 placement，但它不能仅凭�
 角色须在 lane 连续域内，越界只允许发生在首 START 或末 END，且对应 lane 侧必须是真实 TIFF 外缘；
 每格须有正向跨度与正的可见交集。反向、内部 lane 越界或整格不可见均拒绝。不移动原坐标、不夹紧 fit，
 不增加 seed、query 或拟合 pass，也不因此取得 source clipping、角色或输出权限。
+这类额外准入只供独立源截断 Review 池使用；canonical competition、失败诊断位置与原生端点保留池
+仍按投影前 input fit 核验原 holder 范围，不让额外 ordinal 解释替换原 winner/runner。全部实际 authority
+核验与 projection 仍计入同一工作量 receipt。
 
 - 连续小误差保存在一个 placement 的区间中。
 - 不同 ordinal mapping 或相隔明显的 phase 是离散 placements，保留 winner/runner，绝不平均。
@@ -1617,8 +1620,10 @@ geometry 和 output identity 保留为 provenance，不编码为数值特征；s
 全体最高分与只含 primary/runner 的最高分分别保存。有条件及独立 phase 提案只提供开发标签与分数，不取得
 canonical selection 或自动输出权限；无完整 footprint 的候选不进入排序。
 至少需要五个 source group。方法在查看该轮结果前冻结为
-`source_balanced_standardized_ridge_ranking_v1`：source SHA 排序后循环分配五折，同源 count 变体同折；
+`source_balanced_standardized_ridge_ranking_v2`：source SHA 排序后循环分配五折，同源 count 变体同折；
 每个 source 总权重相等，其内已生成候选等权。仅用训练折拟合各特征的观测均值与标准差；
+加权总量、均值与方差使用固定顺序的 `math.fsum`，保持严格统计重放与来源哈希，不依赖 BLAS 的
+浮点归约路径或数组地址。Ridge 目标、权重、训练/测试隔离及开发排序权限不变。
 缺失项标准化后填 0，另加 28 个缺失指示量。常量与全缺失维度尺度为 1，全缺失中心为 0。
 加权最小二乘使用固定 ridge 系数 0.1，截距不惩罚；不根据本轮结果搜索参数。分数无界，不称为概率。
 每份已有候选独立学习安全标签，多正例不竞争归一化；unavailable 不参与训练或排序。
@@ -2090,7 +2095,8 @@ competition、alternatives、source proposal、共同 H、selected output 与两
 只按完整 fit、projection、residual 与端点事实身份去重，几何相近但原投影不同的解释分别保留。
 同模板跨 pass 每类只比较 prior/current 两份完整记录；不同模板不携带。所有类均保留原歧义，不挑选自动输出。
 
-源截断记录使用同一既有池及完整 input/output projection。`PhaseSourceDomain` 须确认至少一条真实
+源截断记录使用包含额外源域准入的完整既有池及 input/output projection；原生端点池只消费原 holder
+准入的记录，二者均不额外生成 seed 或拟合。`PhaseSourceDomain` 须确认至少一条真实
 源边截断；原 `supported` 的 `source_wide_edge | aggregate_union` 事实须与有效 fit 中同一
 `PHASE_ANCHOR` role/observation 绑定对应，原 direct constraint rank 须可重算且为 1–3。
 首 START 与末 END 各按原 rank 1、2、3 构成六个固定类；同时截断可属于两类。每类依次比较 intrinsic

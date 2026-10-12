@@ -74,6 +74,7 @@ When photographs extend beyond a true TIFF edge, the report may show up to six a
 If a native endpoint interpretation cannot form a complete crop, existing source-wide or aggregate boundaries may
 also produce a fixed refit proposal with the original failure and all remaining boundary counterevidence preserved.
 These independent proposals are marked Review and retain their own protection ranges and budget results.
+Additional source-clipped interpretations preserve the primary and runner positions.
 When top/bottom evidence is insufficient, fixed-height review proposals prefer boundaries with measured support across
 all positioned photographs. The report preserves their original role evidence and blocking reasons for manual review.
 If the primary cannot form a complete crop but the runner already has a complete proposal, the report retains that

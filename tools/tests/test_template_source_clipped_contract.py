@@ -293,6 +293,12 @@ class SourceClippedRetentionContractTests(unittest.TestCase):
         result = fit_template_phase(observations, phase_template(3), holder_span_px=holder,
             source_domain=domain,
             sequence_measurement_sets=(phase_sequence_measurement("visible-source", holder),))
+        canonical = fit_template_phase(observations, phase_template(3), holder_span_px=holder,
+            sequence_measurement_sets=(phase_sequence_measurement("visible-source", holder),))
+        self.assertGreater(result.receipt.candidate_direct_role_projection_evaluation_count,
+            canonical.receipt.candidate_direct_role_projection_evaluation_count)
+        self.assertEqual(replace(result, receipt=canonical.receipt,
+            _source_clipped_phase_retention=None), canonical)
         retained = result._source_clipped_phase_retention
         self.assertIsNotNone(retained)
         self.assertTrue(retained.diagnostics)

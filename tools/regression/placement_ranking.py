@@ -30,7 +30,7 @@ from .report_validation import validate_placement_feature_record
 RANKING_SCHEMA = "x5crop_development_placement_ranking_v4"
 CONDITIONAL_ROLE_SCOPE = "development_label_and_score_only"
 INDEPENDENT_PHASE_ROLE_SCOPE = "development_label_and_score_only"
-MODEL_SPEC = "source_balanced_standardized_ridge_ranking_v1"
+MODEL_SPEC = "source_balanced_standardized_ridge_ranking_v2"
 RANKING_RULE = "maximum_score_then_retained_order_v1"
 FOLD_COUNT = 5
 RIDGE_PENALTY = 0.1
@@ -123,10 +123,20 @@ def _training_transform(examples: Sequence[RankingExample]) -> dict[str, Any]:
             maximums.append(None)
             continue
         values = column[observed]
-        observed_weights = weights[observed] / weights[observed].sum()
+        observed_weights = weights[observed]
+        weight_total = math.fsum(float(weight) for weight in observed_weights)
         minimum, maximum = float(values.min()), float(values.max())
-        center = minimum if minimum == maximum else float(observed_weights @ values)
-        variance = float(observed_weights @ ((values - center) ** 2))
+        # These statistics are exact provenance fields, recomputed by the
+        # validator. Keep their reduction independent of BLAS kernels and
+        # array alignment while preserving the declared weighted moments.
+        center = minimum if minimum == maximum else math.fsum(
+            float(weight) * float(value)
+            for weight, value in zip(observed_weights, values, strict=True)
+        ) / weight_total
+        variance = math.fsum(
+            float(weight) * (float(value) - center) ** 2
+            for weight, value in zip(observed_weights, values, strict=True)
+        ) / weight_total
         centers.append(center)
         scales.append(1.0 if minimum == maximum else math.sqrt(variance))
         minimums.append(minimum)

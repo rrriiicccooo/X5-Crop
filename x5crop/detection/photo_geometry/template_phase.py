@@ -617,6 +617,22 @@ def _unseparated_completion_competitor(
     return None
 
 
+def _candidate_respects_holder(
+    fit: SequenceFit,
+    *,
+    holder_span_px: FiniteInterval | None,
+    holder_slack_px: float,
+) -> bool:
+    """Keep the canonical competition's original holder admission."""
+
+    limits = _holder_limits(holder_span_px)
+    positions = fit.model_role_positions_px
+    return limits is None or (
+        min(positions) >= limits[0] - holder_slack_px
+        and max(positions) <= limits[1] + holder_slack_px
+    )
+
+
 def _candidate_respects_holder_or_terminal_source(
     fit: SequenceFit,
     *,
@@ -624,13 +640,10 @@ def _candidate_respects_holder_or_terminal_source(
     holder_slack_px: float,
     source_domain: PhaseSourceDomain | None,
 ) -> bool:
-    """Defer only true source-terminal overflow to existing final checks."""
+    """Admit extra true source-terminal fits only for independent Review."""
 
-    limits = _holder_limits(holder_span_px)
-    positions = fit.model_role_positions_px
-    if limits is None or (
-        min(positions) >= limits[0] - holder_slack_px
-        and max(positions) <= limits[1] + holder_slack_px
+    if _candidate_respects_holder(
+        fit, holder_span_px=holder_span_px, holder_slack_px=holder_slack_px,
     ):
         return True
     if source_domain is None:
@@ -1254,8 +1267,18 @@ def fit_template_phase(
         if candidate_authorities
         else ()
     )
+    # Admission through the true-source domain does not grant a new ordinal
+    # interpretation a place in canonical competition or the native pool.
+    # Filter on the original input fit, before authority projection can move it.
+    canonical_projection_records = tuple(
+        record for record in projection_records
+        if _candidate_respects_holder(
+            record[0].fit, holder_span_px=holder_span_px,
+            holder_slack_px=width0 * 0.04,
+        )
+    )
     native_retention = select_native_phase_retention(
-        projection_records, template=template,
+        canonical_projection_records, template=template,
     )
     source_clipped_retention = select_source_clipped_phase_retention(
         projection_records, template=template, source_domain=source_domain,
@@ -1281,7 +1304,7 @@ def fit_template_phase(
     ] = (
         tuple(
             (projected, projection)
-            for _input, projected, projection in projection_records
+            for _input, projected, projection in canonical_projection_records
             if projected is not None
             and respects_phase_anchor_authority_ceiling(projected)
         )
@@ -1289,18 +1312,22 @@ def fit_template_phase(
         else tuple(
             (candidate, None)
             for candidate in candidates
-            if respects_phase_anchor_authority_ceiling(candidate)
+            if _candidate_respects_holder(
+                candidate.fit, holder_span_px=holder_span_px,
+                holder_slack_px=width0 * 0.04,
+            )
+            and respects_phase_anchor_authority_ceiling(candidate)
         )
     )
     terminal_records = tuple(
         (input_candidate, projection)
-        for input_candidate, projected, projection in projection_records
+        for input_candidate, projected, projection in canonical_projection_records
         if projected is None
     )
     phase_anchor_authority_exceeded = any(
         projected is not None
         and not respects_phase_anchor_authority_ceiling(projected)
-        for _input, projected, _projection in projection_records
+        for _input, projected, _projection in canonical_projection_records
     )
 
     def record_rank(
@@ -1384,7 +1411,8 @@ def fit_template_phase(
             seed_peak_bytes,
             len(seeds) * len(roles) * 32 + len(ordered) * len(roles) * 96,
             overlap_validation_peak_bytes,
-        ) + (len(roles) * 128 if terminal_records else 0),
+        ) + (len(roles) * 128 if terminal_records else 0)
+        + 8 * len(canonical_projection_records),
         candidate_direct_role_authority_evaluation_count=len(
             candidate_authorities
         ),
@@ -1445,7 +1473,7 @@ def fit_template_phase(
             sorted(
                 (
                     (input_candidate, projection)
-                    for input_candidate, projected, projection in projection_records
+                    for input_candidate, projected, projection in canonical_projection_records
                     if projected is None and input_candidate.residual_compatible
                 ),
                 key=record_rank,

@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import math
 import unittest
+from unittest.mock import patch
+
+import numpy as np
 
 from tools.regression.placement_ranking import (
     INDEPENDENT_PHASE_ROLE_SCOPE, RANKING_SCHEMA,
     FEATURE_NAMES, RankingExample, _examples, _fit_model, _fold_assignments,
     _model_id, _scores, _source_weights, _training_transform,
+    _raw_features, _validate_fitted_model,
     build_development_ranking, validate_development_ranking,
 )
 from tools.tests.template_runtime_test_support import retained_proposal_fixture
@@ -60,6 +65,28 @@ class PlacementRankingContractTest(unittest.TestCase):
         for fold, model in enumerate(artifact["fold_models"]):
             self.assertFalse(set(model["training_source_sha256s"]) &
                              {source for source, assigned in folds.items() if assigned == fold})
+
+    def test_weighted_moments_are_alignment_independent_and_remain_strict_provenance(self):
+        # Source 1 contributes two candidates, source 2 one: weights 1/4, 1/4, 1/2.
+        examples = (self._example(1, 0.0, False), self._example(1, 1.0, True),
+                    self._example(2, 3.0, True))
+        expected = _training_transform(examples)
+        self.assertEqual(expected["centers"][0], 1.75)
+        self.assertEqual(expected["scales"][0], math.sqrt(1.6875))
+        raw = _raw_features(examples)
+        for offset in range(8):
+            storage = np.empty(raw.size + offset, dtype=np.float64)
+            shifted = storage[offset:].reshape(raw.shape)
+            shifted[:] = raw
+            with self.subTest(offset=offset), patch(
+                "tools.regression.placement_ranking._raw_features", return_value=shifted,
+            ):
+                self.assertEqual(_training_transform(examples), expected)
+        model = _fit_model(examples)
+        model["scales"][0] = math.nextafter(model["scales"][0], math.inf)
+        model["model_id"] = _model_id(model)
+        with self.assertRaisesRegex(ValueError, "provenance"):
+            _validate_fitted_model(model, examples)
 
     def test_transform_and_fold_fit_do_not_consume_heldout_features_or_labels(self):
         records = self._records()
