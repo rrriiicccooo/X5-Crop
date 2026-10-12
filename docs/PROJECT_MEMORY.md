@@ -6,17 +6,17 @@
 
 ## 当前目标
 
-V5 继续保持 current-only、单一职责和零危险自动批准。当前进行有界的性能/RSS、架构、测试与文档审计；
-性能优化和模块 owner 更新仍在进行。发布未授权，不创建 RC、tag、
-GitHub Release 或公开 ZIP。
+V5 保持 current-only、单一职责和零危险自动批准。本轮有界性能/RSS、架构、测试与文档审计已完成。
+3 秒为非阻塞 challenge；发布未授权。
 
 ## 最新可验证检查点
 
 ### Development gold
 
 最新完整报告为
-`Test/gold_analysis/proposal_sequence_20261011/full_holder_admission_partition/gold_analysis_summary.json`，
-绑定 gold commit `c54fadeb`；当前 `cf5e2a49` 仅有测试 fixture 差异，不能把该报告当作当前发布证书。
+`Test/engineering_audit_20261012/optimized_gold/gold_analysis_summary.json`，绑定 `45a66e36`。
+后续 `ba3e9a94` 仅调整测试；detector/comparator 源码身份不变。与审计前完整 gold 相比，110 条记录
+除耗时外完全相等，比较证据为 `Test/engineering_audit_20261012/gold_equivalence.json`。
 
 | 项目 | 结果 |
 |---|---|
@@ -28,21 +28,43 @@ GitHub Release 或公开 ZIP。
 | `release_detection_gate_ready` | `false` |
 
 该集合仍是 development diagnostic；安全提案、候选资格和 Runtime 最终决定分别计数，不能互换权限。
-对应 development cohort SHA 为
-`daaea2ad49564616342051253c8fa67c4922a260d0dcc92f0d187f7b2eb10288`。
+对应 cohort、detector 和 comparator SHA 分别为：
 
-### 性能基线
+```text
+cohort     daaea2ad49564616342051253c8fa67c4922a260d0dcc92f0d187f7b2eb10288
+detector   2008c5dd9ce7f0dc98b999f61047e94a1d06bf6afba2c90b6e4c46258cde332b
+comparator 67ac1b0c03bc674e23e9325020936aaa8ae5538bd50825df0b73404eec87bf25
+```
 
-当前基线 receipt 为 `Test/engineering_audit_20261012/baseline_performance_receipt.json`，绑定
-`cf5e2a49`：24-source 平均 `5.841136s`，p50 `5.432742s`，p95 `9.396120s`，最慢 S096 为
-`9.815311s`；RSS 平均 `982667946.67` bytes，峰值 `1690714112` bytes（S024）。5 秒 Gate 未通过，
-3 秒 challenge 未达到。该结果只是本次 baseline，不能写成已优化最好或最终结果。
+### 性能与 RSS
 
-### CI
+同一 24-source cohort、环境与硬件的成对测量位于 `Test/engineering_audit_20261012/`：
+`baseline_performance_receipt.json` 绑定 `cf5e2a49`，`optimized_performance_receipt.json` 绑定
+`ba3e9a94`；汇总重算一致，正式输出状态与 TIFF 数量不变。
 
-`Test/gold_analysis/proposal_sequence_20261011/ci_cf5e2a49_final.json` 记录当前 head SHA
-`cf5e2a49` 的 12 个 CI job 全部 success/completed。CI 不能替代 Intel Mac、Windows x64 等真实机的
-platform/package/release receipt，相关发布风险仍开放。
+| 指标 | 基线 | 优化后 |
+|---|---:|---:|
+| 平均耗时 | 5.841136 s | 5.747780 s |
+| p50 / p95 | 5.432742 / 9.396120 s | 5.302173 / 9.574647 s |
+| 平均 peak RSS | 937.15 MiB | 795.47 MiB |
+| 最大 peak RSS（S024） | 1612.39 MiB | 1270.48 MiB |
+
+平均/最大 RSS 分别下降 15.1% / 21.2%；平均耗时下降 1.6%，p95 上升 1.9%，不宣称显著提速。
+5 秒发布 Gate 未通过，3 秒 challenge 未达到；失败 receipt 完整保留。RGB 联合采样原型实测更慢、
+临时分配更多，已拒绝；正式 sampler 未改。
+
+### 架构、工具与文档
+
+当前生产与验证 owner 已同步至架构第 13 节。测试共享 fixture 由纯 support owner 提供，peer test
+imports 为 0；全部有效反例保留。源码规模与机械迁移证据位于上述审计目录。
+全部文档按职责审核，内部合同由架构独占，公共中英文说明同步。
+
+### 工程验收
+
+`ba3e9a94` 的正常 pre-push full Hook 通过：1245 项测试、2 项跳过；依赖、编译、cohort authority、
+脚本与差异检查通过。记录为 `Test/engineering_audit_20261012/push_ba3e9a94.log`。该提交的 12 组合
+CI 全部通过，记录为 `Test/engineering_audit_20261012/ci_ba3e9a94_final.json`；后续仅更新检查点文档。
+CI 不能替代目标平台真实机的 platform/package/release receipt。
 
 ## 保留的人工局部事实
 
@@ -67,16 +89,14 @@ JSON 只证明窗口映射，人工确认仅限展示范围，不扩展为整源
 ## 开放风险
 
 - 准确性 gate 尚未 ready；当前 25 个自动批准和 85 个 Review 不能替代完整 release 检查。
-- 性能 baseline 未过 5 秒 Gate，性能/RSS 根因分析仍在进行；不得声称最终优化结果。
-- 当前 gold 绑定 `c54fadeb`，当前审计基线为 `cf5e2a49`；最终 commit、TIFF/metadata、安装、打包、
-  Hook、平台实机 receipt 仍需同一 commit 的证据闭合。
+- 优化后性能仍未过 5 秒发布 Gate；3 秒仅为 challenge，不宣称达到理论最优。
+- 开发 gold、性能与工程检查各自绑定上述提交；发布 commit 的 accuracy、TIFF/metadata、安装、打包、
+  Hook 和平台实机 receipt 仍需同一 commit 的证据闭合。
 - 当前 gold 没有 `xpan`、`120-645`、`135-dual` 真实样片，也没有 sealed cohort；不得建立 format 特例或
   声称未见来源泛化。Runtime 排序和独立 calibration/sealed acceptance 仍未取得正式权限。
 
 ## 精确下一步
 
-1. 完成有界性能/RSS 与架构、测试审计；主线程据最终证据补齐模块 owner 和性能结果，不提前写入未知事实。
-2. 将修订后的代码、文档与验证绑定最终 commit，运行受影响的最小 `tools/verify` 检查，并补齐 Intel Mac、
-   Windows x64 与打包/release receipt。
-3. 只有 accuracy、性能、平台、安装、TIFF/metadata、打包和 Hook/CI 均按架构第 14 节闭合后，才进入发布
-   决策；发布仍需用户明确授权。
+1. 后续性能优化以新的完整路径 profile 和有界等价性证据为起点，保持安全提案覆盖与零危险自动批准；
+   不围绕 3 秒目标无限微调。
+2. 发布前按架构第 14 节闭合 accuracy、性能、平台、安装、TIFF/metadata、打包与 Hook/CI，再请求发布授权。
