@@ -38,32 +38,13 @@ from x5crop.detection.photo_geometry.template_cross_model import (
 )
 from x5crop.detection.photo_geometry.template_cross import fit_template_cross
 from tools.tests.template_test_support import placement_template
-from x5crop.detection.photo_geometry.template_model import PhaseLatticeAuthority
 from x5crop.detection.photo_geometry.template_registration import (
     CrossRegistrationWorkReceipt,
     RegisteredCrossEvidence,
     project_cross_solver_bindings,
     register_cross_evidence,
     register_template_local_cross_refinements,
-    template_spec_from_physical_authority,
 )
-
-
-def _source(frame: FramePhysicalSpec) -> SourceScanGeometry:
-    return SourceScanGeometry.create(
-        frame,
-        width_scale_px_per_mm=PositiveInterval.exact(10.0),
-        height_scale_px_per_mm=PositiveInterval.exact(10.0),
-    )
-
-
-def _lattice() -> PhaseLatticeAuthority:
-    return PhaseLatticeAuthority(
-        period_px=380.0,
-        cycle_origin_px=0.0,
-        minimum_slot_offset=-1,
-        maximum_slot_offset=20,
-    )
 
 
 class TemplateRegistrationContractTest(unittest.TestCase):
@@ -1068,32 +1049,6 @@ class TemplateRegistrationContractTest(unittest.TestCase):
             refined.width_state.extent_projection_px(),
             geometry.width_state.extent_projection_px(),
         )
-
-    def test_registration_uses_direct_phase_and_format_gap(self) -> None:
-        frame = FramePhysicalSpec(36.0, 24.0, 2.0)
-        template = template_spec_from_physical_authority(
-            frame_spec=frame,
-            source_geometry=_source(frame),
-            width_scale_px_per_mm=PositiveInterval.exact(10.0),
-            count=6,
-            phase_lattice_authority=_lattice(),
-        )
-        self.assertFalse(hasattr(template, "phase_authority"))
-        self.assertEqual(template.count, 6)
-        self.assertEqual(template.nominal_gap_px.minimum, 20.0)
-        self.assertEqual(template.nominal_gap_px.maximum, 20.0)
-
-    def test_explicit_count_equal_to_capacity_gets_no_center_authority(self) -> None:
-        frame = FramePhysicalSpec(36.0, 24.0, 2.0)
-        template = template_spec_from_physical_authority(
-            frame_spec=frame,
-            source_geometry=_source(frame),
-            width_scale_px_per_mm=PositiveInterval.exact(10.0),
-            count=6,
-            phase_lattice_authority=_lattice(),
-        )
-        self.assertFalse(hasattr(template, "phase_authority"))
-        self.assertEqual(template.count, 6)
 
 if __name__ == "__main__":
     unittest.main()

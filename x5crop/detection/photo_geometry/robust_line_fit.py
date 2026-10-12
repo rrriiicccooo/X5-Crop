@@ -52,35 +52,27 @@ def _clip_line_region(
     if not vertices:
         return ()
     result: list[tuple[float, float]] = []
-
-    def append(point: tuple[float, float]) -> None:
-        if not result or point != result[-1]:
-            result.append(point)
-
-    def distance(point: tuple[float, float]) -> float:
-        if _work is not None:
-            _work["polygon_vertex_evaluation_count"] += 1
-        value = (
-            position_coefficient * point[0]
-            + slope_coefficient * point[1]
-            - limit
-        )
-        # The existing coordinate contract admits 1e-9 px arithmetic error.
-        # Keep a closed-set vertex when cancellation lands on its boundary.
-        return 0.0 if abs(value) <= LINE_REGION_ARITHMETIC_EPSILON_PX else value
-
+    if _work is not None:
+        _work["polygon_vertex_evaluation_count"] += len(vertices) + 1
     previous = vertices[-1]
-    previous_value = distance(previous)
+    previous_value = position_coefficient * previous[0] + slope_coefficient * previous[1] - limit
+    if abs(previous_value) <= LINE_REGION_ARITHMETIC_EPSILON_PX:
+        previous_value = 0.0
     for current in vertices:
-        current_value = distance(current)
+        current_value = position_coefficient * current[0] + slope_coefficient * current[1] - limit
+        # Keep the existing closed-set arithmetic allowance at each vertex.
+        if abs(current_value) <= LINE_REGION_ARITHMETIC_EPSILON_PX:
+            current_value = 0.0
         if (previous_value <= 0.0) != (current_value <= 0.0):
             fraction = previous_value / (previous_value - current_value)
-            append((
+            point = (
                 previous[0] + fraction * (current[0] - previous[0]),
                 previous[1] + fraction * (current[1] - previous[1]),
-            ))
-        if current_value <= 0.0:
-            append(current)
+            )
+            if not result or point != result[-1]:
+                result.append(point)
+        if current_value <= 0.0 and (not result or current != result[-1]):
+            result.append(current)
         previous = current
         previous_value = current_value
     if len(result) > 1 and result[0] == result[-1]:

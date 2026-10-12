@@ -408,31 +408,6 @@ def _resolved_sequence_pairs(
     )
 
 
-def resolved_sequence_support_domains_px(
-    sequence: SequenceFit,
-) -> tuple[FiniteInterval, ...]:
-    """Return the realized long-axis domain of every fixed-template frame.
-
-    Direct observations own their native coordinates; fixed-W inference fills
-    only an unobserved opposite side.  Cross registration and final placement
-    must therefore consult this same resolved geometry instead of the model
-    lattice that merely organized the observations.
-    """
-
-    template = sequence.template
-    width = _canonical_width(sequence, template)
-    return tuple(
-        FiniteInterval(
-            min(start.canonical, end.canonical),
-            max(start.canonical, end.canonical),
-        )
-        for start, end in (
-            _sequence_pair(sequence, template, ordinal, width)
-            for ordinal in range(template.count)
-        )
-    )
-
-
 def retained_cross_support_domain_groups_px(
     phase: PhaseFitResult,
 ) -> tuple[tuple[FiniteInterval, ...], ...]:

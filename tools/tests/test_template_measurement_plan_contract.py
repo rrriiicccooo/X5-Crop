@@ -111,9 +111,19 @@ class TemplateMeasurementPlanContractTest(unittest.TestCase):
     def test_explicit_count_never_adds_center_phase_authority(self) -> None:
         plan = _plan()
         self.assertFalse(hasattr(plan, "phase_authority"))
+        self.assertFalse(hasattr(plan.template_spec, "phase_authority"))
+        self.assertEqual(plan.template_spec.count, 6)
         self.assertFalse(hasattr(plan, "normal_path_stop_facts"))
         shorter = _plan(count=5, full_count=6)
         self.assertEqual(shorter.template_spec.count, 5)
+
+    def test_compiler_uses_fixed_format_gap_in_source_units(self) -> None:
+        template = _plan().template_spec
+        self.assertEqual(template.nominal_gap_px, FiniteInterval.exact(20.0))
+        self.assertEqual(template.pitch_px.minimum,
+                         template.frame_width_px.minimum + 20.0)
+        self.assertEqual(template.pitch_px.maximum,
+                         template.frame_width_px.maximum + 20.0)
 
     def test_query_intents_are_complete_and_pre_registered(self) -> None:
         plan = _plan()

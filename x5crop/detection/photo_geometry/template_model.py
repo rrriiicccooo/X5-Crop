@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from enum import Enum
+from functools import cached_property
 import math
 from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
 from .template_nominal_grid_model import CalibratedNominalGridFitState
@@ -340,7 +341,7 @@ class TemplateSpec:
             if expected_maximum < self.pitch_px.minimum or self.pitch_px.maximum < expected_minimum:
                 raise ValueError("template pitch and nominal gap are incompatible")
 
-    @property
+    @cached_property
     def roles(self) -> tuple[TemplateRole, ...]:
         return ordered_template_roles(self.count)
 

@@ -7,7 +7,6 @@ import math
 
 from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
 from ...run_local_identity import source_identity_scope
-from ...formats import FramePhysicalSpec
 from .boundary_fitting import (
     BoundaryFamilyFit,
     complete_boundary_family_proposal,
@@ -44,11 +43,7 @@ from .template_cross_model import (
     CrossRoleBinding,
 )
 from .template_cross_longitudinal import covers_all_template_domains
-from .template_model import (
-    PhaseLatticeAuthority,
-    TemplateSpec,
-    generic_separator_gap_interval_px,
-)
+from .template_model import TemplateSpec
 
 
 def _add(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval:
@@ -354,43 +349,6 @@ class CrossRegistrationWorkReceipt:
             raise ValueError("cross registration work receipt is invalid")
         if self.membership is not None and not isinstance(self.membership, MembershipReceipt):
             raise TypeError("cross registration requires typed membership work")
-
-
-def template_spec_from_physical_authority(
-    *,
-    frame_spec: FramePhysicalSpec,
-    source_geometry: SourceScanGeometry,
-    width_scale_px_per_mm: PositiveInterval,
-    count: int,
-    phase_lattice_authority: PhaseLatticeAuthority,
-    template_id: str | None = None,
-) -> TemplateSpec:
-    """Scale the user's fixed format once; observations only refine it."""
-
-    width = source_geometry.width_state.extent_projection_px()
-    height = source_geometry.height_state.extent_projection_px()
-    calibrated_scale = source_geometry.width_state.feasible_scale_interval()
-    if frame_spec.format_gap_prior_mm is None:
-        gap = generic_separator_gap_interval_px(width)
-    else:
-        gap = FiniteInterval(
-            frame_spec.format_gap_prior_mm * calibrated_scale.minimum,
-            frame_spec.format_gap_prior_mm * calibrated_scale.maximum,
-        )
-    return TemplateSpec(
-        template_id=(
-            template_id
-            or f"template:{frame_spec.frame_spec_id}:direct:{count}"
-        ),
-        frame_width_px=width,
-        frame_height_px=height,
-        pitch_px=_add(width, gap),
-        nominal_gap_px=gap,
-        count=count,
-        phase_lattice_authority=phase_lattice_authority.with_period(
-            _add(width, gap)
-        ),
-    )
 
 
 @dataclass(frozen=True)

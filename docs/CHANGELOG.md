@@ -18,6 +18,8 @@
 
 ### 验证边界
 
+- phase 求解按职责拆分并复用不可变准备事实；区域测量使用紧凑整数和与有界列块，保留完整观察和判据。
+  验证工具删除退役 runner，性能测量保留失败记录并拒绝覆盖已有 receipt。
 - `tools/verify` 是工程、准确性、性能、平台和 Hook 的统一入口；开发 gold、诊断报告、CI 通过或安全
   Review 都不能替代架构第 14 节定义的 release gate。
 - 发布资格必须把 accuracy、TIFF/metadata、性能、安装、目标平台、打包和 Hook/CI 证据绑定同一最终

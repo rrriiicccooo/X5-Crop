@@ -32,7 +32,7 @@ from x5crop.detection.photo_geometry.template_model import (
 )
 from x5crop.detection.photo_geometry.template_placement import (
     compose_format_placement,
-    resolved_sequence_support_domains_px,
+    resolved_cross_support_domains_px,
 )
 
 
@@ -281,7 +281,7 @@ class TemplatePlacementContractTest(unittest.TestCase):
         self.assertEqual(placement.frames[0].start.canonical_position_px, 102.0)
         self.assertEqual(placement.frames[0].end.canonical_position_px, 201.0)
         self.assertEqual(
-            resolved_sequence_support_domains_px(sequence),
+            resolved_cross_support_domains_px(sequence),
             (FiniteInterval(102.0, 201.0),),
         )
         self.assertNotEqual(placement.placement_id, model_placement.placement_id)
@@ -318,7 +318,7 @@ class TemplatePlacementContractTest(unittest.TestCase):
             FiniteInterval(197.5, 206.5),
         )
         self.assertEqual(
-            resolved_sequence_support_domains_px(sequence),
+            resolved_cross_support_domains_px(sequence),
             (FiniteInterval(102.0, 202.0),),
         )
 

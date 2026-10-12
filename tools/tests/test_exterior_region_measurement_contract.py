@@ -79,6 +79,9 @@ class ExteriorRegionMeasurementContractTest(unittest.TestCase):
         negative, _ = _box_sums(255-gray)
         np.testing.assert_array_equal(negative,6375-sums)
         self.assertGreaterEqual(peak,sums.nbytes)
+        saturated, _ = _box_sums(np.full((31, 47), 255, dtype=np.uint8))
+        self.assertEqual(saturated.dtype, np.dtype("int16"))
+        np.testing.assert_array_equal(saturated, np.full((27, 43), 6375))
 
     def test_local_weak_content_is_protected_in_every_column(self):
         result = _measure(_source())

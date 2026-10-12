@@ -225,9 +225,9 @@ observation ID分区；连续合并不能删除或替换该绑定，因此不能
 完整包含时才跳过。晚到的缺绑定桥接可能让此前离散候选变成可合并；仍可能互相冲突或扩展保护
 范围，必须保留补全竞争检查，不以最终两两连续性冒充闭合。
 
-Edge-family registration 是 `observation_id` 的 owner；`template_phase_candidates.py` 只把已登记的
+Edge-family registration 是 `observation_id` 的 owner；`template_phase_observations.py` 只把已登记的
 separator material/component 映射成 `evidence_group_id`，并由 `SequenceRoleBinding` 同时保存两种身份。
-`template_phase.py` 只读取 coordinate identity 判断连续 placement；phase、pitch、W 与 lattice rank
+`template_phase_state.py` 只读取 coordinate identity 判断连续 placement；phase、pitch、W 与 lattice rank
 只读取 evidence group 去重。无法满足第一行时，Gate 通过现有 `discrete_phase_ambiguous` 保持 review，
 不增加 proximity、residual 或 score 旁路。
 
@@ -315,7 +315,10 @@ placement evidence，也不能把源边未观测区域补成背景；它只提�
 没有偏离的列保留 null；区域事实不生成 transition、Cross binding 或自动输出权限。
 
 该区域查询与稀疏查询共用原 lane 像素、坐标和内存上限。工作账本计入两侧读取、25 像素平均核、
-颜色／全源种子比较、连续性扫描、种子统计和弱信号窗口的逻辑样本访问；前缀和优化不减少登记成本。
+颜色／全源种子比较、连续性扫描、种子统计和弱信号窗口的逻辑样本访问；数组优化不减少登记成本。
+25 像素整数和及差值使用 `int16`（和最大为 6375），累积窗口仍使用 `int64`，归一化使用 `float64`。
+种子统计保留完整列域与全源极值，颜色偏离、连续性与弱信号在同一个有界列块内消费；不改变 kernel、
+判据或逐列结果，也不增加像素查询。
 密集像素缓冲在稀疏 baseline 建立前释放；全部阶段的同时存活数值数组按维度登记保守峰值上界，
 运行时核对数组账本，报告无像素重放同一上界，不能只保留卷积阶段的较小内存数。开发报告保留完整逐列结果和独立 work，回读
 重建查询与覆盖、核对来源计划／尺度／lane，并核验合并工作上限；不能只验证一个自洽的汇总数字。
@@ -671,7 +674,7 @@ Grid 始终可以生成一个待检验的默认 placement，但它不能仅凭�
   更宽包络。原 phase status/failure、离散身份和竞争顺序不变，eligibility 仍被阻断。
 - 其它 unresolved/conflict 状态、失败的 candidate projection、direct-role 未闭合或 rank 0–2 继续使用
   原模型包络；不得借条件几何掩盖已知反证或冒充 full direct closure。
-- Rank 3 直接坐标系统由 `template_phase_candidates.py` 在同一个连续 placement 内联合拟合
+- Rank 3 直接坐标系统由 `template_phase_fitting.py` 在同一个连续 placement 内联合拟合
   `(phase, W, source_pitch)`。直接约束集合未改变时复用同一矩阵及其已计算的秩；
   已有满秩有界解时直接返回该解，不再计算随后被覆盖的中位 phase；
   rank 不足的中位估计与原 phase 区间约束保持。无约束最小二乘若落在已编译的 phase、W、pitch 与
@@ -1014,7 +1017,7 @@ intrinsic basis。接收 edge 可以覆盖两个或三个区域；若其目标�
 不能做同样过滤。其它局部观察与相关 W 不唯一相容时保持 unresolved。每个 bounded phase
 candidate 与最终 selected fit 的直接坐标权限都由 `template_direct_role_authority.py` 唯一拥有；让位与
 source W 校准/相关推断由 `template_frame_width.py` 拥有，固定 placement 上的本地 rebind 由
-`template_phase.py` 调度、`template_phase_candidates.py` 执行，
+`template_phase_refinement.py` 调度、`template_phase_observations.py` 执行，
 短轴域由 `template_direct_role_aperture_domain.py` 唯一证明，`template_selection.py` 只消费其终态；这些
 owner 都不读取新像素，也不按强度选择 winner。
 
@@ -1257,7 +1260,7 @@ separator 两侧均为 `directly_visible` 的完整 adjacency，每个 source �
 
 `formats/__init__.py` 唯一拥有 calibration identity 与毫米区间；
 `template_nominal_grid_authority.py` 唯一编译 prior、求解相关 envelope 并建立 evidence/selected authority；
-`template_phase_candidates.py` 只让同一 candidate 使用该 envelope，`template_phase.py` 负责 selected-only
+`template_phase_projection.py` 只让同一 candidate 使用该 envelope，`template_phase_refinement.py` 负责 selected-only
 权限与 typed failure，`template_feasible_geometry.py` 把相关状态传播到输出包络。Report 与 Debug 显示
 calibration identity、参数依据、精确 anchor role、nominal Grid、direct correction、逐 adjacency local
 delta、逐关系 coverage、counterevidence、完整未观察 Frame、最终联合包络、工作量与 failure。该路径保持
@@ -2231,6 +2234,9 @@ cache 只在单个 source 内复用并在 source 结束时清空。这些优化�
 winner/runner、provenance、footprint 或输出像素。
 单次 lattice fit 内，同一 slot 的不可变 adjacency prefix 系数只计算一次，供 START/END、矩阵、
 固定 delta 与低秩 offset 复用；空 prefix 直接返回原空求和结果。缓存随该次 fit 释放，不跨候选或 source。
+`TemplateSpec.roles` 只在该不可变模板实例首次访问时构造；角色顺序与 count 绑定，不缓存拟合结果。
+每次 phase pass 的材料筛选、separator component resolution 与角色准备只执行一次，后续消费者显式
+复用同一 typed resolution；不同 pass、直接观察子集与 source 分别准备，不共享权限结果。
 
 正式输入限于单页 unsigned 16-bit、RGB 三通道、contiguous TIFF；压缩接受 `NONE`、`LZW`、
 `DEFLATE` / `ADOBE_DEFLATE` 或 `ZSTD`。Orientation 1–8 在 decode boundary 规范化，输出写
@@ -2269,8 +2275,12 @@ Linux开发/CI使用`renameat2(RENAME_NOREPLACE)`。目标在最终检查之后�
 | `photo_geometry/template_frame_width.py` | canonical `SourceFrameWidthAuthority` 的可靠完整 Frame/direct-lattice 测量；与 placement 消费分离的 W 区间、相关投影/reconciliation、单边 opposite 推导及其 topology assessment；缺失整 Frame 仍归 Grid，scope 不改变资格/runner，不重复增加 rank 或重编译 template |
 | `photo_geometry/template_aspect_ratio_model.py`、`template_aspect_ratio.py` | 校准 W/H 比例的 typed authority、相关 H 推断与 direct H 物理对账 |
 | `photo_geometry/template_model.py` | Sequence coordinate/evidence identity、`AdjacencyRelation` sum type、measured separator 的直接 gap identity 与相关 delta realization，以及统一 O(count) prefix |
-| `photo_geometry/template_phase_model.py`、`template_phase_candidates.py` | role binding、projection outcome/type、phase-authority ceiling、同一离散 identity 的有界投影重拟合，以及 physical/source W 下的有界 native-edge rebind |
-| `photo_geometry/template_phase.py`、`template_pitch.py`、`template_residual.py` | phase/ordinal 求解、连续 placement identity、candidate-bound direct separator relation、Contact/Overlap/Separator 离散竞争、被 local 反证后的 pre-local phase proposal provenance、placement-bound source-W 消费与 resolved-only rebind 调度，以及 source pitch |
+| `photo_geometry/template_phase_model.py`、`template_phase_candidate_model.py` | phase 的 typed input/outcome、role binding、projection authority ceiling 与有界候选数值类型 |
+| `photo_geometry/template_phase_observations.py` | 已登记 fact、离散 seed、单次 separator 准备与固定 placement 的 native-edge 局部绑定 |
+| `photo_geometry/template_phase_fitting.py`、`template_phase_projection.py` | 有界 matching/连续拟合，以及同一离散 identity 的 direct-role/nominal Grid 投影重拟合 |
+| `photo_geometry/template_phase_state.py`、`template_phase_competition.py` | 连续 placement identity、lineage/failure、holder/source admission 与 Contact/Overlap/Separator 初始竞争和保留 |
+| `photo_geometry/template_phase_refinement.py` | local/late correction、selected-only 权限、placement-bound source-W 消费与最终 lattice 合同 |
+| `photo_geometry/template_phase.py`、`template_pitch.py`、`template_residual.py` | 跨 pass receipt/carry、pre-local proposal provenance 与 adjacency/finalization 编排，以及 source pitch/residual |
 | `photo_geometry/template_direct_role_authority.py` | 每个 bounded phase candidate 与最终已选 START/END 的 native-coordinate 权限证明及共享 evidence ledger |
 | `photo_geometry/template_direct_role_aperture_domain.py` | partial-height separator role 在全部可行 cross 状态中的两侧 aperture-domain containment；不读取像素或创建 placement |
 | `photo_geometry/template_lattice_authority.py` | `(phase, W, pitch)` 的全部 retained direct 约束矩阵、native coordinate interval 与独立 rank 闭合证明；只证明全局未知量是否闭合，不消费、选择或重登记 canonical source W |
@@ -2297,6 +2307,7 @@ Linux开发/CI使用`renameat2(RENAME_NOREPLACE)`。目标在最终检查之后�
 | `x5crop/debug/` | 只读诊断 facts 与面板 |
 | `x5crop/io/`、`export/`、`output/` | TIFF domain、affine sampling、metadata 与原子发布 |
 | `tools/verify`、`tools/regression/` | 唯一验证入口、外部 report validator、方向性黄金验收与 accuracy/diagnostic/performance/platform 分层证据 |
+| `tools/regression/report_sequence_validation.py`、`report_value_validation.py` | 独立 sequence/topology/width 检查与纯值检查；主 report validator 单向调用，全部 leaf 纳入 comparator 来源身份 |
 | `tools/manual_annotation/` | source-SHA-bound 的本地 proposal、原 TIFF 有界精修、原图坐标人工审核与最内侧可接受裁切基准冻结；不进入 production 或 release |
 
 人工标注器的 canonical record 按 source SHA 聚合：两条共享短轴边和一个物理 `boundary_pool` 只保存

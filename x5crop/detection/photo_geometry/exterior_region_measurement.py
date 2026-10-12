@@ -133,31 +133,28 @@ class ExteriorRegionQuery:
 
         Source-gray storage and retained scalar observations are not temporary
         measurement arrays. Each stage includes full-lane arrays still alive
-        while a streaming block is processed; integer and float buffers are 8
-        bytes, coordinate arrays 4, boolean masks 1.
+        while a streaming block is processed. Exact 25-pixel sums and their
+        differences fit int16; cumulative windows use int64, normalized
+        values float64, coordinates int32 and masks bool.
         """
         if not self.observable:
             return 0
         rows, columns = self.read_depth-4, self.trace_count
-        band = self.coordinate_count*columns
-        sums = 8*rows*columns
+        sums = 2*rows*columns
         # Box sum, seed statistics, colour/persistence and global departure.
         stages = [
-            8*self.read_depth*(2*self.work_box.width-3),
-            8*(self.read_depth+rows)*columns,
-            sums+16*self.seed_count*columns+24*columns,
-            # argmax(axis=0) may copy a C-order persistent mask into an
-            # axis-contiguous buffer; include that third boolean field.
-            sums+11*band+8*self.seed_count*columns+64*columns,
-            sums+4*band+96*columns,
+            2*(self.read_depth+rows)*columns,
+            sums+4*self.seed_count*columns+24*columns,
         ]
         width = min(columns, max(1, SPEC.maximum_streaming_block_pixels//rows))
         field = 8*self.weak_coordinate_count*width
         mask = self.weak_coordinate_count*width
-        # Full sums, color/result vectors, coordinates, and the existing
-        # gradient mask stay alive during tone/texture calculations.
-        base = sums+16*columns+4*self.weak_coordinate_count+mask
-        differences = 8*(rows-1)*width
+        # Full sums and per-column seed/result vectors stay alive while one
+        # block runs. Persistent argmax may copy another boolean field.
+        retained = sums+64*columns
+        stages.append(retained+11*self.coordinate_count*width+32*width)
+        base = retained+4*self.weak_coordinate_count+8*width+mask
+        differences = 2*(rows-1)*width
         stages.extend((
             base+3*field,
             base+2*field+mask+32*width,
@@ -265,17 +262,15 @@ class ExteriorRegionMeasurement:
 def _box_sums(values: np.ndarray) -> tuple[np.ndarray, int]:
     """Exact 25-pixel integer sums avoid orientation-dependent filter roundoff."""
     height, width = values.shape
-    prefix = np.empty((height, width+1), dtype=np.int64)
-    prefix[:,0] = 0
-    np.cumsum(values, axis=1, dtype=np.int64, out=prefix[:,1:])
-    horizontal = prefix[:,5:] - prefix[:,:-5]
-    peak = prefix.nbytes + horizontal.nbytes
-    del prefix
-    np.cumsum(horizontal, axis=0, out=horizontal)
-    sums = horizontal[4:].copy()
-    sums[1:] -= horizontal[:-5]
-    peak = max(peak, horizontal.nbytes + sums.nbytes)
-    return sums, peak
+    # Registered gray is uint8: a horizontal sum is at most 1275, a full
+    # kernel 6375, and either signed difference remains inside int16.
+    horizontal = np.add(values[:, :width-4], values[:, 1:width-3], dtype=np.int16)
+    for shift in range(2, 5):
+        horizontal += values[:, shift:width-4+shift]
+    sums = horizontal[:height-4].copy()
+    for shift in range(1, 5):
+        sums += horizontal[shift:height-4+shift]
+    return sums, horizontal.nbytes + sums.nbytes
 
 
 def _first_persistent(mask: np.ndarray, seed_count: int, persistence: int) -> tuple[np.ndarray, np.ndarray]:
@@ -351,6 +346,50 @@ def _weak_prefixes(sums: np.ndarray, query: ExteriorRegionQuery) -> tuple[np.nda
     return result, peak, blocks
 
 
+def _side_prefixes(
+    sums: np.ndarray,
+    query: ExteriorRegionQuery,
+) -> tuple[np.ndarray, np.ndarray, float, float, tuple[int, ...], int, int]:
+    """Use the complete seed domain, then consume each column block once."""
+    seed_values = sums[:query.seed_count]
+    seed = np.median(seed_values, axis=0)
+    noise = NORMAL_MAD_SCALE*np.median(np.abs(seed_values-seed), axis=0)
+    peak = sums.nbytes + 2*seed_values.nbytes + 3*seed.nbytes
+    minimum, maximum = float(seed_values.min()), float(seed_values.max())
+    threshold = np.maximum(KERNEL_AREA*PREFIX_ALLOWANCE_GRAY, SEED_MAD_MULTIPLIER*noise)
+    allowance = np.maximum(KERNEL_AREA*REGISTERED_UINT8_QUANTIZATION_STEP, SEED_MAD_MULTIPLIER*noise)
+    color = np.empty(sums.shape[1], dtype=np.float64)
+    weak = np.empty_like(color)
+    departures = np.empty(sums.shape[1], dtype=bool)
+    retained = sum(array.nbytes for array in (sums, seed, noise, threshold, allowance, color, weak, departures))
+    block_width = max(1, SPEC.maximum_streaming_block_pixels // len(sums))
+    blocks = 0
+    for begin in range(0, sums.shape[1], block_width):
+        end = min(sums.shape[1], begin+block_width)
+        values = sums[:, begin:end]
+        band = values[:query.coordinate_count]
+        differences = band-seed[begin:end]
+        np.abs(differences, out=differences)
+        mask = differences > threshold[begin:end]
+        indices, available = _first_persistent(mask, query.seed_count, query.persistence)
+        peak = max(peak, retained + differences.nbytes + 3*mask.nbytes + 32*(end-begin))
+        color[begin:end] = np.where(available, indices + KERNEL_RADIUS_PX, np.nan)
+        del differences, mask, indices, available
+        global_mask = ((band < minimum-allowance[begin:end]) |
+                       (band > maximum+allowance[begin:end]))
+        global_indices, global_available = _first_persistent(global_mask, query.seed_count, query.persistence)
+        departures[begin:end] = global_available
+        peak = max(peak, retained + 4*global_mask.nbytes + 32*(end-begin))
+        del global_mask, global_indices, global_available
+        weak_values, weak_peak, weak_blocks = _weak_prefixes(values, query)
+        weak[begin:end] = weak_values
+        peak = max(peak, weak_peak + retained-values.nbytes)
+        blocks += weak_blocks
+        del weak_values
+    counts = tuple(int(np.count_nonzero(part)) for part in np.array_split(departures, 3))
+    return color, weak, minimum, maximum, counts, peak, blocks
+
+
 def measure_exterior_region(field: PhotoBoundaryMeasurementField, query: ExteriorRegionQuery) -> ExteriorRegionMeasurement:
     if field.layout != query.layout:
         raise ValueError("exterior region query layout differs from its field")
@@ -367,33 +406,10 @@ def measure_exterior_region(field: PhotoBoundaryMeasurementField, query: Exterio
         source = lane[::-1] if maximum_side else lane
         sums, mean_peak = _box_sums(source[:query.read_depth])
         peak = max(peak, mean_peak)
-        band = sums[:query.coordinate_count]
-        seed_values = band[:query.seed_count]
-        seed = np.median(seed_values, axis=0)
-        noise = NORMAL_MAD_SCALE*np.median(np.abs(seed_values-seed), axis=0)
-        peak = max(peak, sums.nbytes + 2*seed_values.nbytes + 3*seed.nbytes)
-        threshold = np.maximum(KERNEL_AREA*PREFIX_ALLOWANCE_GRAY, SEED_MAD_MULTIPLIER*noise)
-        differences = band-seed
-        np.abs(differences, out=differences)
-        mask = differences > threshold
-        indices, available = _first_persistent(mask, query.seed_count, query.persistence)
-        peak = max(peak, sums.nbytes + differences.nbytes + 3*mask.nbytes
-                   + seed_values.size*8 + seed.nbytes + noise.nbytes + threshold.nbytes)
-        del differences, mask
-        color = indices.astype(float) + KERNEL_RADIUS_PX
-        color[~available] = np.nan
-        del indices, available
-        minimum, maximum = float(seed_values.min()), float(seed_values.max())
-        allowance = np.maximum(KERNEL_AREA*REGISTERED_UINT8_QUANTIZATION_STEP, SEED_MAD_MULTIPLIER*noise)
-        global_mask = (band < minimum-allowance) | (band > maximum+allowance)
-        global_indices, global_available = _first_persistent(global_mask, query.seed_count, query.persistence)
-        counts = tuple(int(np.count_nonzero(part)) for part in np.array_split(global_available, 3))
-        peak = max(peak, sums.nbytes + 3*global_mask.nbytes + 8*query.trace_count*8)
-        del global_mask, global_indices, global_available, seed_values, seed, noise, threshold, allowance
-        weak, weak_peak, weak_blocks = _weak_prefixes(sums, query)
-        peak = max(peak, weak_peak + color.nbytes)
-        blocks += weak_blocks
-        del sums, band
+        color, weak, minimum, maximum, counts, side_peak, side_blocks = _side_prefixes(sums, query)
+        peak = max(peak, side_peak)
+        blocks += side_blocks
+        del sums
         if maximum_side:
             color = box.bottom-1-color
             weak = box.bottom-1-weak

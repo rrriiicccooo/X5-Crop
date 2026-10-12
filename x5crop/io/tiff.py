@@ -215,12 +215,7 @@ def read_tiff(path: Path) -> tuple[np.ndarray, ImageProfile, list[str]]:
 
 def compression_for_write(
     profile: ImageProfile,
-    mode: str,
 ) -> str | None:
-    if mode not in {"none", "same"}:
-        raise ValueError(f"Unsupported TIFF compression mode: {mode}")
-    if mode == "none":
-        return None
     name = profile.compression.upper()
     if name == "NONE":
         return None
@@ -246,7 +241,7 @@ def tiff_write_kwargs(
         planar = profile.planar_config.lower()
         if planar in {"contig", "separate"}:
             kwargs["planarconfig"] = planar
-    compression = compression_for_write(profile, "same")
+    compression = compression_for_write(profile)
     if compression is not None:
         kwargs["compression"] = compression
     if profile.resolution and profile.resolution[0] and profile.resolution[1]:
