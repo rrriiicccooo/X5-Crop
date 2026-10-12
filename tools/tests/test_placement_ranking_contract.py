@@ -4,7 +4,7 @@ from copy import deepcopy
 import unittest
 
 from tools.regression.placement_ranking import (
-    NATIVE_ENDPOINT_ROLE_SCOPE, RANKING_SCHEMA,
+    INDEPENDENT_PHASE_ROLE_SCOPE, RANKING_SCHEMA,
     FEATURE_NAMES, RankingExample, _examples, _fit_model, _fold_assignments,
     _model_id, _scores, _source_weights, _training_transform,
     build_development_ranking, validate_development_ranking,
@@ -167,8 +167,11 @@ class PlacementRankingContractTest(unittest.TestCase):
             record["retained_placement_gold_labels"].append(native)
         artifact = build_development_ranking(records)
         self.assertEqual(artifact["ranking_schema"], RANKING_SCHEMA)
-        self.assertEqual(RANKING_SCHEMA, "x5crop_development_placement_ranking_v3")
-        self.assertEqual(artifact["native_endpoint_role_scope"], NATIVE_ENDPOINT_ROLE_SCOPE)
+        self.assertEqual(RANKING_SCHEMA, "x5crop_development_placement_ranking_v4")
+        self.assertEqual(
+            artifact["independent_phase_role_scope"],
+            INDEPENDENT_PHASE_ROLE_SCOPE,
+        )
         self.assertFalse(artifact["admission_enabled"])
         for task in artifact["source_grouped_oof"]["tasks"]:
             self.assertEqual(task["ranked_role"], "native_endpoint")
@@ -180,7 +183,7 @@ class PlacementRankingContractTest(unittest.TestCase):
                          [record["sample_id"] for record in records])
         validate_development_ranking(artifact, records)
         for field, value in (
-            ("native_endpoint_role_scope", "automatic_output"),
+            ("independent_phase_role_scope", "automatic_output"),
             ("ranking_schema", "x5crop_development_placement_ranking_v2"),
             ("label_record_schema", "x5crop_development_gold_analysis_record_v23"),
             ("retained_placement_scope", "retained_canonical_pair_and_conditional_cross_proposal"),
@@ -189,6 +192,68 @@ class PlacementRankingContractTest(unittest.TestCase):
             altered[field] = value
             with self.subTest(field=field), self.assertRaises(ValueError):
                 validate_development_ranking(altered, records)
+
+    def test_independent_phase_review_roles_rank_without_changing_canonical_metrics(self):
+        for role in ("source_clipped_terminal", "intrinsic_refit"):
+            with self.subTest(role=role):
+                records = self._records()
+                for record in records:
+                    for candidate in record["retained_placement_gold_labels"]:
+                        candidate["geometry_conformance"] = "unsafe"
+                    record["retained_placement_gold_labels"][1][
+                        "acceptability_features"
+                    ]["values"][0]["value"] = 0.5
+                    review = deepcopy(
+                        record["retained_placement_gold_labels"][1]
+                    )
+                    review["role"] = role
+                    review["placement_id"] = f"placement:{role}"
+                    review["acceptability_features"]["placement_id"] = (
+                        f"placement:{role}"
+                    )
+                    review["acceptability_features"]["values"][0]["value"] = 1.0
+                    review["geometry_conformance"] = "safe"
+                    record["retained_placement_gold_labels"].append(review)
+
+                artifact = build_development_ranking(records)
+                self.assertEqual(
+                    artifact["independent_phase_role_scope"],
+                    INDEPENDENT_PHASE_ROLE_SCOPE,
+                )
+                for task in artifact["source_grouped_oof"]["tasks"]:
+                    self.assertEqual(task["ranked_role"], role)
+                    self.assertEqual(task["ranked_geometry_conformance"], "safe")
+                    self.assertEqual(task["canonical_ranked_role"], "runner")
+                    self.assertEqual(
+                        task["canonical_ranked_geometry_conformance"],
+                        "unsafe",
+                    )
+                    self.assertFalse(task["canonical_at_least_one_safe_retained"])
+                self.assertEqual(
+                    artifact["source_grouped_oof"]["summary"][
+                        f"{role}_ranked_task_ids"
+                    ],
+                    [record["sample_id"] for record in records],
+                )
+                validate_development_ranking(artifact, records)
+
+    def test_unknown_review_role_and_legacy_scope_alias_are_rejected(self):
+        records = self._records()
+        invalid = deepcopy(records[0]["retained_placement_gold_labels"][0])
+        invalid["role"] = "intrinsic_refit_typo"
+        invalid["placement_id"] = "placement:invalid-review-role"
+        invalid["acceptability_features"]["placement_id"] = invalid["placement_id"]
+        records[0]["retained_placement_gold_labels"].append(invalid)
+        with self.assertRaises(ValueError):
+            build_development_ranking(records)
+
+        records = self._records()
+        artifact = build_development_ranking(records)
+        legacy = deepcopy(artifact)
+        del legacy["independent_phase_role_scope"]
+        legacy["native_endpoint_role_scope"] = "development_label_and_score_only"
+        with self.assertRaises(ValueError):
+            validate_development_ranking(legacy, records)
 
     def test_validator_rejects_rehashed_wrong_fit_predictions_and_contract_tampering(self):
         records = self._records()
