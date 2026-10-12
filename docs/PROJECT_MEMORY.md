@@ -6,68 +6,58 @@
 
 ## 当前目标
 
-V5 保持 current-only、单一职责和零危险自动批准。几何求解与重复计算优化已完成并合理收束；
-5 秒性能 Gate 尚未通过，3 秒仍为非阻塞 challenge。发布未授权。
+按通用根因改善已有合格裁切的选择与安全准入，保持全部黄金任务的合格方案覆盖、完整验证与零危险
+自动批准。5 秒 Gate 尚未通过，3 秒仍为非阻塞 challenge；本轮审计已合理收束，暂不发布。
 
 ## 最新可验证检查点
 
-### Development gold
+### 黄金与选择
 
-最新完整报告为
-`Test/geometry_optimization_20261012/gold/gold_analysis_summary.json`，绑定 `7f822e72`。
-与 `89956fdf` 相比，110 条记录的黄金语义和结论一致；实际投影计数减少或改为端点检查，
-部分近共线顶点表示不同，边界最大偏差为 `1.82e-12 px`。比较证据为
-`Test/geometry_optimization_20261012/gold_equivalence.json`。
+源码提交 `3ca6619c` 的完整报告为 `Test/selection_admission_20261012/gold/`。
+与 `7f822e72` 相比，110 条记录除耗时外全部字段一致，证据为同目录上级的 `gold_equivalence.json`。
 
 | 项目 | 结果 |
 |---|---|
 | task / source | 110 / 106 |
 | 完成 / 分析异常 | 110 / 0 |
-| `approved_auto` / `needs_review` | 25 / 85 |
+| 至少一份黄金几何合格保留方案 | 110 |
+| 主 proposal 几何合格 / 不合格 | 94 / 16 |
 | 安全自动批准 / 危险自动批准 | 25 / 0 |
-| 至少一份安全提案的 task | 110 |
+| nominal 自动批准 / Review；challenge Review | 25 / 71；14 |
 | `release_detection_gate_ready` | `false` |
 
-该集合仍是 development diagnostic；安全提案、候选资格和 Runtime 最终决定分别计数，不能互换权限。
-对应 cohort、detector 和 comparator SHA 分别为：
+合格保留方案、主方案、candidate 资格与最终决定不能互换。源码、comparator 和 cohort 身份见报告
+`analysis_identity`；后续文档检查点不改变生产源码。
 
-```text
-cohort     daaea2ad49564616342051253c8fa67c4922a260d0dcc92f0d187f7b2eb10288
-detector   ae916d80041573e90477bfb9ca223cf27b3d38bd9bd182db472267c37e3391ef
-comparator 67ac1b0c03bc674e23e9325020936aaa8ae5538bd50825df0b73404eec87bf25
-```
+53 个 nominal placement 阻断任务与评分选错的 17 个任务重叠 12 个，并集为 58 task / 57 source。
+分组入口为 `Test/selection_admission_20261012/inventory.json`，核验结论为 `findings.json`：
 
-### 性能与 RSS
+- 53 个阻断任务中，38 个有长轴离散 phase 歧义，15 个有 Cross 非等价解释，两组可能重叠。
+  Cross 权限缺口多数同时有 phase 失败；仅处理两份 retained 不能代表完整竞争池。
+- 17 个评分错误中，15 个只在长轴越线，2 个在短轴越线。S013/S033 的 conditional 直接角色虽已获权，
+  仍依赖未闭合 family；不能只增加 role-authorized 指示或将所有 conditional 判负。
+- 25 个任务虽有安全几何，却没有预算通过的安全方案；12 个仅涉及 W 超窗、4 个仅 H、9 个两轴。
+  未发现重复计费或浮点边界误拒绝，不能直接删除完整物理保护。
+- 现有排序仍为 OOF 93 safe / 17 unsafe。S070/S074 各有同 task、同 28 特征及缺失模式而黄金标签相反
+  的候选组；开发排序 v5 已显式报告。新旧模型、分数与排名完全一致，见 `ranking_equivalence.json`。
+- 成对 Ridge 排序由 93 退步到 90；序列中心特征虽净增 1，却引入 2 个退步；晚期硬反证重排因备选
+  未完成有效投影而无收益，均未合入。实验分别保留在 `pairwise_experiment.json`、
+  `center_feature_experiment.json` 和 `reorder_targeted_gold/`。
 
-同一 24-source cohort、环境与硬件的完整测量为：
-`Test/fit_candidate_optimization_20261012/optimized_performance_receipt.json`（`89956fdf`）与
-`Test/geometry_optimization_20261012/performance_receipt.json`（`7f822e72`）。
-身份与汇总重算一致，输出状态与 TIFF 数量不变；比较证据为后一个目录的 `performance_comparison.json`。
+本轮只合入局部候选筛选的共用逻辑与特征冲突诊断。生产源码减 12 行，源码、工具和测试合计净减 1 行，
+没有新增模块；公共产品行为、评分方法与自动准入均未改变，公共中英文手册无需改写。
 
-| 指标 | 基线 | 优化后 |
-|---|---:|---:|
-| 平均耗时 | 5.214285 s | 5.163244 s |
-| p50 / p95 | 4.940840 / 8.765501 s | 4.950683 / 8.820237 s |
-| 平均 peak RSS | 793.76 MiB | 791.10 MiB |
-| 最大 peak RSS（S024） | 1274.69 MiB | 1268.02 MiB |
+### 性能与工程
 
-配对完整 CLI A/B 均值为 5.211328 → 5.075379 秒，观察到 2.6% 提速；正式测量改善较小，RSS 基本
-持平。5 秒 Gate 未通过，3 秒 challenge 未达到；失败测量完整保留。单侧准备缓存和采样行分块没有
-明确收益；替代 affine 采样更慢且改变像素，均未合入。旧 seed 系数缓存与 RGB 联合采样原型也已否决。
+`Test/selection_admission_20261012/performance_receipt.json` 绑定 `3ca6619c`。
+24-source 完整路径均值为 5.137881 秒，p50 / p95 为 4.903851 / 8.914215 秒；平均 peak RSS 为
+791.25 MiB，最大为 S024 的 1269.67 MiB。5 秒 Gate 失败，3 秒 challenge 未达到，原始失败记录保留。
+与 `7f822e72` 的 cohort、环境、硬件、决定和输出数量一致，见 `performance_comparison.json`；
+上次均值 5.163244 秒，小幅变化不归因为本轮简化，p95 略升，不宣称性能改善。
 
-### 架构、工具与文档
-
-当前 owner 与数值合同见架构第 7、12、13 节。本轮生产代码净减 31 行，没有新增模块；必要回归测试
-覆盖任意斜率域、退化区间、原生顶点代表与投影内复用。24 张真实输入重放的最大端点差为 `4.55e-13 px`；
-S106 / S109 联合投影顶点逐位一致，LP 次数为 753 → 549 / 479 → 338。全部 25 个自动批准任务的
-93 个 TIFF 字节完全相同，证据为上述目录的 `output_equivalence.json`。公共产品行为未变。
-
-### 工程验收
-
-`7f822e72` 的正常 pre-push full Hook 通过：1252 项测试、2 项跳过；依赖、编译、cohort authority、
-脚本与差异检查通过。记录为 `Test/geometry_optimization_20261012/push_7f822e72.log`。
-该提交的 12 组合 CI 全部通过，记录为同目录的 `ci_7f822e72.json`；后续只同步检查点文档。
-CI 不能替代目标平台真实机的 platform/package/release receipt。
+正常 pre-push full Hook 通过 1252 项测试、2 项跳过，依赖、编译、cohort、脚本与差异检查通过；
+`3ca6619c` 已推送，12 组 CI 全部通过。记录为同目录的 `push_3ca6619c.log` 与 `ci_3ca6619c.json`。
+CI 不替代目标平台实机或发布 receipt。
 
 ## 保留的人工局部事实
 
@@ -91,15 +81,18 @@ JSON 只证明窗口映射，人工确认仅限展示范围，不扩展为整源
 
 ## 开放风险
 
-- 准确性 gate 尚未 ready；当前 25 个自动批准和 85 个 Review 不能替代完整 release 检查。
-- 正式测量距 5 秒均值仍差 0.163 秒；3 秒仅为 challenge，不宣称达到理论最优。
-- 开发 gold、性能与工程检查各自绑定上述提交；发布 commit 的 accuracy、TIFF/metadata、安装、打包、
-  Hook 和平台实机 receipt 仍需同一 commit 的证据闭合。
-- 当前 gold 没有 `xpan`、`120-645`、`135-dual` 真实样片，也没有 sealed cohort；不得建立 format 特例或
-  声称未见来源泛化。Runtime 排序和独立 calibration/sealed acceptance 仍未取得正式权限。
+- 71 个 nominal 仍为 Review，检测发布 Gate 未 ready；110/110 方案覆盖不代表选择或自动准入完成。
+- 5 秒均值仍差约 0.138 秒；3 秒仅为 challenge，不宣称已达到理论最优。
+- 当前 gold 未覆盖 `xpan`、`120-645`、`135-dual` 真实样片，也没有 sealed cohort，不声称未见来源泛化。
+  若让评分承担自动准入，还需独立 calibration、冻结风险/OOD 合同与 sealed acceptance。
+- 发布前全部资格仍须按架构第 14 节绑定同一最终 commit；当前没有三目标平台完整实机、安装与打包
+  验收闭环，也没有发布授权。
 
 ## 精确下一步
 
-1. 只有新的 profile 指向足够收益时再继续性能优化；保持完整黄金、安全提案覆盖与零危险自动批准，
-   不围绕 3 秒或剩余小差距无限微调。
-2. 发布前按架构第 14 节闭合 accuracy、性能、平台、安装、TIFF/metadata、打包与 Hook/CI，再请求发布授权。
+1. 优先在完整 phase 竞争 owner 内核对晚期硬反证与角色归属，先证明能在既有工作量上限内可靠区分；
+   不从 primary/runner 两份显示记录推断已穷尽竞争，也不靠相同中心或 evidence ID 集合去重。
+2. 针对已确认的特征冲突寻找可解释、无需新增像素查询的结构事实；先做 source 分组开发评估，有稳定
+   收益再实现。现有黄金不能冒充独立校准，缺失证据继续保留 Review。
+3. 只有新 profile 指向足够收益时再优化 5 秒路径；检测行为稳定后闭合架构第 14 节的全部发布证据，
+   再请求发布授权，不围绕 3 秒或小幅计时差异反复微调。
