@@ -6,17 +6,17 @@
 
 ## 当前目标
 
-V5 保持 current-only、单一职责和零危险自动批准。本轮有界性能/RSS、架构、测试与文档审计已完成。
-3 秒为非阻塞 challenge；发布未授权。
+V5 保持 current-only、单一职责和零危险自动批准。拟合与候选评估的重复计算优化已完成并合理收束；
+5 秒性能 Gate 尚未通过，3 秒仍为非阻塞 challenge。发布未授权。
 
 ## 最新可验证检查点
 
 ### Development gold
 
 最新完整报告为
-`Test/engineering_audit_20261012/optimized_gold/gold_analysis_summary.json`，绑定 `45a66e36`。
-后续 `ba3e9a94` 仅调整测试；detector/comparator 源码身份不变。与审计前完整 gold 相比，110 条记录
-除耗时外完全相等，比较证据为 `Test/engineering_audit_20261012/gold_equivalence.json`。
+`Test/fit_candidate_optimization_20261012/optimized_gold/gold_analysis_summary.json`，绑定 `89956fdf`。
+与上一轮完整 gold 相比，110 条记录除耗时外完全相等，比较证据为
+`Test/fit_candidate_optimization_20261012/gold_equivalence.json`。
 
 | 项目 | 结果 |
 |---|---|
@@ -32,38 +32,39 @@ V5 保持 current-only、单一职责和零危险自动批准。本轮有界性�
 
 ```text
 cohort     daaea2ad49564616342051253c8fa67c4922a260d0dcc92f0d187f7b2eb10288
-detector   2008c5dd9ce7f0dc98b999f61047e94a1d06bf6afba2c90b6e4c46258cde332b
+detector   7bda8238abedb72e719bd8a9d3e95d0ed540c6c09eb9177f30b09f5f629ffe3c
 comparator 67ac1b0c03bc674e23e9325020936aaa8ae5538bd50825df0b73404eec87bf25
 ```
 
 ### 性能与 RSS
 
-同一 24-source cohort、环境与硬件的成对测量位于 `Test/engineering_audit_20261012/`：
-`baseline_performance_receipt.json` 绑定 `cf5e2a49`，`optimized_performance_receipt.json` 绑定
-`ba3e9a94`；汇总重算一致，正式输出状态与 TIFF 数量不变。
+同一 24-source cohort、环境与硬件的完整测量为：
+`Test/engineering_audit_20261012/optimized_performance_receipt.json`（`ba3e9a94`）与
+`Test/fit_candidate_optimization_20261012/optimized_performance_receipt.json`（`89956fdf`）。
+汇总重算一致，正式输出状态与 TIFF 数量不变；比较证据为后一个目录的 `performance_comparison.json`。
 
 | 指标 | 基线 | 优化后 |
 |---|---:|---:|
-| 平均耗时 | 5.841136 s | 5.747780 s |
-| p50 / p95 | 5.432742 / 9.396120 s | 5.302173 / 9.574647 s |
-| 平均 peak RSS | 937.15 MiB | 795.47 MiB |
-| 最大 peak RSS（S024） | 1612.39 MiB | 1270.48 MiB |
+| 平均耗时 | 5.747780 s | 5.214285 s |
+| p50 / p95 | 5.302173 / 9.574647 s | 4.940840 / 8.765501 s |
+| 平均 peak RSS | 795.47 MiB | 793.76 MiB |
+| 最大 peak RSS（S024） | 1270.48 MiB | 1274.69 MiB |
 
-平均/最大 RSS 分别下降 15.1% / 21.2%；平均耗时下降 1.6%，p95 上升 1.9%，不宣称显著提速。
-5 秒发布 Gate 未通过，3 秒 challenge 未达到；失败 receipt 完整保留。RGB 联合采样原型实测更慢、
-临时分配更多，已拒绝；正式 sampler 未改。
+本次观察到平均耗时下降 9.3%、p95 下降 8.5%，RSS 基本持平。5 秒发布 Gate 未通过，3 秒 challenge
+未达到；失败 receipt 完整保留。追加的 seed 系数复用原型在 S109 / S106 回放中各省
+0.017 / 0.044 秒，已撤回。RGB 联合采样旧原型更慢且临时分配更多，不重复同一方向。
 
 ### 架构、工具与文档
 
-当前生产与验证 owner 已同步至架构第 13 节。测试共享 fixture 由纯 support owner 提供，peer test
-imports 为 0；全部有效反例保留。源码规模与机械迁移证据位于上述审计目录。
-全部文档按职责审核，内部合同由架构独占，公共中英文说明同步。
+当前 owner 与拟合数值合同见架构第 7、12、13 节。实现提交生产代码净减 134 行，含新增反例测试和合同
+说明的 tracked 内容净减 80 行，没有新增模块。16,730 个真实线性输入、5,270 个 seed 和 8,000 个边界
+案例回放完全相等；证据保存在上述优化目录。公共产品行为未变。
 
 ### 工程验收
 
-`ba3e9a94` 的正常 pre-push full Hook 通过：1245 项测试、2 项跳过；依赖、编译、cohort authority、
-脚本与差异检查通过。记录为 `Test/engineering_audit_20261012/push_ba3e9a94.log`。该提交的 12 组合
-CI 全部通过，记录为 `Test/engineering_audit_20261012/ci_ba3e9a94_final.json`；后续仅更新检查点文档。
+`89956fdf` 的正常 pre-push full Hook 通过：1247 项测试、2 项跳过；依赖、编译、cohort authority、
+脚本与差异检查通过。记录为 `Test/fit_candidate_optimization_20261012/push_89956fdf.log`。
+该提交的 12 组合 CI 全部通过，记录为同目录 `ci_89956fdf.json`；后续仅更新检查点文档。
 CI 不能替代目标平台真实机的 platform/package/release receipt。
 
 ## 保留的人工局部事实
@@ -89,7 +90,7 @@ JSON 只证明窗口映射，人工确认仅限展示范围，不扩展为整源
 ## 开放风险
 
 - 准确性 gate 尚未 ready；当前 25 个自动批准和 85 个 Review 不能替代完整 release 检查。
-- 优化后性能仍未过 5 秒发布 Gate；3 秒仅为 challenge，不宣称达到理论最优。
+- 优化后距 5 秒均值仍差 0.214 秒；3 秒仅为 challenge，不宣称达到理论最优。
 - 开发 gold、性能与工程检查各自绑定上述提交；发布 commit 的 accuracy、TIFF/metadata、安装、打包、
   Hook 和平台实机 receipt 仍需同一 commit 的证据闭合。
 - 当前 gold 没有 `xpan`、`120-645`、`135-dual` 真实样片，也没有 sealed cohort；不得建立 format 特例或
@@ -97,6 +98,6 @@ JSON 只证明窗口映射，人工确认仅限展示范围，不扩展为整源
 
 ## 精确下一步
 
-1. 后续性能优化以新的完整路径 profile 和有界等价性证据为起点，保持安全提案覆盖与零危险自动批准；
-   不围绕 3 秒目标无限微调。
+1. 只有新的 profile 指向足够收益时再继续性能优化；保持完整黄金、安全提案覆盖与零危险自动批准，
+   不围绕 3 秒或剩余小差距无限微调。
 2. 发布前按架构第 14 节闭合 accuracy、性能、平台、安装、TIFF/metadata、打包与 Hook/CI，再请求发布授权。
