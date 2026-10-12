@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import tempfile
 import unittest
@@ -18,6 +19,35 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class VerificationScopeContractTest(unittest.TestCase):
+    @unittest.skipIf(os.name == "nt", "POSIX verification wrapper")
+    def test_performance_wrapper_forwards_receipt_output_arguments(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            captured = directory / "arguments"
+            python = directory / "python3"
+            python.write_text(
+                '#!/bin/sh\n'
+                'if [ "${1:-}" = "-c" ]; then exit 0; fi\n'
+                'printf "%s\\n" "$@" > "$VERIFY_ARGUMENTS"\n',
+                encoding="utf-8",
+            )
+            python.chmod(0o755)
+            output = directory / "new receipt.json"
+            subprocess.run(
+                ("/bin/sh", str(ROOT / "tools/verify"),
+                 "performance", "--output", str(output)),
+                cwd=ROOT,
+                env={**os.environ, "PATH": str(directory),
+                     "VERIFY_ARGUMENTS": str(captured)},
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            self.assertEqual(captured.read_text().splitlines(), [
+                "-m", "tools.regression.performance", "--output", str(output),
+            ])
+
     def test_staged_hygiene_allows_the_tracked_release_tool(self) -> None:
         verifier = (ROOT / "tools/verify").read_text(encoding="utf-8")
         self.assertIn("|/release/*|", verifier)

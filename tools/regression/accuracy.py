@@ -1,13 +1,10 @@
-"""Run the source-bound V5 development-gold contract around production."""
+"""Validate source-bound development gold and release task results."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-import subprocess
-import sys
-from tempfile import TemporaryDirectory
-from typing import Iterable, Sequence
+from typing import Iterable
 
 from tools.manual_annotation.model import (
     BASELINE_SCHEMA,
@@ -16,8 +13,6 @@ from tools.manual_annotation.model import (
     canonical_record_sha256,
     evaluation_task_role,
 )
-
-from .report_validation import validate_current_report_record
 
 from .cohort_count import validate_cohort_counts
 from .file_identity import sha256_file
@@ -279,27 +274,6 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
     return records
 
 
-def _production_command(
-    source: Path,
-    output: Path,
-    record: dict[str, object],
-) -> list[str]:
-    command = [
-        sys.executable,
-        str(PROJECT_ROOT / "X5_Crop.py"),
-        str(source),
-        "--output",
-        str(output),
-        "--format",
-        str(record["format_id"]),
-        "--count",
-        str(record["count"]),
-        "--jobs",
-        "1",
-    ]
-    return command
-
-
 def validate_release_gold_task_result(
     record: dict[str, object],
     report: dict[str, object],
@@ -318,88 +292,3 @@ def validate_release_gold_task_result(
     if status == "approved_auto":
         validate_approved_geometry(record, report)
     return status
-
-
-def _run_task(record: dict[str, object]) -> str:
-    source = (PROJECT_ROOT / str(record["source_relative_path"])).resolve()
-    before = source.stat()
-    with TemporaryDirectory(prefix="x5crop-accuracy-") as temporary:
-        output = Path(temporary) / "x5_crop_output"
-        completed = subprocess.run(
-            _production_command(source, output, record),
-            cwd=PROJECT_ROOT,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            check=False,
-        )
-        if completed.returncode != 0:
-            raise ValueError(
-                f"{record['sample_id']} production CLI failed:\n"
-                + completed.stdout[-4000:]
-            )
-        report_path = output / "x5_crop_report.jsonl"
-        rows = tuple(
-            json.loads(line)
-            for line in report_path.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        )
-        if len(rows) != 1:
-            raise ValueError("accuracy task must produce exactly one terminal report")
-        report = rows[0]
-        validate_current_report_record(report)
-        identity = report["runtime_identity"]["source"]
-        after = source.stat()
-        if (
-            before.st_size != after.st_size
-            or before.st_mtime_ns != after.st_mtime_ns
-            or identity["input_ordinal"] != 1
-            or identity["name"] != source.name
-            or identity["size"] != before.st_size
-            or identity["mtime_ns"] != before.st_mtime_ns
-        ):
-            raise ValueError("source stat identity changed across accuracy task")
-        return validate_release_gold_task_result(record, report)
-
-
-def run_accuracy(records: Iterable[dict[str, object]]) -> tuple[int, int]:
-    passed = 0
-    approved = 0
-    failures: list[str] = []
-    for record in records:
-        identity = str(record["sample_id"])
-        try:
-            status = _run_task(record)
-        except Exception as exc:
-            failures.append(f"{identity}: {exc}")
-            print(f"{identity}: FAIL: {exc}")
-            continue
-        passed += 1
-        approved += status == "approved_auto"
-        print(f"{identity}: {status}")
-    if failures:
-        raise ValueError(
-            f"release detection gate failed {len(failures)} task(s):\n"
-            + "\n".join(failures)
-        )
-    return passed, approved
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    if argv:
-        raise SystemExit("accuracy verifier takes no arguments")
-    try:
-        records = validate_gold_source_identities()
-        passed, approved = run_accuracy(records)
-    except ValueError as error:
-        print(f"release detection gate: FAIL: {error}", file=sys.stderr)
-        return 1
-    print(
-        f"release detection gate: {passed}/{len(records)} accepted; "
-        f"approved={approved}"
-    )
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

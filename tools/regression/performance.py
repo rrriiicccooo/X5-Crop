@@ -550,12 +550,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.expected_commit is not None:
         parser.error("--expected-commit requires --check-receipt")
+    if args.output.exists() or args.output.is_symlink():
+        parser.error(f"output already exists: {args.output}")
     record = build_receipt()
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(
-        json.dumps(record, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    with args.output.open("x", encoding="utf-8") as stream:
+        stream.write(json.dumps(record, ensure_ascii=False, indent=2) + "\n")
     validate_receipt(record, expected_commit=str(record["git_commit"]))
     print(f"performance receipt: {args.output}")
     return 0

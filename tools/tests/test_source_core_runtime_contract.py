@@ -21,10 +21,12 @@ from x5crop.detection.decision.vocabulary import (
     FINAL_REASON_NO_LEGAL_PLACEMENT,
 )
 from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
-from tools.regression.report_validation import (
+from tools.regression.report_sequence_validation import (
     _validate_adjacency_relations,
     _validate_direct_role_aperture_domain_authority,
     _validate_direct_role_binding_authority,
+)
+from tools.regression.report_validation import (
     _validate_phase_candidate_projection,
     validate_current_report_record,
 )

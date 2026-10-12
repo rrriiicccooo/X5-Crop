@@ -6,15 +6,19 @@ from dataclasses import replace
 import io
 import json
 from pathlib import Path
+import subprocess
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
 from tools.regression.accuracy import DEVELOPMENT_GOLD_COHORT_PATH
+from tools.regression import gold_analysis
+from tools.tests.git_environment_support import isolated_git_environment
 from tools.tests.template_runtime_test_support import retained_proposal_fixture
 from x5crop.report.read_models import typed_read_model
 from tools.regression.gold_analysis import (
     ANALYSIS_RECORD_SCHEMA,
+    COMPARATOR_SOURCE_PATHS,
     RETAINED_PLACEMENT_SCOPE,
     _analysis_identity,
     _axis_guard_calibration,
@@ -27,6 +31,7 @@ from tools.regression.gold_analysis import (
     _round_outward_lower,
     _runtime_budget_state,
     _source_variation_summary,
+    _source_manifest_identity,
     _summary,
     line_axis_position,
     main as gold_analysis_main,
@@ -885,6 +890,45 @@ class GoldAnalysisContractTest(unittest.TestCase):
             )
             with self.assertRaisesRegex(ValueError, "artifact is invalid"):
                 validate_gold_analysis_artifacts(root)
+
+    def test_comparator_identity_binds_each_extracted_validation_owner(self) -> None:
+        helper_paths = (
+            "tools/regression/report_sequence_validation.py",
+            "tools/regression/report_value_validation.py",
+        )
+        self.assertTrue(set(helper_paths) <= set(COMPARATOR_SOURCE_PATHS))
+        with isolated_git_environment(), TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for relative in COMPARATOR_SOURCE_PATHS:
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("frozen comparator\n", encoding="utf-8")
+            for arguments in (
+                ("init", "-q"),
+                ("config", "user.name", "X5 Crop Test"),
+                ("config", "user.email", "test@example.invalid"),
+                ("add", "."),
+                ("commit", "-qm", "comparator baseline"),
+            ):
+                subprocess.run(
+                    ("git", *arguments), cwd=root, check=True,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                )
+            with patch.object(gold_analysis, "PROJECT_ROOT", root):
+                baseline = _source_manifest_identity(COMPARATOR_SOURCE_PATHS)
+                self.assertTrue(baseline["paths_match_head"])
+                for relative in helper_paths:
+                    with self.subTest(path=relative):
+                        path = root / relative
+                        original = path.read_bytes()
+                        path.write_bytes(original + b"modified authority check\n")
+                        changed = _source_manifest_identity(COMPARATOR_SOURCE_PATHS)
+                        self.assertFalse(changed["paths_match_head"])
+                        self.assertNotEqual(
+                            changed["source_manifest_sha256"],
+                            baseline["source_manifest_sha256"],
+                        )
+                        path.write_bytes(original)
 
     def test_release_gate_requires_the_complete_cohort(self) -> None:
         error = io.StringIO()

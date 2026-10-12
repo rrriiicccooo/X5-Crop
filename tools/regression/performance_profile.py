@@ -10,7 +10,7 @@ from pathlib import Path
 import pstats
 import subprocess
 import sys
-from tempfile import TemporaryDirectory
+from tempfile import TemporaryDirectory, TemporaryFile
 import time
 from typing import Any
 
@@ -109,34 +109,30 @@ def _process_rss_bytes(pid: int) -> int:
 def run_with_peak_rss(command: list[str]) -> tuple[float, int, str, int]:
     """Run one CLI subprocess and observe wall time plus process peak RSS."""
 
-    started = time.perf_counter()
-    process = subprocess.Popen(
-        command,
-        cwd=PROJECT_ROOT,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-    )
-    if os.name != "nt" and hasattr(os, "wait4"):
-        _pid, status, usage = os.wait4(process.pid, 0)
-        process.returncode = os.waitstatus_to_exitcode(status)
-        output, _unused = process.communicate()
-        peak = int(usage.ru_maxrss)
-        if sys.platform != "darwin":
-            peak *= 1024
-        return (
-            time.perf_counter() - started,
-            peak,
-            output,
-            int(process.returncode),
+    with TemporaryFile(mode="w+t") as log:
+        started = time.perf_counter()
+        process = subprocess.Popen(
+            command,
+            cwd=PROJECT_ROOT,
+            text=True,
+            stdout=log,
+            stderr=subprocess.STDOUT,
         )
-    peak = 0
-    while process.poll() is None:
-        peak = max(peak, _process_rss_bytes(process.pid))
-        time.sleep(0.05)
-    output, _unused = process.communicate()
-    peak = max(peak, _process_rss_bytes(process.pid))
-    return time.perf_counter() - started, peak, output, int(process.returncode)
+        if os.name != "nt" and hasattr(os, "wait4"):
+            _pid, status, usage = os.wait4(process.pid, 0)
+            process.returncode = os.waitstatus_to_exitcode(status)
+            peak = int(usage.ru_maxrss)
+            if sys.platform != "darwin":
+                peak *= 1024
+        else:
+            peak = 0
+            while process.poll() is None:
+                peak = max(peak, _process_rss_bytes(process.pid))
+                time.sleep(0.05)
+            peak = max(peak, _process_rss_bytes(process.pid))
+        log.seek(0)
+        output = log.read()
+        return time.perf_counter() - started, peak, output, int(process.returncode)
 
 
 def _cumulative(stats: pstats.Stats, suffix: str, function: str) -> float:

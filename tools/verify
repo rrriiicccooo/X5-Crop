@@ -100,7 +100,8 @@ case "${1:-}" in
         fi
         ;;
     performance)
-        "$PYTHON" -m tools.regression.performance
+        shift
+        "$PYTHON" -m tools.regression.performance "$@"
         ;;
     platform)
         shift

@@ -15,7 +15,6 @@ from tools.regression.accuracy import (
     DEVELOPMENT_GOLD_COHORT_PATH,
     DEVELOPMENT_GOLD_COHORT_SCHEMA,
     DEVELOPMENT_GOLD_COMPLETION_SCOPE,
-    main as accuracy_main,
     validate_count_variant_references,
     validate_gold_evaluation_role,
     validate_gold_source_identities,
@@ -28,6 +27,7 @@ from tools.regression.gold_analysis import (
     RETAINED_PLACEMENT_SCOPE,
     _retained_placement_gold_labels,
     _retained_placement_summary,
+    main as gold_analysis_main,
 )
 from tools.regression.diagnostic_cohort import DIAGNOSTIC_COHORT_PATH
 from tools.regression.gold_geometry import (
@@ -410,7 +410,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
                     validate_gold_source_identities()
                 error = io.StringIO()
                 with redirect_stderr(error):
-                    self.assertEqual(accuracy_main(), 1)
+                    self.assertEqual(gold_analysis_main(("--gate", "release")), 1)
         self.assertIn("calibration is incomplete", error.getvalue())
 
     def test_cohort_record_is_a_deterministic_binding_of_confirmed_geometry(

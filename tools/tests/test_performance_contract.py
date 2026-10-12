@@ -46,6 +46,61 @@ from tools.regression.environment_identity import verification_environment_ident
 
 
 class V5PerformanceContractTest(unittest.TestCase):
+    def test_existing_receipts_are_preserved_without_starting_measurement(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "performance_receipt.json"
+            for passed in (False, True):
+                with self.subTest(passed=passed):
+                    original = json.dumps({"passed": passed}).encode("utf-8")
+                    output.write_bytes(original)
+                    with mock.patch.object(performance, "build_receipt") as build:
+                        with self.assertRaises(SystemExit) as error:
+                            performance.main(("--output", str(output)))
+                    self.assertEqual(error.exception.code, 2)
+                    build.assert_not_called()
+                    self.assertEqual(output.read_bytes(), original)
+
+    def test_competing_receipt_creation_cannot_be_overwritten(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "performance_receipt.json"
+            original = b'{"owner":"concurrent measurement"}\n'
+
+            def measure() -> dict[str, object]:
+                output.write_bytes(original)
+                return {"git_commit": "current-measurement"}
+
+            with (
+                mock.patch.object(performance, "build_receipt", side_effect=measure),
+                mock.patch.object(performance, "validate_receipt") as validate,
+            ):
+                with self.assertRaises(FileExistsError):
+                    performance.main(("--output", str(output)))
+            validate.assert_not_called()
+            self.assertEqual(output.read_bytes(), original)
+
+    def test_check_receipt_only_reads_existing_measurement(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "performance_receipt.json"
+            original = b'{"git_commit":"frozen-measurement"}\n'
+            path.write_bytes(original)
+            with (
+                mock.patch.object(performance, "build_receipt") as build,
+                mock.patch.object(performance, "validate_receipt") as validate,
+            ):
+                self.assertEqual(
+                    performance.main((
+                        "--check-receipt", str(path),
+                        "--expected-commit", "frozen-measurement",
+                    )),
+                    0,
+                )
+            build.assert_not_called()
+            validate.assert_called_once_with(
+                {"git_commit": "frozen-measurement"},
+                expected_commit="frozen-measurement",
+            )
+            self.assertEqual(path.read_bytes(), original)
+
     def test_failed_gate_preserves_the_measured_receipt(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "performance_receipt.json"
@@ -319,6 +374,29 @@ class V5PerformanceContractTest(unittest.TestCase):
         )
         self.assertEqual(returncode, 0)
         self.assertEqual(output.strip(), "profile-child")
+        self.assertGreater(peak, 0)
+
+    def test_profiler_collects_logs_larger_than_a_pipe_capacity(self) -> None:
+        size = 256 * 1024 + 1
+        wall, peak, output, returncode = run_with_peak_rss([
+            sys.executable, "-c",
+            "import sys; "
+            f"sys.stdout.write('a' * {size}); sys.stdout.flush(); "
+            f"sys.stderr.write('b' * {size}); sys.stderr.flush()",
+        ])
+        self.assertEqual(returncode, 0)
+        self.assertEqual(output, "a" * size + "b" * size)
+        self.assertGreater(peak, 0)
+        self.assertGreater(wall, 0.0)
+
+    def test_profiler_preserves_logs_and_failure_exit_status(self) -> None:
+        _wall, peak, output, returncode = run_with_peak_rss([
+            sys.executable, "-c",
+            "import sys; print('failed-child', flush=True); "
+            "print('error-detail', file=sys.stderr, flush=True); sys.exit(7)",
+        ])
+        self.assertEqual(returncode, 7)
+        self.assertEqual(output, "failed-child\nerror-detail\n")
         self.assertGreater(peak, 0)
 
     def test_diagnostic_adjacency_relations_are_bounded_by_template_adjacencies(
