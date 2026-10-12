@@ -12,7 +12,6 @@ from dataclasses import replace
 import math
 
 import numpy as np
-from scipy.optimize import linprog
 
 from ...domain import (
     EvidenceState,
@@ -51,7 +50,10 @@ from .registered_transition_measurement import (
     TraceMeasurement,
     measured_transition_peaks,
 )
-from .robust_line_fit import fit_transition_line, physical_slope_interval, physical_line_region
+from .robust_line_fit import (
+    fit_transition_line, physical_slope_interval, physical_line_region,
+    physical_line_region_in_slopes,
+)
 from .trace_support import source_spanning_continuous_trace_support
 from .transition_tracking import track_broad_material_transition_regions
 from .broad_material_transition_measurement import broad_material_trace_support_qualified
@@ -448,37 +450,6 @@ def _midpoint_transition(
     )
 
 
-def _reference_position_interval(
-    transitions: tuple[PhotoBoundaryTransition, ...],
-    *,
-    reference_trace_px: float,
-    slope_interval: FiniteInterval,
-) -> FiniteInterval | None:
-    """Project one line's direct intervals without separating slope/offset."""
-
-    rows: list[tuple[float, float]] = []
-    limits: list[float] = []
-    for item in transitions:
-        distance = float(item.trace_coordinate_px) - reference_trace_px
-        interval = item.physical_position_interval_px
-        rows.extend(((1.0, distance), (-1.0, -distance)))
-        limits.extend((interval.maximum, -interval.minimum))
-    bounds = ((None, None), (slope_interval.minimum, slope_interval.maximum))
-    results: list[float] = []
-    for objective in ((1.0, 0.0), (-1.0, 0.0)):
-        fitted = linprog(
-            objective,
-            A_ub=np.asarray(rows, dtype=np.float64),
-            b_ub=np.asarray(limits, dtype=np.float64),
-            bounds=bounds,
-            method="highs",
-        )
-        if not fitted.success or fitted.x is None:
-            return None
-        results.append(float(fitted.x[0]))
-    return FiniteInterval(results[0], results[1])
-
-
 def _shared_tracks(
     query: PhotoBoundaryMeasurementQuery,
     *,
@@ -582,13 +553,14 @@ def _shared_tracks(
         raw: CoarseEnclosingTrack,
         transitions: tuple[PhotoBoundaryTransition, ...],
     ) -> CoarseEnclosingTrack | None:
-        full_position = _reference_position_interval(
-            transitions,
-            reference_trace_px=reference_trace_px,
-            slope_interval=shared_slopes,
+        region = physical_line_region_in_slopes(
+            tuple((float(item.trace_coordinate_px), item.physical_position_interval_px)
+                  for item in transitions),
+            shared_slopes, reference_trace_px,
         )
-        if full_position is None:
+        if region is None:
             return None
+        full_position = region.project(reference_trace_px)
         canonical_candidates = tuple(
             item.canonical_coordinate_px
             - canonical_slope

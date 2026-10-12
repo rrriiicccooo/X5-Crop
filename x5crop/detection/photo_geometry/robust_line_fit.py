@@ -95,12 +95,17 @@ def physical_line_region(
     Connection allowance does not make an infeasible physical family close.
     """
 
-    return _physical_line_region(trace_intervals, maximum_slope, reference_trace_px, work=work)
+    if not math.isfinite(maximum_slope) or maximum_slope <= 0.0:
+        raise ValueError("physical line inputs are invalid")
+    return physical_line_region_in_slopes(
+        trace_intervals, FiniteInterval(-maximum_slope, maximum_slope),
+        reference_trace_px, work=work,
+    )
 
 
-def _physical_line_region(
+def physical_line_region_in_slopes(
     trace_intervals: tuple[tuple[float, FiniteInterval], ...],
-    maximum_slope: float,
+    slopes: FiniteInterval,
     reference_trace_px: float,
     *,
     work: dict[str, int] | None = None,
@@ -109,21 +114,20 @@ def _physical_line_region(
 
     if (
         not trace_intervals
-        or not math.isfinite(maximum_slope)
-        or maximum_slope <= 0.0
         or not math.isfinite(reference_trace_px)
         or any(not math.isfinite(trace) for trace, _ in trace_intervals)
     ):
         raise ValueError("physical line inputs are invalid")
     first_trace, interval = trace_intervals[0]
-    allowance = maximum_slope * abs(first_trace - reference_trace_px)
-    minimum = interval.minimum - allowance
-    maximum = interval.maximum + allowance
+    distance = first_trace - reference_trace_px
+    offsets = (slopes.minimum * distance, slopes.maximum * distance)
+    minimum = interval.minimum - max(offsets)
+    maximum = interval.maximum - min(offsets)
     vertices = (
-        (minimum, -maximum_slope),
-        (maximum, -maximum_slope),
-        (maximum, maximum_slope),
-        (minimum, maximum_slope),
+        (minimum, slopes.minimum),
+        (maximum, slopes.minimum),
+        (maximum, slopes.maximum),
+        (minimum, slopes.maximum),
     )
     for trace, interval in trace_intervals:
         distance = trace - reference_trace_px
@@ -251,7 +255,7 @@ def fit_complete_transition_line(
             point.transition.physical_position_interval_px.maximum + allowance,
         )) for point in ordered)
         work["raw_constraint_count"] = 2 * len(intervals)
-        region = _physical_line_region(intervals, maximum_slope, reference, work=work)
+        region = physical_line_region(intervals, maximum_slope, reference, work=work)
     except (OverflowError, ValueError):
         return finish(failure=failure.NONFINITE_NUMERICAL_RESULT)
     if region is None:

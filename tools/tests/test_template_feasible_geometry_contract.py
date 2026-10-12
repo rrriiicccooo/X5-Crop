@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from dataclasses import replace
 import unittest
+from unittest.mock import patch
+
+import numpy as np
+from scipy.optimize import linprog
 
 from x5crop.domain import FiniteInterval, ObservationId, PositiveInterval
 from x5crop.detection.photo_geometry.template_feasible_geometry import (
-    project_format_placement,
+    _FeasibleSystem, _LinearExpression, _aperture_cross_vertices,
+    _interval_pair_vertices, _project_pair_vertices, project_format_placement,
 )
 from x5crop.detection.photo_geometry.template_lattice_authority import (
     assess_global_lattice_authority,
@@ -39,28 +44,78 @@ from tools.tests.template_test_support import (
 
 
 class TemplateFeasibleGeometryContractTest(unittest.TestCase):
+    def test_repeated_support_directions_are_local_to_one_projection(self) -> None:
+        first = _LinearExpression(np.asarray((1.0, 0.0)), 0.0)
+        second = _LinearExpression(np.asarray((0.0, 1.0)), 0.0)
+        for offset in (0.0, 100.0):
+            system = _FeasibleSystem(
+                ((offset, offset + 2.0), (3.0, 4.0)),
+                (np.empty((0, 2)), np.empty(0)),
+            )
+            with patch("x5crop.detection.photo_geometry.template_feasible_geometry.linprog",
+                       wraps=linprog) as solve, patch(
+                           "x5crop.detection.photo_geometry.template_feasible_geometry._MAX_SUPPORT_EVALUATIONS", 8):
+                vertices, evaluations = _project_pair_vertices(system, first, second)
+            self.assertEqual(set(vertices), {
+                (offset, 3.0), (offset + 2.0, 3.0), (offset + 2.0, 4.0), (offset, 4.0),
+            })
+            self.assertEqual(evaluations, solve.call_count)
+            self.assertEqual(evaluations, 8)
+
+    def test_native_interval_pair_matches_joint_linear_constraints(self) -> None:
+        for first, second, span in (
+            ((0.0, 20.0), (245.0, 250.0), (240.0, 240.0)),
+            ((0.0, 20.0), (230.0, 260.0), (235.0, 245.0)),
+            ((10.0, 10.0), (250.0, 250.0), (240.0, 240.0)),
+            ((1e6, 1e6 + 2.0), (1e6 + 240.0, 1e6 + 243.0), (240.0, 241.0)),
+            ((0.0, 1.0), (250.0, 251.0), (240.0, 240.0)),
+        ):
+            for direction in (-1, 1):
+                signed_second = second if direction == 1 else (-second[1], -second[0])
+                signed_first = first if direction == 1 else (-first[1], -first[0])
+                vertices, evaluations = _interval_pair_vertices(
+                    FiniteInterval(*signed_first), FiniteInterval(*signed_second),
+                    FiniteInterval(*span), direction,
+                )
+                self.assertEqual(evaluations, 12)
+                for objective in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, 1)):
+                    oracle = linprog(
+                        objective, A_ub=((-direction, direction), (direction, -direction)),
+                        b_ub=(span[1], -span[0]), bounds=(signed_first, signed_second), method="highs",
+                    )
+                    self.assertEqual(bool(vertices), oracle.success)
+                    if vertices:
+                        self.assertAlmostEqual(
+                            min(objective[0] * a + objective[1] * b for a, b in vertices),
+                            oracle.fun, places=7,
+                        )
+
+    def test_near_degenerate_direct_vertices_keep_native_representatives(self) -> None:
+        vertices, _ = _interval_pair_vertices(
+            FiniteInterval(0.0, 3e-8), FiniteInterval(239.99999988, 249.99999988),
+            FiniteInterval(239.99999994, 239.99999995), 1,
+        )
+        self.assertIn((3e-8, 239.99999988), vertices)
+
+    def test_aperture_projection_uses_the_native_interval_geometry(self) -> None:
+        template = _template(1)
+        placement = _compose(template, _sequence(template), _cross(template, direction=_direction()))
+        with patch("x5crop.detection.photo_geometry.template_feasible_geometry.linprog",
+                   side_effect=AssertionError("simple aperture must not run LP")):
+            vertices, evaluations = _aperture_cross_vertices(placement)
+        self.assertTrue(vertices)
+        self.assertEqual(evaluations, 12)
+
     @staticmethod
     def _sequence_interval(projection, frame_index: int, edge: int) -> FiniteInterval:
-        values = tuple(
-            (
-                state.sequence_start_px
-                if edge == 0
-                else state.sequence_end_px
-            )
-            for state in projection.frame_states[frame_index]
-        )
+        field = ("sequence_start_px", "sequence_end_px")[edge]
+        values = tuple(getattr(state, field) for state in projection.frame_states[frame_index])
         return FiniteInterval(min(values), max(values))
 
     @staticmethod
     def _cross_interval(projection, edge: int) -> FiniteInterval:
-        values = tuple(
-            (
-                state.top_at_lane_reference_px
-                if edge == 0
-                else state.bottom_at_lane_reference_px
-            )
-            for state in projection.frame_states[0]
-        )
+        field = ("top_at_lane_reference_px", "bottom_at_lane_reference_px")[edge]
+        values = tuple(getattr(state, field) for state in projection.frame_states[0])
         return FiniteInterval(min(values), max(values))
 
     def test_phase_and_pitch_extremes_remain_correlated(self) -> None:

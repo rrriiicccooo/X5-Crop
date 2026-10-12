@@ -24,7 +24,7 @@ from x5crop.detection.photo_geometry.robust_line_fit import (
     LINE_REGION_ARITHMETIC_EPSILON_PX,
     _clip_line_region,
     _huber_edge_minimum,
-    _physical_line_region,
+    physical_line_region_in_slopes,
     fit_complete_transition_line,
     fit_transition_line,
     physical_line_region,
@@ -271,7 +271,7 @@ class CompleteFamilyHuberContractTest(unittest.TestCase):
             PhysicalLineRegion(10.0, ((99.0, 0.0), (101.0, 0.0), (101.0, 1e-14), (99.0, 1e-14))),
         )
         for region in regions:
-            with patch('x5crop.detection.photo_geometry.robust_line_fit._physical_line_region', return_value=region):
+            with patch('x5crop.detection.photo_geometry.robust_line_fit.physical_line_region_in_slopes', return_value=region):
                 result = fit_complete_transition_line(points, 10.0, SPEC)
             solution = self.check_solution(result, points)
             self.assertEqual(solution.cost, 0.0)
@@ -281,7 +281,7 @@ class CompleteFamilyHuberContractTest(unittest.TestCase):
     def test_raw_recheck_rejects_an_invalid_numerical_domain(self):
         points = points_for((100.0, 100.0, 100.0))
         region = PhysicalLineRegion(10.0, ((150.0, 0.0),))
-        with patch('x5crop.detection.photo_geometry.robust_line_fit._physical_line_region', return_value=region):
+        with patch('x5crop.detection.photo_geometry.robust_line_fit.physical_line_region_in_slopes', return_value=region):
             result = fit_complete_transition_line(points, 10.0, SPEC)
         self.assertEqual(result.failure_kind, Failure.RAW_CONSTRAINT_RECHECK_FAILED)
         self.assertEqual(result.work.raw_recheck_point_count, 3)
@@ -342,7 +342,8 @@ class CompleteFamilyHuberContractTest(unittest.TestCase):
         for intervals, cap in cases:
             work = empty_work()
             expected = physical_line_region(intervals, cap, 5.0)
-            self.assertEqual(_physical_line_region(intervals, cap, 5.0, work=work), expected)
+            self.assertEqual(physical_line_region_in_slopes(
+                intervals, FiniteInterval(-cap, cap), 5.0, work=work), expected)
             self.assertGreater(work['polygon_clip_count'], 0)
             self.assertGreater(work['polygon_vertex_evaluation_count'], 0)
             self.assertLessEqual(work['polygon_clip_count'], 2*len(intervals))

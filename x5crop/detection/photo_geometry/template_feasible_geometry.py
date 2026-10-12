@@ -8,7 +8,7 @@ import math
 import numpy as np
 from scipy.optimize import linprog
 
-from ...domain import FiniteInterval
+from ...domain import FiniteInterval, PositiveInterval
 from ...run_local_identity import run_local_id
 from .model import BoundaryRole, PositionSource
 from .output_model import (
@@ -205,34 +205,36 @@ def _project_pair_vertices(
     second: _LinearExpression,
 ) -> tuple[tuple[tuple[float, float], ...], int]:
     points: dict[tuple[int, int], tuple[float, float]] = {}
+    supports: dict[tuple[float, float], tuple[float, float]] = {}
     evaluations = 0
 
-    def query(direction: tuple[float, float]) -> None:
+    def query(direction: tuple[float, float]) -> tuple[float, float]:
         nonlocal evaluations
+        if direction in supports:
+            return supports[direction]
         if evaluations >= _MAX_SUPPORT_EVALUATIONS:
             raise ValueError("joint feasible projection exceeded its work bound")
         point = _support_point(system, first, second, direction)
-        points[_point_key(point)] = point
+        supports[direction] = point
         evaluations += 1
+        return point
 
     for direction in _INITIAL_SUPPORT_DIRECTIONS:
-        query(direction)
+        point = query(direction)
+        points[_point_key(point)] = point
     while True:
         hull = _ordered_hull(tuple(points.values()))
         if len(hull) <= 2:
             return hull, evaluations
         added = False
         for left, right in zip(hull, (*hull[1:], hull[0]), strict=True):
-            if evaluations >= _MAX_SUPPORT_EVALUATIONS:
-                raise ValueError("joint feasible projection exceeded its work bound")
             edge_x = right[0] - left[0]
             edge_y = right[1] - left[1]
             norm = math.hypot(edge_x, edge_y)
             if norm <= _GEOMETRY_EPSILON:
                 continue
             outward = (edge_y / norm, -edge_x / norm)
-            candidate = _support_point(system, first, second, outward)
-            evaluations += 1
+            candidate = query(outward)
             edge_support = outward[0] * left[0] + outward[1] * left[1]
             candidate_support = (
                 outward[0] * candidate[0] + outward[1] * candidate[1]
@@ -414,6 +416,28 @@ def _sequence_system(
     ), roles
 
 
+def _interval_pair_vertices(
+    first: FiniteInterval,
+    second: FiniteInterval,
+    span: FiniteInterval | PositiveInterval,
+    direction: int,
+) -> tuple[tuple[tuple[float, float], ...], int]:
+    """Intersect two native intervals with their signed separation strip."""
+    candidates = []
+    for left in (first.minimum, first.maximum):
+        candidates.extend((left, right) for right in (second.minimum, second.maximum))
+        candidates.extend((left, left + direction * width) for width in (span.minimum, span.maximum))
+    for right in (second.minimum, second.maximum):
+        candidates.extend((right - direction * width, right) for width in (span.minimum, span.maximum))
+    return _ordered_hull(tuple(
+        (left, right) for left, right in candidates
+        if first.contains(left, epsilon=_GEOMETRY_EPSILON)
+        and second.contains(right, epsilon=_GEOMETRY_EPSILON)
+        and span.minimum - _GEOMETRY_EPSILON
+        <= direction * (right - left) <= span.maximum + _GEOMETRY_EPSILON
+    )), len(candidates)
+
+
 def _direct_sequence_solutions(
     placement: FormatPlacement,
     frame_index: int,
@@ -442,28 +466,11 @@ def _direct_sequence_solutions(
 
     candidates: list[tuple[float, float]] = []
     if start_direct and end_direct:
-        starts = frame.start.full_position_interval_px
-        ends = frame.end.full_position_interval_px
-
-        def retain(start: float, end: float) -> None:
-            measured = direction * (end - start)
-            if (
-                starts.contains(start, epsilon=_GEOMETRY_EPSILON)
-                and ends.contains(end, epsilon=_GEOMETRY_EPSILON)
-                and width.minimum - _GEOMETRY_EPSILON
-                <= measured
-                <= width.maximum + _GEOMETRY_EPSILON
-            ):
-                candidates.append((start, end))
-
-        for start in (starts.minimum, starts.maximum):
-            for end in (ends.minimum, ends.maximum):
-                retain(start, end)
-            for measured in (width.minimum, width.maximum):
-                retain(start, start + direction * measured)
-        for end in (ends.minimum, ends.maximum):
-            for measured in (width.minimum, width.maximum):
-                retain(end - direction * measured, end)
+        positions, evaluations = _interval_pair_vertices(
+            frame.start.full_position_interval_px,
+            frame.end.full_position_interval_px,
+            width, direction,
+        )
     else:
         direct = frame.start if start_direct else frame.end
         for anchor in (
@@ -477,18 +484,16 @@ def _direct_sequence_solutions(
                         (anchor + direction * measured if start_direct else anchor),
                     )
                 )
-    positions = _ordered_hull(tuple(candidates))
+        positions, evaluations = _ordered_hull(tuple(candidates)), len(candidates)
     if not positions:
         raise ValueError("direct frame boundaries have no fixed-W state")
-    return positions, len(candidates)
+    return positions, evaluations
 
 
 def _aperture_cross_vertices(
     placement: FormatPlacement,
 ) -> tuple[tuple[tuple[float, float], ...], int]:
     cross = placement.cross_fit
-    top = _LinearExpression(np.asarray((1.0, 0.0)), 0.0)
-    bottom = _LinearExpression(np.asarray((1.0, 1.0)), 0.0)
     if cross.boundary_use != OutputBoundaryUse.APERTURE_PAIR:
         raise ValueError("aperture projection cannot consume support geometry")
     height_interval = (
@@ -499,25 +504,13 @@ def _aperture_cross_vertices(
         == CrossHeightProjectionBasis.RETAINED_REVIEW_CANONICAL_HEIGHT
         else cross.fixed_height_px
     )
-    bounds = (
-        (
-            cross.top_full_interval_px.minimum,
-            cross.top_full_interval_px.maximum,
-        ),
-        (
-            height_interval.minimum,
-            height_interval.maximum,
-        ),
+    vertices, evaluations = _interval_pair_vertices(
+        cross.top_full_interval_px, cross.bottom_full_interval_px,
+        height_interval, 1,
     )
-    intervals = (
-        (top, cross.top_full_interval_px),
-        (bottom, cross.bottom_full_interval_px),
-    )
-    return _project_pair_vertices(
-        _FeasibleSystem(bounds, _constraints(intervals)),
-        top,
-        bottom,
-    )
+    if not vertices:
+        raise ValueError("selected placement has no joint feasible state")
+    return vertices, evaluations
 
 
 def _support_cross_vertices(

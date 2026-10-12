@@ -2246,7 +2246,14 @@ winner/runner、provenance、footprint 或输出像素。
 同一 phase 输入的坐标、角色与 separator 身份以 O(N+R+P) 只读索引供 seed 和迭代复用；索引绑定
 原观察与 pair tuple，随该次 pass 释放。依赖 seed、拟合参数或邻接关系的匹配状态仍逐次计算。
 单次 matching 的 expected role positions 和 Pareto compatibility axes 各计算一次；固定 W 的区间
-相容性直接比较差值端点。联合可行投影共用一条顶点路径，仍保留原 LP 查询次序、上限和实际计数。
+相容性直接比较差值端点。联合可行投影共用一条顶点路径，保留完整联合约束与求解上限。
+原生双边界与 fixed W/H 的二维集合共用区间矩形和有符号跨度条带的交点枚举，每次计入 12 个端点
+组合检查；点、线段和空集沿用同一闭集判据。孔径不再为该集合调用通用 LP，完整联合格点约束仍由
+原投影求解。单次联合投影只求解一次完全相同的支撑方向，结果随该次投影释放，不跨 placement 或
+source；计数只包含实际 LP 调用，原 64 次求解与 32 个顶点上限不变。
+粗边共同方向闭合复用 `physical_line_region_in_slopes`，以共同斜率区间直接初始化联合位置/斜率域，
+再裁剪完整原始物理区间；零宽斜率、点和线段均保留，不对斜率额外应用像素容差。单侧准备和每对
+共同方向、代表拟合、连续性及 H/span 权限仍独立计算，不缓存配对结论。
 
 正式输入限于单页 unsigned 16-bit、RGB 三通道、contiguous TIFF；压缩接受 `NONE`、`LZW`、
 `DEFLATE` / `ADOBE_DEFLATE` 或 `ZSTD`。Orientation 1–8 在 decode boundary 规范化，输出写

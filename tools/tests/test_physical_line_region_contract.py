@@ -18,6 +18,7 @@ from x5crop.detection.photo_geometry.measurement_model import PhotoBoundaryTrans
 from x5crop.detection.photo_geometry.measurement_points import TransitionPoint
 from x5crop.detection.photo_geometry.robust_line_fit import (
     physical_line_region as compile_physical_line_region,
+    physical_line_region_in_slopes,
     physical_line_region_at_positions,
     physical_slope_interval,
 )
@@ -67,6 +68,37 @@ def physical_line_region(points, maximum_slope, reference_trace_px):
 
 
 class PhysicalLineRegionContractTest(unittest.TestCase):
+    def test_asymmetric_and_exact_slope_boxes_match_joint_lp(self) -> None:
+        for traces, intervals, reference, slopes in (
+            ((0, 100, 200), ((100, 102), (102, 104), (104, 106)), 50.0, (0.01, 0.03)),
+            ((0, 100, 200), ((100, 102), (102, 104), (104, 106)), 50.0, (0.02, 0.02)),
+            ((0, 100, 200), ((104, 106), (102, 104), (100, 102)), 50.0, (-0.03, -0.01)),
+            ((0, 100, 200), ((100, 102), (100, 102), (100, 102)), 50.0, (0.0, 0.0)),
+            ((0, 100, 200), ((100, 100), (100, 100), (100, 100)), 50.0, (0.0, 0.0)),
+            ((0, 100, 200), ((100, 102), (102, 104), (104, 106)), 50.0, (0.0, 0.0)),
+            ((10000000, 10000100, 10000200), ((100, 102), (102, 104), (104, 106)),
+             9000000.0, (0.02, 0.02)),
+        ):
+            region = physical_line_region_in_slopes(
+                tuple((float(trace), FiniteInterval(*bounds))
+                      for trace, bounds in zip(traces, intervals, strict=True)),
+                FiniteInterval(*slopes), reference,
+            )
+            rows, limits = [], []
+            for trace, bounds in zip(traces, intervals, strict=True):
+                rows.extend(((1.0, trace - reference), (-1.0, reference - trace)))
+                limits.extend((bounds[1], -bounds[0]))
+            for objective in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 100), (-1, 100)):
+                oracle = linprog(objective, A_ub=rows, b_ub=limits,
+                                 bounds=((None, None), slopes), method="highs")
+                self.assertEqual(region is not None, oracle.success)
+                if region is not None:
+                    self.assertTrue(all(slopes[0] <= m <= slopes[1] for _, m in region.vertices))
+                    self.assertAlmostEqual(
+                        min(objective[0] * p + objective[1] * m for p, m in region.vertices),
+                        oracle.fun, places=7,
+                    )
+
     def test_output_line_provenance_rejects_family_and_width_substitution(self) -> None:
         edge = {
             "observation_id": "registered-line",
