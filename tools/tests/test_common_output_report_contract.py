@@ -17,10 +17,10 @@ from x5crop.domain import Box
 from x5crop.report.read_models import typed_read_model
 
 
-def fixture(delta=5):
+def fixture(delta=5, *, lane=None):
     first = _placement()
     placements = first, translated_h(first, delta)
-    result = materialize_common_h_output(placements, ((0, 1), (1, 0)), lane=_lane(), layout="horizontal")
+    result = materialize_common_h_output(placements, ((0, 1), (1, 0)), lane=lane or _lane(), layout="horizontal")
     cross = {"fit_groups": [{"fit": typed_read_model(p.cross_fit), "independently_supported": True}
                             for p in placements],
              "conditional_fit_groups": [{"fit": typed_read_model(p.cross_fit), "independently_supported": True}
@@ -77,7 +77,10 @@ class CommonOutputReportContractTest(unittest.TestCase):
             self.validate(self.value, cross_competition=cross)
 
     def test_changed_common_hull_source_clipping_or_saturation_is_rejected(self):
-        clipped, _ = fixture(-20)
+        # A window larger than the true source still requires explicit clipping
+        # after feasible in-source center placement has been exhausted.
+        clipped, _ = fixture(-20, lane=_lane(short_axis_px=50))
+        self.extent = clipped.output_footprints[0].source_extent
         value = typed_read_model(clipped)
         self.assertTrue(value["output_footprints"][0]["saturation_facts"])
         self.validate(value)

@@ -93,8 +93,8 @@ class CurrentRuntimeContractTest(unittest.TestCase):
 
     def test_diagnostic_validates_current_output_footprint_overflow_facts(self) -> None:
         output = typed_read_model(sampling_footprint(Box(0, 0, 100, 100), WorkspaceExtent(100, 100),
-            requested=((-2.0, 10.0), (80.0, 10.0), (80.0, 90.0), (-2.0, 90.0)),
-            mandatory=((0.0, 10.0), (80.0, 10.0), (80.0, 90.0), (0.0, 90.0))))
+            requested=((-2.0, 10.0), (101.0, 10.0), (101.0, 90.0), (-2.0, 90.0)),
+            mandatory=((0.0, 10.0), (99.0, 10.0), (99.0, 90.0), (0.0, 90.0))))
         orientation = orientation_mapping(1, 100, 100)
         report = {
             "input": {"profile": {"shape": [100, 100, 3], "axes": "YXS", "orientation": typed_read_model(orientation)}},
@@ -104,12 +104,14 @@ class CurrentRuntimeContractTest(unittest.TestCase):
             "photo_geometry": {"lanes": [{"output_footprints": [output]}]},
         }
         self.assertTrue(_source_geometry_authority_is_explicit(report))
+        self.assertTrue(output["saturation_facts"])
         output["saturation_facts"] = []
         self.assertFalse(_source_geometry_authority_is_explicit(report))
 
     def test_current_report_rejects_duplicate_footprint_authority_sides(self) -> None:
         output = typed_read_model(sampling_footprint(Box(0, 0, 100, 100), WorkspaceExtent(100, 100),
-            requested=((-2.0, 10.0), (80.0, 10.0), (80.0, 90.0), (-2.0, 90.0))))
+            requested=((-2.0, 10.0), (101.0, 10.0), (101.0, 90.0), (-2.0, 90.0))))
+        validate_output_footprint_authority(output, expected_source_extent=WorkspaceExtent(100, 100))
         output["saturation_facts"].append(dict(output["saturation_facts"][0]))
         with self.assertRaisesRegex(ValueError, "one fact per authority side"):
             validate_output_footprint_authority(output, expected_source_extent=WorkspaceExtent(100, 100))

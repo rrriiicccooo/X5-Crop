@@ -145,7 +145,10 @@ class SourceSamplingDomainContractTest(unittest.TestCase):
 
     def test_report_cannot_self_declare_a_different_source_extent(self) -> None:
         extent = WorkspaceExtent(7, 5)
-        output = typed_read_model(sampling_footprint(Box(0, 0, 7, 5), extent))
+        # Keep the window inside both forged extents so this checks the external
+        # source binding rather than failing an earlier fixed-window replay.
+        output = typed_read_model(sampling_footprint(Box(0, 0, 7, 5), extent,
+            requested=rectangle(1.0, 1.0, 4.0, 3.0)))
         for width in (6, 8):
             output["source_extent"]["width"] = width
             with self.subTest(width=width), self.assertRaisesRegex(ValueError, "source extent"):
