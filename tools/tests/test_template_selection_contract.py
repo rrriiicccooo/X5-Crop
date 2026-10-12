@@ -11,9 +11,7 @@ from tools.tests.template_test_support import (
     placement_cross,
     placement_cross_longitudinal_authority,
 )
-from x5crop.detection.candidate.assessment.candidate_gate import (
-    candidate_gate_assessment,
-)
+from x5crop.detection.candidate.assessment.candidate_gate import candidate_gate_assessment
 from x5crop.detection.candidate.assessment.model import CANDIDATE_GATE_CHECK_CODES
 from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.gate_checks import (
@@ -23,9 +21,7 @@ from x5crop.detection.gate_checks import (
     TypedAssessment,
 )
 from x5crop.detection.photo_geometry.model import BoundaryRole
-from x5crop.detection.photo_geometry.content_veto_model import (
-    ContentVetoAssessment,
-)
+from x5crop.detection.photo_geometry.content_veto_model import ContentVetoAssessment
 from x5crop.detection.photo_geometry.template_cross import fit_template_cross
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossFit,
@@ -35,7 +31,7 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     EnclosingSupportPair,
     TemplateCrossInput,
 )
-from x5crop.detection.photo_geometry.template_phase import fit_template_phase
+from x5crop.detection.photo_geometry.template_phase_competition import fit_template_phase
 from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseFailureKind,
     PhaseFitStatus,

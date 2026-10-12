@@ -17,7 +17,10 @@ from .corridors import (
     source_lane_box,
 )
 from .coarse_strip_support import observe_coarse_strip_support
-from .template_coarse_sides import coarse_enclosing_binding as _coarse_enclosing_binding, register_coarse_side_facts
+from .template_coarse_sides import (
+    coarse_enclosing_binding as _coarse_enclosing_binding,
+    register_coarse_side_facts,
+)
 from .exterior_region_measurement import measure_exterior_region
 from .coarse_enclosing_model import CoarseSharedDirection
 from .measurement_model import (
@@ -43,9 +46,7 @@ from .observation_types import (
     SeparatorBandMeasurementBasis,
 )
 from .template_evidence import template_evidence_use_ledger
-from .template_direct_role_authority import (
-    intrinsic_direct_role_authority_bases,
-)
+from .template_direct_role_authority import intrinsic_direct_role_authority_bases
 from .template_frame_width import (
     apply_placement_source_frame_width,
     calibrate_source_frame_width,
@@ -65,10 +66,7 @@ from .template_registration import (
     register_cross_evidence,
     register_template_local_cross_refinements,
 )
-from .template_cross import (
-    calibrate_source_frame_height,
-    fit_template_cross,
-)
+from .template_cross import calibrate_source_frame_height, fit_template_cross
 from .template_cross_model import TemplateCrossInput
 from .template_contact import observe_contact_edges
 from .template_overlap import observe_overlap_edge_pairs
@@ -79,10 +77,10 @@ from .template_model import (
 from .template_phase import (
     account_prior_phase_fit,
     finalize_template_phase_candidate,
-    fit_template_phase,
     fit_template_phase_candidate_with_adjacency_relations,
-    refine_template_phase_with_source_frame_width,
 )
+from .template_phase_competition import fit_template_phase
+from .template_phase_refinement import refine_template_phase_with_source_frame_width
 from .template_phase_model import (
     GlobalLatticeAuthorityEvidence,
     PhaseFailureKind,

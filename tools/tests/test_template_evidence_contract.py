@@ -9,9 +9,7 @@ from tools.tests.template_test_support import (
     unavailable_nominal_grid_prior,
 )
 from x5crop.detection.photo_geometry.template_cross import fit_template_cross
-from x5crop.detection.photo_geometry.template_cross_model import (
-    TemplateCrossInput,
-)
+from x5crop.detection.photo_geometry.template_cross_model import TemplateCrossInput
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.template_evidence import (
     EvidenceUse,
@@ -22,19 +20,10 @@ from x5crop.detection.photo_geometry.observation_types import (
     AggregateEdgeResolution,
     AggregateEdgeResolutionKind,
 )
-from x5crop.detection.photo_geometry.template_phase import (
-    fit_template_phase,
-    fit_template_phase_with_adjacency_relations,
-)
-from x5crop.detection.photo_geometry.template_phase_model import (
-    TemplatePhaseInput,
-)
-from x5crop.domain import (
-    EvidenceState,
-    FiniteInterval,
-    ObservationId,
-    PositiveInterval,
-)
+from x5crop.detection.photo_geometry.template_phase_competition import fit_template_phase
+from x5crop.detection.photo_geometry.template_phase import fit_template_phase_with_adjacency_relations
+from x5crop.detection.photo_geometry.template_phase_model import TemplatePhaseInput
+from x5crop.domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
 
 
 class TemplateEvidenceContractTest(unittest.TestCase):

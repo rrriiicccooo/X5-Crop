@@ -4,36 +4,56 @@ from dataclasses import replace
 from types import SimpleNamespace
 import unittest
 
-from tools.tests.template_test_support import phase_edge, phase_template, placement_compose
+from tools.tests.template_test_support import (
+    phase_edge,
+    phase_template,
+    placement_compose,
+)
 from tools.tests.test_common_h_output_contract import registration
 from tools.tests.test_common_output_contract import translated_h
-from tools.tests.test_template_cross_contract import aspect_input, binding, _supported_aspect_ratio
+from tools.tests.test_template_cross_contract import (
+    aspect_input,
+    binding,
+    _supported_aspect_ratio,
+)
 from tools.tests.test_template_family_membership_contract import _problem
-from tools.tests.test_template_output_contract import _lane, _placement, _selected_output_gate_fact
+from tools.tests.test_template_output_contract import (
+    _lane,
+    _placement,
+    _selected_output_gate_fact,
+)
 from x5crop.domain import EvidenceState, FiniteInterval, ObservationId
 from x5crop.formats import FramePhysicalSpec
 from x5crop.detection.gate_checks import GateGap
 from x5crop.detection.photo_geometry.content_veto_model import (
-    ContentVetoAssessment, ContentVetoFact, ContentVetoReason,
+    ContentVetoAssessment,
+    ContentVetoFact,
+    ContentVetoReason,
 )
 from x5crop.detection.photo_geometry.line_observations import (
-    PhotoBoundaryObservation, RobustLineFitReceipt, SourceCoordinateLine,
+    PhotoBoundaryObservation,
+    RobustLineFitReceipt,
+    SourceCoordinateLine,
 )
 from x5crop.detection.photo_geometry.model import BoundaryAxis, BoundaryRole
 from x5crop.detection.photo_geometry.template_common_output import (
-    assess_common_h_output_authority, common_h_fit_members, materialize_common_h_output,
+    assess_common_h_output_authority,
+    common_h_fit_members,
+    materialize_common_h_output,
 )
 from x5crop.detection.photo_geometry.template_cross import fit_template_cross
 from x5crop.detection.photo_geometry.template_cross_model import CrossFitStatus
 from x5crop.detection.photo_geometry.template_cross_support import SupportFitStatus
 from x5crop.detection.photo_geometry.template_family_membership import (
-    MembershipState, enumerate_membership_scope,
+    MembershipState,
+    enumerate_membership_scope,
 )
 from x5crop.detection.photo_geometry.template_output import common_direct_use_budget_assessment
-from x5crop.detection.photo_geometry.template_phase import fit_template_phase
+from x5crop.detection.photo_geometry.template_phase_competition import fit_template_phase
 from x5crop.detection.photo_geometry.template_registration import membership_projection_coverage
 from x5crop.detection.photo_geometry.template_selection import (
-    select_lane_template_placement, select_template_source,
+    select_lane_template_placement,
+    select_template_source,
 )
 
 

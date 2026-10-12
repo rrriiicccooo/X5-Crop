@@ -14,7 +14,6 @@ from enum import Enum
 
 from ...domain import FiniteInterval, ObservationId
 from .model import PHOTO_BOUNDARY_MEASUREMENT_SPEC
-from .separator_material import normal_separator_material_bands
 from .template_direct_role_authority import (
     DirectRoleAuthorityBasis,
     DirectRoleAuthorityFact,
@@ -25,20 +24,15 @@ from .template_model import (
     adjacency_relation_required_bindings,
     ordered_template_roles,
 )
-from . import template_phase_candidates as _phase_candidates
-from .template_phase_candidates import (
-    _BoundFit,
-    _PhaseSeed,
+from .template_phase_candidate_model import _BoundFit, _PhaseSeed
+from .template_phase_observations import (
     _facts,
-    _projected_role_counterevidence_conflicts,
     _separator_pair_facts,
-    _with_separator_role_authority,
+    prepare_phase_separator_support,
 )
-from .template_phase_model import (
-    NativeEndpointPhaseDiagnostic,
-    TemplatePhaseInput,
-)
-from .template_separator_support import resolve_separator_support
+from .template_phase_projection import _projected_role_counterevidence_conflicts
+from .template_phase_model import NativeEndpointPhaseDiagnostic, TemplatePhaseInput
+from . import template_phase_fitting as _phase_fitting
 
 
 _INTRINSIC_BASES = frozenset(
@@ -501,19 +495,14 @@ def build_intrinsic_phase_refit(
         )
 
     try:
-        eligible_bands = normal_separator_material_bands(
-            phase_input.separator_bands,
-            maximum_material_gap_px=template.gap_prior_px.maximum,
-        )
-        support_resolution = resolve_separator_support(
-            phase_input.observations,
-            eligible_bands,
-        )
-        qualified_observations = _with_separator_role_authority(
+        separator_support = prepare_phase_separator_support(
             phase_input.observations,
             phase_input.separator_bands,
             maximum_material_gap_px=template.gap_prior_px.maximum,
         )
+        eligible_bands = separator_support.bands
+        support_resolution = separator_support.resolution
+        qualified_observations = separator_support.observations
         registered_trace_positions = (
             phase_input.sequence_measurement_sets[0].query.trace_positions_px
             if phase_input.sequence_measurement_sets
@@ -584,7 +573,7 @@ def build_intrinsic_phase_refit(
     )
     fit_seed_call_count = 1
     try:
-        proposal = _phase_candidates._fit_seed(
+        proposal = _phase_fitting._fit_seed(
             seed,
             tuple(
                 item

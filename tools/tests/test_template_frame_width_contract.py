@@ -16,9 +16,7 @@ from tools.tests.template_test_support import (
     unavailable_nominal_grid_prior,
 )
 from x5crop.detection.photo_geometry.template_contact import observe_contact_edges
-from x5crop.detection.photo_geometry.template_feasible_geometry import (
-    project_format_placement,
-)
+from x5crop.detection.photo_geometry.template_feasible_geometry import project_format_placement
 from x5crop.detection.photo_geometry.template_frame_width import (
     apply_correlated_frame_width_inference,
     apply_placement_source_frame_width,
@@ -39,9 +37,7 @@ from x5crop.detection.photo_geometry.template_adjacency_coverage import (
     AdjacencyObservationCoverage,
     AdjacencyTraceCoverage,
 )
-from x5crop.detection.photo_geometry.template_adjacency_topology import (
-    observe_adjacency_continuity,
-)
+from x5crop.detection.photo_geometry.template_adjacency_topology import observe_adjacency_continuity
 from x5crop.detection.photo_geometry.template_model import (
     FrameWidthInferenceFailureKind,
     SeparatorRelation,
@@ -54,17 +50,10 @@ from x5crop.detection.photo_geometry.template_lattice_authority import (
     assess_global_lattice_authority,
     direct_role_constraint_rank,
 )
-from x5crop.detection.photo_geometry.template_outer_frame_authority import (
-    assess_outer_frame_observation_authority,
-)
-from x5crop.domain import (
-    EvidenceState,
-    FiniteInterval,
-    ObservationId,
-    PositiveInterval,
-)
+from x5crop.detection.photo_geometry.template_outer_frame_authority import assess_outer_frame_observation_authority
+from x5crop.domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
 from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
-from x5crop.detection.photo_geometry.template_phase import fit_template_phase
+from x5crop.detection.photo_geometry.template_phase_competition import fit_template_phase
 from x5crop.detection.photo_geometry.template_phase_model import (
     GlobalLatticeAuthorityEvidence,
     PhaseFailureKind,

@@ -13,9 +13,7 @@ from tools.tests.template_test_support import (
 )
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
-from x5crop.detection.photo_geometry.template_aspect_ratio_model import (
-    unavailable_aperture_aspect_ratio_authority,
-)
+from x5crop.detection.photo_geometry.template_aspect_ratio_model import unavailable_aperture_aspect_ratio_authority
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossEvidence,
     CrossFailureKind,
@@ -37,13 +35,9 @@ from x5crop.detection.photo_geometry.template_phase_review import (
     build_independent_phase_review,
     independent_phase_cross_input,
 )
-from x5crop.detection.photo_geometry.template_measurement_plan_model import (
-    MAX_CROSS_PAIRS,
-)
-from x5crop.detection.photo_geometry.template_native_retention import (
-    select_native_phase_retention,
-)
-from x5crop.detection.photo_geometry.template_phase_candidates import _BoundFit
+from x5crop.detection.photo_geometry.template_measurement_plan_model import MAX_CROSS_PAIRS
+from x5crop.detection.photo_geometry.template_native_retention import select_native_phase_retention
+from x5crop.detection.photo_geometry.template_phase_candidate_model import _BoundFit
 from x5crop.detection.photo_geometry.template_phase_model import (
     NativeEndpointPhaseDiagnostic,
     NativeEndpointSelectionBasis,
@@ -52,9 +46,7 @@ from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseCandidateProjectionBasis,
     PhaseCandidateProjectionOutcome,
 )
-from x5crop.detection.photo_geometry.template_placement import (
-    resolved_cross_support_domains_px,
-)
+from x5crop.detection.photo_geometry.template_placement import resolved_cross_support_domains_px
 from x5crop.domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
 from x5crop.formats import FramePhysicalSpec
 

@@ -4,6 +4,10 @@ from dataclasses import replace
 import unittest
 from unittest.mock import patch
 
+from x5crop.detection.photo_geometry import (
+    template_phase_fitting as phase_fitting,
+    template_phase_observations as phase_observations,
+)
 from tools.tests.template_test_support import (
     phase_edge,
     phase_template,
@@ -22,7 +26,7 @@ from x5crop.detection.photo_geometry.template_model import (
     SeparatorRelationKind,
     SequenceBindingUse,
 )
-from x5crop.detection.photo_geometry.template_phase_candidates import _BoundFit
+from x5crop.detection.photo_geometry.template_phase_candidate_model import _BoundFit
 from x5crop.detection.photo_geometry.template_phase_model import (
     NativeEndpointPhaseDiagnostic,
     NativeEndpointSelectionBasis,
@@ -155,17 +159,27 @@ class IntrinsicPhaseReviewRefitContractTests(unittest.TestCase):
         )
         return phase_input, diagnostic
 
+    def test_refit_resolves_separator_components_once_without_changing_facts(self):
+        phase_input, original = self._fixture()
+        expected = build_intrinsic_phase_refit(phase_input, original)
+        with patch.object(
+            phase_observations,
+            "resolve_separator_support",
+            wraps=phase_observations.resolve_separator_support,
+        ) as resolve:
+            actual = build_intrinsic_phase_refit(phase_input, original)
+        resolve.assert_called_once()
+        self.assertEqual(actual, expected)
+
     def test_replays_one_seed_and_preserves_contradicted_outer_ledger(self):
         phase_input, original = self._fixture()
         authority_before = original.projection.input_direct_role_authority
         projection_before = original.projection
         fit_before = original.fit
 
-        from x5crop.detection.photo_geometry import template_phase_candidates
-
-        real_fit_seed = template_phase_candidates._fit_seed
+        real_fit_seed = phase_fitting._fit_seed
         with patch.object(
-            template_phase_candidates,
+            phase_fitting,
             "_fit_seed",
             side_effect=real_fit_seed,
         ) as fitter:
@@ -239,7 +253,7 @@ class IntrinsicPhaseReviewRefitContractTests(unittest.TestCase):
         # The constructor still validates the complete role/fact mapping; the
         # missing intrinsic relation identity is rejected by the builder.
         with patch(
-            "x5crop.detection.photo_geometry.template_intrinsic_review_refit._phase_candidates._fit_seed"
+            "x5crop.detection.photo_geometry.template_phase_fitting._fit_seed"
         ) as fitter:
             result = build_intrinsic_phase_refit(phase_input, relation_original)
         self.assertEqual(
@@ -252,7 +266,7 @@ class IntrinsicPhaseReviewRefitContractTests(unittest.TestCase):
     def test_none_fit_and_changed_slot_are_typed_failures_with_one_call(self):
         phase_input, original = self._fixture()
         with patch(
-            "x5crop.detection.photo_geometry.template_intrinsic_review_refit._phase_candidates._fit_seed",
+            "x5crop.detection.photo_geometry.template_phase_fitting._fit_seed",
             return_value=None,
         ) as fitter:
             result = build_intrinsic_phase_refit(phase_input, original)
@@ -274,14 +288,14 @@ class IntrinsicPhaseReviewRefitContractTests(unittest.TestCase):
             phase_lattice_fit=changed_lattice,
         )
         with patch(
-            "x5crop.detection.photo_geometry.template_intrinsic_review_refit._phase_candidates._fit_seed",
+            "x5crop.detection.photo_geometry.template_phase_fitting._fit_seed",
             return_value=_BoundFit(changed_fit, True),
         ):
             changed = build_intrinsic_phase_refit(phase_input, original)
         self.assertEqual(changed.failure.kind, IntrinsicPhaseRefitFailureKind.FIT_SLOT_CHANGED)
 
         with patch(
-            "x5crop.detection.photo_geometry.template_intrinsic_review_refit._phase_candidates._fit_seed",
+            "x5crop.detection.photo_geometry.template_phase_fitting._fit_seed",
             return_value=_BoundFit(successful.diagnostic.fit, False),
         ):
             incompatible = build_intrinsic_phase_refit(phase_input, original)
@@ -323,7 +337,7 @@ class IntrinsicPhaseReviewRefitContractTests(unittest.TestCase):
         )
 
         with patch(
-            "x5crop.detection.photo_geometry.template_intrinsic_review_refit._phase_candidates._fit_seed"
+            "x5crop.detection.photo_geometry.template_phase_fitting._fit_seed"
         ) as fitter:
             result = build_intrinsic_phase_refit(phase_input, foreign_original)
 
@@ -358,7 +372,7 @@ class IntrinsicPhaseReviewRefitContractTests(unittest.TestCase):
         # full interval is compared against the new model envelope, even when
         # a center-only comparison would have hidden the disjoint interval.
         with patch(
-            "x5crop.detection.photo_geometry.template_intrinsic_review_refit._phase_candidates._fit_seed",
+            "x5crop.detection.photo_geometry.template_phase_fitting._fit_seed",
             return_value=_BoundFit(far_model, True),
         ):
             result = build_intrinsic_phase_refit(phase_input, original)
@@ -418,7 +432,7 @@ class IntrinsicPhaseReviewRefitContractTests(unittest.TestCase):
             all_intrinsic=True,
         )
         with patch(
-            "x5crop.detection.photo_geometry.template_intrinsic_review_refit._phase_candidates._fit_seed"
+            "x5crop.detection.photo_geometry.template_phase_fitting._fit_seed"
         ) as fitter:
             result = build_intrinsic_phase_refit(phase_input, original)
         self.assertEqual(

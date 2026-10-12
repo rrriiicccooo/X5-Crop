@@ -21,7 +21,7 @@ from x5crop.detection.photo_geometry.template_direct_role_authority import (
     assess_direct_role_binding_authority,
 )
 from x5crop.detection.photo_geometry.template_model import ContactRelation
-from x5crop.detection.photo_geometry.template_phase import fit_template_phase
+from x5crop.detection.photo_geometry.template_phase_competition import fit_template_phase
 from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseCandidateProjectionOutcome,
     PhaseFailureKind,

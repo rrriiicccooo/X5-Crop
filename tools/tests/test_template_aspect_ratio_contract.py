@@ -18,28 +18,25 @@ from x5crop.detection.photo_geometry.template_aspect_ratio import (
     derive_aperture_aspect_ratio_authority,
     reconcile_direct_aperture_height,
 )
-from x5crop.detection.photo_geometry.template_aspect_ratio_model import (
-    ApertureAspectRatioFailureKind,
-)
+from x5crop.detection.photo_geometry.template_aspect_ratio_model import ApertureAspectRatioFailureKind
 from x5crop.detection.photo_geometry.template_frame_width import (
     SourceFrameWidthAuthority,
     SourceFrameWidthAuthorityFailureKind,
     SourceFrameWidthAuthorityPlacementScope,
 )
-from x5crop.detection.photo_geometry.template_model import (
-    SourceFrameWidthAuthorityBasis,
+from x5crop.detection.photo_geometry.template_model import SourceFrameWidthAuthorityBasis
+from x5crop.detection.photo_geometry.template_cross import (
+    calibrate_source_frame_height,
+    fit_template_cross,
 )
-from x5crop.detection.photo_geometry.template_cross import calibrate_source_frame_height, fit_template_cross
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossEvidence,
     CrossFitStatus,
     CrossHeightInferenceBasis,
     TemplateCrossInput,
 )
-from x5crop.detection.photo_geometry.template_phase import fit_template_phase
-from x5crop.detection.photo_geometry.template_selection import (
-    select_lane_template_placement,
-)
+from x5crop.detection.photo_geometry.template_phase_competition import fit_template_phase
+from x5crop.detection.photo_geometry.template_selection import select_lane_template_placement
 from x5crop.detection.gate_checks import GateGap, MinimumMissingFact
 from x5crop.formats import ApertureAspectRatioSpec, FramePhysicalSpec
 

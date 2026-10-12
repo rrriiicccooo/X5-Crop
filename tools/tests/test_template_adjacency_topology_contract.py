@@ -9,10 +9,9 @@ from tools.tests.template_test_support import (
     phase_sequence_measurement,
     phase_template,
     placement_sequence,
+    unavailable_nominal_grid_prior,
 )
-from x5crop.detection.photo_geometry.template_adjacency_coverage import (
-    assess_adjacency_observation_coverage,
-)
+from x5crop.detection.photo_geometry.template_adjacency_coverage import assess_adjacency_observation_coverage
 from x5crop.detection.photo_geometry.template_adjacency_topology import (
     AdjacencyContinuityBasis,
     AdjacencyContinuityFailureKind,
@@ -21,34 +20,24 @@ from x5crop.detection.photo_geometry.template_adjacency_topology import (
     unbound_registered_overlap_counterevidence,
 )
 from x5crop.detection.photo_geometry.template_contact import observe_contact_edges
-from x5crop.detection.photo_geometry.model import (
-    BoundaryEvidenceState,
-    BoundaryRole,
-)
-from x5crop.detection.photo_geometry.observation_types import (
-    SeparatorMaterialRegionState,
-)
+from x5crop.detection.photo_geometry.model import BoundaryEvidenceState, BoundaryRole
+from x5crop.detection.photo_geometry.observation_types import SeparatorMaterialRegionState
 from x5crop.detection.photo_geometry.template_residual import (
     ResidualPattern,
     derive_adjacency_relations,
 )
-from x5crop.detection.photo_geometry.template_phase import fit_template_phase
-from x5crop.detection.photo_geometry.template_phase import (
-    fit_template_phase_with_adjacency_relations,
-)
+from x5crop.detection.photo_geometry.template_phase_competition import fit_template_phase
+from x5crop.detection.photo_geometry.template_phase import fit_template_phase_with_adjacency_relations
 from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseFailureKind,
     PhaseFitStatus,
     TemplatePhaseInput,
 )
-from tools.tests.template_test_support import unavailable_nominal_grid_prior
 from x5crop.detection.photo_geometry.template_model import (
     OverlapRelation,
     template_role_refinement_radius_px,
 )
-from x5crop.detection.photo_geometry.template_overlap import (
-    observe_overlap_edge_pairs,
-)
+from x5crop.detection.photo_geometry.template_overlap import observe_overlap_edge_pairs
 from x5crop.domain import EvidenceState, FiniteInterval
 
 

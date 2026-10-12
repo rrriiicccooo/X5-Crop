@@ -1,11 +1,12 @@
 """Prepared-lane fixtures shared by runtime and replay contract tests."""
 
 from __future__ import annotations
-from tools.tests.photo_geometry_support import make_native_test_field
 
 from dataclasses import replace
+
 import numpy as np
 
+from tools.tests.photo_geometry_support import make_native_test_field
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.evidence.scan_canvas import observe_scan_canvas
 from x5crop.detection.photo_geometry.coarse_strip_support import (
@@ -33,30 +34,21 @@ from x5crop.detection.photo_geometry.search_model import (
 )
 from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
 from x5crop.detection.photo_geometry.template_cross import fit_template_cross
-from x5crop.detection.photo_geometry.template_cross_model import (
-    TemplateCrossInput,
-)
+from x5crop.detection.photo_geometry.template_cross_model import TemplateCrossInput
 from x5crop.detection.photo_geometry.template_frame_width import (
     SourceFrameWidthAuthority,
     SourceFrameWidthAuthorityFailureKind,
 )
-from x5crop.detection.photo_geometry.template_measurement_plan import (
-    compile_template_measurement_plan,
-)
-from x5crop.detection.photo_geometry.template_phase import fit_template_phase
-from x5crop.detection.photo_geometry.template_phase_model import (
-    TemplatePhaseInput,
-)
+from x5crop.detection.photo_geometry.template_measurement_plan import compile_template_measurement_plan
+from x5crop.detection.photo_geometry.template_phase_competition import fit_template_phase
+from x5crop.detection.photo_geometry.template_phase_model import TemplatePhaseInput
 from x5crop.detection.photo_geometry.template_registration import CrossRegistrationWorkReceipt
 from x5crop.detection.photo_geometry.template_runtime_model import (
     PreparedTemplateLane,
     RegisteredTemplateLane,
     TemplateMeasurementWorkReceipt,
 )
-from x5crop.detection.source_core import (
-    SourceLaneEvidence,
-    SourceStripValidationDomain,
-)
+from x5crop.detection.source_core import SourceLaneEvidence, SourceStripValidationDomain
 from x5crop.domain import Box, EvidenceState, FiniteInterval, PositiveInterval
 from x5crop.formats import FramePhysicalSpec
 from tools.tests.template_test_support import unavailable_nominal_grid_prior

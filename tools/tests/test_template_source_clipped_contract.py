@@ -6,32 +6,50 @@ import unittest
 
 from tools.regression.report_validation import _read_common_proof
 from tools.tests.template_test_support import (
-    phase_edge, phase_sequence_measurement, phase_template, placement_sequence,
+    phase_edge,
+    phase_sequence_measurement,
+    phase_template,
+    placement_sequence,
 )
 from x5crop.detection.photo_geometry.model import BoundaryAxis, BoundaryRole
 from x5crop.detection.photo_geometry.template_direct_role_authority import (
-    DirectRoleAuthorityBasis, DirectRoleAuthorityFact, DirectRoleBindingAuthority,
+    DirectRoleAuthorityBasis,
+    DirectRoleAuthorityFact,
+    DirectRoleBindingAuthority,
 )
 from x5crop.detection.photo_geometry.template_lattice_authority import direct_role_constraint_rank
 from x5crop.detection.photo_geometry.template_model import (
-    SequenceBindingUse, TemplateSearchReceipt, phase_lattice_fit_from_absolute,
+    SequenceBindingUse,
+    TemplateSearchReceipt,
+    phase_lattice_fit_from_absolute,
 )
-from x5crop.detection.photo_geometry.template_phase_candidates import _BoundFit
+from x5crop.detection.photo_geometry.template_phase_candidate_model import _BoundFit
 from x5crop.detection.photo_geometry.template_phase_model import (
-    PhaseCandidateAuthorityProjection, PhaseCandidateProjectedBinding,
-    PhaseCandidateProjectionBasis, PhaseCandidateProjectionOutcome,
-    PhaseFailureKind, PhaseFitResult, PhaseFitStatus,
+    PhaseCandidateAuthorityProjection,
+    PhaseCandidateProjectedBinding,
+    PhaseCandidateProjectionBasis,
+    PhaseCandidateProjectionOutcome,
+    PhaseFailureKind,
+    PhaseFitResult,
+    PhaseFitStatus,
 )
-from x5crop.detection.photo_geometry.template_phase import (
-    _carry_native_phase_diagnostic, fit_template_phase,
-)
+from x5crop.detection.photo_geometry.template_phase import _carry_native_phase_diagnostic
+from x5crop.detection.photo_geometry.template_phase_competition import fit_template_phase
 from x5crop.detection.photo_geometry.template_source_clipped import (
-    SourceClippedPhaseDiagnostic, SourceClippedPhaseRetention,
-    _deduplicate_classes, carry_source_clipped_phase_retention,
+    SourceClippedPhaseDiagnostic,
+    SourceClippedPhaseRetention,
+    _deduplicate_classes,
+    carry_source_clipped_phase_retention,
     select_source_clipped_phase_retention,
 )
 from x5crop.detection.photo_geometry.template_source_domain import PhaseSourceDomain
-from x5crop.domain import Box, EvidenceState, FiniteInterval, ObservationId, WorkspaceExtent
+from x5crop.domain import (
+    Box,
+    EvidenceState,
+    FiniteInterval,
+    ObservationId,
+    WorkspaceExtent,
+)
 from x5crop.report.read_models import typed_read_model
 
 

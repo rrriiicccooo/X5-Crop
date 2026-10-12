@@ -9,6 +9,7 @@ from ...domain import EvidenceState, ObservationId
 from .template_direct_role_authority import DirectRoleAuthorityBasis
 from .template_model import SequenceBindingUse, SequenceFit, TemplateSpec
 from .template_source_domain import PhaseSourceDomain, source_clipped_terminal_roles
+from .template_phase_candidate_model import _BoundFit, _rank
 
 
 # First START ranks 1, 2, 3, then last END ranks 1, 2, 3.
@@ -118,8 +119,6 @@ class SourceClippedPhaseDiagnostic:
 
     @property
     def selection_key(self) -> tuple[object, ...]:
-        from .template_phase_candidates import _BoundFit, _rank
-
         return (
             int(_outer_material_terminal(self.fit, self.projection)),
             int(self.projection.eligible),

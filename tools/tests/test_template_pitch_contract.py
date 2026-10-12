@@ -10,7 +10,6 @@ from tools.tests.template_test_support import (
     calibrated_nominal_grid_prior,
     phase_sequence_measurement,
 )
-
 from x5crop.detection.photo_geometry.observation_types import (
     BoundaryEdgeMeasurementBasis,
     BoundaryEdgeObservation,
@@ -25,7 +24,7 @@ from x5crop.detection.photo_geometry.template_model import (
     PhaseLatticeAuthority,
     TemplateSpec,
 )
-from x5crop.detection.photo_geometry.template_phase import fit_template_phase
+from x5crop.detection.photo_geometry.template_phase_competition import fit_template_phase
 from x5crop.detection.photo_geometry.template_pitch import (
     calibrate_template_source_pitch,
     close_separator_phase_hypothesis,

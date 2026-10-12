@@ -22,17 +22,14 @@ from .template_direct_role_authority import (
     DirectRoleBindingAuthority,
 )
 from .template_outer_frame_authority import OuterFrameObservationAuthority
-from .template_model import (
-    SequenceFit,
-    TemplateSearchReceipt,
-    TemplateSpec,
-)
+from .template_model import SequenceFit, TemplateSearchReceipt, TemplateSpec
 from .template_nominal_grid_model import (
     CalibratedNominalGridEvidence,
     CalibratedNominalGridPrior,
 )
 from .template_source_domain import PhaseSourceDomain
 from .template_source_clipped import SourceClippedPhaseRetention
+from .template_phase_candidate_model import _BoundFit, _rank
 
 
 @dataclass(frozen=True)
@@ -871,10 +868,6 @@ class NativeEndpointPhaseDiagnostic:
     @property
     def rank(self) -> tuple[object, ...]:
         """Return the existing bounded candidate rank for this effective fit."""
-
-        # Keep the canonical comparator private to its existing owner while
-        # avoiding an import cycle during model-module initialization.
-        from .template_phase_candidates import _BoundFit, _rank
 
         return _rank(_BoundFit(self.fit, self.residual_compatible))
 

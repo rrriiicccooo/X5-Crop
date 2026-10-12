@@ -9,9 +9,7 @@ from tools.tests.template_test_support import (
     phase_sequence_measurement,
     phase_template,
 )
-from x5crop.detection.photo_geometry.aggregate_edge_support import (
-    placement_sequence_edges_with_material_support,
-)
+from x5crop.detection.photo_geometry.aggregate_edge_support import placement_sequence_edges_with_material_support
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.observation_types import (
     AggregateEdgeResolution,
@@ -19,14 +17,12 @@ from x5crop.detection.photo_geometry.observation_types import (
     BoundaryEdgeMeasurementBasis,
     SeparatorBandMeasurementBasis,
 )
-from x5crop.detection.photo_geometry.outer_material import (
-    observe_outer_material_boundaries,
-)
+from x5crop.detection.photo_geometry.outer_material import observe_outer_material_boundaries
 from x5crop.detection.photo_geometry.template_direct_role_authority import (
     DirectRoleAuthorityBasis,
     assess_direct_role_binding_authority,
 )
-from x5crop.detection.photo_geometry.template_phase import fit_template_phase
+from x5crop.detection.photo_geometry.template_phase_competition import fit_template_phase
 from x5crop.domain import EvidenceState, FiniteInterval
 
 

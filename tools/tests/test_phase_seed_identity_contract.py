@@ -5,10 +5,22 @@ from itertools import permutations
 import unittest
 from unittest.mock import patch
 
-from tools.tests.template_test_support import phase_edge, phase_separator, phase_template
-from x5crop.detection.photo_geometry import template_phase
+from x5crop.detection.photo_geometry import (
+    template_phase_candidate_model as candidate_model,
+    template_phase_competition as phase_competition,
+    template_phase_fitting as phase_fitting,
+    template_phase_observations as phase_observations,
+)
+from tools.tests.template_test_support import (
+    phase_edge,
+    phase_separator,
+    phase_template,
+)
 from x5crop.detection.photo_geometry.model import BoundaryRole
-from x5crop.detection.photo_geometry.template_phase_model import PhaseFailureKind, PhaseFitStatus
+from x5crop.detection.photo_geometry.template_phase_model import (
+    PhaseFailureKind,
+    PhaseFitStatus,
+)
 from x5crop.domain import FiniteInterval, ObservationId
 
 
@@ -22,8 +34,8 @@ class PhaseSeedIdentityContractTest(unittest.TestCase):
             anchor("a", 10, BoundaryRole.START),
             anchor("z", 110, BoundaryRole.END),
         )
-        with patch.object(template_phase, "_fit_seed", wraps=template_phase._fit_seed) as fit:
-            result = template_phase.fit_template_phase(observations, phase_template(1))
+        with patch.object(phase_fitting, "_fit_seed", wraps=phase_fitting._fit_seed) as fit:
+            result = phase_competition.fit_template_phase(observations, phase_template(1))
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
         self.assertEqual(fit.call_count, 1)
         self.assertEqual(result.best.binding_observation_ids, ("a", "z"))
@@ -37,8 +49,8 @@ class PhaseSeedIdentityContractTest(unittest.TestCase):
         )
         for order in permutations(observations):
             with self.subTest(order=tuple(str(item.observation_id) for item in order)):
-                with patch.object(template_phase, "_fit_seed", wraps=template_phase._fit_seed) as fit:
-                    result = template_phase.fit_template_phase(order, phase_template(1))
+                with patch.object(phase_fitting, "_fit_seed", wraps=phase_fitting._fit_seed) as fit:
+                    result = phase_competition.fit_template_phase(order, phase_template(1))
                 self.assertEqual(result.status, PhaseFitStatus.AMBIGUOUS)
                 self.assertEqual(
                     {result.best.binding_observation_ids, result.runner_up.binding_observation_ids},
@@ -62,7 +74,7 @@ class PhaseSeedIdentityContractTest(unittest.TestCase):
         )
         for order in (bands, tuple(reversed(bands))):
             with self.subTest(bands=order):
-                result = template_phase.fit_template_phase(
+                result = phase_competition.fit_template_phase(
                     observations, phase_template(2), separator_bands=order,
                 )
                 self.assertEqual(result.status, PhaseFitStatus.AMBIGUOUS)
@@ -80,12 +92,12 @@ class PhaseSeedIdentityContractTest(unittest.TestCase):
         )
         cap = len(observations) * 6
         recipes = tuple(
-            template_phase._PhaseSeed(10.0, 120.0, ((0, ObservationId(f"choice:{i}")),))
+            candidate_model._PhaseSeed(10.0, 120.0, ((0, ObservationId(f"choice:{i}")),))
             for i in range(cap + 1)
         )
-        with patch.object(template_phase, "_separator_phase_seeds", return_value=recipes), \
-                patch.object(template_phase, "_fit_seed", wraps=template_phase._fit_seed) as fit:
-            result = template_phase.fit_template_phase(observations, phase_template(1))
+        with patch.object(phase_observations, "_separator_phase_seeds", return_value=recipes), \
+                patch.object(phase_fitting, "_fit_seed", wraps=phase_fitting._fit_seed) as fit:
+            result = phase_competition.fit_template_phase(observations, phase_template(1))
         self.assertEqual(result.status, PhaseFitStatus.BOUND_EXCEEDED)
         self.assertEqual(result.failure_kind, PhaseFailureKind.HYPOTHESIS_BOUND_EXCEEDED)
         self.assertIsNone(result.best)
@@ -99,9 +111,9 @@ class PhaseSeedIdentityContractTest(unittest.TestCase):
             anchor("a", 10, BoundaryRole.START),
             anchor("z", 110, BoundaryRole.END),
         )
-        seed = template_phase._PhaseSeed(10.0, 120.0, ((0, observations[0].observation_id),))
-        with patch.object(template_phase, "_separator_phase_seeds", return_value=(seed,) * 20):
-            result = template_phase.fit_template_phase(observations, phase_template(1))
+        seed = candidate_model._PhaseSeed(10.0, 120.0, ((0, observations[0].observation_id),))
+        with patch.object(phase_observations, "_separator_phase_seeds", return_value=(seed,) * 20):
+            result = phase_competition.fit_template_phase(observations, phase_template(1))
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
         self.assertEqual(result.receipt.phase_hypothesis_count, 1)
         result.receipt.validate_bounds()
@@ -114,14 +126,14 @@ class PhaseSeedIdentityContractTest(unittest.TestCase):
         )
         bindings = tuple((i, item.observation_id) for i, item in enumerate(observations))
         recipes = tuple(
-            template_phase._PhaseSeed(
+            candidate_model._PhaseSeed(
                 10.0, 120.0,
                 tuple(binding for i, binding in enumerate(bindings) if mask & (1 << i)),
             )
             for mask in range(1, 64)
         )
-        with patch.object(template_phase, "_separator_phase_seeds", return_value=recipes):
-            result = template_phase.fit_template_phase(observations, phase_template(3))
+        with patch.object(phase_observations, "_separator_phase_seeds", return_value=recipes):
+            result = phase_competition.fit_template_phase(observations, phase_template(3))
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
         self.assertEqual(result.best.binding_observation_ids, tuple(str(i) for i in range(6)))
         result.receipt.validate_bounds()
@@ -132,10 +144,10 @@ class PhaseSeedIdentityContractTest(unittest.TestCase):
             anchor("z", 110, BoundaryRole.END),
         )
         cap = len(observations) * 6
-        recipes = tuple(template_phase._PhaseSeed(float(i), 120.0) for i in range(cap + 1))
-        with patch.object(template_phase, "_separator_phase_seeds", return_value=recipes), \
-                patch.object(template_phase, "_fit_seed", wraps=template_phase._fit_seed) as fit:
-            result = template_phase.fit_template_phase(observations, phase_template(1))
+        recipes = tuple(candidate_model._PhaseSeed(float(i), 120.0) for i in range(cap + 1))
+        with patch.object(phase_observations, "_separator_phase_seeds", return_value=recipes), \
+                patch.object(phase_fitting, "_fit_seed", wraps=phase_fitting._fit_seed) as fit:
+            result = phase_competition.fit_template_phase(observations, phase_template(1))
         self.assertEqual(result.status, PhaseFitStatus.BOUND_EXCEEDED)
         self.assertIsNone(result.best)
         self.assertEqual(fit.call_count, 0)

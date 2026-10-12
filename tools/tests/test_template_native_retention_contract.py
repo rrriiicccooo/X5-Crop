@@ -3,10 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 import unittest
 
-from tools.tests.template_test_support import (
-    placement_sequence,
-    placement_template,
-)
+from tools.tests.template_test_support import placement_sequence, placement_template
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.template_direct_role_authority import (
     DirectRoleAuthorityBasis,
@@ -19,7 +16,7 @@ from x5crop.detection.photo_geometry.template_native_retention import (
     select_native_phase_retention,
 )
 from x5crop.detection.photo_geometry.template_model import TemplateSearchReceipt
-from x5crop.detection.photo_geometry.template_phase_candidates import _BoundFit
+from x5crop.detection.photo_geometry.template_phase_candidate_model import _BoundFit
 from x5crop.detection.photo_geometry.template_phase_model import (
     NativeEndpointPhaseDiagnostic,
     NativeEndpointSelectionBasis,

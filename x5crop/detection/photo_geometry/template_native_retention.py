@@ -15,7 +15,7 @@ from typing import TypeAlias
 from ...domain import ObservationId
 from .template_direct_role_authority import DirectRoleAuthorityBasis
 from .template_model import TemplateSpec
-from .template_phase_candidates import _BoundFit
+from .template_phase_candidate_model import _BoundFit
 from .template_phase_model import (
     NATIVE_ENDPOINT_ROLE_CLASS_COUNT,
     NativeEndpointPhaseDiagnostic,

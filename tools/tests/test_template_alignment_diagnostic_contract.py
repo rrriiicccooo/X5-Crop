@@ -4,9 +4,7 @@ from dataclasses import replace
 import unittest
 
 from x5crop.domain import EvidenceState, FiniteInterval, ObservationId
-from x5crop.detection.photo_geometry.template_alignment_diagnostic import (
-    template_alignment_diagnostic,
-)
+from x5crop.detection.photo_geometry.template_alignment_diagnostic import template_alignment_diagnostic
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.template_model import (
     SequenceBindingUse,
@@ -21,10 +19,10 @@ from x5crop.detection.photo_geometry.template_frame_width import (
 )
 from x5crop.detection.photo_geometry.template_phase import (
     finalize_template_phase_candidate,
-    fit_template_phase,
     fit_template_phase_candidate_with_adjacency_relations,
-    refine_template_phase_with_source_frame_width,
 )
+from x5crop.detection.photo_geometry.template_phase_competition import fit_template_phase
+from x5crop.detection.photo_geometry.template_phase_refinement import refine_template_phase_with_source_frame_width
 from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseFailureKind,
     PhaseFitStatus,
