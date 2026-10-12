@@ -50,6 +50,7 @@ from x5crop.detection.photo_geometry.template_cross_model import (
 )
 from x5crop.detection.photo_geometry.template_gate import build_template_gate
 from x5crop.detection.photo_geometry.template_holder_fill import HolderFillState
+from x5crop.detection.photo_geometry.source_geometry import SourceFixedOutputSize
 from x5crop.detection.photo_geometry.template_phase_model import PhaseFitStatus
 from x5crop.detection.photo_geometry.template_nominal_grid_authority import (
     assess_calibrated_nominal_grid_authority,
@@ -482,6 +483,78 @@ def _selected_output_gate_fact(
             failure=None,
         ),
     )[code]
+
+
+class FixedOutputCenterContractTest(unittest.TestCase):
+    def setUp(self):
+        self.size = SourceFixedOutputSize("source:test", 100.0, 60.0)
+        self.extent = WorkspaceExtent(400, 300)
+
+    def rectangle(self, bounds, target, *, extent=None, axis=BoundaryAxis.X):
+        left, top, right, bottom = bounds
+        mandatory = convex_hull(((left, top), (right, top), (right, bottom), (left, bottom)))
+        return fixed_output_rectangle(self.size, axis, mandatory, extent or self.extent,
+                                      preferred_center=target)
+
+    def test_all_four_true_source_sides_keep_the_complete_fixed_window(self):
+        for name, bounds, target, expected in (
+            ("left", (-25, 100, 60, 140), (-5, 120), (-.5, 87, 109.5, 153)),
+            ("right", (350, 100, 430, 140), (405, 120), (289.5, 87, 399.5, 153)),
+            ("top", (100, -20, 140, 30), (120, -5), (65, -.5, 175, 65.5)),
+            ("bottom", (100, 270, 140, 330), (120, 300), (65, 233.5, 175, 299.5)),
+        ):
+            with self.subTest(side=name):
+                actual = self.rectangle(bounds, target)
+                for value, wanted in zip(
+                    (min(x for x, _ in actual), min(y for _, y in actual),
+                     max(x for x, _ in actual), max(y for _, y in actual)), expected, strict=True,
+                ):
+                    self.assertAlmostEqual(value, wanted)
+
+    def test_center_rule_commutes_with_axis_transpose_and_source_reflections(self):
+        mandatory = convex_hull(((-30, 110), (80, 110), (80, 155), (-30, 155)))
+        target = (-20, 120)
+        original = fixed_output_rectangle(self.size, BoundaryAxis.X, mandatory, self.extent,
+                                          preferred_center=target)
+        for transpose in (False, True):
+            for reflect_x in (False, True):
+                for reflect_y in (False, True):
+                    def transform(point):
+                        x, y = point
+                        x = self.extent.width - 1 - x if reflect_x else x
+                        y = self.extent.height - 1 - y if reflect_y else y
+                        return (y, x) if transpose else (x, y)
+                    with self.subTest(transpose=transpose, x=reflect_x, y=reflect_y):
+                        extent = WorkspaceExtent(300, 400) if transpose else self.extent
+                        actual = fixed_output_rectangle(self.size,
+                            BoundaryAxis.Y if transpose else BoundaryAxis.X,
+                            convex_hull(tuple(transform(point) for point in mandatory)), extent,
+                            preferred_center=transform(target))
+                        expected = convex_hull(tuple(transform(point) for point in original))
+                        for point, wanted in zip(actual, expected, strict=True):
+                            for coordinate, value in zip(point, wanted, strict=True):
+                                self.assertAlmostEqual(coordinate, value)
+
+    def test_source_shorter_than_fixed_dimension_keeps_legal_clipping_and_size(self):
+        actual = self.rectangle((-20, -10, 90, 60), (40, 25), extent=WorkspaceExtent(80, 50))
+        for point, wanted in zip(actual, ((-15, -8), (95, -8), (95, 58), (-15, 58)), strict=True):
+            for coordinate, value in zip(point, wanted, strict=True):
+                self.assertAlmostEqual(coordinate, value)
+        clipped = clip_convex_polygon_to_bounds(actual, (-.5, -.5, 79.5, 49.5))
+        self.assertEqual(clipped, ((-.5, -.5), (79.5, -.5), (79.5, 49.5), (-.5, 49.5)))
+        self.assertAlmostEqual(max(x for x, _ in actual) - min(x for x, _ in actual), self.size.output_width_px)
+        self.assertAlmostEqual(max(y for _, y in actual) - min(y for _, y in actual), self.size.output_height_px)
+
+    def test_uncontainable_axis_keeps_original_target_even_if_it_overflows_source(self):
+        actual = self.rectangle((-30, 100, 400, 140), (-10, 120))
+        self.assertAlmostEqual((min(x for x, _ in actual) + max(x for x, _ in actual)) / 2.0, -10.0)
+        self.assertGreater(399.5 - max(x for x, _ in actual), 0.0)
+        self.assertAlmostEqual(max(x for x, _ in actual) - min(x for x, _ in actual), self.size.output_width_px)
+
+    def test_preferred_center_is_unchanged_when_it_already_contains_source_visible_content(self):
+        actual = self.rectangle((100, 100, 180, 140), (140, 120))
+        self.assertAlmostEqual((min(x for x, _ in actual) + max(x for x, _ in actual)) / 2.0, 140.0)
+        self.assertAlmostEqual((min(y for _, y in actual) + max(y for _, y in actual)) / 2.0, 120.0)
 
 
 class TemplateOutputContractTest(unittest.TestCase):
@@ -1315,8 +1388,8 @@ class TemplateOutputContractTest(unittest.TestCase):
             output.envelope.canonical_source_footprint,
             placement.frames[0].canonical_source_polygon,
         )
-        self.assertTrue(output.saturation_facts)
-        self.assertTrue(all(item.source_boundary for item in output.saturation_facts))
+        self.assertFalse(output.saturation_facts)
+        self.assertEqual(output.required_source_footprint, output.requested_source_footprint)
         self.assertAlmostEqual(
             output.requested_source_footprint[1][0]
             - output.requested_source_footprint[0][0],
@@ -1405,10 +1478,11 @@ class TemplateOutputContractTest(unittest.TestCase):
             - min(y for _, y in output.requested_source_footprint),
             output.fixed_size.output_height_px,
         )
-        self.assertEqual(
-            output.required_source_footprint,
-            ((-0.5, -0.5), (348.0, -0.5), (348.0, 79.5), (-0.5, 79.5)),
-        )
+        self.assertEqual(min(x for x, _ in output.required_source_footprint), -.5)
+        self.assertAlmostEqual(max(x for x, _ in output.required_source_footprint),
+                               -.5 + output.fixed_size.output_width_px)
+        self.assertEqual((min(y for _, y in output.required_source_footprint),
+                          max(y for _, y in output.required_source_footprint)), (-.5, 79.5))
         self.assertIn(AuthoritySide.BOTTOM, tuple(
             item.authority_side for item in output.saturation_facts
         ))
@@ -1608,8 +1682,8 @@ class TemplateOutputContractTest(unittest.TestCase):
             layout="horizontal",
         )
 
-        self.assertTrue(output.saturation_facts)
-        self.assertTrue(all(item.source_boundary for item in output.saturation_facts))
+        self.assertFalse(output.saturation_facts)
+        self.assertEqual(output.required_source_footprint, output.requested_source_footprint)
         self.assertFalse(hasattr(output, "sampling_source_footprint"))
         self.assertFalse(hasattr(output, "mapped_output_box"))
 

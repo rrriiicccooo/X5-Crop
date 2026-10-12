@@ -80,9 +80,12 @@ class CommonOutputContractTest(unittest.TestCase):
         requested_x = tuple(x for x, _ in common.requested_source_footprint)
         requested_y = tuple(y for _, y in common.requested_source_footprint)
         self.assertAlmostEqual(
-            (min(requested_x) + max(requested_x)) / 2.0,
-            (min(mandatory_x) + max(mandatory_x)) / 2.0,
+            min(requested_x), -.5,
         )
+        self.assertAlmostEqual(max(requested_x), -.5 + common.fixed_size.output_width_px)
+        self.assertLessEqual(max(requested_x), common.source_extent.width - .5)
+        self.assertLessEqual(min(requested_x), min(mandatory_x))
+        self.assertGreaterEqual(max(requested_x), max(mandatory_x))
         self.assertAlmostEqual(
             (min(requested_y) + max(requested_y)) / 2.0,
             (min(mandatory_y) + max(mandatory_y)) / 2.0,
@@ -109,19 +112,39 @@ class CommonOutputContractTest(unittest.TestCase):
         )
         self.assertTrue(any(not edge.within_limit for member in common.member_budgets for edge in member.assessment.edge_assessments))
 
-    def test_source_clipping_preserves_fixed_request_and_visible_mandatory_budget(self):
+    def test_avoidable_source_clipping_keeps_complete_window_and_every_member_budget(self):
         first = _placement()
         second = translated_h(first, -20)
         common = common_h_output_footprint((first, second), (native_output(first), native_output(second)))
         self.assertTrue(common.source_authority_supported)
-        self.assertTrue(common.saturation_facts)
-        self.assertLess(min(y for _, y in common.requested_source_footprint), min(y for _, y in common.required_source_footprint))
+        self.assertFalse(common.saturation_facts)
+        self.assertEqual(common.requested_source_footprint, common.required_source_footprint)
         self.assertTrue(common.budget_supported)
+        self.assertTrue(all(member.assessment.state == EvidenceState.SUPPORTED for member in common.member_budgets))
+        self.assertGreaterEqual(min(y for _, y in common.requested_source_footprint), -.5)
         self.assertAlmostEqual(
             common.requested_source_footprint[2][1]
             - common.requested_source_footprint[1][1],
             common.fixed_size.output_height_px,
         )
+
+    def test_unavoidable_short_source_clipping_preserves_all_common_members(self):
+        first = _placement()
+        second = translated_h(first, -20)
+        lane = _lane()
+        lane = replace(lane, domain=replace(lane.domain, work_box=Box(0, 0, 500, 80)),
+                       scan_canvas=replace(lane.scan_canvas, observed_short_axis_px=80))
+        native = (native_output(first, lane), native_output(second, lane))
+        common = common_h_output_footprint((first, second), native)
+        self.assertEqual(common.members, native)
+        self.assertTrue(common.source_authority_supported)
+        self.assertTrue(common.saturation_facts)
+        self.assertTrue(common.budget_supported)
+        self.assertTrue(all(member.assessment.state == EvidenceState.SUPPORTED for member in common.member_budgets))
+        self.assertAlmostEqual(max(y for _, y in common.requested_source_footprint)
+                               - min(y for _, y in common.requested_source_footprint), common.fixed_size.output_height_px)
+        self.assertEqual((min(y for _, y in common.required_source_footprint),
+                          max(y for _, y in common.required_source_footprint)), (-.5, 79.5))
 
     def test_internal_lane_edge_is_not_clipped_into_approval(self):
         first = _placement()

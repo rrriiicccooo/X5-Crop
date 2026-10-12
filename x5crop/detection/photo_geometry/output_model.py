@@ -403,7 +403,7 @@ def fixed_output_rectangle(
     mandatory: ConvexPolygon, source_extent: WorkspaceExtent,
     *, preferred_center: tuple[float, float] | None = None,
 ) -> ConvexPolygon:
-    """Choose position within the containment interval; never change size.
+    """Contain visible protection, preferring a complete true-source window.
 
     If containment is impossible, retain the fitted position for Review.
     The complete mandatory footprint still blocks the output budget.
@@ -414,9 +414,19 @@ def fixed_output_rectangle(
                   else (size.output_height_px, size.output_width_px))
     preferred = preferred_center or ((left + right) / 2.0, (top + bottom) / 2.0)
     centers = []
-    for minimum, maximum, dimension, target in zip((left, top), (right, bottom), dimensions, preferred, strict=True):
+    for minimum, maximum, dimension, target, source_length in zip(
+        (left, top), (right, bottom), dimensions, preferred,
+        (source_extent.width, source_extent.height), strict=True,
+    ):
         lower, upper = maximum - dimension / 2.0, minimum + dimension / 2.0
-        centers.append(min(max(target, lower), upper) if lower <= upper else target)
+        if lower > upper:
+            centers.append(target)
+            continue
+        source_lower = max(lower, dimension / 2.0 - 0.5)
+        source_upper = min(upper, source_length - 0.5 - dimension / 2.0)
+        if source_lower <= source_upper:
+            lower, upper = source_lower, source_upper
+        centers.append(min(max(target, lower), upper))
     cx, cy = centers
     dx, dy = dimensions[0] / 2.0, dimensions[1] / 2.0
     return convex_hull(((cx - dx, cy - dy), (cx + dx, cy - dy),
