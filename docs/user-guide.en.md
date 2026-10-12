@@ -7,22 +7,14 @@
 ## Product Behavior
 
 X5 Crop uses a known format's design-size prior to establish a bounded physical template for each source; it is not a
-general-purpose photo-boundary recognizer.
-Official TIFFs are written only when every slot in the source has a directly usable crop that meets the current risk-admission rules. Otherwise the
-entire source becomes `needs_review`; individual slots are never salvaged.
+general-purpose photo-boundary recognizer. Official TIFFs are written only when every slot in the source has a directly
+usable crop that meets the current safety rules. Otherwise the entire source becomes `needs_review`; individual slots
+are never salvaged.
 
-Cropping protects photograph content already visible in the input TIFF. Image content hidden by the holder and
-absent from the TIFF is outside the recovery scope. Visible content, including tilted corners, must be retained.
-Each source TIFF shares one W/H size; every Frame requests one fixed source-space window
-of `1.1W × 1.1H`, with a fixed 5% margin on each side. The script selects the window position only and never
-adjusts its size. The fixed margin includes base protection; no additional fixed-size border is added.
+Cropping protects photograph content already visible in the input TIFF. Image content hidden by the holder and absent
+from the TIFF is outside the recovery scope. Visible content, including tilted corners, must be retained.
 
-When credible evidence requires a complete physical envelope that cannot fit inside the fixed box, the whole source
-remains in `needs_review`; the highest score cannot force automatic approval. Shared H candidates use the same fixed
-box and cannot enlarge it by taking a union. A true TIFF edge may be source-clipped, but an internal lane or other
-authority boundary cannot be bypassed by shrinking the window.
-
-### Format And Count
+### Format and Count
 
 Format is always required. Count may be omitted or explicit:
 
@@ -35,85 +27,42 @@ Default complete counts are 135=6, half=12, XPan=3, 120-645=4, and 120-66=3. 120
 and 2 on the short holder. 135-dual uses 12 total.
 
 V5 applies the same physical and safety contract to every format. Current development gold has no real gold source for
-`xpan`, `120-645`, or `135-dual`, so these formats are implemented by the Runtime but do not yet have real-sample
-accuracy coverage. They receive neither a special disable rule nor a looser acceptance rule.
+`xpan`, `120-645`, or `135-dual`, so these formats are implemented by the Runtime without real-sample accuracy
+coverage. They receive neither a special disable rule nor a looser acceptance rule.
 
-The program never infers format or real photo count from filenames, picture content, holder capacity, or blank slots.
-It does not remove, merge, or reorder blank slots. V5 has no full/partial mode.
+The program never infers format or real photo count from filenames, picture content, holder capacity, or blank slots. It
+does not remove, merge, or reorder blank slots. V5 has no full/partial mode.
 
-### Automatic Approval And Review
+### Automatic Approval and Review
 
-The program builds a physical template with a common W/H from the supplied format/count, then locates it using
-whole-strip and local-edge evidence. Directly observed photo boundaries retain their native coordinates. Missing
-boundaries may be inferred only from established common dimensions, position anchors, and checked adjacency relations.
-Aspect-ratio information or outer support may help locate the crop, but cannot impersonate a direct photo boundary
-or override counterevidence.
+The program builds a physical template with a common W/H from the supplied format/count, then locates it using whole-strip
+and local-edge evidence. Directly observed photo boundaries retain their native coordinates. Missing boundaries may be
+inferred only from established common dimensions, position anchors, and checked adjacency relations. Aspect-ratio
+information or outer support may help locate the crop, but cannot impersonate a direct photo boundary or override
+counterevidence.
 
 Every output slot must have complete visible-content protection, sufficient position evidence, and a safe output
 footprint. The entire source enters `needs_review` if content is missing, an internal boundary is crossed, a required
-boundary is unknown, evidence conflicts, or an interpretation cannot be fully verified and protected.
-A score cannot replace these conditions or enlarge the fixed box.
-Near a true TIFF edge, the program keeps the same-size window inside the source when it can also contain all visible
-protection, preserving more recorded content. Otherwise, the existing source-clipping and content-protection checks apply.
+boundary is unknown, evidence conflicts, or an interpretation cannot be fully verified and protected. A score cannot
+replace these conditions or enlarge the fixed box.
 
 When photo ownership is established and several complete top/bottom interpretations remain, one fixed box may protect
 them all. Automatic approval requires every interpretation to pass content containment and source-wide safety checks.
 Touching or overlapping photos use the same checks and remain in review when evidence is insufficient.
 
 Separator material is checked for adjacency using the actual coordinates on each scan line. A line with an intervening
-boundary does not support the outer pair. Local and source-wide separator relationships are checked separately;
-relationships with insufficient evidence remain subject to review.
+boundary does not support the outer pair. Local and source-wide separator relationships are checked separately; relations
+with insufficient evidence remain subject to review.
 
 Debug Analysis shows the primary, runner, and retained proposals with their evidence, coverage results, and blocking
-reasons for inspection. Reports do not change crop coordinates or approval conditions. The current Runtime does not
-use development ranking scores to select crops.
-When native boundaries support the first and last photographs, the report may also show up to four independent
-"Native Endpoint Review" proposals for different endpoint roles, each with its original evidence, counterevidence,
-and failure reasons. They are available for manual inspection; automatic cropping continues to require the existing safety checks.
-When photographs extend beyond a true TIFF edge, the report may show up to six additional source-clipped proposals.
-If a native endpoint interpretation cannot form a complete crop, existing source-wide or aggregate boundaries may
-also produce a fixed refit proposal with the original failure and all remaining boundary counterevidence preserved.
-These independent proposals are marked Review and retain their own protection ranges and budget results.
-Additional source-clipped interpretations preserve the primary and runner positions.
-When top/bottom evidence is insufficient, fixed-height review proposals prefer boundaries with measured support across
-all positioned photographs. The report preserves their original role evidence and blocking reasons for manual review.
-If the primary cannot form a complete crop but the runner already has a complete proposal, the report retains that
-runner for inspection with the original blocking reasons.
-Spacing proposed by two separator bands also requires an independent, verified photo boundary to establish position;
-a successful weak-edge match does not grant crop authority.
-Position fitting rechecks the remaining boundaries after removing outliers. Required boundaries and position
-interpretations remain subject to the same evidence checks.
-An independent position proposed by a direct boundary is checked separately; a larger set of additional edges cannot
-erase that interpretation solely by pulling the joint fit away from its defining boundary.
-Direct boundaries spanning the registered scan area may propose a position from their measured physical line range.
-Statistical residuals remain in the report, and additional edge matching keeps its existing limits. Role, photo
-position, and full protection are still checked; insufficient evidence keeps the source in review.
-When separator material and edge texture indicate different roles, the ordered material pair may propose a position
-for review. Automatic cropping still requires verified roles and complete coverage evidence.
-Verified shared edges continue to locate both adjacent photos despite a one-sided texture hint. When material
-supports conflicting roles, its complete counterevidence remains visible and the affected placement requires review.
-When one boundary of an ordinary gap is missing, registered overlap evidence associated with the observed boundary
-still counts as counterevidence. Conflicting ordinary placements are rejected; overlap proposals retain their own
-material checks and review requirements.
-When a native proposal's complete protection envelope cannot fit in the fixed box, it retains the fitted photograph
-position for inspection. The report preserves the full protection envelope and failed budget, which blocks automatic
-output of that proposal.
-When more direct boundaries support a different placement whose residual is incompatible, the report retains that
-runner and the ambiguity reason for inspection, including when its coordinate projection failed. Its original
-failure remains visible and continues to block automatic output.
-More fully observed native placements that conflict with the calibrated position model also remain available for
-inspection.
-Diagnostic runners retain their original failure reasons. Displaying an interpretation does not grant it crop or
-automatic output authority.
-If later checks fail and the runner slot is empty, the report can retain an earlier generated diagnostic proposal.
-A late refit that exceeds the existing residual limit retains the position before projection for review. When a
-short-strip material-spacing hypothesis fails independent position checks, the original template proposal remains
-available for inspection and the hypothesis cannot authorize automatic output.
+reasons for inspection. Reports preserve the original evidence and failure reason for each displayed interpretation;
+displaying one does not grant crop or automatic-output authority. The current Runtime does not use development ranking
+scores to select crops.
 
-Holder fill is assessed only after placement by asking whether another W fits beyond either outer. It never searches
-for or centers a placement. Both lanes of 135-dual must be complete.
+Holder fill is assessed only after placement by asking whether another W fits beyond either outer. It never searches for
+or centers a placement. Both lanes of 135-dual must be complete.
 
-## Fixed Source-Space Window, Content Protection, And Deskew
+## Fixed Source-Space Window, Content Protection, and Deskew
 
 Each source TIFF uses one common W/H size. Every Frame requests one fixed window:
 
@@ -124,7 +73,8 @@ per-side margin = 5%
 
 The fixed box permits the script to select a position only; measurement, residual, direction, or score cannot change
 its size. It must contain all visible TIFF content, including tilted corners. When credible evidence requires a complete
-physical envelope that cannot fit inside the box, the whole source enters `needs_review`. An offset within the fixed box is not independently rejected when all visible photograph content remains protected.
+physical envelope that cannot fit inside the fixed box, the whole source enters `needs_review`. An offset within the
+fixed box is not independently rejected when all visible photograph content remains protected.
 
 When independent evidence uniquely establishes both photo edges, the program uses those coordinates to choose the fixed
 box position rather than replacing the measured height with an inferred height inside the frame. Continuous outer support
@@ -150,7 +100,7 @@ the same affine transform before an axis-aligned envelope is taken. Small black 
 content cannot be cut. Deskew's axis-aligned envelope, true-TIFF edge clipping, and integer rounding can change final
 pixel width and height. The fixed dimensions apply in source coordinates.
 
-## Install The Development Source
+## Install the Development Source
 
 Use a complete repository checkout. Do not copy only `X5_Crop.py`, and do not treat GitHub's generated Source code
 archive as a stable release package. Regular users should download v4.2.8 from
@@ -164,8 +114,8 @@ The V5 development source supports Python 3.12–3.14:
 The same installers are under `install/`, without the `tools/` prefix, in a future V5 Release package.
 
 Setup finds 64-bit Python 3.12–3.14, reuses dependencies that meet the required versions, and installs or updates the rest
-through their recognized package manager. Unknown ownership stops before changes. Homebrew is not required, and no
-private environment is created.
+through their recognized package manager. Unknown ownership stops before changes. Homebrew is not required, and no private
+environment is created.
 
 ## Input Contract
 
@@ -182,9 +132,9 @@ official output uses `Orientation=1`.
 
 ## Run
 
-In the repository root, run the command with one TIFF or a scan directory. Use
-`python3 X5_Crop.py --interactive` to process TIFFs in the current directory interactively. A future V5 release package
-provides macOS and Windows double-click launchers.
+In the repository root, run the command with one TIFF or a scan directory. Use `python3 X5_Crop.py --interactive` to
+process TIFFs in the current directory interactively. A future V5 release package provides macOS and Windows double-click
+launchers.
 
 Command-line example:
 
@@ -206,13 +156,12 @@ Main options:
 - `--interactive`: prompt for format, count, deskew, and Debug Analysis.
 
 There is no `--overwrite`. The target must not exist. Use different fresh directories for Debug Analysis and official
-cropping; an official run always rereads the source TIFF.
-If another operation creates the target during processing, it is preserved and publication reports an output error;
-retry with a new directory. Publication also stops if the filesystem cannot guarantee atomic no-replace behavior.
-On macOS, write to a fresh directory on an APFS/HFS+ volume that supports atomic no-replace publication. If needed,
-copy the completed output directory to exFAT afterward.
+cropping; an official run always rereads the source TIFF. If another operation creates the target during processing, it is
+preserved and publication reports an output error. Publication also stops if the filesystem cannot guarantee atomic
+no-replace behavior. On macOS, write to a fresh directory on an APFS/HFS+ volume that supports atomic no-replace
+publication. If needed, copy the completed output directory to exFAT afterward.
 
-## Status, Output, And Exit Codes
+## Status, Output, and Exit Codes
 
 Each input has exactly one terminal state:
 
@@ -220,13 +169,11 @@ Each input has exactly one terminal state:
 - `needs_review`: writes no photos and retains the minimum missing fact and suggested action;
 - `runtime_error`: this input failed while other inputs continue.
 
-Debug Analysis shows the template, observations, winner/runner, raw and guarded aspect-ratio intervals, inferred H,
-the fixed source-space window's size and position, content-protection evidence, and first blocking reason. It also shows `DESKEW APPLIED`, `ROTATION NOT NEEDED`, or a typed `DESKEW SKIPPED`. It reads the same detection facts and
-never solves geometry again.
-
-The development report also records exterior color continuity, weak signals, and measurement availability.
-These observations help inspect exterior material. An available measurement does not establish holder identity
-or authorize a crop by itself.
+Debug Analysis shows the template, observations, winner/runner, raw and guarded aspect-ratio intervals, inferred H, the
+fixed source-space window's size and position, content-protection evidence, and first blocking reason. It also shows
+`DESKEW APPLIED`, `ROTATION NOT NEEDED`, or a typed `DESKEW SKIPPED`. It reads the same detection facts and never solves
+geometry again. The development report also records exterior color continuity, weak signals, and measurement
+availability; an available measurement does not establish holder identity or authorize a crop by itself.
 
 Default output:
 
@@ -248,7 +195,7 @@ Exit codes:
 - `3`: a fresh output directory could not be published safely.
 
 Official TIFFs are read and written only by `tifffile + imagecodecs`, with checks for bit depth, channels, ICC,
-resolution, supported metadata, lossless compression, and `Orientation=1`. Each run writes staging first and publishes
-with one rename; an existing target is never traversed, replaced, or deleted.
+resolution, supported metadata, lossless compression, and `Orientation=1`. Each run writes staging and publishes with one
+rename; an existing target is never traversed, replaced, or deleted.
 
 License: MIT — [GitHub LICENSE](https://github.com/rrriiicccooo/X5-Crop/blob/main/LICENSE)

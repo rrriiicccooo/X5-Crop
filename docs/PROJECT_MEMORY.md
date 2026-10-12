@@ -1,52 +1,48 @@
 # 项目记忆
 
-更新：2026-10-10。现场 Git、原 TIFF、source SHA、current report 与最新验证高于本文件。
+更新：2026-10-12。现场 Git、原 TIFF、source SHA、current report 与最新验证高于本文件。
 长期合同见 [ARCHITECTURE.md](ARCHITECTURE.md)，人工权限见
 [MANUAL_ANNOTATION.md](MANUAL_ANNOTATION.md)，协作规则见 [AGENTS.md](../AGENTS.md)。
 
-## 当前目标与授权
+## 当前目标
 
-持续目标是让 V5 达到发布标准，保持 current-only、单一职责和零已知危险自动批准。
-用户已授权整理代码、测试、全部文档与项目记忆，并将未提交、未推送的工作提交推送到 `main`。
-发布仍须用户另行确认；不提前创建 RC、tag、GitHub Release 或公开 ZIP。
+V5 继续保持 current-only、单一职责和零危险自动批准。当前进行有界的性能/RSS、架构、测试与文档审计；
+性能优化和模块 owner 更新仍在进行。发布未授权，不创建 RC、tag、
+GitHub Release 或公开 ZIP。
 
-本地只保留 `main` 分支与主工作树，无暂存记录；远端只有 `main`。
-历史实验的独有修改与证据保存在静态恢复归档
-`Test/gold_analysis/mainline_cleanup_20261010/manifest.json`，已验证可恢复，不参与当前运行与发布验收。
+## 最新可验证检查点
 
-裁切使用 source 共用 W/H 的固定 `1.1W × 1.1H` 请求窗口，5% 留边包含基础保护。程序只选择位置；
-完整可见内容与合法物理保护无法放入时保持 Review。框内偏移和实际向外距离不另设逐侧上限。
-完整物理状态、证据权限、source/lane 安全与人工 reference 不变，精确合同由架构拥有。
+### Development gold
 
-## 最新完整黄金证据
-
-最近完整 development gold 为 `Test/gold_analysis/fixed_output_20261008_final/`，绑定
-`1a92bbcf8f3f74563f192f7b90b5f9ce962228d4`，不是此后清理提交的发布证书。
-`gold_analysis_summary.json` 记录：
+最新完整报告为
+`Test/gold_analysis/proposal_sequence_20261011/full_holder_admission_partition/gold_analysis_summary.json`，
+绑定 gold commit `c54fadeb`；当前 `cf5e2a49` 仅有测试 fixture 差异，不能把该报告当作当前发布证书。
 
 | 项目 | 结果 |
 |---|---|
 | task / source | 110 / 106 |
-| nominal / challenge | 96 / 14 |
 | 完成 / 分析异常 | 110 / 0 |
-| 安全自动批准 / 危险自动批准 | 23 / 0 |
-| nominal Review / challenge Review | 73 / 14 |
-| 首选提案安全 / 不安全 / 未生成 | 81 / 28 / 1 |
-| 至少保留一份安全提案的 task | 90 |
+| `approved_auto` / `needs_review` | 25 / 85 |
+| 安全自动批准 / 危险自动批准 | 25 / 0 |
+| 至少一份安全提案的 task | 110 |
+| `release_detection_gate_ready` | `false` |
 
-源码身份与物理先验校准检查通过，`release_detection_gate_ready=false`。
-保留集合不是全部潜在几何解释；90 项有安全提案不意味着这些提案已获得 Runtime 自动权限。
+该集合仍是 development diagnostic；安全提案、候选资格和 Runtime 最终决定分别计数，不能互换权限。
+对应 development cohort SHA 为
+`daaea2ad49564616342051253c8fa67c4922a260d0dcc92f0d187f7b2eb10288`。
 
-证据身份：
+### 性能基线
 
-- detector manifest：`ca1a0a9c822464ca62ba6a70e27403343d8cb8c02888f39ad5bd4c19e4e2bc08`
-- comparator manifest：`911e23f8e60b72c037f02c0f8f8498ab8f90f4b263020174d6dca21603a848f9`
-- development cohort：`daaea2ad49564616342051253c8fa67c4922a260d0dcc92f0d187f7b2eb10288`
+当前基线 receipt 为 `Test/engineering_audit_20261012/baseline_performance_receipt.json`，绑定
+`cf5e2a49`：24-source 平均 `5.841136s`，p50 `5.432742s`，p95 `9.396120s`，最慢 S096 为
+`9.815311s`；RSS 平均 `982667946.67` bytes，峰值 `1690714112` bytes（S024）。5 秒 Gate 未通过，
+3 秒 challenge 未达到。该结果只是本次 baseline，不能写成已优化最好或最终结果。
 
-最近工程验收绑定 `e4638fea`：正常 pre-push Hook 完成 `tools/verify full`，1120 项测试中 1118 项通过、
-2 项 Windows 专属跳过，依赖、编译、cohort、shell 与版本检查通过。证据为
-`Test/gold_analysis/cleanup_20261010/engineering_e4638fea.log`，该实现已推送到 `origin/main`。
-工程检查、黄金准确性与发布资格分别验收；清理不重标旧黄金或性能 receipt。
+### CI
+
+`Test/gold_analysis/proposal_sequence_20261011/ci_cf5e2a49_final.json` 记录当前 head SHA
+`cf5e2a49` 的 12 个 CI job 全部 success/completed。CI 不能替代 Intel Mac、Windows x64 等真实机的
+platform/package/release receipt，相关发布风险仍开放。
 
 ## 保留的人工局部事实
 
@@ -68,19 +64,19 @@ JSON 只证明窗口映射，人工确认仅限展示范围，不扩展为整源
 固定 RGB 前缀与仿射 seed 外推已被反例否定，不继续围绕同一失败假设调阈值。
 反例入口与材料测量权限统一见架构第 5 节，原始证据保留在 `Test/gold_analysis/`。
 
-## 开放风险与下一步
+## 开放风险
 
-1. 按当前报告区分提案生成、候选资格和最终选择。先修不安全提案的通用几何，再审计安全提案为何
-   阻断；不以最高分、删 runner、改评测角色或放宽保护制造自动覆盖。
-2. H、W、phase、anchor 与邻接可以独立推进，不再设 H 完成前禁止 W 的顺序限制。共同 H 必须证明
-   完整成员与全部局部精修闭合；共同 W 多重归属尚未获权，不能把 best/runner/conditional 当作完整解释集。
-3. Runtime 评分选择尚未启用。独立 calibration、sealed acceptance 与风险准入仍缺失；当前折外排序
-   只用于开发研究，不能代替正式概率权限。
-4. 当前 gold 尚无 `xpan`、`120-645`、`135-dual` 真实样片，尚无 sealed cohort，不能声称这些覆盖或未见
-   来源泛化。按架构保留明确披露，不建立 format 特例。
-5. 准确性完成后，正式性能、TIFF/metadata、安装、三目标实机、打包与 Hook/CI 须绑定同一最终 release
-   commit。旧性能结果不能用于当前版本签收；Intel Mac 与 Windows x64 暂不可用是用户已确认的发布阻碍。
+- 准确性 gate 尚未 ready；当前 25 个自动批准和 85 个 Review 不能替代完整 release 检查。
+- 性能 baseline 未过 5 秒 Gate，性能/RSS 根因分析仍在进行；不得声称最终优化结果。
+- 当前 gold 绑定 `c54fadeb`，当前审计基线为 `cf5e2a49`；最终 commit、TIFF/metadata、安装、打包、
+  Hook、平台实机 receipt 仍需同一 commit 的证据闭合。
+- 当前 gold 没有 `xpan`、`120-645`、`135-dual` 真实样片，也没有 sealed cohort；不得建立 format 特例或
+  声称未见来源泛化。Runtime 排序和独立 calibration/sealed acceptance 仍未取得正式权限。
 
-用户要求的“共同 W 与逐 Frame 真实变化”审计延后到此前能力完成后开展。届时区分测量误差、真实
-aperture/走片变化与模型误差，以最小反例检查不同边界可见性下的联合投影；当前不增加逐 Frame
-尺寸自由度、不改变物理模型或 Gate。
+## 精确下一步
+
+1. 完成有界性能/RSS 与架构、测试审计；主线程据最终证据补齐模块 owner 和性能结果，不提前写入未知事实。
+2. 将修订后的代码、文档与验证绑定最终 commit，运行受影响的最小 `tools/verify` 检查，并补齐 Intel Mac、
+   Windows x64 与打包/release receipt。
+3. 只有 accuracy、性能、平台、安装、TIFF/metadata、打包和 Hook/CI 均按架构第 14 节闭合后，才进入发布
+   决策；发布仍需用户明确授权。

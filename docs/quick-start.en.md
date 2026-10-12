@@ -1,83 +1,46 @@
 # X5 Crop V5 Quick Start (Development Preview)
 
-This guide applies only to the unreleased V5 source on repository `main`. The
-latest public stable release remains v4.2.8. Regular users should download its
-release package and follow the bundled v4.2.8 documentation; its command line
-is different from this V5 preview.
+This guide covers only the unreleased V5 source on repository `main`. The latest public stable release is v4.2.8;
+download its release package and follow its bundled documentation instead.
 
-## 1. Install
+## Install
 
-Obtain the complete repository checkout, then run its platform installer:
+Obtain a complete repository checkout, then run its platform installer:
 
 - macOS: `tools/install/X5_Crop_Mac_install.command`
 - Windows: `tools/install/X5_Crop_win_install.bat`
 
-The same installers are under `install/`, without the `tools/` prefix, in a
-future V5 release package.
+The same installers are under `install/`, without the `tools/` prefix, in a future V5 release package. Setup finds
+64-bit Python 3.12–3.14, reuses suitable dependencies, and installs or updates the rest. Homebrew is not required,
+and no private environment is created.
 
-Setup finds 64-bit Python 3.12–3.14, reuses dependencies that meet the required
-versions, and installs or updates the rest. Homebrew is not required, and no
-private environment is created.
+## Run one source
 
-## 2. Run The Development Source
-
-In the repository root, run the command with one TIFF or a scan directory:
+From the repository root, use one TIFF or a scan directory and provide the known format:
 
 ```bash
 python3 X5_Crop.py /path/to/scans --format 135
 ```
 
-Omitting `--count` confirms the matched holder's default slot count. Supply a
-different count explicitly:
+Omitting `--count` confirms the matched holder's default complete count. Use an explicit count when the source has a
+different known count:
 
 ```bash
 python3 X5_Crop.py /path/to/scans --format 120-66 --count 2
 ```
 
-Count includes intermediate blank exposures. X5 Crop never infers it from a
-filename or picture content and never removes blank slots. `135-dual` defaults
-to 12, six per lane. Any explicit different count enters review; lane counts
-are never guessed.
-
-`python3 X5_Crop.py --interactive` processes TIFFs in the current directory.
-Interactive mode asks for count for every format. Press Return to confirm the
-matched-holder default. `135-dual` accepts another typed number consistently,
-but every value other than 12 safely enters review.
-
-Deskew defaults to small cleanup only after approval. Preserve source
-orientation with:
-
-```bash
-python3 X5_Crop.py /path/to/scans --format 135 --deskew off
-```
-
-`--layout auto` chooses horizontal or vertical from the scan, or either may be
-specified. V5 accepts single-page 16-bit RGB TIFFs with supported lossless
-compression. See the [English User Guide](https://github.com/rrriiicccooo/X5-Crop/blob/main/docs/user-guide.en.md) for the complete
-input contract.
-
-Each source TIFF shares one W/H size. The crop window is fixed at `1.1W × 1.1H`, with 5% margins that include
-base protection. The program selects its position only. If all visible content cannot fit or evidence is insufficient,
-the whole source enters `needs_review`. Multiple valid top/bottom interpretations must also fit within one fixed box.
-
-The fixed dimensions apply in source coordinates. Source-edge clipping, deskew, and integer rounding can change the
-final TIFF pixel dimensions.
-
-## 3. Inspect Debug Analysis First
-
-Use two different fresh output paths when inspecting detection before a normal
-crop:
+For a first inspection, use a fresh debug directory and then a different fresh directory for the official run:
 
 ```bash
 python3 X5_Crop.py /path/to/scans --format 135 --debug-analysis --output /path/to/x5_debug
 python3 X5_Crop.py /path/to/scans --format 135 --output /path/to/x5_crops
 ```
 
-Debug Analysis writes diagnostic JPGs and reports, but no official TIFFs or
-review copy. A normal run always detects again from the source TIFF and never
-reuses the Debug report.
+Debug Analysis writes diagnostic JPGs and reports, but no official TIFFs. A normal run rereads the source TIFF and
+does not reuse the debug report. The target directory must not already exist; an existing target is preserved and the
+run reports an output error.
 
-## 4. Read The Result
+## Read the result
 
 ```text
 x5_crop_output/
@@ -89,9 +52,6 @@ x5_crop_output/
   x5_crop_summary.csv
 ```
 
-Approval is source-wide: if any slot is unsafe, the complete source enters
-`needs_review`. If the target already exists, X5 Crop stops and never replaces
-or deletes it. Deskew is optional cleanup after the safety decision; when it is
-off, unavailable, or outside the small-cleanup range, safe photos are still
-written with their original tilt. Rotated envelopes may have black corners.
-See the [English User Guide](https://github.com/rrriiicccooo/X5-Crop/blob/main/docs/user-guide.en.md) for full details.
+Approval is source-wide: if any required slot is unsafe or evidence is insufficient, the complete source enters
+`needs_review`. Deskew is optional cleanup after the safety decision. See the [English User Guide](user-guide.en.md)
+for the complete input contract, format/count rules, geometry contract, output details, and exit codes.
