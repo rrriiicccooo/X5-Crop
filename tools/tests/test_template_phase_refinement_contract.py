@@ -309,14 +309,18 @@ class TemplatePhaseRefinementContractTest(unittest.TestCase):
             dtype=np.float64,
         )
 
-        phase, width, pitch, basis = _bounded_lattice_least_squares(
-            matrix,
-            values,
-            width_authority=PositiveInterval(95.0, 105.0),
-            pitch_authority=FiniteInterval(115.0, 125.0),
-            gap_authority=FiniteInterval(18.0, 22.0),
-            phase_authority=None,
-        )
+        with patch.object(phase_fitting, "lsq_linear", wraps=phase_fitting.lsq_linear) as bounded:
+            phase, width, pitch, basis = _bounded_lattice_least_squares(
+                matrix,
+                values,
+                width_authority=PositiveInterval(95.0, 105.0),
+                pitch_authority=FiniteInterval(115.0, 125.0),
+                gap_authority=FiniteInterval(18.0, 22.0),
+                phase_authority=None,
+            )
+        # Only the coupled gap is outside authority: the unconstrained solution
+        # already minimizes over the phase/W/pitch box, so only its face is fit.
+        self.assertEqual(bounded.call_count, 1)
 
         self.assertAlmostEqual(pitch - width, 22.0)
         self.assertEqual(
@@ -338,6 +342,23 @@ class TemplatePhaseRefinementContractTest(unittest.TestCase):
             ** 2
         )
         self.assertLess(bounded_residual, nominal_residual)
+
+    def test_snapping_into_box_still_refits_its_free_parameters(self) -> None:
+        matrix = np.asarray(((1., 0., 0.), (1., 10., 0.), (1., 11., 1.)))
+        values = np.asarray((1000., 1999.9999995, 2219.99999965))
+        phase, width, pitch, basis = _bounded_lattice_least_squares(
+            matrix, values,
+            width_authority=PositiveInterval(100., 101.),
+            pitch_authority=FiniteInterval(119., 121.),
+            gap_authority=FiniteInterval(19., 20.),
+            phase_authority=None,
+        )
+        # Raw W is 99.99999995. Snapping W to 100 does not optimize the box:
+        # its free phase/pitch must still move, and their gap is already legal.
+        self.assertAlmostEqual(phase, 999.99999975, places=9)
+        self.assertEqual(width, 100.)
+        self.assertAlmostEqual(pitch, 119.9999999, places=9)
+        self.assertEqual(basis, LatticeParameterFitBasis.BOUNDED_DIRECT_LEAST_SQUARES)
 
     def test_rank_three_fit_never_widens_compiled_authorities(self) -> None:
         matrix = np.asarray(
@@ -456,6 +477,30 @@ class TemplatePhaseRefinementContractTest(unittest.TestCase):
         )
         self.assertIsNotNone(retained.calibrated_nominal_grid_evidence)
 
+    def test_unchanged_matches_finish_full_and_low_rank_seed_fits(self) -> None:
+        compiled = template(2)
+        facts = _facts(tuple(
+            edge(f"stable:{index}", coordinate)
+            for index, coordinate in enumerate((10.0, 110.0, 130.0, 230.0))
+        ))
+        for indices in ((0, 1, 2, 3), (0, 2)):
+            with self.subTest(indices=indices):
+                matches = tuple((compiled.roles[index], facts[index]) for index in indices)
+                with patch.object(phase_fitting, "_match_roles", return_value=matches), patch.object(
+                    phase_fitting, "_linear_fit", wraps=phase_fitting._linear_fit,
+                ) as linear:
+                    result = phase_fitting._fit_seed(
+                        candidate_model._PhaseSeed(0.0, 120.0), facts, (), compiled.roles,
+                        compiled, (), FiniteInterval.exact(120.0), None, None,
+                    )
+                self.assertEqual(linear.call_count, 1)
+                assert result is not None
+                self.assertTrue(result.residual_compatible)
+                self.assertEqual(
+                    tuple(binding.canonical_position_px for binding in result.fit.role_bindings if binding),
+                    tuple(facts[index].coordinate_px for index in indices),
+                )
+
     def test_terminal_refit_closes_new_outliers_without_rematching(self) -> None:
         compiled = template(6)
         observations = tuple(
@@ -478,7 +523,7 @@ class TemplatePhaseRefinementContractTest(unittest.TestCase):
             phase_fitting, "_linear_fit", wraps=phase_fitting._linear_fit,
         ) as linear:
             result = phase_fitting._fit_seed(*arguments)
-        self.assertEqual(linear.call_count, 4)
+        self.assertEqual(linear.call_count, 3)
         assert result is not None
         self.assertTrue(result.residual_compatible)
         self.assertEqual(
@@ -502,7 +547,7 @@ class TemplatePhaseRefinementContractTest(unittest.TestCase):
         ) as linear:
             restored = phase_fitting._fit_seed(required, *arguments[1:])
         assert restored is not None
-        self.assertEqual(linear.call_count, 5)
+        self.assertEqual(linear.call_count, 4)
         self.assertEqual(
             tuple(identity for identity in restored.fit.binding_observation_ids
                   if identity is not None),

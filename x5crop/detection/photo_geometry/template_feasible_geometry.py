@@ -199,29 +199,6 @@ def _support_point(
     return first.value(solution), second.value(solution)
 
 
-def _support_solution(
-    system: _FeasibleSystem,
-    first: _LinearExpression,
-    second: _LinearExpression,
-    direction: tuple[float, float],
-) -> tuple[tuple[float, float], np.ndarray]:
-    objective = -(
-        direction[0] * first.coefficients
-        + direction[1] * second.coefficients
-    )
-    result = linprog(
-        objective,
-        A_ub=system.inequalities[0],
-        b_ub=system.inequalities[1],
-        bounds=system.bounds,
-        method="highs",
-    )
-    if not result.success or result.x is None:
-        raise ValueError("selected placement has no joint feasible state")
-    solution = np.asarray(result.x, dtype=np.float64)
-    return (first.value(solution), second.value(solution)), solution
-
-
 def _project_pair_vertices(
     system: _FeasibleSystem,
     first: _LinearExpression,
@@ -269,72 +246,6 @@ def _project_pair_vertices(
                     )
         if not added:
             return _ordered_hull(tuple(points.values())), evaluations
-
-
-def _project_pair_solutions(
-    system: _FeasibleSystem,
-    first: _LinearExpression,
-    second: _LinearExpression,
-) -> tuple[tuple[np.ndarray, ...], int]:
-    """Retain the shared parameter solution behind every projected vertex."""
-
-    solutions: dict[tuple[int, int], np.ndarray] = {}
-    points: dict[tuple[int, int], tuple[float, float]] = {}
-    evaluations = 0
-
-    def query(direction: tuple[float, float]) -> None:
-        nonlocal evaluations
-        if evaluations >= _MAX_SUPPORT_EVALUATIONS:
-            raise ValueError("joint feasible projection exceeded its work bound")
-        point, solution = _support_solution(system, first, second, direction)
-        key = _point_key(point)
-        points[key] = point
-        solutions[key] = solution
-        evaluations += 1
-
-    for direction in _INITIAL_SUPPORT_DIRECTIONS:
-        query(direction)
-    while True:
-        hull = _ordered_hull(tuple(points.values()))
-        if len(hull) <= 2:
-            keys = tuple(_point_key(point) for point in hull)
-            return tuple(solutions[key] for key in keys), evaluations
-        added = False
-        for left, right in zip(hull, (*hull[1:], hull[0]), strict=True):
-            if evaluations >= _MAX_SUPPORT_EVALUATIONS:
-                raise ValueError("joint feasible projection exceeded its work bound")
-            edge_x = right[0] - left[0]
-            edge_y = right[1] - left[1]
-            norm = math.hypot(edge_x, edge_y)
-            if norm <= _GEOMETRY_EPSILON:
-                continue
-            outward = (edge_y / norm, -edge_x / norm)
-            candidate, solution = _support_solution(
-                system,
-                first,
-                second,
-                outward,
-            )
-            evaluations += 1
-            edge_support = outward[0] * left[0] + outward[1] * left[1]
-            candidate_support = (
-                outward[0] * candidate[0] + outward[1] * candidate[1]
-            )
-            if candidate_support > edge_support + _GEOMETRY_EPSILON:
-                key = _point_key(candidate)
-                points[key] = candidate
-                solutions[key] = solution
-                added = True
-                if len(points) > _MAX_PROJECTED_VERTICES:
-                    raise ValueError(
-                        "joint feasible projection exceeded its vertex bound"
-                    )
-        if not added:
-            keys = tuple(
-                _point_key(point)
-                for point in _ordered_hull(tuple(points.values()))
-            )
-            return tuple(solutions[key] for key in keys), evaluations
 
 
 def _sequence_system(
@@ -763,17 +674,10 @@ def project_format_placement(
     for ordinal in range(placement.output_slot_count):
         direct_solutions = _direct_sequence_solutions(placement, ordinal)
         if direct_solutions is None:
-            raw_sequence_solutions, evaluations = _project_pair_solutions(
+            sequence_solutions, evaluations = _project_pair_vertices(
                 sequence_system,
                 roles[2 * ordinal],
                 roles[2 * ordinal + 1],
-            )
-            sequence_solutions = tuple(
-                (
-                    roles[2 * ordinal].value(solution),
-                    roles[2 * ordinal + 1].value(solution),
-                )
-                for solution in raw_sequence_solutions
             )
         else:
             direct_positions, evaluations = direct_solutions

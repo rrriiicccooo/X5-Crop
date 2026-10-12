@@ -675,12 +675,18 @@ Grid 始终可以生成一个待检验的默认 placement，但它不能仅凭�
 - 其它 unresolved/conflict 状态、失败的 candidate projection、direct-role 未闭合或 rank 0–2 继续使用
   原模型包络；不得借条件几何掩盖已知反证或冒充 full direct closure。
 - Rank 3 直接坐标系统由 `template_phase_fitting.py` 在同一个连续 placement 内联合拟合
-  `(phase, W, source_pitch)`。直接约束集合未改变时复用同一矩阵及其已计算的秩；
+  `(phase, W, source_pitch)`。同一次最小二乘分解同时取得秩和无约束解，后续有界求解复用该解；
+  straight rows 不满秩时仍按原顺序检查全部 matches，低秩保持原中位估计。
+  Relation realization 只更新几何位置，不改变 measured-gap 系数；相邻 matching 的完整 role/anchor
+  tuple 相同时，当前参数已是同一系统的解，直接结束该 seed 的 matching，不再次求解。
   已有满秩有界解时直接返回该解，不再计算随后被覆盖的中位 phase；
   rank 不足的中位估计与原 phase 区间约束保持。无约束最小二乘若落在已编译的 phase、W、pitch 与
   `pitch-W` 全部区间内，记录 `direct_least_squares`；若只越过这些硬区间，求解器在同一可行集合内取得
   最近的 `bounded_direct_least_squares`，不能把 W/pitch 整体退回 catalog 中心后继续沿用不相容的
-  phase。同一离散 placement 经候选无关 source pitch 或 local advance 重拟合时，报告保留该连续
+  phase。原始无约束解在边界吸附前后均已满足 phase/W/pitch box、只越过 coupled gap 时，跳过必然
+  返回同一解的 box 求解，直接求原 gap 边界面；由吸附才进入 box 时仍重新优化其自由参数。
+  边界吸附、硬区间与参数依据不变，不跨候选保存拟合结果。
+  同一离散 placement 经候选无关 source pitch 或 local advance 重拟合时，报告保留该连续
   lineage 中约束最强的一次参数依据；只有 template 身份、ordinal offset、phase 区间及共享
   observation-role 映射一致才允许继承，runner 之间不能串用。区间不会扩张，直接 role 的 native
   coordinate 也不会被拟合值覆盖。Source W 可以测量并收紧 retained fit 的连续 W，其消费不授予离散选择
@@ -2239,6 +2245,8 @@ winner/runner、provenance、footprint 或输出像素。
 复用同一 typed resolution；不同 pass、直接观察子集与 source 分别准备，不共享权限结果。
 同一 phase 输入的坐标、角色与 separator 身份以 O(N+R+P) 只读索引供 seed 和迭代复用；索引绑定
 原观察与 pair tuple，随该次 pass 释放。依赖 seed、拟合参数或邻接关系的匹配状态仍逐次计算。
+单次 matching 的 expected role positions 和 Pareto compatibility axes 各计算一次；固定 W 的区间
+相容性直接比较差值端点。联合可行投影共用一条顶点路径，仍保留原 LP 查询次序、上限和实际计数。
 
 正式输入限于单页 unsigned 16-bit、RGB 三通道、contiguous TIFF；压缩接受 `NONE`、`LZW`、
 `DEFLATE` / `ADOBE_DEFLATE` 或 `ZSTD`。Orientation 1–8 在 decode boundary 规范化，输出写

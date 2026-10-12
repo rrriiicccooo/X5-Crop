@@ -217,35 +217,26 @@ def _match_roles(
     ) -> object | None:
         """Return one physically dominant value, never an ID/strength tie-break."""
 
+        measured = tuple((value, axes(value)) for value in values)
         frontier = []
-        for candidate in values:
-            candidate_axes = axes(candidate)
+        for candidate, candidate_axes in measured:
             dominated = any(
                 all(left <= right + 1.0e-9 for left, right in zip(other_axes, candidate_axes, strict=True))
                 and any(left < right - 1.0e-9 for left, right in zip(other_axes, candidate_axes, strict=True))
-                for other in values
+                for other, other_axes in measured
                 if other is not candidate
-                for other_axes in (axes(other),)
             )
             if not dominated:
                 frontier.append(candidate)
         return frontier[0] if len(frontier) == 1 else None
 
     def width_compatible(start: _candidate_model._AnchorFact, end: _candidate_model._AnchorFact) -> bool:
-        values = tuple(
-            direction * (end_value - start_value)
-            for start_value in (
-                start.interval_px.minimum,
-                start.interval_px.maximum,
-            )
-            for end_value in (
-                end.interval_px.minimum,
-                end.interval_px.maximum,
-            )
-        )
-        span = FiniteInterval(min(values), max(values))
-        return max(span.minimum, frame_width.minimum) <= min(
-            span.maximum,
+        low = direction * (end.interval_px.minimum - start.interval_px.maximum)
+        high = direction * (end.interval_px.maximum - start.interval_px.minimum)
+        if direction < 0:
+            low, high = high, low
+        return max(low, frame_width.minimum) <= min(
+            high,
             frame_width.maximum,
         )
 
@@ -311,6 +302,17 @@ def _match_roles(
         selected.append((role, anchor))
     used_supports.update(required_by_support)
 
+    expected_positions = {
+        role.role_index: template_role_position(
+            role,
+            phase=phase,
+            width=width,
+            pitch=pitch,
+            direction=direction,
+            prefixes=prefixes,
+        )
+        for role in roles
+    }
     # A separator is one measured END -> material -> START relation.  Bind its
     # exact pair to one adjacency before individual frame edges are considered;
     # independently choosing two edges from different band interpretations
@@ -322,22 +324,8 @@ def _match_roles(
     if direction < 0:
         adjacency_roles = tuple(reversed(adjacency_roles))
     for end_role, start_role in adjacency_roles:
-        end_expected = template_role_position(
-            end_role,
-            phase=phase,
-            width=width,
-            pitch=pitch,
-            direction=direction,
-            prefixes=prefixes,
-        )
-        start_expected = template_role_position(
-            start_role,
-            phase=phase,
-            width=width,
-            pitch=pitch,
-            direction=direction,
-            prefixes=prefixes,
-        )
+        end_expected = expected_positions[end_role.role_index]
+        start_expected = expected_positions[start_role.role_index]
         end_candidates = {
             item.observation_id: item
             for item in candidates(end_role, end_expected)
@@ -379,23 +367,10 @@ def _match_roles(
     )
     if direction < 0:
         slot_roles = tuple(reversed(slot_roles))
+    frame_width_center = (frame_width.minimum + frame_width.maximum) / 2.0
     for start_role, end_role in slot_roles:
-        start_expected = template_role_position(
-            start_role,
-            phase=phase,
-            width=width,
-            pitch=pitch,
-            direction=direction,
-            prefixes=prefixes,
-        )
-        end_expected = template_role_position(
-            end_role,
-            phase=phase,
-            width=width,
-            pitch=pitch,
-            direction=direction,
-            prefixes=prefixes,
-        )
+        start_expected = expected_positions[start_role.role_index]
+        end_expected = expected_positions[end_role.role_index]
         starts = tuple(
             item
             for item in candidates(start_role, start_expected)
@@ -409,9 +384,6 @@ def _match_roles(
         end_ids = {item.observation_id for item in ends}
         pairs: list[tuple[_candidate_model._AnchorFact, _candidate_model._AnchorFact]] = []
         for start in starts:
-            frame_width_center = (
-                frame_width.minimum + frame_width.maximum
-            ) / 2.0
             target = start.coordinate_px + direction * frame_width_center
             insertion = bisect_left(centers, target)
             for index in range(insertion - 2, insertion + 3):
@@ -513,29 +485,27 @@ def _linear_fit(
     def fixed_delta(role: TemplateRole) -> float:
         return prefix_by_slot[role.slot_index][2]
 
-    straight_matrix = np.asarray(
-        [coefficients(role) for role, _anchor in straight],
-        dtype=np.float64,
-    )
-    straight_full_rank = len(straight) >= 3 and np.linalg.matrix_rank(straight_matrix) == 3
-    if straight_full_rank or len(straight) == len(matches):
-        fit_matches = straight
-        matrix = straight_matrix
-        full_rank = straight_full_rank
-    else:
-        fit_matches = matches
+    for fit_matches in (straight, matches):
         matrix = np.asarray(
             [coefficients(role) for role, _anchor in fit_matches],
             dtype=np.float64,
         )
-        full_rank = len(fit_matches) >= 3 and np.linalg.matrix_rank(matrix) == 3
-    values = np.asarray(
-        [
-            anchor.coordinate_px - direction * fixed_delta(role)
-            for role, anchor in fit_matches
-        ],
-        dtype=np.float64,
-    )
+        values = np.asarray(
+            [
+                anchor.coordinate_px - direction * fixed_delta(role)
+                for role, anchor in fit_matches
+            ],
+            dtype=np.float64,
+        )
+        unconstrained = None
+        full_rank = False
+        if len(fit_matches) >= 3:
+            unconstrained, _residuals, rank, _singular_values = np.linalg.lstsq(
+                matrix, values, rcond=None
+            )
+            full_rank = rank == 3
+        if full_rank or len(straight) == len(matches):
+            break
     fit_basis = LatticeParameterFitBasis.TEMPLATE_INTERVAL_CENTER
     if full_rank:
         solution = _bounded_lattice_least_squares(
@@ -545,6 +515,7 @@ def _linear_fit(
             pitch_authority=pitch_authority,
             gap_authority=gap_authority,
             phase_authority=phase_authority,
+            unconstrained=unconstrained,
         )
         phase, width, pitch, fit_basis = solution
         return float(phase), width, pitch, fit_basis
@@ -575,6 +546,7 @@ def _bounded_lattice_least_squares(
     pitch_authority: FiniteInterval,
     gap_authority: FiniteInterval,
     phase_authority: FiniteInterval | None,
+    unconstrained: np.ndarray | None = None,
 ) -> tuple[float, float, float, LatticeParameterFitBasis]:
     """Fit one continuous lattice inside every compiled physical interval.
 
@@ -648,15 +620,19 @@ def _bounded_lattice_least_squares(
                 snapped[1] = snapped[2] - target_gap
         return snapped
 
-    def inside_authorities(candidate: np.ndarray) -> bool:
+    def inside_box(candidate: np.ndarray) -> bool:
         return (
             width_authority.minimum <= candidate[1] <= width_authority.maximum
             and pitch_authority.contains(float(candidate[2]))
-            and gap_authority.contains(float(candidate[2] - candidate[1]))
             and (
                 phase_authority is None
                 or phase_authority.contains(float(candidate[0]))
             )
+        )
+
+    def inside_authorities(candidate: np.ndarray) -> bool:
+        return inside_box(candidate) and gap_authority.contains(
+            float(candidate[2] - candidate[1])
         )
 
     def box_fit(
@@ -701,9 +677,10 @@ def _bounded_lattice_least_squares(
         if phase_authority is None
         else (phase_authority.minimum, phase_authority.maximum)
     )
-    unconstrained = snap_numeric_boundary(
-        np.linalg.lstsq(matrix, values, rcond=None)[0]
-    )
+    if unconstrained is None:
+        unconstrained = np.linalg.lstsq(matrix, values, rcond=None)[0]
+    box_fit_required = not inside_box(unconstrained)
+    unconstrained = snap_numeric_boundary(unconstrained)
     if inside_authorities(unconstrained):
         return (
             float(unconstrained[0]),
@@ -711,14 +688,16 @@ def _bounded_lattice_least_squares(
             float(unconstrained[2]),
             LatticeParameterFitBasis.DIRECT_LEAST_SQUARES,
         )
-    selected = snap_numeric_boundary(
-        box_fit(
-            matrix,
-            values,
-            (phase_bounds[0], width_authority.minimum, pitch_authority.minimum),
-            (phase_bounds[1], width_authority.maximum, pitch_authority.maximum),
+    selected = unconstrained
+    if box_fit_required or not inside_box(selected):
+        selected = snap_numeric_boundary(
+            box_fit(
+                matrix,
+                values,
+                (phase_bounds[0], width_authority.minimum, pitch_authority.minimum),
+                (phase_bounds[1], width_authority.maximum, pitch_authority.maximum),
+            )
         )
-    )
     gap = float(selected[2] - selected[1])
     if not gap_authority.contains(gap):
         target_gap = (
@@ -808,6 +787,24 @@ def _fit_seed(
             }
         )
 
+    def compatible_subset() -> tuple[tuple[TemplateRole, _candidate_model._AnchorFact], ...]:
+        residual_limit = max(3.0, width * 0.035)
+        return tuple(
+            (role, anchor)
+            for role, anchor in matches
+            if abs(
+                anchor.coordinate_px
+                - template_role_position(
+                    role,
+                    phase=phase,
+                    width=width,
+                    pitch=pitch,
+                    direction=template.direction,
+                    prefixes=prefixes,
+                )
+            ) <= residual_limit
+        )
+
     for _iteration in range(4):
         updated_matches = _match_roles(
             direct,
@@ -833,6 +830,10 @@ def _fit_seed(
             )
         if not updated_matches or not retains_seed_identity(updated_matches):
             return None
+        # Realizing relations changes their positions, not their fit coefficients.
+        # The same direct rows therefore already have their final bounded fit.
+        if updated_matches == matches:
+            break
         updated = _linear_fit(
             updated_matches,
             width=width,
@@ -845,17 +846,10 @@ def _fit_seed(
             phase_authority=phase_authority,
         )
         updated_phase, updated_width, updated_pitch, updated_basis = updated
-        converged = updated_matches == matches and (
-            updated_phase,
-            updated_width,
-            updated_pitch,
-        ) == (phase, width, pitch)
         fit_basis = most_constrained_lattice_parameter_fit_basis(
             fit_basis,
             updated_basis,
         )
-        if converged:
-            break
         matches = updated_matches
         phase, width, pitch = updated_phase, updated_width, updated_pitch
         relations = realize_adjacency_relations(
@@ -874,23 +868,7 @@ def _fit_seed(
     # No role rematch, new seed, native coordinate, or authority is introduced.
     seed_identity_replayed = False
     for _trim_iteration in range(len(matches)):
-        residual_limit = max(3.0, width * 0.035)
-        retained = tuple(
-            (role, anchor)
-            for role, anchor in matches
-            if abs(
-                anchor.coordinate_px
-                - template_role_position(
-                    role,
-                    phase=phase,
-                    width=width,
-                    pitch=pitch,
-                    direction=template.direction,
-                    prefixes=prefixes,
-                )
-            )
-            <= residual_limit
-        )
+        retained = compatible_subset()
         if retained == matches:
             break
         if not retained or not retains_seed_identity(retained):
@@ -920,23 +898,7 @@ def _fit_seed(
                 pitch_px=pitch,
             )
             prefixes = adjacency_prefix_positions(relations, template.count)
-            residual_limit = max(3.0, width * 0.035)
-            retained = tuple(
-                (role, anchor)
-                for role, anchor in matches
-                if abs(
-                    anchor.coordinate_px
-                    - template_role_position(
-                        role,
-                        phase=phase,
-                        width=width,
-                        pitch=pitch,
-                        direction=template.direction,
-                        prefixes=prefixes,
-                    )
-                )
-                <= residual_limit
-            )
+            retained = compatible_subset()
             if (
                 retained == matches
                 or not retained
