@@ -1607,17 +1607,21 @@ footprint、typed generation failure 与带 physical frame ID 的逐帧诊断。
 Primary 尚无 placement identity 而 runner 已能物化时，集合保留 runner 的原角色，不伪造 primary，也不丢弃该候选。
 
 候选特征由 `template_acceptability_features.py` 独占，冻结为
-`x5crop_placement_acceptability_features_v2` 的 28 个非负数值字段，定义、顺序、单位和来源字段由
+`x5crop_placement_acceptability_features_v3` 的 30 个非负数值字段，定义、顺序、单位和来源字段由
 `PLACEMENT_FEATURE_DEFINITIONS` 统一登记。它只读取同一 placement 的锚点/角色账本、W/H/pitch、
 residual、Cross 支持、Contact/Overlap、direction、saturation 与输出预算；独立锚点按 evidence group
 去重，不能把 best 的角色权限或 coverage 复制到 runner。Observation、evidence group、template、source
 geometry 和 output identity 保留为 provenance，不编码为数值特征；sample ID、文件名、黄金与 cohort
 不在提取函数输入中。比例量按当前模板 count、尺度或实际跨度归一化，不构造逐 Frame 尺寸自由度。
 `not_applicable`、`evidence_unavailable` 与 `proposal_unavailable` 分开保留；缺失值是 `None`，不是测量值 0。
+源截断的两个特征将各 slot 的 mandatory 长轴跨度在真实 TIFF 像素单元域
+`[-0.5, extent-0.5]` 两端之外的长度分别求和，再除以全部 slot 的完整长轴跨度之和，按小、大排列。
+它们不依赖扫描方向或 slot 顺序，只描述已有 proposal，不授予截断、角色或自动输出权限；
+无完整 proposal 时保持 `proposal_unavailable`。
 
 每份已生成 proposal 使用 `template_direct_use_budget_assessment` 评价一次数值预算，正式 candidate 复用
 对应 primary 的原结果；未生成时预算为空。Feature 只读取该结果，不重算预算、几何或像素。工作量 receipt
-分别记录实际逐 slot 预算评价次数与 `28 × retained placement count` 个特征值；已有有界 slot/角色账本只做
+分别记录实际逐 slot 预算评价次数与 `30 × retained placement count` 个特征值；已有有界 slot/角色账本只做
 线性归约，不新增搜索。Gold 逐候选保留这些同次事实，并单独汇总黄金标签与 proposal 数值预算的对应关系；
 原 selected-candidate 预算与 CandidateGate 阻断统计仍是独立层级。
 
@@ -1625,7 +1629,7 @@ geometry 和 output identity 保留为 provenance，不编码为数值特征；s
 `tools/regression/gold_geometry.py` 独占，集合分析由现有 `gold_analysis.py` 扩展，不另建 detector 或黄金池。
 离线排序由 `tools/regression/placement_ranking.py` 独占，使用当前源码绑定、无分析错误的黄金报告；
 入口为 `tools/verify diagnostic --placement-ranking --analysis-root <gold-root> --output-root <new-root>`。
-`x5crop_development_placement_ranking_v5` 同时评价 primary、runner、conditional 与独立 phase Review 的已生成提案；
+`x5crop_development_placement_ranking_v6` 同时评价 primary、runner、conditional 与独立 phase Review 的已生成提案；
 全体最高分与只含 primary/runner 的最高分分别保存。有条件及独立 phase 提案只提供开发标签与分数，不取得
 canonical selection 或自动输出权限；无完整 footprint 的候选不进入排序。
 至少需要五个 source group。方法在查看该轮结果前冻结为
@@ -1633,7 +1637,7 @@ canonical selection 或自动输出权限；无完整 footprint 的候选不进�
 每个 source 总权重相等，其内已生成候选等权。仅用训练折拟合各特征的观测均值与标准差；
 加权总量、均值与方差使用固定顺序的 `math.fsum`，保持严格统计重放与来源哈希，不依赖 BLAS 的
 浮点归约路径或数组地址。Ridge 目标、权重、训练/测试隔离及开发排序权限不变。
-缺失项标准化后填 0，另加 28 个缺失指示量。常量与全缺失维度尺度为 1，全缺失中心为 0。
+缺失项标准化后填 0，另加 30 个缺失指示量。常量与全缺失维度尺度为 1，全缺失中心为 0。
 加权最小二乘使用固定 ridge 系数 0.1，截距不惩罚；不根据本轮结果搜索参数。分数无界，不称为概率。
 每份已有候选独立学习安全标签，多正例不竞争归一化；unavailable 不参与训练或排序。
 最大分数优先，精确同分沿用保留顺序；margin 只报告前两名差值，不授予或否决权限。
@@ -2195,7 +2199,7 @@ lattice authority。不新增像素 query 或 phase 搜索；包括第三份提�
 独立 phase Review 使用自己的 receipt：既有 projection record 数 M、角色数 R 的原生分类工作为 O(MR)，
 四个角色类的分类、比较、完整身份去重分别计数；保留状态与临时索引为 O(4R)，same-template carry 每类
 最多比较 prior/current 两份。每份解释最多一次 Cross 调用，沿用原 4096-fit 上限；compose/projection
-各最多一次，extreme evaluations 不超过 `130F + 64`，output/budget 各不超过 F，placement 特征为 28 项。
+各最多一次，extreme evaluations 不超过 `130F + 64`，output/budget 各不超过 F，placement 特征为 30 项。
 源截断分类同为 O(MR)，保留与索引为 O(6R)，每条至多两个类成员、carry 至多 `6(M−1)` 次完整比较，
 完整去重至多 `15(2M−1)` 次；原 rank 重算与全部事实检查单独计数。固定重拟合至多四次，每次
 `_fit_seed` 一次、内部 matching 至多四轮，重建既有 observations/pairs 与完整反证的工作及 O(N+P+R)
@@ -2241,6 +2245,10 @@ Affine sampler 独占每格 contiguous 输出缓冲，writer 完成一格后才�
 存活；vertical deskew 使用灰度转置 view，registered interval 使用连续 slice view。Transition-line
 cache 只在单个 source 内复用并在 source 结束时清空。这些优化不得改变 observation、placement、
 winner/runner、provenance、footprint 或输出像素。
+每个 affine 分块只读取已生成坐标的四角，利用逐轴单调性界定整块；全部角点位于 authority
+像素中心闭域 `[0,width-1] × [0,height-1]` 内时，使用与原路径等价的 SciPy `constant` mode，
+其余继续使用 `grid-constant` 保留部分越界 tap。比较不加 epsilon，不重算坐标或增加图像／mask
+缓冲；分块、`order=1`、`cval=0`、float64 中间值与 uint16 截断顺序保持。
 单次 lattice fit 内，同一 slot 的不可变 adjacency prefix 系数只计算一次，供 START/END、矩阵、
 固定 delta 与低秩 offset 复用；空 prefix 直接返回原空求和结果。缓存随该次 fit 释放，不跨候选或 source。
 `TemplateSpec.roles` 只在该不可变模板实例首次访问时构造；角色顺序与 count 绑定，不缓存拟合结果。

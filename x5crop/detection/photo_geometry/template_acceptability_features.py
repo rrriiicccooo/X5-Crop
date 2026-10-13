@@ -7,13 +7,14 @@ from enum import Enum
 import math
 
 from ...domain import EvidenceState, ObservationId
+from .model import BoundaryAxis
 from .output_model import DirectUseBudgetAssessment, OutputFootprint
 from .template_cross_model import CrossLineProjectionBasis
 from .template_model import ContactRelation, OverlapRelation, SequenceBindingUse
 from .template_placement import FormatPlacement
 
 
-PLACEMENT_FEATURE_SCHEMA = "x5crop_placement_acceptability_features_v2"
+PLACEMENT_FEATURE_SCHEMA = "x5crop_placement_acceptability_features_v3"
 
 
 class PlacementFeatureUnit(str, Enum):
@@ -68,6 +69,8 @@ PLACEMENT_FEATURE_DEFINITIONS = (
     PlacementFeatureDefinition("cross_longitudinal_supported", PlacementFeatureUnit.INDICATOR, ("cross_fit.longitudinal_projection_authority.state",)),
     PlacementFeatureDefinition("cross_direction_span_degrees", PlacementFeatureUnit.DEGREES, ("cross_fit.selected_direction.full_angle_interval_degrees",)),
     PlacementFeatureDefinition("cross_uses_enclosing_support", PlacementFeatureUnit.INDICATOR, ("cross_fit.enclosing_support_pair",)),
+    PlacementFeatureDefinition("source_minimum_clipped_length_fraction", PlacementFeatureUnit.FRACTION, ("output_footprints.mandatory_source_footprint", "output_footprints.width_axis", "output_footprints.source_extent")),
+    PlacementFeatureDefinition("source_maximum_clipped_length_fraction", PlacementFeatureUnit.FRACTION, ("output_footprints.mandatory_source_footprint", "output_footprints.width_axis", "output_footprints.source_extent")),
 )
 _DEFINITIONS_BY_NAME = {item.name: item for item in PLACEMENT_FEATURE_DEFINITIONS}
 
@@ -133,6 +136,20 @@ class PlacementAcceptabilityFeatures:
             raise ValueError("placement feature identity or compiled vector is invalid")
 
 
+def _source_clipped_length_fractions(outputs: tuple[OutputFootprint, ...]) -> tuple[float, float]:
+    """Length-weighted source clipping, invariant under sequence reversal."""
+    lower = upper = length = 0.0
+    for output in outputs:
+        axis = 0 if output.width_axis == BoundaryAxis.X else 1
+        extent = output.source_extent.width if axis == 0 else output.source_extent.height
+        coordinates = tuple(point[axis] for point in output.mandatory_source_footprint)
+        minimum, maximum = min(coordinates), max(coordinates)
+        lower += max(0.0, min(maximum, -0.5) - minimum)
+        upper += max(0.0, maximum - max(minimum, extent - 0.5))
+        length += maximum - minimum
+    return min(lower, upper) / length, max(lower, upper) / length
+
+
 def build_placement_acceptability_features(
     placement: FormatPlacement,
     outputs: tuple[OutputFootprint, ...],
@@ -173,6 +190,7 @@ def build_placement_acceptability_features(
     unavailable = PlacementFeatureMissingReason.EVIDENCE_UNAVAILABLE
     inference = sequence.frame_width_inference
     longitudinal = cross.longitudinal_projection_authority
+    clipped = _source_clipped_length_fractions(outputs) if outputs else (None, None)
     values: dict[str, float | None] = {
         "phase_anchor_group_fraction": len(anchor_groups) / (2 * count),
         "local_role_fraction": sum(item.use == SequenceBindingUse.LOCAL_REFINEMENT for item in bound) / (2 * count),
@@ -229,6 +247,12 @@ def build_placement_acceptability_features(
             if cross.selected_direction is not None else absent("cross_direction_span_degrees", unavailable)
         ),
         "cross_uses_enclosing_support": float(cross.enclosing_support_pair is not None),
+        "source_minimum_clipped_length_fraction": (
+            clipped[0] if outputs else absent("source_minimum_clipped_length_fraction", no_proposal)
+        ),
+        "source_maximum_clipped_length_fraction": (
+            clipped[1] if outputs else absent("source_maximum_clipped_length_fraction", no_proposal)
+        ),
     }
     return PlacementAcceptabilityFeatures(
         placement_id=placement.placement_id,

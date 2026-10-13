@@ -105,13 +105,22 @@ def sample_affine_roi(
         chunk_coordinates[1] += inverse[0][1] * expanded_y
         chunk_coordinates[1] += inverse[0][2]
         chunk_coordinates[1] -= sampling_authority_box.left
+        # Each affine coordinate is monotone in each raster axis, including
+        # rounding. Actual corners bound the entire block without a new scan.
+        # Constant and grid-constant are identical inside the pixel-centre
+        # domain; even one ULP outside requires the original partial taps.
+        interior = all(
+            0.0 <= plane[row, column] <= size - 1
+            for plane, size in zip(chunk_coordinates, authority.shape[:2], strict=True)
+            for row in (0, -1) for column in (0, -1)
+        )
         chunk_value = value[:row_count]
         for channel in range(arr.shape[2]):
             map_coordinates(
                 authority[..., channel],
                 chunk_coordinates,
                 order=1,
-                mode="grid-constant",
+                mode="constant" if interior else "grid-constant",
                 cval=float(background_value),
                 prefilter=False,
                 output=chunk_value,

@@ -27,7 +27,7 @@ from .gold_analysis import (
 from .report_validation import validate_placement_feature_record
 
 
-RANKING_SCHEMA = "x5crop_development_placement_ranking_v5"
+RANKING_SCHEMA = "x5crop_development_placement_ranking_v6"
 CONDITIONAL_ROLE_SCOPE = "development_label_and_score_only"
 INDEPENDENT_PHASE_ROLE_SCOPE = "development_label_and_score_only"
 MODEL_SPEC = "source_balanced_standardized_ridge_ranking_v2"

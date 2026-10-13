@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from tools.tests.affine_tiff_support import *
 
 
@@ -160,84 +162,59 @@ class AffineFoundationContractTest(unittest.TestCase):
         from scipy.ndimage import map_coordinates
 
         rng = np.random.default_rng(20260820)
-        source = rng.integers(
-            0,
-            np.iinfo(np.uint16).max + 1,
-            size=(281, 337, 3),
-            dtype=np.uint16,
-        )
-        transform = AffineCoordinateTransform.expanded_rotation(
-            source.shape[1],
-            source.shape[0],
-            1.7,
-        )
-        box = Box(11, 9, 330, 279)
-        authority_box = Box(7, 5, 331, 277)
-        expected = np.full(
-            (box.height, box.width, 3),
-            0,
-            dtype=np.uint16,
-        )
-        inverse = transform.inverse_matrix
-        authority = source[
-            authority_box.top : authority_box.bottom,
-            authority_box.left : authority_box.right,
-        ]
-        expanded_x = np.arange(box.left, box.right, dtype=np.float64)[
-            None, :
-        ]
-        for output_row in range(0, box.height, 256):
-            row_end = min(box.height, output_row + 256)
-            expanded_y = np.arange(
-                box.top + output_row,
-                box.top + row_end,
-                dtype=np.float64,
-            )[:, None]
-            source_x = (
-                inverse[0][0] * expanded_x
-                + inverse[0][1] * expanded_y
-                + inverse[0][2]
-            )
-            source_y = (
-                inverse[1][0] * expanded_x
-                + inverse[1][1] * expanded_y
-                + inverse[1][2]
-            )
-            coordinates = np.asarray(
-                (
-                    source_y - authority_box.top,
-                    source_x - authority_box.left,
-                ),
-                dtype=np.float64,
-            )
-            values = np.empty(source_x.shape, dtype=np.float64)
-            for channel in range(3):
-                map_coordinates(
-                    authority[..., channel],
-                    coordinates,
-                    order=1,
-                    mode="grid-constant",
-                    cval=0.0,
-                    prefilter=False,
-                    output=values,
-                )
-                np.clip(
-                    values,
-                    0,
-                    np.iinfo(np.uint16).max,
-                    out=values,
-                )
-                expected[output_row:row_end, :, channel] = values.astype(
-                    np.uint16
-                )
+        source = rng.integers(0, 65536, size=(640, 337, 3), dtype=np.uint16)
+        original = source[:281]
+        cases = [(original, AffineCoordinateTransform.expanded_rotation(337, 281, 1.7),
+                  Box(11, 9, 330, 279), Box(7, 5, 331, 277), None)]
+        for angle in (-1.7, 1.7):
+            transform = AffineCoordinateTransform.expanded_rotation(337, 640, angle)
+            for rows in (255, 256, 257, 513):
+                cases.append((source[:, ::-1], transform, Box(30, 30, 307, 30 + rows),
+                              Box(0, 0, 337, 640), {"constant"}))
+            cases.append((source, transform, Box(30, 0, 307, transform.output_extent.height),
+                          Box(0, 0, 337, 640), {"constant", "grid-constant"}))
+        for array, transform, box, authority_box, modes in cases:
+            with self.subTest(angle=transform.matrix, rows=box.height):
+                inverse = transform.inverse_matrix
+                x = np.arange(box.left, box.right, dtype=np.float64)[None, :]
+                y = np.arange(box.top, box.bottom, dtype=np.float64)[:, None]
+                coordinates = np.asarray((
+                    inverse[1][0] * x + inverse[1][1] * y + inverse[1][2] - authority_box.top,
+                    inverse[0][0] * x + inverse[0][1] * y + inverse[0][2] - authority_box.left,
+                ))
+                authority = array[authority_box.top:authority_box.bottom, authority_box.left:authority_box.right]
+                expected = np.stack([
+                    np.clip(map_coordinates(authority[..., channel], coordinates, order=1,
+                        mode="grid-constant", cval=0.0, prefilter=False, output=np.float64), 0, 65535).astype(np.uint16)
+                    for channel in range(3)
+                ], axis=2)
+                with patch("scipy.ndimage.map_coordinates", wraps=map_coordinates) as sampling:
+                    actual = sample_affine_roi(array, transform, box, sampling_authority_box=authority_box)
+                self.assertTrue(np.array_equal(actual, expected))
+                if modes is not None:
+                    self.assertEqual({call.kwargs["mode"] for call in sampling.call_args_list}, modes)
 
-        actual = sample_affine_roi(
-            source,
-            transform,
-            box,
-            sampling_authority_box=authority_box,
-        )
-        self.assertTrue(np.array_equal(actual, expected))
+    def test_internal_sampling_rejects_even_one_ulp_outside_authority(self) -> None:
+        from scipy.ndimage import map_coordinates
+
+        source = np.repeat(np.asarray([[1200, 2400], [3600, 65535]], dtype=np.uint16)[..., None], 3, axis=2)
+        extent = AffineCoordinateTransform.identity(2, 2).source_extent
+        for offset, pixel, mode in (
+            (np.nextafter(0.0, -np.inf), 0, "grid-constant"),
+            (np.nextafter(1.0, np.inf) - 1.0, 1, "grid-constant"),
+            (np.nextafter(1.0, 0.0) - 1.0, 1, "constant"),
+            (1.0, 0, "constant"),
+        ):
+            with self.subTest(offset=offset):
+                transform = AffineCoordinateTransform(
+                    ((1.0, 0.0, -offset), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)), extent, extent,
+                )
+                authority = Box(1, 0, 2, 1) if offset == 1.0 else Box(0, 0, 2, 2)
+                with patch("scipy.ndimage.map_coordinates", wraps=map_coordinates) as sampling:
+                    actual = sample_affine_roi(source, transform, Box(pixel, 0, pixel + 1, 1),
+                                               sampling_authority_box=authority)
+                self.assertEqual({call.kwargs["mode"] for call in sampling.call_args_list}, {mode})
+                self.assertGreater(int(actual[0, 0, 0]), 0)
 
     def test_expanded_canvas_preserves_bilinear_support_at_source_corners(
         self,

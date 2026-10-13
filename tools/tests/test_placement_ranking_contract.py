@@ -195,7 +195,7 @@ class PlacementRankingContractTest(unittest.TestCase):
             record["retained_placement_gold_labels"][1]["acceptability_features"]["values"][0]["value"] = 0.5
             record["retained_placement_gold_labels"].append(native)
         artifact = build_development_ranking(records)
-        self.assertEqual(artifact["ranking_schema"], "x5crop_development_placement_ranking_v5")
+        self.assertEqual(artifact["ranking_schema"], "x5crop_development_placement_ranking_v6")
         self.assertEqual(
             artifact["independent_phase_role_scope"],
             INDEPENDENT_PHASE_ROLE_SCOPE,

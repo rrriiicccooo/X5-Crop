@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from ...domain import EvidenceState
 from ..gate_checks import DetectionFailureFact, GateGap, failure_fact
 from .content_veto_model import ContentVetoAssessment
 from .source_geometry import SourceScanGeometry
 from .template_direct_role_aperture_domain import (
+    DirectRoleApertureDomainAuthority,
     assess_direct_role_aperture_domain_authority,
 )
 from .template_cross_model import CrossFitCompetition, CrossFitStatus
@@ -57,27 +60,26 @@ def select_lane_template_placement(
         or common_h_output is None and cross.status != CrossFitStatus.RESOLVED
     ):
         raise ValueError("content veto requires the actual complete output selection")
+
+    def result(
+        state: EvidenceState, failure: DetectionFailureFact | None = None, *,
+        selected: str | None = None,
+        aperture_domain_authority: DirectRoleApertureDomainAuthority | None = None,
+    ) -> TemplatePlacementCompetition:
+        return TemplatePlacementCompetition(
+            placements, selected, None if runner_up is None else runner_up.placement_id,
+            state, failure, aperture_domain_authority,
+            common_h_output=common_h_output, common_h_authority=common_h_authority,
+        )
+
+    bounds_exceeded = phase.status == PhaseFitStatus.BOUND_EXCEEDED or cross.status == CrossFitStatus.BOUND_EXCEEDED
     try:
         phase.receipt.validate_bounds(slot_count=phase.template.count)
         cross.receipt.validate_bounds()
     except ValueError:
-        return TemplatePlacementCompetition(
-            placements, None,
-            None if runner_up is None else runner_up.placement_id,
-            EvidenceState.CONTRADICTED,
-            failure_fact(GateGap.PRODUCER_BOUND_EXCEEDED),
-            common_h_output=common_h_output,
-            common_h_authority=common_h_authority,
-        )
-    if phase.status == PhaseFitStatus.BOUND_EXCEEDED or cross.status == CrossFitStatus.BOUND_EXCEEDED:
-        return TemplatePlacementCompetition(
-            placements, None,
-            None if runner_up is None else runner_up.placement_id,
-            EvidenceState.CONTRADICTED,
-            failure_fact(GateGap.PRODUCER_BOUND_EXCEEDED),
-            common_h_output=common_h_output,
-            common_h_authority=common_h_authority,
-        )
+        bounds_exceeded = True
+    if bounds_exceeded:
+        return result(EvidenceState.CONTRADICTED, failure_fact(GateGap.PRODUCER_BOUND_EXCEEDED))
     if phase.status != PhaseFitStatus.RESOLVED or phase.best is None:
         phase_gap = {
             PhaseFailureKind.DIRECT_PHASE_ANCHOR_UNAVAILABLE: (
@@ -132,34 +134,24 @@ def select_lane_template_placement(
                 GateGap.ADJACENCY_TOPOLOGY_UNRESOLVED
             ),
         }.get(phase.failure_kind, GateGap.PHASE_TEMPLATE_MISMATCH)
-        return TemplatePlacementCompetition(
-            placements, None,
-            None if runner_up is None else runner_up.placement_id,
+        return result(
             EvidenceState.UNAVAILABLE,
             failure_fact(
                 phase_gap,
                 detail=phase.ambiguity_reason,
             ),
-            common_h_output=common_h_output,
-            common_h_authority=common_h_authority,
         )
     if common_h_output is not None:
         if common_h_output.failure is not None or common_h_authority.state != EvidenceState.SUPPORTED:
-            return TemplatePlacementCompetition(
-                placements, None, None if runner_up is None else runner_up.placement_id,
+            return result(
                 EvidenceState.UNAVAILABLE, common_h_output.failure or common_h_authority.failure,
-                common_h_output=common_h_output,
-                common_h_authority=common_h_authority,
             )
         if content_assessment is None:
             raise ValueError("common output selection requires its own content check")
-        return TemplatePlacementCompetition(
-            placements, None if content_assessment.vetoed else common_h_output.placement_id,
-            None if runner_up is None else runner_up.placement_id,
+        return result(
             EvidenceState.CONTRADICTED if content_assessment.vetoed else EvidenceState.SUPPORTED,
             failure_fact(GateGap.CONTENT_VETO_REJECTED) if content_assessment.vetoed else None,
-            common_h_output=common_h_output,
-            common_h_authority=common_h_authority,
+            selected=None if content_assessment.vetoed else common_h_output.placement_id,
         )
     if cross.status != CrossFitStatus.RESOLVED or cross.best is None:
         aspect = cross.aperture_aspect_ratio_authority
@@ -178,9 +170,7 @@ def select_lane_template_placement(
             if aspect.blocks_cross_resolution
             else None
         )
-        return TemplatePlacementCompetition(
-            placements, None,
-            None if runner_up is None else runner_up.placement_id,
+        return result(
             EvidenceState.UNAVAILABLE,
             failure_fact(
                 aspect_gap
@@ -195,18 +185,9 @@ def select_lane_template_placement(
                     else cross.reason
                 ),
             ),
-            common_h_output=common_h_output,
-            common_h_authority=common_h_authority,
         )
     if best is None:
-        return TemplatePlacementCompetition(
-            placements, None,
-            None if runner_up is None else runner_up.placement_id,
-            EvidenceState.UNAVAILABLE,
-            failure_fact(GateGap.COMPLETE_PLACEMENT_UNAVAILABLE),
-            common_h_output=common_h_output,
-            common_h_authority=common_h_authority,
-        )
+        return result(EvidenceState.UNAVAILABLE, failure_fact(GateGap.COMPLETE_PLACEMENT_UNAVAILABLE))
     if best.sequence_fit != phase.best or best.cross_fit != cross.best:
         raise ValueError("template placement does not use the selected fits")
     direct_role_authority = phase.direct_role_binding_authority
@@ -233,38 +214,23 @@ def select_lane_template_placement(
             if aperture_domain_authority.state == EvidenceState.CONTRADICTED
             else GateGap.DIRECT_ROLE_APERTURE_DOMAIN_UNAVAILABLE
         )
-        return TemplatePlacementCompetition(
-            placements,
-            None,
-            None if runner_up is None else runner_up.placement_id,
+        return result(
             aperture_domain_authority.state,
             failure_fact(
                 gap,
                 detail=aperture_domain_authority.reason,
             ),
-            aperture_domain_authority,
-            common_h_output=common_h_output,
-            common_h_authority=common_h_authority,
+            aperture_domain_authority=aperture_domain_authority,
         )
     if content_assessment is not None and content_assessment.vetoed:
-        return TemplatePlacementCompetition(
-            placements, None,
-            None if runner_up is None else runner_up.placement_id,
+        return result(
             EvidenceState.CONTRADICTED,
             failure_fact(GateGap.CONTENT_VETO_REJECTED),
-            aperture_domain_authority,
-            common_h_output=common_h_output,
-            common_h_authority=common_h_authority,
+            aperture_domain_authority=aperture_domain_authority,
         )
-    return TemplatePlacementCompetition(
-        placements,
-        best.placement_id,
-        None if runner_up is None else runner_up.placement_id,
-        EvidenceState.SUPPORTED,
-        None,
-        aperture_domain_authority,
-        common_h_output=common_h_output,
-        common_h_authority=common_h_authority,
+    return result(
+        EvidenceState.SUPPORTED, selected=best.placement_id,
+        aperture_domain_authority=aperture_domain_authority,
     )
 
 
@@ -277,18 +243,11 @@ def withhold_lane_winner(
 
     if not isinstance(failure, DetectionFailureFact):
         raise TypeError("withheld template winner requires a typed failure")
-    return TemplatePlacementCompetition(
-        placements=competition.placements,
+    return replace(
+        competition,
         selected_placement_id=None,
-        runner_up_placement_id=competition.runner_up_placement_id,
         state=EvidenceState.UNAVAILABLE,
         failure=failure,
-        direct_role_aperture_domain_authority=(
-            competition.direct_role_aperture_domain_authority
-        ),
-        conditional_proposal_placement_id=competition.conditional_proposal_placement_id,
-        common_h_output=competition.common_h_output,
-        common_h_authority=competition.common_h_authority,
     )
 
 
@@ -304,29 +263,16 @@ def select_template_source(
         raise ValueError("source selection requires every lane competition")
     if len(set(lane_ids)) != len(lane_ids) or any(not value for value in lane_ids):
         raise ValueError("source selection lane identities must be unique")
-    if any(item.state != EvidenceState.SUPPORTED for item in competitions):
-        failure = next(
-            item.failure
-            for item in competitions
-            if item.state != EvidenceState.SUPPORTED
-        )
-        assert failure is not None
+    runner_ids = tuple(item.runner_up_placement_id for item in competitions)
+    failure = next((item.failure for item in competitions if item.state != EvidenceState.SUPPORTED), None)
+    if failure is not None or shared_scan_geometry is None:
         return TemplateSourceSelection(
             lane_ids,
-            tuple(None for _item in competitions),
+            (None,) * len(competitions),
             None,
             EvidenceState.UNAVAILABLE,
-            failure,
-            tuple(item.runner_up_placement_id for item in competitions),
-        )
-    if shared_scan_geometry is None:
-        return TemplateSourceSelection(
-            lane_ids,
-            tuple(None for _item in competitions),
-            None,
-            EvidenceState.UNAVAILABLE,
-            failure_fact(GateGap.SHARED_AUTHORITY_UNAVAILABLE),
-            tuple(item.runner_up_placement_id for item in competitions),
+            failure or failure_fact(GateGap.SHARED_AUTHORITY_UNAVAILABLE),
+            runner_ids,
         )
     selected = tuple(item.selected_output for item in competitions)
     if any(
@@ -340,5 +286,5 @@ def select_template_source(
         shared_scan_geometry,
         EvidenceState.SUPPORTED,
         None,
-        tuple(item.runner_up_placement_id for item in competitions),
+        runner_ids,
     )

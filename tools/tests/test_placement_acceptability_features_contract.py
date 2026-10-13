@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from tools.regression.report_validation import validate_placement_feature_record
+from tools.tests.affine_tiff_support import sampling_footprint
 from tools.tests.template_runtime_test_support import prepared_template_lane
 from tools.tests.template_test_support import (
     placement_compose, placement_cross, placement_direction,
@@ -13,13 +14,16 @@ from tools.tests.template_test_support import (
 )
 from x5crop.detection.photo_geometry.template_acceptability_features import (
     PLACEMENT_FEATURE_DEFINITIONS, PlacementFeatureMissingReason,
-    build_placement_acceptability_features,
+    _source_clipped_length_fractions, build_placement_acceptability_features,
 )
+from x5crop.detection.photo_geometry.model import BoundaryAxis
 from x5crop.detection.photo_geometry.template_feasible_geometry import project_format_placement
 from x5crop.detection.photo_geometry.template_output import (
     output_footprint_from_template_placement, template_direct_use_budget_assessment,
 )
 from x5crop.report.read_models import typed_read_model
+from x5crop.domain import Box, WorkspaceExtent
+from x5crop.geometry.convex import convex_hull
 
 
 class PlacementAcceptabilityFeaturesContractTest(unittest.TestCase):
@@ -64,6 +68,37 @@ class PlacementAcceptabilityFeaturesContractTest(unittest.TestCase):
         self.assertTrue(all(item.observation_id in features.observation_ids for item in placement.cross_fit.direct_bindings))
         self.assertEqual(features.evidence_group_ids, placement.sequence_fit.evidence_group_ids)
         self.assertEqual(features.output_geometry_ids, tuple(item.geometry_id for item in outputs))
+        clipped = _source_clipped_length_fractions(outputs)
+        self.assertEqual(values["source_minimum_clipped_length_fraction"].value, clipped[0])
+        self.assertEqual(values["source_maximum_clipped_length_fraction"].value, clipped[1])
+
+    def test_source_clipping_uses_pixel_cells_and_length_weighting_without_direction_bias(self):
+        def output(low, high):
+            return sampling_footprint(
+                Box(0, 0, 100, 80), WorkspaceExtent(100, 80),
+                mandatory=((low, 10.0), (high, 10.0), (high, 60.0), (low, 60.0)),
+            )
+
+        full = output(-0.5, 99.5)
+        clipped = output(-25.5, 149.5)
+        self.assertEqual(_source_clipped_length_fractions((full,)), (0.0, 0.0))
+        self.assertEqual(_source_clipped_length_fractions((clipped, full)), (25 / 275, 50 / 275))
+        reflected = output(99 - 149.5, 99 + 25.5)
+        self.assertEqual(_source_clipped_length_fractions((clipped,)),
+                         _source_clipped_length_fractions((replace(reflected, sequence_direction=-1),)))
+        transpose = lambda polygon: convex_hull(tuple((y, x) for x, y in polygon))
+        transposed = replace(
+            clipped, width_axis=BoundaryAxis.Y, source_extent=WorkspaceExtent(80, 100),
+            sampling_authority_box=Box(0, 0, 80, 100),
+            envelope=replace(clipped.envelope,
+                canonical_source_footprint=transpose(clipped.envelope.canonical_source_footprint),
+                feasible_source_footprint=transpose(clipped.envelope.feasible_source_footprint)),
+            mandatory_source_footprint=transpose(clipped.mandatory_source_footprint),
+            requested_source_footprint=transpose(clipped.requested_source_footprint),
+            required_source_footprint=transpose(clipped.required_source_footprint),
+        )
+        self.assertEqual(_source_clipped_length_fractions((clipped,)),
+                         _source_clipped_length_fractions((transposed,)))
 
     def test_missing_frames_and_unavailable_proposal_are_not_zero_evidence(self):
         placement = self._placement(count=3, missing=(2, 3, 5))
@@ -71,7 +106,8 @@ class PlacementAcceptabilityFeaturesContractTest(unittest.TestCase):
         values = {item.name: item for item in features.values}
         self.assertEqual(values["unobserved_frame_fraction"].value, 1 / 3)
         self.assertEqual(values["one_sided_frame_fraction"].value, 1 / 3)
-        for name in ("output_maximum_budget_ratio", "output_supported_budget_fraction", "output_saturation_count"):
+        for name in ("output_maximum_budget_ratio", "output_supported_budget_fraction", "output_saturation_count",
+                     "source_minimum_clipped_length_fraction", "source_maximum_clipped_length_fraction"):
             self.assertIsNone(values[name].value)
             self.assertEqual(values[name].missing_reason, PlacementFeatureMissingReason.PROPOSAL_UNAVAILABLE)
         single = build_placement_acceptability_features(self._placement(count=1), (), ())
