@@ -57,7 +57,8 @@ with insufficient evidence remain subject to review.
 Debug Analysis shows the primary, runner, and retained proposals with their evidence, coverage results, and blocking
 reasons for inspection. Reports preserve the original evidence and failure reason for each displayed interpretation;
 displaying one does not grant crop or automatic-output authority. The current Runtime does not use development ranking
-scores to select crops.
+scores to select crops. Residual differences within numerical rounding precision do not distinguish interpretations;
+existing ambiguity still requires review.
 
 Holder fill is assessed only after placement by asking whether another W fits beyond either outer. It never searches for
 or centers a placement. Both lanes of 135-dual must be complete.

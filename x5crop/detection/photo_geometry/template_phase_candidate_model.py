@@ -16,7 +16,8 @@ from .template_model import (
 )
 
 
-_NUMERIC_RESIDUAL_EPSILON_PX = 1.0e-9
+_NUMERIC_RESIDUAL_PRECISION = 9
+_NUMERIC_RESIDUAL_EPSILON_PX = 10.0 ** -_NUMERIC_RESIDUAL_PRECISION
 
 
 @dataclass(frozen=True)
@@ -137,5 +138,6 @@ def _rank(value: _BoundFit) -> tuple[object, ...]:
         int(value.residual_compatible),
         fit.phase_support_count,
         fit.phase_support_coverage,
-        -fit.residual_sum_px,
+        # LAPACK-scale noise cannot reorder otherwise tied interpretations.
+        -round(fit.residual_sum_px, _NUMERIC_RESIDUAL_PRECISION),
     )

@@ -32,7 +32,7 @@ from x5crop.detection.photo_geometry.template_phase_state import (
     _same_continuous_placement,
 )
 from x5crop.detection.photo_geometry.template_phase import fit_template_phase_with_adjacency_relations
-from x5crop.detection.photo_geometry.template_phase_candidate_model import _BoundFit
+from x5crop.detection.photo_geometry.template_phase_candidate_model import _BoundFit, _rank
 from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseFailureKind,
     PhaseFitStatus,
@@ -48,6 +48,17 @@ from tools.tests.phase_test_support import _continuity_for_residual
 
 
 class TemplatePhaseCompetitionContractTest(unittest.TestCase):
+    def test_numeric_residual_ties_preserve_registration_order(self) -> None:
+        fit = placement_sequence(template(2))
+        for noise in (-4.0e-12, 0.0, 4.0e-12):
+            with self.subTest(noise=noise):
+                first = _BoundFit(replace(fit, residual_sum_px=32.125 + noise), True)
+                second = _BoundFit(replace(fit, residual_sum_px=32.125 - noise), True)
+                self.assertIs(max((first, second), key=_rank), first)
+                self.assertIs(max((second, first), key=_rank), second)
+                separated = _BoundFit(replace(fit, residual_sum_px=32.12499), True)
+                self.assertIs(max((first, separated), key=_rank), separated)
+
     def test_sequence_fit_rejects_invalid_provenance_and_residual(self) -> None:
         result = fit_template_phase(
             tuple(
