@@ -82,7 +82,7 @@ class DependencyInstallerContractTest(unittest.TestCase):
                 for pin in contract.dependencies
             ),
             (
-                ("numpy", "numpy", "2.5.3", "numpy", "2.5.3", "numpy"),
+                ("numpy", "numpy", "2.5.4", "numpy", "2.5.4", "numpy"),
                 ("scipy", "scipy", "1.18.1", "scipy", "1.18.1", "scipy"),
                 (
                     "opencv",
