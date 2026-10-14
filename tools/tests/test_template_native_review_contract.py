@@ -13,6 +13,7 @@ from tools.tests.template_test_support import (
 )
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
+from x5crop.detection.photo_geometry.template_acceptability_features import PLACEMENT_FEATURE_DEFINITIONS
 from x5crop.detection.photo_geometry.template_aspect_ratio_model import unavailable_aperture_aspect_ratio_authority
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossEvidence,
@@ -453,7 +454,7 @@ class NativeReviewContractTests(TestCase):
         self.assertEqual(review.work.placement_projection_count, 1)
         self.assertEqual(review.work.output_count, lane.template_spec.count)
         self.assertEqual(review.work.budget_evaluation_count, lane.template_spec.count)
-        self.assertEqual(review.work.feature_evaluation_count, 28)
+        self.assertEqual(review.work.feature_evaluation_count, len(PLACEMENT_FEATURE_DEFINITIONS))
         self.assertTrue(
             review.placement.placement_id.startswith(
                 "native-endpoint-review-placement"
@@ -612,7 +613,7 @@ class NativeReviewContractTests(TestCase):
                 output_evaluation_count=1,
                 output_count=1,
                 budget_evaluation_count=1,
-                feature_evaluation_count=28,
+                feature_evaluation_count=len(PLACEMENT_FEATURE_DEFINITIONS),
                 output_slot_count=1,
                 peak_temporary_bytes=1,
             )
