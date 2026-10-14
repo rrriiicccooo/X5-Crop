@@ -693,10 +693,6 @@ Grid 始终可以生成一个待检验的默认 placement，但它不能仅凭�
   权限，不能改变 lineage、ordinal、winner 或 runner。受约束后仍存在另一离散
   ordinal/edge 解释时保留 runner 并产生 `discrete_phase_ambiguous`；连续最小二乘不能充当 best-score。
 
-候选排序的残差项按既有 `1e-9 px` 数值精度量化，完整残差与拟合坐标不变，避免数值后端的舍入差异
-交换并列解释。其余排序字段与明确胜出的物理分离判据不变，完整排序键相同时保留原登记顺序；
-数值并列不能消除离散歧义。
-
 初次 seed 拟合的终端 outlier 筛选使用当前几何的 `max(3 px, 3.5% W)`。剔除后重拟合必须再次核查
 同一阈值，直到保留子集闭合；每轮只能删除原 optional binding，不重新匹配已退出的 identity，不改变
 required seed、投影权限 ceiling 或 template 的硬区间。Optional 联合拟合若使 required 越界，至多一次
