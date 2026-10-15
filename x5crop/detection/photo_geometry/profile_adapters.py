@@ -20,39 +20,29 @@ def _is_strict_majority(fraction: float) -> bool:
     return fraction > 1.0 - fraction
 
 
+def _sequence_region_qualified(region: SideTransitionRegion) -> bool:
+    spec = PHOTO_BOUNDARY_MEASUREMENT_SPEC
+    broad = region.measurement_basis == TransitionRegionMeasurementBasis.BROAD_MATERIAL_TRACE
+    return (
+        not region.ambiguous
+        and region.independent_support_region_count
+        >= MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+        and (not broad or region.independent_support_region_count == SPATIAL_SUPPORT_REGION_COUNT)
+        and region.mean_tone_or_texture_z >= spec.tone_or_texture_z_minimum
+        and (broad or region.mean_gradient_z >= spec.gradient_z_minimum)
+    )
+
+
 def _region_anchor_qualified(
     region: SideTransitionRegion,
     role: BoundaryRole,
 ) -> bool:
     if role not in {BoundaryRole.START, BoundaryRole.END}:
         return False
-    spec = PHOTO_BOUNDARY_MEASUREMENT_SPEC
-    role_preference = (
+    return _sequence_region_qualified(region) and _is_strict_majority(
         region.left_background_preference_fraction
         if role == BoundaryRole.START
         else region.right_background_preference_fraction
-    )
-    signal_qualified = (
-        region.mean_tone_or_texture_z
-        >= spec.tone_or_texture_z_minimum
-        and (
-            region.measurement_basis
-            == TransitionRegionMeasurementBasis.BROAD_MATERIAL_TRACE
-            or region.mean_gradient_z >= spec.gradient_z_minimum
-        )
-    )
-    return (
-        not region.ambiguous
-        and region.independent_support_region_count
-        >= MINIMUM_INDEPENDENT_SUPPORT_REGIONS
-        and (
-            region.measurement_basis
-            != TransitionRegionMeasurementBasis.BROAD_MATERIAL_TRACE
-            or region.independent_support_region_count
-            == SPATIAL_SUPPORT_REGION_COUNT
-        )
-        and signal_qualified
-        and _is_strict_majority(role_preference)
     )
 
 
@@ -62,7 +52,6 @@ def sequence_profile_from_regions(
     coordinate_count: int,
     transition_by_id: dict[str, SequenceTransitionObservation],
 ) -> BasicAxisProfile:
-    spec = PHOTO_BOUNDARY_MEASUREMENT_SPEC
     runs = tuple(
         sorted(
             (
@@ -94,27 +83,7 @@ def sequence_profile_from_regions(
                     evidence_strength=(
                         region.mean_gradient_z + region.mean_tone_or_texture_z
                     ),
-                    pair_qualified=(
-                        not region.ambiguous
-                        and region.independent_support_region_count
-                        >= MINIMUM_INDEPENDENT_SUPPORT_REGIONS
-                        and region.mean_tone_or_texture_z
-                        >= spec.tone_or_texture_z_minimum
-                        and (
-                            region.measurement_basis
-                            == TransitionRegionMeasurementBasis
-                            .BROAD_MATERIAL_TRACE
-                            or region.mean_gradient_z
-                            >= spec.gradient_z_minimum
-                        )
-                        and (
-                            region.measurement_basis
-                            != TransitionRegionMeasurementBasis
-                            .BROAD_MATERIAL_TRACE
-                            or region.independent_support_region_count
-                            == SPATIAL_SUPPORT_REGION_COUNT
-                        )
-                    ),
+                    pair_qualified=_sequence_region_qualified(region),
                 )
                 for region in regions
             ),

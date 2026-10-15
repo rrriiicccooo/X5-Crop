@@ -1,6 +1,6 @@
 # 项目记忆
 
-更新：2026-10-14。现场 Git、原 TIFF、source SHA、current report 与最新验证高于本文件。
+更新：2026-10-15。现场 Git、原 TIFF、source SHA、current report 与最新验证高于本文件。
 长期合同见 [ARCHITECTURE.md](ARCHITECTURE.md)，人工权限见
 [MANUAL_ANNOTATION.md](MANUAL_ANNOTATION.md)，协作规则见 [AGENTS.md](../AGENTS.md)。
 
@@ -15,9 +15,10 @@
 
 ### 黄金与选择
 
-当前 pip 依赖环境的完整报告为 `Test/release_readiness_20261014/gold_bc405d23/`，绑定
-`bc405d23`。`d3be01c4` 撤回无净收益的残差量化试验，源码与该验证提交逐字一致；后续文档检查点
-不改变生产源码。依赖环境调整后，S086 的主方案由合格变为不合格，合格备选和 Review 阻断均保留。
+当前 pip 环境完整报告为 `Test/release_readiness_20261015/gold_profile_qualification/`，按检测源码摘要
+绑定本轮长轴资格去重。110 条记录除耗时外与 `Test/release_readiness_20261014/gold_bc405d23/`
+逐字段全同，证据为同目录上级的 `gold_record_equivalence.json`。这是开发回归，发布验收仍须绑定最终
+release commit。依赖环境调整后，S086 的主方案由合格变为不合格，合格备选和 Review 阻断均保留。
 
 | 项目 | 结果 |
 |---|---|
@@ -42,22 +43,30 @@
   `admission_enabled=false`；这些已查看开发数据不能替代独立 calibration。
 - 剩余 12 个排序错误中，10 个涉及长轴，2 个涉及短轴。错误方案预算通过、合格方案预算失败的
   反例仍存在；截断较少也不必然安全，不能把这些代理整体硬化成准入规则。
-- 完整 phase 池的预补全实验增加大量 lookup，未解决测试案例的歧义。S005/S026/S102 的剩余成员
-  确有 observation、ordinal、邻接或权限差异；相同完整解释已被现有连续合并吸收，不能合并整个池。
-  实验位于 `Test/release_readiness_20261012/full_competition_role_replay.json`，没有合入生产。
-- residual 反证保留投影终止 raw fit 是架构已有的明确合同；三个重放仍有其它合法竞争，
-  没有证明删除这种反证可安全增加自动批准，该方向暂收束。
-- 新环境的残差量化试验使 S086 变好、S068 变差，完整黄金仍为 93 / 17，没有净收益，已撤回。
-  原报告保留于 `gold_1a5bd053/`，不继续围绕舍入精度调参。
+- 完整 phase 池的预补全增加 lookup，未解决 S005/S026/S102 的真实身份、ordinal、邻接或权限差异。
+  投影终止 raw fit 的 residual 反证仍须保留；残差量化使 S086 变好、S068 变差，没有净收益，已撤回。
+  不继续围绕完整池强行合并、删除反证或舍入精度调参。实验入口分别为
+  `Test/release_readiness_20261012/full_competition_role_replay.json` 与 `gold_1a5bd053/`。
 - 22 个 nominal phase ambiguous、Cross resolved 任务中，仅 6 个主备 pair 满足共同固定框的必要
   几何条件。完整池重放后，S006/S026/S075/S080/S081 均有槽位放不下；S005 仅必要几何可行，
-  尚无共同 W 准入。S080/S081 的 late local binding 已改变最终 lane，未精修的 pool 不能冒充最终完整集。
+  尚无共同 W 准入。S080/S081 对全部 7 / 6 个 ordered 成员分别执行 late local binding 后，
+  三个槽位仍均放不下；只保留 source-W supported 子集不能代表完整竞争。
   Source W 只对自己的 placement identity 有效；成员须从原始 source state 独立核验。
   可复现实验为 `Test/release_readiness_20261014/common_window_pair_screen.json`、
-  `common_window_pool_replay.json` 与同目录 `replay_common_window_pool.py`，均未授予自动批准。
+  `common_window_pool_replay.json`、`common_window_late_pool_replay.json` 与同目录
+  `replay_common_window_pool.py`，均未授予自动批准。
+- 15 个 Cross `non_equivalent_fits` 阻断中，8 个同时有 phase 失败；S019 的合格方案均预算失败，
+  S048/S074 仍有不合格解释。其余 S002 有 22 条 trace 的局部选择歧义，S015 的 5 个 canonical 组
+  缺少纵向投影权限。S028/S045 即使完成全部归属搜索，新增唯一 union 也分别为 174 / 145；
+  已完成作用域的必要拟合数量就超过原预算，单独优化搜索不能回收自动批准。
+  精确作用域与预检见 `Test/release_readiness_20261015/common_h_closure_audit.json`，未放宽工作量上限。
+- S042 在同一冻结 trace 上比较 uint8、原生亮度、RGB/opponent 与原生宽缓测量。原生宽缓峰由
+  4352 增至 7387，但未补齐完整可准入边界；增加信号不等于取得角色或邻接权限。
+  证据为 `Test/release_readiness_20261015/S042_registered_native_probe_broad_edges.json`，未合入生产。
 
-已合入的选择结果构造、来源失败与撤回逻辑共用原 typed owner，生产代码净减 21 行，
-源码、工具和测试合计净减 7 行，没有新增模块。
+选择结果构造、来源失败与撤回逻辑共用原 typed owner。长轴角色与配对资格也改为共用同一判定，
+本轮生产代码净减 31 行，没有新增模块；原实现的 11250 组完整 profile 比较全部一致，证据为
+`Test/release_readiness_20261015/profile_qualification_equivalence.json`。
 
 ### 性能与环境
 
@@ -106,11 +115,15 @@ JSON 只证明窗口映射，人工确认仅限展示范围，不扩展为整源
 
 ## 精确下一步
 
-1. 回到选择与准入的共享根因：核对晚期局部补全仅覆盖 canonical pair 的作用域，先证明其它合法解释
-   能否在原权限与工作量上限内取得相同 native 事实，再重建完整竞争集；不能直接复用 primary 的 W。
-   共同 W 只有逐帧归属、邻接、完整保护与每个成员权限闭合后才可尝试准入，先证明实际收益再改 Runtime。
-   旧预补全实验已证实不改善唯一胜出；本方向只有能证明安全共同输出的完整作用域闭合才继续。
-2. 保持 110/110 合格方案覆盖、完整黄金与零危险 auto；不围绕无净收益的残差量化或单纯 pair 并集微调。
+1. 核对长轴弱边缘的证据投影：S042 第二个 separator 在 9 条 trace 上通过必要邻接筛查；同一 native
+   transition 的 2–4 个 raw family 均已解析到同一 canonical END，但仍因多个 family 阻断配对。
+   四份原始 pair 的材料均得到完整三区域支持，见
+   `Test/release_readiness_20261015/S042_separator_alias_screen_material.json`。下一步只验证单侧同点、
+   同一已解析身份的 alias 投影，保留全部 raw family 与失败；不同坐标或未解析 family 继续竞争。
+   不增加 query 或 Cartesian 组合，不只按 canonical ID 合并。当前没有授予新 pair 或自动输出权限；
+   正式 CLI 证明输出净收益后才合入生产。
+2. 保持 110/110 合格方案覆盖、完整黄金与零危险 auto；不绕过已证明的共同框容量或拟合预算缺口。
+   原生测量未证明准入收益前不合入，不围绕无净收益的残差量化微调。
 3. 性能只消除已证明输入等价的重复工作。S109 的密集区域 median 没有重复输入，
    转置 scratch 的同值实验无明确速度收益，不合入；完整 pass 和有效 LP 不直接删除。
    本机检测与工程全部达标后再冻结最终 commit，补齐其它平台全部发布验收，达标即停止等待确认，暂不发布。
