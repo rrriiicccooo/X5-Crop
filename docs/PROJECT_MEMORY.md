@@ -52,23 +52,25 @@ phase／Cross／最终阻断交叉表完整保存，不能把 ambiguity 名称�
   原模板物理上限 3743.0271 px；旧首选与备选的第 2 格共同保护也超过固定框 170.4669 px。
   全部 26 条 canonical 记录中只有原首选命中此反证，原完整证据与可重放源码在
   `Test/release_readiness_20261016/S086_selection_audit/`。
-  新检查复用原相邻关系 owner，在压缩候选前对称核验全部成功投影；不绑定伙伴、不调排序、不借 W。
-  当前正式 CLI 专项中 S086 已几何合格并安全自动批准，自己的 source W 为
-  `reconciled_direct_constraints`；S068 保持原 safe Review。原冲突解释保留为 terminal。
-  证据为同目录 `S086_approved_current/`、`S086_new_projection_receipt.json` 和上述完整黄金；
-  全量确认首选合格和安全 auto 各净增 1，无对应指标回归。
-- coverage／continuity 的报告结构校验改为复用 typed owner，开发报告再从原观察和权限重建。
-  source-W 共用同一无条件坐标资格判定，128 组状态／basis 组合完全等价，见同目录
-  `coordinate_authority_equivalence.json`；report 为 current-only schema 106。
+  新检查在压缩前对称核验全部成功投影；不绑定伙伴、不调排序、不借 W。原冲突解释保留为 terminal。
+  正式 CLI 和完整黄金确认 S086 首选合格并安全 auto，自己的 W 为 `reconciled_direct_constraints`；
+  S068 保持 safe Review。首选合格和安全 auto 各净增 1，无对应回归，专项证据为同目录
+  `S086_approved_current/` 与 `S086_new_projection_receipt.json`。
 - 当前 CommonH 只证明同一已解析长轴模型下的完整 H 竞争。基线第一组有 8 个窄 phase 入口；
   S005/S006/S026/S075/S081 的保存主备均几何合格且预算通过，尚无完整共同输出准入证明。
-  S005 的 4 个 ordered 成员各自获权 W 的固定长轴输出代表分为 3452.1372 / 3418.7325 px，
-  测量区间仍有交集；保存的保护并集连较小成员框都可容纳，最紧长轴余量 46.2659 px，见
-  `S005_own_size_necessary_geometry.json`。这只核验旧 ordered 几何的必要条件，未闭合 terminal、
-  late refinement 或各成员 Cross；不同尺寸身份仍须证明，不能借 primary 尺寸或据此准入。
+  S005 当前官方 CLI 的完整原始投影为 50 条：32 条未获准、14 条成功但在原 holder 范围外、4 条
+  canonical 成功。不能把 canonical、未胜出或支持较少当作完整物理反证集合。最新逐份审计从初始
+  source H 与各自 W 重放全部 18 个成功投影的注册 Cross 输入，实际共 630 次 evaluated fit。
+  四份 canonical 都凭自身证据选择同一直接 aperture pair，H 与比例相容；固定长轴尺寸仍分为
+  3452.1372 / 3418.7325 px。证据为 `S005_complete_phase_cross_authorities_accepted.json`，绑定
+  5c62d6f7 与原 TIFF，报告校验通过；这是离线核验，不增加生产预算，也未证明完整成员／局部精修闭合。
+  旧四份 ordered 保护并集能放入较小框、最紧余量 46.2659 px，仅是必要几何条件，见
+  `S005_own_size_necessary_geometry.json`；测量区间相交不授予共同尺寸，不据此晋升。
+  若把源端 Review 的另一 ordinal 映射也并入，第 2 格至少需 6392.6204 px，超过原格式最大固定框
+  3656.3414 px，见 `S005_ordinal_common_window_necessary_counterexample_accepted.json`；这不否定
+  四份 canonical 的共同输出可能性，也不把缺全局权限的 Review 映射改称自动准入成员。
   S011 只有一份已生成 canonical 输出，但完整池有 6 ordered / 4 terminal；更高支持的原生竞争
-  与校准 Grid 冲突，不能删除。两份最新官方捕获与逐成员权限核验见同目录
-  `S005_phase_member_authorities.json`、`S011_phase_member_authorities.json`，仅为必要条件审计。
+  与校准 Grid 冲突，不能删除。逐成员必要权限核验见同目录 `S011_phase_member_authorities.json`。
 - S082/S093 的两个 continuity 均 supported；最终 topology 阻断来自未独立闭合的两点 pitch 假说。
   撤权后已恢复原模板，phase/pitch authority 为空；材料本体仍参与正式竞争。原假说核验中，S082
   的 6 份投影均 Grid conflict，S093 的唯一可行投影缺少两 band 之外的独立 anchor。该限定核验不能
@@ -82,6 +84,11 @@ phase／Cross／最终阻断交叉表完整保存，不能把 ambiguity 名称�
   子集不代表完整竞争。入口为 `Test/release_readiness_20261014/common_window_*replay.json`。
 - Cross 阻断中，S002 有局部多选，S015 缺纵向权限，S028/S045 完整归属搜索所需拟合已超原预算；
   仅优化枚举不能回收准入。证据为 `Test/release_readiness_20261015/common_h_closure_audit.json`。
+- S040 的 `side-region:139` 已进入正式 profile，但六点物理直线域为空；原 recovery 删除 3999 后
+  只剩两区域且连续支持断开，拒绝正确。同一完整查询另有一份物理可行、三区域连续的 START 关联，
+  被互为唯一最近邻规则排除；现无长轴 conditional-family 入口，尚无完整权限或输出收益证明。
+  主线程纯 owner 复核见同目录 `S040_sharp_association_scope_audit.json`，绑定 10 月 15 日原报告、
+  原子与当前原 TIFF。后续只评估关联覆盖机制，不恢复 139、扩阈值或借 source W 晋升两区域点。
 - 评分仍为离线研究，`admission_enabled=false`。source 分组 OOF 98 safe / 12 unsafe 不代替独立
   calibration；错误方案预算通过、合格方案预算失败的反例仍存在，不硬化代理阈值。
 
@@ -133,8 +140,11 @@ JSON 只证明窗口映射，人工确认仅限展示范围，不扩展为整源
 
 1. 继续优先第一组有合格输出却未准入的通用机制，研究完整 phase／Cross 竞争的共同输出；
    保留原生成员、terminal 反证、各自 W/H 权限与完整预算，不把全部角色修正作为前置目标。
-   S005 先补尺寸身份与成员 Cross 的完整证明；S082/S093 先核对邻接阻断是否确实影响完整输出，
+   S005 的注册 Cross 逐份核验已完成，准入仍缺完整成员与共同尺寸权限；无证明前停止该方向的实现。
+   S082/S093 先核对邻接阻断是否确实影响完整输出，
    使用完整原始投影与每份自身权限，不因首选几何合格或预算通过而删除 topology 证据。
-2. 识别精修只服务已证明的输出／权限缺口。S040 的三区域 `side-region:139` 未形成 edge 可在需要时
-   定向追因；入口为 `Test/release_readiness_20261015/S040_current_phase/` 与同目录
-   `S040_peak_polarity_probe.json`。本机达标后冻结最终提交，补齐其它平台验收；达标即停止等待确认，暂不发布。
+2. 识别精修只服务已证明的输出／权限缺口。S040 的实际内切有 sharp 原始关联覆盖缺口；先证明
+   通用补全能保留全部竞争、相关证据身份与工作量上限，再作正式 CLI 对照。若不能改善首选或安全
+   auto，就停止该实现方向，不恢复原 139。现有 broad 极大关联可作代码复用线索，但不能把 broad 的
+   区域多数与材料条件套到 sharp 或为成功删去其它路径。本机达标后冻结最终提交，补齐其它平台验收；
+   达标即停止等待确认，暂不发布。
