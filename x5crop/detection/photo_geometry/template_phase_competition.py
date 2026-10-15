@@ -30,7 +30,7 @@ from .template_model import (
     ordered_template_roles,
 )
 from .template_adjacency_coverage import assess_adjacency_observation_coverage
-from .template_adjacency_topology import unbound_registered_overlap_counterevidence
+from .template_adjacency_topology import unbound_registered_adjacency_counterevidence
 from .template_direct_role_authority import assess_direct_role_binding_authorities
 from .template_phase_model import (
     PhaseCandidateAuthorityProjection,
@@ -772,9 +772,8 @@ def fit_template_phase(
         )
         if (
             projected is not None
-            and projection.basis
-            == PhaseCandidateProjectionBasis.CALIBRATED_NOMINAL_GRID
-            and overlap_pairs
+            and (phase_separator_bands or overlap_pairs and projection.basis
+                 == PhaseCandidateProjectionBasis.CALIBRATED_NOMINAL_GRID)
         ):
             coverage = assess_adjacency_observation_coverage(
                 projected.fit,
@@ -783,7 +782,7 @@ def fit_template_phase(
             )
             overlap_validation_peak_bytes = max(
                 overlap_validation_peak_bytes,
-                128 * (len(facts) + len(overlap_pairs) + len(coverage))
+                128 * (len(facts) + len(overlap_pairs) + len(phase_separator_bands) + len(coverage))
                 + sum(
                     64 + 32 * (
                         len(trace.covering_query_ids)
@@ -793,24 +792,28 @@ def fit_template_phase(
                     for trace in item.trace_coverage
                 ),
             )
-            conflicts = unbound_registered_overlap_counterevidence(
+            conflicts = unbound_registered_adjacency_counterevidence(
                 projected.fit,
                 registered_observations,
                 coverage,
-                overlap_pairs,
+                overlap_pairs if projection.basis == PhaseCandidateProjectionBasis.CALIBRATED_NOMINAL_GRID else (),
+                separator_bands=tuple(phase_separator_bands),
+                separator_support=separator_support.resolution,
+                direct_role_authority=projection.input_direct_role_authority,
             )
             if conflicts:
                 projected = None
                 projection = replace(
                     projection,
                     outcome=(
-                        PhaseCandidateProjectionOutcome
-                        .CALIBRATED_NOMINAL_GRID_CONFLICT
+                        PhaseCandidateProjectionOutcome.ADJACENCY_MATERIAL_CONFLICT
+                        if any(isinstance(pair, SeparatorBandObservation) for _, pair in conflicts)
+                        else PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID_CONFLICT
                     ),
                     basis=None,
                     reason=(
-                        "ordinary calibrated Grid conflicts with unique "
-                        "registered overlap partners: "
+                        "phase mapping conflicts with unique "
+                        "registered adjacency partners: "
                         + ", ".join(
                             f"adjacency {ordinal}={pair.observation_id}"
                             for ordinal, pair in conflicts

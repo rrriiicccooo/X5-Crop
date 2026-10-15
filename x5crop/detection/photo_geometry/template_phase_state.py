@@ -36,6 +36,9 @@ def _projection_failure_kind(
         PhaseCandidateProjectionOutcome.DIRECT_ROLE_CONTRADICTION: (
             PhaseFailureKind.SEPARATOR_MATERIAL_CONFLICT
         ),
+        PhaseCandidateProjectionOutcome.ADJACENCY_MATERIAL_CONFLICT: (
+            PhaseFailureKind.ADJACENCY_CONTINUITY_UNRESOLVED
+        ),
         PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID_UNAVAILABLE: (
             PhaseFailureKind.CALIBRATED_NOMINAL_GRID_AUTHORITY_UNAVAILABLE
         ),

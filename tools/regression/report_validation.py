@@ -115,7 +115,12 @@ from x5crop.detection.photo_geometry.broad_material_association import (
 from x5crop.detection.photo_geometry.measurement_model import (
     PhotoBoundaryMeasurementQuery, PhotoBoundaryMeasurementSet, BroadMaterialTraceObservation, MaterialBackgroundSide,
 )
-from x5crop.detection.photo_geometry.observation_types import SeparatorBandObservation
+from x5crop.detection.photo_geometry.observation_types import BoundaryEdgeObservation, SeparatorBandObservation
+from x5crop.detection.photo_geometry.template_adjacency_topology import (
+    AdjacencyContinuityObservation, observe_adjacency_continuity,
+)
+from x5crop.detection.photo_geometry.template_adjacency_coverage import AdjacencyObservationCoverage
+from x5crop.detection.photo_geometry.template_overlap import OverlapEdgePairObservation
 from x5crop.detection.photo_geometry.separator_material import classify_separator_material_region
 from x5crop.detection.photo_geometry.coarse_strip_support import CoarseStripSupport
 from x5crop.detection.photo_geometry.coarse_enclosing_support import observe_coarse_broad_side_facts
@@ -2259,7 +2264,8 @@ def _read_common_proof(value: Any, model: type) -> Any:
                      SourceScanGeometry, HolderFillAssessment, FormatPlacement, ExteriorRegionMeasurement,
                      TemplateCrossInput, CoarseStripSupport, PhotoBoundaryMeasurementSet, CrossRegistrationWorkReceipt,
                      IndependentPhaseReview, IndependentPhaseReviewPortfolio, MatchedHolder, TemplatePhaseInput,
-                     SeparatorBandObservation):
+                     SeparatorBandObservation, BoundaryEdgeObservation,
+                     AdjacencyContinuityObservation, AdjacencyObservationCoverage, OverlapEdgePairObservation):
         raise ValueError("unsupported common-output proof root")
 
     def read(raw: Any, kind: Any) -> Any:
@@ -3223,10 +3229,10 @@ def _validate_geometry(
             alignment["calibrated_nominal_grid_evidence"]
         )
         sequence_validation._validate_adjacency_coverage(
-            alignment["adjacency_observation_coverage"]
+            alignment["adjacency_observation_coverage"], read_proof=_read_common_proof,
         )
         sequence_validation._validate_adjacency_continuity(
-            alignment["adjacency_continuity_observations"]
+            alignment["adjacency_continuity_observations"], read_proof=_read_common_proof,
         )
         topology_relations = sequence_validation._validate_adjacency_relations(
             alignment["adjacency_relations"]
@@ -3422,6 +3428,7 @@ def _validate_phase_candidate_projection(
         "projected",
         "calibrated_nominal_grid",
         "direct_role_contradiction",
+        "adjacency_material_conflict",
         "topology_binding_unavailable",
         "calibrated_nominal_grid_unavailable",
         "calibrated_nominal_grid_conflict",
@@ -3442,6 +3449,7 @@ def _validate_phase_candidate_projection(
         "supported": outcome
         in {
             "unchanged",
+            "adjacency_material_conflict",
             "direct_separator_refit",
             "calibrated_nominal_grid",
             "calibrated_nominal_grid_unavailable",
@@ -3591,9 +3599,9 @@ def _validate_phase_competition(value: object) -> None:
     _validate_nominal_grid_evidence(
         value["calibrated_nominal_grid_evidence"]
     )
-    sequence_validation._validate_adjacency_coverage(value["adjacency_observation_coverage"])
+    sequence_validation._validate_adjacency_coverage(value["adjacency_observation_coverage"], read_proof=_read_common_proof)
     sequence_validation._validate_adjacency_continuity(
-        value["adjacency_continuity_observations"]
+        value["adjacency_continuity_observations"], read_proof=_read_common_proof,
     )
     sequence_validation._validate_source_frame_width_topology_assessment(
         value["source_frame_width_topology_assessment"]
@@ -4133,6 +4141,27 @@ def _validate_development(record: dict[str, Any]) -> None:
         )
         _validate_separator_material_states(lane["observations"]["separator_bands"])
         _validate_sequence_output_line_provenance(lane)
+        phase = _read_common_proof(lane["phase_competition"], PhaseFitResult)
+        continuity = () if phase.best is None else observe_adjacency_continuity(
+            phase.best,
+            tuple(_read_common_proof(edge, BoundaryEdgeObservation)
+                  for edge in lane["observations"]["sequence_edges"]),
+            tuple(_read_common_proof(band, SeparatorBandObservation)
+                  for band in lane["observations"]["separator_bands"]),
+            phase.adjacency_observation_coverage,
+            tuple(_read_common_proof(pair, OverlapEdgePairObservation)
+                  for pair in lane["observations"]["overlap_edge_pair_observations"]),
+            direct_role_authority=phase.direct_role_binding_authority,
+        )
+        replayed = typed_read_model(continuity)
+        recorded = production_lane["template_alignment"]["adjacency_continuity_observations"]
+        if len(replayed) == len(recorded):
+            # Fact IDs are allocated within a source run; physical fields and
+            # the ordinal mapping must replay exactly.
+            for expected, actual in zip(replayed, recorded, strict=True):
+                expected["observation_id"] = actual["observation_id"]
+        if replayed != recorded:
+            raise ValueError("adjacency continuity changed its registered physical evidence")
         if cross_competition["receipt"]["fitted_observation_count"] != sum(
             item["independent_support_region_count"] >= MINIMUM_INDEPENDENT_SUPPORT_REGIONS
             for item in registered_cross.values()

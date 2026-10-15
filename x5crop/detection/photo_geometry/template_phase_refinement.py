@@ -616,6 +616,7 @@ def _attach_selected_candidate_authorities(
             phase_input.separator_bands,
             coverage,
             phase_input.overlap_edge_pair_observations,
+            direct_role_authority=direct_role_authority,
         )
     )
     outer_authority = (

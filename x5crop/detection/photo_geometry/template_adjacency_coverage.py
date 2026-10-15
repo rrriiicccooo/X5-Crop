@@ -32,6 +32,7 @@ class AdjacencyTraceCoverage:
         if (
             tuple(sorted(set(self.covering_query_ids)))
             != self.covering_query_ids
+            or any(not identity for identity in self.covering_query_ids)
             or tuple(
                 sorted(
                     self.covered_intervals_px,
@@ -76,6 +77,7 @@ class AdjacencyObservationCoverage:
             or not isinstance(self.required_interval_px, FiniteInterval)
             or tuple(sorted(set(self.covering_query_ids)))
             != self.covering_query_ids
+            or any(not identity for identity in self.covering_query_ids)
             or tuple(item.trace_position_px for item in self.trace_coverage)
             != tuple(
                 sorted({item.trace_position_px for item in self.trace_coverage})
@@ -124,6 +126,10 @@ class AdjacencyObservationCoverage:
             )
         ):
             raise ValueError("adjacency aggregate coverage disagrees with traces")
+        if any(interval.minimum < self.required_interval_px.minimum
+               or interval.maximum > self.required_interval_px.maximum
+               for trace in self.trace_coverage for interval in trace.covered_intervals_px):
+            raise ValueError("adjacency trace coverage leaves its required corridor")
 
 
 def _integer_coordinate_bounds(

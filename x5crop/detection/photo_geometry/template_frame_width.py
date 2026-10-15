@@ -47,15 +47,6 @@ from .template_phase_model import (
 )
 
 
-_INDEPENDENT_WIDTH_ROLE_BASES = frozenset(
-    {
-        DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE,
-        DirectRoleAuthorityBasis.AGGREGATE_UNION,
-        DirectRoleAuthorityBasis.SEPARATOR_PAIR,
-    }
-)
-
-
 def _topology_frame_ordinals(fit: SequenceFit) -> frozenset[int]:
     return frozenset(
         ordinal
@@ -432,10 +423,8 @@ def calibrate_source_frame_width(
             or end is None
             or start_fact is None
             or end_fact is None
-            or start_fact.state != EvidenceState.SUPPORTED
-            or end_fact.state != EvidenceState.SUPPORTED
-            or not set(start_fact.bases) & _INDEPENDENT_WIDTH_ROLE_BASES
-            or not set(end_fact.bases) & _INDEPENDENT_WIDTH_ROLE_BASES
+            or not start_fact.has_unconditional_coordinate_authority
+            or not end_fact.has_unconditional_coordinate_authority
             or start.evidence_group_id == end.evidence_group_id
         ):
             continue
@@ -1131,10 +1120,8 @@ def _yield_local_roles_to_correlated_width(
             or end is None
             or start_fact is None
             or end_fact is None
-            or start_fact.state != EvidenceState.SUPPORTED
-            or end_fact.state != EvidenceState.SUPPORTED
-            or not set(start_fact.bases) & _INDEPENDENT_WIDTH_ROLE_BASES
-            or not set(end_fact.bases) & _INDEPENDENT_WIDTH_ROLE_BASES
+            or not start_fact.has_unconditional_coordinate_authority
+            or not end_fact.has_unconditional_coordinate_authority
             or start.observation_id not in width_ids
             or end.observation_id not in width_ids
             or start.evidence_group_id == end.evidence_group_id
@@ -1184,8 +1171,7 @@ def _yield_local_roles_to_correlated_width(
             or fact.state != EvidenceState.UNAVAILABLE
             or fact.independent_support_region_count != 2
             or opposite_fact is None
-            or opposite_fact.state != EvidenceState.SUPPORTED
-            or not set(opposite_fact.bases) & _INDEPENDENT_WIDTH_ROLE_BASES
+            or not opposite_fact.has_unconditional_coordinate_authority
         ):
             continue
         predicted = _predicted_role_interval_from_opposite(fit, role_index)

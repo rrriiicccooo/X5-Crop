@@ -363,6 +363,7 @@ def fit_template_phase_candidate_with_adjacency_relations(
         separator_bands,
         initial_coverage,
         phase_input.overlap_edge_pair_observations,
+        direct_role_authority=normal.direct_role_binding_authority,
     )
 
     analysis = derive_adjacency_relations(

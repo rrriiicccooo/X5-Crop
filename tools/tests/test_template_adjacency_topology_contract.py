@@ -17,7 +17,7 @@ from x5crop.detection.photo_geometry.template_adjacency_topology import (
     AdjacencyContinuityFailureKind,
     AdjacencyContinuityKind,
     observe_adjacency_continuity,
-    unbound_registered_overlap_counterevidence,
+    unbound_registered_adjacency_counterevidence,
 )
 from x5crop.detection.photo_geometry.template_contact import observe_contact_edges
 from x5crop.detection.photo_geometry.model import BoundaryEvidenceState, BoundaryRole
@@ -38,6 +38,7 @@ from x5crop.detection.photo_geometry.template_model import (
     template_role_refinement_radius_px,
 )
 from x5crop.detection.photo_geometry.template_overlap import observe_overlap_edge_pairs
+from x5crop.detection.photo_geometry.template_direct_role_authority import assess_direct_role_binding_authority
 from x5crop.domain import EvidenceState, FiniteInterval
 
 
@@ -104,7 +105,110 @@ def _contact_fit():
     return result.best, edges
 
 
+def _unbound_separator_case(missing_role=2, *, direction=1, partner=None, regions=3):
+    fit = placement_sequence(phase_template(2), missing=(missing_role,))
+    coordinates = [100.0, 200.0, 220.0, 320.0]
+    coordinates[missing_role] = 210.0 if partner is None else partner
+    full = list(fit.model_full_role_intervals_px)
+    full[1:3] = (FiniteInterval(180.0, 240.0),) * 2
+    fit = replace(fit, model_full_role_intervals_px=tuple(full))
+    if direction < 0:
+        def reflect(interval):
+            return FiniteInterval(600.0 - interval.maximum, 600.0 - interval.minimum)
+        spec = replace(fit.template, direction=-1,
+            phase_lattice_authority=replace(fit.template.phase_lattice_authority, cycle_origin_px=600.0))
+        fit = replace(fit, template=spec,
+            phase_lattice_fit=replace(fit.phase_lattice_fit, authority=spec.phase_lattice_authority,
+                direction=-1, canonical_absolute_phase_px=500.0, absolute_phase_interval_px=FiniteInterval.exact(500.0)),
+            model_role_positions_px=tuple(600.0 - value for value in fit.model_role_positions_px),
+            model_role_intervals_px=tuple(map(reflect, fit.model_role_intervals_px)),
+            model_full_role_intervals_px=tuple(map(reflect, fit.model_full_role_intervals_px)),
+            role_bindings=tuple(None if b is None else replace(b,
+                canonical_position_px=600.0 - b.canonical_position_px,
+                fit_position_interval_px=reflect(b.fit_position_interval_px),
+                full_position_interval_px=reflect(b.full_position_interval_px)) for b in fit.role_bindings))
+        coordinates = [600.0 - value for value in coordinates]
+    edges = _edges(*coordinates)
+    left, right = (edges[1], edges[2]) if direction > 0 else (edges[2], edges[1])
+    gap = abs(coordinates[2] - coordinates[1])
+    band = phase_separator("native-partner", left, right, FiniteInterval(gap - .4, gap + .4), region_count=regions)
+    measurement = phase_sequence_measurement("native-partner", FiniteInterval(0.0, 600.0))
+    coverage = assess_adjacency_observation_coverage(fit, (measurement,), directly_observed_ordinals=())
+    direct = assess_direct_role_binding_authority(fit, edges, (band,), (measurement,))
+    return fit, edges, band, coverage, direct
+
+
 class TemplateAdjacencyTopologyContractTests(unittest.TestCase):
+    def test_unbound_separator_rejects_only_unavoidable_native_width_excess(self):
+        for missing in (1, 2):
+            for direction in (-1, 1):
+                with self.subTest(missing=missing, direction=direction):
+                    fit, edges, band, coverage, direct = _unbound_separator_case(missing, direction=direction)
+                    original_bindings = fit.role_bindings
+                    conflicts = unbound_registered_adjacency_counterevidence(fit, edges, coverage,
+                        separator_bands=(band,), direct_role_authority=direct)
+                    self.assertEqual(conflicts, ((1, band),))
+                    (fact,) = observe_adjacency_continuity(fit, edges, (band,), coverage,
+                        direct_role_authority=direct)
+                    self.assertEqual(fact.failure_kind, AdjacencyContinuityFailureKind.UNBOUND_SEPARATOR_WIDTH_CONFLICT)
+                    self.assertEqual(fact.separator_band_observation_ids, (band.observation_id,))
+                    self.assertEqual(fit.role_bindings, original_bindings)
+                    compatible = _unbound_separator_case(missing, direction=direction,
+                        partner=200.0 if missing == 1 else 225.0)
+                    good_fit, good_edges, good_band, good_coverage, good_direct = compatible
+                    self.assertEqual(unbound_registered_adjacency_counterevidence(
+                        good_fit, good_edges, good_coverage, separator_bands=(good_band,),
+                        direct_role_authority=good_direct), ())
+
+    def test_separator_counterevidence_requires_own_authority_and_full_intervals(self):
+        fit, edges, band, coverage, direct = _unbound_separator_case()
+        widened = list(edges)
+        widened[2] = replace(edges[2], full_position_interval_px=FiniteInterval(209.8, 230.0))
+        partial = _unbound_separator_case(regions=2)
+        alternative = phase_edge("other-partner", 211.0)
+        competing = phase_separator("competing-partner", edges[1], alternative, FiniteInterval(10.6, 11.4))
+        incomplete = assess_adjacency_observation_coverage(fit,
+            (phase_sequence_measurement("incomplete", FiniteInterval(0.0, 600.0), complete=False),),
+            directly_observed_ordinals=())
+        mismatched = replace(direct, facts=tuple(replace(fact, evidence_group_id=alternative.observation_id)
+            if fact.role_index == 3 else fact for fact in direct.facts))
+        for candidate_edges, bands, cov, authority in (
+            (edges, (band,), coverage, None),
+            (edges, (band,), coverage, mismatched),
+            (tuple(widened), (band,), coverage, direct),
+            (partial[1], (partial[2],), partial[3], partial[4]),
+            ((*edges, alternative), (band, competing), coverage, direct),
+            (edges, (band,), incomplete, direct),
+        ):
+            with self.subTest(bands=tuple(b.observation_id for b in bands), authority=authority):
+                self.assertEqual(unbound_registered_adjacency_counterevidence(fit, tuple(candidate_edges), cov,
+                    separator_bands=bands, direct_role_authority=authority), ())
+
+    def test_continuity_report_reuses_typed_provenance_checks(self):
+        from copy import deepcopy
+        from tools.regression.report_sequence_validation import _validate_adjacency_continuity
+        from tools.regression.report_sequence_validation import _validate_adjacency_coverage
+        from tools.regression.report_validation import _read_common_proof
+        from x5crop.report.read_models import typed_read_model
+
+        fit, edges, band, coverage, direct = _unbound_separator_case()
+        records = typed_read_model(observe_adjacency_continuity(fit, edges, (band,), coverage,
+            direct_role_authority=direct))
+        _validate_adjacency_continuity(records, read_proof=_read_common_proof)
+        coverage_record = typed_read_model(coverage)
+        _validate_adjacency_coverage(coverage_record, read_proof=_read_common_proof)
+        forged_coverage = deepcopy(coverage_record)
+        forged_coverage[0]["trace_coverage"][0]["covered_intervals_px"][0]["maximum"] = 601.0
+        with self.assertRaises(ValueError):
+            _validate_adjacency_coverage(forged_coverage, read_proof=_read_common_proof)
+        for key, invalid in (("separator_band_observation_ids", []),
+                             ("signed_gap_interval_px", {"minimum": -1.0, "maximum": 0.0}),
+                             ("relation_ordinal", True), ("end_observation_id", "")):
+            forged = deepcopy(records)
+            forged[0][key] = invalid
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                _validate_adjacency_continuity(forged, read_proof=_read_common_proof)
+
     def test_unbound_native_overlap_is_counterevidence_without_a_new_binding(
         self,
     ) -> None:
@@ -152,18 +256,20 @@ class TemplateAdjacencyTopologyContractTests(unittest.TestCase):
         )
         self.assertEqual(len(pairs), 1)
         self.assertEqual(
-            unbound_registered_overlap_counterevidence(
+            unbound_registered_adjacency_counterevidence(
                 fit, edges, coverage, (pairs[0], pairs[0]),
             ),
             (),
         )
-        self.assertEqual(
-            unbound_registered_overlap_counterevidence(
-                fit, edges, tuple(replace(item, required_interval_px=FiniteInterval(210.0, 240.0))
-                                 for item in coverage), pairs,
-            ),
-            (),
-        )
+        restricted = tuple(replace(item,
+            required_interval_px=FiniteInterval(210.0, 240.0),
+            trace_coverage=tuple(replace(trace,
+                covered_intervals_px=(FiniteInterval(210.0, 240.0),),
+                required_coordinate_count=31, covered_coordinate_count=31)
+                for trace in item.trace_coverage),
+            required_coordinate_count=31 * item.required_trace_count,
+            covered_coordinate_count=31 * item.covered_trace_count) for item in coverage)
+        self.assertEqual(unbound_registered_adjacency_counterevidence(fit, edges, restricted, pairs), ())
 
     def test_overlap_is_refit_in_the_single_grid_and_prefix_model(self) -> None:
         edges = tuple(

@@ -535,6 +535,7 @@ class PhaseCandidateProjectionOutcome(str, Enum):
     PROJECTED = "projected"
     CALIBRATED_NOMINAL_GRID = "calibrated_nominal_grid"
     DIRECT_ROLE_CONTRADICTION = "direct_role_contradiction"
+    ADJACENCY_MATERIAL_CONFLICT = "adjacency_material_conflict"
     TOPOLOGY_BINDING_UNAVAILABLE = "topology_binding_unavailable"
     CALIBRATED_NOMINAL_GRID_UNAVAILABLE = (
         "calibrated_nominal_grid_unavailable"
@@ -631,6 +632,7 @@ class PhaseCandidateAuthorityProjection:
                 self.outcome
                 in {
                     PhaseCandidateProjectionOutcome.UNCHANGED,
+                    PhaseCandidateProjectionOutcome.ADJACENCY_MATERIAL_CONFLICT,
                     PhaseCandidateProjectionOutcome.DIRECT_SEPARATOR_REFIT,
                     PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID,
                     PhaseCandidateProjectionOutcome

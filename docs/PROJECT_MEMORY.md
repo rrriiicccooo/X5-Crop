@@ -6,108 +6,87 @@
 
 ## 当前目标
 
-先使既有样片与本机项目达到对应发布标准，新增扫描和其它平台实测留待随后。按选择与安全准入、
-5 秒性能 Gate、完整发布验收的顺序继续推进；达成架构第 14 节全部发布标准后
-停止等待用户确认，暂不发布。保持全部黄金任务的合格方案覆盖、完整验证与零危险自动批准；
-3 秒为非阻塞 challenge，只合入有明确收益的机制，不反复微调已无收益的方向。
+先使既有样片与本机项目达到完整发布标准，再安排新增扫描和其它平台实测；达标即停止等待用户确认，
+暂不发布。验收最终逐格对应、完整画面保护、固定尺寸、源域和风险预算，不要求内部角色与人工同名或
+解释唯一。优先解决已有几何合格且预算通过方案的选择与准入；共同输出须覆盖完整竞争集合，逐成员
+核验自身尺寸和权限，不能借 primary 权或让黄金参与选框。S053 不预设为接触案例。
+保持全部几何方案覆盖和零危险自动批准；5 秒均值为 Gate，3 秒仅为 challenge。净收益分别报告首选
+几何合格、几何加预算通过、安全自动批准及逐 task 回归；候选覆盖和测试通过不替代发布能力。
 
-## 最新可验证检查点
+## 当前证据
 
-### 黄金与选择
+### 黄金与 Review
 
-当前 pip 环境完整报告为 `Test/release_readiness_20261015/gold_peak_selection_vectorized/`，
-110 条均完成、无异常。全部任务记录除耗时外与同目录 `gold_material_validation/` 逐字段全同，
-汇总行为与工作量计数也全同，证据为 `peak_selection_gold_equivalence.json`。这是开发回归，发布
-验收仍须绑定最终 release commit。依赖环境调整后，S086 的主方案由合格变为不合格，合格备选和
-Review 阻断均保留。
+最新完整报告为 `Test/release_readiness_20261016/gold_separator_width/`：110 task / 106 source
+全完成、无分析异常。相对 `1583f010` 的 `gold_peak_selection_vectorized/`，S086 首选从 unsafe
+变为 safe，Review 变为安全 auto；其余 task 的决定、首选／candidate 几何状态不变，没有丢失原安全
+首选、auto 或几何方案覆盖。证据为同目录上级 `separator_width_gold_regression.json`。
 
-| 项目 | 结果 |
+| 项目 | 最新结果 |
 |---|---|
-| task / source | 110 / 106 |
-| 完成 / 分析异常 | 110 / 0 |
-| 至少一份黄金几何合格保留方案 | 110 |
-| 主 proposal 几何合格 / 不合格 | 93 / 17 |
-| 安全自动批准 / 危险自动批准 | 25 / 0 |
-| nominal 自动批准 / Review；challenge Review | 25 / 71；14 |
+| 至少一份黄金几何合格保留方案 | 110 / 110 |
+| 首选 proposal 几何合格 / 不合格 | 94 / 16 |
+| 首选几何合格且数值预算通过 | 66 |
+| 安全自动批准 / 危险自动批准 | 26 / 0 |
+| nominal 自动批准 / Review；challenge Review | 26 / 70；14 |
 | `release_detection_gate_ready` | `false` |
 
-合格保留方案、主方案、candidate 资格与最终决定不能互换。源码、comparator 和 cohort 身份见报告
-`analysis_identity`。
+84 个 Review 的当前输出分组见 `Test/release_readiness_20261016/current_output_groups.json`。
+完整 typed 交叉表在同目录 `final_output_inventory/`，明确绑定修改前的 1583f010；S086 已移至 auto，
+其它任务不变。这些保留方案库存不冒充完整竞争池：
 
-上轮 53 个 nominal placement 阻断任务的分组仍有效：38 个有长轴 phase 歧义，15 个有 Cross
-非等价解释，可能重叠；入口为 `Test/selection_admission_20261012/inventory.json` 与 `findings.json`。
-当前机制证据：
+| 互斥分组 | nominal | challenge |
+|---|---:|---:|
+| 首选几何合格且预算通过 | 36 | 4 |
+| 仅其它保留方案几何合格且预算通过 | 15 | 4 |
+| 所有几何合格保留方案预算均失败 | 19 | 6 |
 
-- 两项反向不变的源截断长度比例保留于特征 owner。新环境 source 分组 OOF 为 98 safe / 12 unsafe，
-  canonical 为 97 / 13，特征完全相同而标签相反的冲突为零。
-  正式排序为 `Test/release_readiness_20261014/ranking_bc405d23/placement_ranking.json`。
-  `admission_enabled=false`；这些已查看开发数据不能替代独立 calibration。
-- 剩余 12 个排序错误中，10 个涉及长轴，2 个涉及短轴。错误方案预算通过、合格方案预算失败的
-  反例仍存在；截断较少也不必然安全，不能把这些代理整体硬化成准入规则。
-- 完整 phase 池的预补全增加 lookup，未解决 S005/S026/S102 的真实身份、ordinal、邻接或权限差异。
-  投影终止 raw fit 的 residual 反证仍须保留；残差量化使 S086 变好、S068 变差，没有净收益，已撤回。
-  不继续围绕完整池强行合并、删除反证或舍入精度调参。实验入口分别为
-  `Test/release_readiness_20261012/full_competition_role_replay.json` 与 `gold_1a5bd053/`。
-- 22 个 nominal phase ambiguous、Cross resolved 任务中，仅 6 个主备 pair 满足共同固定框的必要
-  几何条件。完整池重放后，S006/S026/S075/S080/S081 均有槽位放不下；S005 仅必要几何可行，
-  尚无共同 W 准入。S080/S081 对全部 7 / 6 个 ordered 成员分别执行 late local binding 后，
-  三个槽位仍均放不下；只保留 source-W supported 子集不能代表完整竞争。
-  Source W 只对自己的 placement identity 有效；成员须从原始 source state 独立核验。
-  可复现实验为 `Test/release_readiness_20261014/common_window_pair_screen.json`、
-  `common_window_pool_replay.json`、`common_window_late_pool_replay.json` 与同目录
-  `replay_common_window_pool.py`，均未授予自动批准。
-- 15 个 Cross `non_equivalent_fits` 阻断中，8 个同时有 phase 失败；S019 的合格方案均预算失败，
-  S048/S074 仍有不合格解释。其余 S002 有 22 条 trace 的局部选择歧义，S015 的 5 个 canonical 组
-  缺少纵向投影权限。S028/S045 即使完成全部归属搜索，新增唯一 union 也分别为 174 / 145；
-  已完成作用域的必要拟合数量就超过原预算，单独优化搜索不能回收自动批准。
-  精确作用域与预检见 `Test/release_readiness_20261015/common_h_closure_audit.json`，未放宽工作量上限。
-- S042 在同一冻结 trace 上比较 uint8、原生亮度、RGB/opponent 与原生宽缓测量。原生宽缓峰由
-  4352 增至 7387，但未补齐完整可准入边界；增加信号不等于取得角色或邻接权限。
-  证据为 `Test/release_readiness_20261015/S042_registered_native_probe_broad_edges.json`，未合入生产。
-- S042 第二个 separator 的 4 个 raw family 只在部分 trace 同点，3083 / 3340 上仍有不同原始
-  transition，不能整体去重。保留四份解释的必要条件重放未区分最终 2 个候选，两份原 placement
-  仍各有 8 条边超预算，见 `Test/release_readiness_20261015/alias_necessary_replay/verification.json`。
-  没有执行新增 pair refit；当前证据不足以支持新增 alias 准入机制，不合入生产。
-- S053 的唯一合格备选 `source-clipped-review-placement:3` 已严格绑定到当前正式 CLI 的完整原始
-  diagnostic、六份 footprint、预算与黄金标签。END117 仍无权限；剩余获权 native full 区间在当前
-  role/ordinal 映射下要求的两组等 pitch 区间相隔 20.748497 px，不依赖校准先验也不能相交。
-  证据为 `Test/release_readiness_20261015/S053_selection_audit/current_ledger_binding.json`；
-  该结论不排除不同角色身份或有独立实测支持的局部 advance，不能直接晋升 Review 方案。
-- 可见边界库存为 1310 条：691 已绑定、261 合格未绑定、88 角色不合格、270 无登记区间匹配。
-  角色缺口涉及 33 个 nominal，但只有 S051/S053/S073 的主方案实际内切对应此类，不能宣称可回收
-  33 项。88 条中已有带版本证据支持 44 条相反角色、9 条空角色，其余 35 条尚未细分；
-  保存报告不全是当前源码，入口为 `Test/release_readiness_20261015/role_inventory/`。
-  S053 edge1 / edge67 分别对应黄金 END1 / START6，而 raw hint 为 START / END；纹理窗口对齐和
-  移出定位尾部均未恢复正确提示。不得把这一映射错误解释为真实不等 pitch。
-- 长轴全面保留反向峰使完整黄金的合格方案覆盖 110→98、安全 auto 25→14，未保留。
-  聚合材料取消角色前置过滤，在上述三个直接受影响任务上也没有改善主方案或自动批准，未保留。
-  证据为同目录 `polarity_partition_comparison.json`、`material_role_projection_three_comparison.json`；
-  不继续通过全局多造峰、放宽材料资格或增加拟合额度争取覆盖。
+第二组只有 8 个 nominal 的首选实际几何不合格；其余 7 个首选已几何合格但预算失败。第一组的
+phase／Cross／最终阻断交叉表完整保存，不能把 ambiguity 名称直接解释为多余阻断。
 
-选择结果构造、来源失败与撤回逻辑共用原 typed owner。长轴角色与配对资格也改为共用同一判定，
-该去重使生产代码净减 31 行，没有新增模块；原实现的 11250 组完整 profile 比较全部一致，证据为
-`Test/release_readiness_20261015/profile_qualification_equivalence.json`。
-峰选择以数组索引替换逐像素循环，另净减 10 行；正式 CLI 捕获的真实输入与对照共 848 组，
-39127 个峰的全部字段和顺序全同。真实输入微基准中位耗时下降 3.75%，临时分配未增加；
-证据为同目录 `peak_selection_equivalence.json`，不代表全程 CLI 或进程 RSS 同幅改善。
-Development report 校验复用 typed parser 与材料 classifier，从各区域区间重建材料状态与完整包络；
-原验证器接受的四类错误记录现均被拒绝，原报告仍通过，证据为同目录 `material_report_rejection.json`。
-该修复只改变验证工具，不改变 detector、排序或自动批准权限。
+### 选择机制与共同输出
+
+- S086 的首选遗漏唯一获权 separator 伙伴，结合本候选原生另一边要求 W 至少 3934.2235 px，超过
+  原模板物理上限 3743.0271 px；旧首选与备选的第 2 格共同保护也超过固定框 170.4669 px。
+  全部 26 条 canonical 记录中只有原首选命中此反证，原完整证据与可重放源码在
+  `Test/release_readiness_20261016/S086_selection_audit/`。
+  新检查复用原相邻关系 owner，在压缩候选前对称核验全部成功投影；不绑定伙伴、不调排序、不借 W。
+  当前正式 CLI 专项中 S086 已几何合格并安全自动批准，自己的 source W 为
+  `reconciled_direct_constraints`；S068 保持原 safe Review。原冲突解释保留为 terminal。
+  证据为同目录 `S086_approved_current/`、`S086_new_projection_receipt.json` 和上述完整黄金；
+  全量确认首选合格和安全 auto 各净增 1，无对应指标回归。
+- coverage／continuity 的报告结构校验改为复用 typed owner，开发报告再从原观察和权限重建。
+  source-W 共用同一无条件坐标资格判定，128 组状态／basis 组合完全等价，见同目录
+  `coordinate_authority_equivalence.json`；report 为 current-only schema 106。
+- 当前 CommonH 只证明同一已解析长轴模型下的完整 H 竞争。基线第一组有 8 个窄 phase 入口；
+  S005/S006/S026/S075/S081 的保存主备均几何合格且预算通过，尚无完整共同输出准入证明。
+  S005 的 4 个 ordered 成员各自获权 W 的固定长轴输出代表分为 3452.1372 / 3418.7325 px，
+  测量区间仍有交集；不能借 primary 尺寸，也不能仅凭代表值不同断言共同输出不可能。
+  S011 只有一份已生成 canonical 输出，但完整池有 6 ordered / 4 terminal；更高支持的原生竞争
+  与校准 Grid 冲突，不能删除。两份最新官方捕获与逐成员权限核验见同目录
+  `S005_phase_member_authorities.json`、`S011_phase_member_authorities.json`，仅为必要条件审计。
+- 既定 primary 尺寸的完整池必要几何筛查使 S006/S026/S075/S080/S081 至少一格放不下；
+  S080/S081 全成员 late refinement 后仍不成立。它不否定所有跨模型共同输出，但 source-W supported
+  子集不代表完整竞争。入口为 `Test/release_readiness_20261014/common_window_*replay.json`。
+- Cross 阻断中，S002 有局部多选，S015 缺纵向权限，S028/S045 完整归属搜索所需拟合已超原预算；
+  仅优化枚举不能回收准入。证据为 `Test/release_readiness_20261015/common_h_closure_audit.json`。
+- 评分仍为离线研究，`admission_enabled=false`。source 分组 OOF 98 safe / 12 unsafe 不代替独立
+  calibration；错误方案预算通过、合格方案预算失败的反例仍存在，不硬化代理阈值。
+
+已收束的无净收益方向：完整 phase 预补全、residual 舍入、S042 原生／RGB／宽缓与 raw-family alias、
+全面反向峰、取消聚合材料角色过滤。证据保留在 `Test/release_readiness_20261012/` 至
+`Test/release_readiness_20261015/`，不重复同一调参。S053 在现映射下的 native 等 pitch 区间不相交
+只证明这份解释有约束缺口，不证明真实胶片不等 pitch，也不把内部角色命名差异作为失败。
 
 ### 性能与环境
 
-新环境的 `Test/release_readiness_20261014/performance_receipt_bc405d23.json`：24-source 完整
-用户路径均值 4.441367 秒，p50 / p95 为 4.149025 / 7.430305 秒；平均 peak RSS 747.97 MiB，
-最大 S024 为 1227.78 MiB。5 秒 Gate 已通过，3 秒 challenge 未达到。
-
-内部 affine 块使用精确等价路径，S096 三份正式 TIFF 的 SHA 全同，单次 CLI 重放 9.079→8.184 秒，
-见 `Test/release_readiness_20261013/sampling_probe/equivalence.json`。旧环境 5.160986 秒的失败
-receipt 保留；安装来源与数值后端同时变化，不能把本次总耗时或 RSS 改善全部归因于单项源码或库。
-
-现场依赖现从用户 pip 目录加载 NumPy 2.5.4、SciPy 1.18.1、OpenCV 5.0.0、tifffile 与 imagecodecs；
-Pillow 仍来自 Homebrew。NumPy 合同由 2.5.3 同步到 2.5.4，保留本机安装。实际 import 身份位于
-`Test/release_readiness_20261014/dependency_imports_before_contract_update.json`；旧环境 receipt
-不能替代当前环境证据。CI 不替代目标平台实机或发布 receipt。
+最近正式性能为 `bc405d23` 的
+`Test/release_readiness_20261014/performance_receipt_bc405d23.json`：24-source 完整用户路径
+均值 4.441367 秒，p50 / p95 为 4.149025 / 7.430305 秒；平均 peak RSS 747.97 MiB，最大
+S024 为 1227.78 MiB。该提交通过 5 秒 Gate，未达到 3 秒；它不能替代后续机制或最终 release commit。
+现场 pip 加载 NumPy 2.5.4、SciPy 1.18.1、OpenCV 5.0.0、tifffile、imagecodecs，Pillow 来自
+Homebrew。保留本机新版，合同以实际 import 为准。旧环境耗时／RSS不能归因于单项源码或库；
+CI 不能替代实机、安装、打包与发布 receipt。
 
 ## 保留的人工局部事实
 
@@ -131,25 +110,18 @@ JSON 只证明窗口映射，人工确认仅限展示范围，不扩展为整源
 
 ## 开放风险
 
-- 71 个 nominal 仍为 Review，检测发布 Gate 未 ready；110/110 方案覆盖不代表选择或自动准入完成。
-- 本机 5 秒 Gate 已通过，后续机制改动须保留收益；3 秒仅为 challenge，不宣称已达到理论最优。
-- 当前 gold 未覆盖 `xpan`、`120-645`、`135-dual` 真实样片，也没有 sealed cohort，不声称未见来源泛化。
-  若让评分承担自动准入，还需独立 calibration、冻结风险/OOD 合同与 sealed acceptance。
-- 发布前全部资格仍须按架构第 14 节绑定同一最终 commit；当前没有三目标平台完整实机、安装与打包
-  验收闭环。用户已确认可安排 Intel Mac 与 Windows x64 实测；待机制稳定后冻结同一验收提交。
-  仍无发布授权。
+- nominal 尚未全部安全自动通过；全部保留几何覆盖不代表首选、资格或发布 Gate 已完成。
+- gold 未覆盖 xpan、120-645、135-dual 真实样片，也没有 sealed cohort，不声称未见来源泛化。
+  若评分承担自动准入，仍须独立 calibration、冻结风险／OOD 合同与 sealed acceptance。
+- 用户已确认可安排 Intel Mac、Windows x64 实测和新扫描人工确认；按其要求先完成现有／本机。
+  最终全部资格须绑定同一 release commit；没有发布授权。
 
 ## 精确下一步
 
-1. 优先审计内切侧没有登记区间匹配的六个 nominal：S040/S053/S061/S072/S074/S076，
-   区分选了别处边界与完全由模板推断。S040 的长轴仅 START4 未命中，主方案内切约 249 px；
-   冻结 query 的 4834 个原始峰已精确重放，邻近真实边界已有峰，`side-region:139` 覆盖三区域却
-   未形成 edge。先定位该 region 的拟合与物理直线闭合拒绝原因，保留全部原始点。
-   输入为同目录 `S040_phase_inputs.pkl`、`S040_current_phase/` 与 `S040_peak_polarity_probe.json`。
-   全面反向分峰曾让它安全自动通过，但完整 cohort 明显退步；不得据此改全局政策或使用黄金角色作
-   Runtime 特征。
-2. 保持 110/110 合格方案覆盖、完整黄金与零危险 auto；不绕过已证明的共同框容量或拟合预算缺口。
-   原生测量未证明准入收益前不合入，不围绕无净收益的残差量化微调。
-3. 性能只消除已证明输入等价的重复工作。S109 的密集区域 median 没有重复输入，
-   转置 scratch 的同值实验无明确速度收益，不合入；完整 pass 和有效 LP 不直接删除。
-   本机检测与工程全部达标后再冻结最终 commit，补齐其它平台全部发布验收，达标即停止等待确认，暂不发布。
+1. 按正常 Hook 提交推送已通过完整黄金的 separator 负证据与校验去重，核验对应 CI；本轮改变候选
+   验证工作，补测正式 24-source 性能，不把全量 diagnostic 的 4.9799 秒均值当作性能 Gate。
+2. 继续优先第一组有合格输出却未准入的通用机制，研究完整 phase／Cross 竞争的共同输出；
+   保留原生成员、terminal 反证、各自 W/H 权限与完整预算，不把全部角色修正作为前置目标。
+3. 识别精修只服务已证明的输出／权限缺口。S040 的三区域 `side-region:139` 未形成 edge 可在需要时
+   定向追因；入口为 `Test/release_readiness_20261015/S040_current_phase/` 与同目录
+   `S040_peak_polarity_probe.json`。本机达标后冻结最终提交，补齐其它平台验收；达标即停止等待确认，暂不发布。

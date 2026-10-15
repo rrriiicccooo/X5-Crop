@@ -1158,6 +1158,20 @@ Grid 求解后、压缩 best/runner 前拒绝这份普通解释，使用原 `cal
 分别为候选、角色、原查询及 trace 数，工作上界为 `O(N_seed × (H + R × T × Q log Q))`，单次临时 coverage
 与 identity 索引按实际项数计入原 phase peak receipt；全部候选仍受原 `H × max(6,R)` 上限约束。
 
+同一关联检查还核验普通 adjacency 遗漏的正材料伙伴。必须是原组件中唯一获权的三区域 separator
+pair，只有一侧已绑定，另一侧未绑定别处；两端原生完整区间均位于同一完整查询走廊内。该候选还须
+独立拥有目标 Frame 另一侧的直接坐标权限，observation 与 evidence-group identity 完全对应，三条线
+共用同一 reference trace。只有原生可见宽度区间的最小值仍超过模板完整物理 W 上限，才构成反证。
+偏窄的残缺曝光、区间相交、多伙伴、partial 材料或权限不足均不产生此项拒绝；不用 fitted W 或其它
+placement 的 source W 缩窄上限。它不绑定伙伴、不改坐标或 rank，也不把宽度冲突解释为角色命名错误。
+所有已生成的成功投影在 best/runner 压缩前对称核验；冲突以 `adjacency_material_conflict` 保留在终止
+记录中，selected continuity 使用 `unbound_separator_width_conflict`。其余完整竞争、source W、输出
+预算与 Gate 照常执行。该检查复用上述工作上界，无新增查询、seed 或拟合。
+
+报告的 coverage 与 continuity 结构校验复用原 typed owner；开发报告另从完整原观察、角色权限和覆盖
+账本重建 continuity。仅运行内分配的 observation ID 可按 ordinal 对应，其余物理字段必须一致，
+不能删掉已存在的反证或伪造材料身份。
+
 宽缓/低梯度 material 已在同一 registered baseline owner 内以多尺度 tone、uniformity、texture 与跨高度
 一致性形成 typed observation。Contact/Overlap 只复用这些既有事实，不用 tone、texture 或 content
 continuity 单独证明 topology，也不建立 enhanced-image 平行 detector。
@@ -1566,8 +1580,8 @@ frame；实际可达位置与两轴保护的消费合同见第 10 节。只有�
 投票或样片/format 特判。同一 template identity、integer offset、local topology 与独立物理 support
 下，相交的 role interval 与互补 observation bindings 可以联合成一个连续 placement；同一 role 的不同
 物理 support、不同坐标、ordinal、local topology、boundary use 或 required source footprint 是离散竞争。
-当前未启用评分选择，硬事实不能区分离散解释时仍进入 review。这是当前选择能力的边界，不是产品要求
-证明唯一真实边界；目标是选择一份满足直接可用合同的已有裁切。
+当前未启用评分选择，硬事实不能区分离散解释且第 10 节的共同输出证明不成立时仍进入 review。
+这不是要求证明唯一真实边界；目标是选择一份满足直接可用合同的已有裁切，并保留竞争解释。
 
 这是一项当前实现边界，不是对校准概率选择的永久禁令。未经校准的 score 不得拥有最终决定权；
 合法 runner 也不因“仍然合法”而被定义为永久阻断项。
@@ -1698,6 +1712,11 @@ selected placement
 → OutputFootprint
 → authority + direct-use assessment
 ```
+
+共同输出的准入证明必须覆盖完整的、仍有证据支持的竞争集合：逐格对应不能遗漏或重复，每个成员
+分别核验自身的固定尺寸、源域、完整保护、权限与风险预算。内部角色名称或 binding 不同本身不证明
+输出有风险，也不证明可以合并；不得删除不利成员、借用 primary 权限或用黄金选框。
+下述实现目前只覆盖固定长轴归属下的 H 竞争；跨 phase、SourceW 或 topology 的共同输出仍需独立证明。
 
 `template_output.common_h_output_footprint` 在同一输出 owner 内核算固定 W 归属下的共同
 同一边界用途的需求。输入为各 H 解释自己的 placement 和完整 native output，保留独立 envelope、保护量与
@@ -2378,14 +2397,15 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   尺寸严格对应 `1.1W × 1.1H`；缺失或篡改 metadata、不同 slot 使用不同 source W/H 均失败。
   Gold 独立检查这些几何事实；Runtime report 另从完整 source state 重建尺寸身份。
   实际向外 expansion 仅作诊断，不再按真实边界每侧 5% 阻断；框内偏移不额外处罚。
-- H 的验收对象是最终可直接使用的固定裁切：保护画面、满足完整包含及运行时权限，并能安全
-  批准。检测线与人工指导线的数像素差异、或中间 H 解释尚不唯一，本身不是新增失败条件。若完整合法
-  H 解释集能由同一输出覆盖，且共同输出在每个解释下都满足已有几何、预算、源域与内容保护条件，
-  可以保留解释差异；不得强行选择唯一边，也不得只相对 primary 证明安全。W 后续还必须证明逐帧归属
-  与相邻关系正确。第 10 节的共同输出在全部成员权限闭合时可以进入原自动批准流程；这不代表 H 已完成
-  全部真实样片验收，也不授予 W 多重归属相同权限。
-  接触精度研究只服务具体内切、预算超限或安全批准缺口；已直接可用的样片继续回归，不以进一步精修
-  中间检测线作为未完成事项。新特征或搜索自由度必须证明实际输出收益才可进入 Runtime。
+- 验收对象是最终可直接使用的逐格固定裁切：对应正确、不漏格或重复格，完整保护人工确认画面，
+  满足固定尺寸、源域、运行时权限和风险预算。内部边界角色不必与人工命名一致；人工确认的接触照片
+  可以由同一物理边界承担前一格 END 与后一格 START，不能仅因角色复用判错。人工确认不成为 Runtime
+  输入，任何 source 是否接触仍须依据实际证据判断。
+  多种仍有证据支持的解释若能由同一合规输出完整覆盖，可以保留解释差异；必须核验完整竞争集合及
+  每个成员自身的尺寸和权限，不能只证明 primary 安全。第 10 节已实现的共同 H 输出在全部成员权限
+  闭合时进入原自动批准流程；它不自动证明跨 W、逐帧归属或相邻 topology 的共同输出安全。
+  角色修正、识别精修、新特征或搜索自由度只在改善最终输出或安全依据时实施；已直接可用的样片继续
+  回归，不以内部解释唯一或每条检测线与人工一致作为额外完成条件。
 - 人工 line、polygon 与 `source_truncated` 交集始终以原 TIFF 坐标持久化；Runtime footprint 使用
   Orientation-normalized canonical 坐标。`tools/regression/gold_geometry.py` 是验收映射的唯一 owner，必须
   用冻结的 `raw_to_canonical` affine 将全部人工几何恰好转换一次，再进行 proposal、candidate 或正式输出
@@ -2454,9 +2474,10 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   `unsafe_approved_auto`、nominal 自动覆盖，以及 challenge capability。决定分布、proposal/candidate 偏差、
   自动覆盖与安全准确性不得合并为单一“准确率”。开发诊断允许暂时出现危险 auto，但必须完整列出样片、
   错误边界和根因，并把结果明确标为未达到 release detection gate；不得隐藏、改角色或提前删除 proposal。
-  所有合法、受支持的黄金 task 应先形成完整 proposal 并接受 pre-Gate 黄金比较；优化顺序是先修 unsafe
-  proposal 的通用几何，再审计 safe proposal 的 eligibility 阻断，最后校准 auto/review 决定。不能让证据
-  不足提前终止 proposal，也不能为了观察错误而人为绕过 Runtime Gate。
+  所有合法、受支持的黄金 task 应形成完整 proposal 并接受 pre-Gate 黄金比较。Review 按实际输出风险与
+  尚待证明的内部解释差异分组，优先审计已有几何合格、预算通过的方案为何未被可靠选中或批准；不能
+  先假定歧义阻断多余。净收益以首选方案几何合格数、安全自动通过数及逐 task 回归衡量，候选覆盖和
+  测试通过不替代发布能力。证据不足不能提前终止 proposal，也不能为了观察错误绕过 Runtime Gate。
 - 检测能力发布底线是当前 development nominal 全部安全 `approved_auto`，全部角色
   `unsafe_approved_auto = 0`；challenge 的安全 auto 是能力发现，安全 review 同样合格，但不能替代
   nominal 覆盖。未来建立 sealed cohort 后，其 nominal 也必须全部安全自动通过。不得把失败 nominal 改成

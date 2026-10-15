@@ -148,6 +148,12 @@ class DirectRoleAuthorityFact:
                 f"state={self.state.value}"
             )
 
+    @property
+    def has_unconditional_coordinate_authority(self) -> bool:
+        return self.state == EvidenceState.SUPPORTED and bool(
+            _UNCONDITIONAL_DIRECT_ROLE_BASES.intersection(self.bases)
+        )
+
 
 @dataclass(frozen=True)
 class DirectRoleBindingAuthority:

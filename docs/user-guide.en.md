@@ -41,10 +41,15 @@ inferred only from established common dimensions, position anchors, and checked 
 information or outer support may help locate the crop, but cannot impersonate a direct photo boundary or override
 counterevidence.
 
-Every output slot must have complete visible-content protection, sufficient position evidence, and a safe output
-footprint. The entire source enters `needs_review` if content is missing, an internal boundary is crossed, a required
-boundary is unknown, evidence conflicts, or an interpretation cannot be fully verified and protected. A score cannot
-replace these conditions or enlarge the fixed box.
+Acceptance concerns the final crops: correct slot correspondence, no missing or duplicate photos, full protection of
+confirmed content, and compliance with fixed dimensions, source bounds, and risk budgets. Internal boundary names need
+not match human labels. For touching photos, one physical boundary may end the previous slot and start the next.
+Every slot still needs sufficient position and protection evidence. The entire source enters `needs_review` if content
+is missing, an internal boundary is crossed, necessary evidence is absent, or a competing interpretation cannot be fully
+verified and protected. A score cannot replace these conditions or enlarge the fixed box.
+The program checks complete separator material already identified in the scan. An interpretation is rejected if it
+omits the other side of that material and thereby requires a photo wider than the format's physical upper limit.
+Other interpretations must independently pass every safety check.
 
 When photo ownership is established and several complete top/bottom interpretations remain, one fixed box may protect
 them all. Automatic approval requires every interpretation to pass content containment and source-wide safety checks.
