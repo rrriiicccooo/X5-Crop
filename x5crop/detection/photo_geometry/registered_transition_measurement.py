@@ -539,51 +539,41 @@ def measured_transition_peaks(
     split_gradient_reversals: bool,
 ) -> tuple[MeasuredTransitionPeak, ...]:
     coordinates = measurement.coordinates
-    credible = (
-        (measurement.gradient_z >= spec.gradient_z_minimum)
+    gradient_supported = measurement.gradient_z >= spec.gradient_z_minimum
+    indices = np.flatnonzero(
+        gradient_supported
         | (
             np.maximum(measurement.tone_z, measurement.texture_z)
             >= spec.tone_or_texture_z_minimum
         )
     )
-    indices = np.flatnonzero(credible)
     if indices.size == 0:
         return ()
     split_at = np.flatnonzero(np.diff(indices) > 1) + 1
     groups = np.split(indices, split_at)
+    gradient_supported &= measurement.signed_gradient != 0.0
     secondary = np.maximum(measurement.tone_z, measurement.texture_z)
     noise_statistics = {}
     records: list[MeasuredTransitionPeak] = []
     for group in groups:
         if group.size == 0:
             continue
-        reliable_gradient = tuple(
-            int(index)
-            for index in group
-            if measurement.gradient_z[int(index)] >= spec.gradient_z_minimum
-            and measurement.signed_gradient[int(index)] != 0.0
-        )
-        polarity_runs: list[list[int]] = []
-        for index in reliable_gradient:
-            polarity = 1 if measurement.signed_gradient[index] > 0.0 else -1
-            previous = (
-                None
-                if not polarity_runs
-                else 1
-                if measurement.signed_gradient[polarity_runs[-1][-1]] > 0.0
-                else -1
+        reliable_gradient = group[gradient_supported[group]]
+        polarity_runs = ()
+        if reliable_gradient.size:
+            polarity_runs = (
+                np.split(
+                    reliable_gradient,
+                    np.flatnonzero(
+                        np.diff(measurement.signed_gradient[reliable_gradient] > 0.0)
+                    ) + 1,
+                )
+                if split_gradient_reversals
+                else (reliable_gradient,)
             )
-            if not split_gradient_reversals:
-                if not polarity_runs:
-                    polarity_runs.append([])
-                polarity_runs[0].append(index)
-            elif previous != polarity:
-                polarity_runs.append([index])
-            else:
-                polarity_runs[-1].append(index)
         peak_candidates = (
             tuple(
-                max(run, key=lambda index: (measurement.gradient_z[index], -index))
+                int(run[np.argmax(measurement.gradient_z[run])])
                 for run in polarity_runs
             )
             if polarity_runs

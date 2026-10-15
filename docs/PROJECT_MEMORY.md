@@ -1,6 +1,6 @@
 # 项目记忆
 
-更新：2026-10-15。现场 Git、原 TIFF、source SHA、current report 与最新验证高于本文件。
+更新：2026-10-16。现场 Git、原 TIFF、source SHA、current report 与最新验证高于本文件。
 长期合同见 [ARCHITECTURE.md](ARCHITECTURE.md)，人工权限见
 [MANUAL_ANNOTATION.md](MANUAL_ANNOTATION.md)，协作规则见 [AGENTS.md](../AGENTS.md)。
 
@@ -15,11 +15,11 @@
 
 ### 黄金与选择
 
-当前 pip 环境完整报告为 `Test/release_readiness_20261015/gold_material_validation/`，110 条均完成、
-无异常。材料验证修复后，全部记录除耗时外与同目录上级的 `gold_profile_qualification/` 逐字段全同，
-证据为 `material_validation_gold_equivalence.json`；production 源码未变。这是开发回归，发布验收
-仍须绑定最终 release commit。依赖环境调整后，S086 的主方案由合格变为不合格，合格备选和 Review
-阻断均保留。
+当前 pip 环境完整报告为 `Test/release_readiness_20261015/gold_peak_selection_vectorized/`，
+110 条均完成、无异常。全部任务记录除耗时外与同目录 `gold_material_validation/` 逐字段全同，
+汇总行为与工作量计数也全同，证据为 `peak_selection_gold_equivalence.json`。这是开发回归，发布
+验收仍须绑定最终 release commit。依赖环境调整后，S086 的主方案由合格变为不合格，合格备选和
+Review 阻断均保留。
 
 | 项目 | 结果 |
 |---|---|
@@ -73,10 +73,23 @@
   role/ordinal 映射下要求的两组等 pitch 区间相隔 20.748497 px，不依赖校准先验也不能相交。
   证据为 `Test/release_readiness_20261015/S053_selection_audit/current_ledger_binding.json`；
   该结论不排除不同角色身份或有独立实测支持的局部 advance，不能直接晋升 Review 方案。
+- 可见边界库存为 1310 条：691 已绑定、261 合格未绑定、88 角色不合格、270 无登记区间匹配。
+  角色缺口涉及 33 个 nominal，但只有 S051/S053/S073 的主方案实际内切对应此类，不能宣称可回收
+  33 项。88 条中已有带版本证据支持 44 条相反角色、9 条空角色，其余 35 条尚未细分；
+  保存报告不全是当前源码，入口为 `Test/release_readiness_20261015/role_inventory/`。
+  S053 edge1 / edge67 分别对应黄金 END1 / START6，而 raw hint 为 START / END；纹理窗口对齐和
+  移出定位尾部均未恢复正确提示。不得把这一映射错误解释为真实不等 pitch。
+- 长轴全面保留反向峰使完整黄金的合格方案覆盖 110→98、安全 auto 25→14，未保留。
+  聚合材料取消角色前置过滤，在上述三个直接受影响任务上也没有改善主方案或自动批准，未保留。
+  证据为同目录 `polarity_partition_comparison.json`、`material_role_projection_three_comparison.json`；
+  不继续通过全局多造峰、放宽材料资格或增加拟合额度争取覆盖。
 
 选择结果构造、来源失败与撤回逻辑共用原 typed owner。长轴角色与配对资格也改为共用同一判定，
 该去重使生产代码净减 31 行，没有新增模块；原实现的 11250 组完整 profile 比较全部一致，证据为
 `Test/release_readiness_20261015/profile_qualification_equivalence.json`。
+峰选择以数组索引替换逐像素循环，另净减 10 行；正式 CLI 捕获的真实输入与对照共 848 组，
+39127 个峰的全部字段和顺序全同。真实输入微基准中位耗时下降 3.75%，临时分配未增加；
+证据为同目录 `peak_selection_equivalence.json`，不代表全程 CLI 或进程 RSS 同幅改善。
 Development report 校验复用 typed parser 与材料 classifier，从各区域区间重建材料状态与完整包络；
 原验证器接受的四类错误记录现均被拒绝，原报告仍通过，证据为同目录 `material_report_rejection.json`。
 该修复只改变验证工具，不改变 detector、排序或自动批准权限。
@@ -128,10 +141,13 @@ JSON 只证明窗口映射，人工确认仅限展示范围，不扩展为整源
 
 ## 精确下一步
 
-1. 从 S053 的 edge1 / 47 / 63 / 67 原始 role 与邻接事实，区分 aperture 角色绑定错误和已观察但未形成
-   relation 的局部 advance；再按同类根因分组。当前完整五次 phase 返回在
-   `Test/release_readiness_20261015/S053_phase_inputs.pkl`，正式报告在 `S053_current_phase/`。
-   不只补 END117 或扩 Grid 先验，也不能只按预算换选：另两份预算通过的 Review 方案仍不合格。
+1. 优先审计内切侧没有登记区间匹配的六个 nominal：S040/S053/S061/S072/S074/S076，
+   区分选了别处边界与完全由模板推断。S040 的长轴仅 START4 未命中，主方案内切约 249 px；
+   冻结 query 的 4834 个原始峰已精确重放，邻近真实边界已有峰，`side-region:139` 覆盖三区域却
+   未形成 edge。先定位该 region 的拟合与物理直线闭合拒绝原因，保留全部原始点。
+   输入为同目录 `S040_phase_inputs.pkl`、`S040_current_phase/` 与 `S040_peak_polarity_probe.json`。
+   全面反向分峰曾让它安全自动通过，但完整 cohort 明显退步；不得据此改全局政策或使用黄金角色作
+   Runtime 特征。
 2. 保持 110/110 合格方案覆盖、完整黄金与零危险 auto；不绕过已证明的共同框容量或拟合预算缺口。
    原生测量未证明准入收益前不合入，不围绕无净收益的残差量化微调。
 3. 性能只消除已证明输入等价的重复工作。S109 的密集区域 median 没有重复输入，
