@@ -68,6 +68,11 @@
   transition，不能整体去重。保留四份解释的必要条件重放未区分最终 2 个候选，两份原 placement
   仍各有 8 条边超预算，见 `Test/release_readiness_20261015/alias_necessary_replay/verification.json`。
   没有执行新增 pair refit；当前证据不足以支持新增 alias 准入机制，不合入生产。
+- S053 的唯一合格备选 `source-clipped-review-placement:3` 已严格绑定到当前正式 CLI 的完整原始
+  diagnostic、六份 footprint、预算与黄金标签。END117 仍无权限；剩余获权 native full 区间在当前
+  role/ordinal 映射下要求的两组等 pitch 区间相隔 20.748497 px，不依赖校准先验也不能相交。
+  证据为 `Test/release_readiness_20261015/S053_selection_audit/current_ledger_binding.json`；
+  该结论不排除不同角色身份或有独立实测支持的局部 advance，不能直接晋升 Review 方案。
 
 选择结果构造、来源失败与撤回逻辑共用原 typed owner。长轴角色与配对资格也改为共用同一判定，
 该去重使生产代码净减 31 行，没有新增模块；原实现的 11250 组完整 profile 比较全部一致，证据为
@@ -123,11 +128,10 @@ JSON 只证明窗口映射，人工确认仅限展示范围，不扩展为整源
 
 ## 精确下一步
 
-1. 审计 S053 当前逐候选淘汰链：主方案 phase / Cross 均 resolved，但长轴 START 仍向内；唯一合格
-   备选 `source-clipped-review-placement:3` 属于 Review scope。不能只按预算换选，另两份预算通过的
-   Review 方案仍不合格。当前正式 CLI 已捕获完整 5 次 phase 返回，入口为
-   `Test/release_readiness_20261015/S053_phase_inputs.pkl` 与 `S053_current_phase/`；先将合格备选
-   绑定到完整原 projection、角色权限和 Grid 失败，再判断是否存在可推广的机制缺口。
+1. 从 S053 的 edge1 / 47 / 63 / 67 原始 role 与邻接事实，区分 aperture 角色绑定错误和已观察但未形成
+   relation 的局部 advance；再按同类根因分组。当前完整五次 phase 返回在
+   `Test/release_readiness_20261015/S053_phase_inputs.pkl`，正式报告在 `S053_current_phase/`。
+   不只补 END117 或扩 Grid 先验，也不能只按预算换选：另两份预算通过的 Review 方案仍不合格。
 2. 保持 110/110 合格方案覆盖、完整黄金与零危险 auto；不绕过已证明的共同框容量或拟合预算缺口。
    原生测量未证明准入收益前不合入，不围绕无净收益的残差量化微调。
 3. 性能只消除已证明输入等价的重复工作。S109 的密集区域 median 没有重复输入，
