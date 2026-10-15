@@ -19,7 +19,7 @@
 
 最新完整报告为 `Test/release_readiness_20261016/gold_separator_width/`：110 task / 106 source
 全完成、无分析异常；源码、比较器与 cohort 字节已核对到已推送的 `97daa7fc`，桥接证据为
-`separator_width_amended_source_identity.json`。正常 pre-push 为 1258 passed / 2 skipped，
+`separator_width_amended_source_identity.json`。正常 pre-push 完成 1258 项测试（含 2 项跳过），
 对应 CI `38782587962` 的 12 项全部通过。相对 `1583f010` 的 `gold_peak_selection_vectorized/`，S086 首选从 unsafe
 变为 safe，Review 变为安全 auto；其余 task 的决定、首选／candidate 几何状态不变，没有丢失原安全
 首选、auto 或几何方案覆盖。证据为同目录上级 `separator_width_gold_regression.json`。
