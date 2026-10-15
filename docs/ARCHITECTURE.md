@@ -2094,7 +2094,9 @@ Holder/count/output-slot identity 只在 `photo_geometry` 保存一次；finaliz
 geometry 或 final boxes。每个阻止事实
 同时给出最小缺失事实、恢复类别和建议操作。完整 observations、alignment residual、winner/runner、
 direct/inferred ledger、content veto 和工作量只属于显式 Debug Analysis 或 verifier。外部 report
-validator 位于 `tools/regression/`，不进入用户 standalone。
+validator 位于 `tools/regression/`，不进入用户 standalone。Development 校验逐份重建 separator band
+的 typed 合同，用同一材料 classifier 从各区域的 contrast/texture 完整区间核对状态，并核对 band
+摘要恰为全部区域的包络；不能信任外部报告中的 `supported` 标签或缩小后的摘要。
 
 每条 lane 可另存一份 `independent_phase_review`，含最多十四份完整解释。它属于固定 `review_only` scope，独立于 canonical
 competition、alternatives、source proposal、共同 H、selected output 与两级 Gate；普通与 development

@@ -115,6 +115,8 @@ from x5crop.detection.photo_geometry.broad_material_association import (
 from x5crop.detection.photo_geometry.measurement_model import (
     PhotoBoundaryMeasurementQuery, PhotoBoundaryMeasurementSet, BroadMaterialTraceObservation, MaterialBackgroundSide,
 )
+from x5crop.detection.photo_geometry.observation_types import SeparatorBandObservation
+from x5crop.detection.photo_geometry.separator_material import classify_separator_material_region
 from x5crop.detection.photo_geometry.coarse_strip_support import CoarseStripSupport
 from x5crop.detection.photo_geometry.coarse_enclosing_support import observe_coarse_broad_side_facts
 from x5crop.detection.photo_geometry.template_coarse_sides import coarse_enclosing_binding, register_coarse_side_facts, close_coarse_side_bindings
@@ -783,6 +785,27 @@ def _validate_sequence_physical_line_regions(
             if not all(value_validation._interval_contains(edge["full_position_interval_px"], value)
                        for value in (projection.minimum, projection.maximum)):
                 raise ValueError("sequence full position discards a physical line state")
+
+
+def _validate_separator_material_states(values: list[dict[str, Any]]) -> None:
+    """Recheck material authority from recorded intervals, not a state label."""
+
+    bands = tuple(_read_common_proof(value, SeparatorBandObservation) for value in values)
+    if len({band.observation_id for band in bands}) != len(bands):
+        raise ValueError("separator material observations must be unique")
+    for band in bands:
+        for region in band.material_regions:
+            if region.state != classify_separator_material_region(
+                region.material_contrast_interval, region.core_texture_interval,
+            ):
+                raise ValueError("separator material state contradicts its measured intervals")
+        for field in ("material_contrast_interval", "core_texture_interval"):
+            intervals = tuple(getattr(region, field) for region in band.material_regions)
+            if getattr(band, field) != FiniteInterval(
+                min(interval.minimum for interval in intervals),
+                max(interval.maximum for interval in intervals),
+            ):
+                raise ValueError("separator material summary changed its regional envelope")
 
 
 def _validate_sequence_output_line_provenance(lane: dict[str, Any]) -> None:
@@ -2235,7 +2258,8 @@ def _read_common_proof(value: Any, model: type) -> Any:
                      CrossFitCompetition, CrossRoleBinding, PhotoBoundaryObservation,
                      SourceScanGeometry, HolderFillAssessment, FormatPlacement, ExteriorRegionMeasurement,
                      TemplateCrossInput, CoarseStripSupport, PhotoBoundaryMeasurementSet, CrossRegistrationWorkReceipt,
-                     IndependentPhaseReview, IndependentPhaseReviewPortfolio, MatchedHolder, TemplatePhaseInput):
+                     IndependentPhaseReview, IndependentPhaseReviewPortfolio, MatchedHolder, TemplatePhaseInput,
+                     SeparatorBandObservation):
         raise ValueError("unsupported common-output proof root")
 
     def read(raw: Any, kind: Any) -> Any:
@@ -4107,6 +4131,7 @@ def _validate_development(record: dict[str, Any]) -> None:
         _validate_sequence_physical_line_regions(
             lane, development["measurement"]["queries"]
         )
+        _validate_separator_material_states(lane["observations"]["separator_bands"])
         _validate_sequence_output_line_provenance(lane)
         if cross_competition["receipt"]["fitted_observation_count"] != sum(
             item["independent_support_region_count"] >= MINIMUM_INDEPENDENT_SUPPORT_REGIONS

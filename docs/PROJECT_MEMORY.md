@@ -15,10 +15,11 @@
 
 ### 黄金与选择
 
-当前 pip 环境完整报告为 `Test/release_readiness_20261015/gold_profile_qualification/`，按检测源码摘要
-绑定本轮长轴资格去重。110 条记录除耗时外与 `Test/release_readiness_20261014/gold_bc405d23/`
-逐字段全同，证据为同目录上级的 `gold_record_equivalence.json`。这是开发回归，发布验收仍须绑定最终
-release commit。依赖环境调整后，S086 的主方案由合格变为不合格，合格备选和 Review 阻断均保留。
+当前 pip 环境完整报告为 `Test/release_readiness_20261015/gold_material_validation/`，110 条均完成、
+无异常。材料验证修复后，全部记录除耗时外与同目录上级的 `gold_profile_qualification/` 逐字段全同，
+证据为 `material_validation_gold_equivalence.json`；production 源码未变。这是开发回归，发布验收
+仍须绑定最终 release commit。依赖环境调整后，S086 的主方案由合格变为不合格，合格备选和 Review
+阻断均保留。
 
 | 项目 | 结果 |
 |---|---|
@@ -63,10 +64,17 @@ release commit。依赖环境调整后，S086 的主方案由合格变为不合�
 - S042 在同一冻结 trace 上比较 uint8、原生亮度、RGB/opponent 与原生宽缓测量。原生宽缓峰由
   4352 增至 7387，但未补齐完整可准入边界；增加信号不等于取得角色或邻接权限。
   证据为 `Test/release_readiness_20261015/S042_registered_native_probe_broad_edges.json`，未合入生产。
+- S042 第二个 separator 的 4 个 raw family 只在部分 trace 同点，3083 / 3340 上仍有不同原始
+  transition，不能整体去重。保留四份解释的必要条件重放未区分最终 2 个候选，两份原 placement
+  仍各有 8 条边超预算，见 `Test/release_readiness_20261015/alias_necessary_replay/verification.json`。
+  没有执行新增 pair refit；当前证据不足以支持新增 alias 准入机制，不合入生产。
 
 选择结果构造、来源失败与撤回逻辑共用原 typed owner。长轴角色与配对资格也改为共用同一判定，
-本轮生产代码净减 31 行，没有新增模块；原实现的 11250 组完整 profile 比较全部一致，证据为
+该去重使生产代码净减 31 行，没有新增模块；原实现的 11250 组完整 profile 比较全部一致，证据为
 `Test/release_readiness_20261015/profile_qualification_equivalence.json`。
+Development report 校验复用 typed parser 与材料 classifier，从各区域区间重建材料状态与完整包络；
+原验证器接受的四类错误记录现均被拒绝，原报告仍通过，证据为同目录 `material_report_rejection.json`。
+该修复只改变验证工具，不改变 detector、排序或自动批准权限。
 
 ### 性能与环境
 
@@ -115,13 +123,11 @@ JSON 只证明窗口映射，人工确认仅限展示范围，不扩展为整源
 
 ## 精确下一步
 
-1. 核对长轴弱边缘的证据投影：S042 第二个 separator 在 9 条 trace 上通过必要邻接筛查；同一 native
-   transition 的 2–4 个 raw family 均已解析到同一 canonical END，但仍因多个 family 阻断配对。
-   四份原始 pair 的材料均得到完整三区域支持，见
-   `Test/release_readiness_20261015/S042_separator_alias_screen_material.json`。下一步只验证单侧同点、
-   同一已解析身份的 alias 投影，保留全部 raw family 与失败；不同坐标或未解析 family 继续竞争。
-   不增加 query 或 Cartesian 组合，不只按 canonical ID 合并。当前没有授予新 pair 或自动输出权限；
-   正式 CLI 证明输出净收益后才合入生产。
+1. 审计 S053 当前逐候选淘汰链：主方案 phase / Cross 均 resolved，但长轴 START 仍向内；唯一合格
+   备选 `source-clipped-review-placement:3` 属于 Review scope。不能只按预算换选，另两份预算通过的
+   Review 方案仍不合格。当前正式 CLI 已捕获完整 5 次 phase 返回，入口为
+   `Test/release_readiness_20261015/S053_phase_inputs.pkl` 与 `S053_current_phase/`；先将合格备选
+   绑定到完整原 projection、角色权限和 Grid 失败，再判断是否存在可推广的机制缺口。
 2. 保持 110/110 合格方案覆盖、完整黄金与零危险 auto；不绕过已证明的共同框容量或拟合预算缺口。
    原生测量未证明准入收益前不合入，不围绕无净收益的残差量化微调。
 3. 性能只消除已证明输入等价的重复工作。S109 的密集区域 median 没有重复输入，

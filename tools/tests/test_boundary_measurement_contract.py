@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from copy import deepcopy
 from unittest.mock import patch
 
+from tools.regression.report_validation import _validate_separator_material_states
 from tools.tests.photo_geometry_support import *
+from x5crop.report.read_models import typed_read_model
 from x5crop.detection.photo_geometry.sequence_direction_measurement import (
     sequence_run_direction_measurement,
 )
@@ -426,6 +429,30 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
                 )
             )
         )
+
+    def test_report_rejects_forged_separator_material_authority(self) -> None:
+        bands = self._separator_material_fixture()
+        value = typed_read_model(bands)
+        _validate_separator_material_states(value)
+        # A state label and matching support count must not override the
+        # measured tone/texture interval or hide an adverse region in a summary.
+        for field, interval in (
+            ("material_contrast_interval", {"minimum": 0.0, "maximum": 0.0}),
+            ("core_texture_interval", {"minimum": 1000.0, "maximum": 1000.0}),
+        ):
+            changed = deepcopy(value)
+            changed[0]["material_regions"][0][field] = interval
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "material state"):
+                _validate_separator_material_states(changed)
+        changed = deepcopy(value)
+        changed[0]["material_contrast_interval"]["minimum"] -= 1.0
+        with self.assertRaisesRegex(ValueError, "regional envelope"):
+            _validate_separator_material_states(changed)
+        with self.assertRaisesRegex(ValueError, "unique"):
+            _validate_separator_material_states([*value, value[0]])
+        _validate_separator_material_states(typed_read_model(
+            self._separator_material_fixture(non_uniform_traces=(0, 50)),
+        ))
 
     @staticmethod
     def _separator_material_fixture(

@@ -29,6 +29,8 @@
   复用原有坐标和缓冲。选择结果的构造与撤回共用已有 typed model，删除重复字段装配。
 - `tools/verify` 是工程、准确性、性能、平台和 Hook 的统一入口；开发 gold、诊断报告、CI 通过或安全
   Review 都不能替代架构第 14 节定义的 release gate。
+- Development report 校验从各区域 contrast/texture 区间重建 separator material 状态和完整摘要，
+  拒绝与实测区间矛盾的支持标签、遗漏区域的摘要和重复 observation。
 - 发布资格必须把 accuracy、TIFF/metadata、性能、安装、目标平台、打包和 Hook/CI 证据绑定同一最终
   release commit。V5 当前仍为开发预览，未创建 RC、tag、GitHub Release 或公开 ZIP。
 
