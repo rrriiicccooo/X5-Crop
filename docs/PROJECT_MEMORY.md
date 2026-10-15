@@ -18,7 +18,9 @@
 ### 黄金与 Review
 
 最新完整报告为 `Test/release_readiness_20261016/gold_separator_width/`：110 task / 106 source
-全完成、无分析异常。相对 `1583f010` 的 `gold_peak_selection_vectorized/`，S086 首选从 unsafe
+全完成、无分析异常；源码、比较器与 cohort 字节已核对到已推送的 `97daa7fc`，桥接证据为
+`separator_width_amended_source_identity.json`。正常 pre-push 为 1258 passed / 2 skipped，
+对应 CI `38782587962` 的 12 项全部通过。相对 `1583f010` 的 `gold_peak_selection_vectorized/`，S086 首选从 unsafe
 变为 safe，Review 变为安全 auto；其余 task 的决定、首选／candidate 几何状态不变，没有丢失原安全
 首选、auto 或几何方案覆盖。证据为同目录上级 `separator_width_gold_regression.json`。
 
@@ -61,10 +63,20 @@ phase／Cross／最终阻断交叉表完整保存，不能把 ambiguity 名称�
 - 当前 CommonH 只证明同一已解析长轴模型下的完整 H 竞争。基线第一组有 8 个窄 phase 入口；
   S005/S006/S026/S075/S081 的保存主备均几何合格且预算通过，尚无完整共同输出准入证明。
   S005 的 4 个 ordered 成员各自获权 W 的固定长轴输出代表分为 3452.1372 / 3418.7325 px，
-  测量区间仍有交集；不能借 primary 尺寸，也不能仅凭代表值不同断言共同输出不可能。
+  测量区间仍有交集；保存的保护并集连较小成员框都可容纳，最紧长轴余量 46.2659 px，见
+  `S005_own_size_necessary_geometry.json`。这只核验旧 ordered 几何的必要条件，未闭合 terminal、
+  late refinement 或各成员 Cross；不同尺寸身份仍须证明，不能借 primary 尺寸或据此准入。
   S011 只有一份已生成 canonical 输出，但完整池有 6 ordered / 4 terminal；更高支持的原生竞争
   与校准 Grid 冲突，不能删除。两份最新官方捕获与逐成员权限核验见同目录
   `S005_phase_member_authorities.json`、`S011_phase_member_authorities.json`，仅为必要条件审计。
+- S082/S093 的两个 continuity 均 supported；最终 topology 阻断来自未独立闭合的两点 pitch 假说。
+  撤权后已恢复原模板，phase/pitch authority 为空；材料本体仍参与正式竞争。原假说核验中，S082
+  的 6 份投影均 Grid conflict，S093 的唯一可行投影缺少两 band 之外的独立 anchor。该限定核验不能
+  证明完整最终输出。逐成员审计见 `S082_withheld_pitch_member_audit.json`、`S093_withheld_pitch_member_audit.json`；
+  另有 `S082_complete_phase.pkl`、`S093_complete_phase.pkl` 保存全部原始投影及 lattice 作用域。
+  正式竞争的原始投影为 78 / 6，canonical 仅 31 / 2；新观察工具未改变正式几何与决定，源码和原 TIFF
+  已核对，见 `withheld_pitch_complete_capture_acceptance.json`。
+  不把受限 refit、canonical 子集或未使用的 pitch 参数直接当作解除阻断的证明，暂不新增准入路径。
 - 既定 primary 尺寸的完整池必要几何筛查使 S006/S026/S075/S080/S081 至少一格放不下；
   S080/S081 全成员 late refinement 后仍不成立。它不否定所有跨模型共同输出，但 source-W supported
   子集不代表完整竞争。入口为 `Test/release_readiness_20261014/common_window_*replay.json`。
@@ -80,10 +92,11 @@ phase／Cross／最终阻断交叉表完整保存，不能把 ambiguity 名称�
 
 ### 性能与环境
 
-最近正式性能为 `bc405d23` 的
-`Test/release_readiness_20261014/performance_receipt_bc405d23.json`：24-source 完整用户路径
-均值 4.441367 秒，p50 / p95 为 4.149025 / 7.430305 秒；平均 peak RSS 747.97 MiB，最大
-S024 为 1227.78 MiB。该提交通过 5 秒 Gate，未达到 3 秒；它不能替代后续机制或最终 release commit。
+最新正式性能绑定代码提交 `97daa7fc`，证据为
+`Test/release_readiness_20261016/performance_receipt_97daa7fc.json`：24-source 完整用户路径
+均值 4.296431 秒，p50 / p95 为 3.976725 / 7.257891 秒；平均 peak RSS 749.76 MiB，最大
+S024 为 1225.02 MiB。该提交通过 5 秒 Gate，未达到 3 秒；不把历史差值归因于本次单项修改。
+后续纯文档检查点不改变已验证源码，但这份 receipt 不能替代最终同一 release commit 的验收。
 现场 pip 加载 NumPy 2.5.4、SciPy 1.18.1、OpenCV 5.0.0、tifffile、imagecodecs，Pillow 来自
 Homebrew。保留本机新版，合同以实际 import 为准。旧环境耗时／RSS不能归因于单项源码或库；
 CI 不能替代实机、安装、打包与发布 receipt。
@@ -118,10 +131,10 @@ JSON 只证明窗口映射，人工确认仅限展示范围，不扩展为整源
 
 ## 精确下一步
 
-1. 按正常 Hook 提交推送已通过完整黄金的 separator 负证据与校验去重，核验对应 CI；本轮改变候选
-   验证工作，补测正式 24-source 性能，不把全量 diagnostic 的 4.9799 秒均值当作性能 Gate。
-2. 继续优先第一组有合格输出却未准入的通用机制，研究完整 phase／Cross 竞争的共同输出；
+1. 继续优先第一组有合格输出却未准入的通用机制，研究完整 phase／Cross 竞争的共同输出；
    保留原生成员、terminal 反证、各自 W/H 权限与完整预算，不把全部角色修正作为前置目标。
-3. 识别精修只服务已证明的输出／权限缺口。S040 的三区域 `side-region:139` 未形成 edge 可在需要时
+   S005 先补尺寸身份与成员 Cross 的完整证明；S082/S093 先核对邻接阻断是否确实影响完整输出，
+   使用完整原始投影与每份自身权限，不因首选几何合格或预算通过而删除 topology 证据。
+2. 识别精修只服务已证明的输出／权限缺口。S040 的三区域 `side-region:139` 未形成 edge 可在需要时
    定向追因；入口为 `Test/release_readiness_20261015/S040_current_phase/` 与同目录
    `S040_peak_polarity_probe.json`。本机达标后冻结最终提交，补齐其它平台验收；达标即停止等待确认，暂不发布。
