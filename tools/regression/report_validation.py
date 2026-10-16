@@ -108,12 +108,12 @@ from x5crop.detection.photo_geometry.line_observations import (
 )
 from x5crop.domain import Box, EvidenceState, FiniteInterval, ObservationId, PositiveInterval, WorkspaceExtent
 from x5crop.detection.photo_geometry.broad_material_association import (
-    BroadAssociationResult, BroadAssociationState, BroadAssociationWork,
+    BroadAssociationResult, BroadAssociationState,
     associate_registered_broad_material,
     broad_family_sources_supported,
 )
 from x5crop.detection.photo_geometry.measurement_model import (
-    PhotoBoundaryMeasurementQuery, PhotoBoundaryMeasurementSet, BroadMaterialTraceObservation, MaterialBackgroundSide,
+    PhotoBoundaryMeasurementQuery, PhotoBoundaryMeasurementSet, BroadMaterialTraceObservation,
 )
 from x5crop.detection.photo_geometry.observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from x5crop.detection.photo_geometry.template_adjacency_topology import (
@@ -2264,7 +2264,7 @@ def _read_common_proof(value: Any, model: type) -> Any:
                      SourceScanGeometry, HolderFillAssessment, FormatPlacement, ExteriorRegionMeasurement,
                      TemplateCrossInput, CoarseStripSupport, PhotoBoundaryMeasurementSet, CrossRegistrationWorkReceipt,
                      IndependentPhaseReview, IndependentPhaseReviewPortfolio, MatchedHolder, TemplatePhaseInput,
-                     SeparatorBandObservation, BoundaryEdgeObservation,
+                     SeparatorBandObservation, BoundaryEdgeObservation, BroadMaterialTraceObservation, BroadAssociationResult,
                      AdjacencyContinuityObservation, AdjacencyObservationCoverage, OverlapEdgePairObservation):
         raise ValueError("unsupported common-output proof root")
 
@@ -3738,32 +3738,15 @@ def _validate_exterior_measurements(record: dict[str, Any]) -> dict[str, Exterio
 
 
 def _validate_broad_material_traces(raw: dict[str, Any], query: PhotoBoundaryMeasurementQuery) -> BroadAssociationResult | None:
-    expected_fields = {field.name for field in fields(BroadMaterialTraceObservation)}
     values = raw.get("broad_material_transitions")
     if not isinstance(values, list) or raw.get("broad_material_transition_count") != len(values):
         raise ValueError("broad material trace count is invalid")
-    identities = set()
-    observations = []
-    for value in values:
-        if not isinstance(value, dict) or set(value) != expected_fields:
-            raise ValueError("broad material trace schema is invalid")
-        try:
-            observation = BroadMaterialTraceObservation(**{
-                **value,
-                "transition_id": ObservationId(value["transition_id"]),
-                "localization_interval_px": FiniteInterval(**value["localization_interval_px"]),
-                "physical_position_interval_px": FiniteInterval(**value["physical_position_interval_px"]),
-                "window_scales_mm": tuple(value["window_scales_mm"]),
-                "scale_tone_contrasts": tuple(value["scale_tone_contrasts"]),
-                "background_side": MaterialBackgroundSide(value["background_side"]),
-            })
+    try:
+        observations = tuple(_read_common_proof(value, BroadMaterialTraceObservation) for value in values)
+        for observation in observations:
             observation.validate_query(query)
-            if observation.transition_id in identities:
-                raise ValueError("duplicate broad material trace")
-            identities.add(observation.transition_id)
-            observations.append(observation)
-        except (KeyError, TypeError, ValueError) as error:
-            raise ValueError("broad material trace provenance is invalid") from error
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError("broad material trace provenance is invalid") from error
     if "broad_material_association" not in raw:
         raise ValueError("broad material association receipt is missing")
     value = raw["broad_material_association"]
@@ -3771,21 +3754,12 @@ def _validate_broad_material_traces(raw: dict[str, Any], query: PhotoBoundaryMea
         if value is not None:
             raise ValueError("empty broad measurement has an association receipt")
         return None
-    if not isinstance(value, dict) or set(value) != {field.name for field in fields(BroadAssociationResult)}:
-        raise ValueError("broad material association schema is invalid")
     try:
-        receipt = BroadAssociationResult(**{
-            **value,
-            "state": BroadAssociationState(value["state"]),
-            "input_transition_ids": tuple(ObservationId(identity) for identity in value["input_transition_ids"]),
-            "queried_traces": tuple(value["queried_traces"]),
-            "paths": tuple(tuple(ObservationId(identity) for identity in path) for path in value["paths"]),
-            "work": BroadAssociationWork(**value["work"]),
-        })
-        receipt.validate_query(query, tuple(observations))
+        receipt = _read_common_proof(value, BroadAssociationResult)
+        receipt.validate_query(query, observations)
         # Offline verification replays only the bounded raw association. It
         # does not read pixels, refit lines or choose a detector alternative.
-        expected = associate_registered_broad_material(query, tuple(observations))
+        expected = associate_registered_broad_material(query, observations)
         if receipt != expected:
             raise ValueError("broad association changed its complete search or work ledger")
         if raw["coverage"]["peak_temporary_bytes"] < receipt.temporary_numeric_bytes:

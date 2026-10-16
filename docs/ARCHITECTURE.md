@@ -516,6 +516,7 @@ Mask 使用正数包含／排除运算，初始移位计入进位 limb；补集 
 超界 receipt 保留完整输入身份和已执行工作，清空全部关联路径；原始测量仍保留，但该 lane 不能
 取得 selected placement，Gate 的 producer coverage 失败。报告校验从同一 raw ledger 重放有界关联，
 核对完整结果、工作与最终 edge 回链；它不重新读像素或选择 detector 方案。
+Broad 原子与关联 receipt 复用既有 typed 证据解码，核对精确字段和数值类型；布尔值不能冒充数值。
 
 完整 broad 路径进入 physical region 时，保留原路径全部 raw，以共同物理直线域投影 reference 位置。
 定位峰在各自较宽的物理区间内可以弯曲；不得再按定位区间的最大重叠数裁点，避免隐藏已经成立的

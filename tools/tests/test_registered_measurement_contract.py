@@ -723,7 +723,7 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
                 association.update(state="bound_exceeded", paths=[], failure_reason="charged_work_bound")
             with self.subTest(association_mutation=mutation), self.assertRaises(ValueError):
                 _validate_broad_material_traces(changed, measured.query)
-        for mutation in ("region", "trace", "legacy", "duplicate"):
+        for mutation in ("region", "trace", "legacy", "duplicate", "numeric_boolean"):
             changed = deepcopy(raw)
             point = changed["broad_material_transitions"][0]
             if mutation == "region":
@@ -732,6 +732,8 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
                 point["trace_coordinate_px"] += 1
             elif mutation == "legacy":
                 point["contributing_trace_ordinals"] = [0, 1, 2]
+            elif mutation == "numeric_boolean":
+                point["left_texture_mean"] = False
             else:
                 changed["broad_material_transitions"].append(deepcopy(point))
                 changed["broad_material_transition_count"] += 1

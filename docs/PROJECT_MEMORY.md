@@ -17,12 +17,11 @@
 
 ### 黄金与 Review
 
-最新完整报告为 `Test/release_readiness_20261016/gold_separator_width/`：110 task / 106 source
-全完成、无分析异常；源码、比较器与 cohort 字节已核对到已推送的 `97daa7fc`，桥接证据为
-`separator_width_amended_source_identity.json`。正常 pre-push 完成 1258 项测试（含 2 项跳过），
-对应 CI `38782587962` 的 12 项全部通过。相对 `1583f010` 的 `gold_peak_selection_vectorized/`，S086 首选从 unsafe
-变为 safe，Review 变为安全 auto；其余 task 的决定、首选／candidate 几何状态不变，没有丢失原安全
-首选、auto 或几何方案覆盖。证据为同目录上级 `separator_width_gold_regression.json`。
+最新完整报告为 `Test/release_readiness_20261016/gold_report_decoder_current/`：110 task / 106 source
+全完成、无分析异常。与 `gold_separator_width/` 的全部逐 task 记录比较，除耗时外完全相等；首选、
+预算、auto、保留几何及权限均无回归，证据为同目录上级 `report_decoder_full_gold_equivalence.json`。
+生产源码仍与 `97daa7fc` 的已验证字节一致；本次仅合并报告校验的重复解码，Python 净减少 24 行。
+黄金冻结 runtime／比较器／cohort 身份，提交后的同字节核对保存于 `report_decoder_committed_source_identity.json`。
 
 | 项目 | 最新结果 |
 |---|---|
@@ -86,9 +85,16 @@ phase／Cross／最终阻断交叉表完整保存，不能把 ambiguity 名称�
   仅优化枚举不能回收准入。证据为 `Test/release_readiness_20261015/common_h_closure_audit.json`。
 - S040 的 `side-region:139` 已进入正式 profile，但六点物理直线域为空；原 recovery 删除 3999 后
   只剩两区域且连续支持断开，拒绝正确。同一完整查询另有一份物理可行、三区域连续的 START 关联，
-  被互为唯一最近邻规则排除；现无长轴 conditional-family 入口，尚无完整权限或输出收益证明。
+  被互为唯一最近邻规则排除；现无长轴 conditional-family 入口。
   主线程纯 owner 复核见同目录 `S040_sharp_association_scope_audit.json`，绑定 10 月 15 日原报告、
-  原子与当前原 TIFF。后续只评估关联覆盖机制，不恢复 139、扩阈值或借 source W 晋升两区域点。
+  原子与当前原 TIFF。通用补全沿用原工作上限，S040 的 904 raw 完整产生 28 条一致关联，原 line
+  owner 全部保留 raw；正式试跑使 S040 首选几何及预算通过，但完整回归降至 83 个首选合格、
+  5 个安全 auto、96 个 task 有合格几何，并出现 2 个合同错误，危险 auto 为 0。
+  改成仅对实际计数支持闭合相关性后，8-task 正式抽查仍有 3 个原安全 auto 退为 Review，另两项仍出错；
+  整项实现已撤下。证据在 `Test/release_readiness_20261016/sharp_association_*rejected*.patch`、
+  `sharp_association_full_regression_rejected_corrected.json` 与 `sharp_association_selected_support_rejection.json`。
+  不继续仅扩大 sharp 关联，不删竞争、恢复 139、扩阈值或借 W 晋升两区域点；新路径须有额外输出或
+  安全依据后再评估。独立可保留的清理仅为 broad 报告复用 typed 解码，生产路径无改动。
 - 评分仍为离线研究，`admission_enabled=false`。source 分组 OOF 98 safe / 12 unsafe 不代替独立
   calibration；错误方案预算通过、合格方案预算失败的反例仍存在，不硬化代理阈值。
 
@@ -143,8 +149,7 @@ JSON 只证明窗口映射，人工确认仅限展示范围，不扩展为整源
    S005 的注册 Cross 逐份核验已完成，准入仍缺完整成员与共同尺寸权限；无证明前停止该方向的实现。
    S082/S093 先核对邻接阻断是否确实影响完整输出，
    使用完整原始投影与每份自身权限，不因首选几何合格或预算通过而删除 topology 证据。
-2. 识别精修只服务已证明的输出／权限缺口。S040 的实际内切有 sharp 原始关联覆盖缺口；先证明
-   通用补全能保留全部竞争、相关证据身份与工作量上限，再作正式 CLI 对照。若不能改善首选或安全
-   auto，就停止该实现方向，不恢复原 139。现有 broad 极大关联可作代码复用线索，但不能把 broad 的
-   区域多数与材料条件套到 sharp 或为成功删去其它路径。本机达标后冻结最终提交，补齐其它平台验收；
+2. 识别精修只服务已证明的输出／权限缺口；S040 的一致关联补全因整体回归已收束，不再仅按路径数量
+   扩大该机制。只有能改善最终输出或提供独立安全依据的新证据才重开；不把内部角色修正作为前置目标。
+   本机达标后冻结最终提交，补齐其它平台验收；
    达标即停止等待确认，暂不发布。
