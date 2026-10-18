@@ -162,6 +162,9 @@ class TemplatePhaseRetainedDiagnosticsContractTest(unittest.TestCase):
             direct_role_binding_authority=None,
             outer_frame_observation_authority=None,
             source_frame_width_topology_assessment=None,
+            # This synthetic pre-local failure has no retained fit; final
+            # candidate-bound proofs are rebuilt after proposal retention.
+            retained_adjacency_assessments=(),
         )
 
         retained = retain_pre_local_phase_proposal(
