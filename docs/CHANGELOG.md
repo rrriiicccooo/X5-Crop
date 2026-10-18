@@ -18,6 +18,7 @@
   不增加 rank。无合法 contact 的重复绑定继续拒绝，schema 或 solver 错误不再误报为物理 Grid 冲突。
   保留的 native 双边宽度完整区间若与格式物理范围不相交，资格阶段即拒绝该映射；原有安全诊断提案
   继续保留。区间相交的局部变化不被代表点或拟合 W 强行排除。
+  共享边恢复合法拓扑竞争后，多解 source 进入 Review，保留完整竞争证据与未闭合原因。
 - 只有真实 TIFF 外缘允许 source clipping；内部 authority 边界不能用缩小窗口绕过。Deskew 只在批准后
   整理，不参与检测或 Gate。Debug Analysis 复用同次检测事实，不取得裁切或自动输出权限。
 - 正式 TIFF 只在整张 source 通过安全准入后发布；输出先写 staging，再原子发布到全新目录，保留既有目标。
