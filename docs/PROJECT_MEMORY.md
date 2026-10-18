@@ -103,7 +103,10 @@ phase／Cross／最终阻断交叉表完整保存，不能把 ambiguity 名称�
 
 ### 性能与环境
 
-本轮正式性能待代码提交后重测；旧 `97daa7fc` receipt 不代表新版源码与依赖。隔离完整 CLI 对照确认：
+最新正式性能绑定 `7ae2bd7a`，见 `Test/engineering_audit_20261018/performance_receipt_7ae2bd7a.json`：
+24-source 均值 4.648740 秒，p50／p95 为 4.306029／8.015066 秒，通过 5 秒 Gate，未达到 3 秒 challenge。
+平均 peak RSS 725.60 MiB，最大 S024 为 1227.19 MiB；不把跨环境的历史耗时差值归因于单项修改。
+该 receipt 不代替最终同一 release commit 的完整验收。隔离完整 CLI 对照确认：
 竖向灰度视图使四张样片 peak RSS 中位值降低 23–54 MiB；方向视图配合平坦百分位采样，使 S101 持平，
 S105／S106 分别降低约 200／214 MiB，报告与 TIFF 字节均相等。证据为
 `Test/engineering_audit_20261018/workspace_view_ab.json`、`orientation_flat_ab.json`；它们不代替正式计时 Gate。
