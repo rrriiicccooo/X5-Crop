@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from itertools import permutations
 import unittest
 
 from tools.tests.template_test_support import placement_sequence, placement_template
@@ -15,11 +16,14 @@ from x5crop.detection.photo_geometry.template_native_retention import (
     carry_native_phase_retention,
     select_native_phase_retention,
 )
-from x5crop.detection.photo_geometry.template_model import TemplateSearchReceipt
+from x5crop.detection.photo_geometry.template_model import LatticeParameterFitBasis, TemplateSearchReceipt
+from x5crop.detection.photo_geometry.template_lattice_authority import direct_role_constraint_rank
+from x5crop.detection.photo_geometry.template_nominal_grid_model import CalibratedNominalGridFitState
 from x5crop.detection.photo_geometry.template_phase_candidate_model import _BoundFit
 from x5crop.detection.photo_geometry.template_phase_model import (
     NativeEndpointPhaseDiagnostic,
     NativeEndpointSelectionBasis,
+    NativeEndpointGeometryBasis,
     NativePhaseRetention,
     PhaseCandidateAuthorityProjection,
     PhaseCandidateProjectionBasis,
@@ -28,10 +32,23 @@ from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseFitStatus,
     PhaseFitResult,
 )
-from x5crop.domain import EvidenceState, FiniteInterval, ObservationId
+from x5crop.domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
 
 
 class NativeRetentionContractTests(unittest.TestCase):
+    def _grid_fit(self, fit):
+        anchors = tuple(i for i, binding in enumerate(fit.role_bindings) if binding is not None)
+        return replace(
+            fit, lattice_parameter_fit_basis=LatticeParameterFitBasis.CALIBRATED_NOMINAL_GRID,
+            calibrated_nominal_grid_fit_state=CalibratedNominalGridFitState(
+                prior_id="unit-grid", scale_px_per_mm=PositiveInterval.exact(10.0),
+                frame_width_mm=FiniteInterval.exact(10.0), pitch_mm=FiniteInterval.exact(12.0),
+                canonical_scale_px_per_mm=10.0, phase_anchor_role_indices=anchors,
+                phase_anchor_observation_ids=tuple(fit.role_bindings[i].observation_id for i in anchors),
+                retained_direct_constraint_rank=direct_role_constraint_rank(fit, anchors),
+            ),
+        )
+
     def _authority(
         self,
         fit,
@@ -186,7 +203,7 @@ class NativeRetentionContractTests(unittest.TestCase):
         template = placement_template(3)
         records = self._class_records(template)
         retained = select_native_phase_retention(records)
-        self.assertEqual(retained.role_class_indices, (0, 1, 2, 3))
+        self.assertEqual(retained.role_class_indices, (0, 1, 2, 3) + (None,) * 8)
         self.assertEqual(len(retained.diagnostics), 4)
         for index, diagnostic in enumerate(retained.diagnostics):
             self.assertEqual(diagnostic.role_class_memberships, (index,))
@@ -200,7 +217,7 @@ class NativeRetentionContractTests(unittest.TestCase):
     def test_one_complete_diagnostic_can_represent_all_four_classes(self):
         fit = placement_sequence(placement_template(3))
         retained = select_native_phase_retention((self._record(fit),))
-        self.assertEqual(retained.role_class_indices, (0, 0, 0, 0))
+        self.assertEqual(retained.role_class_indices, (0, 0, 0, 0) + (None,) * 8)
         self.assertEqual(len(retained.diagnostics), 1)
         self.assertEqual(retained.diagnostics[0].role_class_memberships, (0, 1, 2, 3))
         self.assertEqual(retained.class_membership_count, 4)
@@ -219,9 +236,9 @@ class NativeRetentionContractTests(unittest.TestCase):
         )
         variants, mapping, comparisons = _deduplicate_classes((
             diagnostic, residual_variant, interval_variant, diagnostic,
-        ))
+        ) + (None,) * 8)
         self.assertEqual(variants, (diagnostic, residual_variant, interval_variant))
-        self.assertEqual(mapping, (0, 1, 2, 0))
+        self.assertEqual(mapping, (0, 1, 2, 0) + (None,) * 8)
         self.assertEqual(comparisons, 4)
 
     def test_count_one_uses_actual_overlapping_terminal_roles(self):
@@ -235,14 +252,14 @@ class NativeRetentionContractTests(unittest.TestCase):
                 retained = select_native_phase_retention((
                     self._record(fit, intrinsic_roles=intrinsic),
                 ))
-                self.assertEqual(retained.role_class_indices, mapping)
+                self.assertEqual(retained.role_class_indices, mapping + (None,) * 8)
                 self.assertEqual(len(retained.diagnostics), 1)
                 self.assertEqual(retained.diagnostics[0].role_class_memberships, classes)
 
     def test_partial_class_maps_preserve_first_reference_order(self):
         records = self._class_records(placement_template(3))
         retained = select_native_phase_retention((records[3], records[1]))
-        self.assertEqual(retained.role_class_indices, (None, 0, None, 1))
+        self.assertEqual(retained.role_class_indices, (None, 0, None, 1) + (None,) * 8)
         self.assertIs(retained.diagnostics[0].projection, records[1][2])
         self.assertIs(retained.diagnostics[1].projection, records[3][2])
 
@@ -322,7 +339,7 @@ class NativeRetentionContractTests(unittest.TestCase):
             EvidenceState.CONTRADICTED,
         )
 
-    def test_completed_projection_precedes_raw_rank_within_terminal_class(self):
+    def test_completed_and_failed_geometries_keep_separate_terminal_classes(self):
         template = placement_template(3)
         projected = replace(
             placement_sequence(template), residual_sum_px=9.0,
@@ -342,8 +359,12 @@ class NativeRetentionContractTests(unittest.TestCase):
             selected = select_native_phase_retention(records)
             self.assertIs(selected.diagnostics[0].fit, projected)
             self.assertTrue(selected.diagnostics[0].projection.eligible)
+            self.assertIs(selected.diagnostics[1].fit, raw)
+            self.assertIs(selected.diagnostics[1].projection, failed_record[2])
+            self.assertEqual(selected.role_class_indices, (0,) * 4 + (None,) * 4 + (1,) * 4)
         carried = carry_native_phase_retention(successful, failed)
         self.assertIs(carried.diagnostics[0].fit, projected)
+        self.assertIs(carried.diagnostics[1].fit, raw)
 
         # A distinct outer-material terminal explanation remains represented
         # even when its original projection carries contradictory facts.
@@ -354,9 +375,48 @@ class NativeRetentionContractTests(unittest.TestCase):
             ),
         )
         selected = select_native_phase_retention((successful_record, outer_record))
-        self.assertIs(selected.diagnostics[0].fit, raw)
-        self.assertIs(selected.diagnostics[0].projection, outer_record[2])
-        self.assertFalse(selected.diagnostics[0].projection.eligible)
+        self.assertIs(selected.diagnostics[0].fit, projected)
+        self.assertIs(selected.diagnostics[1].fit, raw)
+        self.assertIs(selected.diagnostics[1].projection, outer_record[2])
+        self.assertFalse(selected.diagnostics[1].projection.eligible)
+
+    def test_direct_grid_and_failed_input_cannot_displace_each_other(self):
+        direct = placement_sequence(placement_template(3))
+        grid = self._grid_fit(placement_sequence(direct.template, missing=(2, 3)))
+        records = (self._record(direct), self._record(grid), self._record(direct, failed=True))
+        for ordered in permutations(records):
+            retained = select_native_phase_retention(ordered)
+            self.assertEqual(tuple(d.geometry_basis for d in retained.diagnostics), tuple(NativeEndpointGeometryBasis))
+            self.assertEqual(retained.role_class_indices, (0,) * 4 + (1,) * 4 + (2,) * 4)
+            self.assertIs(retained.diagnostics[0].fit, direct)
+            self.assertIs(retained.diagnostics[1].fit, grid)
+            self.assertIs(retained.diagnostics[2].projection, records[2][2])
+            self.assertFalse(retained.diagnostics[2].projection.eligible)
+        carried = carry_native_phase_retention(
+            select_native_phase_retention(records[:1]), select_native_phase_retention(records[1:]),
+        )
+        self.assertEqual(carried.role_class_indices, (0,) * 4 + (1,) * 4 + (2,) * 4)
+        with self.assertRaisesRegex(ValueError, "invented a role class"):
+            replace(carried, role_class_indices=(1,) * 4 + (0,) * 4 + (2,) * 4)
+
+    def test_twelve_distinct_representatives_reach_the_exact_fixed_bound(self):
+        template = placement_template(3)
+        direct = self._class_records(template)
+        grid = tuple(self._record(self._grid_fit(record[0].fit), intrinsic_roles=roles)
+                     for record, roles in zip(direct, ((0, 4), (0, 5), (1, 4), (1, 5)), strict=True))
+        failed = tuple(self._record(record[0].fit, failed=True, intrinsic_roles=roles)
+                       for record, roles in zip(direct, ((0, 4), (0, 5), (1, 4), (1, 5)), strict=True))
+        retained = select_native_phase_retention((*direct, *grid, *failed))
+        self.assertEqual(retained.role_class_indices, tuple(range(12)))
+        self.assertEqual(len(retained.diagnostics), 12)
+        self.assertEqual(retained.class_membership_count, 12)
+        self.assertEqual(retained.deduplication_comparison_count, 66)
+        with self.assertRaisesRegex(ValueError, "exceeds twelve"):
+            replace(retained, diagnostics=(*retained.diagnostics, retained.diagnostics[0]))
+        carried = carry_native_phase_retention(retained, retained)
+        self.assertEqual(carried.role_class_indices, tuple(range(12)))
+        self.assertEqual(carried.carry_comparison_count, 12)
+        self.assertEqual(carried.deduplication_comparison_count, 198)
 
     def test_output_deleted_or_changed_terminal_binding_cannot_borrow_input_fact(self):
         template = placement_template(3)
@@ -621,14 +681,15 @@ class NativeRetentionContractTests(unittest.TestCase):
         prior = select_native_phase_retention(prior_records)
         current = select_native_phase_retention(current_records)
         carried = carry_native_phase_retention(prior, current)
-        self.assertEqual(carried.role_class_indices, (0, 1, 2, 3))
+        self.assertEqual(carried.role_class_indices, (0, 1, 2, 3) + (None,) * 7 + (4,))
         self.assertIs(carried.diagnostics[0], current.diagnostics[0])
         self.assertIs(carried.diagnostics[1], prior.diagnostics[1])
         self.assertIs(carried.diagnostics[2], prior.diagnostics[2])
         self.assertIs(carried.diagnostics[3], current.diagnostics[3])
-        self.assertEqual(carried.carry_comparison_count, 4)
+        self.assertIs(carried.diagnostics[4], prior.diagnostics[3])
+        self.assertEqual(carried.carry_comparison_count, 3)
         self.assertEqual(carried.class_membership_count, 8)
-        self.assertEqual(carried.deduplication_comparison_count, 18)
+        self.assertEqual(carried.deduplication_comparison_count, 22)
         self.assertGreater(carried.peak_temporary_bytes, prior.peak_temporary_bytes)
         self.assertEqual(prior.diagnostics[3].projection.input_direct_role_authority.state,
                          EvidenceState.CONTRADICTED)
@@ -654,6 +715,8 @@ class NativeRetentionContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             replace(retained, diagnostics=(*retained.diagnostics, retained.diagnostics[0]))
         all_classes = select_native_phase_retention((self._record(placement_sequence(placement_template(3))),))
+        with self.assertRaisesRegex(ValueError, "lost a represented class"):
+            replace(all_classes, role_class_indices=(0,) + (None,) * 11)
         with self.assertRaises(ValueError):
             replace(all_classes, diagnostics=all_classes.diagnostics * 2,
                     role_class_indices=(0, 1, 0, 1))
@@ -672,8 +735,8 @@ class NativeRetentionContractTests(unittest.TestCase):
         self.assertGreater(retained.peak_temporary_bytes, 0)
         for field, value in (("class_membership_count", 9),
                              ("class_comparison_count", 9),
-                             ("carry_comparison_count", 5),
-                             ("deduplication_comparison_count", 19),
+                             ("carry_comparison_count", 13),
+                             ("deduplication_comparison_count", 199),
                              ("class_membership_count", True)):
             with self.subTest(field=field), self.assertRaises(ValueError):
                 replace(retained, **{field: value})

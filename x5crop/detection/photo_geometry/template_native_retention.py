@@ -18,6 +18,7 @@ from .template_model import TemplateSpec
 from .template_phase_candidate_model import _BoundFit
 from .template_phase_model import (
     NATIVE_ENDPOINT_ROLE_CLASS_COUNT,
+    NATIVE_PHASE_RETENTION_CLASS_COUNT,
     NativeEndpointPhaseDiagnostic,
     NativeEndpointSelectionBasis,
     NativePhaseRetention,
@@ -42,17 +43,16 @@ _INTRINSIC_BASES = frozenset(
 # measurement.  During one diagnostic construction the classifier's fact index
 # and the typed diagnostic validator's index can both be live.  The entry
 # constants cover the identity tuple, mapping slot, and retained fact/object
-# references. Four retained diagnostics plus the current candidate can be live
-# during a pool scan; carry can reference four prior and four current records.
-# Four role-sized validator allowances, class maps, and the deduplication list
-# keep the logical peak O(4R), without copying full fit/fact payloads. Counts
-# report producer work; typed validation has the same fixed four-record bound.
+# references. Twelve diagnostics plus the current candidate can be live during
+# a pool scan; carry can reference twelve prior and twelve current records.
+# Validator allowances and class maps keep the logical peak O(12R), without
+# copying full fit/fact payloads. Counts describe producer work.
 _FACT_INDEX_CONTAINER_BYTES = 256
 _FACT_INDEX_ENTRY_BYTES = 128
 _VALIDATION_INDEX_CONTAINER_BYTES = 256
 _VALIDATION_INDEX_ENTRY_BYTES = 128
 _RETAINED_DIAGNOSTIC_BYTES = 1024
-_TERMINAL_INDEX_COUNT = 4
+_TERMINAL_INDEX_COUNT = NATIVE_ENDPOINT_ROLE_CLASS_COUNT
 _TERMINAL_INDEX_BYTES = 64
 _ROLE_CLASS_MAP_COUNT = 3  # prior, current, result during carry
 _ROLE_CLASS_ENTRY_BYTES = 128
@@ -73,18 +73,18 @@ def _temporary_byte_bound(
     return (
         _FACT_INDEX_CONTAINER_BYTES
         + fact_count * _FACT_INDEX_ENTRY_BYTES
-        + NATIVE_ENDPOINT_ROLE_CLASS_COUNT * (
+        + NATIVE_PHASE_RETENTION_CLASS_COUNT * (
             _VALIDATION_INDEX_CONTAINER_BYTES
             + role_count * _VALIDATION_INDEX_ENTRY_BYTES
         )
         + (
-            2 * NATIVE_ENDPOINT_ROLE_CLASS_COUNT
-            if carry else NATIVE_ENDPOINT_ROLE_CLASS_COUNT + 1
+            2 * NATIVE_PHASE_RETENTION_CLASS_COUNT
+            if carry else NATIVE_PHASE_RETENTION_CLASS_COUNT + 1
         ) * _RETAINED_DIAGNOSTIC_BYTES
         + _TERMINAL_INDEX_COUNT * _TERMINAL_INDEX_BYTES
-        + _ROLE_CLASS_MAP_COUNT * NATIVE_ENDPOINT_ROLE_CLASS_COUNT * _ROLE_CLASS_ENTRY_BYTES
+        + _ROLE_CLASS_MAP_COUNT * NATIVE_PHASE_RETENTION_CLASS_COUNT * _ROLE_CLASS_ENTRY_BYTES
         + _DEDUPLICATION_CONTAINER_BYTES
-        + NATIVE_ENDPOINT_ROLE_CLASS_COUNT * _DEDUPLICATION_ENTRY_BYTES
+        + NATIVE_PHASE_RETENTION_CLASS_COUNT * _DEDUPLICATION_ENTRY_BYTES
     )
 
 
@@ -177,12 +177,12 @@ def select_native_phase_retention(
     *,
     template: TemplateSpec | None = None,
 ) -> NativePhaseRetention:
-    """Select four terminal-role class representatives from existing records.
+    """Select each geometry basis's four terminal-role representatives.
 
     Records are scanned once in their existing order.  Equal complete keys
     retain the first record, so no input ordering or authority provenance is
     rewritten by this diagnostic-only pass. At most four role-sized class/key
-    walks per record keep logical work O(4MR), with six final identity checks.
+    walks per record keep logical work O(4MR), with at most 66 final identity checks.
     """
 
     if projection_records is None or not projection_records:
@@ -190,7 +190,7 @@ def select_native_phase_retention(
     if template is not None and not isinstance(template, TemplateSpec):
         raise TypeError("native retention template is invalid")
 
-    selected: list[NativeEndpointPhaseDiagnostic | None] = [None] * NATIVE_ENDPOINT_ROLE_CLASS_COUNT
+    selected: list[NativeEndpointPhaseDiagnostic | None] = [None] * NATIVE_PHASE_RETENTION_CLASS_COUNT
     record_scan_count = 0
     fact_check_count = 0
     class_membership_count = 0
@@ -220,7 +220,7 @@ def select_native_phase_retention(
         diagnostic, temporary_bytes = _terminal_diagnostic(candidate, projection)
         peak_temporary_bytes = max(peak_temporary_bytes, temporary_bytes)
         if diagnostic is not None:
-            for role_class in diagnostic.role_class_memberships:
+            for role_class in diagnostic.retention_class_memberships:
                 class_membership_count += 1
                 previous = selected[role_class]
                 if previous is None:
@@ -250,13 +250,13 @@ def _deduplicate_classes(
     selected: Sequence[NativeEndpointPhaseDiagnostic | None],
 ) -> tuple[
     tuple[NativeEndpointPhaseDiagnostic, ...],
-    tuple[int | None, int | None, int | None, int | None],
+    tuple[int | None, ...],
     int,
 ]:
     """Preserve first class order using complete diagnostic equality only."""
 
-    if len(selected) != NATIVE_ENDPOINT_ROLE_CLASS_COUNT:
-        raise ValueError("native retention requires four class representatives")
+    if len(selected) != NATIVE_PHASE_RETENTION_CLASS_COUNT:
+        raise ValueError("native retention requires twelve class representatives")
     diagnostics: list[NativeEndpointPhaseDiagnostic] = []
     indices: list[int | None] = []
     comparisons = 0
@@ -272,7 +272,7 @@ def _deduplicate_classes(
         else:
             indices.append(len(diagnostics))
             diagnostics.append(diagnostic)
-    return tuple(diagnostics), (indices[0], indices[1], indices[2], indices[3]), comparisons
+    return tuple(diagnostics), tuple(indices), comparisons
 
 
 def _validate_carry_context(
@@ -320,7 +320,7 @@ def carry_native_phase_retention(
 ) -> NativePhaseRetention:
     """Compare only prior/current representatives of each fixed role class.
 
-    An exact key tie retains the earlier prior diagnostic. The four selected
+    An exact key tie retains the earlier prior diagnostic. The twelve selected
     representatives are then deduplicated by complete diagnostic equality.
     """
 
@@ -340,7 +340,7 @@ def carry_native_phase_retention(
         raise ValueError("native carry mixed role bounds")
     selected: list[NativeEndpointPhaseDiagnostic | None] = []
     comparisons = 0
-    for role_class in range(NATIVE_ENDPOINT_ROLE_CLASS_COUNT):
+    for role_class in range(NATIVE_PHASE_RETENTION_CLASS_COUNT):
         prior_index = prior.role_class_indices[role_class]
         current_index = current.role_class_indices[role_class]
         prior_diagnostic = None if prior_index is None else prior.diagnostics[prior_index]

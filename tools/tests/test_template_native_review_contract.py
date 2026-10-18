@@ -53,6 +53,31 @@ from x5crop.formats import FramePhysicalSpec
 
 
 class NativeReviewContractTests(TestCase):
+    def test_report_cannot_forge_geometry_basis_or_cross_family_classes(self):
+        from copy import deepcopy
+        from tools.regression.report_validation import _read_common_proof
+        from x5crop.report.read_models import typed_read_model
+
+        lane = self._retained_lane()
+        with patch(
+            "x5crop.detection.photo_geometry.template_phase_review.fit_template_cross",
+            return_value=self._cross_competition(lane),
+        ):
+            portfolio = build_independent_phase_review(lane)
+        value = typed_read_model(portfolio)
+        self.assertEqual(_read_common_proof(value, IndependentPhaseReviewPortfolio), portfolio)
+        for key in ("native_phase_retention", "reviews"):
+            forged = deepcopy(value)
+            diagnostic = (forged[key]["diagnostics"][0] if key == "native_phase_retention"
+                          else forged[key][0]["phase_diagnostic"])
+            diagnostic["geometry_basis"] = "failed_input"
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                _read_common_proof(forged, IndependentPhaseReviewPortfolio)
+        forged = deepcopy(value)
+        forged["native_phase_retention"]["role_class_indices"] = [None] * 8 + [0] * 4
+        with self.assertRaises(ValueError):
+            _read_common_proof(forged, IndependentPhaseReviewPortfolio)
+
     def _retained_lane(self):
         lane = prepared_template_lane()
         fit = placement_sequence(lane.template_spec)

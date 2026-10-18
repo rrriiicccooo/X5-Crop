@@ -628,21 +628,21 @@ class GoldAnalysisContractTest(unittest.TestCase):
         self.assertEqual(_retained_placement_summary((record,))["placement_label_counts"],
                          {"safe": 4, "unsafe": 3})
 
-        all_roles = roles[:3] + ["native_endpoint"] * 4 + ["source_clipped_terminal"] * 6 + ["intrinsic_refit"] * 4
+        all_roles = roles[:3] + ["native_endpoint"] * 12 + ["source_clipped_terminal"] * 6 + ["intrinsic_refit"] * 12
         record["retained_placement_gold_labels"] = [label(role) for role in all_roles]
         for index, item in enumerate(record["retained_placement_gold_labels"]):
             item["placement_id"] += f":{index}"
             item["acceptability_features"]["placement_id"] = item["placement_id"]
         self.assertEqual(_retained_placement_summary((record,))["placement_label_counts"],
-                         {"safe": 4, "unsafe": 13})
+                         {"safe": 12, "unsafe": 21})
 
         for invalid_roles in (
             ["primary", "native_endpoint", "runner"],
             ["primary", "runner", "runner"],
             ["native_endpoint", "conditional"],
-            [*roles, *["native_endpoint"] * 4],
+            [*roles, *["native_endpoint"] * 12],
             ["source_clipped_terminal"] * 7,
-            ["intrinsic_refit"] * 5,
+            ["intrinsic_refit"] * 13,
             ["source_clipped_terminal", "native_endpoint"],
             ["intrinsic_refit", "source_clipped_terminal"],
             ["primary", "unknown_phase_kind"],

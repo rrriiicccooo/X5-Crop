@@ -655,6 +655,13 @@ Grid 始终可以生成一个待检验的默认 placement，但它不能仅凭�
 - 两个 residual-compatible、已获准参与竞争的解释若具有不同 Contact/Overlap topology，支持数、
   coverage 或残差分离不能取消其中一方；完整竞争扫描同样保留该反证。只有原权限与物理检查排除某个
   解释后，才可按既有规则判断剩余解释；不存在物理排除证据时保持 `adjacency_topology_ambiguous`。
+- 原生坐标获权、adjacency coverage 完整或 Contact 共用一条物理边，均不单独证明未绑定观察必属于
+  某个照片 ordinal。把另一解释的角色映射或 source W 移入当前解释，不能构成物理反证。稀疏 Grid
+  需要独立锚点与序号关联闭合；已有较完整原生约束仍须核验整组联合不相容，不能只比较代表点。
+  每份竞争解释分别检查自身 direct-role authority、coverage、continuity 与 Cross 权限；`unresolved`
+  只表示关系尚未闭合，不能当作已排除。预算通过同样只证明给定解释下的误差边界，不证明 topology
+  正确。跨 phase／topology 的共同输出须满足第 10 节完整竞争集合合同；仅一对保护范围能放入固定
+  窗口是必要条件，不授予共同输出权限。
 - Holder 长轴中心不参与 phase。省略 count 也不提供居中权限。
 - Format/count 可以定义尺子的刻度和 ordinal，但不能知道尺子应放在 TIFF 的哪一个像素；absolute phase
   必须来自直接 outer、START/END 或其它独立 anchor。
@@ -1638,7 +1645,7 @@ source W，也不清除原失败。Canonical 部分最多尝试 primary 与两�
 不能选择没有完整 footprint 的方案，也不因此晋升 runner。报告和黄金分析只读取这些同次 runtime facts，不重新求解几何。物化次数与实际逐 slot
 输出评估次数进入工作量 receipt，分别不超过 3 与全部保留 placement 的 slot 总数。
 黄金逐候选标签仍由唯一方向性 comparator 产生；保留集合中没有安全候选，不能外推为所有潜在裁切均不可用。
-第 11 节的独立 phase Review 记录另计，保留集合总上限为十七份，不能进入 canonical selection。
+第 11 节的独立 phase Review 记录另计，保留集合总上限为三十三份，不能进入 canonical selection。
 Gold record 在同一 source SHA、format/count 身份下保存每份 placement ID、canonical 或独立 Review 角色、实际
 footprint、typed generation failure 与带 physical frame ID 的逐帧诊断。集合按 task 计数，不将不同 count
 的同源任务混成一个答案；多正例不归一化，unavailable 不产生负例。可用但有 placement 歧义的统计只消费
@@ -2149,18 +2156,21 @@ validator 位于 `tools/regression/`，不进入用户 standalone。Development 
 Broad 原子与关联、Cross line／family receipt 共用 typed 解码，核对精确字段和数值类型，拒绝布尔值
 冒充数值；完整原始成员、数值、权限和资源重放仍由各证据 owner 独立核验。
 
-每条 lane 可另存一份 `independent_phase_review`，含最多十四份完整解释。它属于固定 `review_only` scope，独立于 canonical
+每条 lane 可另存一份 `independent_phase_review`，含最多三十份完整解释。它属于固定 `review_only` scope，独立于 canonical
 competition、alternatives、source proposal、共同 H、selected output 与两级 Gate；普通与 development
-报告保存相同的完整记录。黄金保留集合上限为十七份，原 canonical 两份与 conditional 一份的合同不变。
-记录按 `native_endpoint → source_clipped_terminal → intrinsic_refit` 排序，各自上限为四、六、四份。
+报告保存相同的完整记录。黄金保留集合上限为三十三份，原 canonical 两份与 conditional 一份的合同不变。
+记录按 `native_endpoint → source_clipped_terminal → intrinsic_refit` 排序，各自上限为十二、六、十二份。
 
 原生端点记录在既有 phase authority projection 池压缩前单次扫描选出：成功 projection 取其 output fit，失败
 取原 input fit 与原失败 projection；首末 Frame 各须至少有一条相同 role/observation identity 的原始
-`source_wide_edge | aggregate_union` 正 basis。优先具有 `outer_material_boundary` 的终端事实；同类中先保留
-已完成 authority projection 的 output，避免失败 input 中未获角色支持的绑定仅凭数量压过完整投影；再使用原
-`_rank`，完整键相同保留先出现的记录。原 `contradicted` 状态、所有反证与完整联合状态均保留，不授予
-角色或 Grid 权限。首 Frame 的 START/END 与末 Frame 的 START/END 构成四个固定角色类；每类使用上述键
-独立保留首个最大值，类顺序为 START→START、START→END、END→START、END→END。一份解释可以覆盖多类；
+`source_wide_edge | aggregate_union` 正 basis。原几何依据分别为：成功且不带校准 Grid state 的
+`direct_native`、成功且带校准 Grid state 的 `calibrated_nominal_grid`、投影已终止的 `failed_input`。
+先按成功状态判定；失败输入即使带 Grid state 也只能进入失败组。三组不能互相覆盖，未获权绑定不增加
+组别或权限。每组内优先具有 `outer_material_boundary` 的终端事实，再使用原 `_rank`，完整键相同保留
+先出现的记录。原 `contradicted` 状态、所有反证与完整联合状态均保留，不授予角色或 Grid 权限。
+首 Frame 的 START/END 与末 Frame 的 START/END 构成四个固定角色类；三种依据各保留这四类，共十二类。
+每类使用上述键独立保留首个最大值，先按上述依据顺序，再按 START→START、START→END、END→START、END→END。
+一份解释可以覆盖同组多类；
 只按完整 fit、projection、residual 与端点事实身份去重，几何相近但原投影不同的解释分别保留。
 同模板跨 pass 每类只比较 prior/current 两份完整记录；不同模板不携带。所有类均保留原歧义，不挑选自动输出。
 
@@ -2183,7 +2193,7 @@ W/gap/pitch 交集，单次调用原 `_fit_seed`；全部保留绑定均为 requ
 输出须保持精确 role/observation 集合和关系。原 compose 失败、原 projection、全部 validation-only
 事实及相对于新 model full interval 的冲突均保存；残差不相容也只作 Review 诊断，不宣称 authority
 projection 成功。不具备 intrinsic 或 validation-only 集合、关系依赖退出绑定、拟合失败或身份改变时，
-保存 typed failure。每个原生解释至多一次，共至多四次；源截断类不触发此重拟合。
+保存 typed failure。每个原生解释至多一次，共至多十二次；源截断类不触发此重拟合。
 
 独立提案用原 frame spec 和 scan-canvas axis scales 新建初始 source W/H，不继承 canonical 校准。
 仅消费既有 Cross input 中 `DIRECT` binding；原 fixed H/center 必须等于初始 H，避免重新解释依赖校准 H
@@ -2253,13 +2263,15 @@ direct-role 与 global-lattice 评估。有条件 Cross 提案最多增加一份
 lattice authority。不新增像素 query 或 phase 搜索；包括第三份提案在内的全部 footprint projection、
 物化和 output evaluation 由同一 receipt 逐次计数。
 独立 phase Review 使用自己的 receipt：既有 projection record 数 M、角色数 R 的原生分类工作为 O(MR)，
-四个角色类的分类、比较、完整身份去重分别计数；保留状态与临时索引为 O(4R)，same-template carry 每类
+每条记录只进入一种依据、至多四个角色类；分类、比较、完整身份去重分别计数。保留状态与临时索引
+为 O(12R)，same-template carry 每类
 最多比较 prior/current 两份。每份解释最多一次 Cross 调用，沿用原 4096-fit 上限；compose/projection
 各最多一次，extreme evaluations 不超过 `130F + 64`，output/budget 各不超过 F，placement 特征为 30 项。
 源截断分类同为 O(MR)，保留与索引为 O(6R)，每条至多两个类成员、carry 至多 `6(M−1)` 次完整比较，
-完整去重至多 `15(2M−1)` 次；原 rank 重算与全部事实检查单独计数。固定重拟合至多四次，每次
+完整去重至多 `15(2M−1)` 次；原 rank 重算与全部事实检查单独计数。原生十二类 carry 至多
+`12(M−1)` 次，完整去重至多 `66(2M−1)` 次；固定重拟合至多十二次，每次
 `_fit_seed` 一次、内部 matching 至多四轮，重建既有 observations/pairs 与完整反证的工作及 O(N+P+R)
-临时量保存独立 receipt。完整解释的 Cross/compose/projection 各至多十四次；分类工作只记录一次，
+临时量保存独立 receipt。完整解释的 Cross/compose/projection 各至多三十次；分类工作只记录一次，
 各构建单独保存 receipt。峰值还计入前序完整提案与重拟合的保留结构。
 没有新像素、query、注册或搜索组合。独立失败与工作量不写回 canonical receipt；
 临时内存仍受同一 source 总上限约束。
@@ -2385,7 +2397,7 @@ Linux开发/CI使用`renameat2(RENAME_NOREPLACE)`。目标在最终检查之后�
 | `photo_geometry/template_output.py`、`output_model.py` | JointPlacementEnvelope、实际 sequence constraint basis/identity、固定 source W/H 身份、完整 mandatory、固定 requested、source clipping 与可见内容包含；enclosing risk 只作诊断 |
 | `photo_geometry/template_runtime_model.py`、`detector.py` | `TemplatePlacementProposal` / `TemplateSourceProposal`、eligibility/selection handoff 与顶层编排；proposal 不授权正式输出 |
 | `photo_geometry/template_source_domain.py` | 已登记 lane 与真实 TIFF 外缘的 phase 源域及终端截断判定；不授予裁切权限 |
-| `photo_geometry/template_native_retention.py`、`template_source_clipped.py` | 从既有 projection 记录按四个原生端点类与六个源截断类保留完整解释及分类工作量 |
+| `photo_geometry/template_native_retention.py`、`template_source_clipped.py` | 从既有 projection 记录按十二个原生依据/端点类与六个源截断类保留完整解释及分类工作量 |
 | `photo_geometry/template_intrinsic_review_refit.py`、`template_phase_review.py` | 原 compose 失败后的单次固定 intrinsic 重拟合、完整反证、独立初始 source/Cross Review 上下文与有界物化；不参与 canonical competition 或 Gate |
 | `photo_geometry/template_gate.py` | selected-only CandidateGate facts；不生成、选择或删除 proposal |
 | `x5crop/detection/output_deskew.py` | approved-only 6–24 trace、role-free、candidate-independent 的可选输出角度 observation |

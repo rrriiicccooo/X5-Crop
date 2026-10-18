@@ -25,6 +25,9 @@ from x5crop.detection.photo_geometry.template_measurement_plan import (
     compile_template_measurement_plan,
 )
 from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
+from x5crop.detection.photo_geometry.template_phase_model import NATIVE_PHASE_RETENTION_CLASS_COUNT
+from x5crop.detection.photo_geometry.template_phase_review import MAX_INDEPENDENT_PHASE_REVIEWS
+from x5crop.detection.photo_geometry.template_source_clipped import SOURCE_CLIPPED_CLASS_COUNT
 from x5crop.detection.source_core import SourceStripValidationDomain
 from x5crop.domain import Box
 from x5crop.formats import (
@@ -979,13 +982,14 @@ def _retained_placement_summary(records: Sequence[dict[str, Any]]) -> dict[str, 
         canonical_roles = roles[:independent_start]
         independent_roles = roles[independent_start:]
         if (
-            len(labels) > 17 or len(set(ids)) != len(ids)
+            len(labels) > 3 + MAX_INDEPENDENT_PHASE_REVIEWS or len(set(ids)) != len(ids)
             or independent_roles != [
                 kind for kind in independent_kinds
                 for role in independent_roles if role == kind
             ]
             or any(independent_roles.count(kind) > limit for kind, limit in
-                   zip(independent_kinds, (4, 6, 4), strict=True))
+                   zip(independent_kinds, (NATIVE_PHASE_RETENTION_CLASS_COUNT,
+                       SOURCE_CLIPPED_CLASS_COUNT, NATIVE_PHASE_RETENTION_CLASS_COUNT), strict=True))
             or any(not isinstance(identity, str) or not identity for identity in ids)
             or canonical_roles
             not in ([], ["primary"], ["runner"], ["primary", "runner"],

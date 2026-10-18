@@ -733,6 +733,20 @@ NATIVE_ENDPOINT_ROLE_CLASSES = ((0, 0), (0, 1), (1, 0), (1, 1))
 NATIVE_ENDPOINT_ROLE_CLASS_COUNT = len(NATIVE_ENDPOINT_ROLE_CLASSES)
 
 
+class NativeEndpointGeometryBasis(str, Enum):
+    """Distinct geometry contracts must not compete for one Review slot."""
+
+    DIRECT_NATIVE = "direct_native"
+    CALIBRATED_NOMINAL_GRID = "calibrated_nominal_grid"
+    FAILED_INPUT = "failed_input"
+
+
+NATIVE_ENDPOINT_GEOMETRY_BASES = tuple(NativeEndpointGeometryBasis)
+NATIVE_PHASE_RETENTION_CLASS_COUNT = (
+    NATIVE_ENDPOINT_ROLE_CLASS_COUNT * len(NATIVE_ENDPOINT_GEOMETRY_BASES)
+)
+
+
 def _validate_native_projection_fit_mapping(
     fit: SequenceFit,
     projection: PhaseCandidateAuthorityProjection,
@@ -797,6 +811,7 @@ class NativeEndpointPhaseDiagnostic:
     residual_compatible: bool
     terminal_role_indices: tuple[int, ...]
     selection_basis: NativeEndpointSelectionBasis
+    geometry_basis: NativeEndpointGeometryBasis = field(init=False)
 
     def __post_init__(self) -> None:
         if (
@@ -817,6 +832,13 @@ class NativeEndpointPhaseDiagnostic:
             raise ValueError("native endpoint phase diagnostic is invalid")
 
         _validate_native_projection_fit_mapping(self.fit, self.projection)
+        object.__setattr__(self, "geometry_basis", (
+            NativeEndpointGeometryBasis.FAILED_INPUT
+            if not self.projection.eligible
+            else NativeEndpointGeometryBasis.CALIBRATED_NOMINAL_GRID
+            if self.fit.calibrated_nominal_grid_fit_state is not None
+            else NativeEndpointGeometryBasis.DIRECT_NATIVE
+        ))
 
         facts = self.projection.input_direct_role_authority.facts
         facts_by_identity = {
@@ -875,19 +897,13 @@ class NativeEndpointPhaseDiagnostic:
 
     @property
     def selection_key(self) -> tuple[object, ...]:
-        """Prefer a completed projection within the same terminal class.
-
-        A failed raw input may still contain unsupported bindings. Their
-        contribution to the original rank must not displace an explanation
-        whose complete authority projection already succeeded.
-        """
+        """Rank only within one geometry basis and terminal role class."""
 
         return (
             int(
                 self.selection_basis
                 == NativeEndpointSelectionBasis.OUTER_MATERIAL_TERMINAL
             ),
-            int(self.projection.eligible),
             *self.rank,
         )
 
@@ -908,20 +924,26 @@ class NativeEndpointPhaseDiagnostic:
             and last_roles[last].role_index in self.terminal_role_indices
         )
 
+    @property
+    def retention_class_memberships(self) -> tuple[int, ...]:
+        offset = (
+            NATIVE_ENDPOINT_GEOMETRY_BASES.index(self.geometry_basis)
+            * NATIVE_ENDPOINT_ROLE_CLASS_COUNT
+        )
+        return tuple(offset + index for index in self.role_class_memberships)
+
 
 @dataclass(frozen=True)
 class NativePhaseRetention:
-    """Four role-class representatives with complete-diagnostic deduplication.
+    """Twelve geometry/role representatives with complete-diagnostic deduplication.
 
-    Class indices are SS, SE, ES, EE. Diagnostics appear in the order of their
+    Each geometry basis has SS, SE, ES, EE. Diagnostics appear in the order of their
     first class reference. Counts describe producer operations; schema checks
-    separately remain bounded by four complete records.
+    separately remain bounded by twelve complete records.
     """
 
     diagnostics: tuple[NativeEndpointPhaseDiagnostic, ...] = ()
-    role_class_indices: tuple[int | None, int | None, int | None, int | None] = (
-        None, None, None, None,
-    )
+    role_class_indices: tuple[int | None, ...] = (None,) * NATIVE_PHASE_RETENTION_CLASS_COUNT
     record_scan_count: int = 0
     fact_check_count: int = 0
     class_membership_count: int = 0
@@ -947,20 +969,20 @@ class NativePhaseRetention:
             for diagnostic in self.diagnostics
         ):
             raise TypeError("native phase retention diagnostics are invalid")
-        if len(self.diagnostics) > NATIVE_ENDPOINT_ROLE_CLASS_COUNT:
-            raise ValueError("native phase retention exceeds four diagnostics")
+        if len(self.diagnostics) > NATIVE_PHASE_RETENTION_CLASS_COUNT:
+            raise ValueError("native phase retention exceeds twelve diagnostics")
         if (
             not isinstance(self.role_class_indices, tuple)
-            or len(self.role_class_indices) != NATIVE_ENDPOINT_ROLE_CLASS_COUNT
+            or len(self.role_class_indices) != NATIVE_PHASE_RETENTION_CLASS_COUNT
         ):
-            raise ValueError("native phase retention requires four role classes")
+            raise ValueError("native phase retention requires twelve geometry/role classes")
         referenced: set[int] = set()
         for role_class, index in enumerate(self.role_class_indices):
             if index is None:
                 continue
             if type(index) is not int or not 0 <= index < len(self.diagnostics):
                 raise ValueError("native phase retention class index is invalid")
-            if role_class not in self.diagnostics[index].role_class_memberships:
+            if role_class not in self.diagnostics[index].retention_class_memberships:
                 raise ValueError("native phase retention invented a role class")
             if index not in referenced:
                 if index != len(referenced):
@@ -973,6 +995,9 @@ class NativePhaseRetention:
                 raise ValueError("native phase retention repeats a complete diagnostic")
             if diagnostic.fit.template != self.diagnostics[0].fit.template:
                 raise ValueError("native phase retention mixed template identities")
+            if any(self.role_class_indices[member] is None
+                   for member in diagnostic.retention_class_memberships):
+                raise ValueError("native phase retention lost a represented class")
         if any(
             not isinstance(value, int)
             or isinstance(value, bool)
@@ -1000,12 +1025,13 @@ class NativePhaseRetention:
             or bool(self.diagnostics) != bool(self.class_membership_count)
         ):
             raise ValueError("native phase retention class work bound is invalid")
-        if self.carry_comparison_count > 4 * (self.record_scan_count - 1):
+        if self.carry_comparison_count > NATIVE_PHASE_RETENTION_CLASS_COUNT * (self.record_scan_count - 1):
             raise ValueError("native phase retention carry bound is invalid")
         # A pool build uses at least one scanned record. A binary carry adds
-        # one build; at most 2*M-1 builds therefore contribute at most six
+        # one build; at most 2*M-1 builds therefore contribute at most 66
         # complete-identity comparisons each to an accumulated receipt.
-        if self.deduplication_comparison_count > 6 * (2 * self.record_scan_count - 1):
+        deduplication_bound = NATIVE_PHASE_RETENTION_CLASS_COUNT * (NATIVE_PHASE_RETENTION_CLASS_COUNT - 1) // 2
+        if self.deduplication_comparison_count > deduplication_bound * (2 * self.record_scan_count - 1):
             raise ValueError("native phase retention deduplication bound is invalid")
         if any(self.role_count != len(item.fit.role_bindings) for item in self.diagnostics):
             raise ValueError("native phase retention diagnostic role bound is invalid")

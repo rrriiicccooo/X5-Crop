@@ -38,6 +38,7 @@ from .template_output import (
 from .template_phase_model import (
     NativeEndpointPhaseDiagnostic,
     NativePhaseRetention,
+    NATIVE_PHASE_RETENTION_CLASS_COUNT,
 )
 from .template_intrinsic_review_refit import (
     IntrinsicPhaseRefitResult,
@@ -47,6 +48,7 @@ from .template_intrinsic_review_refit import (
 from .template_source_clipped import (
     SourceClippedPhaseDiagnostic,
     SourceClippedPhaseRetention,
+    SOURCE_CLIPPED_CLASS_COUNT,
 )
 from .template_placement import (
     FormatPlacement,
@@ -64,6 +66,9 @@ from .source_geometry import SourceScanGeometry
 # Conservative receipt proxy for one temporary output geometry record.  The
 # value is a fixed per-slot accounting constant, not a Cross search bound.
 _REVIEW_OUTPUT_TEMPORARY_BYTES = 4096
+MAX_INDEPENDENT_PHASE_REVIEWS = (
+    2 * NATIVE_PHASE_RETENTION_CLASS_COUNT + SOURCE_CLIPPED_CLASS_COUNT
+)
 
 
 def _review_peak_temporary_bound(
@@ -879,10 +884,10 @@ class IndependentPhaseReviewPortfolio:
             raise TypeError("independent phase portfolio source retention is invalid")
         if (
             not isinstance(self.reviews, tuple)
-            or not 1 <= len(self.reviews) <= 14
+            or not 1 <= len(self.reviews) <= MAX_INDEPENDENT_PHASE_REVIEWS
             or any(not isinstance(item, IndependentPhaseReview) for item in self.reviews)
             or not isinstance(self.intrinsic_refits, tuple)
-            or len(self.intrinsic_refits) > 4
+            or len(self.intrinsic_refits) > NATIVE_PHASE_RETENTION_CLASS_COUNT
             or any(not isinstance(item, IntrinsicPhaseRefitResult) for item in self.intrinsic_refits)
         ):
             raise ValueError("independent phase portfolio exceeds its typed attempts")

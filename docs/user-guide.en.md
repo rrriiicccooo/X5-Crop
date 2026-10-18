@@ -47,6 +47,9 @@ Position anchors, common width, and pitch vary together while retaining the comp
 boundaries. Distinct legal contact or overlap interpretations still require review; more local support alone does not
 exclude another interpretation. When position or contact relations remain ambiguous, each interpretation keeps its own
 native boundaries and allowed position ranges for review.
+Reports retain direct-boundary proposals, calibrated-template proposals, and diagnostic proposals blocked by evidence,
+with each proposal's geometric basis and unresolved reason. Counterevidence remains attached to diagnostic proposals,
+which still require manual review.
 
 Acceptance concerns the final crops: correct slot correspondence, no missing or duplicate photos, full protection of
 confirmed content, and compliance with fixed dimensions, source bounds, and risk budgets. Internal boundary names need
