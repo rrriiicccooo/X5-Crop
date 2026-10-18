@@ -1452,6 +1452,7 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             phase_template(4),
             separator_bands=bands,
             contact_edge_observations=contacts,
+            holder_span_px=FiniteInterval(35.0, 485.0),
         )
         self.assertEqual(phase.status, PhaseFitStatus.RESOLVED)
         phase = self._with_selected_width_prerequisites(

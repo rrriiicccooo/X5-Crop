@@ -849,6 +849,23 @@ class TemplateOutputSupportContractTest(unittest.TestCase):
             support_span_px=248.0,
             support_position_uncertainty_px=2.0,
         )
+        calibration = EnclosingSupportApertureCalibrationSpec(
+            calibration_id="unit-enclosing-center-envelope",
+            development_gold_cohort_sha256=DEVELOPMENT_GOLD_CALIBRATION_COHORT_SHA256,
+            development_observation_set_sha256="0" * 64,
+            eligibility_revision="unit-envelope-v1",
+            minimum_center_offset_ratio=-0.007,
+            maximum_center_offset_ratio=0.010,
+            development_source_count=3,
+            development_task_count=3,
+            outward_rounding_ratio=0.001,
+        )
+        placement = replace(
+            placement,
+            enclosing_support_aperture_authority=derive_enclosing_support_aperture_authority(
+                placement.cross_fit, calibration=calibration,
+            ),
+        )
         output = output_footprint_from_template_placement(
             placement,
             project_format_placement(placement),
