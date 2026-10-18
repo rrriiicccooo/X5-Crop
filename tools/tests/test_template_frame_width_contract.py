@@ -1160,9 +1160,13 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
         )
 
         preserved = apply_placement_source_frame_width(phase, authority)
-        self.assertEqual(
+        assert preserved.best is not None
+        self.assertEqual(preserved.best.role_bindings, fit.role_bindings)
+        for actual, expected in zip(
             preserved.best.model_role_positions_px, fit.model_role_positions_px,
-        )
+            strict=True,
+        ):
+            self.assertAlmostEqual(actual, expected, delta=1.0e-9)
         self.assertEqual(
             preserved.best.pitch_fit.canonical_frame_width_px,
             fit.pitch_fit.canonical_frame_width_px,
