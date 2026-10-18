@@ -12,6 +12,7 @@ from x5crop.detection.photo_geometry.template_lattice_authority import direct_ro
 from x5crop.detection.photo_geometry.template_model import (
     ContactRelation,
     LatticeParameterFitBasis,
+    SequenceBindingUse,
     SeparatorRelationKind,
     SeparatorRelation,
 )
@@ -173,6 +174,46 @@ class TemplateNominalGridContractTest(unittest.TestCase):
                 retained_direct_constraint_rank=2,
             )
 
+    def test_native_width_cancels_the_same_uncertain_local_prefix(self) -> None:
+        template = replace(
+            phase_template(3),
+            frame_width_px=PositiveInterval(90.0, 110.0),
+            pitch_px=PositiveInterval(110.0, 130.0),
+        )
+        shared = ObservationId("prefix:shared")
+        relation = ContactRelation(
+            relation_ordinal=1,
+            contact_observation_id=ObservationId("prefix:contact"),
+            physical_edge_id=shared, shared_edge_observation_id=shared,
+            delta_interval_px=FiniteInterval(-40.0, 0.0),
+            canonical_delta_px=-20.0, supporting_observation_ids=(shared,),
+        )
+        for direction in (1, -1):
+            selected = replace(template, direction=direction)
+            constraints = tuple(
+                NominalGridRoleConstraint(
+                    index, identity, direction * value,
+                    FiniteInterval.exact(direction * value),
+                )
+                for index, identity, value in (
+                    (1, shared, 140.0), (2, shared, 140.0),
+                    (4, ObservationId("prefix:last-start"), 260.0),
+                    (5, ObservationId("prefix:last-end"), 360.0),
+                )
+            )
+
+            envelope, _state = solve_calibrated_nominal_grid_envelope(
+                prior=calibrated_nominal_grid_prior(selected), template=selected,
+                integer_slot_offset=0, role_constraints=constraints,
+                relations=(relation,), phase_authority_px=None,
+                retained_direct_constraint_rank=3,
+            )
+
+            # Both sides contain the same prefix, in either scan direction.
+            with self.subTest(direction=direction):
+                self.assertEqual(envelope.frame_width_interval_px, FiniteInterval.exact(100.0))
+                self.assertEqual(envelope.role_intervals_px[0], FiniteInterval.exact(direction * 40.0))
+
     @staticmethod
     def _contact_anchor_fixture():
         template = phase_template(2)
@@ -320,6 +361,31 @@ class TemplateNominalGridContractTest(unittest.TestCase):
                     template=fit.template, integer_slot_offset=0,
                     role_constraints=selected_constraints, relations=relations,
                     phase_authority_px=None, retained_direct_constraint_rank=2,
+                )
+
+    def test_nominal_anchor_ledger_requires_its_native_phase_bindings(self) -> None:
+        fit, relation, constraints = self._contact_anchor_fixture()
+        _envelope, state = solve_calibrated_nominal_grid_envelope(
+            prior=calibrated_nominal_grid_prior(fit.template),
+            template=fit.template, integer_slot_offset=0,
+            role_constraints=constraints, relations=(relation,),
+            phase_authority_px=None, retained_direct_constraint_rank=2,
+        )
+        selected = replace(
+            fit, calibrated_nominal_grid_fit_state=state,
+            lattice_parameter_fit_basis=LatticeParameterFitBasis.CALIBRATED_NOMINAL_GRID,
+        )
+        first = selected.role_bindings[0]
+        assert first is not None
+        for binding in (
+            None,
+            replace(first, observation_id=ObservationId("other:native-anchor")),
+            replace(first, use=SequenceBindingUse.LOCAL_REFINEMENT),
+        ):
+            with self.subTest(binding=binding), self.assertRaisesRegex(ValueError, "anchor lost its native role binding"):
+                replace(
+                    selected, role_bindings=(binding, *selected.role_bindings[1:]),
+                    phase_support_coverage=1.0,
                 )
 
     def test_duplicate_sequence_bindings_keep_one_native_contact_interval(self) -> None:

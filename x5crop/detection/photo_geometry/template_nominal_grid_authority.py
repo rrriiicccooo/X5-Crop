@@ -576,6 +576,17 @@ def solve_calibrated_nominal_grid_envelope(
         prior_pitch = pitch_interval
         for left_index, left in enumerate(ordered_constraints):
             left_role = template.roles[left.role_index]
+            # Both roles share every advance before the left slot. Cancel
+            # that prefix symbolically before interval subtraction; treating
+            # its two appearances independently invents width/pitch freedom.
+            relative_prefixes = [FiniteInterval.exact(0.0)]
+            for slot_index in range(left_role.slot_index + 1, template.count):
+                interval = (
+                    local_intervals[slot_index - 1]
+                    if slot_index <= relation_count
+                    else FiniteInterval.exact(0.0)
+                )
+                relative_prefixes.append(add_interval(relative_prefixes[-1], interval))
             for right in ordered_constraints[left_index + 1 :]:
                 right_role = template.roles[right.role_index]
                 observed_difference = subtract_interval(
@@ -590,10 +601,7 @@ def solve_calibrated_nominal_grid_envelope(
                     right_role.slot_index - left_role.slot_index
                 )
                 local_difference = scale_interval(
-                    subtract_interval(
-                        prefix_intervals[right_role.slot_index],
-                        prefix_intervals[left_role.slot_index],
-                    ),
+                    relative_prefixes[right_role.slot_index - left_role.slot_index],
                     direction,
                 )
                 if pitch_coefficient:

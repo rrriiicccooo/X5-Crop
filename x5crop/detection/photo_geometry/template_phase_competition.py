@@ -166,6 +166,10 @@ def _unseparated_completion_competitor(
         # extend its required hull; continuity alone does not absorb either fact.
         if _state._continuous_state_is_absorbed(best.fit, fit):
             continue
+        if _state._topology_signature(best.fit) != _state._topology_signature(fit):
+            # More support for one mapping does not contradict another
+            # independently authorized contact/overlap topology.
+            return index
         support_count, coverage, count = bounds[index]
         if count == 1:
             if _clear_winner_basis(best, candidate) is None:
@@ -1319,6 +1323,8 @@ def _clear_winner_basis(
     right = runner.fit
     if best.residual_compatible and not runner.residual_compatible:
         return PhaseWinnerBasis.RESIDUAL_COMPATIBILITY
+    if _state._topology_signature(left) != _state._topology_signature(right):
+        return None
     if left.phase_support_count >= right.phase_support_count + 1:
         return PhaseWinnerBasis.INDEPENDENT_SUPPORT
     if (

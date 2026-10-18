@@ -119,8 +119,16 @@ class SourceClippedPhaseDiagnostic:
 
     @property
     def selection_key(self) -> tuple[object, ...]:
+        native_groups = {
+            self.fit.role_bindings[index].evidence_group_id
+            for index in _intrinsic_phase_roles(self.fit, self.projection)
+        }
         return (
             int(_outer_material_terminal(self.fit, self.projection)),
+            # Review retention must preserve the stronger native evidence
+            # even when the calibrated model cannot authorize it. Unsupported
+            # bindings and the two roles of a shared Contact add no groups.
+            len(native_groups),
             int(self.projection.eligible),
             *_rank(_BoundFit(self.fit, self.residual_compatible)),
         )

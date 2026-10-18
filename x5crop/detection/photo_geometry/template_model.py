@@ -1472,6 +1472,18 @@ class SequenceFit:
             raise ValueError("one physical edge cannot prove two contacts")
         nominal_state = self.calibrated_nominal_grid_fit_state
         if nominal_state is not None:
+            for index, identity in zip(
+                nominal_state.phase_anchor_role_indices,
+                nominal_state.phase_anchor_observation_ids,
+                strict=True,
+            ):
+                if (
+                    index >= len(self.role_bindings)
+                    or (binding := self.role_bindings[index]) is None
+                    or binding.observation_id != identity
+                    or binding.use != SequenceBindingUse.PHASE_ANCHOR
+                ):
+                    raise ValueError("nominal Grid anchor lost its native role binding")
             for identity, indices in nominal_grid_shared_anchor_roles(
                 nominal_state.phase_anchor_role_indices,
                 nominal_state.phase_anchor_observation_ids,

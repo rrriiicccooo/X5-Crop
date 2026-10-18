@@ -43,6 +43,9 @@ counterevidence.
 
 When the allowed common-width interval narrows, inferred boundaries use the updated range. Placement ambiguity and
 competing interpretations still require every safety check.
+Position anchors, common width, and pitch vary together while retaining the complete measurement ranges of direct
+boundaries. Distinct legal contact or overlap interpretations still require review; more local support alone does not
+exclude another interpretation.
 
 Acceptance concerns the final crops: correct slot correspondence, no missing or duplicate photos, full protection of
 confirmed content, and compliance with fixed dimensions, source bounds, and risk budgets. Internal boundary names need

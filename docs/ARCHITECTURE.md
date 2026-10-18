@@ -652,6 +652,9 @@ Grid 始终可以生成一个待检验的默认 placement，但它不能仅凭�
 
 - 连续小误差保存在一个 placement 的区间中。
 - 不同 ordinal mapping 或相隔明显的 phase 是离散 placements，保留 winner/runner，绝不平均。
+- 两个 residual-compatible、已获准参与竞争的解释若具有不同 Contact/Overlap topology，支持数、
+  coverage 或残差分离不能取消其中一方；完整竞争扫描同样保留该反证。只有原权限与物理检查排除某个
+  解释后，才可按既有规则判断剩余解释；不存在物理排除证据时保持 `adjacency_topology_ambiguous`。
 - Holder 长轴中心不参与 phase。省略 count 也不提供居中权限。
 - Format/count 可以定义尺子的刻度和 ordinal，但不能知道尺子应放在 TIFF 的哪一个像素；absolute phase
   必须来自直接 outer、START/END 或其它独立 anchor。
@@ -1253,6 +1256,13 @@ END/START 两个 role 保留同一 shared edge ID；两项对应关系都须保�
 和完整区间；无 contact、角色不相邻、重复超过两项或同 ID 坐标不一致均拒绝。Evidence 的 anchor ledger
 必须与同一 fit state 一致。只有有效约束的联合不可行结果才映射为 `calibrated_nominal_grid_conflict`；
 schema、身份校验或求解器错误必须传播为实际错误，不能伪装成物理冲突。
+输出联合投影必须重放同一 fit state 中全部 phase anchor 的完整 native interval，并保留共同 scale、
+W/pitch 与 measured-gap 约束；model/native 的边际 hull 不能替代这些原生联合约束。每个 anchor 的
+role、observation ID 与 `PHASE_ANCHOR` binding 均须一致，缺失、换绑或降为 local 时拒绝该状态。
+这些约束属于原 Nominal Grid，不增加 direct rank、global-lattice constraint ID、solver 次数或物理观察；
+原生双侧 Frame 的真实局部 departure 仍由各自完整区间与原输出保护核算，不拉回精确 Grid。
+原生 role 差分先消去双方共用的 local prefix，再传播两者之间的 advance 区间；同一前缀不能作为两份
+独立不确定性重复相减。单次配对投影仍最多四轮、`O(R²)` 工作和 `O(R)` 临时区间，不新增求解器调用。
 Nominal 投影还须核验全部保留的 native 双边 Frame：其完整原生宽度区间若与完整 compiled physical W
 范围不相交，即使 Grid 的 LP 非空也属于物理冲突，不能取得资格后才在 placement 组合时丢失提案。
 该检查不使用更窄的 source W，不把 native 代表点当成精确约束，也不要求各 Frame 原生宽度相等；区间
@@ -2159,7 +2169,10 @@ competition、alternatives、source proposal、共同 H、selected output 与两
 源边截断；原 `supported` 的 `source_wide_edge | aggregate_union` 事实须与有效 fit 中同一
 `PHASE_ANCHOR` role/observation 绑定对应，原 direct constraint rank 须可重算且为 1–3。
 首 START 与末 END 各按原 rank 1、2、3 构成六个固定类；同时截断可属于两类。每类依次比较 intrinsic
-outer terminal、原 projection 是否成功与原 `_rank`，相同键保留首条。完整记录按类顺序去重；
+outer terminal、获权 intrinsic phase anchor 的独立 evidence-group 数、原 projection 是否成功与原
+`_rank`，相同键保留首条。较完整的直接事实不能只因 calibrated model 投影失败而被较弱的成功投影
+替换；unsupported/local binding 与同一 Contact 的双角色不增加独立组。该顺序只决定 Review 诊断，
+不重新排序 canonical candidate、不清除失败或取得资格。完整记录按类顺序去重；
 跨 pass 只携带同模板、同源域的对应类。Rank 0、仅 local、仅 partial 或仅矛盾事实不能取得该保留资格；
 混合记录中的反证与 projection 失败保持，不恢复任何权限。
 

@@ -187,7 +187,10 @@ class CompletionGuardTests(unittest.TestCase):
         def calibrated(bound, prior):
             return replace(bound, fit=replace(bound.fit,
                 lattice_parameter_fit_basis=LatticeParameterFitBasis.CALIBRATED_NOMINAL_GRID,
-                calibrated_nominal_grid_fit_state=replace(state, prior_id=prior)))
+                calibrated_nominal_grid_fit_state=replace(
+                    state, prior_id=prior,
+                    phase_anchor_observation_ids=(bound.fit.role_bindings[0].observation_id,),
+                )))
         best = calibrated(part(self.full, 'A', (0,1,3,5,7)), 'best')
         B = calibrated(part(self.full, 'B', (0,1)), 'other')
         B2 = calibrated(part(self.full, 'B', (0,3)), 'other')

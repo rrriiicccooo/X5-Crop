@@ -364,6 +364,17 @@ def _sequence_system(
                         constraint.value_interval_px,
                     )
                 )
+    if nominal_state is not None:
+        # Nominal Grid was solved against these native absolute anchors.
+        # Their model/native marginal hulls do not retain that joint
+        # constraint, especially across a measured local advance. Reuse the
+        # same full intervals without adding direct rank or moving any edge.
+        for role_index in nominal_state.phase_anchor_role_indices:
+            binding = sequence.role_bindings[role_index]
+            assert binding is not None
+            authority_constraints.append(
+                (roles[role_index], binding.full_position_interval_px)
+            )
     constraints = tuple(
         (expression, interval)
         for expression, interval in zip(

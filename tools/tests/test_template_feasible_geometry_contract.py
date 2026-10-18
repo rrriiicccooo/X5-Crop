@@ -395,6 +395,66 @@ class TemplateFeasibleGeometryContractTest(unittest.TestCase):
             },
         )
 
+    def test_nominal_native_anchors_bound_an_unobserved_frame(self) -> None:
+        template = replace(
+            _template(3),
+            frame_width_px=PositiveInterval(90.0, 110.0),
+            pitch_px=PositiveInterval(110.0, 130.0),
+        )
+        sequence = _sequence(template, missing=(1, 2, 3, 5))
+        bindings = tuple(
+            None if binding is None else replace(
+                binding,
+                full_position_interval_px=FiniteInterval(
+                    binding.canonical_position_px - 1.0,
+                    binding.canonical_position_px + 1.0,
+                ),
+            )
+            for binding in sequence.role_bindings
+        )
+        intervals = tuple(
+            FiniteInterval(position - 50.0, position + 50.0)
+            for position in sequence.model_role_positions_px
+        )
+        sequence = replace(
+            sequence,
+            phase_lattice_fit=replace(
+                sequence.phase_lattice_fit,
+                cycle_phase_interval_px=FiniteInterval(95.0, 105.0),
+                absolute_phase_interval_px=FiniteInterval(95.0, 105.0),
+            ),
+            role_bindings=bindings,
+            lattice_parameter_fit_basis=LatticeParameterFitBasis.CALIBRATED_NOMINAL_GRID,
+            calibrated_nominal_grid_fit_state=CalibratedNominalGridFitState(
+                prior_id="nominal-grid:two-native-anchors",
+                scale_px_per_mm=PositiveInterval(1.8, 2.2),
+                frame_width_mm=FiniteInterval.exact(50.0),
+                pitch_mm=FiniteInterval.exact(60.0),
+                canonical_scale_px_per_mm=2.0,
+                phase_anchor_role_indices=(0, 4),
+                phase_anchor_observation_ids=(
+                    ObservationId("sequence:0"), ObservationId("sequence:4"),
+                ),
+                retained_direct_constraint_rank=2,
+            ),
+            model_role_intervals_px=intervals,
+            model_full_role_intervals_px=intervals,
+        )
+        placement = _compose(template, sequence, _cross(template, direction=_direction()))
+
+        projection = project_format_placement(placement)
+
+        # The middle START is the average of the two native START anchors.
+        # Their complete intervals must constrain the same phase/pitch state;
+        # model/native marginal hulls alone admit impossible combinations.
+        self.assertEqual(
+            self._sequence_interval(projection, 1, 0),
+            FiniteInterval(219.0, 221.0),
+        )
+        self.assertEqual(placement.sequence_fit.role_bindings, bindings)
+        self.assertIsNone(placement.global_lattice_authority)
+        self.assertEqual(projection.global_lattice_constraint_ids, ())
+
     def test_fixed_height_keeps_top_and_bottom_correlated(self) -> None:
         template = _template(1)
         cross = replace(

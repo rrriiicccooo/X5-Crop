@@ -231,6 +231,32 @@ class SourceClippedRetentionContractTests(unittest.TestCase):
         outer = _record(high, failed=True, outer=(0,))
         self.assertIs(_select((first, outer)).diagnostics[0].projection, outer[2])
 
+    def test_supported_native_groups_precede_projection_success(self):
+        eligible = _record(_fit((0, 1, 2)))
+        stronger_native = _record(
+            _fit((0, 1, 2, 3)), failed=True, raw_compatible=True,
+        )
+        selected = _select((eligible, stronger_native))
+        self.assertIs(selected.diagnostics[0].projection, stronger_native[2])
+        self.assertFalse(selected.diagnostics[0].projection.eligible)
+
+        # An unsupported extra binding adds no native evidence and cannot
+        # displace the completed projection just by inflating raw support.
+        weak_extra = _record(
+            _fit((0, 1, 2, 3)), failed=True, supported=(0, 1, 2),
+            intrinsic=(0, 1, 2), raw_compatible=True,
+        )
+        self.assertIs(_select((weak_extra, eligible)).diagnostics[0].projection, eligible[2])
+
+        correlated = _fit((0, 1, 2, 3))
+        bindings = list(correlated.role_bindings)
+        bindings[3] = replace(bindings[3], evidence_group_id=bindings[2].evidence_group_id)
+        correlated = _record(
+            replace(correlated, role_bindings=tuple(bindings)),
+            failed=True, raw_compatible=True,
+        )
+        self.assertIs(_select((correlated, eligible)).diagnostics[0].projection, eligible[2])
+
     def test_carry_checks_domains_context_and_preserves_prior_key_ties(self):
         first = _select((_record(_fit((0,), residual=9.0)),))
         second = _select((_record(_fit((0,), residual=1.0)),))

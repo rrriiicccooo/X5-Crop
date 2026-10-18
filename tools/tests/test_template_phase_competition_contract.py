@@ -19,6 +19,7 @@ from x5crop.detection.photo_geometry.observation_types import (
     SeparatorMaterialRegionState,
 )
 from x5crop.detection.photo_geometry.template_model import (
+    ContactRelation,
     OverlapRelation,
     SeparatorRelationKind,
     SeparatorRelation,
@@ -26,7 +27,11 @@ from x5crop.detection.photo_geometry.template_model import (
     TemplateSearchReceipt,
     TemplateSpec,
 )
-from x5crop.detection.photo_geometry.template_phase_competition import fit_template_phase
+from x5crop.detection.photo_geometry.template_phase_competition import (
+    _clear_winner_basis,
+    _unseparated_completion_competitor,
+    fit_template_phase,
+)
 from x5crop.detection.photo_geometry.template_phase_state import (
     _merge_continuous_placement,
     _same_continuous_placement,
@@ -48,6 +53,40 @@ from tools.tests.phase_test_support import _continuity_for_residual
 
 
 class TemplatePhaseCompetitionContractTest(unittest.TestCase):
+    def test_supported_contact_cannot_be_rejected_by_support_totals(self) -> None:
+        spec = template(2)
+        normal = placement_sequence(spec)
+        shared = normal.role_bindings[1]
+        assert shared is not None
+        contact = replace(
+            normal,
+            role_bindings=(normal.role_bindings[0], shared, shared, None),
+            model_role_positions_px=(100.0, 200.0, 200.0, 300.0),
+            model_role_intervals_px=tuple(FiniteInterval.exact(x) for x in (100.0, 200.0, 200.0, 300.0)),
+            model_full_role_intervals_px=tuple(FiniteInterval.exact(x) for x in (100.0, 200.0, 200.0, 300.0)),
+            adjacency_relations=(ContactRelation(
+                relation_ordinal=1,
+                contact_observation_id=ObservationId("topology:contact"),
+                physical_edge_id=shared.evidence_group_id,
+                shared_edge_observation_id=shared.observation_id,
+                delta_interval_px=FiniteInterval.exact(-20.0),
+                canonical_delta_px=-20.0,
+                supporting_observation_ids=(shared.observation_id,),
+            ),),
+            phase_support_coverage=1.0,
+        )
+        sparse = replace(
+            normal,
+            role_bindings=(normal.role_bindings[0], None, None, normal.role_bindings[3]),
+            phase_support_coverage=2.0,
+        )
+        runner = _BoundFit(contact, True)
+        for winner in (normal, sparse):
+            best = _BoundFit(winner, True)
+            with self.subTest(support_count=winner.phase_support_count):
+                self.assertIsNone(_clear_winner_basis(best, runner))
+                self.assertEqual(_unseparated_completion_competitor(best, (best, runner)), 1)
+
     def test_sequence_fit_rejects_invalid_provenance_and_residual(self) -> None:
         result = fit_template_phase(
             tuple(

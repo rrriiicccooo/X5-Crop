@@ -46,6 +46,7 @@ class TemplateContactContractTest(unittest.TestCase):
                 result = fit_template_phase(
                     observations, phase_template(2),
                     contact_edge_observations=contacts,
+                    holder_span_px=FiniteInterval(0.0, 220.0),
                 )
                 self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
                 assert result.best is not None
@@ -169,6 +170,7 @@ class TemplateContactContractTest(unittest.TestCase):
             observations,
             phase_template(2),
             contact_edge_observations=contact_edges,
+            holder_span_px=FiniteInterval(0.0, 220.0),
         )
 
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
