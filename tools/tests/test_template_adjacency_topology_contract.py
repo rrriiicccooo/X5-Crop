@@ -18,6 +18,7 @@ from x5crop.detection.photo_geometry.template_adjacency_topology import (
     AdjacencyContinuityKind,
     observe_adjacency_continuity,
     unbound_registered_adjacency_counterevidence,
+    assess_phase_candidate_adjacency,
 )
 from x5crop.detection.photo_geometry.template_contact import observe_contact_edges
 from x5crop.detection.photo_geometry.model import BoundaryEvidenceState, BoundaryRole
@@ -139,6 +140,42 @@ def _unbound_separator_case(missing_role=2, *, direction=1, partner=None, region
 
 
 class TemplateAdjacencyTopologyContractTests(unittest.TestCase):
+    def test_registered_partner_proof_binds_only_the_validation_ordinal(self):
+        for missing in (1, 2):
+            for direction in (-1, 1):
+                with self.subTest(missing=missing, direction=direction):
+                    fit, edges, band, _, _ = _unbound_separator_case(missing, direction=direction)
+                    measurement = phase_sequence_measurement("native-proof", FiniteInterval(0.0, 600.0))
+                    assessment = assess_phase_candidate_adjacency(fit, edges, (band,), (measurement,))
+                    self.assertEqual(assessment.state, EvidenceState.CONTRADICTED)
+                    (association,) = assessment.registered_role_associations
+                    self.assertEqual(association.partner_role_index, missing)
+                    self.assertEqual(association.partner_observation_id, edges[missing].observation_id)
+                    self.assertEqual(association.scope, "validation_only")
+                    self.assertGreater(association.native_frame_width_px.minimum,
+                                       association.physical_frame_width_upper_px)
+                    self.assertIs(assessment.fit, fit)
+                    self.assertIsNone(fit.role_bindings[missing])
+                    self.assertEqual(assessment.role_check_count, 3)
+
+    def test_full_native_width_intersection_does_not_invent_counterevidence(self):
+        fit, edges, band, _, _ = _unbound_separator_case(partner=225.0)
+        measurement = phase_sequence_measurement("native-proof", FiniteInterval(0.0, 600.0))
+        assessment = assess_phase_candidate_adjacency(fit, edges, (band,), (measurement,))
+        self.assertFalse(assessment.registered_role_associations)
+        self.assertNotEqual(assessment.state, EvidenceState.CONTRADICTED)
+
+    def test_partner_proof_cannot_drop_counterevidence_or_borrow_another_role_ledger(self):
+        fit, edges, band, _, _ = _unbound_separator_case()
+        measurement = phase_sequence_measurement("native-proof", FiniteInterval(0.0, 600.0))
+        assessment = assess_phase_candidate_adjacency(fit, edges, (band,), (measurement,))
+        with self.assertRaisesRegex(ValueError, "lost a registered partner"):
+            replace(assessment, registered_role_associations=())
+        foreign, foreign_edges, foreign_band, _, _ = _unbound_separator_case(1)
+        other = assess_phase_candidate_adjacency(foreign, foreign_edges, (foreign_band,), (measurement,))
+        with self.assertRaisesRegex(ValueError, "borrowed a role ledger"):
+            replace(assessment, direct_role_authority=other.direct_role_authority)
+
     def test_unbound_separator_rejects_only_unavoidable_native_width_excess(self):
         for missing in (1, 2):
             for direction in (-1, 1):

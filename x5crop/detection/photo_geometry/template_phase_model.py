@@ -14,7 +14,7 @@ from .observation_types import (
 )
 from .measurement_model import PhotoBoundaryMeasurementSet
 from .template_adjacency_coverage import AdjacencyObservationCoverage
-from .template_adjacency_topology import AdjacencyContinuityObservation
+from .template_adjacency_topology import AdjacencyContinuityObservation, PhaseCandidateAdjacencyAssessment
 from .template_contact import ContactEdgeObservation
 from .template_overlap import OverlapEdgePairObservation
 from .template_direct_role_authority import (
@@ -1073,6 +1073,7 @@ class PhaseFitResult:
     source_frame_width_topology_assessment: (
         SourceFrameWidthTopologyAssessment | None
     ) = None
+    retained_adjacency_assessments: tuple[PhaseCandidateAdjacencyAssessment, ...] = ()
     # Transient handoff, not a third retained/output candidate. The report
     # read model excludes private fields; if consumed, the original fit and
     # failed projection become the ordinary runner and are reported there.
@@ -1089,6 +1090,18 @@ class PhaseFitResult:
     def __post_init__(self) -> None:
         from .template_source_clipped import SourceClippedPhaseRetention
 
+        if (
+            not isinstance(self.retained_adjacency_assessments, tuple)
+            or any(not isinstance(item, PhaseCandidateAdjacencyAssessment) for item in self.retained_adjacency_assessments)
+            or len(self.retained_adjacency_assessments) > 2
+        ):
+            raise ValueError("retained adjacency assessments exceed the fixed candidate bound")
+        if self.retained_adjacency_assessments:
+            retained = tuple(fit for fit in (self.best, self.runner_up) if fit is not None)
+            if tuple(item.fit for item in self.retained_adjacency_assessments) != retained:
+                raise ValueError("retained adjacency assessments lost their complete fit identities")
+            if self.status == PhaseFitStatus.RESOLVED and self.retained_adjacency_assessments[0].state == EvidenceState.CONTRADICTED:
+                raise ValueError("resolved phase carries registered adjacency counterevidence")
         source_retention = self._source_clipped_phase_retention
         if source_retention is not None:
             if not isinstance(source_retention, SourceClippedPhaseRetention):

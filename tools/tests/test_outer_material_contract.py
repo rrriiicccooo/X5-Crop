@@ -436,6 +436,7 @@ class OuterMaterialContractTest(unittest.TestCase):
         )
 
     def test_fixed_width_can_distinguish_inner_material_boundary(self) -> None:
+        from x5crop.detection.photo_geometry.template_adjacency_topology import assess_phase_candidate_adjacency
         exterior = _edge("outer:phase:exterior", 10.0, BoundaryRole.START)
         boundary = _edge(
             "outer:phase:boundary",
@@ -503,6 +504,13 @@ class OuterMaterialContractTest(unittest.TestCase):
             first.evidence_group_id,
             outer[0].evidence_group_id,
         )
+        assessment = assess_phase_candidate_adjacency(
+            result.best, observations, (band,),
+            (phase_sequence_measurement("outer-material-phase", FiniteInterval(0.0, 260.0)),),
+            outer_material_boundaries=outer,
+        )
+        self.assertEqual(assessment.direct_role_authority.facts[0].evidence_group_id, outer[0].evidence_group_id)
+        self.assertFalse(assessment.registered_role_associations)
 
     def test_material_band_does_not_contradict_authorized_exterior_start(self) -> None:
         exterior = _edge(

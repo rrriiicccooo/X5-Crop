@@ -519,7 +519,10 @@ def finalize_template_phase_candidate(
         or result.failure_kind
         != PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE
     ):
-        return _retain_empty_terminal_diagnostic_runner(result)
+        return _refinement.assess_retained_phase_adjacencies(
+            _retain_empty_terminal_diagnostic_runner(result), phase_input,
+            source_frame_width_authority=source_frame_width_authority,
+        )
     projected = _refinement._project_retained_late_local_refinements(
         candidate.result,
         phase_input,
@@ -534,7 +537,10 @@ def finalize_template_phase_candidate(
         ),
         source_frame_width_authority=source_frame_width_authority,
     )
-    return _retain_empty_terminal_diagnostic_runner(result)
+    return _refinement.assess_retained_phase_adjacencies(
+        _retain_empty_terminal_diagnostic_runner(result), phase_input,
+        source_frame_width_authority=source_frame_width_authority,
+    )
 
 
 def fit_template_phase_with_adjacency_relations(

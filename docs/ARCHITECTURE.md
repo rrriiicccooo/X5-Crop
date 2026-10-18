@@ -1180,6 +1180,28 @@ placement 的 source W 缩窄上限。它不绑定伙伴、不改坐标或 rank�
 记录中，selected continuity 使用 `unbound_separator_width_conflict`。其余完整竞争、source W、输出
 预算与 Gate 照常执行。该检查复用上述工作上界，无新增查询、seed 或拟合。
 
+原生局部补边和最后一次 source-W 传播完成后，`assess_retained_phase_adjacencies` 对最终保留的
+best/runner 分别重建自己的角色权限、完整 coverage 与 continuity，保存
+`retained_adjacency_assessments`。只在 source W 与该 fit 的 placement identity 匹配时消费它；不能沿用
+补边前的账本，也不能把 best 的 W 或角色权限交给 runner。`PhaseCandidateAdjacencyAssessment` 绑定
+完整 fit；角色、原始观察或连续状态改变时，旧证明不再有效。Evidence group 只允许原 direct-role
+owner 已定义的唯一 outer-material-only 转移，其余必须对应原 binding。连续 lineage 只继承数值
+拟合依据的元数据时，证明随自己的 fit 更新，不重新求解或转移权限。
+
+唯一已登记伙伴通过上述完整物理条件后，`RegisteredAdjacencyRoleAssociation` 显式保存已有端点的
+role/observation、缺失伙伴的条件 ordinal、原 pair identity 与反证类型。正材料宽度反证保存完整原生
+Frame-width 区间及完整格式上限；Overlap 保留原负间距。它是 `validation_only`，不补写缺失 binding、
+不成为 phase anchor、不增加 rank，也不证明当前 ordinal 映射正确。两类已证明的关联冲突使该解释的
+最终关联状态为 `contradicted`；其余覆盖或关系缺口保持 `unavailable`，不能当作硬反证。
+已 resolved 的首选解释若在最后补边后被物理反证否定，则撤回资格并保留完整提案。仅否定一个
+retained runner 不足以证明未保留的竞争池只有一个剩余解释，因此不取消原歧义或自动晋升另一份。
+
+该重放每条 lane 最多两份，不增加像素查询、seed、local role lookup 或数值拟合；新增角色与邻接
+检查数保存在各解释的记录中，完整账本和注册索引计入原 phase 峰值 receipt。H、R、Q、T 分别表示
+原观察、角色、查询和 trace 数，工作上界为 `O(2 × (H + R × T × Q log Q))`。普通和 development
+报告保存相同证明；验证器从原始测量重新生成每份角色权限、伙伴归属、native 宽度、覆盖和连续性，
+拒绝删成员、借权限、缩窄区间或伪造 `supported`。
+
 报告的 coverage 与 continuity 结构校验复用原 typed owner；开发报告另从完整原观察、角色权限和覆盖
 账本重建 continuity。仅运行内分配的 observation ID 可按 ordinal 对应，其余物理字段必须一致，
 不能删掉已存在的反证或伪造材料身份。
@@ -1752,6 +1774,10 @@ holder 准入排除、权限缺口、连续吸收与相对选择须分别保留�
 逐成员重放 Cross 还须从初始 source H 和自身 W 出发，重新编译纵向域及比例权限；相同的已选边界对
 不授权复用另一成员的纵向权限、最终 H 或固定尺寸。测量区间相交本身也不授权新的共同尺寸代表。
 下述实现目前只覆盖固定长轴归属下的 H 竞争；跨 phase、SourceW 或 topology 的共同输出仍需独立证明。
+第 7.1 节的最终关联证明只覆盖实际保留的解释，不能把它当成完整 phase 集合证明。完整核验必须
+区分 projection 失败、holder/source-domain 准入、残差不相容、连续吸收和仅相对未胜出；holder 排除
+不能冒充物理反证，残差相容且未被连续吸收的其它成员也不能从共同输出集合消失。现有 Cross
+纵向域若只编译了 best/runner，即使 Cross 已 resolved，也未证明其它 phase 成员的权限与输出预算。
 
 `template_output.common_h_output_footprint` 在同一输出 owner 内核算固定 W 归属下的共同
 同一边界用途的需求。输入为各 H 解释自己的 placement 和完整 native output，保留独立 envelope、保护量与
@@ -2378,13 +2404,13 @@ Linux开发/CI使用`renameat2(RENAME_NOREPLACE)`。目标在最终检查之后�
 | `photo_geometry/template_phase_observations.py` | 已登记 fact、离散 seed、单次 separator 准备与固定 placement 的 native-edge 局部绑定 |
 | `photo_geometry/template_phase_fitting.py`、`template_phase_projection.py` | 有界 matching/连续拟合，以及同一离散 identity 的 direct-role/nominal Grid 投影重拟合 |
 | `photo_geometry/template_phase_state.py`、`template_phase_competition.py` | 连续 placement identity、lineage/failure、holder/source admission 与 Contact/Overlap/Separator 初始竞争和保留 |
-| `photo_geometry/template_phase_refinement.py` | local/late correction、selected-only 权限、placement-bound source-W 消费与最终 lattice 合同 |
+| `photo_geometry/template_phase_refinement.py` | local/late correction、selected-only 权限、placement-bound source-W 消费、最终 lattice 合同与两份 retained fit 的最终邻接重放 |
 | `photo_geometry/template_phase.py`、`template_pitch.py`、`template_residual.py` | 跨 pass receipt/carry、pre-local proposal provenance 与 adjacency/finalization 编排，以及 source pitch/residual |
 | `photo_geometry/template_direct_role_authority.py` | 每个 bounded phase candidate 与最终已选 START/END 的 native-coordinate 权限证明及共享 evidence ledger |
 | `photo_geometry/template_direct_role_aperture_domain.py` | partial-height separator role 在全部可行 cross 状态中的两侧 aperture-domain containment；不读取像素或创建 placement |
 | `photo_geometry/template_lattice_authority.py` | `(phase, W, pitch)` 的全部 retained direct 约束矩阵、native coordinate interval 与独立 rank 闭合证明；只证明全局未知量是否闭合，不消费、选择或重登记 canonical source W |
 | `photo_geometry/template_adjacency_coverage.py` | selected adjacency 合法走廊到既有 query/trace/coordinate 的覆盖证明 |
-| `photo_geometry/template_adjacency_topology.py` | selected adjacency 的 continuity ledger、Contact/Overlap 验证与 typed topology failure；不读取像素或重新选择 placement |
+| `photo_geometry/template_adjacency_topology.py` | 每份解释自身的 continuity ledger、Contact/Overlap 与唯一注册伙伴的条件 ordinal 关联证明；不读取像素、补 phase anchor 或重新选择 placement |
 | `photo_geometry/template_outer_frame_authority.py` | 带 Grid 推断时首尾输出 Frame 的直接长轴角色证明 |
 | `photo_geometry/template_alignment_diagnostic.py` | theoretical-vs-observed residual 的只读诊断 |
 | `photo_geometry/interval_math.py`、`template_cross*.py`、`template_cross_support.py` | 共享 interval 运算、source H 校准、局部 top/bottom 方向闭合、typed producer bound 与 enclosing support；其中 `template_cross_longitudinal.py` 独占 Cross line 从已观测长轴范围投影到完整 template 的 typed authority |

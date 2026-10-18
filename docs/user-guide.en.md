@@ -50,6 +50,9 @@ native boundaries and allowed position ranges for review.
 Reports retain direct-boundary proposals, calibrated-template proposals, and diagnostic proposals blocked by evidence,
 with each proposal's geometric basis and unresolved reason. Counterevidence remains attached to diagnostic proposals,
 which still require manual review.
+The primary and retained competing interpretation each check their own boundaries and relations between adjacent photos.
+Reports show evidence for registered partners and physical conflicts. Incomplete coverage of competing interpretations
+requires manual review; fitting two proposals into one window alone does not qualify the result for automatic output.
 
 Acceptance concerns the final crops: correct slot correspondence, no missing or duplicate photos, full protection of
 confirmed content, and compliance with fixed dimensions, source bounds, and risk budgets. Internal boundary names need

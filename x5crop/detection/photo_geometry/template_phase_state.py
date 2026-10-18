@@ -150,11 +150,20 @@ def _inherit_prior_lattice_fit_basis(
             lattice_parameter_fit_basis=basis,
         )
 
-    return replace(
-        result,
-        best=inherit(result.best),
-        runner_up=inherit(result.runner_up),
-    )
+    best, runner = inherit(result.best), inherit(result.runner_up)
+    # Only provenance metadata changes here. Keep the final native-association
+    # proof attached to the same exact fit without recomputing or transferring
+    # coordinates, constraints or authority between candidates.
+    assessments = tuple(
+        replace(assessment, fit=fit)
+        for assessment, fit in zip(
+            result.retained_adjacency_assessments,
+            tuple(fit for fit in (best, runner) if fit is not None),
+            strict=True,
+        )
+    ) if result.retained_adjacency_assessments else ()
+    return replace(result, best=best, runner_up=runner,
+                   retained_adjacency_assessments=assessments)
 
 
 def _continuous_role_bindings(

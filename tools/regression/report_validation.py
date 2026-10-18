@@ -115,7 +115,10 @@ from x5crop.detection.photo_geometry.measurement_model import (
 from x5crop.detection.photo_geometry.observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from x5crop.detection.photo_geometry.template_adjacency_topology import (
     AdjacencyContinuityObservation, observe_adjacency_continuity,
+    assess_phase_candidate_adjacency, PhaseCandidateAdjacencyAssessment,
 )
+from x5crop.detection.photo_geometry.template_frame_width import SourceFrameWidthAuthority
+from x5crop.detection.photo_geometry.outer_material import OuterMaterialBoundaryObservation
 from x5crop.detection.photo_geometry.template_adjacency_coverage import AdjacencyObservationCoverage
 from x5crop.detection.photo_geometry.template_overlap import OverlapEdgePairObservation
 from x5crop.detection.photo_geometry.separator_material import classify_separator_material_region
@@ -2212,7 +2215,9 @@ def _read_common_proof(value: Any, model: type) -> Any:
                      TemplateCrossInput, CoarseStripSupport, PhotoBoundaryMeasurementSet, CrossRegistrationWorkReceipt,
                      IndependentPhaseReview, IndependentPhaseReviewPortfolio, MatchedHolder, TemplatePhaseInput,
                      SeparatorBandObservation, BoundaryEdgeObservation, BroadMaterialTraceObservation, BroadAssociationResult,
-                     AdjacencyContinuityObservation, AdjacencyObservationCoverage, OverlapEdgePairObservation):
+                     AdjacencyContinuityObservation, AdjacencyObservationCoverage, OverlapEdgePairObservation,
+                     SourceFrameWidthAuthority, OuterMaterialBoundaryObservation,
+                     PhaseCandidateAdjacencyAssessment):
         raise ValueError("unsupported common-output proof root")
 
     def read(raw: Any, kind: Any) -> Any:
@@ -2874,6 +2879,15 @@ def _validate_geometry(
         lane_id = lane.get("lane_id")
         if not isinstance(lane_id, str) or not lane_id:
             raise ValueError("source lane identity is invalid")
+        assessments = lane.get("retained_adjacency_assessments")
+        if not isinstance(assessments, list) or len(assessments) > 2:
+            raise ValueError("source lane lost its final retained adjacency assessments")
+        assessed = tuple(_read_common_proof(item, PhaseCandidateAdjacencyAssessment) for item in assessments)
+        if any(item.fit.template.template_id != lane.get("template_id") for item in assessed) or (
+            assessed and lane.get("phase_status") == PhaseFitStatus.RESOLVED.value
+            and assessed[0].state == EvidenceState.CONTRADICTED
+        ):
+            raise ValueError("source lane contradicts its final native adjacency evidence")
         if "common_h_output" not in lane:
             raise ValueError("source lane lost its common H output assessment")
         common = lane["common_h_output"]
@@ -3474,6 +3488,39 @@ def _validate_phase_candidate_projection(
                 raise ValueError("retained direct role lost its native binding")
 
 
+def _validate_retained_adjacency_assessments(lane, production_lane, query_records) -> None:
+    """Replay every final retained mapping with its own native role ledger."""
+
+    phase = _read_common_proof(lane["phase_competition"], PhaseFitResult)
+    source_w = _read_common_proof(lane["source_frame_width_authority"], SourceFrameWidthAuthority)
+    measurements = tuple(_read_common_proof(
+        {field.name: record[field.name] for field in fields(PhotoBoundaryMeasurementSet)},
+        PhotoBoundaryMeasurementSet,
+    ) for record in query_records if record["query"]["lane_id"] == lane["lane_id"]
+      and record["query"]["purpose"] == QueryPurpose.SEQUENCE_ANCHOR_WINDOW.value)
+    observations = lane["observations"]
+    edges = tuple(_read_common_proof(item, BoundaryEdgeObservation) for item in observations["sequence_edges"])
+    bands = tuple(_read_common_proof(item, SeparatorBandObservation) for item in observations["separator_bands"])
+    overlaps = tuple(_read_common_proof(item, OverlapEdgePairObservation) for item in observations["overlap_edge_pair_observations"])
+    outer = tuple(_read_common_proof(item, OuterMaterialBoundaryObservation)
+                  for item in observations["outer_material_boundaries"])
+    expected = tuple(assess_phase_candidate_adjacency(
+        fit, edges, bands, measurements, overlaps,
+        outer_material_boundaries=outer,
+        authorized_source_frame_width_px=(source_w.width_px
+            if source_w.state == EvidenceState.SUPPORTED and source_w.matches_placement(fit) else None),
+    ) for fit in (phase.best, phase.runner_up) if fit is not None) if measurements else ()
+    replayed = typed_read_model(expected)
+    recorded = typed_read_model(phase.retained_adjacency_assessments)
+    if len(replayed) == len(recorded):
+        for expected_item, actual_item in zip(replayed, recorded, strict=True):
+            if len(expected_item["continuity"]) == len(actual_item["continuity"]):
+                for a, b in zip(expected_item["continuity"], actual_item["continuity"], strict=True):
+                    a["observation_id"] = b["observation_id"]
+    if replayed != recorded or production_lane.get("retained_adjacency_assessments") != recorded:
+        raise ValueError("retained adjacency assessments changed their candidate-owned physical evidence")
+
+
 def _validate_phase_competition(value: object) -> None:
     if not isinstance(value, dict) or set(value) != {
         "template",
@@ -3496,6 +3543,7 @@ def _validate_phase_competition(value: object) -> None:
         "direct_role_binding_authority",
         "outer_frame_observation_authority",
         "source_frame_width_topology_assessment",
+        "retained_adjacency_assessments",
     }:
         raise ValueError("development phase competition schema is invalid")
     best = value["best"]
@@ -4085,6 +4133,7 @@ def _validate_development(record: dict[str, Any]) -> None:
                 expected["observation_id"] = actual["observation_id"]
         if replayed != recorded:
             raise ValueError("adjacency continuity changed its registered physical evidence")
+        _validate_retained_adjacency_assessments(lane, production_lane, development["measurement"]["queries"])
         if cross_competition["receipt"]["fitted_observation_count"] != sum(
             item["independent_support_region_count"] >= MINIMUM_INDEPENDENT_SUPPORT_REGIONS
             for item in registered_cross.values()

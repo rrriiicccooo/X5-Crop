@@ -26,6 +26,7 @@ from .template_adjacency_coverage import (
     assess_adjacency_observation_coverage,
 )
 from .template_adjacency_topology import (
+    assess_phase_candidate_adjacency,
     AdjacencyContinuityKind,
     observe_adjacency_continuity,
 )
@@ -76,6 +77,67 @@ def _local_role_candidates(result: PhaseFitResult) -> tuple[SequenceFit, ...]:
             and result.runner_up is not None):
         return result.best, result.runner_up
     return ()
+
+
+def assess_retained_phase_adjacencies(
+    result: PhaseFitResult,
+    phase_input: TemplatePhaseInput,
+    *,
+    source_frame_width_authority: SourceFrameWidthAuthority | None,
+) -> PhaseFitResult:
+    """Close each final retained candidate's own registered role associations.
+
+    Native completion can introduce an independent endpoint after the bounded
+    candidate pool has been compressed. Its role ledger must be reassessed
+    before interpreting a missing partner as absent physical counterevidence.
+    A contradicted runner does not prove the unretained pool has one survivor.
+    """
+
+    if result.retained_adjacency_assessments:
+        raise ValueError("retained adjacency finalization must run exactly once")
+    if not phase_input.sequence_measurement_sets or result.best is None:
+        return result
+    assessments = tuple(
+        assess_phase_candidate_adjacency(
+            fit, phase_input.observations, phase_input.separator_bands,
+            phase_input.sequence_measurement_sets, phase_input.overlap_edge_pair_observations,
+            outer_material_boundaries=phase_input.outer_material_boundaries,
+            authorized_source_frame_width_px=(
+                source_frame_width_authority.width_px
+                if source_frame_width_authority is not None
+                and source_frame_width_authority.state == EvidenceState.SUPPORTED
+                and source_frame_width_authority.matches_placement(fit)
+                else None
+            ),
+        )
+        for fit in (result.best, result.runner_up) if fit is not None
+    )
+    # Logical accounting includes the retained ledgers and the largest live
+    # registered index/coverage structure. No pixel, seed or solver work runs.
+    retained_bytes = sum(1024 + len(item.fit.role_bindings) * 384 + sum(
+        128 + 32 * (len(trace.covering_query_ids) + len(trace.covered_intervals_px))
+        for coverage in item.coverage for trace in coverage.trace_coverage
+    ) for item in assessments)
+    temporary_bytes = 128 * (len(phase_input.observations) + len(phase_input.separator_bands)
+                            + len(phase_input.overlap_edge_pair_observations))
+    receipt = replace(result.receipt, peak_temporary_bytes=max(
+        result.receipt.peak_temporary_bytes, retained_bytes + temporary_bytes,
+    ))
+    receipt.validate_bounds()
+    contradicted_best = result.status == PhaseFitStatus.RESOLVED and assessments[0].state == EvidenceState.CONTRADICTED
+    contradiction_kind = (
+        PhaseFailureKind.SEPARATOR_MATERIAL_CONFLICT
+        if assessments[0].direct_role_authority.state == EvidenceState.CONTRADICTED
+        else PhaseFailureKind.ADJACENCY_CONTINUITY_UNRESOLVED
+    )
+    return replace(
+        result, retained_adjacency_assessments=assessments, receipt=receipt,
+        status=PhaseFitStatus.UNRESOLVED if contradicted_best else result.status,
+        failure_kind=contradiction_kind if contradicted_best else result.failure_kind,
+        ambiguity_reason=("final native roles or registered adjacency associations are contradicted"
+                          if contradicted_best else result.ambiguity_reason),
+        winner_basis=None if contradicted_best else result.winner_basis,
+    )
 
 
 def _with_local_role_refinement(

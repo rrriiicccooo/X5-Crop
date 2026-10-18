@@ -1,24 +1,26 @@
-"""Classify selected adjacency material facts without choosing topology.
+"""Classify candidate-bound adjacency facts without choosing a placement.
 
 The registered measurement and the fixed-template placement already exist
 before this module runs.  This owner maps those facts once per adjacency and
 classifies positive separator, shared-edge contact, independent reversed-edge
 overlap, fully observed normal absence, or an explicit unresolved state.  It
-never searches pixels or chooses an ordinal.
+never searches pixels, selects a placement or installs new phase anchors.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
+import math
 
 from ...domain import EvidenceState, FiniteInterval, ObservationId
 from .model import BoundaryEvidenceState, BoundaryRole, SPATIAL_SUPPORT_REGION_COUNT
-from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
+from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation, OuterMaterialBoundaryObservation
 from .physical_identity import physical_fact_id
 from .template_adjacency_coverage import (
     AdjacencyCoverageState,
     AdjacencyObservationCoverage,
+    assess_adjacency_observation_coverage,
 )
 from .template_model import (
     ContactRelation,
@@ -30,7 +32,12 @@ from .template_model import (
 from .template_overlap import OverlapEdgePairObservation
 from .separator_material import normal_separator_material_bands
 from .template_separator_support import SeparatorSupportResolution, resolve_separator_support
-from .template_direct_role_authority import DirectRoleBindingAuthority
+from .template_direct_role_authority import (
+    DirectRoleBindingAuthority,
+    DirectRoleAuthorityBasis,
+    assess_direct_role_binding_authority,
+)
+from .measurement_model import PhotoBoundaryMeasurementSet
 
 
 _NUMERIC_EPSILON_PX = 1.0e-7
@@ -918,10 +925,217 @@ def observe_adjacency_continuity(
     return tuple(values)
 
 
+@dataclass(frozen=True)
+class RegisteredAdjacencyRoleAssociation:
+    """A unique physical partner mapped conditionally from one native role.
+
+    This validates the candidate's ordinal mapping. It does not install the
+    missing binding or supply a new phase anchor.
+    """
+
+    relation_ordinal: int
+    bound_role_index: int
+    bound_observation_id: ObservationId
+    partner_role_index: int
+    partner_observation_id: ObservationId
+    pair_observation_id: ObservationId
+    failure_kind: AdjacencyContinuityFailureKind
+    native_frame_width_px: FiniteInterval | None
+    physical_frame_width_upper_px: float | None
+    scope: str = field(default="validation_only", init=False)
+
+    def __post_init__(self) -> None:
+        roles = (2 * self.relation_ordinal - 1, 2 * self.relation_ordinal)
+        width_conflict = self.failure_kind == AdjacencyContinuityFailureKind.UNBOUND_SEPARATOR_WIDTH_CONFLICT
+        if (
+            type(self.relation_ordinal) is not int or self.relation_ordinal <= 0
+            or type(self.bound_role_index) is not int
+            or type(self.partner_role_index) is not int
+            or {self.bound_role_index, self.partner_role_index} != set(roles)
+            or any(not isinstance(value, ObservationId) for value in (
+                self.bound_observation_id, self.partner_observation_id, self.pair_observation_id,
+            ))
+            or self.bound_observation_id == self.partner_observation_id
+            or not isinstance(self.failure_kind, AdjacencyContinuityFailureKind)
+            or self.failure_kind not in {
+                AdjacencyContinuityFailureKind.UNBOUND_REGISTERED_OVERLAP,
+                AdjacencyContinuityFailureKind.UNBOUND_SEPARATOR_WIDTH_CONFLICT,
+            }
+            or width_conflict != (self.native_frame_width_px is not None)
+            or width_conflict != (self.physical_frame_width_upper_px is not None)
+        ):
+            raise ValueError("registered adjacency role association is invalid")
+        if width_conflict and (
+            not isinstance(self.native_frame_width_px, FiniteInterval)
+            or isinstance(self.physical_frame_width_upper_px, bool)
+            or not isinstance(self.physical_frame_width_upper_px, (int, float))
+            or not math.isfinite(self.physical_frame_width_upper_px)
+            or self.physical_frame_width_upper_px <= 0
+            or not self.native_frame_width_px.minimum
+            > self.physical_frame_width_upper_px + _NUMERIC_EPSILON_PX
+        ):
+            raise ValueError("registered native Frame-width counterevidence is invalid")
+
+
+@dataclass(frozen=True)
+class PhaseCandidateAdjacencyAssessment:
+    """Fresh, candidate-owned role and adjacency facts after native completion."""
+
+    fit: SequenceFit
+    direct_role_authority: DirectRoleBindingAuthority
+    coverage: tuple[AdjacencyObservationCoverage, ...]
+    continuity: tuple[AdjacencyContinuityObservation, ...]
+    registered_role_associations: tuple[RegisteredAdjacencyRoleAssociation, ...]
+    registered_edge_count: int
+    state: EvidenceState = field(init=False)
+    scope: str = field(default="candidate_bound_validation", init=False)
+    role_check_count: int = field(init=False)
+    adjacency_check_count: int = field(init=False)
+    coverage_trace_check_count: int = field(init=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.fit, SequenceFit) or not isinstance(self.direct_role_authority, DirectRoleBindingAuthority):
+            raise TypeError("candidate adjacency assessment is invalid")
+        if type(self.registered_edge_count) is not int or self.registered_edge_count < len(self.fit.bound_observation_ids):
+            raise ValueError("candidate adjacency assessment work is invalid")
+        expected = tuple(range(1, self.fit.template.count))
+        if (
+            not isinstance(self.coverage, tuple)
+            or any(not isinstance(item, AdjacencyObservationCoverage) for item in self.coverage)
+            or not isinstance(self.continuity, tuple)
+            or any(not isinstance(item, AdjacencyContinuityObservation) for item in self.continuity)
+            or tuple(item.relation_ordinal for item in self.coverage) != expected
+            or tuple(item.relation_ordinal for item in self.continuity) != expected
+            or not isinstance(self.registered_role_associations, tuple)
+            or any(not isinstance(item, RegisteredAdjacencyRoleAssociation) for item in self.registered_role_associations)
+        ):
+            raise ValueError("candidate adjacency assessment lost its complete ordinal ledger")
+        identities = tuple((index, binding.observation_id)
+                           for index, binding in enumerate(self.fit.role_bindings) if binding is not None)
+        facts = tuple((fact.role_index, fact.observation_id)
+                      for fact in self.direct_role_authority.facts)
+        if identities != facts:
+            raise ValueError("candidate adjacency assessment borrowed a role ledger")
+        for fact in self.direct_role_authority.facts:
+            binding = self.fit.role_bindings[fact.role_index]
+            # The direct-role owner intentionally transfers outer-only facts
+            # to their unique material evidence group. This is not native
+            # coordinate authority and cannot support the width rejection.
+            outer_only = (
+                fact.bases == (DirectRoleAuthorityBasis.OUTER_MATERIAL_BOUNDARY,)
+                and len(fact.supporting_outer_material_observation_ids) == 1
+            )
+            if fact.evidence_group_id != binding.evidence_group_id and not outer_only:
+                raise ValueError("candidate adjacency assessment borrowed an evidence group")
+        failures = tuple(item for item in self.continuity if item.failure_kind in {
+            AdjacencyContinuityFailureKind.UNBOUND_REGISTERED_OVERLAP,
+            AdjacencyContinuityFailureKind.UNBOUND_SEPARATOR_WIDTH_CONFLICT,
+        })
+        if tuple(item.relation_ordinal for item in failures) != tuple(
+            item.relation_ordinal for item in self.registered_role_associations
+        ):
+            raise ValueError("candidate adjacency assessment lost a registered partner")
+        for association, continuity in zip(self.registered_role_associations, failures, strict=True):
+            bound = self.fit.role_bindings[association.bound_role_index]
+            pair_id = continuity.overlap_observation_id or continuity.separator_band_observation_ids[0]
+            if (
+                bound is None or bound.observation_id != association.bound_observation_id
+                or self.fit.role_bindings[association.partner_role_index] is not None
+                or association.partner_observation_id in self.fit.bound_observation_ids
+                or pair_id != association.pair_observation_id
+                or continuity.failure_kind != association.failure_kind
+            ):
+                raise ValueError("candidate adjacency partner changed its native role identity")
+        object.__setattr__(self, "state", (
+            EvidenceState.CONTRADICTED
+            if failures or self.direct_role_authority.state == EvidenceState.CONTRADICTED
+            else EvidenceState.UNAVAILABLE
+            if self.direct_role_authority.state != EvidenceState.SUPPORTED
+            or any(item.state != AdjacencyCoverageState.COMPLETE for item in self.coverage)
+            or any(item.state != EvidenceState.SUPPORTED for item in self.continuity)
+            else EvidenceState.SUPPORTED
+        ))
+        object.__setattr__(self, "role_check_count", len(facts))
+        object.__setattr__(self, "adjacency_check_count", len(self.coverage))
+        object.__setattr__(self, "coverage_trace_check_count", sum(len(item.trace_coverage) for item in self.coverage))
+
+
+def assess_phase_candidate_adjacency(
+    fit: SequenceFit,
+    sequence_edges: tuple[BoundaryEdgeObservation, ...],
+    separator_bands: tuple[SeparatorBandObservation, ...],
+    measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
+    overlap_edge_pairs: tuple[OverlapEdgePairObservation, ...] = (),
+    *,
+    outer_material_boundaries: tuple[OuterMaterialBoundaryObservation, ...] = (),
+    authorized_source_frame_width_px: FiniteInterval | None = None,
+) -> PhaseCandidateAdjacencyAssessment:
+    """Replay only registered facts; no fit, pixel query or candidate selection."""
+
+    direct = assess_direct_role_binding_authority(
+        fit, sequence_edges, separator_bands, measurement_sets,
+        outer_material_boundaries=outer_material_boundaries,
+        authorized_source_frame_width_px=authorized_source_frame_width_px,
+    )
+    coverage = assess_adjacency_observation_coverage(
+        fit, measurement_sets,
+        directly_observed_ordinals=tuple(item.relation_ordinal for item in fit.adjacency_relations),
+    )
+    continuity = observe_adjacency_continuity(
+        fit, sequence_edges, separator_bands, coverage, overlap_edge_pairs,
+        direct_role_authority=direct,
+    )
+    by_id = {edge.observation_id: edge for edge in sequence_edges}
+    overlaps = {pair.observation_id: pair for pair in overlap_edge_pairs}
+    bands = {band.observation_id: band for band in separator_bands}
+    associations = []
+    for item in continuity:
+        if item.failure_kind not in {
+            AdjacencyContinuityFailureKind.UNBOUND_REGISTERED_OVERLAP,
+            AdjacencyContinuityFailureKind.UNBOUND_SEPARATOR_WIDTH_CONFLICT,
+        }:
+            continue
+        end_index, start_index = 2 * item.relation_ordinal - 1, 2 * item.relation_ordinal
+        bound_index = end_index if item.end_observation_id is not None else start_index
+        partner_index = start_index if bound_index == end_index else end_index
+        native_width = upper = None
+        if item.overlap_observation_id is not None:
+            pair = overlaps[item.overlap_observation_id]
+            end_id, start_id = pair.end_edge_observation_id, pair.next_start_edge_observation_id
+        else:
+            pair = bands[item.separator_band_observation_ids[0]]
+            end_id, start_id = ((pair.left_edge_observation_id, pair.right_edge_observation_id)
+                                if fit.template.direction > 0 else
+                                (pair.right_edge_observation_id, pair.left_edge_observation_id))
+            opposite_index = partner_index + 1 if bound_index == end_index else partner_index - 1
+            opposite = by_id[fit.binding_observation_ids[opposite_index]]
+            native_width = _signed_gap_interval(
+                by_id[start_id] if bound_index == end_index else opposite,
+                opposite if bound_index == end_index else by_id[end_id],
+                fit.template.direction,
+            )
+            upper = fit.template.frame_width_px.maximum
+        associations.append(RegisteredAdjacencyRoleAssociation(
+            relation_ordinal=item.relation_ordinal,
+            bound_role_index=bound_index,
+            bound_observation_id=fit.binding_observation_ids[bound_index],
+            partner_role_index=partner_index,
+            partner_observation_id=start_id if bound_index == end_index else end_id,
+            pair_observation_id=pair.observation_id,
+            failure_kind=item.failure_kind,
+            native_frame_width_px=native_width,
+            physical_frame_width_upper_px=upper,
+        ))
+    return PhaseCandidateAdjacencyAssessment(fit, direct, coverage, continuity, tuple(associations), len(sequence_edges))
+
+
 __all__ = [
     "AdjacencyContinuityBasis",
     "AdjacencyContinuityFailureKind",
     "AdjacencyContinuityKind",
     "AdjacencyContinuityObservation",
     "observe_adjacency_continuity",
+    "PhaseCandidateAdjacencyAssessment",
+    "RegisteredAdjacencyRoleAssociation",
+    "assess_phase_candidate_adjacency",
 ]
