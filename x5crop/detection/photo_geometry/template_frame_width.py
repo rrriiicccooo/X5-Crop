@@ -911,13 +911,12 @@ def apply_placement_source_frame_width(
         frame_width_px=canonical,
         pitch_px=fit.pitch_fit.canonical_pitch_px,
     )
-    if canonical == fit.pitch_fit.canonical_frame_width_px:
+    if (
+        selected_pitch_fit == fit.pitch_fit
+        and selected_relations == fit.adjacency_relations
+    ):
         return replace(
             phase,
-            best=replace(
-                fit, pitch_fit=selected_pitch_fit,
-                adjacency_relations=selected_relations,
-            ),
             source_frame_width_topology_assessment=None,
         )
     prefixes = adjacency_prefix_positions(selected_relations, fit.template.count)

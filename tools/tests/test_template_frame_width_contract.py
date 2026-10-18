@@ -44,7 +44,10 @@ from x5crop.detection.photo_geometry.template_model import (
     SeparatorRelationKind,
     SequenceBindingUse,
     SourceFrameWidthAuthorityBasis,
+    adjacency_prefix_intervals,
     measured_separator_relation_kind,
+    realize_adjacency_relations,
+    template_role_interval,
 )
 from x5crop.detection.photo_geometry.template_lattice_authority import (
     assess_global_lattice_authority,
@@ -1240,6 +1243,172 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             abs(state.sequence_end_px - state.sequence_start_px - 95.0) < 1.0e-9
             for state in projection.frame_states[0]
         ))
+
+    @classmethod
+    def _source_width_grid_fixture(cls):
+        template = replace(
+            placement_template(3),
+            frame_width_px=PositiveInterval(90.0, 110.0),
+            nominal_gap_px=FiniteInterval(10.0, 30.0),
+        )
+        fit = placement_sequence(template, missing=(0, 1))
+        bindings = list(fit.role_bindings)
+        assert bindings[2] is not None
+        bindings[2] = replace(
+            bindings[2],
+            fit_position_interval_px=FiniteInterval(219.5, 220.5),
+            full_position_interval_px=FiniteInterval(215.0, 225.0),
+        )
+        prefixes = adjacency_prefix_intervals(fit.adjacency_relations, template.count)
+        intervals = tuple(
+            binding.fit_position_interval_px
+            if binding is not None
+            else template_role_interval(
+                role,
+                phase=fit.phase_lattice_fit.absolute_phase_interval_px,
+                width=fit.pitch_fit.frame_width_px,
+                pitch=fit.pitch_fit.pitch_interval_px,
+                direction=template.direction,
+                prefixes=prefixes,
+            )
+            for role, binding in zip(template.roles, bindings, strict=True)
+        )
+        fit = replace(
+            fit,
+            role_bindings=tuple(bindings),
+            model_role_intervals_px=intervals,
+            model_full_role_intervals_px=tuple(
+                binding.full_position_interval_px if binding is not None else interval
+                for binding, interval in zip(bindings, intervals, strict=True)
+            ),
+        )
+        phase = replace(
+            fit_template_phase(
+                tuple(
+                    phase_edge(str(binding.observation_id), binding.canonical_position_px)
+                    for binding in bindings if binding is not None
+                ),
+                template,
+            ),
+            best=fit,
+        )
+        authority = replace(
+            cls._independent_width_authority(
+                fit, tuple(sorted(fit.bound_observation_ids)),
+                supporting_frame_ordinals=(2, 3),
+            ),
+            placement_scope=(
+                SourceFrameWidthAuthorityPlacementScope.RETAINED_AMBIGUOUS_PROPOSAL
+            ),
+            width_px=FiniteInterval(99.0, 101.0),
+            canonical_width_px=100.0,
+        )
+        return phase, authority
+
+    def test_unchanged_canonical_source_width_refreshes_grid_role_intervals(self) -> None:
+        phase, authority = self._source_width_grid_fixture()
+        fit = phase.best
+        assert fit is not None and authority.width_px is not None
+        self.assertIsNone(fit.role_bindings[1])
+        self.assertEqual(fit.pitch_fit.frame_width_px, PositiveInterval(90.0, 110.0))
+        self.assertEqual(phase.status, PhaseFitStatus.AMBIGUOUS)
+        self.assertIsNotNone(phase.runner_up)
+        relations = realize_adjacency_relations(
+            fit.adjacency_relations,
+            frame_width_interval_px=authority.width_px,
+            pitch_interval_px=fit.pitch_fit.pitch_interval_px,
+            frame_width_px=fit.pitch_fit.canonical_frame_width_px,
+            pitch_px=fit.pitch_fit.canonical_pitch_px,
+        )
+        expected = template_role_interval(
+            fit.template.roles[1],
+            phase=fit.phase_lattice_fit.absolute_phase_interval_px,
+            width=authority.width_px,
+            pitch=fit.pitch_fit.pitch_interval_px,
+            direction=fit.template.direction,
+            prefixes=adjacency_prefix_intervals(relations, fit.template.count),
+        )
+        self.assertEqual(expected, FiniteInterval(199.0, 201.0))
+        self.assertLess(expected.width, fit.model_role_intervals_px[1].width)
+
+        selected = apply_placement_source_frame_width(phase, authority)
+
+        assert selected.best is not None
+        self.assertEqual(
+            selected.best.pitch_fit.frame_width_px,
+            PositiveInterval(authority.width_px.minimum, authority.width_px.maximum),
+        )
+        self.assertEqual(
+            selected.best.pitch_fit.canonical_frame_width_px,
+            fit.pitch_fit.canonical_frame_width_px,
+        )
+        self.assertEqual(selected.best.adjacency_relations, relations)
+        self.assertEqual(selected.best.model_role_positions_px, fit.model_role_positions_px)
+        self.assertEqual(selected.best.phase_lattice_fit, fit.phase_lattice_fit)
+        self.assertEqual(selected.best.binding_observation_ids, fit.binding_observation_ids)
+        for original, consumed in zip(fit.role_bindings, selected.best.role_bindings, strict=True):
+            self.assertIs(consumed, original)
+        self.assertEqual(replace(selected, best=fit), phase)
+        self.assertIs(selected.runner_up, phase.runner_up)
+        self.assertEqual(selected.best.model_role_intervals_px[1], expected)
+        self.assertEqual(selected.best.model_full_role_intervals_px[1], expected)
+
+    def test_unchanged_consumed_source_width_preserves_tighter_grid_intervals(self) -> None:
+        phase, authority = self._source_width_grid_fixture()
+        fit = phase.best
+        assert fit is not None and authority.width_px is not None
+        intervals = list(fit.model_role_intervals_px)
+        full_intervals = list(fit.model_full_role_intervals_px)
+        intervals[1] = FiniteInterval(199.8, 200.2)
+        full_intervals[1] = FiniteInterval(199.5, 200.5)
+        fit = replace(
+            fit,
+            pitch_fit=replace(
+                fit.pitch_fit,
+                frame_width_px=authority.width_px,
+                gap_interval_px=FiniteInterval(19.0, 21.0),
+            ),
+            model_role_intervals_px=tuple(intervals),
+            model_full_role_intervals_px=tuple(full_intervals),
+        )
+        phase = replace(phase, best=fit)
+
+        selected = apply_placement_source_frame_width(phase, authority)
+
+        self.assertEqual(selected, phase)
+        self.assertEqual(selected.best, fit)
+
+    def test_source_width_consumption_preserves_native_full_interval(self) -> None:
+        phase, authority = self._source_width_grid_fixture()
+        fit = phase.best
+        assert fit is not None and authority.width_px is not None
+        native = fit.role_bindings[2]
+        assert native is not None
+
+        selected = apply_placement_source_frame_width(phase, authority)
+
+        assert selected.best is not None
+        self.assertIs(selected.best.role_bindings[2], native)
+        self.assertEqual(
+            selected.best.model_role_intervals_px[2], native.fit_position_interval_px,
+        )
+        self.assertEqual(
+            selected.best.model_full_role_intervals_px[2], native.full_position_interval_px,
+        )
+        self.assertEqual(native.full_position_interval_px, FiniteInterval(215.0, 225.0))
+        self.assertNotEqual(
+            selected.best.model_full_role_intervals_px[2],
+            template_role_interval(
+                fit.template.roles[2],
+                phase=fit.phase_lattice_fit.absolute_phase_interval_px,
+                width=authority.width_px,
+                pitch=fit.pitch_fit.pitch_interval_px,
+                direction=fit.template.direction,
+                prefixes=adjacency_prefix_intervals(
+                    selected.best.adjacency_relations, fit.template.count,
+                ),
+            ),
+        )
 
     def test_contact_adjacent_frames_do_not_calibrate_source_width(
         self,

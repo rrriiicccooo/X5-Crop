@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from ...domain import EvidenceState, FiniteInterval, ObservationId
+from .interval_math import intersect, scale, subtract
 from .template_model import (
     AdjacencyRelation,
     LatticeParameterFitBasis,
@@ -21,6 +22,7 @@ from .template_model import (
     realize_adjacency_relations_at_role_positions,
 )
 from .template_nominal_grid_authority import (
+    NominalGridInfeasibleError,
     NominalGridRoleConstraint,
     solve_calibrated_nominal_grid_envelope,
 )
@@ -69,6 +71,23 @@ def _fit_calibrated_nominal_grid_candidate(
     registered_by_id = {item.observation_id: item for item in registered_facts}
     if not retained_ids or any(identity not in registered_by_id for identity in retained_ids):
         return None
+    retained_by_role = {item.role_index: item for item in retained_facts}
+    # A feasible Grid cannot authorize native Frame widths outside the full
+    # compiled physical range. Native departures stay independent of Grid W;
+    # only a disjoint complete interval is a contradiction.
+    for start_index in range(0, len(candidate.fit.role_bindings), 2):
+        end_index = start_index + 1
+        if start_index not in retained_by_role or end_index not in retained_by_role:
+            continue
+        start, end = candidate.fit.role_bindings[start_index:end_index + 1]
+        if start is None or end is None:
+            raise ValueError("nominal Grid projection lost its native Frame pair")
+        native_width = scale(
+            subtract(end.full_position_interval_px, start.full_position_interval_px),
+            template.direction,
+        )
+        if intersect(native_width, template.frame_width_px) is None:
+            return None
     phase_facts = tuple(
         item
         for item in retained_facts
@@ -99,10 +118,9 @@ def _fit_calibrated_nominal_grid_candidate(
             phase_authority_px=phase_authority,
             retained_direct_constraint_rank=retained_direct_constraint_rank,
         )
-    except ValueError:
+    except NominalGridInfeasibleError:
         return None
 
-    retained_by_role = {item.role_index: item for item in retained_facts}
     role_bindings: list[SequenceRoleBinding | None] = []
     role_intervals: list[FiniteInterval] = []
     role_full_intervals: list[FiniteInterval] = []

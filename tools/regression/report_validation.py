@@ -80,6 +80,9 @@ from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseFitResult,
     TemplatePhaseInput,
 )
+from x5crop.detection.photo_geometry.template_nominal_grid_model import (
+    nominal_grid_shared_anchor_roles,
+)
 from x5crop.detection.photo_geometry.template_placement import (
     compile_cross_support_domains_px,
     FormatPlacement,
@@ -470,7 +473,7 @@ def _validate_global_lattice_authority(value: object) -> None:
         raise ValueError("global lattice closure summary is invalid")
 
 
-def _validate_nominal_grid_evidence(value: object) -> None:
+def _validate_nominal_grid_evidence(value: object, *, relations: list[dict]) -> None:
     if value is None:
         return
     if (
@@ -481,7 +484,10 @@ def _validate_nominal_grid_evidence(value: object) -> None:
         or not value["evidence_id"]
         or not isinstance(value["prior_id"], str)
         or not value["prior_id"]
-        or not value_validation._valid_ids(value["phase_anchor_observation_ids"], allow_empty=False)
+        or not isinstance(value["phase_anchor_observation_ids"], list)
+        or not value["phase_anchor_observation_ids"]
+        or any(not isinstance(identity, str) or not identity
+               for identity in value["phase_anchor_observation_ids"])
         or not value_validation._valid_ids(value["covering_query_ids"])
         or not isinstance(value["phase_anchor_role_indices"], list)
         or not isinstance(value["inferred_adjacency_ordinals"], list)
@@ -496,6 +502,18 @@ def _validate_nominal_grid_evidence(value: object) -> None:
         != len(value["phase_anchor_observation_ids"])
     ):
         raise ValueError("calibrated nominal Grid evidence summary is invalid")
+    shared_anchors = nominal_grid_shared_anchor_roles(
+        tuple(value["phase_anchor_role_indices"]),
+        tuple(ObservationId(identity) for identity in value["phase_anchor_observation_ids"]),
+    )
+    for identity, indices in shared_anchors:
+        if not any(
+            relation["kind"] == "contact"
+            and relation["relation_ordinal"] == indices[1] // 2
+            and relation["shared_edge_observation_id"] == identity
+            for relation in relations
+        ):
+            raise ValueError("nominal Grid evidence shared anchor lost its contact")
     supported = value["state"] == "supported"
     failed = value["state"] in {"unavailable", "contradicted"}
     if (
@@ -3149,7 +3167,8 @@ def _validate_geometry(
             alignment["global_lattice_authority"]
         )
         _validate_nominal_grid_evidence(
-            alignment["calibrated_nominal_grid_evidence"]
+            alignment["calibrated_nominal_grid_evidence"],
+            relations=alignment["adjacency_relations"],
         )
         sequence_validation._validate_adjacency_coverage(
             alignment["adjacency_observation_coverage"], read_proof=_read_common_proof,
@@ -3520,7 +3539,8 @@ def _validate_phase_competition(value: object) -> None:
     for projection in eliminated:
         _validate_phase_candidate_projection(projection, None)
     _validate_nominal_grid_evidence(
-        value["calibrated_nominal_grid_evidence"]
+        value["calibrated_nominal_grid_evidence"],
+        relations=[] if best is None else best["adjacency_relations"],
     )
     sequence_validation._validate_adjacency_coverage(value["adjacency_observation_coverage"], read_proof=_read_common_proof)
     sequence_validation._validate_adjacency_continuity(

@@ -14,7 +14,10 @@ from enum import Enum
 from functools import cached_property
 import math
 from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
-from .template_nominal_grid_model import CalibratedNominalGridFitState
+from .template_nominal_grid_model import (
+    CalibratedNominalGridFitState,
+    nominal_grid_shared_anchor_roles,
+)
 from .line_observations import PhysicalLineRegion
 
 
@@ -1467,6 +1470,24 @@ class SequenceFit:
             for item in self.adjacency_relations
         ):
             raise ValueError("one physical edge cannot prove two contacts")
+        nominal_state = self.calibrated_nominal_grid_fit_state
+        if nominal_state is not None:
+            for identity, indices in nominal_grid_shared_anchor_roles(
+                nominal_state.phase_anchor_role_indices,
+                nominal_state.phase_anchor_observation_ids,
+            ):
+                contact = contacts.get(identity)
+                if (
+                    contact is None
+                    or contact.relation_ordinal != indices[1] // 2
+                    or any(
+                        self.role_bindings[index] is None
+                        or self.role_bindings[index].observation_id != identity
+                        or self.role_bindings[index].use != SequenceBindingUse.PHASE_ANCHOR
+                        for index in indices
+                    )
+                ):
+                    raise ValueError("nominal Grid shared anchor lost its contact bindings")
         overlap_ids = tuple(
             item.overlap_observation_id
             for item in self.adjacency_relations
@@ -1492,6 +1513,8 @@ class SequenceFit:
             if (
                 left.evidence_group_id != contact.physical_edge_id
                 or right.evidence_group_id != contact.physical_edge_id
+                or left.fit_position_interval_px != right.fit_position_interval_px
+                or left.full_position_interval_px != right.full_position_interval_px
                 or abs(
                     left.canonical_position_px
                     - right.canonical_position_px

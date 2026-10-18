@@ -27,10 +27,15 @@ from .template_nominal_grid_model import (
     CalibratedNominalGridFitState,
     CalibratedNominalGridPrior,
     NominalGridFailureKind,
+    nominal_grid_shared_anchor_roles,
 )
 
 
 _NUMERIC_EPSILON = 1.0e-8
+
+
+class NominalGridInfeasibleError(ValueError):
+    """The valid nominal Grid constraints have no common physical state."""
 
 
 @dataclass(frozen=True)
@@ -263,8 +268,10 @@ def _solve_linear(
         bounds=bounds,
         method="highs",
     )
+    if result.status == 2:
+        raise NominalGridInfeasibleError("calibrated nominal Grid has no joint feasible state")
     if not result.success or result.x is None:
-        raise ValueError("calibrated nominal Grid has no joint feasible state")
+        raise ValueError(f"calibrated nominal Grid solver failed: {result.message}")
     return np.asarray(result.x, dtype=np.float64)
 
 
@@ -290,6 +297,25 @@ def solve_calibrated_nominal_grid_envelope(
         raise ValueError("nominal Grid direct constraint rank is invalid")
     if not template.phase_lattice_authority.contains_offset(integer_slot_offset):
         raise ValueError("nominal Grid offset leaves the compiled lattice")
+    constraints_by_index = {item.role_index: item for item in role_constraints}
+    if len(constraints_by_index) != len(role_constraints) or any(
+        index >= len(template.roles) for index in constraints_by_index
+    ):
+        raise ValueError("nominal Grid role constraints changed role identity")
+    anchor_indices = tuple(sorted(constraints_by_index))
+    anchor_ids = tuple(constraints_by_index[index].observation_id for index in anchor_indices)
+    shared_anchors = nominal_grid_shared_anchor_roles(anchor_indices, anchor_ids)
+    for identity, indices in shared_anchors:
+        ordinal = indices[1] // 2
+        contact = next((item for item in relations if item.relation_ordinal == ordinal), None)
+        left, right = (constraints_by_index[index] for index in indices)
+        if (
+            not isinstance(contact, ContactRelation)
+            or contact.shared_edge_observation_id != identity
+            or left.coordinate_px != right.coordinate_px
+            or left.full_interval_px != right.full_interval_px
+        ):
+            raise ValueError("nominal Grid shared anchor requires its proven contact")
     assert prior.frame_width_mm is not None
     assert prior.pitch_mm is not None
     assert prior.frame_width_px is not None
@@ -308,7 +334,7 @@ def solve_calibrated_nominal_grid_envelope(
     pitch_minimum = max(prior.pitch_px.minimum, template.pitch_px.minimum)
     pitch_maximum = min(prior.pitch_px.maximum, template.pitch_px.maximum)
     if width_maximum < width_minimum or pitch_maximum < pitch_minimum:
-        raise ValueError(
+        raise NominalGridInfeasibleError(
             "calibrated nominal Grid conflicts with the compiled template"
         )
     bounds: tuple[tuple[float | None, float | None], ...] = (
@@ -491,7 +517,7 @@ def solve_calibrated_nominal_grid_envelope(
         minimum = max(left.minimum, right.minimum)
         maximum = min(left.maximum, right.maximum)
         if maximum < minimum - _NUMERIC_EPSILON:
-            raise ValueError("calibrated nominal Grid intervals do not intersect")
+            raise NominalGridInfeasibleError("calibrated nominal Grid intervals do not intersect")
         return FiniteInterval(minimum, max(minimum, maximum))
 
     def add_interval(
@@ -539,9 +565,6 @@ def solve_calibrated_nominal_grid_envelope(
         pitch_minimum,
         pitch_maximum,
     )
-    constraints_by_index = {
-        item.role_index: item for item in role_constraints
-    }
     ordered_constraints = tuple(
         constraints_by_index[index] for index in sorted(constraints_by_index)
     )
@@ -677,7 +700,6 @@ def solve_calibrated_nominal_grid_envelope(
         role_positions_px=role_positions,
         role_intervals_px=role_intervals,
     )
-    anchor_indices = tuple(sorted(constraints_by_index))
     fit_state = CalibratedNominalGridFitState(
         prior_id=prior.prior_id,
         scale_px_per_mm=prior.scale_px_per_mm,
@@ -685,10 +707,7 @@ def solve_calibrated_nominal_grid_envelope(
         pitch_mm=prior.pitch_mm,
         canonical_scale_px_per_mm=float(canonical[scale_index]),
         phase_anchor_role_indices=anchor_indices,
-        phase_anchor_observation_ids=tuple(
-            constraints_by_index[index].observation_id
-            for index in anchor_indices
-        ),
+        phase_anchor_observation_ids=anchor_ids,
         retained_direct_constraint_rank=retained_direct_constraint_rank,
     )
     return envelope, fit_state

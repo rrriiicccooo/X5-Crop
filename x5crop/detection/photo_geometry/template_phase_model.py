@@ -1207,6 +1207,10 @@ class PhaseFitResult:
             or self.best.calibrated_nominal_grid_fit_state is None
             or self.calibrated_nominal_grid_evidence.prior_id
             != self.best.calibrated_nominal_grid_fit_state.prior_id
+            or self.calibrated_nominal_grid_evidence.phase_anchor_role_indices
+            != self.best.calibrated_nominal_grid_fit_state.phase_anchor_role_indices
+            or self.calibrated_nominal_grid_evidence.phase_anchor_observation_ids
+            != self.best.calibrated_nominal_grid_fit_state.phase_anchor_observation_ids
         ):
             raise ValueError("phase nominal Grid evidence lost its fit state")
         if any(

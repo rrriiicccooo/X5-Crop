@@ -41,9 +41,13 @@ inferred only from established common dimensions, position anchors, and checked 
 information or outer support may help locate the crop, but cannot impersonate a direct photo boundary or override
 counterevidence.
 
+When the allowed common-width interval narrows, inferred boundaries use the updated range. Placement ambiguity and
+competing interpretations still require every safety check.
+
 Acceptance concerns the final crops: correct slot correspondence, no missing or duplicate photos, full protection of
 confirmed content, and compliance with fixed dimensions, source bounds, and risk budgets. Internal boundary names need
-not match human labels. For touching photos, one physical boundary may end the previous slot and start the next.
+not match human labels. For touching photos, one physical boundary may end the previous slot and start the next while
+anchoring their common template. It remains one physical observation.
 Every slot still needs sufficient position and protection evidence. The entire source enters `needs_review` if content
 is missing, an internal boundary is crossed, necessary evidence is absent, or a competing interpretation cannot be fully
 verified and protected. A score cannot replace these conditions or enlarge the fixed box.

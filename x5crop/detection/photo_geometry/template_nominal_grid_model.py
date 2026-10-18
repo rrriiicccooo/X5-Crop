@@ -8,6 +8,37 @@ from enum import Enum
 from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
 
 
+def nominal_grid_shared_anchor_roles(
+    role_indices: tuple[int, ...],
+    observation_ids: tuple[ObservationId, ...],
+) -> tuple[tuple[ObservationId, tuple[int, int]], ...]:
+    """Validate role-indexed anchors; a shared ID still denotes one fact.
+
+    Only adjacent END/START roles can share an identity. The solver and
+    SequenceFit additionally require the corresponding proven ContactRelation.
+    """
+
+    if (
+        not role_indices
+        or len(role_indices) != len(observation_ids)
+        or any(type(index) is not int or index < 0 for index in role_indices)
+        or tuple(sorted(set(role_indices))) != role_indices
+        or any(not isinstance(identity, ObservationId) for identity in observation_ids)
+    ):
+        raise ValueError("nominal Grid phase-anchor roles are invalid")
+    roles_by_id: dict[ObservationId, list[int]] = {}
+    for index, identity in zip(role_indices, observation_ids, strict=True):
+        roles_by_id.setdefault(identity, []).append(index)
+    shared = []
+    for identity, indices in roles_by_id.items():
+        if len(indices) == 1:
+            continue
+        if len(indices) != 2 or indices[0] % 2 != 1 or indices[1] != indices[0] + 1:
+            raise ValueError("nominal Grid shared anchor is not an adjacent END/START")
+        shared.append((identity, (indices[0], indices[1])))
+    return tuple(shared)
+
+
 class NominalGridFailureKind(str, Enum):
     CALIBRATED_PRIOR_UNAVAILABLE = (
         "calibrated_nominal_grid_authority_unavailable"
@@ -105,6 +136,9 @@ class CalibratedNominalGridFitState:
     retained_direct_constraint_rank: int
 
     def __post_init__(self) -> None:
+        nominal_grid_shared_anchor_roles(
+            self.phase_anchor_role_indices, self.phase_anchor_observation_ids
+        )
         if (
             not self.prior_id
             or not isinstance(self.scale_px_per_mm, PositiveInterval)
@@ -114,18 +148,6 @@ class CalibratedNominalGridFitState:
                 self.scale_px_per_mm.minimum - 1.0e-9
                 <= self.canonical_scale_px_per_mm
                 <= self.scale_px_per_mm.maximum + 1.0e-9
-            )
-            or tuple(sorted(set(self.phase_anchor_role_indices)))
-            != self.phase_anchor_role_indices
-            or any(index < 0 for index in self.phase_anchor_role_indices)
-            or not self.phase_anchor_role_indices
-            or len(self.phase_anchor_role_indices)
-            != len(self.phase_anchor_observation_ids)
-            or len(set(self.phase_anchor_observation_ids))
-            != len(self.phase_anchor_observation_ids)
-            or any(
-                not isinstance(identity, ObservationId)
-                for identity in self.phase_anchor_observation_ids
             )
             or not 0 <= self.retained_direct_constraint_rank <= 3
         ):
@@ -148,6 +170,9 @@ class CalibratedNominalGridEvidence:
     reason: str | None
 
     def __post_init__(self) -> None:
+        nominal_grid_shared_anchor_roles(
+            self.phase_anchor_role_indices, self.phase_anchor_observation_ids
+        )
         supported = self.state == EvidenceState.SUPPORTED
         failed = self.state in {
             EvidenceState.UNAVAILABLE,
@@ -157,13 +182,6 @@ class CalibratedNominalGridEvidence:
             not self.evidence_id
             or not self.prior_id
             or not (supported or failed)
-            or tuple(sorted(set(self.phase_anchor_role_indices)))
-            != self.phase_anchor_role_indices
-            or len(self.phase_anchor_role_indices)
-            != len(self.phase_anchor_observation_ids)
-            or not self.phase_anchor_role_indices
-            or len(set(self.phase_anchor_observation_ids))
-            != len(self.phase_anchor_observation_ids)
             or tuple(sorted(set(self.inferred_adjacency_ordinals)))
             != self.inferred_adjacency_ordinals
             or any(ordinal <= 0 for ordinal in self.inferred_adjacency_ordinals)

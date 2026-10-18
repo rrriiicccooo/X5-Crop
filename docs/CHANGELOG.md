@@ -12,6 +12,12 @@
   空曝光格保留，任何必需 slot 不安全都会使整张 source 进入 `needs_review`。
 - 每条 source 使用共同 W/H 和固定 `1.1W × 1.1H` 原图坐标窗口，四边 5% 留边包含基础保护；程序只选择
   位置。可见内容、物理边界、typed evidence、source/lane 安全与人工 reference 继续按架构合同核验。
+- 独立 source W 收窄时，即使 canonical W 不变，缺失边界的 model/full 区间仍同步更新；原生边界、
+  phase 状态与真实 runner 保留。已选唯一 enclosing-support pair 的中心先验重新绑定当前观察集合，数值区间不变。
+- Nominal Grid 保留已证明接触边界对相邻 END/START 的两项角色绑定；共享边界仍是一份物理观察，
+  不增加 rank。无合法 contact 的重复绑定继续拒绝，schema 或 solver 错误不再误报为物理 Grid 冲突。
+  保留的 native 双边宽度完整区间若与格式物理范围不相交，资格阶段即拒绝该映射；原有安全诊断提案
+  继续保留。区间相交的局部变化不被代表点或拟合 W 强行排除。
 - 只有真实 TIFF 外缘允许 source clipping；内部 authority 边界不能用缩小窗口绕过。Deskew 只在批准后
   整理，不参与检测或 Gate。Debug Analysis 复用同次检测事实，不取得裁切或自动输出权限。
 - 正式 TIFF 只在整张 source 通过安全准入后发布；输出先写 staging，再原子发布到全新目录，保留既有目标。

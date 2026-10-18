@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import unittest
+from unittest.mock import patch
 
 from tools.tests.template_test_support import (
     calibrated_nominal_grid_prior,
@@ -404,6 +405,114 @@ class TemplatePhaseCandidateAuthorityContractTest(unittest.TestCase):
                         projected.fit.role_bindings,
                         initial.best.role_bindings,
                     )
+
+    @staticmethod
+    def _nominal_grid_projection_fixture():
+        spec = template(2)
+        observations = tuple(
+            edge(f"nominal-error:{index}", coordinate)
+            for index, coordinate in enumerate((10.0, 110.0, 128.0, 228.0))
+        )
+        measurements = (
+            phase_sequence_measurement("nominal-error", FiniteInterval(0.0, 260.0)),
+        )
+        initial = fit_template_phase(
+            observations, spec, sequence_measurement_sets=measurements,
+        )
+        assert initial.best is not None
+        band = separator(
+            "nominal-error:band", observations[1], observations[2],
+            FiniteInterval(17.8, 18.2),
+        )
+        authority = assess_direct_role_binding_authority(
+            initial.best, observations, (band,), measurements,
+        )
+        relations = derive_candidate_separator_relations(
+            initial.best, authority, (band,), FiniteInterval.exact(120.0),
+        )
+        return (
+            _BoundFit(initial.best, True), authority, _facts(observations), (),
+            spec.roles, spec, relations, FiniteInterval.exact(120.0), None, None,
+            calibrated_nominal_grid_prior(spec),
+        )
+
+    def test_nominal_grid_schema_value_error_propagates_from_projection(self) -> None:
+        arguments = self._nominal_grid_projection_fixture()
+        failure = ValueError("synthetic nominal Grid schema failure")
+        with patch(
+            "x5crop.detection.photo_geometry.template_phase_projection."
+            "solve_calibrated_nominal_grid_envelope",
+            side_effect=failure,
+        ) as solver:
+            with self.assertRaises(ValueError) as raised:
+                project_candidate_to_authorized_direct_roles(*arguments)
+        solver.assert_called_once()
+        self.assertIs(raised.exception, failure)
+
+    def test_nominal_grid_preserves_native_width_uncertainty_and_rejects_disjoint_frame(self) -> None:
+        from x5crop.detection.photo_geometry.template_phase_projection import (
+            _fit_calibrated_nominal_grid_candidate,
+        )
+
+        arguments = self._nominal_grid_projection_fixture()
+        original, authority, registered = arguments[:3]
+        native = original.fit.role_bindings[3]
+        assert native is not None
+        for coordinate, full, expected in (
+            (300.0, FiniteInterval.exact(300.0), False),
+            (245.0, FiniteInterval(228.0, 250.0), True),
+        ):
+            with self.subTest(coordinate=coordinate):
+                binding = replace(
+                    native, use=SequenceBindingUse.LOCAL_REFINEMENT,
+                    canonical_position_px=coordinate,
+                    fit_position_interval_px=FiniteInterval.exact(coordinate),
+                    full_position_interval_px=full, line_evidence=None,
+                )
+                bindings = (*original.fit.role_bindings[:3], binding)
+                model = original.fit.model_role_positions_px[3]
+                fit = replace(
+                    original.fit, role_bindings=bindings, phase_support_coverage=0.0,
+                    model_role_intervals_px=(*original.fit.model_role_intervals_px[:3],
+                        FiniteInterval(min(model, coordinate), max(model, coordinate))),
+                    model_full_role_intervals_px=(*original.fit.model_full_role_intervals_px[:3],
+                        FiniteInterval(min(model, full.minimum), max(model, full.maximum))),
+                )
+                facts = tuple(
+                    replace(item, interval_px=binding.fit_position_interval_px,
+                        full_interval_px=full, line_evidence=None)
+                    if item.observation_id == binding.observation_id else item
+                    for item in registered
+                )
+                result = _fit_calibrated_nominal_grid_candidate(
+                    _BoundFit(fit, True), prior=arguments[-1],
+                    retained_facts=authority.facts, registered_facts=facts,
+                    template=fit.template, relations=arguments[6],
+                    phase_authority=None, retained_direct_constraint_rank=2,
+                )
+                self.assertEqual(result is not None, expected)
+                if result is not None:
+                    self.assertIs(result.fit.role_bindings[3], binding)
+
+    def test_nominal_grid_infeasible_is_a_projection_conflict(self) -> None:
+        from x5crop.detection.photo_geometry.template_nominal_grid_authority import (
+            NominalGridInfeasibleError,
+        )
+
+        arguments = self._nominal_grid_projection_fixture()
+        with patch(
+            "x5crop.detection.photo_geometry.template_phase_projection."
+            "solve_calibrated_nominal_grid_envelope",
+            side_effect=NominalGridInfeasibleError("synthetic infeasible LP"),
+        ) as solver:
+            projected, receipt = project_candidate_to_authorized_direct_roles(*arguments)
+        solver.assert_called_once()
+        self.assertIsNone(projected)
+        self.assertEqual(
+            receipt.outcome,
+            PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID_CONFLICT,
+        )
+        self.assertEqual(receipt.retained_direct_constraint_rank, 2)
 
     def test_candidate_separator_relation_requires_strictly_positive_gap(self) -> None:
         observations = tuple(

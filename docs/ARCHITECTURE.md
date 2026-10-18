@@ -843,8 +843,10 @@ source pitch、base relation、direct separator refit、双候选 local completi
   两类基础都先保存不依赖 fitted Grid W 的测量区间，再由消费端与 retained placement 的连续 W 相交；
   交集为空时保留测量和完整 proposal，以 `source_frame_width_conflict` 阻止该 placement 获得资格。测量的
   canonical W 只是区间内代表值，不是额外的精确约束；原联合拟合代表仍在交集内时保持它，不能单独换成
-  测量中心而破坏 phase/pitch/W 的相关性。消费端保留原测量与完整交集，原代表被排除时同步更新同一
-  Grid 的派生 gap、local delta 和 role 区间；native binding 不变，联合可行状态仍须由下游完整检查。
+  测量中心而破坏 phase/pitch/W 的相关性。消费端保留原测量与完整交集；W 区间或派生关系变化时，即使
+  canonical W 未变，也须同步更新同一 Grid 的派生 gap、local delta 与缺失 role 的 model/full 区间。
+  只有完整 consumed pitch-fit 与 adjacency state 均未变时，才直接保留已有联合投影区间。Native binding
+  的 identity 与原生 fit/full 坐标不变，联合可行状态仍须由下游完整检查。
   Catalog separator 是搜索先验，消费后的普通 gap 由同一 W/pitch 差值导出；直接 signed gap 保持 native。
   最终阶段重新评估 opposite
   inference 与 Gate；不得重编译 template、搜索 phase、删除 runner、改变 ordinal 或参与先前的离散选择。
@@ -1244,6 +1246,18 @@ coordinate 并收紧默认模型；直接 separator 的实际宽度继续只产�
 pre-Gate proposal；`TemplatePlacementCompetition` / `TemplateSourceSelection` 只拥有 eligibility 与选择；
 `DecisionGate` 独占 `approved_auto | needs_review`。Proposal 可以在后两层不支持时保留，绝不能冒充
 selected output 或正式 TIFF。
+
+Nominal Grid 的 anchor ledger 按 role 保存 observation identity。已证明的 `ContactRelation` 可让相邻
+END/START 两个 role 保留同一 shared edge ID；两项对应关系都须保留，但仍只代表一份物理观察，不增加
+独立 rank。重复 ID 只允许这一相邻角色对，solver、SequenceFit 与 report 均须核验同一 contact、原生坐标
+和完整区间；无 contact、角色不相邻、重复超过两项或同 ID 坐标不一致均拒绝。Evidence 的 anchor ledger
+必须与同一 fit state 一致。只有有效约束的联合不可行结果才映射为 `calibrated_nominal_grid_conflict`；
+schema、身份校验或求解器错误必须传播为实际错误，不能伪装成物理冲突。
+Nominal 投影还须核验全部保留的 native 双边 Frame：其完整原生宽度区间若与完整 compiled physical W
+范围不相交，即使 Grid 的 LP 非空也属于物理冲突，不能取得资格后才在 placement 组合时丢失提案。
+该检查不使用更窄的 source W，不把 native 代表点当成精确约束，也不要求各 Frame 原生宽度相等；区间
+仍相交的真实局部变化继续交由原有完整联合包络与输出检查处理。失败候选保留原 typed projection，
+既有有界诊断 runner 路径继续保留完整 pre-Gate 提案。
 
 逐 adjacency coverage 必须覆盖当前 placement 的完整合法走廊；“所有 query 都执行完成”或“没有检测到
 edge”不是 normal adjacency 的充分证明。直接角色反证和已证明 local relation 优先于 Grid，coverage
@@ -1853,7 +1867,7 @@ Enclosing support 本身只证明真实 aperture 位于两条 support 之间，�
 center_offset_ratio = (gold_aperture_center - support_midpoint) / H
 ```
 
-当前 v16 calibration 按完整 development cohort 的同一资格规则纳入 4 个 selected unique enclosing pair、
+当前 v17 calibration 按完整 development cohort 的同一资格规则纳入 4 个 selected unique enclosing pair、
 且黄金 top/bottom 均为 `directly_visible` 的 source（135 两源、120-66 两源，不以最终批准或预算筛选）；
 同源 count 先取中位数，再对 source hull 以 `0.001H` 向外量化，得到 `[-0.007H, +0.010H]`。
 该先验只用于唯一已选 support，不适用于共同包络；有限 development 支持尚不证明 sealed 或未见来源泛化。Calibration
