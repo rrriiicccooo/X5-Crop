@@ -69,7 +69,10 @@ def _local_role_candidates(result: PhaseFitResult) -> tuple[SequenceFit, ...]:
     if result.status == PhaseFitStatus.RESOLVED:
         return (result.best,)
     if (result.status == PhaseFitStatus.AMBIGUOUS
-            and result.failure_kind == PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS
+            and result.failure_kind in {
+                PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS,
+                PhaseFailureKind.ADJACENCY_TOPOLOGY_AMBIGUOUS,
+            }
             and result.runner_up is not None):
         return result.best, result.runner_up
     return ()

@@ -1626,7 +1626,10 @@ def _validate_cross_longitudinal_projection_scope(
         1 if phase_status == PhaseFitStatus.RESOLVED.value
         else 2 if (
             phase_status == PhaseFitStatus.AMBIGUOUS.value
-            and phase_failure_kind == PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS.value
+            and phase_failure_kind in {
+                PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS.value,
+                PhaseFailureKind.ADJACENCY_TOPOLOGY_AMBIGUOUS.value,
+            }
         )
         else 0
     )
@@ -1647,7 +1650,10 @@ def _cross_support_domains_from_phase_report(
         fits = (phase["best"],)
     elif (
         phase["status"] == PhaseFitStatus.AMBIGUOUS.value
-        and phase["failure_kind"] == PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS.value
+        and phase["failure_kind"] in {
+            PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS.value,
+            PhaseFailureKind.ADJACENCY_TOPOLOGY_AMBIGUOUS.value,
+        }
         and phase["runner_up"] is not None
     ):
         fits = (phase["best"], phase["runner_up"])

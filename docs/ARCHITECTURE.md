@@ -670,7 +670,7 @@ Grid 始终可以生成一个待检验的默认 placement，但它不能仅凭�
   状态，也不得因此修改任何直接角色的 native coordinate。Report/Debug 在
   `JointPlacementEnvelope.sequence_constraint_basis` 中区分 `global_lattice_authority | model_intervals`，并
   保存实际消费的 constraint identity。
-- 仅有 `discrete_phase_ambiguous` 的 retained primary/runner 可以分别消费自身 supported rank-3 约束，
+- `discrete_phase_ambiguous` 或 `adjacency_topology_ambiguous` 的 retained primary/runner 可以分别消费自身 supported rank-3 约束，
   条件是该 fit 的 candidate projection 合法且当前 direct-role authority 为 supported。这是“给定该离散
   解释”的条件几何，不证明解释正确、coverage 完整或具备输出资格。Primary 复用最终 authority；runner
   从自己的 binding 和原登记事实重新评估，不能复用 primary 的角色 ledger。只有 source W 与 runner 的
@@ -767,7 +767,7 @@ residual、support 或 Grid 强选。
 也不能被误报为 unknown edge。Grid 约束继续只消费原 `PHASE_ANCHOR`，direct-rank 重拟合后沿用
 原局部绑定恢复 owner；完整账本外的身份仍是错误，未获权弱线及其完整区间反证照常保留。
 
-纯 `discrete_phase_ambiguous` 不再跳过已保留 primary/runner 的局部边界补全。两份 fit 分别调用同一个
+`discrete_phase_ambiguous` 与 `adjacency_topology_ambiguous` 均对已保留 primary/runner 作局部边界补全。两份 fit 分别调用同一个
 local owner，只补原本未绑定的角色，不改变已有 binding、全局 anchor 或候选顺序；各自使用 template W，
 不能共享 selected source W。新增弱线分别进入原投影 owner，保留相同 template/ordinal/phase-anchor ceiling
 及退出线的完整区间反证；新增 material 硬反证写入该候选的 `direct_role_contradiction`，不能沿用旧的
@@ -1528,7 +1528,7 @@ observation、fixed H、runner 或最终 Gate：
 局部 line 会用彼此不共同支持的尾部自证整条 template。`complementary_domains` 仍须两侧各自拥有至少两个
 独立区域，并由两侧 direct trace 的完整并集逐 domain 覆盖 template。
 
-纵向 resolved 编译一组 Frame domain；仅有纯离散歧义、且 primary/runner 均存在时，分别编译两组。
+纵向 resolved 编译一组 Frame domain；phase 或 topology 歧义且 primary/runner 均存在时，分别编译两组。
 每组保持用户 count 指定的 N 个有序区间，并独立执行已有 Overlap midpoint 支撑分割；任一组无法编译时，
 不能静默丢弃该候选后授权另一组。其它 unresolved 状态不产生 domain 权限。
 
@@ -1877,9 +1877,9 @@ Enclosing support 本身只证明真实 aperture 位于两条 support 之间，�
 center_offset_ratio = (gold_aperture_center - support_midpoint) / H
 ```
 
-当前 v18 calibration 按完整 development cohort 的同一资格规则纳入 5 个 selected unique enclosing pair、
-且黄金 top/bottom 均为 `directly_visible` 的 source（135 三源、120-66 两源，不以最终批准或预算筛选）；
-同源 count 先取中位数，再对 source hull 以 `0.001H` 向外量化，得到 `[-0.007H, +0.010H]`。
+当前 v19 calibration 按完整 development cohort 的同一资格规则纳入 3 个 selected unique enclosing pair、
+且黄金 top/bottom 均为 `directly_visible` 的 source（135 一源、120-66 两源，不以最终批准或预算筛选）；
+同源 count 先取中位数，再对 source hull 以 `0.001H` 向外量化，得到 `[-0.003H, +0.010H]`。
 该先验只用于唯一已选 support，不适用于共同包络；有限 development 支持尚不证明 sealed 或未见来源泛化。Calibration
 同时绑定 development cohort SHA、eligibility revision 和精确 observation-set SHA；source 数量相同但成员、
 观测值或 detector 权限变化时同样视为 calibration drift。该 authority
@@ -2512,8 +2512,9 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   错误边界和根因，并把结果明确标为未达到 release detection gate；不得隐藏、改角色或提前删除 proposal。
   所有合法、受支持的黄金 task 应形成完整 proposal 并接受 pre-Gate 黄金比较。Review 按实际输出风险与
   尚待证明的内部解释差异分组，优先审计已有几何合格、预算通过的方案为何未被可靠选中或批准；不能
-  先假定歧义阻断多余。净收益以首选方案几何合格数、安全自动通过数及逐 task 回归衡量，候选覆盖和
-  测试通过不替代发布能力。证据不足不能提前终止 proposal，也不能为了观察错误绕过 Runtime Gate。
+  先假定歧义阻断多余。阶段收益与回退分别报告首选方案、保留提案、预算资格及安全自动批准；有共同
+  根因证据且通往已确认合同的暂时回退可以保留，不要求每次改动立即净增覆盖。候选覆盖和测试通过
+  不替代发布能力。证据不足不能提前终止 proposal，也不能为了观察错误绕过 Runtime Gate。
 - 检测能力发布底线是当前 development nominal 全部安全 `approved_auto`，全部角色
   `unsafe_approved_auto = 0`；challenge 的安全 auto 是能力发现，安全 review 同样合格，但不能替代
   nominal 覆盖。未来建立 sealed cohort 后，其 nominal 也必须全部安全自动通过。不得把失败 nominal 改成

@@ -1,6 +1,7 @@
 """Routing guards for per-hypothesis constraints, independent of eligibility."""
 
 from dataclasses import replace
+from itertools import product
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
@@ -99,9 +100,22 @@ class ConditionalPlacementContractTest(unittest.TestCase):
         self.assertIs(direct.call_args.kwargs["authorized_source_frame_width_px"], self.width.width_px)
         self.assertIs(lattice.call_args.args[1], self.prepared.phase_input)
 
+    def test_topology_ambiguity_keeps_each_hypothesis_constraints(self) -> None:
+        self.phase.failure_kind = PhaseFailureKind.ADJACENCY_TOPOLOGY_AMBIGUOUS
+        result, direct, lattice = self.route()
+        self.assertIs(result[0].global_lattice_authority, self.primary_authority)
+        self.assertIs(result[1].global_lattice_authority, self.runner_authority)
+        self.assertIsNone(direct.call_args.kwargs["authorized_source_frame_width_px"])
+        self.assertEqual(lattice.call_args.args[1].global_lattice_evidence.frame_width_observation_ids, ())
+        self.assertEqual(self.phase.status, PhaseFitStatus.AMBIGUOUS)
+        self.assertEqual(self.phase.failure_kind, PhaseFailureKind.ADJACENCY_TOPOLOGY_AMBIGUOUS)
+
     def test_other_phase_failures_do_not_consume_conditional_constraints(self) -> None:
         for failure in PhaseFailureKind:
-            if failure == PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS:
+            if failure in {
+                PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS,
+                PhaseFailureKind.ADJACENCY_TOPOLOGY_AMBIGUOUS,
+            }:
                 continue
             with self.subTest(failure=failure):
                 self.phase.failure_kind = failure
@@ -111,9 +125,16 @@ class ConditionalPlacementContractTest(unittest.TestCase):
                 lattice.assert_not_called()
 
     def test_failed_projection_cannot_supply_conditional_constraints(self) -> None:
-        for outcome in (Projection.DIRECT_ROLE_CONTRADICTION, Projection.DIRECT_LATTICE_CONFLICT,
-                        Projection.REFIT_UNAVAILABLE, Projection.DISCRETE_IDENTITY_CHANGED):
-            with self.subTest(outcome=outcome):
+        failures = set(Projection) - {
+            Projection.UNCHANGED, Projection.DIRECT_SEPARATOR_REFIT,
+            Projection.PROJECTED, Projection.CALIBRATED_NOMINAL_GRID,
+        }
+        for failure, outcome in product(
+            (PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS,
+             PhaseFailureKind.ADJACENCY_TOPOLOGY_AMBIGUOUS), failures,
+        ):
+            with self.subTest(failure=failure, outcome=outcome):
+                self.phase.failure_kind = failure
                 self.phase.best_phase_candidate_authority_projection.outcome = outcome
                 self.phase.runner_phase_candidate_authority_projection.outcome = outcome
                 result, direct, lattice = self.route()

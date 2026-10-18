@@ -413,7 +413,7 @@ def retained_cross_support_domain_groups_px(
 ) -> tuple[tuple[FiniteInterval, ...], ...]:
     """Compile each positioned candidate without choosing or merging fits.
 
-    A pure discrete ambiguity retains two independent domain requirements.
+    Phase or topology ambiguity retains two independent domain requirements.
     Other unresolved states do not establish a complete placement extent.
     Failure in either group must not silently reduce the requirements to one.
     """
@@ -424,7 +424,10 @@ def retained_cross_support_domain_groups_px(
         fits = (phase.best,)
     elif (
         phase.status == PhaseFitStatus.AMBIGUOUS
-        and phase.failure_kind == PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS
+        and phase.failure_kind in {
+            PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS,
+            PhaseFailureKind.ADJACENCY_TOPOLOGY_AMBIGUOUS,
+        }
         and phase.runner_up is not None
     ):
         fits = (phase.best, phase.runner_up)

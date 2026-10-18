@@ -153,6 +153,21 @@ class TemplatePhaseRefinementContractTest(unittest.TestCase):
             result.receipt.fit_pass_count, before.receipt.fit_pass_count + 1,
         )
         result.receipt.validate_bounds()
+        topology = replace(
+            before,
+            failure_kind=PhaseFailureKind.ADJACENCY_TOPOLOGY_AMBIGUOUS,
+            ambiguity_reason="two retained topology hypotheses",
+        )
+        topology_refined = _with_local_role_refinement(
+            topology, observations, (), phase_input.sequence_measurement_sets,
+        )
+        self.assertEqual(topology_refined.best.role_bindings, result.best.role_bindings)
+        self.assertEqual(topology_refined.runner_up.role_bindings, result.runner_up.role_bindings)
+        self.assertEqual(topology_refined.status, topology.status)
+        self.assertEqual(topology_refined.failure_kind, topology.failure_kind)
+        self.assertIsNone(topology_refined.winner_basis)
+        self.assertEqual(retained_cross_support_domain_groups_px(topology_refined), domain_groups)
+        topology_refined.receipt.validate_bounds()
         with self.assertRaisesRegex(ValueError, "cannot share selected source W"):
             _with_local_role_refinement(
                 before,
@@ -218,6 +233,26 @@ class TemplatePhaseRefinementContractTest(unittest.TestCase):
         self.assertEqual(weak_result.receipt.selected_direct_role_projection_binding_count, 2)
         self.assertEqual(weak_result.receipt.selected_nominal_grid_solve_success_count, 2)
         weak_result.receipt.validate_bounds()
+        weak_topology = _with_local_role_refinement(
+            topology, weak_observations, (), phase_input.sequence_measurement_sets,
+        )
+        weak_topology = _project_retained_late_local_refinements(
+            weak_topology, replace(phase_input, observations=weak_observations),
+        )
+        self.assertEqual(weak_topology.best.role_bindings, weak_result.best.role_bindings)
+        self.assertEqual(weak_topology.runner_up.role_bindings, weak_result.runner_up.role_bindings)
+        self.assertEqual(
+            weak_topology.best_phase_candidate_authority_projection,
+            weak_result.best_phase_candidate_authority_projection,
+        )
+        self.assertEqual(
+            weak_topology.runner_phase_candidate_authority_projection,
+            weak_result.runner_phase_candidate_authority_projection,
+        )
+        self.assertEqual(weak_topology.status, topology.status)
+        self.assertEqual(weak_topology.failure_kind, topology.failure_kind)
+        self.assertIsNone(weak_topology.winner_basis)
+        weak_topology.receipt.validate_bounds()
 
     def test_late_incompatible_refit_retains_input_and_failed_projection(self) -> None:
         spec = template(3)

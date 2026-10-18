@@ -74,6 +74,9 @@ class CrossLongitudinalContractTest(unittest.TestCase):
         ])
         self.assertNotEqual(groups[0], groups[1])
         self.assertEqual(_cross_support_domains_from_phase_report({
+            **phase, "failure_kind": "adjacency_topology_ambiguous",
+        }), groups)
+        self.assertEqual(_cross_support_domains_from_phase_report({
             **phase, "status": "resolved", "failure_kind": None,
         }), groups[:1])
         self.assertEqual(_cross_support_domains_from_phase_report({
@@ -228,6 +231,9 @@ class CrossLongitudinalContractTest(unittest.TestCase):
         _validate_cross_longitudinal_projection_scope(
             record, "ambiguous", "discrete_phase_ambiguous"
         )
+        _validate_cross_longitudinal_projection_scope(
+            record, "ambiguous", "adjacency_topology_ambiguous"
+        )
         truncated = deepcopy(record)
         for field in ("candidate_support_domains_px", "supported_domain_ordinals_by_candidate"):
             truncated[field] = truncated[field][:1]
@@ -235,6 +241,10 @@ class CrossLongitudinalContractTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "retained phase scope"):
             _validate_cross_longitudinal_projection_scope(
                 truncated, "ambiguous", "discrete_phase_ambiguous"
+            )
+        with self.assertRaisesRegex(ValueError, "retained phase scope"):
+            _validate_cross_longitudinal_projection_scope(
+                truncated, "ambiguous", "adjacency_topology_ambiguous"
             )
         _validate_cross_longitudinal_projection_scope(truncated, "resolved", None)
         with self.assertRaisesRegex(ValueError, "retained phase scope"):

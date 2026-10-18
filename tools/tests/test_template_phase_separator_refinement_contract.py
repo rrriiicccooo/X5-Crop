@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from itertools import product
 import unittest
 
 from tools.tests.template_test_support import (
@@ -527,8 +528,11 @@ class TemplatePhaseSeparatorRefinementContractTest(unittest.TestCase):
 
         # The same hard counterevidence belongs to its candidate even when
         # initial identity ambiguity forbids promotion or reordering.
-        for reversed_primary in (True, False):
-            with self.subTest(reversed_primary=reversed_primary):
+        for failure_kind, reversed_primary in product(
+            (PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS,
+             PhaseFailureKind.ADJACENCY_TOPOLOGY_AMBIGUOUS), (True, False),
+        ):
+            with self.subTest(failure_kind=failure_kind, reversed_primary=reversed_primary):
                 ambiguous = replace(
                     competition,
                     best=wrong_fit if reversed_primary else normal_fit,
@@ -544,7 +548,7 @@ class TemplatePhaseSeparatorRefinementContractTest(unittest.TestCase):
                         else eligible_projection(wrong_fit, wrong_authority)
                     ),
                     status=PhaseFitStatus.AMBIGUOUS,
-                    failure_kind=PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS,
+                    failure_kind=failure_kind,
                     ambiguity_reason="two retained identities",
                     winner_basis=None,
                 )

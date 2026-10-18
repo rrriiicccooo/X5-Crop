@@ -147,7 +147,10 @@ def _placements(
     cross = prepared.cross_competition
     conditional = (
         phase.status == PhaseFitStatus.AMBIGUOUS
-        and phase.failure_kind == PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS
+        and phase.failure_kind in {
+            PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS,
+            PhaseFailureKind.ADJACENCY_TOPOLOGY_AMBIGUOUS,
+        }
     )
     legal_projection_outcomes = {
         PhaseCandidateProjectionOutcome.UNCHANGED,
