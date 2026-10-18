@@ -10,7 +10,7 @@ from ..configuration.model import (
     ResolvedSlotCount,
 )
 from ..domain import Box
-from ..geometry.layout import is_horizontal_layout, work_gray
+from ..geometry.layout import is_horizontal_layout
 from ..image.gray import make_base_gray_u8
 from ..io.model import ImageProfile
 from .evidence.scan_canvas import (
@@ -161,7 +161,7 @@ def prepare_detection_workspace(
         arr,
         configuration.base_gray,
     )
-    gray_work = work_gray(source_gray, layout)
+    gray_work = source_gray if is_horizontal_layout(layout) else source_gray.T
     gray_work.flags.writeable = False
     scan_canvas = observe_scan_canvas(
         gray_work.shape[1],

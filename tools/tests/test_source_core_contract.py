@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import fields, replace
 import math
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -109,7 +110,7 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
         yxs = rng.integers(0, 65536, size=(257, 131, 3), dtype=np.uint16)
         params = BaseGrayParameters(maximum_percentile_samples=10_000)
 
-        for source in (yxs, yxs[::-1, ::-1]):
+        for source in (yxs, yxs[::-1, ::-1], yxs.transpose(1, 0, 2)):
             with self.subTest(contiguous=source.flags.c_contiguous):
                 rgb = source.astype(np.float32)
                 reference = (
@@ -386,11 +387,24 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
             "horizontal",
             configuration,
         ).source_core.content_occupancy[0]
+        with mock.patch(
+            "x5crop.detection.workspace.observe_content_occupancy",
+            wraps=observe_content_occupancy,
+        ) as measured:
+            vertical_pixels, vertical_profile = product_rgb_input(gray.T)
+            vertical = prepare_detection_workspace(
+                vertical_pixels, vertical_profile, "vertical", configuration,
+            )
+        values = measured.call_args.args[0]
+        self.assertTrue(np.shares_memory(values, vertical.source_gray))
+        self.assertEqual(
+            vertical.source_core.content_occupancy[0],
+            observe_content_occupancy(
+                np.ascontiguousarray(values), **measured.call_args.kwargs,
+            ),
+        )
         second = prepare_detection_workspace(
-            pixels,
-            profile,
-            "horizontal",
-            configuration,
+            pixels, profile, "horizontal", configuration,
         ).source_core.content_occupancy[0]
         self.assertTrue(first.observations)
         self.assertEqual(first, second)

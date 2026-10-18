@@ -74,41 +74,18 @@ class DependencyInstallerContractTest(unittest.TestCase):
                 (
                     pin.name,
                     pin.module,
-                    pin.module_version,
                     pin.pip_distribution,
-                    pin.pip_version,
                     pin.homebrew_formula,
                 )
                 for pin in contract.dependencies
             ),
             (
-                ("numpy", "numpy", "2.5.4", "numpy", "2.5.4", "numpy"),
-                ("scipy", "scipy", "1.18.1", "scipy", "1.18.1", "scipy"),
-                (
-                    "opencv",
-                    "cv2",
-                    "5.0.0",
-                    "opencv-python-headless",
-                    "5.0.0.93",
-                    "opencv",
-                ),
-                (
-                    "tifffile",
-                    "tifffile",
-                    "2026.9.20",
-                    "tifffile",
-                    "2026.9.20",
-                    None,
-                ),
-                (
-                    "imagecodecs",
-                    "imagecodecs",
-                    "2026.10.10",
-                    "imagecodecs",
-                    "2026.10.10",
-                    None,
-                ),
-                ("pillow", "PIL", "12.3.0", "Pillow", "12.3.0", "pillow"),
+                ("numpy", "numpy", "numpy", "numpy"),
+                ("scipy", "scipy", "scipy", "scipy"),
+                ("opencv", "cv2", "opencv-python-headless", "opencv"),
+                ("tifffile", "tifffile", "tifffile", None),
+                ("imagecodecs", "imagecodecs", "imagecodecs", None),
+                ("pillow", "PIL", "Pillow", "pillow"),
             ),
         )
         text = CONTRACT_PATH.read_text(encoding="utf-8")

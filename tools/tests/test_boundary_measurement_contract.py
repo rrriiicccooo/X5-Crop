@@ -747,57 +747,60 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
                 evidence_state=BoundaryEvidenceState.CONTRADICTION,
             )
 
+    @staticmethod
+    def _separator_pairing_run(name: str, coordinate: float) -> ProfileRun:
+        traces = (0, 50, 100)
+        return ProfileRun(
+            run_id=name,
+            coordinate_interval_px=FiniteInterval.exact(coordinate),
+            transition_ids=tuple(ObservationId(f"transition:{name}:{trace}") for trace in traces),
+            trace_coordinates_px=traces,
+            role_hint=None,
+            qualified_anchor_roles=(),
+            support_fraction=1.0,
+            continuous_support_fraction=1.0,
+            fit_residual_px=0.0,
+            evidence_strength=1.0,
+        )
+
+    @staticmethod
+    def _separator_pairing_edge(run: ProfileRun, polarity: int) -> BoundaryEdgeObservation:
+        interval = run.coordinate_interval_px
+        return BoundaryEdgeObservation(
+            observation_id=ObservationId(f"edge:{run.run_id}"),
+            run_id=run.run_id,
+            discovery_interval_px=interval,
+            reference_trace_px=50.0,
+            canonical_position_px=interval.center,
+            fit_position_interval_px=interval,
+            full_position_interval_px=interval,
+            transition_ids=run.transition_ids,
+            trace_coordinates_px=run.trace_coordinates_px,
+            polarity=polarity,
+            support_fraction=1.0,
+            continuous_support_fraction=1.0,
+            fit_residual_px=0.0,
+            canonical_direction_degrees=None,
+            fit_direction_interval_degrees=None,
+            full_direction_interval_degrees=None,
+            measurement_basis=(
+                BoundaryEdgeMeasurementBasis.DIRECT_TRACE
+            ),
+        )
+
     def test_separator_pairing_accepts_direct_wide_material_below_one_frame(
         self,
     ) -> None:
         traces = (0, 50, 100)
 
-        def profile_run(name: str, coordinate: float) -> ProfileRun:
-            return ProfileRun(
-                run_id=name,
-                coordinate_interval_px=FiniteInterval.exact(coordinate),
-                transition_ids=tuple(ObservationId(f"transition:{name}:{trace}") for trace in traces),
-                trace_coordinates_px=traces,
-                role_hint=None,
-                qualified_anchor_roles=(),
-                support_fraction=1.0,
-                continuous_support_fraction=1.0,
-                fit_residual_px=0.0,
-                evidence_strength=1.0,
-            )
-
-        left_run = profile_run("left", 100.0)
-        right_run = profile_run("right", 900.0)
+        left_run = self._separator_pairing_run("left", 100.0)
+        right_run = self._separator_pairing_run("right", 900.0)
         profile = BasicAxisProfile(
             "sequence",
             1000,
             traces,
             (left_run, right_run),
         )
-
-        def edge(run: ProfileRun, polarity: int) -> BoundaryEdgeObservation:
-            interval = run.coordinate_interval_px
-            return BoundaryEdgeObservation(
-                observation_id=ObservationId(f"edge:{run.run_id}"),
-                run_id=run.run_id,
-                discovery_interval_px=interval,
-                reference_trace_px=50.0,
-                canonical_position_px=interval.center,
-                fit_position_interval_px=interval,
-                full_position_interval_px=interval,
-                transition_ids=run.transition_ids,
-                trace_coordinates_px=traces,
-                polarity=polarity,
-                support_fraction=1.0,
-                continuous_support_fraction=1.0,
-                fit_residual_px=0.0,
-                canonical_direction_degrees=None,
-                fit_direction_interval_degrees=None,
-                full_direction_interval_degrees=None,
-                measurement_basis=(
-                    BoundaryEdgeMeasurementBasis.DIRECT_TRACE
-                ),
-            )
 
         marker = mock.Mock()
         marker.observation_id = ObservationId("separator:wide")
@@ -807,7 +810,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
         ) as builder:
             result = build_format_separator_bands(
                 profile,
-                (edge(left_run, -1), edge(right_run, 1)),
+                (self._separator_pairing_edge(left_run, -1), self._separator_pairing_edge(right_run, 1)),
                 self._separator_pairing_transitions(profile),
                 mock.Mock(),
                 BoundaryAxis.X,
@@ -823,22 +826,8 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
     ) -> None:
         traces = (0, 50, 100)
 
-        def run(name: str, coordinate: float) -> ProfileRun:
-            return ProfileRun(
-                run_id=name,
-                coordinate_interval_px=FiniteInterval.exact(coordinate),
-                transition_ids=tuple(ObservationId(f"transition:{name}:{trace}") for trace in traces),
-                trace_coordinates_px=traces,
-                role_hint=None,
-                qualified_anchor_roles=(),
-                support_fraction=1.0,
-                continuous_support_fraction=1.0,
-                fit_residual_px=0.0,
-                evidence_strength=1.0,
-            )
-
-        left_run = run("left", 100.0)
-        right_run = run("right", 900.0)
+        left_run = self._separator_pairing_run("left", 100.0)
+        right_run = self._separator_pairing_run("right", 900.0)
         profile = BasicAxisProfile(
             "sequence",
             1000,
@@ -846,37 +835,13 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
             (left_run, right_run),
         )
 
-        def edge(value: ProfileRun, polarity: int) -> BoundaryEdgeObservation:
-            interval = value.coordinate_interval_px
-            return BoundaryEdgeObservation(
-                observation_id=ObservationId(f"edge:{value.run_id}"),
-                run_id=value.run_id,
-                discovery_interval_px=interval,
-                reference_trace_px=50.0,
-                canonical_position_px=interval.center,
-                fit_position_interval_px=interval,
-                full_position_interval_px=interval,
-                transition_ids=value.transition_ids,
-                trace_coordinates_px=traces,
-                polarity=polarity,
-                support_fraction=1.0,
-                continuous_support_fraction=1.0,
-                fit_residual_px=0.0,
-                canonical_direction_degrees=None,
-                fit_direction_interval_degrees=None,
-                full_direction_interval_degrees=None,
-                measurement_basis=(
-                    BoundaryEdgeMeasurementBasis.DIRECT_TRACE
-                ),
-            )
-
         with mock.patch(
             "x5crop.detection.photo_geometry.separator_observations._separator_band_from_edges",
             return_value=mock.Mock(),
         ) as builder:
             result = build_format_separator_bands(
                 profile,
-                (edge(left_run, -1), edge(right_run, 1)),
+                (self._separator_pairing_edge(left_run, -1), self._separator_pairing_edge(right_run, 1)),
                 self._separator_pairing_transitions(profile),
                 mock.Mock(),
                 BoundaryAxis.X,
@@ -970,57 +935,19 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
     def test_separator_material_cannot_skip_an_internal_transition(self) -> None:
         traces = (0, 50, 100)
 
-        def run(name: str, coordinate: float) -> ProfileRun:
-            return ProfileRun(
-                run_id=name,
-                coordinate_interval_px=FiniteInterval.exact(coordinate),
-                transition_ids=tuple(ObservationId(f"transition:{name}:{trace}") for trace in traces),
-                trace_coordinates_px=traces,
-                role_hint=None,
-                qualified_anchor_roles=(),
-                support_fraction=1.0,
-                continuous_support_fraction=1.0,
-                fit_residual_px=0.0,
-                evidence_strength=1.0,
-            )
-
         runs = (
-            run("outer-left", 100.0),
-            run("inner-right", 150.0),
-            run("inner-left", 160.0),
-            run("outer-right", 220.0),
+            self._separator_pairing_run("outer-left", 100.0),
+            self._separator_pairing_run("inner-right", 150.0),
+            self._separator_pairing_run("inner-left", 160.0),
+            self._separator_pairing_run("outer-right", 220.0),
         )
         profile = BasicAxisProfile("sequence", 300, traces, runs)
 
-        def edge(value: ProfileRun, polarity: int) -> BoundaryEdgeObservation:
-            interval = value.coordinate_interval_px
-            return BoundaryEdgeObservation(
-                observation_id=ObservationId(f"edge:{value.run_id}"),
-                run_id=value.run_id,
-                discovery_interval_px=interval,
-                reference_trace_px=50.0,
-                canonical_position_px=interval.center,
-                fit_position_interval_px=interval,
-                full_position_interval_px=interval,
-                transition_ids=value.transition_ids,
-                trace_coordinates_px=traces,
-                polarity=polarity,
-                support_fraction=1.0,
-                continuous_support_fraction=1.0,
-                fit_residual_px=0.0,
-                canonical_direction_degrees=None,
-                fit_direction_interval_degrees=None,
-                full_direction_interval_degrees=None,
-                measurement_basis=(
-                    BoundaryEdgeMeasurementBasis.DIRECT_TRACE
-                ),
-            )
-
         edges = (
-            edge(runs[0], -1),
-            edge(runs[1], 1),
-            edge(runs[2], -1),
-            edge(runs[3], 1),
+            self._separator_pairing_edge(runs[0], -1),
+            self._separator_pairing_edge(runs[1], 1),
+            self._separator_pairing_edge(runs[2], -1),
+            self._separator_pairing_edge(runs[3], 1),
         )
         markers = {}
 

@@ -516,7 +516,6 @@ Mask 使用正数包含／排除运算，初始移位计入进位 limb；补集 
 超界 receipt 保留完整输入身份和已执行工作，清空全部关联路径；原始测量仍保留，但该 lane 不能
 取得 selected placement，Gate 的 producer coverage 失败。报告校验从同一 raw ledger 重放有界关联，
 核对完整结果、工作与最终 edge 回链；它不重新读像素或选择 detector 方案。
-Broad 原子与关联 receipt 复用既有 typed 证据解码，核对精确字段和数值类型；布尔值不能冒充数值。
 
 完整 broad 路径进入 physical region 时，保留原路径全部 raw，以共同物理直线域投影 reference 位置。
 定位峰在各自较宽的物理区间内可以弯曲；不得再按定位区间的最大重叠数裁点，避免隐藏已经成立的
@@ -2123,6 +2122,8 @@ direct/inferred ledger、content veto 和工作量只属于显式 Debug Analysis
 validator 位于 `tools/regression/`，不进入用户 standalone。Development 校验逐份重建 separator band
 的 typed 合同，用同一材料 classifier 从各区域的 contrast/texture 完整区间核对状态，并核对 band
 摘要恰为全部区域的包络；不能信任外部报告中的 `supported` 标签或缩小后的摘要。
+Broad 原子与关联、Cross line／family receipt 共用 typed 解码，核对精确字段和数值类型，拒绝布尔值
+冒充数值；完整原始成员、数值、权限和资源重放仍由各证据 owner 独立核验。
 
 每条 lane 可另存一份 `independent_phase_review`，含最多十四份完整解释。它属于固定 `review_only` scope，独立于 canonical
 competition、alternatives、source proposal、共同 H、selected output 与两级 Gate；普通与 development
@@ -2270,7 +2271,7 @@ workspace-owned report facts 冻结后、TIFF sampling 前释放 registered gray
 sampling 或 I/O 只由阶段证据决定。
 
 Affine sampler 独占每格 contiguous 输出缓冲，writer 完成一格后才分配下一格，避免相邻大 crop 同时
-存活；vertical deskew 使用灰度转置 view，registered interval 使用连续 slice view。Transition-line
+存活；vertical 工作区统计与 deskew 使用灰度转置 view，registered interval 使用连续 slice view。Transition-line
 cache 只在单个 source 内复用并在 source 结束时清空。这些优化不得改变 observation、placement、
 winner/runner、provenance、footprint 或输出像素。
 每个 affine 分块只读取已生成坐标的四角，利用逐轴单调性界定整块；全部角点位于 authority
@@ -2300,6 +2301,9 @@ source；计数只包含实际 LP 调用，原 64 次求解与 32 个顶点上�
 
 `tifffile + imagecodecs` 独占正式 TIFF I/O；OpenCV 只作有界测量，SciPy 只作数值拟合与 sampling，
 Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 3，内部数值线程固定为 1。
+Orientation 规范化返回共享解码缓冲的翻转／转置视图；读取器独占原存储，测量只借读，视图保持其
+生命周期，不另存整张 RGB。非连续 RGB 的百分位采样按各通道行优先的平坦索引取原步长样本，
+不构造逐样本坐标向量；样本量仍受原上限约束。逐格输出缓冲仍连续，像素与坐标映射不变。
 
 输出先写同父目录 staging，全部完成后一次 rename 到尚不存在的 target。程序不覆盖、接管、遍历或
 删除旧 target。

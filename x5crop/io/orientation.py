@@ -136,6 +136,7 @@ def canonicalize_orientation(
     axes: str,
     orientation: int | None,
 ) -> tuple[np.ndarray, OrientationMapping]:
+    """Return a visual-coordinate view; the caller owns its shared raw storage."""
     if axes not in {"YX", "YXS"}:
         raise ValueError("V5 orientation canonicalization requires YX or YXS")
     if raw.ndim != len(axes):
@@ -159,4 +160,4 @@ def canonicalize_orientation(
         canonical = np.flip(np.swapaxes(raw, 0, 1), axis=(0, 1))
     else:
         canonical = np.rot90(raw, k=1, axes=(0, 1))
-    return np.ascontiguousarray(canonical), mapping
+    return canonical, mapping

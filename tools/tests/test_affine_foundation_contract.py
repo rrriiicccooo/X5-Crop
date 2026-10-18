@@ -166,6 +166,9 @@ class AffineFoundationContractTest(unittest.TestCase):
         original = source[:281]
         cases = [(original, AffineCoordinateTransform.expanded_rotation(337, 281, 1.7),
                   Box(11, 9, 330, 279), Box(7, 5, 331, 277), None)]
+        cases.append((source.transpose(1, 0, 2),
+                      AffineCoordinateTransform.expanded_rotation(640, 337, -1.7),
+                      Box(30, 20, 610, 320), Box(0, 0, 640, 337), None))
         for angle in (-1.7, 1.7):
             transform = AffineCoordinateTransform.expanded_rotation(337, 640, angle)
             for rows in (255, 256, 257, 513):
@@ -182,7 +185,7 @@ class AffineFoundationContractTest(unittest.TestCase):
                     inverse[1][0] * x + inverse[1][1] * y + inverse[1][2] - authority_box.top,
                     inverse[0][0] * x + inverse[0][1] * y + inverse[0][2] - authority_box.left,
                 ))
-                authority = array[authority_box.top:authority_box.bottom, authority_box.left:authority_box.right]
+                authority = np.ascontiguousarray(array[authority_box.top:authority_box.bottom, authority_box.left:authority_box.right])
                 expected = np.stack([
                     np.clip(map_coordinates(authority[..., channel], coordinates, order=1,
                         mode="grid-constant", cval=0.0, prefilter=False, output=np.float64), 0, 65535).astype(np.uint16)

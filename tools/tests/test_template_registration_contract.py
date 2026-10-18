@@ -757,7 +757,12 @@ class TemplateRegistrationContractTest(unittest.TestCase):
         invalid = deepcopy(lane)
         for family in invalid["observations"]["cross_boundary_family_resolutions"]:
             del family["refit_receipt"]["constrained_evaluation"]["work"]["event_count"]
-        with self.assertRaisesRegex(ValueError, "work is incomplete"):
+        with self.assertRaisesRegex(ValueError, "CompleteTransitionLineWork fields changed"):
+            _validate_cross_measurement_support(invalid, queries)
+        invalid = deepcopy(lane)
+        for family in invalid["observations"]["cross_boundary_family_resolutions"]:
+            family["refit_receipt"]["constrained_evaluation"]["solution"]["cost"] = True
+        with self.assertRaisesRegex(ValueError, "finite number"):
             _validate_cross_measurement_support(invalid, queries)
 
     def test_complete_constrained_family_keeps_empty_domain_failure(self) -> None:

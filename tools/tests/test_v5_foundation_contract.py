@@ -37,9 +37,11 @@ class OrientationFoundationContractTests(unittest.TestCase):
         }
         for tag, visual in expected.items():
             with self.subTest(orientation=tag):
-                canonical, mapping = canonicalize_orientation(raw, "YX", tag)
+                source = raw.copy()
+                canonical, mapping = canonicalize_orientation(source, "YX", tag)
+                self.assertTrue(np.shares_memory(canonical, source))
+                del source
                 self.assertEqual(canonical.tolist(), visual)
-                self.assertTrue(canonical.flags.c_contiguous)
                 for y in range(raw.shape[0]):
                     for x in range(raw.shape[1]):
                         cx, cy = mapping.map_raw_point(float(x), float(y))

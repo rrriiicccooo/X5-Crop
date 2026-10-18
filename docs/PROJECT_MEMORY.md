@@ -1,6 +1,6 @@
 # 项目记忆
 
-更新：2026-10-16。现场 Git、原 TIFF、source SHA、current report 与最新验证高于本文件。
+更新：2026-10-18。现场 Git、原 TIFF、source SHA、current report 与最新验证高于本文件。
 长期合同见 [ARCHITECTURE.md](ARCHITECTURE.md)，人工权限见
 [MANUAL_ANNOTATION.md](MANUAL_ANNOTATION.md)，协作规则见 [AGENTS.md](../AGENTS.md)。
 
@@ -17,11 +17,11 @@
 
 ### 黄金与 Review
 
-最新完整报告为 `Test/release_readiness_20261016/gold_report_decoder_current/`：110 task / 106 source
-全完成、无分析异常。与 `gold_separator_width/` 的全部逐 task 记录比较，除耗时外完全相等；首选、
-预算、auto、保留几何及权限均无回归，证据为同目录上级 `report_decoder_full_gold_equivalence.json`。
-生产源码仍与 `97daa7fc` 的已验证字节一致；本次仅合并报告校验的重复解码，Python 净减少 24 行。
-黄金冻结 runtime／比较器／cohort 身份，提交后的同字节核对保存于 `report_decoder_committed_source_identity.json`。
+最新完整报告为 `Test/engineering_audit_20261018/gold_orientation_current/`：110 task / 106 source
+全完成、无分析异常。与上一检查点及本轮首轮逐 task 比较，除耗时外完全相等；首选、预算、auto、保留
+几何及权限无回归，见同目录上级 `orientation_full_gold_equivalence.json`。
+方向视图、竖向灰度视图和非连续 RGB 采样已验证，报告冻结 runtime／比较器／cohort 身份；
+不把开发黄金或同字节核对当作最终发布验收。
 
 | 项目 | 最新结果 |
 |---|---|
@@ -85,16 +85,12 @@ phase／Cross／最终阻断交叉表完整保存，不能把 ambiguity 名称�
   仅优化枚举不能回收准入。证据为 `Test/release_readiness_20261015/common_h_closure_audit.json`。
 - S040 的 `side-region:139` 已进入正式 profile，但六点物理直线域为空；原 recovery 删除 3999 后
   只剩两区域且连续支持断开，拒绝正确。同一完整查询另有一份物理可行、三区域连续的 START 关联，
-  被互为唯一最近邻规则排除；现无长轴 conditional-family 入口。
-  主线程纯 owner 复核见同目录 `S040_sharp_association_scope_audit.json`，绑定 10 月 15 日原报告、
-  原子与当前原 TIFF。通用补全沿用原工作上限，S040 的 904 raw 完整产生 28 条一致关联，原 line
-  owner 全部保留 raw；正式试跑使 S040 首选几何及预算通过，但完整回归降至 83 个首选合格、
-  5 个安全 auto、96 个 task 有合格几何，并出现 2 个合同错误，危险 auto 为 0。
-  改成仅对实际计数支持闭合相关性后，8-task 正式抽查仍有 3 个原安全 auto 退为 Review，另两项仍出错；
-  整项实现已撤下。证据在 `Test/release_readiness_20261016/sharp_association_*rejected*.patch`、
-  `sharp_association_full_regression_rejected_corrected.json` 与 `sharp_association_selected_support_rejection.json`。
-  不继续仅扩大 sharp 关联，不删竞争、恢复 139、扩阈值或借 W 晋升两区域点；新路径须有额外输出或
-  安全依据后再评估。独立可保留的清理仅为 broad 报告复用 typed 解码，生产路径无改动。
+  被互为唯一最近邻排除，见 `Test/release_readiness_20261016/S040_sharp_association_scope_audit.json`。
+  通用关联补全虽使 S040 首选合格且预算通过，完整黄金却使安全 auto 26→5、几何覆盖 110→96，
+  并出现 2 个合同错误；定向修正后仍有 3 个 auto 退回与 2 个错误，整项实现已撤下。
+  反例与补丁保存在同目录 `sharp_association_*rejected*.patch`、
+  `sharp_association_full_regression_rejected_corrected.json`、`sharp_association_selected_support_rejection.json`。
+  不仅为增加路径数重开；新机制须改善最终输出或提供独立安全依据，不能删竞争、恢复 139、扩阈值或借 W。
 - 评分仍为离线研究，`admission_enabled=false`。source 分组 OOF 98 safe / 12 unsafe 不代替独立
   calibration；错误方案预算通过、合格方案预算失败的反例仍存在，不硬化代理阈值。
 
@@ -102,17 +98,19 @@ phase／Cross／最终阻断交叉表完整保存，不能把 ambiguity 名称�
 全面反向峰、取消聚合材料角色过滤。证据保留在 `Test/release_readiness_20261012/` 至
 `Test/release_readiness_20261015/`，不重复同一调参。S053 在现映射下的 native 等 pitch 区间不相交
 只证明这份解释有约束缺口，不证明真实胶片不等 pitch，也不把内部角色命名差异作为失败。
+匹配中心缓存与空／单元素支配快路径在串行完整 CLI 对照中没有稳定收益，已撤下；exterior median
+转置也无收益。证据在 `Test/engineering_audit_20261018/matching_ab.json`，不重复同一微调。
 
 ### 性能与环境
 
-最新正式性能绑定代码提交 `97daa7fc`，证据为
-`Test/release_readiness_20261016/performance_receipt_97daa7fc.json`：24-source 完整用户路径
-均值 4.296431 秒，p50 / p95 为 3.976725 / 7.257891 秒；平均 peak RSS 749.76 MiB，最大
-S024 为 1225.02 MiB。该提交通过 5 秒 Gate，未达到 3 秒；不把历史差值归因于本次单项修改。
-后续纯文档检查点不改变已验证源码，但这份 receipt 不能替代最终同一 release commit 的验收。
-现场 pip 加载 NumPy 2.5.4、SciPy 1.18.1、OpenCV 5.0.0、tifffile、imagecodecs，Pillow 来自
-Homebrew。保留本机新版，合同以实际 import 为准。旧环境耗时／RSS不能归因于单项源码或库；
-CI 不能替代实机、安装、打包与发布 receipt。
+本轮正式性能待代码提交后重测；旧 `97daa7fc` receipt 不代表新版源码与依赖。隔离完整 CLI 对照确认：
+竖向灰度视图使四张样片 peak RSS 中位值降低 23–54 MiB；方向视图配合平坦百分位采样，使 S101 持平，
+S105／S106 分别降低约 200／214 MiB，报告与 TIFF 字节均相等。证据为
+`Test/engineering_audit_20261018/workspace_view_ab.json`、`orientation_flat_ab.json`；它们不代替正式计时 Gate。
+现场 pip 加载 NumPy 2.5.4、SciPy 1.18.1、OpenCV 5.0.0、tifffile 2026.10.15、imagecodecs 2026.10.10；
+Pillow 12.3.0 来自 Homebrew。冻结合同已同步，保留本机新版；跨环境差值不归因于单项源码或库。
+本轮删除重复解码、退役函数与重复测试夹具，Python 净减少 161 行；10 份文档已审计。
+仍有 14 个生产模块超过千行，phase／Cross 编排和外部校验器保留较大函数，不声称已经达到全局最优。
 
 ## 保留的人工局部事实
 

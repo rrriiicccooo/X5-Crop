@@ -102,15 +102,10 @@ def make_base_gray_u8(
     if arr.flags.c_contiguous:
         sampled_rgb = arr.reshape(-1, RGB_CHANNEL_COUNT)[::sample_step]
     else:
-        positions = np.arange(
-            0,
-            height * width,
-            sample_step,
-            dtype=np.int64,
-        )
-        rows, columns = np.divmod(positions, width)
-        sampled_rgb = arr[rows, columns]
-        del positions, rows, columns
+        sampled_rgb = np.column_stack(tuple(
+            arr[..., channel].flat[::sample_step]
+            for channel in range(RGB_CHANNEL_COUNT)
+        ))
     finite_values = np.empty(sampled_rgb.shape[0], dtype=np.float32)
     sample_scratch = np.empty_like(finite_values)
     _luma_u16(sampled_rgb, finite_values, sample_scratch, params)

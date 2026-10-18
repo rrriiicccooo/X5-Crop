@@ -60,7 +60,6 @@ from x5crop.detection.photo_geometry.template_acceptability_features import (
 )
 from x5crop.detection.photo_geometry.template_cross import fit_template_cross
 from x5crop.detection.photo_geometry.template_cross_model import (
-    CrossBoundaryFamilyFailureKind,
     CrossBoundaryFamilyResolution,
     CrossBoundaryFamilyUse,
     CrossFailureKind,
@@ -93,15 +92,10 @@ from x5crop.detection.photo_geometry.template_registration import (
     membership_projection_coverage, project_cross_solver_bindings,
 )
 from x5crop.detection.photo_geometry.template_family_membership import (
-    MAXIMUM_MEMBERSHIP_VISITS, MembershipAtom, MembershipFitBudget, MembershipReceipt,
-    MembershipScope, MembershipState, MembershipTransition, MembershipWork, enumerate_membership_scope,
+    MAXIMUM_MEMBERSHIP_VISITS, MembershipAtom, MembershipTransition, enumerate_membership_scope,
 )
 from x5crop.detection.photo_geometry.line_observations import (
-    BoundaryFamilyFitReceipt,
     CompleteTransitionLineEvaluation,
-    CompleteTransitionLineFailureKind,
-    CompleteTransitionLineSolution,
-    CompleteTransitionLineWork,
     ConstrainedLineFitReceipt,
     RobustLineFitReceipt,
     PhotoBoundaryObservation,
@@ -923,42 +917,14 @@ def _validate_cross_direct_support_regions(lane: dict[str, Any]) -> None:
         raise ValueError("Cross fit lacks independent measured boundary support")
 
 
-def _read_complete_line_work(value: object) -> CompleteTransitionLineWork:
-    if not isinstance(value, dict) or set(value) != {field.name for field in fields(CompleteTransitionLineWork)}:
-        raise ValueError("Cross constrained numerical work is incomplete")
-    return CompleteTransitionLineWork(**value)
-
-
 def _read_line_fit_receipt(value: object) -> RobustLineFitReceipt | ConstrainedLineFitReceipt:
     if not isinstance(value, dict):
         raise ValueError("Cross line-fit receipt is missing")
     if value.get("method") == "scipy_least_squares_huber":
-        return RobustLineFitReceipt(**value)
+        return _read_common_proof(value, RobustLineFitReceipt)
     if value.get("method") == "physical_constraint_huber":
-        return ConstrainedLineFitReceipt(**{**value, "work": _read_complete_line_work(value["work"])})
+        return _read_common_proof(value, ConstrainedLineFitReceipt)
     raise ValueError("Cross line-fit method is unknown")
-
-
-def _read_boundary_family_receipt(value: object) -> BoundaryFamilyFitReceipt:
-    if not isinstance(value, dict) or set(value) != {field.name for field in fields(BoundaryFamilyFitReceipt)}:
-        raise ValueError("Cross family refit receipt is incomplete")
-    robust = value["robust_fit_receipt"]
-    evaluation = value["constrained_evaluation"]
-    if evaluation is not None:
-        solution = evaluation["solution"]
-        evaluation = CompleteTransitionLineEvaluation(**{
-            **evaluation,
-            "solution": None if solution is None else CompleteTransitionLineSolution(**{
-                **solution, "residuals": tuple(solution["residuals"]),
-            }),
-            "failure_kind": None if evaluation["failure_kind"] is None else
-                CompleteTransitionLineFailureKind(evaluation["failure_kind"]),
-            "work": _read_complete_line_work(evaluation["work"]),
-        })
-    return BoundaryFamilyFitReceipt(
-        None if robust is None else RobustLineFitReceipt(**robust),
-        tuple(map(ObservationId, value["robust_retained_transition_ids"])), evaluation,
-    )
 
 
 def _validate_complete_family_numerics(
@@ -1032,30 +998,6 @@ def _validate_complete_family_numerics(
         or work.gradient_point_evaluation_count < n or work.gap_vertex_evaluation_count < v
     ):
         raise ValueError("Cross constrained line numerical receipt is not reproducible")
-
-
-def _read_membership_receipt(value: Any) -> MembershipReceipt | None:
-    if value is None:
-        return None
-
-    def exact(record, model):
-        if not isinstance(record, dict) or set(record) != {field.name for field in fields(model)}:
-            raise ValueError("Cross membership receipt fields are incomplete")
-        return record
-
-    exact(value, MembershipReceipt)
-    scopes = []
-    for item in value['scopes']:
-        exact(item, MembershipScope)
-        work = MembershipWork(**exact(item['work'], MembershipWork))
-        scopes.append(MembershipScope(**{**item, 'role': BoundaryRole(item['role']),
-            'state': MembershipState(item['state']), 'work': work,
-            'anchor_observation_ids': tuple(map(ObservationId, item['anchor_observation_ids'])),
-            'maximal_member_groups': tuple(tuple(map(ObservationId, group)) for group in item['maximal_member_groups'])}))
-    budgets = tuple(MembershipFitBudget(**{**exact(item, MembershipFitBudget), 'role': BoundaryRole(item['role'])})
-                    for item in value['fit_budgets'])
-    return MembershipReceipt(MembershipState(value['state']), tuple(scopes), budgets,
-                             tuple(map(ObservationId, value['original_observation_ids'])))
 
 
 def _validate_coarse_broad_support_track(
@@ -1349,7 +1291,6 @@ def _validate_cross_measurement_support(
         for transition in record["transitions"]:
             transitions[transition["transition_id"]] = transition
     for observation in raw:
-        _read_line_fit_receipt(observation.get("fit_receipt"))
         identities = observation.get("transition_ids")
         if (
             not value_validation._valid_ids(identities, allow_empty=False)
@@ -1407,26 +1348,7 @@ def _validate_cross_measurement_support(
         raise ValueError("Cross family provenance is missing")
     families = []
     for item in family_records:
-        if not isinstance(item, dict) or set(item) != {
-            "family_id", "role", "state", "use", "member_observation_ids",
-            "member_transition_ids", "member_transition_groups",
-            "final_observation_ids", "failure_kind", "refit_receipt",
-            "membership_parent_family_ids",
-        }:
-            raise ValueError("Cross family provenance is incomplete")
-        family = CrossBoundaryFamilyResolution(
-            family_id=item["family_id"], role=BoundaryRole(item["role"]),
-            state=EvidenceState(item["state"]), use=CrossBoundaryFamilyUse(item["use"]),
-            member_observation_ids=tuple(map(ObservationId, item["member_observation_ids"])),
-            member_transition_ids=tuple(map(ObservationId, item["member_transition_ids"])),
-            member_transition_groups=tuple(tuple(map(ObservationId, group))
-                                          for group in item["member_transition_groups"]),
-            final_observation_ids=tuple(map(ObservationId, item["final_observation_ids"])),
-            failure_kind=(None if item["failure_kind"] is None else
-                          CrossBoundaryFamilyFailureKind(item["failure_kind"])),
-            refit_receipt=_read_boundary_family_receipt(item["refit_receipt"]),
-            membership_parent_family_ids=tuple(item['membership_parent_family_ids']),
-        )
+        family = _read_common_proof(item, CrossBoundaryFamilyResolution)
         if any(str(identity) not in transitions for identity in family.member_transition_ids):
             raise ValueError("Cross family lost its original transition provenance")
         families.append(family)
@@ -2260,7 +2182,8 @@ def _common_proof_field_types(model: type) -> dict[str, Any]:
 def _read_common_proof(value: Any, model: type) -> Any:
     """Rehydrate only explicitly allowed current evidence roots for pure owners."""
     if model not in (OutputFootprint, CommonHOutput, CommonHOutputAuthority, PhaseFitResult,
-                     CrossFitCompetition, CrossRoleBinding, PhotoBoundaryObservation,
+                     CrossFitCompetition, CrossRoleBinding, PhotoBoundaryObservation, CrossBoundaryFamilyResolution,
+                     RobustLineFitReceipt, ConstrainedLineFitReceipt,
                      SourceScanGeometry, HolderFillAssessment, FormatPlacement, ExteriorRegionMeasurement,
                      TemplateCrossInput, CoarseStripSupport, PhotoBoundaryMeasurementSet, CrossRegistrationWorkReceipt,
                      IndependentPhaseReview, IndependentPhaseReviewPortfolio, MatchedHolder, TemplatePhaseInput,
