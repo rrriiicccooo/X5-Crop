@@ -2267,6 +2267,8 @@ Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决
 完整 phase 竞争成员由 `template_phase_membership.py` 记录在候选生产处：每次有界 fit 的全部
 input fit、可选 output fit、完整 projection provenance、残差状态、原 holder 准入、真实源域准入与终端角色、
 anchor ceiling 均保留。过滤 holder、按 rank 排序、连续合并和 best/runner 压缩发生在账本之后。
+直接矛盾与未获坐标权限的事实可以同时存在；失败 projection 保留完整输入，不凭空补写弱线移除。
+移除 provenance 由既有 typed projection owner 校验，账本不复制另一套判据。
 早期定位、正常关系与实测关系是不同作用域，后续 pass 本身不是排除前序解释的物理证据。
 作用域保存原 template、phase/holder/source domain、关系、ceiling、scale、measurement query IDs、Grid prior
 及 topology 输入；确定性 identity 绑定全部记录。只去重完全相同的作用域；实际执行次数与各次记录数另外

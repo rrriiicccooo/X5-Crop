@@ -171,22 +171,13 @@ def _validate_projection_for_fit(
     if authority_role_ids != input_role_ids:
         raise ValueError("projection authority does not cover the complete input fit")
 
-    projected_out = tuple(
-        (item.role_index, item.observation_id)
-        for item in projection.projected_out_bindings
-    )
-    unavailable = tuple(
-        (fact.role_index, fact.observation_id)
-        for fact in facts
-        if fact.state.value == "unavailable"
-    )
-    if projected_out != unavailable:
-        raise ValueError("projection output provenance disagrees with authority")
-
     if projection.eligible:
         if projected_fit is None:
             raise ValueError("eligible projection must retain an output fit")
-        projected_out_roles = {role_index for role_index, _ in projected_out}
+        # Removal provenance belongs to the typed projection owner. A
+        # contradicted input may also contain unavailable coordinates, without
+        # attempting to remove them from an output that does not exist.
+        projected_out_roles = {item.role_index for item in projection.projected_out_bindings}
         _fit_identity_is_preserved(input_fit, projected_fit, frozenset(projected_out_roles))
         if any(
             projected_fit.role_bindings[role_index] is not None

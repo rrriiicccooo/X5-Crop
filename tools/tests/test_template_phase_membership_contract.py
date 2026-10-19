@@ -154,6 +154,29 @@ class TemplatePhaseMembershipContractTest(unittest.TestCase):
             reason=None,
         )
 
+    def test_contradicted_projection_keeps_unavailable_input_without_invented_removal(self):
+        fit = placement_sequence(placement_template(3))
+        authority = self._authority(fit, DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE)
+        facts = list(authority.facts)
+        facts[0] = replace(facts[0], bases=(), state=EvidenceState.CONTRADICTED,
+            blocking_material_conflict_ids=(ObservationId("material:counterevidence"),))
+        facts[1] = replace(facts[1], bases=(), state=EvidenceState.UNAVAILABLE)
+        authority = DirectRoleBindingAuthority(EvidenceState.CONTRADICTED, tuple(facts), (0, 1),
+            "one native role is contradicted and another lacks coordinate authority")
+        projected, projection = project_candidate_to_authorized_direct_roles(
+            _BoundFit(fit, True), authority, (), (), fit.template.roles, fit.template,
+            fit.adjacency_relations, FiniteInterval(fit.template.pitch_px.minimum, fit.template.pitch_px.maximum),
+            None, None, None)
+        self.assertIsNone(projected)
+        self.assertEqual(projection.outcome, PhaseCandidateProjectionOutcome.DIRECT_ROLE_CONTRADICTION)
+        self.assertEqual(projection.projected_out_bindings, ())
+        member = self._member(fit, 0, projection=projection)
+        receipt = replace(self._receipt(hypotheses=1, projection_count=1, role_checks=6),
+                          candidate_direct_role_authority_terminal_count=1)
+        scope = self._scope(fit.template, (member,), receipt, projection_evaluated=True)
+        self.assertEqual(scope.members[0].projection.input_direct_role_authority.facts[1].state,
+                         EvidenceState.UNAVAILABLE)
+
     def test_complete_member_tuple_keeps_third_record_and_rejects_deletion(self):
         template = placement_template(3)
         fit = placement_sequence(template)
