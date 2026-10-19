@@ -103,7 +103,7 @@ class TemplatePhaseRetainedDiagnosticsContractTest(unittest.TestCase):
             self.assertEqual(result.failure_kind, protected.failure_kind)
         with self.assertRaisesRegex(ValueError, "registered template"):
             replace(unresolved, registered_direct_observation_ids=current.registered_direct_observation_ids)
-        with self.assertRaisesRegex(ValueError, "registered template"):
+        with self.assertRaisesRegex(ValueError, "complete producer scopes"):
             replace(unresolved, template=replace(spec, template_id="different-template"))
         with self.assertRaisesRegex(ValueError, "failed projection"):
             _TerminalPhaseDiagnostic(terminal.best, replace(failed,

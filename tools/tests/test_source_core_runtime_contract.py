@@ -714,7 +714,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             )
             with self.assertRaisesRegex(
                 ValueError,
-                "phase competition schema",
+                "PhaseFitResult fields changed",
             ):
                 validate_current_report_record(obsolete)
             inconsistent = deepcopy(analysis_outcome.result)
@@ -726,7 +726,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             ] += 1
             with self.assertRaisesRegex(
                 ValueError,
-                "work receipt",
+                "phase-candidate authority work is inconsistent",
             ):
                 validate_current_report_record(inconsistent)
             invalid_width_topology = deepcopy(analysis_outcome.result)

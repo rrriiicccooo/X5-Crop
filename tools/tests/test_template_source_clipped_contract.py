@@ -24,6 +24,7 @@ from x5crop.detection.photo_geometry.template_model import (
     phase_lattice_fit_from_absolute,
 )
 from x5crop.detection.photo_geometry.template_phase_candidate_model import _BoundFit
+from x5crop.detection.photo_geometry.template_phase_membership import PhaseCompetitionScope
 from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseCandidateAuthorityProjection,
     PhaseCandidateProjectedBinding,
@@ -311,7 +312,8 @@ class SourceClippedRetentionContractTests(unittest.TestCase):
         record = _record(_fit())
         retention = _select((record,))
         result = replace(_phase_result(record[0].fit), _source_clipped_phase_retention=retention)
-        self.assertIs(get_type_hints(PhaseFitResult)["_source_clipped_phase_retention"].__args__[0], SourceClippedPhaseRetention)
+        self.assertIs(get_type_hints(PhaseFitResult, localns={"PhaseCompetitionScope": PhaseCompetitionScope})
+                      ["_source_clipped_phase_retention"].__args__[0], SourceClippedPhaseRetention)
         self.assertIs(get_type_hints(SourceClippedPhaseDiagnostic)["projection"], PhaseCandidateAuthorityProjection)
         raw = typed_read_model(result)
         self.assertNotIn("_source_clipped_phase_retention", raw)
@@ -342,7 +344,12 @@ class SourceClippedRetentionContractTests(unittest.TestCase):
         self.assertGreater(result.receipt.candidate_direct_role_projection_evaluation_count,
             canonical.receipt.candidate_direct_role_projection_evaluation_count)
         self.assertEqual(replace(result, receipt=canonical.receipt,
+            competition_scopes=canonical.competition_scopes,
+            competition_scope_evaluations=canonical.competition_scope_evaluations,
             _source_clipped_phase_retention=None), canonical)
+        self.assertTrue(all(scope.source_domain == domain for scope in result.competition_scopes))
+        self.assertTrue(all(scope.source_domain is None for scope in canonical.competition_scopes))
+        self.assertGreater(result.receipt.phase_producer_record_count, canonical.receipt.phase_producer_record_count)
         retained = result._source_clipped_phase_retention
         self.assertIsNotNone(retained)
         self.assertTrue(retained.diagnostics)
