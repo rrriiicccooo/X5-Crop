@@ -64,6 +64,7 @@ class PhaseMemberOutputGap(str, Enum):
     APERTURE_DOMAIN_UNAVAILABLE = "aperture_domain_unavailable"
     ENCLOSING_APERTURE_CONFLICT = "enclosing_aperture_conflict"
     OUTPUT_UNAVAILABLE = "output_unavailable"
+    OUTPUT_PREREQUISITE_UNAVAILABLE = "output_prerequisite_unavailable"
     OUTPUT_BUDGET_UNAVAILABLE = "output_budget_unavailable"
     WORK_BOUND_EXCEEDED = "work_bound_exceeded"
 
@@ -206,6 +207,14 @@ class PhaseMemberOutputProof:
             raise ValueError("phase member proof lost its registered identity or gaps")
         if len(self.output_footprints) != len(self.budgets):
             raise ValueError("phase member proof lost output budgets")
+        if PhaseMemberOutputGap.OUTPUT_PREREQUISITE_UNAVAILABLE in self.gaps and (
+            len(self.gaps) < 2 or self.cross_context is None or self.phase_assessment is None
+            or self.cross_context.competition.status != CrossFitStatus.RESOLVED
+            or self.placement is not None or self.output_footprints or self.budgets
+            or any((self.work.composition_count, self.work.projection_count,
+                    self.work.output_evaluation_count, self.work.budget_evaluation_count))
+        ):
+            raise ValueError("unqualified member must retain its own prerequisites without claiming output evaluation")
         if self.phase_assessment is not None:
             fit = self.phase_assessment.best
             if fit is None or self.phase_assessment.status == PhaseFitStatus.RESOLVED:
@@ -415,6 +424,12 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
         domain = assess_direct_role_aperture_domain_authority(fit, cross.best, direct)
         if domain.state != EvidenceState.SUPPORTED:
             gaps.append(PhaseMemberOutputGap.APERTURE_DOMAIN_UNAVAILABLE)
+    if gaps:
+        # The member keeps its own W/H/Cross facts. A failed prerequisite
+        # cannot acquire output qualification through downstream geometry.
+        # This is not physical exclusion from the complete common set.
+        gaps.append(PhaseMemberOutputGap.OUTPUT_PREREQUISITE_UNAVAILABLE)
+        return result()
     lattice = assessed.global_lattice_authority
     if lattice is not None and (lattice.state != EvidenceState.SUPPORTED
             or not global_lattice_authority_matches_fit(lattice, fit)):

@@ -55,7 +55,8 @@ Reports show evidence for registered partners and physical conflicts. Incomplete
 requires manual review; fitting two proposals into one window alone does not qualify the result for automatic output.
 Reports retain all competing members from each positioning stage and check each member's own width, height,
 top/bottom association, and protection budget. Members with missing qualification evidence remain in the set;
-manual review continues until the complete set has a compliant window under the same fixed dimensions.
+when prerequisites are unmet, their evidence remains and output geometry and budget are explicitly marked unevaluated.
+Manual review continues until the complete set has a compliant window under the same fixed dimensions.
 
 Acceptance concerns the final crops: correct slot correspondence, no missing or duplicate photos, full protection of
 confirmed content, and compliance with fixed dimensions, source bounds, and risk budgets. Internal boundary names need

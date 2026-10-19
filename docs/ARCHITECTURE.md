@@ -2282,6 +2282,8 @@ Cross 使用 `lane_preparation.prepare_template_cross_context` 的同一规范 o
 重新编译该成员的纵向域、局部 refinement、初始 H、aspect 和直接 H 校准。直接观察到的 adjacency ordinal
 由本成员的原生连续性证据推导，不能仅由关系标签声明。无法匹配本 fit 的 lattice 不进入其
 placement；资格缺口和真实矛盾分别保存，不借首选的 W/H/Cross。
+自身 W/H/Cross 前置证明不通过的成员保留全部已评估事实，标记 `output_prerequisite_unavailable`，
+不再物化下游固定输出或预算；这表示未评估，不表示预算通过或成员已被物理排除，全集共同窗口仍失败。
 
 成员证明只核验条件几何与保护预算；它不是 canonical proposal，不包含完整 placement feature、Content veto 或
 Gate 准入。全部成员都具备该条件资格且确立同一固定 source W/H 身份后，才使用共享固定框 owner 核验逐 slot
@@ -2397,6 +2399,11 @@ winner/runner、provenance、footprint 或输出像素。
 组合检查；点、线段和空集沿用同一闭集判据。孔径不再为该集合调用通用 LP，完整联合格点约束仍由
 原投影求解。单次联合投影只求解一次完全相同的支撑方向，结果随该次投影释放，不跨 placement 或
 source；计数只包含实际 LP 调用，原 64 次求解与 32 个顶点上限不变。
+同一输出复用已生成的 feasible footprint；每个联合状态的四条边各物化一次。单帧保护闭合仅按本帧
+role/support 缓存孔径位置极值，最多 `2 × (1 + 联合状态数)` 项，每项至多两个浮点值，返回后释放；
+原生 trace 准入、状态乘积、保护范围和预算判据保持一致。报告转换只缓存最多 256 类的公开字段名；
+单次转换最多保留 4096 个 frozen model 的转换模板，命中后复制独立 dict/list 树，不共享可变报告分支，
+满额后继续逐字段转换，调用返回即释放。该复用不缓存物理评估、成员资格或跨 source 结果。
 粗边共同方向闭合复用 `physical_line_region_in_slopes`，以共同斜率区间直接初始化联合位置/斜率域，
 再裁剪完整原始物理区间；零宽斜率、点和线段均保留，不对斜率额外应用像素容差。单侧准备和每对
 共同方向、代表拟合、连续性及 H/span 权限仍独立计算，不缓存配对结论。

@@ -108,22 +108,21 @@ def _state_footprint(
             + expansions[BoundaryRole.BOTTOM]
         ),
     }
+    lines = {
+        role: boundary_line_at_state(
+            boundaries[role], position_px=positions[role],
+            enclosing_support_slope=(state.enclosing_support_slope
+                if role in (BoundaryRole.TOP, BoundaryRole.BOTTOM) else None),
+        )
+        for role in _ROLES
+    }
     for cross_role, sequence_role in (
         (BoundaryRole.TOP, BoundaryRole.START),
         (BoundaryRole.TOP, BoundaryRole.END),
         (BoundaryRole.BOTTOM, BoundaryRole.END),
         (BoundaryRole.BOTTOM, BoundaryRole.START),
     ):
-        cross_line = boundary_line_at_state(
-            boundaries[cross_role],
-            position_px=positions[cross_role],
-            enclosing_support_slope=state.enclosing_support_slope,
-        )
-        sequence_line = boundary_line_at_state(
-            boundaries[sequence_role],
-            position_px=positions[sequence_role],
-        )
-        points.append(cross_line.intersection(sequence_line))
+        points.append(lines[cross_role].intersection(lines[sequence_role]))
     return convex_hull(tuple(points))
 
 
@@ -425,6 +424,18 @@ def _frame_boundary_residuals(
     }
     bindings = {role: _cross_binding_for_role(placement, role)
                 for role in (BoundaryRole.TOP, BoundaryRole.BOTTOM)}
+    aperture_extents: dict[tuple[BoundaryRole, FiniteInterval], tuple[float, ...]] = {}
+
+    def aperture_extent(role: BoundaryRole, support: FiniteInterval) -> tuple[float, ...]:
+        key = role, support
+        if key not in aperture_extents:
+            positions = _aperture_binding_positions(
+                bindings[role], lane_reference_trace_px=cross.lane_reference_trace_px,
+                support=support, line_projection_basis=cross.line_projection_basis,
+            )
+            aperture_extents[key] = () if not positions else (min(positions), max(positions))
+        return aperture_extents[key]
+
     statistical = cross.line_projection_basis == CrossLineProjectionBasis.RETAINED_REVIEW_STATISTICAL_FIT
     cross_slopes = {role: _maximum_abs_slope(
         binding.fit_direction_interval_degrees if statistical else binding.full_direction_interval_degrees
@@ -441,11 +452,8 @@ def _frame_boundary_residuals(
         for boundary in (frame.start, frame.end)
     }
     cross_positions = {} if enclosing else {
-        role: _aperture_binding_positions(
-            binding, lane_reference_trace_px=cross.lane_reference_trace_px,
-            support=sequence_span, line_projection_basis=cross.line_projection_basis,
-        )
-        for role, binding in bindings.items()
+        role: aperture_extent(role, sequence_span)
+        for role in bindings
     }
     bases: list[dict[BoundaryRole, float]] = []
     departures: list[dict[BoundaryRole, float]] = []
@@ -597,10 +605,7 @@ def _frame_boundary_residuals(
                             binding, float(state.enclosing_support_slope), support,
                         )
                     else:
-                        positions = _aperture_binding_positions(
-                            binding, lane_reference_trace_px=cross.lane_reference_trace_px,
-                            support=support, line_projection_basis=cross.line_projection_basis,
-                        ) + raw_positions[role]
+                        positions = aperture_extent(role, support) + raw_positions[role]
                         departure = (0.0 if not positions else
                                      sources[role] - min(positions) if role == BoundaryRole.TOP else
                                      max(positions) - sources[role])
@@ -866,7 +871,7 @@ def output_footprint_from_template_placement(
     if lane.domain.lane_id != placement.lane_id:
         raise ValueError("source-lane authority disagrees with placement")
     envelope = joint_placement_envelope(placement, projection, lane_ordinal)
-    parameter_footprint = _footprint(placement, frame, projection)
+    parameter_footprint = envelope.feasible_source_footprint
     protected = _frame_boundary_residuals(placement, frame, projection.frame_states[lane_ordinal - 1])
     local_residuals = {role: max(state[role] for state in protected) for role in _ROLES}
     mandatory = _footprint(placement, frame, projection, apply_residual=True, protected_states=protected)

@@ -32,6 +32,8 @@ class CompletePhaseOutputContractTest(unittest.TestCase):
             replace(complete, members=members[:2])
         with self.assertRaisesRegex(ValueError, "complete member set"):
             replace(complete, common_outputs=(object(),))
+        with self.assertRaisesRegex(ValueError, "retain its own prerequisites"):
+            replace(members[0], gaps=(PhaseMemberOutputGap.OUTPUT_PREREQUISITE_UNAVAILABLE,))
 
     def test_replay_preserves_registered_native_ids_geometry_and_identity_graph(self):
         expected = {"id": "source-scan-geometry:1", "reference": "source-scan-geometry:1",

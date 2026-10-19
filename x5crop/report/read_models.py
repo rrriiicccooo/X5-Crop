@@ -2,30 +2,60 @@ from __future__ import annotations
 
 from dataclasses import fields, is_dataclass
 from enum import Enum
+from functools import lru_cache
 from typing import Any
 
 from ..detection.gate_checks import GateCheck
 
 
+_SCALAR_TYPES = frozenset((str, int, float, bool, type(None)))
+
+
+@lru_cache(maxsize=256)
+def _public_field_names(model_type: type) -> tuple[str, ...]:
+    return tuple(field.name for field in fields(model_type) if not field.name.startswith("_"))
+
+
 def typed_read_model(value: Any) -> Any:
-    if isinstance(value, bytes):
-        return f"<bytes:{len(value)}>"
-    if isinstance(value, Enum):
-        return value.value
-    if is_dataclass(value) and not isinstance(value, type):
-        return {
-            field.name: typed_read_model(getattr(value, field.name))
-            for field in fields(value)
-            if not field.name.startswith("_")
-        }
-    if isinstance(value, dict):
-        return {
-            str(key): typed_read_model(item)
-            for key, item in value.items()
-        }
-    if isinstance(value, (list, tuple)):
-        return [typed_read_model(item) for item in value]
-    return value
+    # A conversion template is local to this call. Copy it on every hit so
+    # repeated facts still produce independently mutable report branches.
+    memo: dict[int, tuple[object, dict[str, Any]]] = {}
+    opaque_containers: set[int] = set()
+
+    def copy_tree(item):
+        kind = type(item)
+        if kind is dict and id(item) not in opaque_containers:
+            return {key: copy_tree(child) for key, child in item.items()}
+        if kind is list and id(item) not in opaque_containers:
+            return [copy_tree(child) for child in item]
+        return item
+
+    def convert(item):
+        if type(item) in _SCALAR_TYPES:
+            return item
+        if isinstance(item, bytes):
+            return f"<bytes:{len(item)}>"
+        if isinstance(item, Enum):
+            result = item.value
+            if type(result) in (dict, list):
+                opaque_containers.add(id(result))
+            return result
+        if is_dataclass(item) and not isinstance(item, type):
+            previous = memo.get(id(item))
+            if previous is not None and previous[0] is item:
+                return copy_tree(previous[1])
+            result = {name: convert(getattr(item, name))
+                      for name in _public_field_names(type(item))}
+            if type(item).__dataclass_params__.frozen and len(memo) < 4096:
+                memo[id(item)] = item, result
+            return result
+        if isinstance(item, dict):
+            return {str(key): convert(child) for key, child in item.items()}
+        if isinstance(item, (list, tuple)):
+            return [convert(child) for child in item]
+        return item
+
+    return convert(value)
 
 
 def gate_check_read_model(check: GateCheck) -> dict[str, Any]:
