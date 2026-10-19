@@ -856,143 +856,56 @@ def _apply_final_lattice_contract(
         directly_observed_ordinals=directly_observed_ordinals,
         source_frame_width_authority=source_frame_width_authority,
     )
-    direct_role_authority = result.direct_role_binding_authority
+    failure = conditional_phase_geometry_failure(result)
+    if result.status != PhaseFitStatus.RESOLVED or failure is None:
+        return result
+    kind, reason = failure
+    return replace(result, status=PhaseFitStatus.UNRESOLVED,
+                   failure_kind=kind, ambiguity_reason=reason, winner_basis=None)
+
+
+def conditional_phase_geometry_failure(
+    result: PhaseFitResult,
+) -> tuple[PhaseFailureKind, str] | None:
+    """Assess one given interpretation without declaring a discrete winner."""
+    direct = result.direct_role_binding_authority
+    nominal = result.calibrated_nominal_grid_evidence
+    inferred = tuple(item for item in result.adjacency_observation_coverage
+                     if item.normal_inference_required)
+    continuity = next((item for item in result.adjacency_continuity_observations
+                       if item.kind == AdjacencyContinuityKind.UNRESOLVED), None)
+    if continuity is not None:
+        return (PhaseFailureKind.ADJACENCY_CONTINUITY_UNRESOLVED,
+                continuity.reason or "adjacency continuity is unresolved")
+    if direct is not None and direct.state != EvidenceState.SUPPORTED:
+        return (
+            PhaseFailureKind.SEPARATOR_MATERIAL_CONFLICT
+            if direct.state == EvidenceState.CONTRADICTED
+            else PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE,
+            direct.reason,
+        )
     authority = result.global_lattice_authority
-    nominal_evidence = result.calibrated_nominal_grid_evidence
-    coverage = result.adjacency_observation_coverage
-    continuity = result.adjacency_continuity_observations
-    outer_authority = result.outer_frame_observation_authority
-    inferred = tuple(item for item in coverage if item.normal_inference_required)
-    continuity_unresolved = next(
-        (
-            item
-            for item in continuity
-            if item.kind == AdjacencyContinuityKind.UNRESOLVED
-        ),
-        None,
-    )
-    if (
-        result.status == PhaseFitStatus.RESOLVED
-        and continuity_unresolved is not None
-    ):
-        return replace(
-            result,
-            status=PhaseFitStatus.UNRESOLVED,
-            ambiguity_reason=(
-                continuity_unresolved.reason
-                or "adjacency continuity is unresolved"
-            ),
-            failure_kind=PhaseFailureKind.ADJACENCY_CONTINUITY_UNRESOLVED,
-            winner_basis=None,
+    if inferred and (authority is None or authority.state != EvidenceState.SUPPORTED) and nominal is None:
+        return (PhaseFailureKind.GLOBAL_LATTICE_AUTHORITY_UNAVAILABLE,
+                "an inferred normal adjacency requires independently closed global phase, W, and pitch authority")
+    missing = tuple(item.relation_ordinal for item in inferred
+                    if item.state != AdjacencyCoverageState.COMPLETE)
+    if missing:
+        return (PhaseFailureKind.ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE,
+                "registered sequence queries do not fully cover inferred normal adjacency ordinals: "
+                + ", ".join(map(str, missing)))
+    outer = result.outer_frame_observation_authority
+    if inferred and nominal is None and (outer is None or outer.state != EvidenceState.SUPPORTED):
+        return (PhaseFailureKind.OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE,
+                "normal Grid inference requires one directly bound long-axis role on each outer output frame")
+    inference = None if result.best is None else result.best.frame_width_inference
+    if nominal is None and inference is not None and inference.state != EvidenceState.SUPPORTED:
+        reason = (
+            "measured source W does not intersect this placement's W"
+            if inference.failure_kind == FrameWidthInferenceFailureKind.SOURCE_WIDTH_PLACEMENT_CONFLICT
+            else "direct-lattice W cannot discard a registered local boundary and then authorize missing roles"
+            if inference.failure_kind == FrameWidthInferenceFailureKind.DIRECT_LATTICE_COUNTEREVIDENCE
+            else "missing opposite Frame roles require one independently closed source-level common W"
         )
-    if (
-        result.status == PhaseFitStatus.RESOLVED
-        and direct_role_authority is not None
-        and direct_role_authority.state != EvidenceState.SUPPORTED
-    ):
-        return replace(
-            result,
-            status=PhaseFitStatus.UNRESOLVED,
-            ambiguity_reason=direct_role_authority.reason,
-            failure_kind=(
-                PhaseFailureKind.SEPARATOR_MATERIAL_CONFLICT
-                if direct_role_authority.state == EvidenceState.CONTRADICTED
-                else PhaseFailureKind.DIRECT_ROLE_BINDING_AUTHORITY_UNAVAILABLE
-            ),
-            winner_basis=None,
-        )
-    if (
-        result.status == PhaseFitStatus.RESOLVED
-        and inferred
-        and (
-            authority is None
-            or authority.state != EvidenceState.SUPPORTED
-        )
-        and nominal_evidence is None
-    ):
-        return replace(
-            result,
-            status=PhaseFitStatus.UNRESOLVED,
-            ambiguity_reason=(
-                "an inferred normal adjacency requires independently closed "
-                "global phase, W, and pitch authority"
-            ),
-            failure_kind=(
-                PhaseFailureKind.GLOBAL_LATTICE_AUTHORITY_UNAVAILABLE
-            ),
-            winner_basis=None,
-        )
-    if (
-        result.status == PhaseFitStatus.RESOLVED
-        and any(
-            item.state != AdjacencyCoverageState.COMPLETE
-            for item in inferred
-        )
-    ):
-        missing = ", ".join(
-            str(item.relation_ordinal)
-            for item in inferred
-            if item.state != AdjacencyCoverageState.COMPLETE
-        )
-        return replace(
-            result,
-            status=PhaseFitStatus.UNRESOLVED,
-            ambiguity_reason=(
-                "registered sequence queries do not fully cover inferred "
-                f"normal adjacency ordinals: {missing}"
-            ),
-            failure_kind=(
-                PhaseFailureKind.ADJACENCY_OBSERVATION_COVERAGE_INCOMPLETE
-            ),
-            winner_basis=None,
-        )
-    if (
-        result.status == PhaseFitStatus.RESOLVED
-        and inferred
-        and nominal_evidence is None
-        and (
-            outer_authority is None
-            or outer_authority.state != EvidenceState.SUPPORTED
-        )
-    ):
-        return replace(
-            result,
-            status=PhaseFitStatus.UNRESOLVED,
-            ambiguity_reason=(
-                "normal Grid inference requires one directly bound long-axis "
-                "role on each outer output frame"
-            ),
-            failure_kind=(
-                PhaseFailureKind.OUTER_FRAME_OBSERVATION_AUTHORITY_UNAVAILABLE
-            ),
-            winner_basis=None,
-        )
-    if result.status == PhaseFitStatus.RESOLVED and result.best is not None:
-        width_inference = result.best.frame_width_inference
-        if (
-            nominal_evidence is None
-            and
-            width_inference is not None
-            and width_inference.state != EvidenceState.SUPPORTED
-        ):
-            return replace(
-                result,
-                status=PhaseFitStatus.UNRESOLVED,
-                ambiguity_reason=(
-                    "measured source W does not intersect this placement's W"
-                    if width_inference.failure_kind
-                    == FrameWidthInferenceFailureKind.SOURCE_WIDTH_PLACEMENT_CONFLICT
-                    else "direct-lattice W cannot discard a registered local "
-                    "boundary and then authorize missing roles"
-                    if width_inference.failure_kind
-                    == FrameWidthInferenceFailureKind
-                    .DIRECT_LATTICE_COUNTEREVIDENCE
-                    else "missing opposite Frame roles require one independently "
-                    "closed source-level common W"
-                ),
-                failure_kind=(
-                    PhaseFailureKind.FRAME_WIDTH_INFERENCE_UNAVAILABLE
-                ),
-                winner_basis=None,
-            )
-    return result
+        return PhaseFailureKind.FRAME_WIDTH_INFERENCE_UNAVAILABLE, reason
+    return None

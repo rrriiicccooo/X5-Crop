@@ -336,6 +336,15 @@ class TemplatePhaseCandidateAuthorityContractTest(unittest.TestCase):
             (4,),
         )
         self.assertIsNone(result.best.role_bindings[4])
+        # The complete producer ledger retains the weak input anchor and its
+        # legal removal, rather than rejecting the whole sample at reporting.
+        self.assertTrue(any(
+            member.input_fit.role_bindings[4] is not None
+            and member.input_fit.role_bindings[4].use == SequenceBindingUse.PHASE_ANCHOR
+            and member.projected_fit is not None
+            and member.projected_fit.role_bindings[4] is None
+            for scope in result.competition_scopes for member in scope.members
+        ))
         self.assertEqual(
             tuple(
                 binding.canonical_position_px

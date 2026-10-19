@@ -78,6 +78,8 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                 "retained_adjacency_assessments": typed_read_model(
                     lane.prepared.phase_competition.retained_adjacency_assessments
                 ),
+                "phase_competition_scopes": typed_read_model(lane.prepared.phase_competition.competition_scopes),
+                "complete_phase_output": typed_read_model(lane.complete_phase_output),
                 "contact_edge_observations": typed_read_model(
                     lane.prepared.phase_input.contact_edge_observations
                 ),

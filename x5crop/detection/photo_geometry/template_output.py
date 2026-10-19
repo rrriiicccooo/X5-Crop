@@ -992,6 +992,41 @@ def common_h_output_footprint(
     outputs: tuple[OutputFootprint, ...],
     *, projections: tuple[FeasiblePlacementProjection, ...] = (),
 ) -> CommonOutputFootprint:
+    """Keep the existing same-sequence H-competition contract."""
+    if not placements:
+        raise ValueError("common output requires a bounded, complete member list")
+    first = placements[0]
+    if any(placement.sequence_fit != first.sequence_fit
+           or placement.global_lattice_authority != first.global_lattice_authority
+           for placement in placements):
+        raise ValueError("common H output requires identical W ownership and source width authority")
+    return _common_output_footprint(placements, outputs, projections=projections,
+                                   identity_prefix="common-h-footprint")
+
+
+def common_phase_output_footprint(
+    placements: tuple[FormatPlacement, ...],
+    outputs: tuple[OutputFootprint, ...],
+) -> CommonOutputFootprint:
+    """Test all supplied ordinal interpretations under one proven source size.
+
+    Equal measurement intervals do not authorize a new size representative.
+    Different sequence identities keep their own envelopes and budgets.
+    """
+    if not 1 < len(placements) <= MAX_CROSS_PAIRS:
+        raise ValueError("common phase output requires a bounded complete plural set")
+    if any(placement.source_scan_geometry != placements[0].source_scan_geometry
+           for placement in placements):
+        raise ValueError("phase members do not establish the same fixed source W/H state")
+    return _common_output_footprint(placements, outputs, identity_prefix="common-phase-footprint")
+
+
+def _common_output_footprint(
+    placements: tuple[FormatPlacement, ...],
+    outputs: tuple[OutputFootprint, ...],
+    *, projections: tuple[FeasiblePlacementProjection, ...] = (),
+    identity_prefix: str,
+) -> CommonOutputFootprint:
     """Cover one slot under every supplied H explanation with fixed W ownership.
 
     Mandatory is the complete union. Requested remains a single fixed-size
@@ -1004,8 +1039,7 @@ def common_h_output_footprint(
     first = placements[0]
     native = outputs[0]
     same_w_fields = (
-        "lane_id", "frame_spec", "output_slot_count", "sequence_fit",
-        "global_lattice_authority", "width_axis", "height_axis",
+        "lane_id", "frame_spec", "output_slot_count", "width_axis", "height_axis",
         "width_authority_px", "height_authority_px",
     )
     for placement, output in zip(placements, outputs, strict=True):
@@ -1031,7 +1065,7 @@ def common_h_output_footprint(
         if saturation and all(fact.source_boundary for fact in saturation)
         else requested
     )
-    geometry_id = run_local_id("common-h-footprint", *sorted(output.geometry_id for output in outputs))
+    geometry_id = run_local_id(identity_prefix, *sorted(output.geometry_id for output in outputs))
     if projections and (len(projections) != len(placements) or any(
             p.placement_id != placement.placement_id for p,placement in zip(projections, placements, strict=True))):
         raise ValueError("common H member projections changed identity or order")

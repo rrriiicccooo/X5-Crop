@@ -5,6 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 import math
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .template_phase_membership import PhaseCompetitionScope
 
 from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
 from .observation_types import (
@@ -1074,6 +1078,8 @@ class PhaseFitResult:
         SourceFrameWidthTopologyAssessment | None
     ) = None
     retained_adjacency_assessments: tuple[PhaseCandidateAdjacencyAssessment, ...] = ()
+    competition_scopes: tuple[PhaseCompetitionScope, ...] = ()
+    competition_scope_evaluations: tuple[str, ...] = ()
     # Transient handoff, not a third retained/output candidate. The report
     # read model excludes private fields; if consumed, the original fit and
     # failed projection become the ordinary runner and are reported there.
@@ -1089,6 +1095,25 @@ class PhaseFitResult:
 
     def __post_init__(self) -> None:
         from .template_source_clipped import SourceClippedPhaseRetention
+
+        if self.competition_scopes:
+            from .template_phase_membership import PhaseCompetitionScope, combine_phase_competition_scopes
+            if (not isinstance(self.competition_scopes, tuple)
+                    or any(not isinstance(scope, PhaseCompetitionScope)
+                           or scope.template.template_id != self.template.template_id
+                           for scope in self.competition_scopes)
+                    or combine_phase_competition_scopes(self.competition_scopes, ()) != self.competition_scopes):
+                raise ValueError("phase competition lost its complete producer scopes")
+        elif not isinstance(self.competition_scopes, tuple):
+            raise TypeError("phase competition scopes must be a tuple")
+        by_scope = {scope.scope_id: scope for scope in self.competition_scopes}
+        if (not isinstance(self.competition_scope_evaluations, tuple)
+                or any(identity not in by_scope for identity in self.competition_scope_evaluations)
+                or set(self.competition_scope_evaluations) != set(by_scope)
+                or len(self.competition_scope_evaluations) != self.receipt.phase_producer_scope_count
+                or sum(len(by_scope[identity].members) for identity in self.competition_scope_evaluations)
+                != self.receipt.phase_producer_record_count):
+            raise ValueError("phase competition omitted a producer scope or record evaluation")
 
         if (
             not isinstance(self.retained_adjacency_assessments, tuple)

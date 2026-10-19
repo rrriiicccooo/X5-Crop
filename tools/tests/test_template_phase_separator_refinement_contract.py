@@ -193,6 +193,7 @@ class TemplatePhaseSeparatorRefinementContractTest(unittest.TestCase):
         )
 
         self.assertEqual(adjusted.status, PhaseFitStatus.RESOLVED)
+        self.assertEqual(adjusted.competition_scopes[0].phase_anchor_authority_ceiling, fixed)
         assert adjusted.best is not None
         self.assertTrue(
             set(

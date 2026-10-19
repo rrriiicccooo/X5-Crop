@@ -32,6 +32,7 @@ def _aggregate_phase_work(
     result: PhaseFitResult,
     *prior: TemplateSearchReceipt,
     adjacency_relation_evaluation_count: int | None = None,
+    prior_phase: PhaseFitResult | None = None,
 ) -> PhaseFitResult:
     receipts = (*prior, result.receipt)
     receipt = TemplateSearchReceipt(
@@ -65,6 +66,8 @@ def _aggregate_phase_work(
             item.peak_temporary_bytes for item in receipts
         ),
         fit_pass_count=sum(item.fit_pass_count for item in receipts),
+        phase_producer_scope_count=sum(item.phase_producer_scope_count for item in receipts),
+        phase_producer_record_count=sum(item.phase_producer_record_count for item in receipts),
         separator_lattice_hypothesis_count=sum(
             item.separator_lattice_hypothesis_count for item in receipts
         ),
@@ -116,7 +119,18 @@ def _aggregate_phase_work(
         ),
     )
     receipt.validate_bounds()
-    return replace(result, receipt=receipt)
+    scopes = result.competition_scopes
+    evaluations = result.competition_scope_evaluations
+    if prior_phase is not None:
+        from .template_phase_membership import combine_phase_competition_scopes
+        scopes = combine_phase_competition_scopes(scopes, prior_phase.competition_scopes)
+        evaluations = (*evaluations, *prior_phase.competition_scope_evaluations)
+        retained = sum(scope.retained_bytes for scope in scopes)
+        producer_peak = max((scope.receipt.peak_temporary_bytes for scope in scopes), default=0)
+        receipt = replace(receipt, peak_temporary_bytes=max(receipt.peak_temporary_bytes,
+            retained + producer_peak))
+    return replace(result, receipt=receipt, competition_scopes=scopes,
+                   competition_scope_evaluations=evaluations)
 
 
 def _carry_terminal_phase_diagnostic(
@@ -470,6 +484,7 @@ def fit_template_phase_candidate_with_adjacency_relations(
     adjusted = _aggregate_phase_work(
         adjusted,
         normal.receipt,
+        prior_phase=normal,
         adjacency_relation_evaluation_count=(
             analysis.evaluated_adjacency_count
         ),
@@ -569,4 +584,5 @@ def account_prior_phase_fit(
             _state._inherit_prior_lattice_fit_basis(result, prior), prior,
         ),
         prior.receipt,
+        prior_phase=prior,
     )

@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from collections.abc import Hashable, Iterator
+from collections.abc import Hashable, Iterable, Iterator
 
 
 @dataclass
@@ -46,8 +46,33 @@ def run_local_id(prefix: str, *parts: object) -> str:
 
 
 @contextmanager
-def source_identity_scope() -> Iterator[None]:
-    token = _CURRENT_SCOPE.set(_IdentityScope())
+def source_identity_scope(*, reserved_ids: Iterable[str] = (),
+                          registered_keys: Iterable[tuple[str, tuple[Hashable, ...], str]] = ()) -> Iterator[None]:
+    """Start one source, optionally restoring registered identities for replay.
+
+    Reservations only prevent name collisions. Registered keys restore the
+    same physical observation's existing name; neither operation grants any
+    measurement or output authority.
+    """
+    scope = _IdentityScope()
+    registered_names = {}
+    for identity in reserved_ids:
+        prefix, separator, ordinal = identity.rpartition(":")
+        if separator and prefix and ordinal.isdecimal():
+            scope.next_ordinal[prefix] = max(scope.next_ordinal.get(prefix, 0), int(ordinal))
+    for prefix, parts, identity in registered_keys:
+        name, separator, ordinal = identity.rpartition(":")
+        if not separator or name != prefix or not ordinal.isdecimal() or int(ordinal) < 1:
+            raise ValueError("registered run-local identity is invalid")
+        key = (prefix, parts)
+        if key in scope.identities and scope.identities[key] != identity:
+            raise ValueError("registered physical key has conflicting identities")
+        if identity in registered_names and registered_names[identity] != key:
+            raise ValueError("registered identity aliases different physical keys")
+        registered_names[identity] = key
+        scope.identities[key] = identity
+        scope.next_ordinal[prefix] = max(scope.next_ordinal.get(prefix, 0), int(ordinal))
+    token = _CURRENT_SCOPE.set(scope)
     try:
         yield
     finally:

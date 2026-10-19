@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 import math
 
 from ...configuration.model import DetectionConfiguration, ResolvedSlotCount
@@ -48,6 +48,7 @@ from .observation_types import (
 from .template_evidence import template_evidence_use_ledger
 from .template_direct_role_authority import intrinsic_direct_role_authority_bases
 from .template_frame_width import (
+    SourceFrameWidthAuthority,
     apply_placement_source_frame_width,
     calibrate_source_frame_width,
 )
@@ -62,15 +63,18 @@ from .template_runtime_model import (
 )
 from .template_measurement_plan import compile_template_measurement_plan
 from .template_registration import (
+    RegisteredCrossEvidence,
     project_cross_solver_bindings,
     register_cross_evidence,
     register_template_local_cross_refinements,
 )
 from .template_cross import calibrate_source_frame_height, fit_template_cross
-from .template_cross_model import TemplateCrossInput
+from .template_cross_model import TemplateCrossInput, CrossFitCompetition, CrossRoleBinding
 from .template_contact import observe_contact_edges
 from .template_overlap import observe_overlap_edge_pairs
 from .template_model import (
+    SequenceFit,
+    TemplateSpec,
     SourceFrameWidthAuthorityBasis,
     template_role_refinement_radius_px,
 )
@@ -85,6 +89,7 @@ from .template_phase_model import (
     GlobalLatticeAuthorityEvidence,
     PhaseFailureKind,
     PhaseFitStatus,
+    PhaseFitResult,
     TemplatePhaseCandidateCompetition,
     TemplatePhaseInput,
 )
@@ -96,6 +101,7 @@ from .template_pitch import (
     resolve_separator_pitch_hypothesis,
 )
 from .template_placement import (
+    resolved_cross_support_domains_px,
     retained_cross_support_domain_groups_px,
     review_cross_support_domain_groups_px,
 )
@@ -147,6 +153,140 @@ def _enclosing_support_for_canonical_height(
     ):
         return None
     return enclosing
+
+
+@dataclass(frozen=True)
+class TemplateCrossContext:
+    """One sequence interpretation's own H, registration and Cross result."""
+
+    source_scan_geometry: SourceScanGeometry
+    cross_input: TemplateCrossInput
+    registration: RegisteredCrossEvidence
+    competition: CrossFitCompetition
+    top_bindings: tuple[CrossRoleBinding, ...]
+    bottom_bindings: tuple[CrossRoleBinding, ...]
+    initial_source_scan_geometry: SourceScanGeometry
+    source_frame_width_authority: SourceFrameWidthAuthority
+    source_width_fit: SequenceFit | None
+    independent_member_context: bool
+    phase_competition: PhaseFitResult
+
+    def __post_init__(self) -> None:
+        if (self.independent_member_context and self.source_frame_width_authority.state.value == "supported"
+                and (self.source_width_fit is None
+                     or not self.source_frame_width_authority.matches_placement(self.source_width_fit))):
+            raise ValueError("Cross context borrowed another member's W")
+        initial = self.initial_source_scan_geometry
+        if (self.cross_input.fixed_height_px != initial.height_state.extent_projection_px()
+                or self.cross_input.canonical_fixed_height_px != initial.height_state.extent_projection_px().center):
+            raise ValueError("Cross context lost its independent initial H")
+        expected = calibrate_source_frame_height(apply_inferred_aperture_height(
+            initial, self.competition.aperture_aspect_ratio_authority), self.competition)
+        if replace(expected, geometry_id=self.source_scan_geometry.geometry_id) != self.source_scan_geometry:
+            raise ValueError("Cross context H does not follow its own Cross authority")
+
+
+def prepare_template_cross_context(
+    registered: RegisteredTemplateLane,
+    base: RegisteredCrossEvidence,
+    *,
+    template: TemplateSpec,
+    phase: PhaseFitResult,
+    source_geometry: SourceScanGeometry,
+    source_frame_width_authority: SourceFrameWidthAuthority,
+    sequence_fits: tuple[SequenceFit, ...] | None = None,
+) -> TemplateCrossContext:
+    """Compile the same canonical Cross path for each supplied role mapping.
+
+    Only the candidate-independent base registration is reusable. Local H
+    windows, longitudinal domains, coarse classification and aspect authority
+    are rebuilt from this interpretation's own W and initial source H.
+    """
+
+    if sequence_fits is None:
+        domains = ()
+        try:
+            domains = retained_cross_support_domain_groups_px(phase)
+        except ValueError as error:
+            if phase.status == PhaseFitStatus.RESOLVED:
+                phase = replace(phase, status=PhaseFitStatus.UNRESOLVED,
+                    ambiguity_reason=str(error), failure_kind=PhaseFailureKind.FIXED_TEMPLATE_MISMATCH,
+                    winner_basis=None)
+    else:
+        domains = tuple(resolved_cross_support_domains_px(fit) for fit in sequence_fits)
+    top_measurement = next(item for item in registered.measurement_sets
+                           if item.query.purpose == QueryPurpose.TOP_CORRIDOR)
+    bottom_measurement = next(item for item in registered.measurement_sets
+                              if item.query.purpose == QueryPurpose.BOTTOM_CORRIDOR)
+    scales = registered.lane.scan_canvas.axis_scales
+    if scales is None:
+        raise ValueError("Cross context requires scan-canvas axis scales")
+    fixed_height = source_geometry.height_state.extent_projection_px()
+    canonical_height = fixed_height.center
+    cross = register_template_local_cross_refinements(
+        base, top_measurement=top_measurement, bottom_measurement=bottom_measurement,
+        width_axis=registered.width_axis, height_axis=registered.height_axis,
+        height_scale_px_per_mm=scales.height_axis_px_per_mm,
+        lane_reference_trace_px=registered.width_authority_px.center,
+        fixed_height_px=fixed_height, canonical_height_px=canonical_height,
+        longitudinal_support_domain_groups_px=domains,
+    )
+    enclosing = _enclosing_support_for_canonical_height(
+        registered.coarse_support.enclosing_support, canonical_height,
+    )
+    pair_id = "" if enclosing is None else (
+        f"coarse-enclosing-pair:{enclosing.minimum_track.observation_id}:"
+        f"{enclosing.maximum_track.observation_id}"
+    )
+    coarse_top = () if enclosing is None else (
+        _coarse_enclosing_binding(enclosing.minimum_track, BoundaryRole.TOP, pair_id=pair_id),
+    )
+    coarse_bottom = () if enclosing is None else (
+        _coarse_enclosing_binding(enclosing.maximum_track, BoundaryRole.BOTTOM, pair_id=pair_id),
+    )
+    fitted_count = len(project_cross_solver_bindings((
+        *cross.top_bindings, *cross.bottom_bindings, *coarse_top, *coarse_bottom,
+    )))
+    plan = registered.measurement_plan
+    native_top, native_bottom, coarse_registration = register_coarse_side_facts(
+        registered.coarse_support.enclosing_side_facts,
+        remaining_bound=max(0, plan.cross_bounds.max_fitted_observations - fitted_count),
+    )
+    top_bindings = (*cross.top_bindings, *coarse_top, *native_top)
+    bottom_bindings = (*cross.bottom_bindings, *coarse_bottom, *native_bottom)
+    solver_top = project_cross_solver_bindings(top_bindings)
+    solver_bottom = project_cross_solver_bindings(bottom_bindings)
+    inputs = TemplateCrossInput(
+        template=template, fixed_height_px=fixed_height,
+        canonical_fixed_height_px=canonical_height,
+        lane_reference_trace_px=registered.width_authority_px.center,
+        source_direction=_shared_direction_from_coarse(registered.coarse_support.shared_direction),
+        registered_trace_coordinates_px=top_measurement.query.trace_positions_px,
+        longitudinal_support_domain_groups_px=domains,
+        review_support_domain_groups_px=review_cross_support_domain_groups_px(phase),
+        top_bindings=solver_top, bottom_bindings=solver_bottom,
+        boundary_axis=registered.height_axis,
+        maximum_registered_runs_per_role=plan.cross_bounds.max_registered_runs_per_role,
+        maximum_fitted_observations=plan.cross_bounds.max_fitted_observations,
+        maximum_compatible_pairs=plan.cross_bounds.max_compatible_pairs,
+        maximum_evaluated_fits=plan.cross_bounds.max_evaluated_fits,
+        registered_top_run_count=cross.registered_top_run_count,
+        registered_bottom_run_count=cross.registered_bottom_run_count,
+        fitted_observation_count=len(solver_top) + len(solver_bottom),
+        coarse_side_registration=coarse_registration,
+        aperture_aspect_ratio_authority=derive_aperture_aspect_ratio_authority(
+            source_geometry, source_frame_width_authority,
+        ),
+    )
+    initial_source = source_geometry
+    competition = fit_template_cross(inputs)
+    source_geometry = apply_inferred_aperture_height(
+        source_geometry, competition.aperture_aspect_ratio_authority,
+    )
+    source_geometry = calibrate_source_frame_height(source_geometry, competition)
+    return TemplateCrossContext(source_geometry, inputs, cross, competition,
+                                top_bindings, bottom_bindings, initial_source,
+                                source_frame_width_authority, phase.best, sequence_fits is not None, phase)
 
 
 def _profile_capacity(
@@ -974,20 +1114,6 @@ def prepare_template_lane(
             ),
         ),
     )
-    longitudinal_support_domain_groups_px = ()
-    try:
-        longitudinal_support_domain_groups_px = (
-            retained_cross_support_domain_groups_px(phase)
-        )
-    except ValueError as error:
-        if phase.status == PhaseFitStatus.RESOLVED:
-            phase = replace(
-                phase,
-                status=PhaseFitStatus.UNRESOLVED,
-                ambiguity_reason=str(error),
-                failure_kind=PhaseFailureKind.FIXED_TEMPLATE_MISMATCH,
-                winner_basis=None,
-            )
     cross = register_cross_evidence(
         profile=cross_profile,
         top_measurement=top_measurement,
@@ -1000,106 +1126,19 @@ def prepare_template_lane(
             measurement_plan.cross_bounds.max_registered_runs_per_role
         ),
     )
-    fixed_height = source_geometry.height_state.extent_projection_px()
-    canonical_height = fixed_height.center
-    cross = register_template_local_cross_refinements(
-        cross,
-        top_measurement=top_measurement,
-        bottom_measurement=bottom_measurement,
-        width_axis=width_axis,
-        height_axis=height_axis,
-        height_scale_px_per_mm=scales.height_axis_px_per_mm,
-        lane_reference_trace_px=width_authority.center,
-        fixed_height_px=fixed_height,
-        canonical_height_px=canonical_height,
-        longitudinal_support_domain_groups_px=longitudinal_support_domain_groups_px,
+    base_cross = cross
+    context = prepare_template_cross_context(
+        registered, base_cross, template=template, phase=phase,
+        source_geometry=source_geometry,
+        source_frame_width_authority=source_frame_width_authority,
     )
-    # Coarse measurement happens before sequence scale calibration. Direction
-    # remains direct evidence, but boundary use is classified against final H.
-    enclosing = _enclosing_support_for_canonical_height(
-        coarse_support.enclosing_support,
-        canonical_height,
-    )
-    enclosing_pair_id = (
-        ""
-        if enclosing is None
-        else (
-            "coarse-enclosing-pair:"
-            f"{enclosing.minimum_track.observation_id}:"
-            f"{enclosing.maximum_track.observation_id}"
-        )
-    )
-    coarse_top = (
-        ()
-        if enclosing is None
-        else (
-            _coarse_enclosing_binding(
-                enclosing.minimum_track,
-                BoundaryRole.TOP,
-                pair_id=enclosing_pair_id,
-            ),
-        )
-    )
-    coarse_bottom = (
-        ()
-        if enclosing is None
-        else (
-            _coarse_enclosing_binding(
-                enclosing.maximum_track,
-                BoundaryRole.BOTTOM,
-                pair_id=enclosing_pair_id,
-            ),
-        )
-    )
-    base_fitted_count = len(project_cross_solver_bindings((*cross.top_bindings, *cross.bottom_bindings, *coarse_top, *coarse_bottom)))
-    native_top, native_bottom, coarse_side_registration = register_coarse_side_facts(
-        coarse_support.enclosing_side_facts,
-        remaining_bound=max(0, measurement_plan.cross_bounds.max_fitted_observations - base_fitted_count),
-    )
-    top_bindings = (*cross.top_bindings, *coarse_top, *native_top)
-    bottom_bindings = (*cross.bottom_bindings, *coarse_bottom, *native_bottom)
-    solver_top = project_cross_solver_bindings(top_bindings)
-    solver_bottom = project_cross_solver_bindings(bottom_bindings)
-    source_direction = _shared_direction_from_coarse(
-        coarse_support.shared_direction
-    )
-    aperture_aspect_ratio = derive_aperture_aspect_ratio_authority(
-        source_geometry,
-        source_frame_width_authority,
-    )
-    cross_input = TemplateCrossInput(
-        template=template,
-        fixed_height_px=fixed_height,
-        canonical_fixed_height_px=canonical_height,
-        lane_reference_trace_px=width_authority.center,
-        source_direction=source_direction,
-        registered_trace_coordinates_px=top_measurement.query.trace_positions_px,
-        longitudinal_support_domain_groups_px=longitudinal_support_domain_groups_px,
-        review_support_domain_groups_px=review_cross_support_domain_groups_px(phase),
-        top_bindings=solver_top,
-        bottom_bindings=solver_bottom,
-        boundary_axis=height_axis,
-        maximum_registered_runs_per_role=(
-            measurement_plan.cross_bounds.max_registered_runs_per_role
-        ),
-        maximum_fitted_observations=measurement_plan.cross_bounds.max_fitted_observations,
-        maximum_compatible_pairs=measurement_plan.cross_bounds.max_compatible_pairs,
-        maximum_evaluated_fits=measurement_plan.cross_bounds.max_evaluated_fits,
-        registered_top_run_count=cross.registered_top_run_count,
-        registered_bottom_run_count=cross.registered_bottom_run_count,
-        fitted_observation_count=len(solver_top) + len(solver_bottom),
-        coarse_side_registration=coarse_side_registration,
-        aperture_aspect_ratio_authority=aperture_aspect_ratio,
-    )
-    cross_competition = fit_template_cross(cross_input)
-    source_geometry = apply_inferred_aperture_height(
-        source_geometry,
-        cross_competition.aperture_aspect_ratio_authority,
-    )
-    source_geometry = calibrate_source_frame_height(
-        source_geometry,
-        cross_competition,
-    )
+    source_geometry = context.source_scan_geometry
+    phase = context.phase_competition
+    cross_input = context.cross_input
+    cross_competition = context.competition
+    cross = context.registration
+    top_bindings = context.top_bindings
+    bottom_bindings = context.bottom_bindings
     registered_values = dict(registered.__dict__)
     registered_values["top_cross_bindings"] = top_bindings
     registered_values["bottom_cross_bindings"] = bottom_bindings
@@ -1110,6 +1149,7 @@ def prepare_template_lane(
     return PreparedTemplateLane(
         **registered_values,
         cross_registration_work=cross.work_receipt,
+        base_cross_registration=base_cross,
         template_spec=template,
         source_scan_geometry=source_geometry,
         source_frame_width_authority=source_frame_width_authority,

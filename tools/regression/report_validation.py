@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from contextvars import ContextVar
 from dataclasses import fields, is_dataclass, replace
 from enum import Enum
 from functools import lru_cache
@@ -11,6 +12,11 @@ from types import UnionType
 from typing import Any, Union, get_args, get_origin, get_type_hints
 
 from .common_output_validation import validate_common_h_output
+from x5crop.detection.photo_geometry.template_phase_membership import PhaseCompetitionScope
+from x5crop.detection.photo_geometry.template_phase_output import CompletePhaseOutputProof
+from x5crop.detection.photo_geometry.template_registration import RegisteredCrossEvidence
+from x5crop.detection.source_core import SourceLaneEvidence
+from x5crop.detection.photo_geometry.observation_types import BasicAxisProfile
 from . import report_sequence_validation as sequence_validation
 from . import report_value_validation as value_validation
 from x5crop.detection.photo_geometry.template_measurement_plan_model import MAX_CROSS_PAIRS
@@ -2203,7 +2209,11 @@ def _validate_gate(record: dict[str, Any], stage: str) -> None:
 
 @lru_cache(maxsize=None)
 def _common_proof_field_types(model: type) -> dict[str, Any]:
-    return get_type_hints(model, localns={"BroadAssociationResult": BroadAssociationResult})
+    return get_type_hints(model, localns={"BroadAssociationResult": BroadAssociationResult,
+                                        "PhaseCompetitionScope": PhaseCompetitionScope})
+
+
+_PROOF_READ_CACHE: ContextVar[dict | None] = ContextVar("report_proof_read_cache", default=None)
 
 
 def _read_common_proof(value: Any, model: type) -> Any:
@@ -2217,8 +2227,15 @@ def _read_common_proof(value: Any, model: type) -> Any:
                      SeparatorBandObservation, BoundaryEdgeObservation, BroadMaterialTraceObservation, BroadAssociationResult,
                      AdjacencyContinuityObservation, AdjacencyObservationCoverage, OverlapEdgePairObservation,
                      SourceFrameWidthAuthority, OuterMaterialBoundaryObservation,
-                     PhaseCandidateAdjacencyAssessment):
+                     PhaseCandidateAdjacencyAssessment, PhaseCompetitionScope, CompletePhaseOutputProof,
+                     RegisteredCrossEvidence, SourceLaneEvidence, BasicAxisProfile):
         raise ValueError("unsupported common-output proof root")
+    cache = _PROOF_READ_CACHE.get()
+    key = (id(value), model)
+    if cache is not None and key in cache:
+        raw, decoded = cache[key]
+        if raw is value:
+            return decoded
 
     def read(raw: Any, kind: Any) -> Any:
         origin = get_origin(kind)
@@ -2259,8 +2276,6 @@ def _read_common_proof(value: Any, model: type) -> Any:
                 except ValueError as error:
                     raise ValueError(f"{kind.__name__}.{field.name}: {error}") from error
             result = kind(**{field.name: values[field.name] for field in declared if field.init})
-            if typed_read_model(result) != raw:
-                raise ValueError("common-output proof changed a derived field")
             return result
         if kind is float:
             if type(raw) not in (int, float) or not math.isfinite(raw):
@@ -2277,7 +2292,14 @@ def _read_common_proof(value: Any, model: type) -> Any:
         raise ValueError("unsupported common-output proof field type")
 
     try:
-        return read(value, model)
+        result = read(value, model)
+        # One comparison of the complete root checks every normalization and
+        # derived field, without repeatedly serializing each nested subtree.
+        if typed_read_model(result) != value:
+            raise ValueError("common-output proof changed a derived field")
+        if cache is not None:
+            cache[key] = (value, result)
+        return result
     except (KeyError, TypeError, AttributeError, IndexError, OverflowError) as error:
         raise ValueError("common-output proof is malformed") from error
 
@@ -2879,6 +2901,16 @@ def _validate_geometry(
         lane_id = lane.get("lane_id")
         if not isinstance(lane_id, str) or not lane_id:
             raise ValueError("source lane identity is invalid")
+        raw_scopes = lane.get("phase_competition_scopes")
+        if not isinstance(raw_scopes, list):
+            raise ValueError("source lane lost its complete phase member ledger")
+        scopes = tuple(_read_common_proof(item, PhaseCompetitionScope) for item in raw_scopes)
+        if "complete_phase_output" not in lane:
+            raise ValueError("source lane lost complete phase output validation")
+        if lane["complete_phase_output"] is not None:
+            complete = _read_common_proof(lane["complete_phase_output"], CompletePhaseOutputProof)
+            if complete.scopes != scopes:
+                raise ValueError("complete phase output changed its producer membership")
         assessments = lane.get("retained_adjacency_assessments")
         if not isinstance(assessments, list) or len(assessments) > 2:
             raise ValueError("source lane lost its final retained adjacency assessments")
@@ -3544,6 +3576,8 @@ def _validate_phase_competition(value: object) -> None:
         "outer_frame_observation_authority",
         "source_frame_width_topology_assessment",
         "retained_adjacency_assessments",
+        "competition_scopes",
+        "competition_scope_evaluations",
     }:
         raise ValueError("development phase competition schema is invalid")
     best = value["best"]
@@ -3639,6 +3673,8 @@ def _validate_phase_competition(value: object) -> None:
         "selected_direct_role_projection_binding_count",
         "selected_nominal_grid_solve_count",
         "selected_nominal_grid_solve_success_count",
+        "phase_producer_scope_count",
+        "phase_producer_record_count",
     }
     if not isinstance(receipt, dict) or set(receipt) != receipt_fields:
         raise ValueError("phase-candidate work receipt schema is invalid")
@@ -3988,6 +4024,9 @@ def _validate_development(record: dict[str, Any]) -> None:
             layout=record["measurement"]["layout"],
             source_extent=WorkspaceExtent(**record["measurement"]["source_extent"]),
         )
+        from .phase_output_validation import validate_complete_phase_output
+        validate_complete_phase_output(lane, production_lane, development["measurement"],
+            layout=record["measurement"]["layout"], read_proof=_read_common_proof)
         placements = placement.get("placements")
         if not isinstance(placements, list) or len(placements) > 3:
             raise ValueError("retained placement set exceeds its compiled bound")
@@ -4257,6 +4296,14 @@ def validate_report_source_extent(record: dict[str, Any]) -> WorkspaceExtent:
 
 
 def validate_current_report_record(record: dict[str, Any]) -> None:
+    token = _PROOF_READ_CACHE.set({})
+    try:
+        _validate_current_report_record(record)
+    finally:
+        _PROOF_READ_CACHE.reset(token)
+
+
+def _validate_current_report_record(record: dict[str, Any]) -> None:
     if tuple(record) != CURRENT_REPORT_SECTIONS:
         raise ValueError("current report sections are incomplete or out of order")
     if (

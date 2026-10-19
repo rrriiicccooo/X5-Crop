@@ -47,10 +47,11 @@
   十一项中的九个 Contact runner 在黄金比较中不安全，其中六个仍通过预算；现有坐标权限和完整
   覆盖不能替代独立的照片序号关联。最终补边后的独立重放闭合 S091 的已登记 Overlap 关联与 S094
   的 separator 原生宽度反证，分别保留为解释自身的 `contradicted`；原 Review 与完整竞争边界保持。
-  S004、S021、S024 的 pair 之外仍有残差相容且未被排除的成员，现有 Cross 只编译 pair 的纵向域；
-  成对窗口跨度满足必要条件，不能授予完整共同输出或自动批准权限。
+  完整 producer 账本保留 pair 之外及早期定位的全部成员；各成员从自身 fit 独立编译 W/H/Cross、
+  邻接、固定输出和预算证明。完整共同窗口先要求全部成员获得资格并确立相同固定尺寸来源；
+  缺口不能冒充物理排除，成对窗口跨度不能替代全集证明。当前该验证不授予自动输出权限。
 - 对全部既有候选核验遗漏的唯一获权 separator 伙伴；仅原生完整可见宽度超过原物理上限时保留为
-  关联反证，不补绑定、不调整排序、不借 source W。报告进入当前 schema 108，独立 Review 显示各解释的
+  关联反证，不补绑定、不调整排序、不借 source W。报告进入当前 schema 109，独立 Review 显示各解释的
   `geometry_basis` 并重放十二类完整映射。Coverage／continuity
   校验共用 typed owner，并从开发报告原证据重建，删除重复判据。
   最终保留解释的 `retained_adjacency_assessments` 同时出现在普通及 development 报告，从原登记事实

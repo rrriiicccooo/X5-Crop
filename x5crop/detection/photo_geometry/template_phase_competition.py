@@ -222,6 +222,14 @@ def _candidate_respects_holder_or_terminal_source(
     return source_clipped_terminal_roles(fit, source_domain) is not None
 
 
+def _candidate_respects_phase_anchor_ceiling(fit, ceiling) -> bool:
+    return ceiling is None or all(
+        (role_index, binding.observation_id) in ceiling
+        for role_index, binding in enumerate(fit.role_bindings)
+        if binding is not None and binding.use == SequenceBindingUse.PHASE_ANCHOR
+    )
+
+
 def fit_template_phase(
     observations: Sequence[BoundaryEdgeObservation],
     template: TemplateSpec,
@@ -322,8 +330,53 @@ def fit_template_phase(
         inferred_role_count=0,
     )
     direct_ids = tuple(item.observation_id for item in direct)
+    candidates = ()
+    projection_records = ()
+    effective_phase_anchor_authority_ceiling = phase_anchor_authority_ceiling
+
+    def finish(result: PhaseFitResult) -> PhaseFitResult:
+        from .template_phase_membership import (
+            PhaseCompetitionInputContext, PhaseCompetitionMember, build_phase_competition_scope,
+        )
+        records = projection_records or tuple((candidate, None, None) for candidate in candidates)
+        members = tuple(PhaseCompetitionMember(
+            record_ordinal=index, input_fit=original.fit,
+            projected_fit=None if projected is None else projected.fit,
+            projection=projection, input_residual_compatible=original.residual_compatible,
+            projected_residual_compatible=(None if projected is None else projected.residual_compatible),
+            holder_admitted=_candidate_respects_holder(original.fit, holder_span_px=holder_span_px,
+                holder_slack_px=(template.frame_width_px.minimum + template.frame_width_px.maximum) * 0.02),
+            source_terminal_role_indices=(() if source_domain is None else
+                (source_clipped_terminal_roles(original.fit, source_domain) or ())),
+            source_domain_admitted=(None if source_domain is None else
+                source_clipped_terminal_roles(original.fit, source_domain) is not None),
+            phase_anchor_ceiling_satisfied=_candidate_respects_phase_anchor_ceiling(
+                original.fit if projected is None else projected.fit,
+                effective_phase_anchor_authority_ceiling),
+        ) for index, (original, projected, projection) in enumerate(records))
+        limits = _observations._holder_limits(holder_span_px)
+        scope = build_phase_competition_scope(
+            template=template, phase_authority_px=phase_authority_px,
+            holder_span_px=None if limits is None else FiniteInterval(*limits),
+            source_domain=source_domain, adjacency_relations=relations,
+            phase_anchor_authority_ceiling=phase_anchor_authority_ceiling,
+            projection_evaluated=bool(projection_records),
+            bound_exceeded=result.status == PhaseFitStatus.BOUND_EXCEEDED,
+            receipt=result.receipt, members=members,
+            input_context=PhaseCompetitionInputContext(
+                None if scale_px_per_mm is None else _candidate_model._positive(scale_px_per_mm),
+                tuple(item.query.query_id for item in sequence_measurement_sets),
+                calibrated_nominal_grid_prior, max_observations,
+                tuple(item.observation_id for item in contact_edges),
+                tuple(item.observation_id for item in overlap_pairs)),
+        )
+        return replace(result, competition_scopes=(scope,), competition_scope_evaluations=(scope.scope_id,),
+            receipt=replace(result.receipt, phase_producer_scope_count=1,
+                phase_producer_record_count=len(members),
+                peak_temporary_bytes=result.receipt.peak_temporary_bytes + scope.retained_bytes))
+
     if len(facts) > max_observations:
-        return PhaseFitResult(
+        return finish(PhaseFitResult(
             template,
             None,
             None,
@@ -332,9 +385,9 @@ def fit_template_phase(
             base,
             direct_ids,
             PhaseFailureKind.OBSERVATION_BOUND_EXCEEDED,
-        )
+        ))
     if not direct:
-        return PhaseFitResult(
+        return finish(PhaseFitResult(
             template,
             None,
             None,
@@ -343,7 +396,7 @@ def fit_template_phase(
             base,
             direct_ids,
             PhaseFailureKind.DIRECT_PHASE_ANCHOR_UNAVAILABLE,
-        )
+        ))
     measurement_scale = (
         None if scale_px_per_mm is None else _candidate_model._positive(scale_px_per_mm)
     )
@@ -664,7 +717,7 @@ def fit_template_phase(
             inferred_role_count=0,
             peak_temporary_bytes=seed_peak_bytes,
         )
-        return PhaseFitResult(
+        return finish(PhaseFitResult(
             template,
             None,
             None,
@@ -673,7 +726,7 @@ def fit_template_phase(
             receipt,
             direct_ids,
             PhaseFailureKind.HYPOTHESIS_BOUND_EXCEEDED,
-        )
+        ))
     # The admission scan is at most R coordinates per existing fitted seed:
     # O(H * R), without new hypotheses, queries, lookups or fit passes.
     matching_index = _fitting._PhaseMatchingIndex(direct, roles, separator_pairs)
@@ -859,15 +912,8 @@ def fit_template_phase(
     def respects_phase_anchor_authority_ceiling(
         candidate: _candidate_model._BoundFit,
     ) -> bool:
-        if effective_phase_anchor_authority_ceiling is None:
-            return True
-        return all(
-            (role_index, binding.observation_id)
-            in effective_phase_anchor_authority_ceiling
-            for role_index, binding in enumerate(candidate.fit.role_bindings)
-            if binding is not None
-            and binding.use == SequenceBindingUse.PHASE_ANCHOR
-        )
+        return _candidate_respects_phase_anchor_ceiling(
+            candidate.fit, effective_phase_anchor_authority_ceiling)
 
     eligible_records: tuple[
         tuple[_candidate_model._BoundFit, PhaseCandidateAuthorityProjection | None], ...
@@ -1027,7 +1073,7 @@ def fit_template_phase(
     receipt.validate_bounds()
     if best is None:
         if phase_anchor_authority_exceeded:
-            return PhaseFitResult(
+            return finish(PhaseFitResult(
                 template,
                 None,
                 None,
@@ -1038,7 +1084,7 @@ def fit_template_phase(
                 PhaseFailureKind.FIXED_TEMPLATE_MISMATCH,
                 _native_phase_retention=native_retention,
                 _source_clipped_phase_retention=source_clipped_retention,
-            )
+            ))
         raw_compatible = tuple(
             sorted(
                 (
@@ -1075,7 +1121,7 @@ def fit_template_phase(
                 None if diagnostic_runner_record is None
                 else diagnostic_runner_record[1]
             )
-            return PhaseFitResult(
+            return finish(PhaseFitResult(
                 template=template,
                 best=diagnostic_best.fit,
                 runner_up=(
@@ -1098,7 +1144,7 @@ def fit_template_phase(
                 runner_phase_candidate_authority_projection=runner_projection,
                 _native_phase_retention=native_retention,
                 _source_clipped_phase_retention=source_clipped_retention,
-            )
+            ))
         # A bounded, anchored fit remains useful as a pre-Gate proposal even
         # when every complete interpretation carries direct residual
         # counterevidence.  Keep the strongest deterministic fit and one
@@ -1140,7 +1186,7 @@ def fit_template_phase(
                 diagnostic_best.fit.calibrated_nominal_grid_fit_state
                 is not None
             )
-            return PhaseFitResult(
+            return finish(PhaseFitResult(
                 template=template,
                 best=diagnostic_best.fit,
                 runner_up=(
@@ -1175,8 +1221,8 @@ def fit_template_phase(
                 ),
                 _native_phase_retention=native_retention,
                 _source_clipped_phase_retention=source_clipped_retention,
-            )
-        return PhaseFitResult(
+            ))
+        return finish(PhaseFitResult(
             template,
             None,
             None,
@@ -1187,7 +1233,7 @@ def fit_template_phase(
             PhaseFailureKind.FIXED_TEMPLATE_MISMATCH,
             _native_phase_retention=native_retention,
             _source_clipped_phase_retention=source_clipped_retention,
-        )
+        ))
     contradictory_runner_record = max(
         (
             record
@@ -1290,7 +1336,7 @@ def fit_template_phase(
     terminal_diagnostic_record = max(
         terminal_records, key=record_rank, default=None,
     )
-    return PhaseFitResult(
+    return finish(PhaseFitResult(
         template,
         best.fit,
         None if runner is None else runner.fit,
@@ -1312,7 +1358,7 @@ def fit_template_phase(
                 terminal_diagnostic_record[1],
             )
         ),
-    )
+    ))
 
 
 def _clear_winner_basis(

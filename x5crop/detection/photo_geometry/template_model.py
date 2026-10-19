@@ -1653,6 +1653,8 @@ class TemplateSearchReceipt:
     selected_direct_role_projection_binding_count: int = 0
     selected_nominal_grid_solve_count: int = 0
     selected_nominal_grid_solve_success_count: int = 0
+    phase_producer_scope_count: int = 0
+    phase_producer_record_count: int = 0
 
     def __post_init__(self) -> None:
         values = (
@@ -1682,6 +1684,8 @@ class TemplateSearchReceipt:
             self.selected_direct_role_projection_binding_count,
             self.selected_nominal_grid_solve_count,
             self.selected_nominal_grid_solve_success_count,
+            self.phase_producer_scope_count,
+            self.phase_producer_record_count,
         )
         if any(not isinstance(value, int) or value < 0 for value in values):
             raise ValueError("template work receipt values must be non-negative integers")
@@ -1698,6 +1702,8 @@ class TemplateSearchReceipt:
             raise ValueError("local refinement bindings exceed template roles")
         if self.fit_pass_count <= 0:
             raise ValueError("template fit pass count must be positive")
+        if self.phase_producer_scope_count > self.fit_pass_count:
+            raise ValueError("phase producer scopes exceed the actual fit passes")
         if self.phase_offset_lookup_count > self.phase_hypothesis_count:
             raise ValueError("phase offset lookups exceed phase hypotheses")
         if (

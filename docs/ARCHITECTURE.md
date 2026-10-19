@@ -2264,6 +2264,35 @@ Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决
 - `DESKEW APPLIED`、`ROTATION NOT NEEDED` 或 typed `DESKEW SKIPPED`；
 - 第一个 blocking Gate gap，或全部事实已支持。
 
+完整 phase 竞争成员由 `template_phase_membership.py` 记录在候选生产处：每次有界 fit 的全部
+input fit、可选 output fit、完整 projection provenance、残差状态、原 holder 准入、真实源域准入与终端角色、
+anchor ceiling 均保留。过滤 holder、按 rank 排序、连续合并和 best/runner 压缩发生在账本之后。
+早期定位、正常关系与实测关系是不同作用域，后续 pass 本身不是排除前序解释的物理证据。
+作用域保存原 template、phase/holder/source domain、关系、ceiling、scale、measurement query IDs、Grid prior
+及 topology 输入；确定性 identity 绑定全部记录。只去重完全相同的作用域；实际执行次数与各次记录数另外
+累计，重复执行同一作用域不伪造新成员，也不丢失已消耗工作。不同输入／输出／投影来源不得仅按最终 fit 去重。
+
+存在未解决的 plural phase 竞争时，`template_phase_output.py` 对所有已登记作用域中的成员建立
+`complete_recorded_phase_validation`。已失败 projection 与残差不相容成员保留缺口；早期未投影成员从自己的
+原 fit 接受已登记原生事实检查，不能因无排名或旧作用域而消失。其它成员逐一从自身 fit 重建一次原生补边、
+至多一次晚期 projection、自身 direct/global/nominal/adjacency 权限、独立初始 source W/H 及本成员 source W。
+Cross 使用 `lane_preparation.prepare_template_cross_context` 的同一规范 owner：只共享候选无关 base registration，
+重新编译该成员的纵向域、局部 refinement、初始 H、aspect 和直接 H 校准。直接观察到的 adjacency ordinal
+由本成员的原生连续性证据推导，不能仅由关系标签声明。无法匹配本 fit 的 lattice 不进入其
+placement；资格缺口和真实矛盾分别保存，不借首选的 W/H/Cross。
+
+成员证明只核验条件几何与保护预算；它不是 canonical proposal，不包含完整 placement feature、Content veto 或
+Gate 准入。全部成员都具备该条件资格且确立同一固定 source W/H 身份后，才使用共享固定框 owner 核验逐 slot
+共同窗口及每个成员预算。W/H 区间相交不能另选尺寸；不得用一部分成员代表全集。
+`common_outputs` 可保留预算失败窗口作为诊断，只有 `state=supported` 且 `common_failure=null` 才表示窗口
+验证通过。当前该分支在规范 selection/Gate 后执行，不授予照片序号映射、canonical winner 或自动输出权限。
+
+当前报告 schema 为 109。普通报告保留完整账本和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
+重放全部 producer 和独立成员，再比对结果、缺口和工作。成员 Cross 只重复自身 H／纵向域、best/runner、
+求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
+外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source
+state、interval、成员和引用关系必须一致。编号预留只防止碰撞，不能产生证据或权限。
+
 ## 12. 工作量、性能与 TIFF
 
 每次 development receipt 保存实际计数和编译上界：
@@ -2303,6 +2332,15 @@ lattice authority。不新增像素 query 或 phase 搜索；包括第三份提�
 临时内存仍受同一 source 总上限约束。
 两个已有 phase fit 的 local completion 各记录一次 `H × R` lookup 和实际新增 binding，第二次消耗一份
 既有 fit-pass 预算；晚期弱线 projection/nominal solve 按各候选实际调用计数，不扩大 6-pass 上限。
+完整成员账本不重新生成 seed 或拟合；每作用域 `M ≤ H × max(6,R)`，最多沿用六个 producer pass，
+保留量为 O(ΣMR)。完整集合条件验证不新增像素、query、phase seed 或离散搜索。每成员至多一次
+原生补边、晚期 projection、W、Cross、compose 和 envelope projection，沿用各 owner 的数值上限；
+单独记录 role lookup/binding、已登记事实检查逻辑上界、邻接／trace 检查、Cross 新增 local fit/event、
+数值 fit、projection extreme、output/budget。六个 pass 的独立验证合计上限为 `6 × 1,000,000` 逻辑工作单位。
+完整集合共同窗口另外计入各 slot 的成员预算与凸包排序逻辑上界，最多消费 4096 个完整成员；
+每次成员构建前按 source 临时内存预算预留当前上限，并计入已有独立 Review 的保留量。
+达到上限则全集证明失效，余下成员显式记录工作缺口；已完成前缀不能用于共同批准。
+峰值计入全部账本、保留成员、已有独立 Review 和当前临时构建；它是逻辑工作量，不能替代 RSS 实测。
 
 任何上界不足都显式产生 `producer_bound_exceeded`，不得 silent first-N。像素工作上限为
 `128 × source_pixels`，峰值临时内存上限为 `10 × source_pixels + 32 MiB`。不得恢复通用 DP、
@@ -2425,6 +2463,7 @@ Linux开发/CI使用`renameat2(RENAME_NOREPLACE)`。目标在最终检查之后�
 | `photo_geometry/template_source_domain.py` | 已登记 lane 与真实 TIFF 外缘的 phase 源域及终端截断判定；不授予裁切权限 |
 | `photo_geometry/template_native_retention.py`、`template_source_clipped.py` | 从既有 projection 记录按十二个原生依据/端点类与六个源截断类保留完整解释及分类工作量 |
 | `photo_geometry/template_intrinsic_review_refit.py`、`template_phase_review.py` | 原 compose 失败后的单次固定 intrinsic 重拟合、完整反证、独立初始 source/Cross Review 上下文与有界物化；不参与 canonical competition 或 Gate |
+| `photo_geometry/template_phase_membership.py`、`template_phase_output.py` | 完整 producer 成员账本、独立成员 W/H/Cross 条件几何证明、完整集合共同窗口验证及独立工作 receipt；不选择 winner 或授予自动批准 |
 | `photo_geometry/template_gate.py` | selected-only CandidateGate facts；不生成、选择或删除 proposal |
 | `x5crop/detection/output_deskew.py` | approved-only 6–24 trace、role-free、candidate-independent 的可选输出角度 observation |
 | `x5crop/detection/decision/`、`final/` | 最终决定、Decision 后 deskew assessment 与 approved geometry exposure |

@@ -55,8 +55,8 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record, validate_placement_feature_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v26"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v27"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v27"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v28"
 RETAINED_PLACEMENT_SCOPE = "retained_canonical_pair_conditional_cross_and_independent_phase_review_proposals"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
@@ -68,10 +68,35 @@ COMPARATOR_SOURCE_PATHS = (
     "tools/regression/development_run.py",
     "tools/regression/gold_analysis.py",
     "tools/regression/gold_geometry.py",
+    "tools/regression/phase_output_validation.py",
     "tools/regression/report_sequence_validation.py",
     "tools/regression/report_validation.py",
     "tools/regression/report_value_validation.py",
 )
+
+
+def _complete_phase_output_diagnostic(lane):
+    scopes = lane["phase_competition"]["competition_scopes"]
+    proof = lane["complete_phase_output"]
+    return {
+        "scope_count": len(scopes),
+        "producer_evaluation_count": len(lane["phase_competition"]["competition_scope_evaluations"]),
+        "record_count": sum(len(scope["members"]) for scope in scopes),
+        "scopes": [{"scope_id": scope["scope_id"], "record_count": len(scope["members"]),
+                    "projection_evaluated": scope["projection_evaluated"],
+                    "bound_exceeded": scope["bound_exceeded"]} for scope in scopes],
+        "validation": None if proof is None else {
+            "state": proof["state"], "scope": proof["scope"],
+            "member_count": len(proof["members"]),
+            "qualified_member_count": sum(not member["gaps"] for member in proof["members"]),
+            "cross_context_count": sum(member["cross_context"] is not None for member in proof["members"]),
+            "output_member_count": sum(bool(member["output_footprints"]) for member in proof["members"]),
+            "gap_counts": dict(sorted(Counter(gap for member in proof["members"] for gap in member["gaps"]).items())),
+            "common_output_count": len(proof["common_outputs"]), "common_failure": proof["common_failure"],
+            "bound_exceeded": proof["bound_exceeded"], "work_units": proof["work_units"],
+            "peak_temporary_bytes": proof["peak_temporary_bytes"],
+        },
+    }
 
 
 def line_axis_position(
@@ -1345,6 +1370,7 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         "phase_failure_kind": development_lanes[0]["phase_competition"].get(
             "failure_kind"
         ),
+        "complete_phase_output_diagnostic": _complete_phase_output_diagnostic(development_lanes[0]),
         "global_lattice_authority_state": (
             None if global_lattice is None else global_lattice["state"]
         ),
@@ -3123,6 +3149,7 @@ def run_gold_analysis(
         try:
             result = run_gold_analysis_task(record)
         except Exception as error:
+            print(f"  {type(error).__name__}: {error}", file=sys.stderr, flush=True)
             try:
                 physical_prior = _physical_prior_diagnostic(record)
             except Exception as physical_error:

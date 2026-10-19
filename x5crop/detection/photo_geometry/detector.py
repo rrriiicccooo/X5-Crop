@@ -672,11 +672,18 @@ def reconstruct_photo_geometry(
     # This Review-only branch runs after canonical selection and Gate facts.
     # It cannot contribute a candidate, source proposal or selected output.
     from .template_phase_review import build_independent_phase_review
+    from .template_phase_output import build_complete_phase_output
 
-    reconstructed = tuple(
-        replace(lane, independent_phase_review=build_independent_phase_review(lane.prepared))
-        for lane in reconstructed
-    )
+    evidence_lanes = []
+    for lane in reconstructed:
+        independent = build_independent_phase_review(lane.prepared)
+        retained = (0 if independent is None else independent.peak_temporary_bytes)
+        complete = build_complete_phase_output(lane.prepared, retained_review_bytes=retained)
+        complete_peak = 0 if complete is None else complete.peak_temporary_bytes
+        evidence_lanes.append(replace(lane, independent_phase_review=independent,
+            complete_phase_output=complete, work=replace(lane.work,
+                peak_temporary_bytes=max(lane.work.peak_temporary_bytes, retained + complete_peak))))
+    reconstructed = tuple(evidence_lanes)
     return PhotoGeometryDetectionResult(
         resolved_output_slots=resolved,
         lane_reconstructions=reconstructed,

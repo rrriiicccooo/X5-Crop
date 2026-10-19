@@ -16,11 +16,35 @@ from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.template_feasible_geometry import project_format_placement
 from x5crop.detection.photo_geometry.template_output import (
     common_h_output_footprint, output_footprint_from_template_placement,
+    common_phase_output_footprint,
     template_direct_use_budget_assessment,
 )
 
 
 class CommonOutputContractTest(unittest.TestCase):
+    def test_third_phase_member_can_invalidate_an_otherwise_safe_common_window(self):
+        first = _placement()
+        second = translated_h(first, 5)
+        third = translated_h(first, 35)
+        placements = (first, second, third)
+        native = tuple(native_output(p) for p in placements)
+        pair = common_phase_output_footprint(placements[:2], native[:2])
+        complete = common_phase_output_footprint(placements, native)
+        self.assertTrue(pair.budget_supported)
+        self.assertFalse(complete.budget_supported)
+        self.assertEqual(len(complete.member_budgets), 3)
+        reverse = common_phase_output_footprint(tuple(reversed(placements)), tuple(reversed(native)))
+        self.assertEqual(reverse.requested_source_footprint, complete.requested_source_footprint)
+        self.assertEqual(reverse.geometry_id, complete.geometry_id)
+
+    def test_phase_common_window_cannot_invent_a_source_size_identity(self):
+        first = _placement()
+        second = translated_h(first, 5)
+        second = replace(second, source_scan_geometry=replace(second.source_scan_geometry,
+                         geometry_id="foreign-source-size"))
+        with self.assertRaisesRegex(ValueError, "same fixed source W/H"):
+            common_phase_output_footprint((first, second), (native_output(first), native_output(second)))
+
     def test_single_member_has_identical_geometry_and_budget_to_native_owner(self):
         placement = _placement()
         native = native_output(placement)

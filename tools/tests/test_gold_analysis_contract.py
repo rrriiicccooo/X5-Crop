@@ -893,6 +893,7 @@ class GoldAnalysisContractTest(unittest.TestCase):
 
     def test_comparator_identity_binds_each_extracted_validation_owner(self) -> None:
         helper_paths = (
+            "tools/regression/phase_output_validation.py",
             "tools/regression/report_sequence_validation.py",
             "tools/regression/report_value_validation.py",
         )

@@ -11,6 +11,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from types import MappingProxyType
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .template_phase_output import CompletePhaseOutputProof
 
 from ...domain import EvidenceState, FiniteInterval
 from ..gate_checks import DetectionFailureFact, TypedAssessment
@@ -74,6 +78,7 @@ from .template_nominal_grid_model import CalibratedNominalGridAuthority
 from .template_phase_model import PhaseFitResult, TemplatePhaseInput
 from .template_placement import FormatPlacement
 from .template_registration import (
+    RegisteredCrossEvidence,
     CrossRegistrationWorkReceipt,
     membership_projection_coverage,
     project_cross_solver_bindings,
@@ -585,9 +590,14 @@ class PreparedTemplateLane(RegisteredTemplateLane):
     cross_competition: CrossFitCompetition
     cross_registration_work: CrossRegistrationWorkReceipt
     evidence_use_ledger: tuple[EvidenceUseFact, ...] = ()
+    base_cross_registration: RegisteredCrossEvidence | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
+        if self.base_cross_registration is not None and not isinstance(
+            self.base_cross_registration, RegisteredCrossEvidence,
+        ):
+            raise TypeError("prepared lane requires candidate-independent base Cross registration")
         if not isinstance(self.template_spec, TemplateSpec):
             raise TypeError("prepared template lane requires a template spec")
         if self.template_spec.count != self.output_slot_count:
@@ -998,6 +1008,7 @@ class TemplateLaneReconstruction:
     content_veto_facts: tuple[ContentVetoFact, ...]
     work: TemplatePlacementWorkReceipt
     independent_phase_review: "IndependentPhaseReviewPortfolio | None" = None
+    complete_phase_output: CompletePhaseOutputProof | None = None
 
     @property
     def common_h_output(self) -> CommonHOutput | None:
@@ -1013,6 +1024,11 @@ class TemplateLaneReconstruction:
     def __post_init__(self) -> None:
         if not self.lane_id or self.prepared.lane.domain.lane_id != self.lane_id:
             raise ValueError("template reconstruction lane authority is invalid")
+        if self.complete_phase_output is not None:
+            from .template_phase_output import CompletePhaseOutputProof
+            if (not isinstance(self.complete_phase_output, CompletePhaseOutputProof)
+                    or self.complete_phase_output.scopes != self.prepared.phase_competition.competition_scopes):
+                raise ValueError("complete phase output changed the registered member collection")
         portfolio = self.independent_phase_review
         if portfolio is not None:
             from .template_phase_review import IndependentPhaseReviewPortfolio
