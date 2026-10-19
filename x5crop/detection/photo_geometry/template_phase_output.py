@@ -12,6 +12,7 @@ from enum import Enum
 from ...domain import EvidenceState, FiniteInterval, ObservationId
 from ...run_local_identity import run_local_id
 from .lane_preparation import TemplateCrossContext, prepare_template_cross_context
+from .line_observations import PhotoBoundaryObservation
 from .output_model import CommonOutputFootprint, DirectUseBudgetAssessment, OutputFootprint
 from .source_geometry import SourceScanGeometry
 from .template_adjacency_topology import PhaseCandidateAdjacencyAssessment, assess_phase_candidate_adjacency
@@ -92,6 +93,15 @@ class PhaseMemberCrossCompetition:
     aperture_aspect_ratio_authority: ApertureAspectRatioAuthority
 
 
+def _member_registration_ids(observations: tuple[PhotoBoundaryObservation, ...]) -> tuple[ObservationId, ...]:
+    # A replay reserves canonical names before allocating new member lines.
+    # Sort the same physical collection independently of those new ordinals.
+    return tuple(item.observation_id for item in sorted(observations, key=lambda item: (
+        item.role.value, str(item.observation_id).rpartition(":")[0],
+        tuple(sorted(map(str, item.transition_ids))),
+    )))
+
+
 @dataclass(frozen=True)
 class PhaseMemberCrossContext:
     """Replayable member facts; shared registered lines remain lane-owned."""
@@ -136,7 +146,7 @@ class PhaseMemberCrossContext:
             coverage is not None, local_cross_refinements_closed(registration.work_receipt),
             tuple(binding.observation_id for binding in context.cross_input.top_bindings),
             tuple(binding.observation_id for binding in context.cross_input.bottom_bindings),
-            tuple(observation.observation_id for observation in registration.observations))
+            _member_registration_ids(registration.observations))
 
 
 @dataclass(frozen=True)

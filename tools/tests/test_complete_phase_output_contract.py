@@ -1,6 +1,7 @@
 """Counterexamples for complete membership and independent proof replay."""
 
 from dataclasses import replace
+from types import SimpleNamespace
 import unittest
 
 from tools.regression.phase_output_validation import assert_replayed_facts
@@ -10,7 +11,9 @@ from x5crop.domain import EvidenceState
 from x5crop.run_local_identity import run_local_id, source_identity_scope
 from x5crop.detection.photo_geometry.template_phase_output import (
     CompletePhaseOutputProof, PhaseMemberOutputProof, PhaseMemberOutputGap, PhaseMemberOutputWork,
+    _member_registration_ids,
 )
+from x5crop.detection.photo_geometry.model import BoundaryRole
 
 
 class CompletePhaseOutputContractTest(unittest.TestCase):
@@ -64,3 +67,18 @@ class CompletePhaseOutputContractTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "physical facts changed"):
             assert_replayed_facts({"observation_id": "membership-proposal-line:1"},
                                   {"observation_id": "membership-proposal-line:2"})
+
+    def test_member_registration_order_survives_new_line_ordinal_changes(self):
+        def line(identity, transition):
+            return SimpleNamespace(observation_id=identity, role=BoundaryRole.TOP,
+                                   transition_ids=(transition,))
+        native = line("format-role-bound-line:11", "transition:a")
+        left = _member_registration_ids((line("format-role-bound-line:12", "transition:b"), native))
+        right = _member_registration_ids((native, line("format-role-bound-line:105", "transition:b")))
+        assert_replayed_facts({"registration_observation_ids": list(left)},
+                              {"registration_observation_ids": list(right)},
+                              protected_native_ids={native.observation_id})
+        with self.assertRaisesRegex(ValueError, "physical facts changed"):
+            assert_replayed_facts({"registration_observation_ids": list(left)},
+                                  {"registration_observation_ids": list(reversed(right))},
+                                  protected_native_ids={native.observation_id})
