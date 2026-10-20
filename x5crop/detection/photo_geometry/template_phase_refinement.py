@@ -803,6 +803,7 @@ def _apply_final_lattice_contract(
         directly_observed_ordinals=directly_observed_ordinals,
         source_frame_width_authority=source_frame_width_authority,
     )
+    assessed_fit = result.best
     if (
         result.best is not None
         and (
@@ -850,12 +851,16 @@ def _apply_final_lattice_contract(
             result,
             source_frame_width_authority,
         )
-    result = _attach_selected_candidate_authorities(
-        result,
-        phase_input,
-        directly_observed_ordinals=directly_observed_ordinals,
-        source_frame_width_authority=source_frame_width_authority,
-    )
+    # The authority owner depends only on this immutable fit and the unchanged
+    # inputs above. Topology may change status, but never those owned facts.
+    # A newly inferred/rebound fit must still rebuild every authority.
+    if result.best is not assessed_fit:
+        result = _attach_selected_candidate_authorities(
+            result,
+            phase_input,
+            directly_observed_ordinals=directly_observed_ordinals,
+            source_frame_width_authority=source_frame_width_authority,
+        )
     failure = conditional_phase_geometry_failure(result)
     if result.status != PhaseFitStatus.RESOLVED or failure is None:
         return result

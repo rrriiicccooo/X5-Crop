@@ -156,7 +156,7 @@ class PhaseMemberOutputWork:
     role_lookup_count: int = 0
     local_binding_count: int = 0
     late_projection_count: int = 0
-    phase_authority_evaluation_count: int = 0
+    phase_authority_check_bound: int = 0
     width_evaluation_count: int = 0
     cross_context_count: int = 0
     cross_evaluated_fit_count: int = 0
@@ -375,7 +375,7 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
         outer_material_boundaries=phase_input.outer_material_boundaries,
         authorized_source_frame_width_px=(width.width_px
             if width.state == EvidenceState.SUPPORTED and width.matches_placement(fit) else None))
-    work = replace(work, phase_authority_evaluation_count=4, width_evaluation_count=1)
+    work = replace(work, phase_authority_check_bound=4, width_evaluation_count=1)
     work = replace(work, registered_fact_check_bound=4 * (
         len(phase_input.observations) + len(phase_input.separator_bands)
         + sum(len(item.transitions) for item in phase_input.sequence_measurement_sets)
@@ -559,7 +559,7 @@ def _build_complete_phase_output(lane, *, retained_review_bytes, preparation) ->
                                                   coarse_geometry_preparation=preparation)
                 work = proof.work
                 units += (work.role_lookup_count + work.local_binding_count
-                    + work.phase_authority_evaluation_count * len(member.input_fit.role_bindings)
+                    + work.phase_authority_check_bound * len(member.input_fit.role_bindings)
                     + work.cross_evaluated_fit_count + work.output_evaluation_count
                     + work.budget_evaluation_count + work.cross_local_fit_count
                     + work.cross_local_event_count + work.adjacency_relation_check_count

@@ -10,6 +10,7 @@ from x5crop.detection.photo_geometry import (
     template_phase_candidate_model as candidate_model,
     template_phase_fitting as phase_fitting,
     template_phase_projection as phase_projection,
+    template_phase_refinement as phase_refinement,
 )
 from tools.tests.template_test_support import (
     calibrated_nominal_grid_prior,
@@ -55,6 +56,27 @@ from tools.tests.phase_test_support import _local_line, _phase_candidate_group
 
 
 class TemplatePhaseRefinementContractTest(unittest.TestCase):
+    def test_unchanged_fit_reuses_facts_but_new_inference_rebuilds_them(self) -> None:
+        for missing in (False, True):
+            with self.subTest(missing=missing):
+                observations = tuple(edge(str(index), coordinate)
+                    for index, coordinate in enumerate((100.0, 200.0, 220.0, 320.0))
+                    if not (missing and index == 3))
+                spec = template(2)
+                measurements = (phase_sequence_measurement("same-fit", FiniteInterval(90.0, 350.0)),)
+                inputs = TemplatePhaseInput(observations=observations, separator_bands=(), template=spec,
+                    sequence_measurement_sets=measurements, scale_px_per_mm=None, holder_span_px=None,
+                    phase_authority_px=None, calibrated_nominal_grid_prior=unavailable_nominal_grid_prior(spec))
+                original = fit_template_phase(observations, spec, sequence_measurement_sets=measurements)
+                with patch.object(phase_refinement, "_attach_selected_candidate_authorities",
+                        wraps=phase_refinement._attach_selected_candidate_authorities) as assess:
+                    result = phase_refinement._apply_final_lattice_contract(original, inputs,
+                        directly_observed_ordinals=(), source_frame_width_authority=None)
+                self.assertEqual(assess.call_count, 2 if missing else 1)
+                self.assertEqual(result.best is original.best, not missing)
+                self.assertEqual(result, phase_refinement._attach_selected_candidate_authorities(result, inputs,
+                    directly_observed_ordinals=(), source_frame_width_authority=None))
+
     def test_discrete_candidates_refine_their_own_local_roles_without_a_winner(
         self,
     ) -> None:
