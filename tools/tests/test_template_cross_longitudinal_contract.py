@@ -96,15 +96,18 @@ class CrossLongitudinalContractTest(unittest.TestCase):
             compile_cross_support_domains_px,
         )
 
-        def compile_domains(direction, model, direct, overlaps=()):
+        def compile_domains(direction, model, direct, overlaps=(), gap_interval=None, delta_interval=None):
             return compile_cross_support_domains_px(
                 count=2,
                 direction=direction,
                 frame_width_px=FiniteInterval(98.0, 102.0),
                 canonical_frame_width_px=100.0,
+                canonical_pitch_px=120.0,
                 model_role_positions_px=model,
                 direct_role_positions_px=direct,
-                overlap_signed_gaps_px=overlaps,
+                overlap_constraints_px=tuple((ordinal,
+                    gap_interval or FiniteInterval.exact(canonical),
+                    delta_interval or FiniteInterval.exact(canonical - 20.0)) for ordinal, canonical in overlaps),
             )
 
         self.assertEqual(
@@ -134,6 +137,16 @@ class CrossLongitudinalContractTest(unittest.TestCase):
                     compile_domains(direction, positions, positions)
                 with self.assertRaisesRegex(ValueError, "signed gap"):
                     compile_domains(direction, positions, positions, ((1, -9.0),))
+                model = ((0.0, 100.0, 91.0, 191.0) if direction > 0 else (191.0, 91.0, 100.0, 0.0))
+                self.assertEqual(compile_domains(direction, model, positions, ((1, -9.0),),
+                    FiniteInterval(-12.0, -8.0), FiniteInterval(-32.0, -28.0)),
+                    (FiniteInterval(0.0, 95.0), FiniteInterval(95.0, 190.0)))
+                with self.assertRaisesRegex(ValueError, "signed gap"):
+                    compile_domains(direction, model, positions, ((1, -9.0),),
+                        FiniteInterval(-9.5, -8.5), FiniteInterval(-32.0, -28.0))
+                with self.assertRaisesRegex(ValueError, "signed gap"):
+                    compile_domains(direction, model, positions, ((1, -9.0),),
+                        FiniteInterval(-12.0, -8.0), FiniteInterval(-29.5, -28.5))
 
     def test_candidates_must_not_union_their_missing_endpoints(self) -> None:
         groups = (domains(20, 40, 60, 80), domains(0, 20, 40, 60))

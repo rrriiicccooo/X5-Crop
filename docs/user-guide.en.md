@@ -59,6 +59,7 @@ when prerequisites are unmet, their evidence remains and output geometry and bud
 Original complete-photo boundaries independently accepted by every interpretation can establish common dimensions;
 each interpretation retains its own dimension ranges and protection requirements. Reports distinguish a positioning
 stage's common window from the complete historical set. Passing some stages still requires manual review.
+For overlapping photos, top/bottom support is partitioned at the native boundaries and checked against the proven overlap range.
 Manual review continues until the complete set has a compliant window under the same fixed dimensions.
 
 Acceptance concerns the final crops: correct slot correspondence, no missing or duplicate photos, full protection of

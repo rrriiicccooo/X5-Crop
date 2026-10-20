@@ -1244,6 +1244,9 @@ contact 或 overlap；存在多组合法解释时保持 `adjacency_topology_ambi
 `OverlapRelation` 与 realized overlap interval 相容时该处 Frame domain 重叠才合法；其它 adjacency 的
 意外重叠仍产生 `fixed_template_mismatch`。物理 output polygon 保留重叠；仅 short-axis evidence 的支持域
 在 overlap 中点分区，防止同一 trace 被当成两份独立 Frame 支撑。
+Cross 支撑域与输出共用实际原生角色坐标及同一 W 补边；已有 Overlap 的实际 gap 和 delta 必须处在原
+测量区间内，不要求它等于 Grid/model 状态的代表点。原关系 identity、区间与 model realization 保留，
+未登记的重叠或超出原区间的实际状态仍拒绝，不能临时补造 Overlap。
 
 现有 source W authority 已允许每个至少拥有一条直接 START/END 的 Frame 用同一相关 W 推导另一侧；
 多张 Frame 的推导共享一份相关状态，不能当成多条独立证据。Contact 转授的反角色以

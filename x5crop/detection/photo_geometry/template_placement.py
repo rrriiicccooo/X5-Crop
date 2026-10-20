@@ -449,13 +449,14 @@ def resolved_cross_support_domains_px(
             sequence.template.frame_width_px.maximum,
         ),
         canonical_frame_width_px=sequence.pitch_fit.canonical_frame_width_px,
+        canonical_pitch_px=sequence.pitch_fit.canonical_pitch_px,
         model_role_positions_px=sequence.model_role_positions_px,
         direct_role_positions_px=tuple(
             None if binding is None else binding.canonical_position_px
             for binding in sequence.role_bindings
         ),
-        overlap_signed_gaps_px=tuple(
-            (relation.relation_ordinal, relation.canonical_signed_gap_px)
+        overlap_constraints_px=tuple(
+            (relation.relation_ordinal, relation.signed_gap_interval_px, relation.delta_interval_px)
             for relation in sequence.adjacency_relations
             if isinstance(relation, OverlapRelation)
         ),
@@ -488,9 +489,10 @@ def compile_cross_support_domains_px(
     direction: int,
     frame_width_px: FiniteInterval,
     canonical_frame_width_px: float,
+    canonical_pitch_px: float,
     model_role_positions_px: tuple[float, ...],
     direct_role_positions_px: tuple[float | None, ...],
-    overlap_signed_gaps_px: tuple[tuple[int, float], ...],
+    overlap_constraints_px: tuple[tuple[int, FiniteInterval, FiniteInterval], ...],
 ) -> tuple[FiniteInterval, ...]:
     """Compile native/inferred domains and partition proven overlap once.
 
@@ -515,13 +517,14 @@ def compile_cross_support_domains_px(
             for value in direct_role_positions_px
         )
         or not math.isfinite(canonical_frame_width_px)
+        or not math.isfinite(canonical_pitch_px) or canonical_pitch_px <= 0
         or not frame_width_px.contains(canonical_frame_width_px, epsilon=_EPSILON)
     ):
         raise ValueError("cross support candidate coordinates are invalid")
-    overlaps = dict(overlap_signed_gaps_px)
-    if len(overlaps) != len(overlap_signed_gaps_px) or any(
-        not 1 <= ordinal < count or not math.isfinite(gap) or gap >= 0.0
-        for ordinal, gap in overlaps.items()
+    overlaps = {ordinal: (gap, delta) for ordinal, gap, delta in overlap_constraints_px}
+    if len(overlaps) != len(overlap_constraints_px) or any(
+        not 1 <= ordinal < count or gap.maximum >= 0.0
+        for ordinal, (gap, delta) in overlaps.items()
     ):
         raise ValueError("cross support overlap identities are invalid")
     domains = []
@@ -546,14 +549,23 @@ def compile_cross_support_domains_px(
         overlap_minimum = max(left.minimum, right.minimum)
         overlap_maximum = min(left.maximum, right.maximum)
         overlap_px = max(0.0, overlap_maximum - overlap_minimum)
-        signed_gap = overlaps.get(ordinal)
-        if (overlap_px > _EPSILON) != (signed_gap is not None):
+        constraint = overlaps.get(ordinal)
+        if (overlap_px > _EPSILON) != (constraint is not None):
             raise ValueError(
                 "realized Frame overlap lacks one explicit OverlapRelation"
             )
-        if signed_gap is None:
+        if constraint is None:
             continue
-        if abs(overlap_px + signed_gap) > _EPSILON:
+        # The relation's representative belongs to the fitted model state.
+        # Domains use native direct coordinates (and the same W for missing
+        # sides), exactly as output composition does. Validate that actual
+        # state's gap and delta against the original measured intervals.
+        gap_interval, delta_interval = constraint
+        native_gap = (right.minimum - left.maximum if direction > 0 else left.minimum - right.maximum)
+        native_delta = canonical_frame_width_px - canonical_pitch_px + native_gap
+        if (abs(overlap_px + native_gap) > _EPSILON
+                or not gap_interval.contains(native_gap, epsilon=_EPSILON)
+                or not delta_interval.contains(native_delta, epsilon=_EPSILON)):
             raise ValueError(
                 "realized Frame overlap contradicts its signed gap"
             )

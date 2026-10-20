@@ -1694,14 +1694,17 @@ def _cross_support_domains_from_candidate_reports(fits) -> list[list[dict[str, f
                 for binding in fit["role_bindings"]
             )
             overlaps = tuple(
-                (item["relation_ordinal"], item["canonical_signed_gap_px"])
+                (item["relation_ordinal"], FiniteInterval(**item["signed_gap_interval_px"]),
+                 FiniteInterval(**item["delta_interval_px"]))
                 for item in fit["adjacency_relations"]
                 if item["kind"] == "overlap"
             )
             canonical_width = fit["pitch_fit"]["canonical_frame_width_px"]
+            canonical_pitch = fit["pitch_fit"]["canonical_pitch_px"]
             if (
                 not value_validation._valid_interval(width)
                 or not value_validation._finite_number(canonical_width)
+                or not value_validation._finite_number(canonical_pitch)
                 or not all(value_validation._finite_number(value) for value in positions)
                 or not all(value is None or value_validation._finite_number(value) for value in direct)
             ):
@@ -1711,9 +1714,10 @@ def _cross_support_domains_from_candidate_reports(fits) -> list[list[dict[str, f
                 direction=template["direction"],
                 frame_width_px=FiniteInterval(width["minimum"], width["maximum"]),
                 canonical_frame_width_px=canonical_width,
+                canonical_pitch_px=canonical_pitch,
                 model_role_positions_px=tuple(positions),
                 direct_role_positions_px=direct,
-                overlap_signed_gaps_px=overlaps,
+                overlap_constraints_px=overlaps,
             )
         except (KeyError, TypeError) as error:
             raise ValueError("Cross support candidate report is incomplete") from error
