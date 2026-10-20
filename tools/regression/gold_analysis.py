@@ -55,8 +55,8 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record, validate_placement_feature_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v28"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v29"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v29"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v30"
 RETAINED_PLACEMENT_SCOPE = "retained_canonical_pair_conditional_cross_and_independent_phase_review_proposals"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
@@ -90,6 +90,11 @@ def _complete_phase_output_diagnostic(lane):
             "member_count": len(proof["members"]),
             "qualified_member_count": sum(not member["gaps"] for member in proof["members"]),
             "cross_context_count": sum(member["cross_context"] is not None for member in proof["members"]),
+            "adjacency_propagation_count": sum(member["adjacency_propagation"] is not None for member in proof["members"]),
+            "adjacency_propagation_success_count": sum(member["adjacency_propagation"] is not None
+                and member["adjacency_propagation"]["output_fit"] is not None for member in proof["members"]),
+            "adjacency_nominal_grid_solve_count": sum(member["work"]["adjacency_nominal_grid_solve_count"]
+                for member in proof["members"]),
             "output_member_count": sum(bool(member["output_footprints"]) for member in proof["members"]),
             "gap_counts": dict(sorted(Counter(gap for member in proof["members"] for gap in member["gaps"]).items())),
             "common_output_count": len(proof["common_outputs"]), "common_failure": proof["common_failure"],

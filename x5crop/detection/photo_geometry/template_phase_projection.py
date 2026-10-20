@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 from ...domain import EvidenceState, FiniteInterval, ObservationId
 from .interval_math import intersect, scale, subtract
@@ -44,6 +44,15 @@ from . import (
 )
 
 
+@dataclass
+class CandidateProjectionWork:
+    """Calls made by one fixed-mapping projection, independent of its verdict."""
+
+    direct_fit_count: int = 0
+    nominal_grid_solve_count: int = 0
+    nominal_grid_solve_success_count: int = 0
+
+
 def _interval_hull(
     left: FiniteInterval,
     right: FiniteInterval,
@@ -64,6 +73,7 @@ def _fit_calibrated_nominal_grid_candidate(
     relations: tuple[AdjacencyRelation, ...],
     phase_authority: FiniteInterval | None,
     retained_direct_constraint_rank: int,
+    work: CandidateProjectionWork | None = None,
 ) -> _candidate_model._BoundFit | None:
     """Refit one existing discrete mapping against the calibrated Grid."""
 
@@ -107,6 +117,8 @@ def _fit_calibrated_nominal_grid_candidate(
         for item in phase_facts
     )
     try:
+        if work is not None:
+            work.nominal_grid_solve_count += 1
         envelope, fit_state = solve_calibrated_nominal_grid_envelope(
             prior=prior,
             template=template,
@@ -120,6 +132,8 @@ def _fit_calibrated_nominal_grid_candidate(
         )
     except NominalGridInfeasibleError:
         return None
+    if work is not None:
+        work.nominal_grid_solve_success_count += 1
 
     role_bindings: list[SequenceRoleBinding | None] = []
     role_intervals: list[FiniteInterval] = []
@@ -350,6 +364,8 @@ def project_candidate_to_authorized_direct_roles(
     phase_anchor_authority_ceiling: (
         frozenset[tuple[int, ObservationId]] | None
     ) = None,
+    *,
+    work: CandidateProjectionWork | None = None,
 ) -> tuple[_candidate_model._BoundFit | None, PhaseCandidateAuthorityProjection]:
     """Project one mapping with its complete identity ledger and fixed seed scope."""
 
@@ -532,6 +548,7 @@ def project_candidate_to_authorized_direct_roles(
             relations=relations,
             phase_authority=phase_authority,
             retained_direct_constraint_rank=retained_rank,
+            work=work,
         )
         if nominal is None:
             return None, PhaseCandidateAuthorityProjection(
@@ -582,6 +599,8 @@ def project_candidate_to_authorized_direct_roles(
             reason=None,
         )
 
+    if work is not None:
+        work.direct_fit_count += 1
     projected = _fitting._fit_seed(
         _candidate_model._PhaseSeed(
             phase_px=(

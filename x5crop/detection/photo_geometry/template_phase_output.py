@@ -28,7 +28,8 @@ from .template_common_source_size import (
 )
 from .template_lattice_authority import global_lattice_authority_matches_fit
 from .template_measurement_plan_model import MAX_CROSS_PAIRS, MAX_WORK_UNITS
-from .template_model import SequenceFit, SourceFrameWidthAuthorityBasis, TemplateSearchReceipt, TemplateSpec
+from .template_model import (SequenceFit, SeparatorRelation, SourceFrameWidthAuthorityBasis,
+    TemplateSearchReceipt, TemplateSpec, adjacency_relation_evidence_identity)
 from .template_model import MAX_TEMPLATE_FIT_PASSES
 from .template_output import (
     common_phase_output_footprint, output_footprint_from_template_placement,
@@ -41,6 +42,7 @@ from .template_phase_model import (
     PhaseFailureKind, PhaseFitResult, PhaseFitStatus,
 )
 from .template_phase_observations import _refine_local_role_bindings
+from .template_phase_projection import CandidateProjectionWork
 from .template_phase_refinement import (
     _apply_final_lattice_contract, _attach_selected_candidate_authorities,
     _project_late_local_candidate, conditional_phase_geometry_failure,
@@ -48,7 +50,7 @@ from .template_phase_refinement import (
 from .template_placement import FormatPlacement, compose_format_placement, resolved_cross_support_domains_px
 from .template_registration import local_cross_refinements_closed, membership_projection_coverage
 from .template_coarse_sides import CoarsePairGeometryPreparation
-from .template_residual import derive_adjacency_relations
+from .template_residual import AdjacencyRelationAnalysis, derive_adjacency_relations
 
 
 class PhaseMemberOutputGap(str, Enum):
@@ -61,6 +63,7 @@ class PhaseMemberOutputGap(str, Enum):
     PHASE_GEOMETRY_UNAVAILABLE = "phase_geometry_unavailable"
     LATTICE_IDENTITY_UNQUALIFIED = "lattice_identity_unqualified"
     NATIVE_ADJACENCY_CONTRADICTED = "native_adjacency_contradicted"
+    ADJACENCY_PROPAGATION_FAILED = "adjacency_propagation_failed"
     SOURCE_WIDTH_CONFLICT = "source_width_conflict"
     CROSS_CONTEXT_UNAVAILABLE = "cross_context_unavailable"
     CROSS_UNRESOLVED = "cross_unresolved"
@@ -78,6 +81,44 @@ class PhaseMemberOutputGap(str, Enum):
 # numerical bounds still apply; reaching this aggregate cap invalidates the
 # complete proof, including any already evaluated prefix.
 MAX_COMPLETE_PHASE_OUTPUT_WORK_UNITS = MAX_TEMPLATE_FIT_PASSES * MAX_WORK_UNITS
+
+
+def _physical_relation_identities(relations):
+    return frozenset(adjacency_relation_evidence_identity(item) for item in relations
+                     if not isinstance(item, SeparatorRelation) or item.is_measured)
+
+
+@dataclass(frozen=True)
+class PhaseMemberAdjacencyPropagation:
+    """One registered-fact refit; the original producer member stays intact."""
+
+    input_fit: SequenceFit
+    analysis: AdjacencyRelationAnalysis
+    projection: PhaseCandidateAuthorityProjection
+    output_fit: SequenceFit | None
+
+    def __post_init__(self) -> None:
+        before = _physical_relation_identities(self.input_fit.adjacency_relations)
+        measured = _physical_relation_identities(self.analysis.relations)
+        if not measured - before or self.analysis.unresolved_reason is not None:
+            raise ValueError("member adjacency propagation requires a new registered physical fact")
+        facts = self.projection.input_direct_role_authority.facts
+        if (tuple(fact.role_index for fact in facts) != tuple(index for index, binding
+                in enumerate(self.input_fit.role_bindings) if binding is not None)
+                or any(self.input_fit.role_bindings[fact.role_index].observation_id != fact.observation_id
+                       for fact in facts)):
+            raise ValueError("member adjacency propagation borrowed another native authority ledger")
+        if (self.output_fit is not None) != self.projection.eligible:
+            raise ValueError("member adjacency propagation changed its projection outcome")
+        if self.output_fit is not None and (
+                not before.issubset(measured)
+                or self.output_fit.template != self.input_fit.template
+                or self.output_fit.phase_lattice_fit.integer_slot_offset
+                    != self.input_fit.phase_lattice_fit.integer_slot_offset
+                or self.output_fit.role_bindings != self.input_fit.role_bindings
+                or tuple(map(adjacency_relation_evidence_identity, self.output_fit.adjacency_relations))
+                    != tuple(map(adjacency_relation_evidence_identity, self.analysis.relations))):
+            raise ValueError("member adjacency propagation changed native bindings or registered relation evidence")
 
 
 @dataclass(frozen=True)
@@ -159,6 +200,11 @@ class PhaseMemberOutputWork:
     role_lookup_count: int = 0
     local_binding_count: int = 0
     late_projection_count: int = 0
+    adjacency_refit_count: int = 0
+    adjacency_direct_fit_count: int = 0
+    adjacency_nominal_grid_solve_count: int = 0
+    adjacency_nominal_grid_solve_success_count: int = 0
+    adjacency_refit_work_bound: int = 0
     phase_authority_check_bound: int = 0
     direct_role_input_lookup_count: int = 0
     direct_role_input_preparation_count: int = 0
@@ -185,12 +231,32 @@ class PhaseMemberOutputWork:
         if any(type(value) is not int or value < 0 for value in self.__dict__.values()):
             raise ValueError("phase member output work must be nonnegative integers")
         if (self.late_projection_count > 1 or self.width_evaluation_count > 1
+                or self.adjacency_refit_count > 1
+                or self.adjacency_direct_fit_count + self.adjacency_nominal_grid_solve_count > self.adjacency_refit_count
+                or self.adjacency_nominal_grid_solve_success_count > self.adjacency_nominal_grid_solve_count
                 or self.cross_context_count > 1 or self.composition_count > 1
                 or self.projection_count > self.composition_count
                 or self.coarse_geometry_preparation_count > self.coarse_geometry_lookup_count
                 or self.direct_role_input_preparation_count > self.direct_role_input_lookup_count
                 or self.budget_evaluation_count > self.output_evaluation_count):
             raise ValueError("phase member output exceeded its single reconstruction")
+
+
+def _member_work_units(work, role_count):
+    return (work.role_lookup_count + work.local_binding_count
+        + work.phase_authority_check_bound * role_count
+        + work.cross_evaluated_fit_count + work.output_evaluation_count
+        + work.budget_evaluation_count + work.cross_local_fit_count
+        + work.cross_local_event_count + work.adjacency_relation_check_count
+        + work.cross_local_scope_count + work.cross_local_trace_count
+        + work.adjacency_trace_check_count + work.registered_fact_check_bound
+        + work.projection_extreme_count + work.composition_count
+        + work.projection_count + work.width_evaluation_count + work.cross_context_count
+        + work.coarse_geometry_lookup_count + work.coarse_geometry_preparation_count
+        + work.direct_role_input_lookup_count + work.direct_role_input_preparation_count
+        + work.adjacency_refit_work_bound + work.adjacency_refit_count
+        + work.adjacency_direct_fit_count + work.adjacency_nominal_grid_solve_count
+        + work.adjacency_nominal_grid_solve_success_count)
 
 
 @dataclass(frozen=True)
@@ -209,6 +275,7 @@ class PhaseMemberOutputProof:
     gaps: tuple[PhaseMemberOutputGap, ...]
     detail: str | None
     work: PhaseMemberOutputWork
+    adjacency_propagation: PhaseMemberAdjacencyPropagation | None = None
 
     def __post_init__(self) -> None:
         if (not self.scope_id or type(self.record_ordinal) is not int or self.record_ordinal < 0
@@ -217,6 +284,15 @@ class PhaseMemberOutputProof:
             raise ValueError("phase member proof lost its registered identity or gaps")
         if len(self.output_footprints) != len(self.budgets):
             raise ValueError("phase member proof lost output budgets")
+        propagation = self.adjacency_propagation
+        if (propagation is not None) != bool(self.work.adjacency_refit_count):
+            raise ValueError("phase member lost its adjacency propagation work")
+        if propagation is not None and (
+                (propagation.output_fit is None)
+                    != (PhaseMemberOutputGap.ADJACENCY_PROPAGATION_FAILED in self.gaps)
+                or propagation.output_fit is None and any((self.phase_assessment, self.cross_context,
+                                                           self.placement, self.output_footprints))):
+            raise ValueError("failed adjacency propagation cannot acquire downstream qualification")
         if PhaseMemberOutputGap.OUTPUT_PREREQUISITE_UNAVAILABLE in self.gaps and (
             len(self.gaps) < 2 or self.cross_context is None or self.phase_assessment is None
             or self.cross_context.competition.status != CrossFitStatus.RESOLVED
@@ -300,12 +376,13 @@ def _conditional_phase(lane, scope, fit, projection) -> PhaseFitResult:
 def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
                                member: PhaseCompetitionMember, *,
                                coarse_geometry_preparation=None,
-                               direct_role_input_preparation=None) -> PhaseMemberOutputProof:
+                               direct_role_input_preparation=None,
+                               available_work_units=MAX_COMPLETE_PHASE_OUTPUT_WORK_UNITS) -> PhaseMemberOutputProof:
     """Rebuild a given member without using selected W, H or Cross results."""
     gaps = []
     detail = None
     work = PhaseMemberOutputWork()
-    local = late = assessed = width = adjacency = context = placement = None
+    local = late = assessed = width = adjacency = context = placement = propagation = None
     outputs = budgets = ()
     native_before = (0, 0) if direct_role_input_preparation is None else (
         direct_role_input_preparation.lookup_count, direct_role_input_preparation.preparation_count)
@@ -321,7 +398,7 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
         return PhaseMemberOutputProof(scope.scope_id, member.record_ordinal, local, late,
             assessed, width, adjacency, None if context is None else PhaseMemberCrossContext.from_context(context),
             placement, outputs, budgets,
-            tuple(dict.fromkeys(gaps)), detail, measured_work)
+            tuple(dict.fromkeys(gaps)), detail, measured_work, adjacency_propagation=propagation)
 
     unprojected = member.projection is None
     if not unprojected and (not member.projection.eligible or member.projected_fit is None):
@@ -363,9 +440,44 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
     if not _phase_residual_compatible(fit):
         gaps.append(PhaseMemberOutputGap.RESIDUAL_INCOMPATIBLE)
     phase = _conditional_phase(lane, scope, fit, late or member.projection)
+    registered_fact_bound = (len(phase_input.observations) + len(phase_input.separator_bands)
+        + sum(len(item.transitions) for item in phase_input.sequence_measurement_sets) + len(fit.role_bindings))
+    work = replace(work, phase_authority_check_bound=4, registered_fact_check_bound=4 * registered_fact_bound)
     phase = _attach_selected_candidate_authorities(phase, phase_input, directly_observed_ordinals=(),
         direct_role_input_preparation=direct_role_input_preparation)
     analysis = derive_adjacency_relations(fit, phase.adjacency_continuity_observations)
+    relation_checks = analysis.evaluated_adjacency_count
+    if _physical_relation_identities(analysis.relations) - _physical_relation_identities(fit.adjacency_relations):
+        refit_bound = 4 * len(fit.role_bindings) * (
+            len(phase_input.observations) + len(phase_input.separator_bands) + len(fit.role_bindings)) + 128
+        if _member_work_units(work, len(fit.role_bindings)) + relation_checks + refit_bound + 4 > available_work_units:
+            gaps.append(PhaseMemberOutputGap.WORK_BOUND_EXCEEDED)
+            detail = "complete phase adjacency propagation work bound exceeded"
+            work = replace(work, adjacency_relation_check_count=relation_checks)
+            return result()
+        calls = CandidateProjectionWork()
+        propagated, projection = _project_late_local_candidate(fit, phase_input, allow_direct_rank=True,
+            direct_role_input_preparation=direct_role_input_preparation,
+            adjacency_relations=analysis.relations, projection_work=calls)
+        if projection is None:
+            raise ValueError("new registered adjacency fact did not enter fixed-member projection")
+        propagation = PhaseMemberAdjacencyPropagation(fit, analysis, projection, propagated)
+        work = replace(work, adjacency_refit_count=1, adjacency_direct_fit_count=calls.direct_fit_count,
+            adjacency_nominal_grid_solve_count=calls.nominal_grid_solve_count,
+            adjacency_nominal_grid_solve_success_count=calls.nominal_grid_solve_success_count,
+            adjacency_refit_work_bound=refit_bound,
+            adjacency_relation_check_count=relation_checks,
+            peak_temporary_bytes=max(work.peak_temporary_bytes, 4096 + 1024 * (
+                len(phase_input.observations) + len(phase_input.separator_bands) + len(fit.role_bindings))))
+        if propagated is None:
+            gaps.append(PhaseMemberOutputGap.ADJACENCY_PROPAGATION_FAILED)
+            detail = projection.reason
+            return result()
+        fit = propagated
+        phase = _attach_selected_candidate_authorities(_conditional_phase(lane, scope, fit, late or member.projection),
+            phase_input, directly_observed_ordinals=(), direct_role_input_preparation=direct_role_input_preparation)
+        analysis = derive_adjacency_relations(fit, phase.adjacency_continuity_observations)
+        relation_checks += analysis.evaluated_adjacency_count
     ordinals = tuple(fact.relation_ordinal for fact in analysis.adjacency_facts)
     scales = lane.lane.scan_canvas.axis_scales
     source = SourceScanGeometry.create(lane.source_scan_geometry.frame_spec,
@@ -391,12 +503,9 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
         outer_material_boundaries=phase_input.outer_material_boundaries,
         authorized_source_frame_width_px=(width.width_px
             if width.state == EvidenceState.SUPPORTED and width.matches_placement(fit) else None))
-    work = replace(work, phase_authority_check_bound=4, width_evaluation_count=1)
-    work = replace(work, registered_fact_check_bound=4 * (
-        len(phase_input.observations) + len(phase_input.separator_bands)
-        + sum(len(item.transitions) for item in phase_input.sequence_measurement_sets)
-        + len(fit.role_bindings)))
-    work = replace(work, adjacency_relation_check_count=adjacency.adjacency_check_count + analysis.evaluated_adjacency_count,
+    work = replace(work, phase_authority_check_bound=4 + int(propagation is not None), width_evaluation_count=1)
+    work = replace(work, registered_fact_check_bound=(4 + int(propagation is not None)) * registered_fact_bound)
+    work = replace(work, adjacency_relation_check_count=adjacency.adjacency_check_count + relation_checks,
                    adjacency_trace_check_count=adjacency.coverage_trace_check_count)
     failure = conditional_phase_geometry_failure(assessed)
     if unprojected and (assessed.direct_role_binding_authority is None
@@ -654,6 +763,9 @@ def _build_complete_phase_output(lane, *, retained_review_bytes, preparation, di
         for member in scope.members:
             temporary_bound = (4096 + len(member.input_fit.role_bindings) * 1024
                                + MAX_CROSS_PAIRS * 1024 + scope.template.count * 4096)
+            if not exceeded:
+                temporary_bound += 4096 + 1024 * (len(lane.phase_input.observations)
+                    + len(lane.phase_input.separator_bands) + len(member.input_fit.role_bindings))
             if memory_limit is not None and retained_review_bytes + retained_bytes + temporary_bound + preparation_reserve > memory_limit:
                 exceeded = True
             if exceeded:
@@ -662,23 +774,17 @@ def _build_complete_phase_output(lane, *, retained_review_bytes, preparation, di
                     (PhaseMemberOutputGap.WORK_BOUND_EXCEEDED,), None, PhaseMemberOutputWork())
             else:
                 proof = assess_phase_member_output(lane, scope, member,
-                    coarse_geometry_preparation=preparation, direct_role_input_preparation=direct_preparation)
+                    coarse_geometry_preparation=preparation, direct_role_input_preparation=direct_preparation,
+                    available_work_units=MAX_COMPLETE_PHASE_OUTPUT_WORK_UNITS - units)
                 work = proof.work
-                units += (work.role_lookup_count + work.local_binding_count
-                    + work.phase_authority_check_bound * len(member.input_fit.role_bindings)
-                    + work.cross_evaluated_fit_count + work.output_evaluation_count
-                    + work.budget_evaluation_count + work.cross_local_fit_count
-                    + work.cross_local_event_count + work.adjacency_relation_check_count
-                    + work.cross_local_scope_count + work.cross_local_trace_count
-                    + work.adjacency_trace_check_count + work.registered_fact_check_bound
-                    + work.projection_extreme_count + work.composition_count
-                    + work.projection_count + work.width_evaluation_count + work.cross_context_count)
-                units += work.coarse_geometry_lookup_count + work.coarse_geometry_preparation_count
-                units += work.direct_role_input_lookup_count + work.direct_role_input_preparation_count
-                exceeded = units > MAX_COMPLETE_PHASE_OUTPUT_WORK_UNITS
+                units += _member_work_units(work, len(member.input_fit.role_bindings))
+                exceeded = (units > MAX_COMPLETE_PHASE_OUTPUT_WORK_UNITS
+                    or PhaseMemberOutputGap.WORK_BOUND_EXCEEDED in proof.gaps)
             proofs.append(proof)
             retained_bytes += (4096 + len(proof.output_footprints) * 8192
                 + (0 if proof.phase_assessment is None else len(proof.phase_assessment.best.role_bindings) * 1024)
+                + (0 if proof.adjacency_propagation is None else 8192
+                   + len(proof.adjacency_propagation.input_fit.role_bindings) * 2048)
                 + (0 if proof.cross_context is None else proof.cross_context.competition.receipt.evaluated_fit_count * 1024))
     if (sum(proof.work.coarse_geometry_lookup_count for proof in proofs) != preparation.lookup_count
             or sum(proof.work.coarse_geometry_preparation_count for proof in proofs) != preparation.preparation_count
@@ -757,6 +863,8 @@ def _build_complete_phase_output(lane, *, retained_review_bytes, preparation, di
     retained = sum(scope.retained_bytes for scope in scopes) + sum(
         4096 + len(proof.output_footprints) * 8192
         + (0 if proof.phase_assessment is None else len(proof.phase_assessment.best.role_bindings) * 1024)
+        + (0 if proof.adjacency_propagation is None else 8192
+           + len(proof.adjacency_propagation.input_fit.role_bindings) * 2048)
         + (0 if proof.cross_context is None else proof.cross_context.competition.receipt.evaluated_fit_count * 1024)
         for proof in proofs)
     retained += _common_window_storage_bound(proofs) if outputs else 0

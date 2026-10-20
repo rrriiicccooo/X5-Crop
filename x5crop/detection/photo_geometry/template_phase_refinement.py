@@ -10,9 +10,12 @@ from .measurement_model import PhotoBoundaryMeasurementSet
 from .model import PHOTO_BOUNDARY_MEASUREMENT_SPEC
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_model import (
+    AdjacencyRelation,
     FrameWidthInferenceFailureKind,
+    SeparatorRelation,
     SequenceBindingUse,
     SequenceFit,
+    adjacency_relation_evidence_identity,
     ordered_template_roles,
 )
 from .template_frame_width import (
@@ -344,6 +347,8 @@ def _project_late_local_candidate(
     source_frame_width_authority: SourceFrameWidthAuthority | None = None,
     allow_direct_rank: bool = False,
     direct_role_input_preparation=None,
+    adjacency_relations: tuple[AdjacencyRelation, ...] | None = None,
+    projection_work: _projection.CandidateProjectionWork | None = None,
 ) -> tuple[SequenceFit | None, PhaseCandidateAuthorityProjection | None]:
     """Yield unsupported late local bindings back to this candidate's lattice.
 
@@ -358,11 +363,15 @@ def _project_late_local_candidate(
     at which it was attached.
     """
 
+    relations = fit.adjacency_relations if adjacency_relations is None else adjacency_relations
+    relation_refit = relations != fit.adjacency_relations
+    if relation_refit and not phase_input.sequence_measurement_sets:
+        raise ValueError("adjacency propagation requires registered sequence measurements")
     if (
         not phase_input.sequence_measurement_sets
         or (
             fit.calibrated_nominal_grid_fit_state is None
-            and not allow_direct_rank
+            and not allow_direct_rank and not relation_refit
         )
     ):
         return fit, None
@@ -391,17 +400,17 @@ def _project_late_local_candidate(
             ),
             reason=authority.reason or "direct-role evidence is contradicted",
         )
-    if authority.state != EvidenceState.UNAVAILABLE:
+    if authority.state != EvidenceState.UNAVAILABLE and not relation_refit:
         return fit, None
     unsupported_bindings = tuple(
         fit.role_bindings[role_index]
         for role_index in authority.unsupported_role_indices
     )
-    if not unsupported_bindings or any(
+    if not relation_refit and (not unsupported_bindings or any(
         binding is None
         or binding.use != SequenceBindingUse.LOCAL_REFINEMENT
         for binding in unsupported_bindings
-    ):
+    )):
         return fit, None
 
     template = phase_input.template
@@ -453,7 +462,7 @@ def _project_late_local_candidate(
         separator_pairs,
         ordered_template_roles(template.count),
         template,
-        fit.adjacency_relations,
+        relations,
         pitch,
         phase_input.phase_authority_px,
         fit_residual_limit_px,
@@ -464,7 +473,20 @@ def _project_late_local_candidate(
             if binding is not None
             and binding.use == SequenceBindingUse.PHASE_ANCHOR
         ),
+        work=projection_work,
     )
+    if projected is not None and relation_refit and (
+            projected.fit.template != fit.template
+            or projected.fit.phase_lattice_fit.integer_slot_offset
+                != fit.phase_lattice_fit.integer_slot_offset
+            or projected.fit.role_bindings != fit.role_bindings
+            or not {adjacency_relation_evidence_identity(item) for item in fit.adjacency_relations
+                    if not isinstance(item, SeparatorRelation) or item.is_measured}.issubset(
+                        {adjacency_relation_evidence_identity(item) for item in relations})):
+        return None, replace(projection,
+            outcome=PhaseCandidateProjectionOutcome.DISCRETE_IDENTITY_CHANGED,
+            basis=None,
+            reason="registered adjacency refit changed native bindings, phase-anchor permissions or existing relation evidence")
     if projected is not None and not projected.residual_compatible:
         # Initial competition separates compatible and incompatible refits.
         # A late refit has no new competition pass, so it cannot silently

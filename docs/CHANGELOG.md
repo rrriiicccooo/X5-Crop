@@ -61,8 +61,12 @@
   无独立 Overlap 或实际状态超出原区间时继续拒绝。
   同次域覆盖查询复用有序 trace 视图，以原 `0.5 px` 闭区间查找替代逐域全扫描；各解释的完整域、
   原生支撑、pair／fit 上限和权限判据保持。
+  完整历史成员在原生补边后消费自身已登记 separator／Overlap 关系，至多一次固定映射连续重拟合，
+  再独立重建权限与 W／H／Cross。原记录、原生 binding、local／anchor 身份及既有关系保持；身份变化或
+  缺少资格时保留完整输入和失败，不能靠删边恢复成员。实际 fit／Grid solve 与成功次数分别记账，
+  传播先预留工作和内存，仍受原全集上限约束。
 - 对全部既有候选核验遗漏的唯一获权 separator 伙伴；仅原生完整可见宽度超过原物理上限时保留为
-  关联反证，不补绑定、不调整排序、不借 source W。报告进入当前 schema 113，独立 Review 显示各解释的
+  关联反证，不补绑定、不调整排序、不借 source W。报告进入当前 schema 114，独立 Review 显示各解释的
   `geometry_basis` 并重放十二类完整映射。Coverage／continuity
   校验共用 typed owner，并从开发报告原证据重建，删除重复判据。
   最终保留解释的 `retained_adjacency_assessments` 同时出现在普通及 development 报告，从原登记事实

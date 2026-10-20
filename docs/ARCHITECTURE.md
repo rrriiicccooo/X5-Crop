@@ -922,6 +922,8 @@ source pitch、base relation、direct separator refit、双候选 local completi
 对两侧都由 native boundary 或 native + W 拥有的 normal adjacency，检查当前 placement 消费的完整 W
 交集，而不是重新引入已被合法约束排除的测量状态。若邻接侧属于完整未观察 Frame，该关系仍由既有 Grid
 authority、coverage、counterevidence 和联合可行集合拥有；不得把相关 Grid/W 的两个边际区间当成独立反证。
+Grid 中两个 model role expression 的普通 `P−W` 正 gap 也不能替代实际 native 边与另一 Frame 的
+Grid 边之间的联合关联证明；未被原联合约束拥有的 native departure 仍须独立闭合，不能只传播 model 标签。
 未执行或
 unavailable 的 W inference 不转移坐标所有权，因此 assessment 为 `supported` 且 facts 为空，原 typed
 failure 保持；direct measured separator、Contact 与 Overlap 已有自己的关系 owner，不由本检查重新解释。
@@ -2293,6 +2295,13 @@ anchor ceiling 均保留。过滤 holder、按 rank 排序、连续合并和 bes
 `complete_recorded_phase_validation`。已失败 projection 与残差不相容成员保留缺口；早期未投影成员从自己的
 原 fit 接受已登记原生事实检查，不能因无排名或旧作用域而消失。其它成员逐一从自身 fit 重建一次原生补边、
 至多一次晚期 projection、自身 direct/global/nominal/adjacency 权限、独立初始 source W/H 及本成员 source W。
+原生补边后的 continuity 若产生尚未消费的独立 separator／Overlap 事实，先用同一固定成员 projection
+owner 有界重拟合一次，再重建该成员自身的权限与连续性，随后才测量 W、编译 Cross。原 producer
+记录保持冻结；`PhaseMemberAdjacencyPropagation` 保留输入 fit、完整关系分析、projection 与可选输出 fit。
+模板、integer offset、全部原生 binding（含 `use`、坐标、完整区间和 line evidence）及既有物理关系必须保持；
+不能删除无权 binding 来伪造原成员恢复，也不能将 local 角色升级为 phase anchor。关系缺证、联合状态
+不可行或身份变化时记录 `adjacency_propagation_failed`，保留完整原证据，不继续 W／Cross／输出评估。
+求解成功本身不授予成员资格，holder、source domain、原 anchor ceiling 与其它缺口仍分别保留。
 Cross 使用 `lane_preparation.prepare_template_cross_context` 的同一规范 owner：只共享候选无关 base registration，
 重新编译该成员的纵向域、局部 refinement、初始 H、aspect 和直接 H 校准。直接观察到的 adjacency ordinal
 由本成员的原生连续性证据推导，不能仅由关系标签声明。无法匹配本 fit 的 lattice 不进入其
@@ -2312,7 +2321,7 @@ format/source 状态测量共同 W。共同 H 只从每个成员都已完整关�
 `common_outputs` 可保留预算失败窗口作为诊断，只有 `state=supported` 且 `common_failure=null` 才表示窗口
 验证通过。当前该分支在规范 selection/Gate 后执行，不授予照片序号映射、canonical winner 或自动输出权限。
 
-当前报告 schema 为 113。普通报告保留完整账本和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
+当前报告 schema 为 114。普通报告保留完整账本和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
 重放全部 producer 和独立成员，再比对结果、缺口和工作。成员 Cross 只重复自身 H／纵向域、best/runner、
 求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
 外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source
@@ -2358,11 +2367,16 @@ lattice authority。不新增像素 query 或 phase 搜索；包括第三份提�
 临时内存仍受同一 source 总上限约束。
 两个已有 phase fit 的 local completion 各记录一次 `H × R` lookup 和实际新增 binding，第二次消耗一份
 既有 fit-pass 预算；晚期弱线 projection/nominal solve 按各候选实际调用计数，不扩大 6-pass 上限。
-完整成员账本不重新生成 seed 或拟合；每作用域 `M ≤ H × max(6,R)`，最多沿用六个 producer pass，
+完整成员账本的记录不重新生成 seed 或拟合；每作用域 `M ≤ H × max(6,R)`，最多沿用六个 producer pass，
 保留量为 O(ΣMR)。完整集合条件验证不新增像素、query、phase seed 或离散搜索。每成员至多一次
-原生补边、晚期 projection、W、Cross、compose 和 envelope projection，沿用各 owner 的数值上限；
+原生补边、晚期 projection、已登记关系传播、W、Cross、compose 和 envelope projection，沿用各 owner 的数值上限；
 单独记录 role lookup/binding、已登记事实检查逻辑上界、邻接／trace 检查、Cross 新增 local fit/event、
 数值 fit、projection extreme、output/budget。六个 pass 的独立验证合计上限为 `6 × 1,000,000` 逻辑工作单位。
+关系传播先按当前剩余额度预留 `4R(H + S + R) + 128` 的逻辑工作上界，H／S 为原 edge／separator 数；
+每成员最多调用一次固定映射 projection，最多一次 direct fit 或一次 nominal Grid solve。实际调用及 Grid
+求解成功在原求解入口计数，不能从最终 projection verdict 推断；可行求解仍可能被身份守卫拒绝。
+额外临时上界为 `4096 + 1024(H + S + R)`，保留输入／输出状态另计 `8192 + 2048R`，并入同一 source 内存；
+达到工作上限时保留全部具名成员和 typed 工作缺口，不运行该 refit，也不以先完成的成员代替全集。
 完整集合及各 producer scope 的独立尺寸检查先编译原生 pair、H 和条件尺寸核验的逻辑上界并预留工作与内存，
 再执行重建；已超界时只保留全部具名成员和 typed unavailable，不继续尺寸重建。成员关联表、共享 pair 和各
 scope 的窗口保留量一起计入同一 source 内存。共同窗口另外计入各 slot 的成员预算与凸包排序逻辑上界，最多消费 4096 个完整成员；
@@ -2439,8 +2453,8 @@ side receipt 保留逐成员登记访问与可用事实数量，实际数值准�
 同一 direct-role 账本复用已经核对的 trace lattice 与 region counts，避免再次扫描相同原生观察；角色、
 separator、source-W 与最终权限仍按本成员独立判定。
 同一次最终 lattice 闭合内，fit 对象及评估输入均未改变时保留刚建立的权限事实；状态变化本身不重建
-相同事实，重新推导或绑定的 fit 仍完整重建。成员工作以 `phase_authority_check_bound` 表示最多四阶段
-权限检查的保守上界，与实际原始几何 preparation 次数分别记录。
+相同事实，重新推导或绑定的 fit 仍完整重建。成员工作以 `phase_authority_check_bound` 表示四阶段权限检查的
+保守上界；已登记关系传播成功后增加一次自身权限重建，与实际原始几何 preparation 次数分别记录。
 全集验证的 direct-role 输入准备绑定完整 observations、separator、measurement sets 与 outer boundaries，
 仅保存最多六份按完整 template 区分的只读原生索引，以及一份 intrinsic 输入索引；角色绑定和本成员
 source-W 的资格仍逐次独立核验。不同输入拒绝复用，满额后继续原准备；lookup、实际 preparation 与
