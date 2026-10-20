@@ -69,6 +69,9 @@
   覆盖并集保持原闭整数语义，合并后才构造最终区间，减少重复取整与中间对象。
   原生补边保留全部弱线与原子 separator 资格，最终邻接使用相同的原生输入准备；各成员在自身内部
   有界复用中性 query 覆盖，按当前 full corridor 和 observed ordinals 分别重建推断资格并记录工作。
+  Cross 全域支持只在当前 continuity 条件需要时计算，局部 pair 和最终投影证明继续完整核验；
+  报告的 4096 项本地转换模板按最近使用顺序淘汰，保持重复证据分支独立可变。
+  固定区间值直接生成独立的 minimum／maximum 记录，保留全部字段与端点转换语义。
 - 对全部既有候选核验遗漏的唯一获权 separator 伙伴；仅原生完整可见宽度超过原物理上限时保留为
   关联反证，不补绑定、不调整排序、不借 source W。报告进入当前 schema 115，独立 Review 显示各解释的
   `geometry_basis` 并重放十二类完整映射。Coverage／continuity

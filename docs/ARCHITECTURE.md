@@ -1453,6 +1453,8 @@ Canonical best、runner、状态与 source H 由只含 canonical binding 的视�
 anchor/opposite 或外侧角色反证，也不能通过排除另一组
 候选间接消歧。Canonical 成员、全部 raw 并集、final observation 与条件标记由运行时和开发报告双向校验。
 同一 pair owner 只枚举一次物理配对；canonical 选择和包含条件线的提案选择使用同一求解函数的两个权限视图。
+仅在一侧 source-spanning continuity 需要另一侧完整域支持时，计算该侧全域覆盖；原局部 pair 支持、
+combined trace 准入与最终纵向投影证明仍逐对完整核验，不重复计算未被当前条件消费的全域布尔值。
 两视图的实际 fit 与单侧推导次数相加，受原 4096 总上限约束；配对枚举只计一次。展示位置至多保留一份
 含条件 binding 的 Cross fit，不追加 phase 搜索、source H 校准或像素查询。
 `CrossFitCompetition.fit_groups` 和 `conditional_fit_groups` 分别保留两权限视图在离散选择前生成的
@@ -2440,7 +2442,10 @@ source；计数只包含实际 LP 调用，原 64 次求解与 32 个顶点上�
 role/support 缓存孔径位置极值，最多 `2 × (1 + 联合状态数)` 项，每项至多两个浮点值，返回后释放；
 原生 trace 准入、状态乘积、保护范围和预算判据保持一致。报告转换只缓存最多 256 类的公开字段名；
 单次转换最多保留 4096 个 frozen model 的转换模板，命中后复制独立 dict/list 树，不共享可变报告分支，
-满额后继续逐字段转换，调用返回即释放。该复用不缓存物理评估、成员资格或跨 source 结果。
+按最近使用顺序淘汰旧模板，调用返回即释放；全标量 dict 复制保持独立，Enum 的 opaque 容器行为保持。
+`FiniteInterval`／`PositiveInterval` 的固定 minimum／maximum 值直接构建独立叶子 dict，不占模型模板
+名额；非标量端点仍走原转换，子类继续按其全部公开字段转换。
+该复用不缓存物理评估、成员资格或跨 source 结果。
 粗边共同方向闭合复用 `physical_line_region_in_slopes`，以共同斜率区间直接初始化联合位置/斜率域，
 再裁剪完整原始物理区间；零宽斜率、点和线段均保留，不对斜率额外应用像素容差。单侧准备和每对
 共同方向、代表拟合与连续性绑定完整原生输入。完整成员验证内用一个显式传递的准备对象复用不依赖 H 的

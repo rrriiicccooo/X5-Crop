@@ -113,14 +113,6 @@ def _direct_candidate(
             )
         )
     )
-    top_covers_all_domains = covers_all_template_domains(
-        top.trace_coordinates_px,
-        longitudinal_support_domain_groups_px,
-    )
-    bottom_covers_all_domains = covers_all_template_domains(
-        bottom.trace_coordinates_px,
-        longitudinal_support_domain_groups_px,
-    )
     if len(support_traces) >= minimum_shared_trace_support:
         pair_support_mode = CrossPairSupportMode.SHARED_TRACES
         # Each candidate must independently close the local pair before its
@@ -177,11 +169,13 @@ def _direct_candidate(
         )
         or (
             top.source_spanning_continuous
-            and bottom_covers_all_domains
+            and covers_all_template_domains(
+                bottom.trace_coordinates_px, longitudinal_support_domain_groups_px)
         )
         or (
             bottom.source_spanning_continuous
-            and top_covers_all_domains
+            and covers_all_template_domains(
+                top.trace_coordinates_px, longitudinal_support_domain_groups_px)
         ),
     )
     if source_direction is None:
