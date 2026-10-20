@@ -678,6 +678,7 @@ def _validate_direct_role_binding_authority(value: object) -> None:
         "separator_pair",
         "partial_height_separator_pair",
         "outer_material_boundary",
+        "shared_contact_edge",
     }
     for fact in facts:
         if not isinstance(fact, dict) or set(fact) != {

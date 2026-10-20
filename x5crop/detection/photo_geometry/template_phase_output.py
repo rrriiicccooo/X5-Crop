@@ -23,6 +23,9 @@ from .template_direct_role_aperture_domain import assess_direct_role_aperture_do
 from .template_direct_role_authority import DirectRoleInputPreparation, intrinsic_direct_role_authority_bases
 from .template_feasible_geometry import project_format_placement
 from .template_frame_width import SourceFrameWidthAuthority, calibrate_source_frame_width
+from .template_common_source_size import (
+    CommonSourceSizeProof, common_source_size_work_bound, prove_common_source_size, unavailable_common_source_size,
+)
 from .template_lattice_authority import global_lattice_authority_matches_fit
 from .template_measurement_plan_model import MAX_CROSS_PAIRS, MAX_WORK_UNITS
 from .template_model import SequenceFit, SourceFrameWidthAuthorityBasis, TemplateSearchReceipt, TemplateSpec
@@ -495,6 +498,78 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
 
 
 @dataclass(frozen=True)
+class PhaseScopeOutputProof:
+    scope_id: str
+    output_slot_count: int
+    source_size_proof: CommonSourceSizeProof
+    common_outputs: tuple[CommonOutputFootprint, ...]
+    common_failure: str | None
+    work_units: int
+    state: EvidenceState = field(init=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "state", EvidenceState.SUPPORTED
+            if self.common_outputs and self.common_failure is None else EvidenceState.UNAVAILABLE)
+        if (not self.scope_id or type(self.output_slot_count) is not int or self.output_slot_count <= 0
+                or any(key[0] != self.scope_id for key in self.source_size_proof.member_keys)
+                or type(self.work_units) is not int or self.work_units < self.source_size_proof.work_units
+                or self.common_outputs and (len(self.common_outputs) != self.output_slot_count
+                    or tuple(output.lane_ordinal for output in self.common_outputs)
+                       != tuple(range(1, self.output_slot_count + 1))
+                    or any(output.source_size_proof != (self.source_size_proof
+                        if self.source_size_proof.state == EvidenceState.SUPPORTED else None)
+                        for output in self.common_outputs)
+                    or any(tuple(member.envelope.placement_id for member in output.members)
+                           != self.source_size_proof.placement_ids for output in self.common_outputs))
+                or self.common_outputs and self.common_failure is None
+                    and any(not output.budget_supported or not output.source_authority_supported for output in self.common_outputs)):
+            raise ValueError("phase scope common proof changed its named evidence or budget")
+
+
+def _validate_named_common_windows(outputs, members, size_proof, slots):
+    if not outputs:
+        return
+    shared_size = size_proof if size_proof is not None and size_proof.state == EvidenceState.SUPPORTED else None
+    if (len(outputs) != slots or any(member.state != EvidenceState.SUPPORTED for member in members)
+            or any(output.source_size_proof != shared_size for output in outputs)
+            or any(output.members != tuple(member.output_footprints[index] for member in members)
+                   for index, output in enumerate(outputs))
+            or shared_size is None and any(member.placement.source_scan_geometry
+                != members[0].placement.source_scan_geometry for member in members)):
+        raise ValueError("complete common window changed its full member or slot set")
+
+
+def _common_member_windows(proofs, source_size_proof, available_work):
+    if any(proof.state != EvidenceState.SUPPORTED for proof in proofs):
+        return (), "one or more complete phase members lack independent output qualification", 0, False
+    if not 1 < len(proofs) <= MAX_CROSS_PAIRS:
+        return (), "common phase output requires a bounded complete plural member set", 0, len(proofs) > MAX_CROSS_PAIRS
+    work = sum(1 + 128 * len(proofs) + points * max(1, points.bit_length())
+        for points in (sum(len(proof.output_footprints[index].mandatory_source_footprint) for proof in proofs)
+                       for index in range(proofs[0].placement.output_slot_count)))
+    if work > available_work:
+        return (), "complete phase common output work bound exceeded", 0, True
+    try:
+        outputs = tuple(common_phase_output_footprint(tuple(proof.placement for proof in proofs),
+            tuple(proof.output_footprints[ordinal] for proof in proofs),
+            source_size_proof=(source_size_proof if source_size_proof.state == EvidenceState.SUPPORTED else None))
+            for ordinal in range(proofs[0].placement.output_slot_count))
+        failure = ("the complete common fixed window does not satisfy every member's protection budget"
+            if any(not output.budget_supported or not output.source_authority_supported for output in outputs) else None)
+        return outputs, failure, work, False
+    except ValueError as error:
+        return (), str(error), work, False
+
+
+def _common_window_storage_bound(proofs):
+    if len(proofs) <= 1 or any(proof.state != EvidenceState.SUPPORTED for proof in proofs):
+        return 0
+    return sum(4096 + 1024 * len(proofs)
+        + 128 * sum(len(proof.output_footprints[index].mandatory_source_footprint) for proof in proofs)
+        for index in range(proofs[0].placement.output_slot_count))
+
+
+@dataclass(frozen=True)
 class CompletePhaseOutputProof:
     scopes: tuple[PhaseCompetitionScope, ...]
     members: tuple[PhaseMemberOutputProof, ...]
@@ -505,6 +580,8 @@ class CompletePhaseOutputProof:
     bound_exceeded: bool
     scope: str = "complete_recorded_phase_validation"
     common_work_units: int = 0
+    source_size_proof: CommonSourceSizeProof | None = None
+    scope_outputs: tuple[PhaseScopeOutputProof, ...] = ()
     state: EvidenceState = field(init=False)
 
     def __post_init__(self) -> None:
@@ -522,15 +599,28 @@ class CompletePhaseOutputProof:
         if self.common_outputs and (self.bound_exceeded
                 or any(member.state != EvidenceState.SUPPORTED for member in self.members)):
             raise ValueError("common phase window lacks a qualified complete member set")
+        if self.source_size_proof is not None and (self.source_size_proof.member_keys != expected
+                or self.source_size_proof.placement_ids != tuple(None if member.placement is None
+                    else member.placement.placement_id for member in self.members)):
+            raise ValueError("common source size omitted a complete producer member")
+        active_scopes = tuple(scope for scope in self.scopes if scope.members)
+        if self.scope_outputs and (tuple(proof.scope_id for proof in self.scope_outputs)
+                != tuple(scope.scope_id for scope in active_scopes)
+                or any(proof.source_size_proof.member_keys != tuple((scope.scope_id, member.record_ordinal)
+                    for member in scope.members) for proof, scope in zip(self.scope_outputs, active_scopes, strict=True))):
+            raise ValueError("scope common window omitted or changed a producer member")
+        offset = 0
+        for scope, proof in zip(active_scopes, self.scope_outputs):
+            named = self.members[offset:offset + len(scope.members)]
+            offset += len(scope.members)
+            if (proof.output_slot_count != scope.template.count
+                    or proof.source_size_proof.placement_ids != tuple(
+                        None if member.placement is None else member.placement.placement_id for member in named)):
+                raise ValueError("scope common window changed its producer slots or placements")
+            _validate_named_common_windows(proof.common_outputs, named, proof.source_size_proof, scope.template.count)
         if self.common_outputs:
             slots = self.members[0].placement.output_slot_count
-            source = self.members[0].placement.source_scan_geometry
-            if (len(self.common_outputs) != slots
-                    or any(not isinstance(output, CommonOutputFootprint) for output in self.common_outputs)
-                    or any(member.placement.source_scan_geometry != source for member in self.members)
-                    or any(output.members != tuple(member.output_footprints[index] for member in self.members)
-                           for index, output in enumerate(self.common_outputs))):
-                raise ValueError("complete common window changed its full member or slot set")
+            _validate_named_common_windows(self.common_outputs, self.members, self.source_size_proof, slots)
             if self.common_failure is None and any(not output.budget_supported or not output.source_authority_supported
                                                   for output in self.common_outputs):
                 raise ValueError("complete common window lacks every member's safe budget")
@@ -596,47 +686,89 @@ def _build_complete_phase_output(lane, *, retained_review_bytes, preparation, di
             or sum(proof.work.direct_role_input_preparation_count for proof in proofs) != direct_preparation.preparation_count
             or preparation.retained_bytes + direct_preparation.retained_bytes > preparation_reserve):
         raise ValueError("complete phase output lost shared raw geometry work")
-    native = tuple(proof for proof in proofs if proof.placement is not None)
+    scales = lane.lane.scan_canvas.axis_scales
+    initial = SourceScanGeometry.create(lane.source_scan_geometry.frame_spec,
+        width_scale_px_per_mm=scales.width_axis_px_per_mm,
+        height_scale_px_per_mm=scales.height_axis_px_per_mm)
+
+    size_reserved_bytes = 0
+
+    def source_size(members):
+        nonlocal exceeded, size_reserved_bytes
+        keys = tuple((proof.scope_id, proof.record_ordinal) for proof in members)
+        ids = tuple(None if proof.placement is None else proof.placement.placement_id for proof in members)
+        phases = tuple(proof.phase_assessment for proof in members)
+        contexts = tuple(proof.cross_context for proof in members)
+        work_bound = common_source_size_work_bound(phases, contexts, len(lane.phase_input.observations))
+        size_bytes = 4096 + len(members) * 256 + 512 * max(
+            (0 if phase is None else len(phase.best.role_bindings) // 2 for phase in phases), default=0)
+        if (exceeded or units + work_bound > MAX_COMPLETE_PHASE_OUTPUT_WORK_UNITS
+                or memory_limit is not None and retained_review_bytes + retained_bytes + preparation_reserve
+                    + size_reserved_bytes + size_bytes > memory_limit):
+            exceeded = True
+            size_reserved_bytes += 4096 + len(members) * 256
+            return unavailable_common_source_size(initial, keys, ids)
+        size_reserved_bytes += size_bytes
+        return prove_common_source_size(initial, keys, ids, phases, contexts, lane.phase_input.observations)
+
+    size_proof = None if not proofs else source_size(proofs)
+    scope_outputs = []
+    common_work = 0 if size_proof is None else size_proof.work_units
+    units += common_work
+    offset = 0
+    for scope in scopes:
+        members = tuple(proofs[offset:offset + len(scope.members)])
+        offset += len(scope.members)
+        if not members:
+            continue
+        size = source_size(members)
+        units += size.work_units
+        common_work += size.work_units
+        window_storage = _common_window_storage_bound(members)
+        if (exceeded or units > MAX_COMPLETE_PHASE_OUTPUT_WORK_UNITS or memory_limit is not None
+                and retained_review_bytes + retained_bytes + preparation_reserve + size_reserved_bytes + window_storage > memory_limit):
+            scope_windows, scope_failure, spent, overflow = (), "complete phase reconstruction work bound exceeded", 0, True
+        else:
+            scope_windows, scope_failure, spent, overflow = _common_member_windows(members, size,
+                MAX_COMPLETE_PHASE_OUTPUT_WORK_UNITS - units)
+        units += spent
+        common_work += spent
+        exceeded = exceeded or overflow
+        if scope_windows:
+            size_reserved_bytes += window_storage
+        scope_outputs.append(PhaseScopeOutputProof(scope.scope_id, scope.template.count, size, scope_windows, scope_failure,
+                                                  size.work_units + spent))
     outputs = ()
-    common_work = 0
     failure = None
     if not scopes or not proofs:
         failure = "registered phase member set is unavailable"
-    elif exceeded:
+    elif (exceeded or memory_limit is not None and retained_review_bytes + retained_bytes
+            + preparation_reserve + size_reserved_bytes + _common_window_storage_bound(proofs) > memory_limit):
+        exceeded = True
         failure = "complete phase reconstruction work bound exceeded"
     elif any(proof.state != EvidenceState.SUPPORTED for proof in proofs):
         failure = "one or more complete phase members lack independent output qualification"
-    elif len(native) > MAX_CROSS_PAIRS:
-        exceeded = True
-        failure = "complete phase common output member bound exceeded"
-    elif len(native) <= 1:
-        failure = "common phase output requires a bounded complete plural member set"
     else:
-        requested_work = sum(1 + 128 * len(native) + points * max(1, points.bit_length())
-            for points in (sum(len(proof.output_footprints[index].mandatory_source_footprint) for proof in native)
-                           for index in range(native[0].placement.output_slot_count)))
-        if units + requested_work > MAX_COMPLETE_PHASE_OUTPUT_WORK_UNITS:
-            exceeded = True
-            failure = "complete phase common output work bound exceeded"
-        else:
-            common_work = requested_work
-            units += common_work
-            try:
-                outputs = tuple(common_phase_output_footprint(
-                    tuple(proof.placement for proof in native),
-                    tuple(proof.output_footprints[ordinal] for proof in native))
-                    for ordinal in range(native[0].placement.output_slot_count))
-                if any(not output.budget_supported or not output.source_authority_supported for output in outputs):
-                    failure = "the complete common fixed window does not satisfy every member's protection budget"
-            except ValueError as error:
-                failure = str(error)
+        outputs, failure, spent, overflow = _common_member_windows(tuple(proofs), size_proof,
+            MAX_COMPLETE_PHASE_OUTPUT_WORK_UNITS - units)
+        units += spent
+        common_work += spent
+        exceeded = exceeded or overflow
     retained = sum(scope.retained_bytes for scope in scopes) + sum(
         4096 + len(proof.output_footprints) * 8192
         + (0 if proof.phase_assessment is None else len(proof.phase_assessment.best.role_bindings) * 1024)
         + (0 if proof.cross_context is None else proof.cross_context.competition.receipt.evaluated_fit_count * 1024)
         for proof in proofs)
-    retained += len(outputs) * (4096 + 128 * len(native))
+    retained += _common_window_storage_bound(proofs) if outputs else 0
+    retained += sum(4096 + len(scope.source_size_proof.member_keys) * 256
+        + len(scope.source_size_proof.width_pairs) * 512
+        + (0 if not scope.common_outputs else sum(4096 + 1024 * len(output.members)
+            + 128 * sum(len(member.mandatory_source_footprint) for member in output.members)
+            for output in scope.common_outputs))
+        for scope in scope_outputs)
+    retained += 0 if size_proof is None else 4096 + len(proofs) * 256 + len(size_proof.width_pairs) * 512
     peak = (retained + max((proof.work.peak_temporary_bytes for proof in proofs), default=0)
             + preparation.retained_bytes + direct_preparation.retained_bytes)
     return CompletePhaseOutputProof(scopes, tuple(proofs), outputs, failure, units, peak, exceeded,
-                                   common_work_units=common_work)
+                                   common_work_units=common_work, source_size_proof=size_proof,
+                                   scope_outputs=tuple(scope_outputs))

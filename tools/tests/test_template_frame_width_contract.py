@@ -31,6 +31,7 @@ from x5crop.detection.photo_geometry.template_direct_role_authority import (
     DirectRoleAuthorityBasis,
     DirectRoleAuthorityFact,
     DirectRoleBindingAuthority,
+    assess_direct_role_binding_authority,
 )
 from x5crop.detection.photo_geometry.template_adjacency_coverage import (
     AdjacencyCoverageState,
@@ -1414,7 +1415,7 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
             ),
         )
 
-    def test_contact_adjacent_frames_do_not_calibrate_source_width(
+    def test_contact_adjacent_frames_keep_independently_native_role_widths(
         self,
     ) -> None:
         observations = tuple(
@@ -1472,7 +1473,24 @@ class TemplateFrameWidthContractTest(unittest.TestCase):
         )
 
         self.assertEqual(authority.state, EvidenceState.SUPPORTED)
-        self.assertEqual(authority.supporting_frame_ordinals, (1, 4))
+        self.assertEqual(authority.supporting_frame_ordinals, (1, 2, 3, 4))
+
+        for native_role, supported_frames, borrowed_index in (
+            (BoundaryRole.START, (1, 3, 4), 3),
+            (BoundaryRole.END, (1, 2, 4), 4),
+        ):
+            with self.subTest(native_role=native_role):
+                native_observations = (*observations[:3],
+                    replace(observations[3], qualified_anchor_roles=(native_role,)), *observations[4:])
+                direct = assess_direct_role_binding_authority(phase.best, native_observations, bands,
+                    (phase_sequence_measurement("contact-width", FiniteInterval(0.0, 500.0)),))
+                borrowed = next(fact for fact in direct.facts if fact.role_index == borrowed_index)
+                self.assertIn(DirectRoleAuthorityBasis.SHARED_CONTACT_EDGE, borrowed.bases)
+                self.assertTrue(borrowed.has_unconditional_coordinate_authority)
+                self.assertFalse(borrowed.has_topology_independent_coordinate_authority)
+                _, measured = calibrate_source_frame_width(source,
+                    replace(phase, direct_role_binding_authority=direct), native_observations)
+                self.assertEqual(measured.supporting_frame_ordinals, supported_frames)
 
     def test_observed_inner_frames_close_source_width_before_outer_refinement(
         self,

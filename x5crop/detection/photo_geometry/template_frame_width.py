@@ -77,6 +77,90 @@ class SourceFrameWidthAuthorityPlacementScope(str, Enum):
 
 
 @dataclass(frozen=True)
+class DirectFrameWidthObservation:
+    """A complete native pair; no ordinal, fitted W or Contact role grant."""
+
+    start_observation_id: ObservationId
+    end_observation_id: ObservationId
+    start_evidence_group_id: ObservationId
+    end_evidence_group_id: ObservationId
+    width_px: FiniteInterval
+
+    def __post_init__(self) -> None:
+        if (any(not isinstance(item, ObservationId) for item in (
+                self.start_observation_id, self.end_observation_id,
+                self.start_evidence_group_id, self.end_evidence_group_id))
+                or self.start_observation_id == self.end_observation_id
+                or self.start_evidence_group_id == self.end_evidence_group_id
+                or self.width_px.minimum <= 0):
+            raise ValueError("complete native width requires independent positive pair facts")
+
+    @property
+    def evidence_group_ids(self) -> frozenset[ObservationId]:
+        return frozenset((self.start_evidence_group_id, self.end_evidence_group_id))
+
+
+def independent_frame_width_pairs(pairs: tuple[DirectFrameWidthObservation, ...]) -> bool:
+    return any(left.evidence_group_ids.isdisjoint(right.evidence_group_ids)
+               and {left.start_observation_id, left.end_observation_id}.isdisjoint(
+                   (right.start_observation_id, right.end_observation_id))
+               for index, left in enumerate(pairs) for right in pairs[index + 1:])
+
+
+def complete_frame_width_observations(
+    phase: PhaseFitResult,
+    sequence_edges: tuple[BoundaryEdgeObservation, ...],
+    physical: FiniteInterval,
+) -> tuple[tuple[tuple[int, DirectFrameWidthObservation], ...], bool]:
+    return _complete_frame_width_observations(phase.best, phase.direct_role_binding_authority,
+                                               sequence_edges, physical)
+
+
+def _complete_frame_width_observations(fit, direct, sequence_edges, physical):
+    """Keep all independently qualified complete pairs, including native Contact sides.
+
+    Overlap Frames remain incomplete. A Contact-derived reverse role is a
+    coordinate inside that interpretation, never an independent W measurement.
+    """
+    if fit is None or direct is None:
+        return (), False
+    by_id = {item.observation_id: item for item in sequence_edges}
+    if len(by_id) != len(sequence_edges):
+        raise ValueError("source W requires unique observation ledger identities")
+    facts = {item.role_index: item for item in direct.facts}
+    overlap_frames = frozenset(ordinal for relation in fit.adjacency_relations
+        if isinstance(relation, OverlapRelation)
+        for ordinal in (relation.relation_ordinal, relation.relation_ordinal + 1))
+    spans = []
+    incomplete = False
+    for frame_index, (start, end) in enumerate(zip(fit.role_bindings[0::2], fit.role_bindings[1::2], strict=True)):
+        start_fact, end_fact = facts.get(2 * frame_index), facts.get(2 * frame_index + 1)
+        if (frame_index + 1 in overlap_frames or start is None or end is None
+                or start_fact is None or end_fact is None
+                or not start_fact.has_topology_independent_coordinate_authority
+                or not end_fact.has_topology_independent_coordinate_authority
+                or start.evidence_group_id == end.evidence_group_id):
+            continue
+        for binding, fact in ((start, start_fact), (end, end_fact)):
+            if (binding.observation_id != fact.observation_id or binding.evidence_group_id != fact.evidence_group_id):
+                raise ValueError("source W direct fact disagrees with its role binding")
+            if binding.observation_id not in by_id:
+                raise ValueError("source W binding leaves the observation ledger")
+        start_edge, end_edge = by_id[start.observation_id], by_id[end.observation_id]
+        left, right = (start_edge, end_edge) if fit.template.direction > 0 else (end_edge, start_edge)
+        measured = FiniteInterval(right.full_position_interval_px.minimum - left.full_position_interval_px.maximum,
+                                  right.full_position_interval_px.maximum - left.full_position_interval_px.minimum)
+        minimum, maximum = ((measured.minimum, measured.maximum) if physical is None else
+            (max(measured.minimum, physical.minimum), min(measured.maximum, physical.maximum)))
+        if maximum < minimum or minimum <= 0:
+            incomplete = True
+            continue
+        spans.append((frame_index + 1, DirectFrameWidthObservation(start.observation_id, end.observation_id,
+            start.evidence_group_id, end.evidence_group_id, FiniteInterval(minimum, maximum))))
+    return tuple(spans), incomplete
+
+
+@dataclass(frozen=True)
 class SourceFrameWidthAuthority:
     """One source W projected inside one retained placement hypothesis.
 
@@ -395,89 +479,16 @@ def calibrate_source_frame_width(
             SourceFrameWidthAuthorityFailureKind.DIRECT_ROLE_AUTHORITY_UNAVAILABLE,
             "source W requires typed direct-role authority facts",
         )
-    by_id = {item.observation_id: item for item in sequence_edges}
-    if len(by_id) != len(sequence_edges):
-        raise ValueError("source W requires unique observation ledger identities")
-    facts = {item.role_index: item for item in direct.facts}
     physical = source_geometry.width_state.extent_projection_px()
-    spans: list[
-        tuple[int, FiniteInterval, tuple[ObservationId, ObservationId]]
-    ] = []
-    incomplete_pair_present = False
-    topology_frames = _topology_frame_ordinals(fit)
-    for frame_index, (start, end) in enumerate(
-        zip(
-            fit.role_bindings[0::2],
-            fit.role_bindings[1::2],
-            strict=True,
-        )
-    ):
-        start_index = 2 * frame_index
-        end_index = start_index + 1
-        if frame_index + 1 in topology_frames:
-            continue
-        start_fact = facts.get(start_index)
-        end_fact = facts.get(end_index)
-        if (
-            start is None
-            or end is None
-            or start_fact is None
-            or end_fact is None
-            or not start_fact.has_unconditional_coordinate_authority
-            or not end_fact.has_unconditional_coordinate_authority
-            or start.evidence_group_id == end.evidence_group_id
-        ):
-            continue
-        for binding, fact in ((start, start_fact), (end, end_fact)):
-            if (
-                binding.observation_id != fact.observation_id
-                or binding.evidence_group_id != fact.evidence_group_id
-            ):
-                raise ValueError("source W direct fact disagrees with its role binding")
-        if (
-            start.observation_id not in by_id
-            or end.observation_id not in by_id
-        ):
-            raise ValueError("source W binding leaves the observation ledger")
-        start_edge = by_id[start.observation_id]
-        end_edge = by_id[end.observation_id]
-        if fit.template.direction > 0:
-            measured = FiniteInterval(
-                end_edge.full_position_interval_px.minimum
-                - start_edge.full_position_interval_px.maximum,
-                end_edge.full_position_interval_px.maximum
-                - start_edge.full_position_interval_px.minimum,
-            )
-        else:
-            measured = FiniteInterval(
-                start_edge.full_position_interval_px.minimum
-                - end_edge.full_position_interval_px.maximum,
-                start_edge.full_position_interval_px.maximum
-                - end_edge.full_position_interval_px.minimum,
-            )
-        minimum = max(measured.minimum, physical.minimum)
-        maximum = min(measured.maximum, physical.maximum)
-        if maximum < minimum:
-            # A visible span outside the complete-aperture distribution is
-            # not a complete W observation (e.g. exposure/source truncation).
-            # Its native roles remain in the placement and its ordinary
-            # fixed-width checks; it cannot erase other complete local pairs
-            # or participate in the ordinary full-Frame lattice W estimator.
-            incomplete_pair_present = True
-            continue
-        spans.append(
-            (
-                frame_index + 1,
-                FiniteInterval(minimum, maximum),
-                (start.observation_id, end.observation_id),
-            )
-        )
+    measured_pairs, incomplete_pair_present = complete_frame_width_observations(phase, sequence_edges, physical)
+    spans = tuple((ordinal, pair.width_px, (pair.start_observation_id, pair.end_observation_id))
+                  for ordinal, pair in measured_pairs)
     complete_frame_projection = (
         FiniteInterval(
             min(item[1].minimum for item in spans),
             max(item[1].maximum for item in spans),
         )
-        if len(spans) >= 2
+        if independent_frame_width_pairs(tuple(pair for _, pair in measured_pairs))
         else None
     )
     complete_frame_identities = tuple(
@@ -1103,37 +1114,20 @@ def _yield_local_roles_to_correlated_width(
         item.role_index: item for item in direct_role_authority.facts
     }
     width_ids = set(source_frame_width_authority.observation_ids)
-    strong_frames: list[int] = []
-    topology_frames = _topology_frame_ordinals(fit)
-    for slot_index in range(fit.template.count):
-        start_index = 2 * slot_index
-        end_index = start_index + 1
-        if slot_index + 1 in topology_frames:
-            continue
-        start = fit.role_bindings[start_index]
-        end = fit.role_bindings[end_index]
-        start_fact = facts.get(start_index)
-        end_fact = facts.get(end_index)
-        if (
-            start is None
-            or end is None
-            or start_fact is None
-            or end_fact is None
-            or not start_fact.has_unconditional_coordinate_authority
-            or not end_fact.has_unconditional_coordinate_authority
-            or start.observation_id not in width_ids
-            or end.observation_id not in width_ids
-            or start.evidence_group_id == end.evidence_group_id
-        ):
-            continue
-        strong_frames.append(slot_index + 1)
+    # The authority already records the physical complete-width admission.
+    # Recheck native roles here, without clipping each Frame to a narrower
+    # reconciled lattice W (real Frames may have slightly different widths).
+    native_pairs, _ = _complete_frame_width_observations(fit, direct_role_authority, sequence_edges, None)
+    strong = tuple((ordinal, pair) for ordinal, pair in native_pairs
+        if pair.start_observation_id in width_ids and pair.end_observation_id in width_ids)
+    strong_frames = tuple(ordinal for ordinal, _ in strong)
     independent_complete_frames = (
         source_frame_width_authority.basis
         in {
             SourceFrameWidthAuthorityBasis.INDEPENDENT_COMPLETE_FRAMES,
             SourceFrameWidthAuthorityBasis.RECONCILED_DIRECT_CONSTRAINTS,
         }
-        and len(strong_frames) >= 2
+        and independent_frame_width_pairs(tuple(pair for _, pair in strong))
         and len(width_ids) >= 4
         and set(source_frame_width_authority.supporting_frame_ordinals)
         .issubset(strong_frames)

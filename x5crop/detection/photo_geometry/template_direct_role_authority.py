@@ -33,6 +33,7 @@ class DirectRoleAuthorityBasis(str, Enum):
     SEPARATOR_PAIR = "separator_pair"
     PARTIAL_HEIGHT_SEPARATOR_PAIR = "partial_height_separator_pair"
     OUTER_MATERIAL_BOUNDARY = "outer_material_boundary"
+    SHARED_CONTACT_EDGE = "shared_contact_edge"
 
 
 _UNCONDITIONAL_DIRECT_ROLE_BASES = frozenset(
@@ -40,6 +41,7 @@ _UNCONDITIONAL_DIRECT_ROLE_BASES = frozenset(
         DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE,
         DirectRoleAuthorityBasis.AGGREGATE_UNION,
         DirectRoleAuthorityBasis.SEPARATOR_PAIR,
+        DirectRoleAuthorityBasis.SHARED_CONTACT_EDGE,
     }
 )
 
@@ -153,6 +155,13 @@ class DirectRoleAuthorityFact:
     def has_unconditional_coordinate_authority(self) -> bool:
         return self.state == EvidenceState.SUPPORTED and bool(
             _UNCONDITIONAL_DIRECT_ROLE_BASES.intersection(self.bases)
+        )
+
+    @property
+    def has_topology_independent_coordinate_authority(self) -> bool:
+        return self.state == EvidenceState.SUPPORTED and bool(
+            (_UNCONDITIONAL_DIRECT_ROLE_BASES - {DirectRoleAuthorityBasis.SHARED_CONTACT_EDGE})
+            .intersection(self.bases)
         )
 
 
@@ -683,26 +692,34 @@ def _assess_direct_role_binding_authority(
     for role_index, count in region_counts.items():
         observation = selected[role_index]
         role = fit.template.roles[role_index].role
-        intrinsic_role_qualified = (
-            not observation.qualified_anchor_roles
-            or role in observation.qualified_anchor_roles
+        native_role_qualified = (
+            role in observation.qualified_anchor_roles
             or (observation.observation_id, role)
             in ledger.supported_material_roles
-            or role_index in shared_contact_roles
         )
+        # A shared Contact line may own both coordinates, but only the
+        # independently measured role may feed source W back into topology.
+        # An unspecified raw role is not positive independent evidence at a
+        # Contact boundary. Ordinary, non-Contact observations retain their
+        # existing unrestricted-role convention.
+        intrinsic_role_qualified = native_role_qualified or (
+            not observation.qualified_anchor_roles and role_index not in shared_contact_roles)
+        role_qualified = intrinsic_role_qualified or role_index in shared_contact_roles
         if (
-            intrinsic_role_qualified
+            role_qualified
             and count == SPATIAL_SUPPORT_REGION_COUNT
             and observation.measurement_basis
             == BoundaryEdgeMeasurementBasis.DIRECT_TRACE
         ):
-            bases[role_index].add(DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE)
+            bases[role_index].add(DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE
+                if intrinsic_role_qualified else DirectRoleAuthorityBasis.SHARED_CONTACT_EDGE)
         if (
-            intrinsic_role_qualified
+            role_qualified
             and observation.measurement_basis
             == BoundaryEdgeMeasurementBasis.DIRECT_WITH_AGGREGATE
         ):
-            bases[role_index].add(DirectRoleAuthorityBasis.AGGREGATE_UNION)
+            bases[role_index].add(DirectRoleAuthorityBasis.AGGREGATE_UNION
+                if intrinsic_role_qualified else DirectRoleAuthorityBasis.SHARED_CONTACT_EDGE)
         outer_role_index = (
             0 if role == BoundaryRole.START else len(fit.template.roles) - 1
         )

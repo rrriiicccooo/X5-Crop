@@ -5,6 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 import math
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .template_common_source_size import CommonSourceSizeProof
 
 from ...domain import Box, EvidenceState, FiniteInterval, ObservationId, WorkspaceExtent
 from ...geometry.convex import (
@@ -658,6 +662,7 @@ class CommonOutputFootprint:
     sampling_authority_box: Box
     source_extent: WorkspaceExtent
     authority_profile_id: str
+    source_size_proof: CommonSourceSizeProof | None = None
 
     def __post_init__(self) -> None:
         if not self.members or any(not isinstance(member, OutputFootprint) for member in self.members):
@@ -675,12 +680,19 @@ class CommonOutputFootprint:
             or member.sampling_authority_box != self.sampling_authority_box
             or member.source_extent != self.source_extent
             or member.authority_profile_id != self.authority_profile_id
-            or member.fixed_size != self.fixed_size
+            or (self.source_size_proof is None and member.fixed_size != self.fixed_size)
             or member.width_axis != self.members[0].width_axis
             or member.sequence_direction != self.members[0].sequence_direction
             for member in self.members
         ):
             raise ValueError("common H output changed lane, slot or source authority")
+        if self.source_size_proof is not None:
+            from .template_common_source_size import CommonSourceSizeProof
+            proof = self.source_size_proof
+            if (not isinstance(proof, CommonSourceSizeProof) or proof.state != EvidenceState.SUPPORTED
+                    or proof.source_geometry.fixed_output_size != self.fixed_size
+                    or proof.placement_ids != tuple(p for p, _ in identities)):
+                raise ValueError("common output borrowed an incomplete or unrelated source size proof")
         expected = convex_hull(tuple(point for member in self.members for point in member.mandatory_source_footprint))
         if self.mandatory_source_footprint != expected:
             raise ValueError("common output lost a native member requirement")

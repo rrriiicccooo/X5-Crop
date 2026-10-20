@@ -1246,8 +1246,12 @@ contact 或 overlap；存在多组合法解释时保持 `adjacency_topology_ambi
 在 overlap 中点分区，防止同一 trace 被当成两份独立 Frame 支撑。
 
 现有 source W authority 已允许每个至少拥有一条直接 START/END 的 Frame 用同一相关 W 推导另一侧；
-多张 Frame 的推导共享一份相关状态，不能当成多条独立证据。Contact/Overlap 两侧 Frame 不参加 source W
-的独立完整 Frame 支撑，避免 topology edge 反向自证 W。W 不得凭空生成两侧都未观察到的 Frame、决定
+多张 Frame 的推导共享一份相关状态，不能当成多条独立证据。Contact 转授的反角色以
+`shared_contact_edge` 单独记录：它在给定 Contact 解释内拥有坐标，但不能反向支撑 source W。
+原始角色或独立 separator 证据已经成立的 Contact 一侧仍可参与完整 Frame 测量；Overlap 两侧继续排除。
+至少两组完整 pair 必须既不共享原始 observation，也不共享 evidence group；全部合法 pair 仍保留并形成
+保守宽度 hull。弱线让位与测量共用同一原生 pair owner，不能在消费端再次整体排除 Contact。
+W 不得凭空生成两侧都未观察到的 Frame、决定
 topology、覆盖 direct native coordinate，或把 contact 共用线重复计票。无权 `LOCAL_REFINEMENT` 仍按第 6 节的
 validation-only 合同让位。
 
@@ -1417,12 +1421,16 @@ gradient、全部顶点的 first-order gap，并要求 `gap <= robust_fit_tolera
 使用独立编号前缀，不改变原有两侧 registration 和后续精修的编号顺序。
 完整并集仍不成立的有条件 family 可以进一步保留完整原子的归属解释。原 canonical observation
 不可拆分；该 family 中全部至少两区域的 observation 同时固定为 anchor，其余原子只作为整体加入。
-在这个固定原子宇宙内，以同 trace 不同 identity 冲突和完整物理域为空作单调剪枝，穷尽全部可行集合后
-保留所有包含极大集合。极大性只表示无法再加入一个完整原子，不证明成员身份或角色权限。
+在这个固定原子宇宙内，以同 trace 不同 identity 冲突和完整物理域为空作单调剪枝，完整枚举所有包含极大集合。
+确定性 include/exclude 搜索分别保留强制、待选与此前排除的原子。完整待选并集可行时，逐一检验此前排除
+原子的单扩展；均不可行才闭合该极大解释，否则拒绝这份非极大解释。完整并集不可行时才分支，加入
+原子后仍用同一联合原始物理域过滤待选及排除集合，不以成对相容代替联合可行性，不缓存搜索结论。
+极大性只表示无法再加入一个完整原子，不证明成员身份或角色权限。
 无独立 anchor 时明确记为不适用；多个 anchor 联合不可行时不删除任何 anchor。搜索不读取拟合结果、
 背景角色授权、黄金或 placement。已有 raw union 不重复物化；新 union 的不同成员解释分别保留来源，
 只共用一次完整数值拟合。每份新 family 绑定其原始未解决 parent，原 raw 和全部原 observation 继续保存。
-同 lane 两侧及全部 family 共用至多 4096 次组合访问；访问前检查预算，任一 scope 耗尽时整批不添加新线，
+同 lane 两侧及全部 family 共用至多 4096 次完整原始集合核验；anchor、初始及分支过滤、完整并集与极大性
+扩展均计入该额度。访问前检查预算，任一 scope 耗尽时整批不添加新线，
 不能输出此前完成的搜索前缀。全部搜索完成后，以每角色原 run 数 R、原唯一 family 拟合数 U、原约束
 拟合数 C、新唯一 union 数 K 预检 `R+U+K <= 3R` 与 `C+K <= 2R`；任一侧失败时两侧均不执行新增拟合。
 新增拟合都通过预检后才开始，失败保留完整解释及明确的不可用结果，不根据成功次数截取前 N 组。
@@ -1459,9 +1467,10 @@ Raster trace 不连续不等于物理边界不同；完整并集重拟合能够�
 两者分别计数，合计不超过 `5R`；原有缺边精修至多再增加 `R`。
 归属搜索另记实际访问、raw union 输入与 identity 检查、物理域与 raw interval、裁剪与顶点检查、
 可行集合及极大性检查次数。令一次 scope 有 A 个原子、T 个原始 transition、Q 条 query trace、V 次访问：
-raw union 输入不超过 `2TV`，identity 检查不超过 `TV`；每个无身份冲突集合至多 Q 条约束，
+原子输入访问不超过 `AV`，raw union 输入不超过 `ATV`，identity 检查不超过 `TV`；每个无身份冲突集合至多 Q 条约束，
 裁剪至多 `2Q` 次、顶点检查至多 `4Q²+10Q` 次，极大性检查至多 `AV`。临时 DFS 深度至多 A，
-已访问集合只保存整数 mask；完整极大解释与预检前 union 计划最多 V 组，获准拟合的唯一 union 数还须
+递归节点、分支及最大深度分别记账；节点不超过 `2 × 分支 + 1`，分支过滤不超过 `A × 分支`。
+当前分支只保存整数 mask 和原子索引，不保留全部可行子集；完整极大解释与预检前 union 计划最多 V 组，获准拟合的唯一 union 数还须
 满足 `3R/2R` 预检。
 有 trace 冲突时极大集合数量可以指数增长，二维物理参数空间不提供一般多项式枚举保证；4096 是明确
 工作上限，不是完整性保证。搜索预算不替代下游 512 observation 和 4096 pair/fit 的实际计数与拒绝合同。
@@ -2286,12 +2295,18 @@ placement；资格缺口和真实矛盾分别保存，不借首选的 W/H/Cross�
 不再物化下游固定输出或预算；这表示未评估，不表示预算通过或成员已被物理排除，全集共同窗口仍失败。
 
 成员证明只核验条件几何与保护预算；它不是 canonical proposal，不包含完整 placement feature、Content veto 或
-Gate 准入。全部成员都具备该条件资格且确立同一固定 source W/H 身份后，才使用共享固定框 owner 核验逐 slot
-共同窗口及每个成员预算。W/H 区间相交不能另选尺寸；不得用一部分成员代表全集。
+Gate 准入。`template_common_source_size.py` 为完整具名集合另建独立尺寸证明：只取每个解释均独立认可的
+相同完整原生 pair；至少两对原始 observation 与 evidence group 均不重复，完整共同 pair 的宽度 hull 从初始
+format/source 状态测量共同 W。共同 H 只从每个成员都已完整关联的同一直接 aperture top/bottom pair 独立重建，
+不消费 W 推导的 aspect H。各成员原有完整 Frame、direct-lattice、W/H 和输出保护保持原样；共同测量的固定
+代表必须落入每个成员自己的条件尺寸范围，否则明确不可用，不能再从区间交集中另选数值。
+全部成员都具备条件资格，并有相同固定 source W/H 身份或上述独立共同尺寸证明后，才使用共享固定框 owner
+核验逐 slot 共同窗口及每个成员预算。各非空 producer scope 的尺寸与窗口另行具名保存，严格核对本 scope
+的完整成员和全部 slot；scope 通过不替代所有历史成员的全集证明，不得用一部分成员代表全集。
 `common_outputs` 可保留预算失败窗口作为诊断，只有 `state=supported` 且 `common_failure=null` 才表示窗口
 验证通过。当前该分支在规范 selection/Gate 后执行，不授予照片序号映射、canonical winner 或自动输出权限。
 
-当前报告 schema 为 112。普通报告保留完整账本和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
+当前报告 schema 为 113。普通报告保留完整账本和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
 重放全部 producer 和独立成员，再比对结果、缺口和工作。成员 Cross 只重复自身 H／纵向域、best/runner、
 求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
 外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source
@@ -2342,7 +2357,9 @@ lattice authority。不新增像素 query 或 phase 搜索；包括第三份提�
 原生补边、晚期 projection、W、Cross、compose 和 envelope projection，沿用各 owner 的数值上限；
 单独记录 role lookup/binding、已登记事实检查逻辑上界、邻接／trace 检查、Cross 新增 local fit/event、
 数值 fit、projection extreme、output/budget。六个 pass 的独立验证合计上限为 `6 × 1,000,000` 逻辑工作单位。
-完整集合共同窗口另外计入各 slot 的成员预算与凸包排序逻辑上界，最多消费 4096 个完整成员；
+完整集合及各 producer scope 的独立尺寸检查先编译原生 pair、H 和条件尺寸核验的逻辑上界并预留工作与内存，
+再执行重建；已超界时只保留全部具名成员和 typed unavailable，不继续尺寸重建。成员关联表、共享 pair 和各
+scope 的窗口保留量一起计入同一 source 内存。共同窗口另外计入各 slot 的成员预算与凸包排序逻辑上界，最多消费 4096 个完整成员；
 每次成员构建前按 source 临时内存预算预留当前上限，并计入已有独立 Review 的保留量。
 达到上限则全集证明失效，余下成员显式记录工作缺口；已完成前缀不能用于共同批准。
 峰值计入全部账本、保留成员、已有独立 Review 和当前临时构建；它是逻辑工作量，不能替代 RSS 实测。
@@ -2489,6 +2506,7 @@ Linux开发/CI使用`renameat2(RENAME_NOREPLACE)`。目标在最终检查之后�
 | `photo_geometry/template_native_retention.py`、`template_source_clipped.py` | 从既有 projection 记录按十二个原生依据/端点类与六个源截断类保留完整解释及分类工作量 |
 | `photo_geometry/template_intrinsic_review_refit.py`、`template_phase_review.py` | 原 compose 失败后的单次固定 intrinsic 重拟合、完整反证、独立初始 source/Cross Review 上下文与有界物化；不参与 canonical competition 或 Gate |
 | `photo_geometry/template_phase_membership.py`、`template_phase_output.py` | 完整 producer 成员账本、独立成员 W/H/Cross 条件几何证明、完整集合共同窗口验证及独立工作 receipt；不选择 winner 或授予自动批准 |
+| `photo_geometry/template_common_source_size.py` | 全部具名成员共同认可的原生完整 pair、独立直接 H、共同固定尺寸及逐成员条件尺寸对账；不改写成员自身几何 |
 | `photo_geometry/template_gate.py` | selected-only CandidateGate facts；不生成、选择或删除 proposal |
 | `x5crop/detection/output_deskew.py` | approved-only 6–24 trace、role-free、candidate-independent 的可选输出角度 observation |
 | `x5crop/detection/decision/`、`final/` | 最终决定、Decision 后 deskew assessment 与 approved geometry exposure |

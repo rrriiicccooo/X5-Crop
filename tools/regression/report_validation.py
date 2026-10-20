@@ -2209,8 +2209,10 @@ def _validate_gate(record: dict[str, Any], stage: str) -> None:
 
 @lru_cache(maxsize=None)
 def _common_proof_field_types(model: type) -> dict[str, Any]:
+    from x5crop.detection.photo_geometry.template_common_source_size import CommonSourceSizeProof
     return get_type_hints(model, localns={"BroadAssociationResult": BroadAssociationResult,
-                                        "PhaseCompetitionScope": PhaseCompetitionScope})
+                                        "PhaseCompetitionScope": PhaseCompetitionScope,
+                                        "CommonSourceSizeProof": CommonSourceSizeProof})
 
 
 _PROOF_READ_CACHE: ContextVar[dict | None] = ContextVar("report_proof_read_cache", default=None)

@@ -43,6 +43,7 @@ from .output_model import (
 )
 from .template_placement import FormatPlacement, TemplateFrame
 from .template_measurement_plan_model import MAX_CROSS_PAIRS
+from .template_common_source_size import CommonSourceSizeProof
 from .template_cross_model import (
     CrossLineProjectionBasis,
     CrossRoleBinding,
@@ -1012,6 +1013,7 @@ def common_h_output_footprint(
 def common_phase_output_footprint(
     placements: tuple[FormatPlacement, ...],
     outputs: tuple[OutputFootprint, ...],
+    *, source_size_proof: CommonSourceSizeProof | None = None,
 ) -> CommonOutputFootprint:
     """Test all supplied ordinal interpretations under one proven source size.
 
@@ -1020,10 +1022,17 @@ def common_phase_output_footprint(
     """
     if not 1 < len(placements) <= MAX_CROSS_PAIRS:
         raise ValueError("common phase output requires a bounded complete plural set")
-    if any(placement.source_scan_geometry != placements[0].source_scan_geometry
-           for placement in placements):
-        raise ValueError("phase members do not establish the same fixed source W/H state")
-    return _common_output_footprint(placements, outputs, identity_prefix="common-phase-footprint")
+    if source_size_proof is None:
+        if any(placement.source_scan_geometry != placements[0].source_scan_geometry for placement in placements):
+            raise ValueError("phase members do not establish the same fixed source W/H state")
+    elif (source_size_proof.state != EvidenceState.SUPPORTED
+            or source_size_proof.placement_ids != tuple(p.placement_id for p in placements)
+            or source_size_proof.conditional_extents != tuple((
+                p.source_scan_geometry.width_state.extent_projection_px(),
+                p.source_scan_geometry.height_state.extent_projection_px()) for p in placements)):
+        raise ValueError("phase common output changed its independent source size member set")
+    return _common_output_footprint(placements, outputs, identity_prefix="common-phase-footprint",
+                                   source_size_proof=source_size_proof)
 
 
 def _common_output_footprint(
@@ -1031,8 +1040,9 @@ def _common_output_footprint(
     outputs: tuple[OutputFootprint, ...],
     *, projections: tuple[FeasiblePlacementProjection, ...] = (),
     identity_prefix: str,
+    source_size_proof: CommonSourceSizeProof | None = None,
 ) -> CommonOutputFootprint:
-    """Cover one slot under every supplied H explanation with fixed W ownership.
+    """Cover one slot under every supplied explanation with proven fixed size.
 
     Mandatory is the complete union. Requested remains a single fixed-size
     rectangle even when that union does not fit. Search completeness and
@@ -1050,7 +1060,8 @@ def _common_output_footprint(
     for placement, output in zip(placements, outputs, strict=True):
         _assert_selected_output(placement, output)
         if any(getattr(placement, field) != getattr(first, field) for field in same_w_fields) or (
-            placement.source_scan_geometry.width_state != first.source_scan_geometry.width_state
+            source_size_proof is None
+            and placement.source_scan_geometry.width_state != first.source_scan_geometry.width_state
         ):
             raise ValueError("common H output requires identical W ownership and source width authority")
         if output.envelope.boundary_use != native.envelope.boundary_use:
@@ -1063,14 +1074,16 @@ def _common_output_footprint(
     if len({p.placement_id for p in placements}) != len(placements):
         raise ValueError("common output repeats a placement")
     mandatory = convex_hull(tuple(point for output in outputs for point in output.mandatory_source_footprint))
-    requested = fixed_output_rectangle(native.fixed_size, native.width_axis, mandatory, native.source_extent)
+    fixed_size = native.fixed_size if source_size_proof is None else source_size_proof.source_geometry.fixed_output_size
+    requested = fixed_output_rectangle(fixed_size, native.width_axis, mandatory, native.source_extent)
     saturation = _saturation_facts(requested, mandatory, native.sampling_authority_box, native.source_extent)
     required = (
         clip_convex_polygon_to_bounds(requested, sampling_authority_bounds(native.sampling_authority_box, native.source_extent))
         if saturation and all(fact.source_boundary for fact in saturation)
         else requested
     )
-    geometry_id = run_local_id(identity_prefix, *sorted(output.geometry_id for output in outputs))
+    geometry_id = run_local_id(identity_prefix, *sorted(output.geometry_id for output in outputs),
+        *(() if source_size_proof is None else (source_size_proof.source_geometry.geometry_id,)))
     if projections and (len(projections) != len(placements) or any(
             p.placement_id != placement.placement_id for p,placement in zip(projections, placements, strict=True))):
         raise ValueError("common H member projections changed identity or order")
@@ -1078,9 +1091,10 @@ def _common_output_footprint(
         common_member_budget_assessment(placement, output, requested, geometry_id=geometry_id))
         for placement, output in zip(placements, outputs, strict=True))
     return CommonOutputFootprint(
-        geometry_id=geometry_id, fixed_size=native.fixed_size, members=outputs,
+        geometry_id=geometry_id, fixed_size=fixed_size, members=outputs,
         mandatory_source_footprint=mandatory, requested_source_footprint=requested,
         required_source_footprint=required, member_budgets=tuple(budgets),
         saturation_facts=saturation, sampling_authority_box=native.sampling_authority_box,
         source_extent=native.source_extent, authority_profile_id=native.authority_profile_id,
+        source_size_proof=source_size_proof,
     )

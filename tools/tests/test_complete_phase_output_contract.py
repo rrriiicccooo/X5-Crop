@@ -3,6 +3,7 @@
 from dataclasses import replace
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from tools.regression.phase_output_validation import assert_replayed_facts
 from tools.tests import test_template_phase_membership_contract as membership_fixture
@@ -12,11 +13,40 @@ from x5crop.run_local_identity import run_local_id, source_identity_scope
 from x5crop.detection.photo_geometry.template_phase_output import (
     CompletePhaseOutputProof, PhaseMemberOutputProof, PhaseMemberOutputGap, PhaseMemberOutputWork,
     _member_registration_ids,
+    _build_complete_phase_output,
 )
 from x5crop.detection.photo_geometry.model import BoundaryRole
+from x5crop.detection.photo_geometry.template_phase_model import PhaseFitStatus
+from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
+from x5crop.domain import PositiveInterval
+from x5crop.formats import FramePhysicalSpec
 
 
 class CompletePhaseOutputContractTest(unittest.TestCase):
+    def test_exhausted_complete_proof_keeps_all_keys_without_reconstructing_common_size(self):
+        fit = placement_sequence(placement_template(3))
+        fixture = membership_fixture.TemplatePhaseMembershipContractTest()
+        scope = fixture._scope(fit.template, tuple(fixture._member(fit, index) for index in range(3)),
+                               fixture._receipt(hypotheses=3))
+        scale = PositiveInterval.exact(10.0)
+        source = SourceScanGeometry.create(FramePhysicalSpec(36.0, 24.0, 2.0),
+            width_scale_px_per_mm=scale, height_scale_px_per_mm=scale)
+        lane = SimpleNamespace(phase_competition=SimpleNamespace(status=PhaseFitStatus.BOUND_EXCEEDED,
+            competition_scopes=(scope,)), phase_input=SimpleNamespace(source_domain=None, observations=()),
+            source_scan_geometry=source, coarse_support=SimpleNamespace(enclosing_side_facts=()),
+            lane=SimpleNamespace(scan_canvas=SimpleNamespace(axis_scales=SimpleNamespace(
+                width_axis_px_per_mm=scale, height_axis_px_per_mm=scale))))
+        raw = SimpleNamespace(reserve_bytes=lambda facts: 0, reserved_bytes=0, retained_bytes=0,
+                              lookup_count=0, preparation_count=0)
+        with patch("x5crop.detection.photo_geometry.template_phase_output.prove_common_source_size",
+                   side_effect=AssertionError("raw reconstruction ran after exhaustion")):
+            proof = _build_complete_phase_output(lane, retained_review_bytes=0,
+                preparation=raw, direct_preparation=raw)
+        self.assertTrue(proof.bound_exceeded)
+        self.assertEqual(len(proof.source_size_proof.member_keys), 3)
+        self.assertEqual(proof.source_size_proof.work_units, 0)
+        self.assertFalse(proof.common_outputs)
+
     def test_third_unqualified_member_cannot_disappear_from_complete_proof(self):
         fit = placement_sequence(placement_template(3))
         fixture = membership_fixture.TemplatePhaseMembershipContractTest()

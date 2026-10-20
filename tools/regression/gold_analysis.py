@@ -55,8 +55,8 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record, validate_placement_feature_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v27"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v28"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v28"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v29"
 RETAINED_PLACEMENT_SCOPE = "retained_canonical_pair_conditional_cross_and_independent_phase_review_proposals"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
@@ -95,6 +95,14 @@ def _complete_phase_output_diagnostic(lane):
             "common_output_count": len(proof["common_outputs"]), "common_failure": proof["common_failure"],
             "bound_exceeded": proof["bound_exceeded"], "work_units": proof["work_units"],
             "peak_temporary_bytes": proof["peak_temporary_bytes"],
+            "source_size_state": None if proof["source_size_proof"] is None else proof["source_size_proof"]["state"],
+            "scope_outputs": [{"scope_id": item["scope_id"], "state": item["state"],
+                "member_count": len(item["source_size_proof"]["member_keys"]),
+                "source_size_state": item["source_size_proof"]["state"],
+                "source_size_gaps": item["source_size_proof"]["gaps"],
+                "width_pair_count": len(item["source_size_proof"]["width_pairs"]),
+                "common_output_count": len(item["common_outputs"]), "common_failure": item["common_failure"]}
+                for item in proof["scope_outputs"]],
         },
     }
 

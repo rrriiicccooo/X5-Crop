@@ -56,6 +56,9 @@ requires manual review; fitting two proposals into one window alone does not qua
 Reports retain all competing members from each positioning stage and check each member's own width, height,
 top/bottom association, and protection budget. Members with missing qualification evidence remain in the set;
 when prerequisites are unmet, their evidence remains and output geometry and budget are explicitly marked unevaluated.
+Original complete-photo boundaries independently accepted by every interpretation can establish common dimensions;
+each interpretation retains its own dimension ranges and protection requirements. Reports distinguish a positioning
+stage's common window from the complete historical set. Passing some stages still requires manual review.
 Manual review continues until the complete set has a compliant window under the same fixed dimensions.
 
 Acceptance concerns the final crops: correct slot correspondence, no missing or duplicate photos, full protection of

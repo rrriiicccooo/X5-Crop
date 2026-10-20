@@ -39,6 +39,14 @@ class MembershipTransition:
 @dataclass(frozen=True)
 class MembershipWork:
     visited_count: int = 0
+    anchor_check_count: int = 0
+    initial_filter_count: int = 0
+    branch_filter_count: int = 0
+    search_node_count: int = 0
+    search_branch_count: int = 0
+    search_maximum_depth: int = 0
+    union_lookahead_count: int = 0
+    raw_union_atom_visit_count: int = 0
     raw_union_input_count: int = 0
     raw_identity_check_count: int = 0
     trace_conflict_count: int = 0
@@ -57,8 +65,19 @@ class MembershipWork:
             raise ValueError("membership work must contain nonnegative actual counts")
         if (
             self.visited_count != self.trace_conflict_count + self.physical_region_count
+            or self.visited_count != (
+                self.anchor_check_count + self.initial_filter_count + self.branch_filter_count
+                + self.union_lookahead_count + self.maximality_extension_check_count
+            )
             or self.physical_region_count != self.empty_region_count + self.feasible_set_count
+            or self.anchor_check_count > 1
+            or not self.union_lookahead_count <= self.search_node_count <= self.union_lookahead_count + 1
+            or self.search_branch_count > self.union_lookahead_count
+            or (self.search_node_count and self.search_node_count > 2 * self.search_branch_count + 1)
+            or (self.search_node_count == 0) != (self.search_maximum_depth == 0)
+            or self.search_maximum_depth > self.search_node_count
             or self.maximality_extension_check_count > self.maximality_variable_visit_count
+            or self.maximality_variable_visit_count > self.maximality_extension_check_count + 1
             or self.polygon_clip_count > 2 * self.raw_interval_count
         ):
             raise ValueError("membership search lost its work ledger")
@@ -90,13 +109,25 @@ class MembershipScope:
             or any(tuple(sorted(set(group), key=str)) != group
                    or not set(self.anchor_observation_ids).issubset(group)
                    or len(group) > self.atom_count for group in self.maximal_member_groups)
+            or len(self.maximal_member_groups) > self.work.union_lookahead_count
             or self.work.visited_count > MAXIMUM_MEMBERSHIP_VISITS
-            or self.work.raw_union_input_count > 2 * self.raw_transition_count * self.work.visited_count
+            or self.work.initial_filter_count > self.atom_count - len(self.anchor_observation_ids)
+            or self.work.branch_filter_count > self.atom_count * self.work.search_branch_count
+            or self.work.search_maximum_depth > self.atom_count
+            or self.work.raw_union_atom_visit_count > self.atom_count * self.work.visited_count
+            or self.work.raw_union_input_count > self.raw_transition_count * self.work.raw_union_atom_visit_count
             or self.work.raw_identity_check_count > self.raw_transition_count * self.work.visited_count
             or self.work.raw_interval_count > self.query_trace_count * self.work.physical_region_count
             or self.work.polygon_vertex_evaluation_count > self.work.physical_region_count * (
                 4 * self.query_trace_count ** 2 + 10 * self.query_trace_count)
-            or self.work.maximality_variable_visit_count > self.atom_count * self.work.feasible_set_count
+            or self.work.maximality_variable_visit_count > self.atom_count * self.work.union_lookahead_count
+            or (self.state == MembershipState.COMPLETE and (
+                self.work.search_node_count != self.work.union_lookahead_count
+                or self.work.maximality_variable_visit_count != self.work.maximality_extension_check_count
+            ))
+            or (self.state == MembershipState.NO_INDEPENDENT_ANCHOR and any(
+                getattr(self.work, field.name) for field in fields(self.work)
+            ))
         ):
             raise ValueError("membership scope is invalid or exceeds finite work bounds")
 
@@ -191,10 +222,13 @@ def enumerate_membership_scope(
 ) -> MembershipScope:
     """Enumerate every maximal feasible superset of all independent anchors.
 
-    Trace conflicts and empty full physical domains are monotone. No fit,
-    loss, role permission, support ranking, or placement result prunes a set.
-    A completed search retains every maximal interpretation; exhaustion
-    exposes work only, never a purportedly complete prefix.
+    Trace conflicts and empty full physical domains are monotone. Include /
+    exclude branches preserve all feasible maximal interpretations. A whole
+    remaining-union lookahead closes a compatible branch only after checking
+    every previously excluded atom for a feasible extension. Every oracle
+    checks the complete raw union, without pairwise substitution or a cache.
+    No fit, loss, role permission, support ranking, or placement result prunes
+    a set. Exhaustion exposes work only, never a purportedly complete prefix.
     """
     if not 0 <= remaining_visits <= MAXIMUM_MEMBERSHIP_VISITS:
         raise ValueError("membership visit budget is invalid")
@@ -222,21 +256,31 @@ def enumerate_membership_scope(
     allowance = spec.inlier_minimum_threshold_mm * scale_px_per_mm
     cap = math.tan(math.radians(spec.maximum_measurable_line_angle_degrees))
     reference = (query_trace_positions_px[0] + query_trace_positions_px[-1]) / 2
-    feasible: set[int] = set()
+    maximal: list[tuple[ObservationId, ...]] = []
 
     class Exhausted(Exception):
         pass
 
-    def visit(mask: int, start: int, previous: frozenset[ObservationId], addition: frozenset[ObservationId]) -> None:
+    def feasible(mask: int, purpose: str) -> bool:
         if work['visited_count'] >= remaining_visits:
             raise Exhausted
         work['visited_count'] += 1
-        work['raw_union_input_count'] += len(previous) + len(addition)
-        identities = previous | addition
+        work[purpose] += 1
+        selected = list(anchors)
+        while mask:
+            bit = mask & -mask
+            selected.append(variables[bit.bit_length() - 1])
+            mask ^= bit
+        inputs = tuple(members[key] for key in selected)
+        work['raw_union_atom_visit_count'] += len(inputs)
+        # Atoms may share raw identities. Count every actual union input, not
+        # only the unique result, with the finite A * T * V scope bound.
+        work['raw_union_input_count'] += sum(map(len, inputs))
+        identities = frozenset().union(*inputs)
         work['raw_identity_check_count'] += len(identities)
         if len({raw[key].trace_coordinate_px for key in identities}) != len(identities):
             work['trace_conflict_count'] += 1
-            return
+            return False
         intervals = tuple((raw[key].trace_coordinate_px, FiniteInterval(
             raw[key].physical_position_interval_px.minimum - allowance,
             raw[key].physical_position_interval_px.maximum + allowance,
@@ -245,26 +289,40 @@ def enumerate_membership_scope(
         work['raw_interval_count'] += len(intervals)
         if physical_line_region(intervals, cap, reference, work=work) is None:
             work['empty_region_count'] += 1
-            return
-        feasible.add(mask)
+            return False
         work['feasible_set_count'] += 1
-        for index in range(start, len(variables)):
-            visit(mask | (1 << index), index + 1, identities, members[variables[index]])
+        return True
+
+    def search(required: int, pending: tuple[int, ...], excluded: tuple[int, ...], depth: int) -> None:
+        work['search_node_count'] += 1
+        work['search_maximum_depth'] = max(work['search_maximum_depth'], depth)
+        union = required | sum(1 << index for index in pending)
+        if feasible(union, 'union_lookahead_count'):
+            for index in excluded:
+                work['maximality_variable_visit_count'] += 1
+                if feasible(union | (1 << index), 'maximality_extension_check_count'):
+                    return
+            maximal.append(tuple(sorted((*anchors, *(variables[index] for index in range(len(variables))
+                                                       if union & (1 << index))), key=str)))
+            return
+        # Every pending atom is individually feasible with required. Thus a
+        # failed whole union has a pending atom and both branches are complete.
+        work['search_branch_count'] += 1
+        selected, *rest = pending
+        tail = tuple(rest)
+        included = required | (1 << selected)
+        next_pending = tuple(index for index in tail
+                             if feasible(included | (1 << index), 'branch_filter_count'))
+        next_excluded = tuple(index for index in excluded
+                              if feasible(included | (1 << index), 'branch_filter_count'))
+        search(included, next_pending, next_excluded, depth + 1)
+        search(required, tail, (*excluded, selected), depth + 1)
 
     try:
-        visit(0, 0, frozenset(), frozenset().union(*(members[key] for key in anchors)))
+        if feasible(0, 'anchor_check_count'):
+            pending = tuple(index for index in range(len(variables))
+                            if feasible(1 << index, 'initial_filter_count'))
+            search(0, pending, (), 1)
     except Exhausted:
         return receipt(MembershipState.SEARCH_BOUND_EXCEEDED)
-    maximal = []
-    for mask in sorted(feasible):
-        for index in range(len(variables)):
-            work['maximality_variable_visit_count'] += 1
-            if mask & (1 << index):
-                continue
-            work['maximality_extension_check_count'] += 1
-            if (mask | (1 << index)) in feasible:
-                break
-        else:
-            maximal.append(tuple(sorted((*anchors, *(name for index, name in enumerate(variables)
-                                                     if mask & (1 << index))), key=str)))
     return receipt(MembershipState.COMPLETE, tuple(sorted(maximal)))
