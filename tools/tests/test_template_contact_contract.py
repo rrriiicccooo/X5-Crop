@@ -30,7 +30,7 @@ from x5crop.detection.photo_geometry.template_phase_model import (
 
 
 class TemplateContactContractTest(unittest.TestCase):
-    def test_proven_contact_keeps_native_authority_for_both_shared_roles(self) -> None:
+    def test_proven_contact_keeps_coordinates_without_borrowing_native_role_authority(self) -> None:
         measurement = phase_sequence_measurement(
             "one-sided-contact-hint", FiniteInterval(0.0, 220.0),
         )
@@ -56,8 +56,14 @@ class TemplateContactContractTest(unittest.TestCase):
                 for fact in authority.facts[1:3]:
                     self.assertEqual(fact.state, EvidenceState.SUPPORTED)
                     self.assertEqual(fact.bases, (
-                        DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE,
+                        DirectRoleAuthorityBasis.SOURCE_WIDE_EDGE if fact.role == hint
+                        else DirectRoleAuthorityBasis.SHARED_CONTACT_EDGE,
                     ))
+                    self.assertTrue(fact.has_unconditional_coordinate_authority)
+                    self.assertEqual(fact.has_topology_independent_coordinate_authority,
+                                     fact.role == hint)
+                self.assertEqual(len({fact.observation_id for fact in authority.facts[1:3]}), 1)
+                self.assertEqual(len({fact.evidence_group_id for fact in authority.facts[1:3]}), 1)
                 # Keeping the same native measurement in an ordinary role
                 # cannot borrow the Contact pair's role-free qualification.
                 bindings = list(result.best.role_bindings)
@@ -71,6 +77,14 @@ class TemplateContactContractTest(unittest.TestCase):
                 opposite = next(f for f in ordinary_authority.facts
                                 if f.role_index == (1 if hint == BoundaryRole.START else 2))
                 self.assertEqual(opposite.state, EvidenceState.UNAVAILABLE)
+                native_bindings = list(result.best.role_bindings)
+                native_bindings[1 if hint == BoundaryRole.START else 2] = None
+                native_authority = assess_direct_role_binding_authority(
+                    replace(ordinary, role_bindings=tuple(native_bindings)), observations, (), (measurement,),
+                )
+                native = next(f for f in native_authority.facts if f.role == hint
+                              and f.observation_id == observations[1].observation_id)
+                self.assertTrue(native.has_topology_independent_coordinate_authority)
 
     def test_positive_separator_edges_cannot_become_contact_candidates(
         self,
