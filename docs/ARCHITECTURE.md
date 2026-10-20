@@ -2321,7 +2321,7 @@ format/source 状态测量共同 W。共同 H 只从每个成员都已完整关�
 `common_outputs` 可保留预算失败窗口作为诊断，只有 `state=supported` 且 `common_failure=null` 才表示窗口
 验证通过。当前该分支在规范 selection/Gate 后执行，不授予照片序号映射、canonical winner 或自动输出权限。
 
-当前报告 schema 为 114。普通报告保留完整账本和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
+当前报告 schema 为 115。普通报告保留完整账本和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
 重放全部 producer 和独立成员，再比对结果、缺口和工作。成员 Cross 只重复自身 H／纵向域、best/runner、
 求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
 外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source
@@ -2459,11 +2459,21 @@ separator、source-W 与最终权限仍按本成员独立判定。
 仅保存最多六份按完整 template 区分的只读原生索引，以及一份 intrinsic 输入索引；角色绑定和本成员
 source-W 的资格仍逐次独立核验。不同输入拒绝复用，满额后继续原准备；lookup、实际 preparation 与
 保留字节独立记账，最坏内存在执行前预留，准备对象随本次全集验证结束释放。
-晚期投影和关系传播也在该准备对象内复用最多六份按完整 template 区分的原生 fact／separator pair
-输入，不包含成员映射、source W 或求解结果。每份保留上界为 `4096 + 4096H + 1024S` 字节，执行前
+原生补边、晚期投影和关系传播也在该准备对象内复用最多六份按完整 template 区分的全部原生 fact、
+完整 separator support 与 projection pair 输入，不包含成员映射、source W 或求解结果。补边保留弱线、
+原子 component 资格和唯一性核验，不把 projection pair 当作其原子资格。每份保留上界为
+`4096 + 4096H + 1024S` 字节，执行前
 预留六份保留量及一份当前准备量；满额继续原编译，权限与连续拟合仍逐成员执行。
 Coverage 的闭整数区间先按原浮点邻接判据合并，再建立最终 typed 区间；取整、query identity 和完整
 坐标计数保持，避免为每个临时交集重复构造区间。
+每个成员另建一份 `AdjacencyCoveragePreparation`，绑定完整 measurement tuple 和 template，只保存
+已执行 query 的 transition ownership 与精确 required interval 的中性 trace 覆盖。incomplete query
+的 trace 仍计入 required；每次从当前 fit 的 full intervals 重建 corridor，并按本次 observed ordinals
+重新生成 `normal_inference_required`，不得复用完整资格包装。缓存最多 `C = 6(N−1)` 份 corridor，
+满额继续原计算、不再保留；该对象随单成员验证结束释放，不跨成员复用。Q 为 query 数、T 为全部 query
+的 trace 并集大小，预留 `4096 + 128ΣTq + (C+1)[256 + T(512 + 128Q)]` 字节，含一份当前计算量，
+在成员执行前并入原临时内存上限。input preparation、corridor lookup 和实际计算分别计入工作；
+原逐成员覆盖与权限的逻辑检查上界保持。
 
 正式输入限于单页 unsigned 16-bit、RGB 三通道、contiguous TIFF；压缩接受 `NONE`、`LZW`、
 `DEFLATE` / `ADOBE_DEFLATE` 或 `ZSTD`。Orientation 1–8 在 decode boundary 规范化，输出写

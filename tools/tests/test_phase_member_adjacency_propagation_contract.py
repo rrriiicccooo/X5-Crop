@@ -635,6 +635,9 @@ class PhaseMemberAdjacencyPropagationContractTest(unittest.TestCase):
         )
         for values in (
             {"adjacency_refit_count": 2},
+            {"coverage_input_preparation_count": 2},
+            {"coverage_corridor_lookup_count": 1},
+            {"coverage_input_preparation_count": 1, "coverage_corridor_preparation_count": 1},
             {
                 "adjacency_refit_count": 1,
                 "adjacency_direct_fit_count": 1,

@@ -1069,6 +1069,8 @@ def assess_phase_candidate_adjacency(
     *,
     outer_material_boundaries: tuple[OuterMaterialBoundaryObservation, ...] = (),
     authorized_source_frame_width_px: FiniteInterval | None = None,
+    direct_role_input_preparation=None,
+    adjacency_coverage_preparation=None,
 ) -> PhaseCandidateAdjacencyAssessment:
     """Replay only registered facts; no fit, pixel query or candidate selection."""
 
@@ -1076,10 +1078,12 @@ def assess_phase_candidate_adjacency(
         fit, sequence_edges, separator_bands, measurement_sets,
         outer_material_boundaries=outer_material_boundaries,
         authorized_source_frame_width_px=authorized_source_frame_width_px,
+        input_preparation=direct_role_input_preparation,
     )
     coverage = assess_adjacency_observation_coverage(
         fit, measurement_sets,
         directly_observed_ordinals=tuple(item.relation_ordinal for item in fit.adjacency_relations),
+        input_preparation=adjacency_coverage_preparation,
     )
     continuity = observe_adjacency_continuity(
         fit, sequence_edges, separator_bands, coverage, overlap_edge_pairs,

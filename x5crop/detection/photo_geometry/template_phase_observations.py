@@ -705,7 +705,7 @@ def prepare_projection_facts(
     pairs = _separator_pair_facts(support.bands,
         tuple(item for item in facts if item.direct),
         maximum_material_gap_px=maximum_material_gap_px)
-    return facts, pairs
+    return facts, pairs, support
 
 
 def _refine_local_role_bindings(
@@ -714,6 +714,7 @@ def _refine_local_role_bindings(
     separator_bands: Sequence[SeparatorBandObservation],
     *,
     intrinsic_coordinate_authority_ids: frozenset[ObservationId] = frozenset(),
+    direct_role_input_preparation=None,
     frame_width_authority_px: FiniteInterval | None = None,
     excluded_role_bindings: frozenset[
         tuple[int, ObservationId]
@@ -734,19 +735,20 @@ def _refine_local_role_bindings(
     """
 
     registered_observations = tuple(observations)
-    separator_support = prepare_phase_separator_support(
-        registered_observations,
-        separator_bands,
-        maximum_material_gap_px=fit.template.gap_prior_px.maximum,
-    )
+    if direct_role_input_preparation is None:
+        separator_support = prepare_phase_separator_support(
+            registered_observations, separator_bands,
+            maximum_material_gap_px=fit.template.gap_prior_px.maximum)
+        facts = _facts(separator_support.observations,
+            separator_support_ids=separator_support.resolution.edge_component_ids)
+    else:
+        # Local completion does not consume source_spanning_direct_line;
+        # projection retains its trace-aware fact for its own seed checks.
+        facts, _pairs, separator_support = direct_role_input_preparation.local_facts_for(
+            fit, registered_observations, separator_bands)
     eligible_bands = separator_support.bands
     observations = separator_support.observations
     support_resolution = separator_support.resolution
-    support_ids = support_resolution.edge_component_ids
-    facts = _facts(
-        observations,
-        separator_support_ids=support_ids,
-    )
     by_id = {item.observation_id: item for item in facts}
     roles = fit.template.roles
     # Local observations must be allowed to contradict the current Grid fit.

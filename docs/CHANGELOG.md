@@ -67,8 +67,10 @@
   传播先预留工作和内存，仍受原全集上限约束。
   固定 template 的原生投影输入在同次全集验证内有界复用；成员权限、W 和求解结果仍独立重建。
   覆盖并集保持原闭整数语义，合并后才构造最终区间，减少重复取整与中间对象。
+  原生补边保留全部弱线与原子 separator 资格，最终邻接使用相同的原生输入准备；各成员在自身内部
+  有界复用中性 query 覆盖，按当前 full corridor 和 observed ordinals 分别重建推断资格并记录工作。
 - 对全部既有候选核验遗漏的唯一获权 separator 伙伴；仅原生完整可见宽度超过原物理上限时保留为
-  关联反证，不补绑定、不调整排序、不借 source W。报告进入当前 schema 114，独立 Review 显示各解释的
+  关联反证，不补绑定、不调整排序、不借 source W。报告进入当前 schema 115，独立 Review 显示各解释的
   `geometry_basis` 并重放十二类完整映射。Coverage／continuity
   校验共用 typed owner，并从开发报告原证据重建，删除重复判据。
   最终保留解释的 `retained_adjacency_assessments` 同时出现在普通及 development 报告，从原登记事实

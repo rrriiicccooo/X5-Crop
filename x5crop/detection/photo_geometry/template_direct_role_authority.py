@@ -282,18 +282,24 @@ class DirectRoleInputPreparation:
     def projection_facts_for(self, phase_input):
         self._check_inputs(phase_input.observations, phase_input.separator_bands,
             phase_input.sequence_measurement_sets, phase_input.outer_material_boundaries)
+        return self._projection_facts_for_template(phase_input.template)
+
+    def local_facts_for(self, fit, observations, separator_bands):
+        self._check_inputs(observations, separator_bands, self.inputs[2], self.inputs[3])
+        return self._projection_facts_for_template(fit.template)
+
+    def _projection_facts_for_template(self, template):
         self.lookup_count += 1
-        facts = self._projection_facts.get(phase_input.template)
+        facts = self._projection_facts.get(template)
         if facts is not None:
             return facts
         from .template_phase_observations import prepare_projection_facts
         self.preparation_count += 1
-        facts = prepare_projection_facts(phase_input.observations, phase_input.separator_bands,
-            maximum_material_gap_px=phase_input.template.gap_prior_px.maximum,
-            registered_trace_positions_px=(phase_input.sequence_measurement_sets[0].query.trace_positions_px
-                if phase_input.sequence_measurement_sets else ()))
+        facts = prepare_projection_facts(self.inputs[0], self.inputs[1],
+            maximum_material_gap_px=template.gap_prior_px.maximum,
+            registered_trace_positions_px=(self.inputs[2][0].query.trace_positions_px if self.inputs[2] else ()))
         if len(self._projection_facts) < MAX_TEMPLATE_FIT_PASSES:
-            self._projection_facts[phase_input.template] = facts
+            self._projection_facts[template] = facts
             self.retained_bytes += self.projection_facts_bytes
         return facts
 

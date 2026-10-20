@@ -51,6 +51,7 @@ from .template_placement import FormatPlacement, compose_format_placement, resol
 from .template_registration import local_cross_refinements_closed, membership_projection_coverage
 from .template_coarse_sides import CoarsePairGeometryPreparation
 from .template_residual import AdjacencyRelationAnalysis, derive_adjacency_relations
+from .template_adjacency_coverage import AdjacencyCoveragePreparation
 
 
 class PhaseMemberOutputGap(str, Enum):
@@ -205,6 +206,9 @@ class PhaseMemberOutputWork:
     adjacency_nominal_grid_solve_count: int = 0
     adjacency_nominal_grid_solve_success_count: int = 0
     adjacency_refit_work_bound: int = 0
+    coverage_input_preparation_count: int = 0
+    coverage_corridor_lookup_count: int = 0
+    coverage_corridor_preparation_count: int = 0
     phase_authority_check_bound: int = 0
     direct_role_input_lookup_count: int = 0
     direct_role_input_preparation_count: int = 0
@@ -231,6 +235,9 @@ class PhaseMemberOutputWork:
         if any(type(value) is not int or value < 0 for value in self.__dict__.values()):
             raise ValueError("phase member output work must be nonnegative integers")
         if (self.late_projection_count > 1 or self.width_evaluation_count > 1
+                or self.coverage_input_preparation_count > 1
+                or self.coverage_corridor_preparation_count > self.coverage_corridor_lookup_count
+                or (self.coverage_corridor_lookup_count > 0 and self.coverage_input_preparation_count != 1)
                 or self.adjacency_refit_count > 1
                 or self.adjacency_direct_fit_count + self.adjacency_nominal_grid_solve_count > self.adjacency_refit_count
                 or self.adjacency_nominal_grid_solve_success_count > self.adjacency_nominal_grid_solve_count
@@ -256,7 +263,9 @@ def _member_work_units(work, role_count):
         + work.direct_role_input_lookup_count + work.direct_role_input_preparation_count
         + work.adjacency_refit_work_bound + work.adjacency_refit_count
         + work.adjacency_direct_fit_count + work.adjacency_nominal_grid_solve_count
-        + work.adjacency_nominal_grid_solve_success_count)
+        + work.adjacency_nominal_grid_solve_success_count
+        + work.coverage_input_preparation_count + work.coverage_corridor_lookup_count
+        + work.coverage_corridor_preparation_count)
 
 
 @dataclass(frozen=True)
@@ -383,6 +392,7 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
     detail = None
     work = PhaseMemberOutputWork()
     local = late = assessed = width = adjacency = context = placement = propagation = None
+    coverage_preparation = None
     outputs = budgets = ()
     native_before = (0, 0) if direct_role_input_preparation is None else (
         direct_role_input_preparation.lookup_count, direct_role_input_preparation.preparation_count)
@@ -391,6 +401,11 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
         measured_work = replace(work, peak_temporary_bytes=max(work.peak_temporary_bytes,
             4096 + work.role_lookup_count * 32 + work.cross_evaluated_fit_count * 1024
             + work.output_evaluation_count * 4096))
+        if coverage_preparation is not None:
+            measured_work = replace(measured_work, coverage_input_preparation_count=1,
+                coverage_corridor_lookup_count=coverage_preparation.lookup_count,
+                coverage_corridor_preparation_count=coverage_preparation.preparation_count,
+                peak_temporary_bytes=measured_work.peak_temporary_bytes + coverage_preparation.reserved_bytes)
         if direct_role_input_preparation is not None:
             measured_work = replace(measured_work,
                 direct_role_input_lookup_count=direct_role_input_preparation.lookup_count - native_before[0],
@@ -426,7 +441,8 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
     intrinsic = (intrinsic_direct_role_authority_bases(phase_input.observations, phase_input.sequence_measurement_sets)
         if direct_role_input_preparation is None else direct_role_input_preparation.intrinsic_bases())
     refined = _refine_local_role_bindings(fit, phase_input.observations, phase_input.separator_bands,
-        intrinsic_coordinate_authority_ids=frozenset(intrinsic))
+        intrinsic_coordinate_authority_ids=frozenset(intrinsic),
+        direct_role_input_preparation=direct_role_input_preparation)
     local = refined.fit
     projected, late = _project_late_local_candidate(local, phase_input, allow_direct_rank=True,
         direct_role_input_preparation=direct_role_input_preparation)
@@ -440,17 +456,20 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
     if not _phase_residual_compatible(fit):
         gaps.append(PhaseMemberOutputGap.RESIDUAL_INCOMPATIBLE)
     phase = _conditional_phase(lane, scope, fit, late or member.projection)
+    coverage_preparation = AdjacencyCoveragePreparation(phase_input.sequence_measurement_sets, fit.template)
     registered_fact_bound = (len(phase_input.observations) + len(phase_input.separator_bands)
         + sum(len(item.transitions) for item in phase_input.sequence_measurement_sets) + len(fit.role_bindings))
     work = replace(work, phase_authority_check_bound=4, registered_fact_check_bound=4 * registered_fact_bound)
     phase = _attach_selected_candidate_authorities(phase, phase_input, directly_observed_ordinals=(),
-        direct_role_input_preparation=direct_role_input_preparation)
+        direct_role_input_preparation=direct_role_input_preparation,
+        adjacency_coverage_preparation=coverage_preparation)
     analysis = derive_adjacency_relations(fit, phase.adjacency_continuity_observations)
     relation_checks = analysis.evaluated_adjacency_count
     if _physical_relation_identities(analysis.relations) - _physical_relation_identities(fit.adjacency_relations):
         refit_bound = 4 * len(fit.role_bindings) * (
             len(phase_input.observations) + len(phase_input.separator_bands) + len(fit.role_bindings)) + 128
-        if _member_work_units(work, len(fit.role_bindings)) + relation_checks + refit_bound + 4 > available_work_units:
+        coverage_work = 1 + coverage_preparation.lookup_count + coverage_preparation.preparation_count
+        if _member_work_units(work, len(fit.role_bindings)) + coverage_work + relation_checks + refit_bound + 4 > available_work_units:
             gaps.append(PhaseMemberOutputGap.WORK_BOUND_EXCEEDED)
             detail = "complete phase adjacency propagation work bound exceeded"
             work = replace(work, adjacency_relation_check_count=relation_checks)
@@ -475,7 +494,8 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
             return result()
         fit = propagated
         phase = _attach_selected_candidate_authorities(_conditional_phase(lane, scope, fit, late or member.projection),
-            phase_input, directly_observed_ordinals=(), direct_role_input_preparation=direct_role_input_preparation)
+            phase_input, directly_observed_ordinals=(), direct_role_input_preparation=direct_role_input_preparation,
+            adjacency_coverage_preparation=coverage_preparation)
         analysis = derive_adjacency_relations(fit, phase.adjacency_continuity_observations)
         relation_checks += analysis.evaluated_adjacency_count
     ordinals = tuple(fact.relation_ordinal for fact in analysis.adjacency_facts)
@@ -491,7 +511,8 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
     ))
     assessed = _apply_final_lattice_contract(phase, phase_input,
         directly_observed_ordinals=ordinals, source_frame_width_authority=width,
-        direct_role_input_preparation=direct_role_input_preparation)
+        direct_role_input_preparation=direct_role_input_preparation,
+        adjacency_coverage_preparation=coverage_preparation)
     fit = assessed.best
     lattice = assessed.global_lattice_authority
     if (lattice is not None and lattice.state == EvidenceState.SUPPORTED
@@ -501,6 +522,8 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
         phase_input.separator_bands, phase_input.sequence_measurement_sets,
         phase_input.overlap_edge_pair_observations,
         outer_material_boundaries=phase_input.outer_material_boundaries,
+        direct_role_input_preparation=direct_role_input_preparation,
+        adjacency_coverage_preparation=coverage_preparation,
         authorized_source_frame_width_px=(width.width_px
             if width.state == EvidenceState.SUPPORTED and width.matches_placement(fit) else None))
     work = replace(work, phase_authority_check_bound=4 + int(propagation is not None), width_evaluation_count=1)
@@ -766,6 +789,8 @@ def _build_complete_phase_output(lane, *, retained_review_bytes, preparation, di
             if not exceeded:
                 temporary_bound += 4096 + 1024 * (len(lane.phase_input.observations)
                     + len(lane.phase_input.separator_bands) + len(member.input_fit.role_bindings))
+                temporary_bound += AdjacencyCoveragePreparation.reserve_bytes(
+                    lane.phase_input.sequence_measurement_sets, member.input_fit.template)
             if memory_limit is not None and retained_review_bytes + retained_bytes + temporary_bound + preparation_reserve > memory_limit:
                 exceeded = True
             if exceeded:

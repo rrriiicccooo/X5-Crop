@@ -59,6 +59,24 @@ from tools.tests import test_phase_member_adjacency_propagation_contract as adja
 
 
 class TemplatePhaseRefinementContractTest(unittest.TestCase):
+    def test_local_completion_keeps_all_facts_when_reusing_trace_aware_inputs(self) -> None:
+        fixture = adjacency_fixture.PhaseMemberAdjacencyPropagationContractTest()
+        fit, inputs, _analysis, edges, _bands = fixture._fixture("overlap", missing=(5,))
+        inputs = replace(inputs, observations=edges)
+        preparation = DirectRoleInputPreparation(inputs.observations, inputs.separator_bands,
+            inputs.sequence_measurement_sets, inputs.outer_material_boundaries)
+        arguments = dict(intrinsic_coordinate_authority_ids=frozenset(preparation.intrinsic_bases()))
+        owner = phase_refinement._observations
+        expected = owner._refine_local_role_bindings(fit, inputs.observations, inputs.separator_bands, **arguments)
+        actual = owner._refine_local_role_bindings(fit, inputs.observations, inputs.separator_bands,
+            direct_role_input_preparation=preparation, **arguments)
+        self.assertEqual(actual, expected)
+        self.assertEqual(actual.binding_count, 1)
+        self.assertEqual(actual.fit.role_bindings[5].use, SequenceBindingUse.LOCAL_REFINEMENT)
+        facts, _pairs, _support = preparation.projection_facts_for(inputs)
+        self.assertTrue(any(fact.source_spanning_direct_line for fact in facts))
+        self.assertFalse(any(fact.source_spanning_direct_line for fact in owner._facts(inputs.observations)))
+
     def test_fixed_member_projection_reuses_only_immutable_registered_inputs(self) -> None:
         fixture = adjacency_fixture.PhaseMemberAdjacencyPropagationContractTest()
         fit, inputs, analysis, _edges, _bands = fixture._fixture("narrow", missing=(4, 5))

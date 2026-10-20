@@ -9,7 +9,7 @@ import math
 from ...domain import FiniteInterval
 from .measurement_model import PhotoBoundaryMeasurementSet
 from .model import QueryPurpose
-from .template_model import SequenceFit
+from .template_model import MAX_TEMPLATE_FIT_PASSES, SequenceFit, TemplateSpec
 
 
 class AdjacencyCoverageState(str, Enum):
@@ -203,11 +203,61 @@ def _trace_coverage(
     )
 
 
+def _registered_trace_intervals(measurement_sets):
+    trace_positions = tuple(sorted({trace for item in measurement_sets
+        for trace in item.query.trace_positions_px}))
+    by_trace = {trace: [] for trace in trace_positions}
+    for item in measurement_sets:
+        if item.coverage.complete:
+            for trace, ownership in zip(item.query.trace_positions_px,
+                    item.query.transition_ownership_intervals_px, strict=True):
+                by_trace[trace].append((ownership, item.query.query_id))
+    return tuple((trace, tuple(by_trace[trace])) for trace in trace_positions)
+
+
+class AdjacencyCoveragePreparation:
+    """One member's bounded neutral query coverage; never inference permission."""
+
+    def __init__(self, measurement_sets, template: TemplateSpec):
+        self.measurement_sets = measurement_sets
+        self.template = template
+        self._trace_intervals = _registered_trace_intervals(measurement_sets)
+        self._corridors = {}
+        self.maximum_corridors = MAX_TEMPLATE_FIT_PASSES * max(0, template.count - 1)
+        self.lookup_count = self.preparation_count = 0
+        self.reserved_bytes = self.reserve_bytes(measurement_sets, template)
+
+    @staticmethod
+    def reserve_bytes(measurement_sets, template):
+        trace_count = len({trace for item in measurement_sets for trace in item.query.trace_positions_px})
+        input_bytes = 4096 + 128 * sum(len(item.query.trace_positions_px) for item in measurement_sets)
+        corridor_bytes = 256 + trace_count * (512 + 128 * len(measurement_sets))
+        return input_bytes + (MAX_TEMPLATE_FIT_PASSES * max(0, template.count - 1) + 1) * corridor_bytes
+
+    def check_inputs(self, fit, measurement_sets):
+        if fit.template != self.template or (
+                measurement_sets is not self.measurement_sets and measurement_sets != self.measurement_sets):
+            raise ValueError("adjacency coverage preparation belongs to different template or registered queries")
+
+    def for_interval(self, required):
+        self.lookup_count += 1
+        coverage = self._corridors.get(required)
+        if coverage is not None:
+            return coverage
+        self.preparation_count += 1
+        coverage = tuple(_trace_coverage(trace, required, intervals)
+            for trace, intervals in self._trace_intervals)
+        if len(self._corridors) < self.maximum_corridors:
+            self._corridors[required] = coverage
+        return coverage
+
+
 def assess_adjacency_observation_coverage(
     fit: SequenceFit,
     measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
     *,
     directly_observed_ordinals: tuple[int, ...],
+    input_preparation: AdjacencyCoveragePreparation | None = None,
 ) -> tuple[AdjacencyObservationCoverage, ...]:
     """Map selected adjacency intervals to already executed query ownership."""
 
@@ -225,27 +275,11 @@ def assess_adjacency_observation_coverage(
         for item in measurement_sets
     ):
         raise TypeError("adjacency coverage requires sequence-window measurements")
-    trace_positions = tuple(
-        sorted(
-            {
-                trace
-                for item in measurement_sets
-                for trace in item.query.trace_positions_px
-            }
-        )
-    )
-    coverage_by_trace: dict[int, list[tuple[FiniteInterval, str]]] = {
-        trace: [] for trace in trace_positions
-    }
-    for item in measurement_sets:
-        if not item.coverage.complete:
-            continue
-        for trace, ownership in zip(
-            item.query.trace_positions_px,
-            item.query.transition_ownership_intervals_px,
-            strict=True,
-        ):
-            coverage_by_trace[trace].append((ownership, item.query.query_id))
+    if input_preparation is not None:
+        input_preparation.check_inputs(fit, measurement_sets)
+        trace_intervals = input_preparation._trace_intervals
+    else:
+        trace_intervals = _registered_trace_intervals(measurement_sets)
     values: list[AdjacencyObservationCoverage] = []
     for adjacency_index in range(max(0, fit.template.count - 1)):
         relation_ordinal = adjacency_index + 1
@@ -256,14 +290,9 @@ def assess_adjacency_observation_coverage(
             max(left.maximum, right.maximum),
         )
         required_per_trace = _integer_coordinate_count(required)
-        trace_coverage = tuple(
-            _trace_coverage(
-                trace,
-                required,
-                tuple(coverage_by_trace[trace]),
-            )
-            for trace in trace_positions
-        )
+        trace_coverage = (tuple(_trace_coverage(trace, required, intervals)
+            for trace, intervals in trace_intervals) if input_preparation is None
+            else input_preparation.for_interval(required))
         covered_trace_count = sum(item.complete for item in trace_coverage)
         covered_coordinate_count = sum(
             item.covered_coordinate_count for item in trace_coverage
@@ -277,11 +306,11 @@ def assess_adjacency_observation_coverage(
                 }
             )
         )
-        required_coordinate_count = required_per_trace * len(trace_positions)
+        required_coordinate_count = required_per_trace * len(trace_intervals)
         state = (
             AdjacencyCoverageState.COMPLETE
-            if trace_positions
-            and covered_trace_count == len(trace_positions)
+            if trace_intervals
+            and covered_trace_count == len(trace_intervals)
             and covered_coordinate_count == required_coordinate_count
             else AdjacencyCoverageState.INCOMPLETE
         )
@@ -291,7 +320,7 @@ def assess_adjacency_observation_coverage(
                 required_interval_px=required,
                 covering_query_ids=query_ids,
                 trace_coverage=trace_coverage,
-                required_trace_count=len(trace_positions),
+                required_trace_count=len(trace_intervals),
                 covered_trace_count=covered_trace_count,
                 required_coordinate_count=required_coordinate_count,
                 covered_coordinate_count=min(
