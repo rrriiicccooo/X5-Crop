@@ -76,6 +76,10 @@
   Review 都不能替代架构第 14 节定义的 release gate。
 - Development report 校验从各区域 contrast/texture 区间重建 separator material 状态和完整摘要，
   拒绝与实测区间矛盾的支持标签、遗漏区域的摘要和重复 observation。
+- 实现 `f881e35c` 的完整开发黄金覆盖 110 项任务、106 个来源 SHA，分析错误与危险自动批准均为 0。
+  同一 cohort 逐任务比较无回退：安全提案覆盖 110 项、安全且预算通过 91 项、首选安全 95 项、
+  安全自动批准 15 项。正式 24-source mean 为 4.858 秒，满足 `<= 5s`；正常 Hook 的 1307 项测试
+  （2 项跳过）及 12 项 CI 均通过。完整竞争验证仍不授予自动输出权限，发布检测 Gate 尚未闭合。
 - 发布资格必须把 accuracy、TIFF/metadata、性能、安装、目标平台、打包和 Hook/CI 证据绑定同一最终
   release commit。V5 当前仍为开发预览，未创建 RC、tag、GitHub Release 或公开 ZIP。
 
