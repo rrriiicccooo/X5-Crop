@@ -235,7 +235,7 @@ def _enclosing_support_cross_fit(inputs: TemplateCrossInput, candidate) -> Cross
     )
 
 
-def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
+def fit_template_cross(inputs: TemplateCrossInput, *, coarse_geometry_preparation=None) -> CrossFitCompetition:
     """Fit one fixed-H short-axis template with bounded interval search."""
 
     if not isinstance(inputs, TemplateCrossInput):
@@ -329,6 +329,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                 longitudinal_support_domain_groups_px=inputs.longitudinal_support_domain_groups_px,
                 minimum_shared_trace_support=inputs.minimum_shared_trace_support,
                 maximum_evaluated_candidates=max(0, available),
+                coarse_geometry_preparation=coarse_geometry_preparation,
             )
             support_pool.append(result)
             charged = result.evaluated_candidate_count

@@ -195,6 +195,7 @@ def prepare_template_cross_context(
     source_geometry: SourceScanGeometry,
     source_frame_width_authority: SourceFrameWidthAuthority,
     sequence_fits: tuple[SequenceFit, ...] | None = None,
+    coarse_geometry_preparation=None,
 ) -> TemplateCrossContext:
     """Compile the same canonical Cross path for each supplied role mapping.
 
@@ -279,7 +280,7 @@ def prepare_template_cross_context(
         ),
     )
     initial_source = source_geometry
-    competition = fit_template_cross(inputs)
+    competition = fit_template_cross(inputs, coarse_geometry_preparation=coarse_geometry_preparation)
     source_geometry = apply_inferred_aperture_height(
         source_geometry, competition.aperture_aspect_ratio_authority,
     )

@@ -8,7 +8,7 @@ Those tracks are not photo-aperture roles and never supply sequence phase.
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 import math
 
 import numpy as np
@@ -572,7 +572,8 @@ def _shared_tracks(
             max(full_position.minimum, float(np.median(canonical_candidates))),
         )
         deviations = tuple(abs(value - canonical) for value in canonical_candidates)
-        position_error = float(np.median(deviations)) / math.sqrt(len(deviations)) + numeric
+        median_deviation = float(np.median(deviations))
+        position_error = median_deviation / math.sqrt(len(deviations)) + numeric
         fit_position = FiniteInterval(
             max(full_position.minimum, canonical - position_error),
             min(full_position.maximum, canonical + position_error),
@@ -587,7 +588,7 @@ def _shared_tracks(
             full_direction_interval_degrees=shared_full_angle,
             # Each side keeps its complete raw ledger and own observed error.
             # The shared physical domain is an intersection of those ledgers.
-            fit_residual_px=float(np.median(deviations)),
+            fit_residual_px=median_deviation,
         )
 
     minimum_shared = compile_track(minimum_track, minimum_transitions)
@@ -631,18 +632,26 @@ def _compile_coarse_enclosing_pair(
     )
 
 
-def close_coarse_enclosing_tracks(
+@dataclass(frozen=True)
+class PreparedCoarseEnclosingGeometry:
+    direction: CoarseSharedDirection
+    minimum_track: CoarseEnclosingTrack
+    maximum_track: CoarseEnclosingTrack
+    span: FiniteInterval
+    evaluated_trace_count: int
+
+
+def prepare_coarse_enclosing_geometry(
     query: PhotoBoundaryMeasurementQuery, *,
     minimum_track: CoarseEnclosingTrack, maximum_track: CoarseEnclosingTrack,
     minimum_transitions: tuple[PhotoBoundaryTransition, ...],
     maximum_transitions: tuple[PhotoBoundaryTransition, ...],
-    expected_height_px: PositiveInterval | FiniteInterval, reference_trace_px: float,
-) -> tuple[CoarseSharedDirection | None, CoarseEnclosingSupport | None]:
-    """Close complete raw sides once in their caller-owned pair budget."""
-    canonical_height = 0.5 * (expected_height_px.minimum + expected_height_px.maximum)
+    reference_trace_px: float,
+) -> PreparedCoarseEnclosingGeometry | None:
+    """Prepare complete raw pair geometry without a member's height."""
     measurement_basis = minimum_track.measurement_basis
     if measurement_basis != maximum_track.measurement_basis:
-        return None, None
+        return None
     common_traces = tuple(
         sorted(
             set(minimum_track.trace_coordinates_px).intersection(
@@ -662,7 +671,7 @@ def close_coarse_enclosing_tracks(
             spec=PHOTO_BOUNDARY_MEASUREMENT_SPEC,
         )
     ):
-        return None, None
+        return None
     minimum_values = tuple(
         item
         for item in minimum_transitions
@@ -682,7 +691,7 @@ def close_coarse_enclosing_tracks(
         reference_trace_px=reference_trace_px,
     )
     if shared is None:
-        return None, None
+        return None
     minimum_track, maximum_track = shared
     direction = CoarseSharedDirection(
         direction_id=(
@@ -718,22 +727,50 @@ def close_coarse_enclosing_tracks(
         maximum_track.full_position_interval_px.maximum
         - minimum_track.full_position_interval_px.minimum,
     )
+    return PreparedCoarseEnclosingGeometry(direction, minimum_track, maximum_track,
+                                           span, len(query.trace_positions_px))
+
+
+def classify_coarse_enclosing_geometry(
+    geometry: PreparedCoarseEnclosingGeometry | None,
+    expected_height_px: PositiveInterval | FiniteInterval,
+) -> tuple[CoarseSharedDirection | None, CoarseEnclosingSupport | None]:
+    """Apply this member's H to the unchanged prepared raw geometry."""
+    if geometry is None:
+        return None, None
+    canonical_height = 0.5 * (expected_height_px.minimum + expected_height_px.maximum)
+    span = geometry.span
     if (
         span.minimum <= canonical_height
         or span.maximum
         > OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio
         * canonical_height
     ):
-        return direction, None
+        return geometry.direction, None
     return (
-        direction,
+        geometry.direction,
         CoarseEnclosingSupport(
-            minimum_track,
-            maximum_track,
+            geometry.minimum_track,
+            geometry.maximum_track,
             span,
-            len(query.trace_positions_px),
+            geometry.evaluated_trace_count,
         ),
     )
+
+
+def close_coarse_enclosing_tracks(
+    query: PhotoBoundaryMeasurementQuery, *,
+    minimum_track: CoarseEnclosingTrack, maximum_track: CoarseEnclosingTrack,
+    minimum_transitions: tuple[PhotoBoundaryTransition, ...],
+    maximum_transitions: tuple[PhotoBoundaryTransition, ...],
+    expected_height_px: PositiveInterval | FiniteInterval, reference_trace_px: float,
+) -> tuple[CoarseSharedDirection | None, CoarseEnclosingSupport | None]:
+    """Close complete raw sides in their caller-owned pair budget."""
+    geometry = prepare_coarse_enclosing_geometry(query,
+        minimum_track=minimum_track, maximum_track=maximum_track,
+        minimum_transitions=minimum_transitions, maximum_transitions=maximum_transitions,
+        reference_trace_px=reference_trace_px)
+    return classify_coarse_enclosing_geometry(geometry, expected_height_px)
 
 
 def _observe_sharp_coarse_short_axis(

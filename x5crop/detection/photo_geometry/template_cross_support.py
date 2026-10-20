@@ -87,12 +87,14 @@ def _candidate(
     registered_traces: tuple[int, ...],
     minimum_shared_trace_support: int,
     longitudinal_support_domain_groups_px: tuple[tuple[FiniteInterval, ...], ...],
+    coarse_geometry_preparation=None,
 ) -> EnclosingSupportCandidate | None:
     if top.role != BoundaryRole.TOP or bottom.role != BoundaryRole.BOTTOM:
         return None
     if top.coarse_side_fact is not None or bottom.coarse_side_fact is not None:
         closed = close_coarse_side_bindings(top, bottom,
-            fixed_height=FiniteInterval.exact(canonical_height_px), reference_trace_px=reference_trace_px)
+            fixed_height=FiniteInterval.exact(canonical_height_px), reference_trace_px=reference_trace_px,
+            geometry_preparation=coarse_geometry_preparation)
         if closed is None:
             return None
         registered_traces = top.coarse_side_fact.query.trace_positions_px
@@ -278,6 +280,7 @@ def fit_enclosing_support(
     longitudinal_support_domain_groups_px: tuple[tuple[FiniteInterval, ...], ...],
     minimum_shared_trace_support: int,
     maximum_evaluated_candidates: int,
+    coarse_geometry_preparation=None,
 ) -> SupportFitCompetition:
     """Run a bounded support-pair sweep and retain discrete alternatives."""
 
@@ -334,6 +337,7 @@ def fit_enclosing_support(
                 registered_traces=registered_trace_coordinates_px,
                 minimum_shared_trace_support=minimum_shared_trace_support,
                 longitudinal_support_domain_groups_px=longitudinal_support_domain_groups_px,
+                coarse_geometry_preparation=coarse_geometry_preparation,
             )
             if candidate is not None:
                 candidates.append(candidate)

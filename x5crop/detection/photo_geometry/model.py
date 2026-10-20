@@ -205,7 +205,7 @@ def independent_spatial_support_count(
         return 1
     return len(
         {
-            spatial_support_region_index(queried_traces, trace)
+            _spatial_support_region_index(minimum, maximum, float(trace))
             for trace in observed_traces
             if minimum <= float(trace) <= maximum
         }
@@ -223,6 +223,10 @@ def spatial_support_region_index(
     value = float(trace)
     if not minimum <= value <= maximum:
         raise ValueError("trace leaves spatial support authority")
+    return _spatial_support_region_index(minimum, maximum, value)
+
+
+def _spatial_support_region_index(minimum: float, maximum: float, value: float) -> int:
     if maximum <= minimum:
         return 0
     return min(

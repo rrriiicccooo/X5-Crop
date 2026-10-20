@@ -5,9 +5,52 @@ from dataclasses import replace
 
 from .coarse_enclosing_model import (CoarseEnclosingSideFact, CoarseEnclosingTrack,
     CoarseSideRegistrationReceipt, CoarseSupportSide, CoarseEnclosingMeasurementBasis)
-from .coarse_enclosing_support import _fit_track, _broad_trace_transition, close_coarse_enclosing_tracks
+from .coarse_enclosing_support import (
+    _fit_track, _broad_trace_transition, prepare_coarse_enclosing_geometry,
+    classify_coarse_enclosing_geometry,
+)
 from .model import BoundaryRole
 from .template_cross_model import CrossRoleBinding
+
+
+class CoarsePairGeometryPreparation:
+    """Bounded raw geometry owned by one complete-member reconstruction."""
+    maximum_entries = 256
+
+    def __init__(self):
+        self._geometry = {}
+        self.lookup_count = 0
+        self.preparation_count = 0
+        self.retained_bytes = 0
+
+    @staticmethod
+    def entry_bytes(left, right):
+        return 4096 + 1024 * (len(left.observations) + len(right.observations))
+
+    @classmethod
+    def reserve_bytes(cls, facts):
+        minimum = tuple(fact for fact in facts if fact.side == CoarseSupportSide.MINIMUM)
+        maximum = tuple(fact for fact in facts if fact.side == CoarseSupportSide.MAXIMUM)
+        entries = min(cls.maximum_entries, len(minimum) * len(maximum))
+        traces = (max((len(fact.observations) for fact in minimum), default=0)
+                  + max((len(fact.observations) for fact in maximum), default=0))
+        return entries * (4096 + 1024 * traces)
+
+    def prepare(self, left, right, minimum_track, maximum_track, reference_trace_px):
+        self.lookup_count += 1
+        key = left, right, minimum_track, maximum_track, reference_trace_px
+        if key in self._geometry:
+            return self._geometry[key]
+        self.preparation_count += 1
+        geometry = prepare_coarse_enclosing_geometry(left.query,
+            minimum_track=minimum_track, maximum_track=maximum_track,
+            minimum_transitions=tuple(_broad_trace_transition(left.query, observation=item) for item in left.observations),
+            maximum_transitions=tuple(_broad_trace_transition(right.query, observation=item) for item in right.observations),
+            reference_trace_px=reference_trace_px)
+        if len(self._geometry) < self.maximum_entries:
+            self._geometry[key] = geometry
+            self.retained_bytes += self.entry_bytes(left, right)
+        return geometry
 
 def coarse_enclosing_binding(
     track: CoarseEnclosingTrack,
@@ -70,17 +113,23 @@ def register_coarse_side_facts(facts, *, remaining_bound):
         len(facts), len(facts), len(top) + len(bottom), remaining_bound)
 
 
-def close_coarse_side_bindings(top, bottom, *, fixed_height, reference_trace_px):
+def close_coarse_side_bindings(top, bottom, *, fixed_height, reference_trace_px,
+                              geometry_preparation=None):
     left, right = top.coarse_side_fact, bottom.coarse_side_fact
     if (left is None or right is None or left.query != right.query
             or left.side != CoarseSupportSide.MINIMUM or right.side != CoarseSupportSide.MAXIMUM
             or left.reference_trace_px != reference_trace_px or right.reference_trace_px != reference_trace_px):
         return None
-    direction, support = close_coarse_enclosing_tracks(
-        left.query, minimum_track=top.coarse_side_track, maximum_track=bottom.coarse_side_track,
-        minimum_transitions=tuple(_broad_trace_transition(left.query, observation=item) for item in left.observations),
-        maximum_transitions=tuple(_broad_trace_transition(right.query, observation=item) for item in right.observations),
-        expected_height_px=fixed_height, reference_trace_px=reference_trace_px)
+    if geometry_preparation is None:
+        geometry = prepare_coarse_enclosing_geometry(left.query,
+            minimum_track=top.coarse_side_track, maximum_track=bottom.coarse_side_track,
+            minimum_transitions=tuple(_broad_trace_transition(left.query, observation=item) for item in left.observations),
+            maximum_transitions=tuple(_broad_trace_transition(right.query, observation=item) for item in right.observations),
+            reference_trace_px=reference_trace_px)
+    else:
+        geometry = geometry_preparation.prepare(left, right, top.coarse_side_track,
+                                                bottom.coarse_side_track, reference_trace_px)
+    direction, support = classify_coarse_enclosing_geometry(geometry, fixed_height)
     if support is None:
         return None
     pair_id = f"coarse-enclosing-pair:{top.observation_id}:{bottom.observation_id}"

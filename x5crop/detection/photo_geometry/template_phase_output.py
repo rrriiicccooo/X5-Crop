@@ -44,6 +44,7 @@ from .template_phase_refinement import (
 )
 from .template_placement import FormatPlacement, compose_format_placement, resolved_cross_support_domains_px
 from .template_registration import local_cross_refinements_closed, membership_projection_coverage
+from .template_coarse_sides import CoarsePairGeometryPreparation
 from .template_residual import derive_adjacency_relations
 
 
@@ -159,6 +160,8 @@ class PhaseMemberOutputWork:
     width_evaluation_count: int = 0
     cross_context_count: int = 0
     cross_evaluated_fit_count: int = 0
+    coarse_geometry_lookup_count: int = 0
+    coarse_geometry_preparation_count: int = 0
     cross_local_fit_count: int = 0
     cross_local_event_count: int = 0
     cross_local_scope_count: int = 0
@@ -179,6 +182,7 @@ class PhaseMemberOutputWork:
         if (self.late_projection_count > 1 or self.width_evaluation_count > 1
                 or self.cross_context_count > 1 or self.composition_count > 1
                 or self.projection_count > self.composition_count
+                or self.coarse_geometry_preparation_count > self.coarse_geometry_lookup_count
                 or self.budget_evaluation_count > self.output_evaluation_count):
             raise ValueError("phase member output exceeded its single reconstruction")
 
@@ -288,7 +292,8 @@ def _conditional_phase(lane, scope, fit, projection) -> PhaseFitResult:
 
 
 def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
-                               member: PhaseCompetitionMember) -> PhaseMemberOutputProof:
+                               member: PhaseCompetitionMember, *,
+                               coarse_geometry_preparation=None) -> PhaseMemberOutputProof:
     """Rebuild a given member without using selected W, H or Cross results."""
     gaps = []
     detail = None
@@ -394,13 +399,22 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
         gaps.append(PhaseMemberOutputGap.CROSS_CONTEXT_UNAVAILABLE)
         return result()
     work = replace(work, cross_context_count=1)
+    before = (0, 0) if coarse_geometry_preparation is None else (
+        coarse_geometry_preparation.lookup_count, coarse_geometry_preparation.preparation_count)
     try:
         context = prepare_template_cross_context(lane, lane.base_cross_registration,
             template=fit.template, phase=assessed, source_geometry=source,
-            source_frame_width_authority=width, sequence_fits=(fit,))
+            source_frame_width_authority=width, sequence_fits=(fit,),
+            coarse_geometry_preparation=coarse_geometry_preparation)
     except ValueError as error:
         gaps.append(PhaseMemberOutputGap.CROSS_CONTEXT_UNAVAILABLE)
         detail = str(error)
+    finally:
+        if coarse_geometry_preparation is not None:
+            work = replace(work,
+                coarse_geometry_lookup_count=coarse_geometry_preparation.lookup_count - before[0],
+                coarse_geometry_preparation_count=coarse_geometry_preparation.preparation_count - before[1])
+    if context is None:
         return result()
     cross = context.competition
     local_work = context.registration.work_receipt
@@ -510,6 +524,11 @@ class CompletePhaseOutputProof:
 
 
 def build_complete_phase_output(lane, *, retained_review_bytes: int = 0) -> CompletePhaseOutputProof | None:
+    return _build_complete_phase_output(lane, retained_review_bytes=retained_review_bytes,
+                                       preparation=CoarsePairGeometryPreparation())
+
+
+def _build_complete_phase_output(lane, *, retained_review_bytes, preparation) -> CompletePhaseOutputProof | None:
     if type(retained_review_bytes) is not int or retained_review_bytes < 0:
         raise ValueError("retained Review bytes must be a nonnegative integer")
     # Resolved single-winner and no-runner cases do not ask for a plural
@@ -520,6 +539,7 @@ def build_complete_phase_output(lane, *, retained_review_bytes: int = 0) -> Comp
     proofs = []
     units = 0
     retained_bytes = sum(scope.retained_bytes for scope in scopes)
+    preparation_reserve = preparation.reserve_bytes(lane.coarse_support.enclosing_side_facts)
     extent = None if lane.phase_input.source_domain is None else lane.phase_input.source_domain.source_extent
     memory_limit = None if extent is None else 10 * extent.width * extent.height + 32 * 1024 * 1024
     exceeded = lane.phase_competition.status == PhaseFitStatus.BOUND_EXCEEDED or any(
@@ -528,14 +548,15 @@ def build_complete_phase_output(lane, *, retained_review_bytes: int = 0) -> Comp
         for member in scope.members:
             temporary_bound = (4096 + len(member.input_fit.role_bindings) * 1024
                                + MAX_CROSS_PAIRS * 1024 + scope.template.count * 4096)
-            if memory_limit is not None and retained_review_bytes + retained_bytes + temporary_bound > memory_limit:
+            if memory_limit is not None and retained_review_bytes + retained_bytes + temporary_bound + preparation_reserve > memory_limit:
                 exceeded = True
             if exceeded:
                 proof = PhaseMemberOutputProof(scope.scope_id, member.record_ordinal,
                     None, None, None, None, None, None, None, (), (),
                     (PhaseMemberOutputGap.WORK_BOUND_EXCEEDED,), None, PhaseMemberOutputWork())
             else:
-                proof = assess_phase_member_output(lane, scope, member)
+                proof = assess_phase_member_output(lane, scope, member,
+                                                  coarse_geometry_preparation=preparation)
                 work = proof.work
                 units += (work.role_lookup_count + work.local_binding_count
                     + work.phase_authority_evaluation_count * len(member.input_fit.role_bindings)
@@ -546,11 +567,16 @@ def build_complete_phase_output(lane, *, retained_review_bytes: int = 0) -> Comp
                     + work.adjacency_trace_check_count + work.registered_fact_check_bound
                     + work.projection_extreme_count + work.composition_count
                     + work.projection_count + work.width_evaluation_count + work.cross_context_count)
+                units += work.coarse_geometry_lookup_count + work.coarse_geometry_preparation_count
                 exceeded = units > MAX_COMPLETE_PHASE_OUTPUT_WORK_UNITS
             proofs.append(proof)
             retained_bytes += (4096 + len(proof.output_footprints) * 8192
                 + (0 if proof.phase_assessment is None else len(proof.phase_assessment.best.role_bindings) * 1024)
                 + (0 if proof.cross_context is None else proof.cross_context.competition.receipt.evaluated_fit_count * 1024))
+    if (sum(proof.work.coarse_geometry_lookup_count for proof in proofs) != preparation.lookup_count
+            or sum(proof.work.coarse_geometry_preparation_count for proof in proofs) != preparation.preparation_count
+            or preparation.retained_bytes > preparation_reserve):
+        raise ValueError("complete phase output lost shared raw geometry work")
     native = tuple(proof for proof in proofs if proof.placement is not None)
     outputs = ()
     common_work = 0
@@ -591,6 +617,6 @@ def build_complete_phase_output(lane, *, retained_review_bytes: int = 0) -> Comp
         + (0 if proof.cross_context is None else proof.cross_context.competition.receipt.evaluated_fit_count * 1024)
         for proof in proofs)
     retained += len(outputs) * (4096 + 128 * len(native))
-    peak = retained + max((proof.work.peak_temporary_bytes for proof in proofs), default=0)
+    peak = retained + max((proof.work.peak_temporary_bytes for proof in proofs), default=0) + preparation.retained_bytes
     return CompletePhaseOutputProof(scopes, tuple(proofs), outputs, failure, units, peak, exceeded,
                                    common_work_units=common_work)

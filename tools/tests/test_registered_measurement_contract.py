@@ -13,7 +13,9 @@ from x5crop.detection.photo_geometry.broad_material_transition_measurement impor
     broad_material_trace_support_qualified,
 )
 from x5crop.detection.photo_geometry.coarse_enclosing_support import observe_coarse_broad_side_facts
-from x5crop.detection.photo_geometry.template_coarse_sides import register_coarse_side_facts, close_coarse_side_bindings
+from x5crop.detection.photo_geometry.template_coarse_sides import (
+    CoarsePairGeometryPreparation, register_coarse_side_facts, close_coarse_side_bindings,
+)
 from x5crop.detection.photo_geometry.profile_adapters import sequence_profile_from_regions
 from x5crop.detection.photo_geometry.observations import validate_broad_material_edge_provenance
 from tools.regression.report_validation import _validate_broad_material_traces, _validate_sequence_physical_line_regions
@@ -639,6 +641,36 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
                 self.assertTrue(closed[0].full_interval_px.contains(top))
                 self.assertTrue(closed[1].full_interval_px.contains(bottom))
                 self.assertEqual(closed[0].trace_coordinates_px, measured.query.trace_positions_px)
+
+    def test_shared_raw_geometry_rechecks_each_height_and_complete_track_identity(self) -> None:
+        measured = self._sloping_broad_strip()
+        facts = observe_coarse_broad_side_facts(measured,
+            aggregate_interval_px=FiniteInterval(205.5, 805.5),
+            expected_height_px=FiniteInterval.exact(580.0), reference_trace_px=4000.0)
+        top, bottom, _ = register_coarse_side_facts(facts, remaining_bound=512)
+        preparation = CoarsePairGeometryPreparation()
+        for height, supported in ((610.0, False), (580.0, True), (540.0, False), (580.0, True)):
+            with self.subTest(height=height):
+                arguments = dict(fixed_height=FiniteInterval.exact(height), reference_trace_px=4000.0)
+                expected = close_coarse_side_bindings(top[0], bottom[0], **arguments)
+                actual = close_coarse_side_bindings(top[0], bottom[0], **arguments,
+                                                    geometry_preparation=preparation)
+                self.assertEqual(actual, expected)
+                self.assertEqual(actual is not None, supported)
+        self.assertEqual((preparation.lookup_count, preparation.preparation_count), (4, 1))
+        changed = replace(top[0], coarse_side_track=replace(top[0].coarse_side_track,
+                          fit_residual_px=top[0].coarse_side_track.fit_residual_px + 0.01))
+        close_coarse_side_bindings(changed, bottom[0], fixed_height=FiniteInterval.exact(580.0),
+                                  reference_trace_px=4000.0, geometry_preparation=preparation)
+        self.assertEqual(preparation.preparation_count, 2)
+        independent = CoarsePairGeometryPreparation()
+        independent.maximum_entries = 0
+        for _ in range(2):
+            actual = close_coarse_side_bindings(top[0], bottom[0], fixed_height=FiniteInterval.exact(580.0),
+                reference_trace_px=4000.0, geometry_preparation=independent)
+            self.assertIsNotNone(actual)
+        self.assertEqual(independent.preparation_count, 2)
+        self.assertEqual(independent.retained_bytes, 0)
 
     def test_complete_physical_broad_competitor_survives_curved_localization(self) -> None:
         from tools.tests.measurement_fixture_support import _broad_point
