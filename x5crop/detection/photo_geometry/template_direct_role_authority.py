@@ -300,6 +300,10 @@ def intrinsic_direct_role_authority_bases(
         observations,
         measurement_sets,
     )
+    return _intrinsic_direct_role_bases(observations, region_counts)
+
+
+def _intrinsic_direct_role_bases(observations, region_counts):
     result: dict[ObservationId, tuple[DirectRoleAuthorityBasis, ...]] = {}
     for observation in observations:
         bases = tuple(
@@ -441,10 +445,7 @@ def _direct_role_authority_ledger(
                 band.observation_id
             )
 
-    intrinsic_bases = intrinsic_direct_role_authority_bases(
-        observations,
-        measurement_sets,
-    )
+    intrinsic_bases = _intrinsic_direct_role_bases(observations, region_counts)
     outer_material_role_sets: dict[
         tuple[ObservationId, BoundaryRole],
         set[ObservationId],

@@ -2408,9 +2408,13 @@ role/support 缓存孔径位置极值，最多 `2 × (1 + 联合状态数)` 项�
 再裁剪完整原始物理区间；零宽斜率、点和线段均保留，不对斜率额外应用像素容差。单侧准备和每对
 共同方向、代表拟合与连续性绑定完整原生输入。完整成员验证内用一个显式传递的准备对象复用不依赖 H 的
 原始配对几何，key 包含完整 query、两侧事实、原 track 与 reference，最多 256 项，满额后继续原求解；
+同一准备对象另按完整侧事实复用最多 512 份原始 track，成员的 remaining bound 仍在访问准备前核验，
+side receipt 保留逐成员登记访问与可用事实数量，实际数值准备由独立工作字段计数。
 不建立新候选或删减配对。每成员仍独立核验自身 H/span、纵向域、覆盖与权限，不缓存配对资格或 Cross
 结论。逐成员记录准备 lookup 和实际 preparation 次数并计入工作；预留最坏保留字节，最终峰值包含实际
 准备量。准备对象随本次全集验证结束释放，不跨 source 或规范 selection/Gate 复用。
+同一 direct-role 账本复用已经核对的 trace lattice 与 region counts，避免再次扫描相同原生观察；角色、
+separator、source-W 与最终权限仍按本成员独立判定。
 
 正式输入限于单页 unsigned 16-bit、RGB 三通道、contiguous TIFF；压缩接受 `NONE`、`LZW`、
 `DEFLATE` / `ADOBE_DEFLATE` 或 `ZSTD`。Orientation 1–8 在 decode boundary 规范化，输出写

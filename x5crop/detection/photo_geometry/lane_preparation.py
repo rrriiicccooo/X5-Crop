@@ -252,6 +252,7 @@ def prepare_template_cross_context(
     native_top, native_bottom, coarse_registration = register_coarse_side_facts(
         registered.coarse_support.enclosing_side_facts,
         remaining_bound=max(0, plan.cross_bounds.max_fitted_observations - fitted_count),
+        geometry_preparation=coarse_geometry_preparation,
     )
     top_bindings = (*cross.top_bindings, *coarse_top, *native_top)
     bottom_bindings = (*cross.bottom_bindings, *coarse_bottom, *native_bottom)

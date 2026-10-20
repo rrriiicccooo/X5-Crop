@@ -11,6 +11,18 @@ from .coarse_enclosing_support import (
 )
 from .model import BoundaryRole
 from .template_cross_model import CrossRoleBinding
+from .template_measurement_plan_model import MAX_CROSS_FITTED_OBSERVATIONS
+
+
+_MISSING = object()
+
+
+def _registered_side_track(fact):
+    transitions = tuple(_broad_trace_transition(fact.query, observation=item)
+                        for item in fact.observations)
+    return _fit_track(fact.query, side=fact.side,
+        measurement_basis=CoarseEnclosingMeasurementBasis.BROAD_MATERIAL,
+        transitions=transitions, reference_trace_px=fact.reference_trace_px)
 
 
 class CoarsePairGeometryPreparation:
@@ -19,6 +31,7 @@ class CoarsePairGeometryPreparation:
 
     def __init__(self):
         self._geometry = {}
+        self._tracks = {}
         self.lookup_count = 0
         self.preparation_count = 0
         self.retained_bytes = 0
@@ -34,13 +47,27 @@ class CoarsePairGeometryPreparation:
         entries = min(cls.maximum_entries, len(minimum) * len(maximum))
         traces = (max((len(fact.observations) for fact in minimum), default=0)
                   + max((len(fact.observations) for fact in maximum), default=0))
-        return entries * (4096 + 1024 * traces)
+        sides = sorted((2048 + 1024 * len(fact.observations) for fact in facts), reverse=True)
+        return entries * (4096 + 1024 * traces) + sum(sides[:MAX_CROSS_FITTED_OBSERVATIONS])
+
+    def register_track(self, fact):
+        self.lookup_count += 1
+        previous = self._tracks.get(fact, _MISSING)
+        if previous is not _MISSING:
+            return previous
+        self.preparation_count += 1
+        track = _registered_side_track(fact)
+        if len(self._tracks) < MAX_CROSS_FITTED_OBSERVATIONS:
+            self._tracks[fact] = track
+            self.retained_bytes += 2048 + 1024 * len(fact.observations)
+        return track
 
     def prepare(self, left, right, minimum_track, maximum_track, reference_trace_px):
         self.lookup_count += 1
         key = left, right, minimum_track, maximum_track, reference_trace_px
-        if key in self._geometry:
-            return self._geometry[key]
+        previous = self._geometry.get(key, _MISSING)
+        if previous is not _MISSING:
+            return previous
         self.preparation_count += 1
         geometry = prepare_coarse_enclosing_geometry(left.query,
             minimum_track=minimum_track, maximum_track=maximum_track,
@@ -94,16 +121,13 @@ def coarse_enclosing_binding(
     )
 
 
-def register_coarse_side_facts(facts, *, remaining_bound):
+def register_coarse_side_facts(facts, *, remaining_bound, geometry_preparation=None):
     if len(facts) > remaining_bound:
         return (), (), CoarseSideRegistrationReceipt(len(facts), 0, 0, remaining_bound)
     top, bottom = [], []
     for fact in facts:
-        transitions = tuple(_broad_trace_transition(fact.query, observation=item)
-                            for item in fact.observations)
-        track = _fit_track(fact.query, side=fact.side,
-            measurement_basis=CoarseEnclosingMeasurementBasis.BROAD_MATERIAL,
-            transitions=transitions, reference_trace_px=fact.reference_trace_px)
+        track = (_registered_side_track(fact) if geometry_preparation is None
+                 else geometry_preparation.register_track(fact))
         if track is None:
             continue
         role = BoundaryRole.TOP if fact.side == CoarseSupportSide.MINIMUM else BoundaryRole.BOTTOM

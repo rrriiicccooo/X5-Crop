@@ -648,6 +648,16 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
             aggregate_interval_px=FiniteInterval(205.5, 805.5),
             expected_height_px=FiniteInterval.exact(580.0), reference_trace_px=4000.0)
         top, bottom, _ = register_coarse_side_facts(facts, remaining_bound=512)
+        registration = CoarsePairGeometryPreparation()
+        expected_registration = register_coarse_side_facts(facts, remaining_bound=512)
+        for _ in range(2):
+            self.assertEqual(register_coarse_side_facts(facts, remaining_bound=512,
+                geometry_preparation=registration), expected_registration)
+        self.assertEqual((registration.lookup_count, registration.preparation_count), (4, 2))
+        blocked = register_coarse_side_facts(facts, remaining_bound=1, geometry_preparation=registration)
+        self.assertTrue(blocked[2].bound_exceeded)
+        self.assertEqual((blocked[0], blocked[1], blocked[2].attempted_count), ((), (), 0))
+        self.assertEqual((registration.lookup_count, registration.preparation_count), (4, 2))
         preparation = CoarsePairGeometryPreparation()
         for height, supported in ((610.0, False), (580.0, True), (540.0, False), (580.0, True)):
             with self.subTest(height=height):
