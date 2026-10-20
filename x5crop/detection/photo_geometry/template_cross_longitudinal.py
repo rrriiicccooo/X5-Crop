@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from bisect import bisect_left
+import math
+
 from ...domain import EvidenceState, FiniteInterval, ObservationId
 from .model import SPATIAL_SUPPORT_REGION_COUNT
 from .physical_identity import physical_fact_id
@@ -12,20 +15,36 @@ from .template_cross_model import (
 )
 
 
+def _ordered_finite_traces(trace_coordinates_px):
+    return tuple(sorted(value for value in map(float, trace_coordinates_px)
+                        if math.isfinite(value)))
+
+
+def _domain_has_trace(traces: tuple[float, ...], domain: FiniteInterval) -> bool:
+    # Same closed +/-0.5 px containment as FiniteInterval.contains, without
+    # rescanning every trace for each Frame in every compatible Cross pair.
+    index = bisect_left(traces, domain.minimum - 0.5)
+    return index < len(traces) and traces[index] <= domain.maximum + 0.5
+
+
+def _covered_domain_ordinals(
+    traces: tuple[float, ...],
+    domains: tuple[FiniteInterval, ...],
+) -> tuple[int, ...]:
+    return tuple(
+        ordinal
+        for ordinal, domain in enumerate(domains, start=1)
+        if _domain_has_trace(traces, domain)
+    )
+
+
 def covered_template_domain_ordinals(
     trace_coordinates_px: tuple[int, ...],
     domains: tuple[FiniteInterval, ...],
 ) -> tuple[int, ...]:
     """Return one-based template domains containing at least one direct trace."""
 
-    return tuple(
-        ordinal
-        for ordinal, domain in enumerate(domains, start=1)
-        if any(
-            domain.contains(float(trace), epsilon=0.5)
-            for trace in trace_coordinates_px
-        )
-    )
+    return _covered_domain_ordinals(_ordered_finite_traces(trace_coordinates_px), domains)
 
 
 def covers_all_template_domains(
@@ -34,10 +53,10 @@ def covers_all_template_domains(
 ) -> bool:
     """Whether every retained candidate has direct support in every Frame."""
 
+    traces = _ordered_finite_traces(trace_coordinates_px)
     return bool(domain_groups) and all(
         bool(domains)
-        and len(covered_template_domain_ordinals(trace_coordinates_px, domains))
-        == len(domains)
+        and all(_domain_has_trace(traces, domain) for domain in domains)
         for domains in domain_groups
     )
 
@@ -67,9 +86,10 @@ def assess_cross_longitudinal_projection(
     ):
         raise ValueError("Cross projection needs direct observation identities")
     traces = tuple(sorted(set(trace_coordinates_px)))
+    ordered_traces = _ordered_finite_traces(traces)
     domain_count = len(domain_groups[0]) if domain_groups else 0
     covered = tuple(
-        covered_template_domain_ordinals(traces, domains)
+        _covered_domain_ordinals(ordered_traces, domains)
         for domains in domain_groups
     )
     required = min(SPATIAL_SUPPORT_REGION_COUNT, domain_count)

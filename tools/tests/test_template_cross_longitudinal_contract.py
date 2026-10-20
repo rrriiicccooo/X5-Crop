@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import replace
+import random
 import unittest
 
 from tools.regression.report_validation import (
@@ -23,6 +24,7 @@ from x5crop.detection.photo_geometry.template_cross_candidates import (
 )
 from x5crop.detection.photo_geometry.template_cross_longitudinal import (
     assess_cross_longitudinal_projection,
+    covered_template_domain_ordinals,
     covers_all_template_domains,
 )
 from x5crop.detection.photo_geometry.template_cross_model import (
@@ -51,6 +53,25 @@ def assess(groups, traces, **kwargs):
 
 
 class CrossLongitudinalContractTest(unittest.TestCase):
+    def test_ordered_trace_lookup_preserves_closed_domain_support(self) -> None:
+        rng = random.Random(173)
+        cases = [
+            ((), (FiniteInterval(0.5, 0.5),)),
+            ((1, -1, 1), (FiniteInterval(-0.5, -0.5), FiniteInterval(1.5, 1.5))),
+            ((0, 1, 2), (FiniteInterval(2.5000000001, 3.0), FiniteInterval(-1.0, -0.5000000001))),
+        ]
+        for _ in range(400):
+            traces = tuple(rng.randrange(-50, 51) for _ in range(rng.randrange(50)))
+            bounds = [sorted((rng.randrange(-110, 111) / 2, rng.randrange(-110, 111) / 2))
+                      for _ in range(rng.randrange(10))]
+            cases.append((traces, tuple(FiniteInterval(*bound) for bound in bounds)))
+        for traces, candidates in cases:
+            expected = tuple(index for index, domain in enumerate(candidates, 1)
+                             if any(domain.contains(float(trace), epsilon=0.5) for trace in traces))
+            self.assertEqual(covered_template_domain_ordinals(traces, candidates), expected)
+            self.assertEqual(covers_all_template_domains(traces, (candidates,)),
+                             bool(candidates) and len(expected) == len(candidates))
+
     def test_report_adapter_binds_each_fit_and_fails_all_groups_together(self) -> None:
         from x5crop.detection.photo_geometry.template_placement import (
             resolved_cross_support_domains_px,

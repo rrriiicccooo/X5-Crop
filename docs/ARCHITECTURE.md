@@ -1586,6 +1586,9 @@ Normal 校验要求非空域组数量与 phase 状态对应；development 校验
 从 retained SequenceFit 的 native/inferred 坐标、共同 W 与 Overlap 事实重建域并逐组核对，不能成对删组
 或更改区间。此检查不测量、拟合或建立新几何路径。
 以上判断只消费已经登记的 trace/domain，不新增 TIFF query、候选、score 或 selected-placement requery。
+域覆盖查询在同次调用内建立有序有限 trace 视图，以二分查找核验每个原闭区间的 `0.5 px` 包含条件，
+避免为每份上下边组合逐域扫描全部 trace；逐候选域、覆盖序号、pair／fit 上限与权限判据保持。
+临时视图仅保留既有 T 个坐标，调用结束即释放，不建立跨成员缓存。
 
 ### 8.2 `ENCLOSING_SUPPORT_PAIR`
 
