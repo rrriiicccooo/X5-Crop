@@ -2459,6 +2459,11 @@ separator、source-W 与最终权限仍按本成员独立判定。
 仅保存最多六份按完整 template 区分的只读原生索引，以及一份 intrinsic 输入索引；角色绑定和本成员
 source-W 的资格仍逐次独立核验。不同输入拒绝复用，满额后继续原准备；lookup、实际 preparation 与
 保留字节独立记账，最坏内存在执行前预留，准备对象随本次全集验证结束释放。
+晚期投影和关系传播也在该准备对象内复用最多六份按完整 template 区分的原生 fact／separator pair
+输入，不包含成员映射、source W 或求解结果。每份保留上界为 `4096 + 4096H + 1024S` 字节，执行前
+预留六份保留量及一份当前准备量；满额继续原编译，权限与连续拟合仍逐成员执行。
+Coverage 的闭整数区间先按原浮点邻接判据合并，再建立最终 typed 区间；取整、query identity 和完整
+坐标计数保持，避免为每个临时交集重复构造区间。
 
 正式输入限于单页 unsigned 16-bit、RGB 三通道、contiguous TIFF；压缩接受 `NONE`、`LZW`、
 `DEFLATE` / `ADOBE_DEFLATE` 或 `ZSTD`。Orientation 1–8 在 decode boundary 规范化，输出写

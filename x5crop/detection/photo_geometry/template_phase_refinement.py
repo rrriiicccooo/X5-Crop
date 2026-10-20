@@ -414,28 +414,14 @@ def _project_late_local_candidate(
         return fit, None
 
     template = phase_input.template
-    separator_support = _observations.prepare_phase_separator_support(
-        phase_input.observations,
-        phase_input.separator_bands,
-        maximum_material_gap_px=template.gap_prior_px.maximum,
-    )
-    phase_separator_bands = separator_support.bands
-    separator_support_ids = separator_support.resolution.edge_component_ids
-    qualified_observations = separator_support.observations
-    facts = _observations._facts(
-        qualified_observations,
-        separator_support_ids=separator_support_ids,
-        registered_trace_positions_px=(
-            phase_input.sequence_measurement_sets[0].query.trace_positions_px
-            if phase_input.sequence_measurement_sets else ()
-        ),
-    )
-    direct = tuple(item for item in facts if item.direct)
-    separator_pairs = _observations._separator_pair_facts(
-        phase_separator_bands,
-        direct,
-        maximum_material_gap_px=template.gap_prior_px.maximum,
-    )
+    if direct_role_input_preparation is None:
+        facts, separator_pairs = _observations.prepare_projection_facts(
+            phase_input.observations, phase_input.separator_bands,
+            maximum_material_gap_px=template.gap_prior_px.maximum,
+            registered_trace_positions_px=(phase_input.sequence_measurement_sets[0].query.trace_positions_px
+                if phase_input.sequence_measurement_sets else ()))
+    else:
+        facts, separator_pairs = direct_role_input_preparation.projection_facts_for(phase_input)
     width = FiniteInterval(
         template.frame_width_px.minimum,
         template.frame_width_px.maximum,

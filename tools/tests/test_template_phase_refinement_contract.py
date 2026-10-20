@@ -55,9 +55,45 @@ from x5crop.detection.photo_geometry.template_placement import (
 )
 from x5crop.domain import EvidenceState, FiniteInterval, PositiveInterval
 from tools.tests.phase_test_support import _local_line, _phase_candidate_group
+from tools.tests import test_phase_member_adjacency_propagation_contract as adjacency_fixture
 
 
 class TemplatePhaseRefinementContractTest(unittest.TestCase):
+    def test_fixed_member_projection_reuses_only_immutable_registered_inputs(self) -> None:
+        fixture = adjacency_fixture.PhaseMemberAdjacencyPropagationContractTest()
+        fit, inputs, analysis, _edges, _bands = fixture._fixture("narrow", missing=(4, 5))
+        preparation = DirectRoleInputPreparation(inputs.observations, inputs.separator_bands,
+            inputs.sequence_measurement_sets, inputs.outer_material_boundaries)
+        arguments = dict(allow_direct_rank=True, adjacency_relations=analysis.relations)
+        expected = phase_refinement._project_late_local_candidate(fit, inputs, **arguments)
+        owner = phase_refinement._observations
+        with patch.object(owner, "prepare_projection_facts", wraps=owner.prepare_projection_facts) as compile_facts:
+            first = phase_refinement._project_late_local_candidate(fit, inputs,
+                direct_role_input_preparation=preparation, **arguments)
+            second = phase_refinement._project_late_local_candidate(fit, inputs,
+                direct_role_input_preparation=preparation, **arguments)
+        self.assertEqual(first, expected)
+        self.assertEqual(second, expected)
+        self.assertIsNot(first[1].input_direct_role_authority, second[1].input_direct_role_authority)
+        self.assertEqual(compile_facts.call_count, 1)
+        self.assertEqual(preparation.preparation_count, 2)
+        self.assertLessEqual(preparation.retained_bytes, preparation.reserved_bytes)
+        with self.assertRaisesRegex(ValueError, "different registered facts"):
+            preparation.projection_facts_for(replace(inputs,
+                observations=inputs.observations + (edge("foreign", 500.0),)))
+        for index in range(8):
+            overflow_template = replace(inputs.template, template_id=f"projection-input-scope:{index}")
+            overflow_input = replace(inputs, template=overflow_template,
+                calibrated_nominal_grid_prior=calibrated_nominal_grid_prior(overflow_template))
+            self.assertEqual(preparation.projection_facts_for(overflow_input),
+                preparation.projection_facts_for(inputs))
+        retained = preparation.retained_bytes
+        preparations = preparation.preparation_count
+        preparation.projection_facts_for(overflow_input)
+        self.assertEqual(preparation.preparation_count, preparations + 1)
+        self.assertEqual(preparation.retained_bytes, retained)
+        self.assertLessEqual(retained, preparation.reserved_bytes)
+
     def test_prepared_native_indexes_keep_member_and_width_assessments_independent(self) -> None:
         observations = tuple(edge(f"{offset}:{index}", position + offset)
             for offset in (0.0, 10.0) for index, position in enumerate((100.0, 200.0, 220.0, 320.0)))

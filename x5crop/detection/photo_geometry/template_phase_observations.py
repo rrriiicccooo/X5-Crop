@@ -689,6 +689,25 @@ def _separator_pair_facts(
     )
 
 
+def prepare_projection_facts(
+    observations: Sequence[BoundaryEdgeObservation],
+    separator_bands: Sequence[SeparatorBandObservation],
+    *,
+    maximum_material_gap_px: float,
+    registered_trace_positions_px: tuple[float, ...],
+):
+    """Compile immutable native inputs, without a selected mapping or W."""
+    support = prepare_phase_separator_support(observations, separator_bands,
+        maximum_material_gap_px=maximum_material_gap_px)
+    facts = _facts(support.observations,
+        separator_support_ids=support.resolution.edge_component_ids,
+        registered_trace_positions_px=registered_trace_positions_px)
+    pairs = _separator_pair_facts(support.bands,
+        tuple(item for item in facts if item.direct),
+        maximum_material_gap_px=maximum_material_gap_px)
+    return facts, pairs
+
+
 def _refine_local_role_bindings(
     fit: SequenceFit,
     observations: Sequence[BoundaryEdgeObservation],

@@ -256,12 +256,15 @@ class DirectRoleInputPreparation:
     def __init__(self, observations, separator_bands, measurement_sets, outer_material_boundaries):
         self.inputs = observations, separator_bands, measurement_sets, outer_material_boundaries
         self._ledgers = {}
+        self._projection_facts = {}
         self._intrinsic = None
         self.lookup_count = self.preparation_count = self.retained_bytes = 0
         self.ledger_bytes = 4096 + 8192 * sum(len(items) for items in (
             observations, separator_bands, outer_material_boundaries))
         self.intrinsic_bytes = 1024 * len(observations)
-        self.reserved_bytes = MAX_TEMPLATE_FIT_PASSES * self.ledger_bytes + self.intrinsic_bytes
+        self.projection_facts_bytes = 4096 + 4096 * len(observations) + 1024 * len(separator_bands)
+        self.reserved_bytes = (MAX_TEMPLATE_FIT_PASSES * self.ledger_bytes + self.intrinsic_bytes
+            + (MAX_TEMPLATE_FIT_PASSES + 1) * self.projection_facts_bytes)
 
     def intrinsic_bases(self):
         self.lookup_count += 1
@@ -271,10 +274,32 @@ class DirectRoleInputPreparation:
             self.retained_bytes += self.intrinsic_bytes
         return self._intrinsic
 
-    def ledger_for(self, fit, observations, separator_bands, measurement_sets, outer_material_boundaries):
+    def _check_inputs(self, observations, separator_bands, measurement_sets, outer_material_boundaries):
         given = observations, separator_bands, measurement_sets, outer_material_boundaries
         if any(left is not right and left != right for left, right in zip(self.inputs, given, strict=True)):
             raise ValueError("direct-role preparation belongs to different registered facts")
+
+    def projection_facts_for(self, phase_input):
+        self._check_inputs(phase_input.observations, phase_input.separator_bands,
+            phase_input.sequence_measurement_sets, phase_input.outer_material_boundaries)
+        self.lookup_count += 1
+        facts = self._projection_facts.get(phase_input.template)
+        if facts is not None:
+            return facts
+        from .template_phase_observations import prepare_projection_facts
+        self.preparation_count += 1
+        facts = prepare_projection_facts(phase_input.observations, phase_input.separator_bands,
+            maximum_material_gap_px=phase_input.template.gap_prior_px.maximum,
+            registered_trace_positions_px=(phase_input.sequence_measurement_sets[0].query.trace_positions_px
+                if phase_input.sequence_measurement_sets else ()))
+        if len(self._projection_facts) < MAX_TEMPLATE_FIT_PASSES:
+            self._projection_facts[phase_input.template] = facts
+            self.retained_bytes += self.projection_facts_bytes
+        return facts
+
+    def ledger_for(self, fit, observations, separator_bands, measurement_sets, outer_material_boundaries):
+        self._check_inputs(observations, separator_bands, measurement_sets, outer_material_boundaries)
+        given = observations, separator_bands, measurement_sets, outer_material_boundaries
         self.lookup_count += 1
         ledger = self._ledgers.get(fit.template)
         if ledger is not None:

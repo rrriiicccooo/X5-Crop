@@ -151,7 +151,11 @@ def _trace_coverage(
     intervals: tuple[tuple[FiniteInterval, str], ...],
 ) -> AdjacencyTraceCoverage:
     required_bounds = _integer_coordinate_bounds(required)
-    required_count = _integer_coordinate_count(required)
+    required_count = (
+        0
+        if required_bounds is None
+        else required_bounds[1] - required_bounds[0] + 1
+    )
     clipped_with_ids: list[tuple[int, int, str]] = []
     if required_bounds is not None:
         required_start, required_end = required_bounds
@@ -165,11 +169,7 @@ def _trace_coverage(
                 clipped_with_ids.append((start, end, query_id))
     clipped_with_ids.sort(key=lambda item: (item[0], item[1], item[2]))
     query_ids = tuple(sorted({item[2] for item in clipped_with_ids}))
-    clipped = tuple(
-        FiniteInterval(float(start), float(end))
-        for start, end, _query_id in clipped_with_ids
-    )
-    if not clipped:
+    if not clipped_with_ids:
         return AdjacencyTraceCoverage(
             trace_position_px=trace_position_px,
             covering_query_ids=(),
@@ -178,24 +178,25 @@ def _trace_coverage(
             covered_coordinate_count=0,
             complete=False,
         )
-    merged: list[FiniteInterval] = []
-    for interval in clipped:
-        if not merged or interval.minimum > merged[-1].maximum + 1.0:
-            merged.append(interval)
+    merged: list[tuple[int, int]] = []
+    for start, end, _query_id in clipped_with_ids:
+        if not merged or float(start) > float(merged[-1][1]) + 1.0:
+            merged.append((start, end))
         else:
-            merged[-1] = FiniteInterval(
-                merged[-1].minimum,
-                max(merged[-1].maximum, interval.maximum),
-            )
+            previous_start, previous_end = merged[-1]
+            merged[-1] = (previous_start, max(previous_end, end))
     count = min(
         required_count,
-        sum(_integer_coordinate_count(interval) for interval in merged),
+        sum(end - start + 1 for start, end in merged),
     )
     complete = required_count > 0 and count == required_count
     return AdjacencyTraceCoverage(
         trace_position_px=trace_position_px,
         covering_query_ids=query_ids,
-        covered_intervals_px=tuple(merged),
+        covered_intervals_px=tuple(
+            FiniteInterval(float(start), float(end))
+            for start, end in merged
+        ),
         required_coordinate_count=required_count,
         covered_coordinate_count=count,
         complete=complete,
