@@ -343,6 +343,7 @@ def _project_late_local_candidate(
     *,
     source_frame_width_authority: SourceFrameWidthAuthority | None = None,
     allow_direct_rank: bool = False,
+    direct_role_input_preparation=None,
 ) -> tuple[SequenceFit | None, PhaseCandidateAuthorityProjection | None]:
     """Yield unsupported late local bindings back to this candidate's lattice.
 
@@ -371,6 +372,7 @@ def _project_late_local_candidate(
         phase_input.separator_bands,
         phase_input.sequence_measurement_sets,
         outer_material_boundaries=phase_input.outer_material_boundaries,
+        input_preparation=direct_role_input_preparation,
         authorized_source_frame_width_px=(
             None
             if source_frame_width_authority is None
@@ -631,6 +633,7 @@ def _attach_selected_candidate_authorities(
     *,
     directly_observed_ordinals: tuple[int, ...],
     source_frame_width_authority: SourceFrameWidthAuthority | None = None,
+    direct_role_input_preparation=None,
 ) -> PhaseFitResult:
     """Measure selected-candidate authorities without changing its status."""
 
@@ -642,6 +645,7 @@ def _attach_selected_candidate_authorities(
             phase_input.observations,
             phase_input.separator_bands,
             phase_input.sequence_measurement_sets,
+            input_preparation=direct_role_input_preparation,
             outer_material_boundaries=(
                 phase_input.outer_material_boundaries
             ),
@@ -780,6 +784,7 @@ def _apply_final_lattice_contract(
     *,
     directly_observed_ordinals: tuple[int, ...],
     source_frame_width_authority: SourceFrameWidthAuthority | None,
+    direct_role_input_preparation=None,
 ) -> PhaseFitResult:
     """Require direct-role, global, and local authority for one placement."""
 
@@ -802,6 +807,7 @@ def _apply_final_lattice_contract(
         phase_input,
         directly_observed_ordinals=directly_observed_ordinals,
         source_frame_width_authority=source_frame_width_authority,
+        direct_role_input_preparation=direct_role_input_preparation,
     )
     assessed_fit = result.best
     if (
@@ -860,6 +866,7 @@ def _apply_final_lattice_contract(
             phase_input,
             directly_observed_ordinals=directly_observed_ordinals,
             source_frame_width_authority=source_frame_width_authority,
+            direct_role_input_preparation=direct_role_input_preparation,
         )
     failure = conditional_phase_geometry_failure(result)
     if result.status != PhaseFitStatus.RESOLVED or failure is None:

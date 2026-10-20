@@ -53,7 +53,7 @@
   成员自身的 W/H/Cross 前置资格不足时，保留完整证据并明确标记输出及预算未评估，不再物化下游几何；
   该成员仍属于全集，继续阻断共同窗口。单帧保护与报告转换复用相同事实，保持独立报告分支和安全判据。
 - 对全部既有候选核验遗漏的唯一获权 separator 伙伴；仅原生完整可见宽度超过原物理上限时保留为
-  关联反证，不补绑定、不调整排序、不借 source W。报告进入当前 schema 111，独立 Review 显示各解释的
+  关联反证，不补绑定、不调整排序、不借 source W。报告进入当前 schema 112，独立 Review 显示各解释的
   `geometry_basis` 并重放十二类完整映射。Coverage／continuity
   校验共用 typed owner，并从开发报告原证据重建，删除重复判据。
   最终保留解释的 `retained_adjacency_assessments` 同时出现在普通及 development 报告，从原登记事实

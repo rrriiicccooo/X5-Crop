@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, replace
 from enum import Enum
+from types import MappingProxyType
 
 from ...domain import EvidenceState, FiniteInterval, ObservationId
 from .measurement_model import PhotoBoundaryMeasurementSet
@@ -23,7 +24,7 @@ from .separator_material import (
     normal_separator_material_conflicts,
 )
 from .template_separator_support import resolve_separator_support
-from .template_model import ContactRelation, SequenceFit
+from .template_model import ContactRelation, SequenceFit, MAX_TEMPLATE_FIT_PASSES
 
 
 class DirectRoleAuthorityBasis(str, Enum):
@@ -238,6 +239,45 @@ class _DirectRoleAuthorityLedger:
         tuple[ObservationId, BoundaryRole],
         tuple[tuple[ObservationId, ObservationId], ...],
     ]
+
+
+class DirectRoleInputPreparation:
+    """Source-local immutable input indexes, never a member authority result."""
+
+    def __init__(self, observations, separator_bands, measurement_sets, outer_material_boundaries):
+        self.inputs = observations, separator_bands, measurement_sets, outer_material_boundaries
+        self._ledgers = {}
+        self._intrinsic = None
+        self.lookup_count = self.preparation_count = self.retained_bytes = 0
+        self.ledger_bytes = 4096 + 8192 * sum(len(items) for items in (
+            observations, separator_bands, outer_material_boundaries))
+        self.intrinsic_bytes = 1024 * len(observations)
+        self.reserved_bytes = MAX_TEMPLATE_FIT_PASSES * self.ledger_bytes + self.intrinsic_bytes
+
+    def intrinsic_bases(self):
+        self.lookup_count += 1
+        if self._intrinsic is None:
+            self.preparation_count += 1
+            self._intrinsic = MappingProxyType(intrinsic_direct_role_authority_bases(self.inputs[0], self.inputs[2]))
+            self.retained_bytes += self.intrinsic_bytes
+        return self._intrinsic
+
+    def ledger_for(self, fit, observations, separator_bands, measurement_sets, outer_material_boundaries):
+        given = observations, separator_bands, measurement_sets, outer_material_boundaries
+        if any(left is not right and left != right for left, right in zip(self.inputs, given, strict=True)):
+            raise ValueError("direct-role preparation belongs to different registered facts")
+        self.lookup_count += 1
+        ledger = self._ledgers.get(fit.template)
+        if ledger is not None:
+            return ledger
+        self.preparation_count += 1
+        ledger = _direct_role_authority_ledger(fit, *given)
+        ledger = replace(ledger, **{field.name: MappingProxyType(value)
+            for field in fields(ledger) if isinstance(value := getattr(ledger, field.name), dict)})
+        if len(self._ledgers) < MAX_TEMPLATE_FIT_PASSES:
+            self._ledgers[fit.template] = ledger
+            self.retained_bytes += self.ledger_bytes
+        return ledger
 
 
 def _ordered_separator_edge_pair(
@@ -878,6 +918,7 @@ def assess_direct_role_binding_authorities(
         ...,
     ] = (),
     authorized_source_frame_width_px: FiniteInterval | None = None,
+    input_preparation: DirectRoleInputPreparation | None = None,
 ) -> tuple[DirectRoleBindingAuthority, ...]:
     """Assess bounded phase candidates against one pre-indexed evidence ledger."""
 
@@ -888,13 +929,9 @@ def assess_direct_role_binding_authorities(
     template = fits[0].template
     if any(fit.template != template for fit in fits[1:]):
         raise ValueError("direct-role candidate batch requires one fixed template")
-    ledger = _direct_role_authority_ledger(
-        fits[0],
-        observations,
-        separator_bands,
-        measurement_sets,
-        outer_material_boundaries,
-    )
+    arguments = fits[0], observations, separator_bands, measurement_sets, outer_material_boundaries
+    ledger = (_direct_role_authority_ledger(*arguments) if input_preparation is None
+              else input_preparation.ledger_for(*arguments))
     return tuple(
         _assess_direct_role_binding_authority(
             fit,
@@ -918,6 +955,7 @@ def assess_direct_role_binding_authority(
         ...,
     ] = (),
     authorized_source_frame_width_px: FiniteInterval | None = None,
+    input_preparation: DirectRoleInputPreparation | None = None,
 ) -> DirectRoleBindingAuthority:
     """Authorize a short line only through a source W that excludes it."""
 
@@ -930,6 +968,7 @@ def assess_direct_role_binding_authority(
         measurement_sets,
         outer_material_boundaries=outer_material_boundaries,
         authorized_source_frame_width_px=authorized_source_frame_width_px,
+        input_preparation=input_preparation,
     )[0]
 
 

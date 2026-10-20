@@ -20,7 +20,7 @@ from .template_cross_model import CrossFit, CrossFitStatus, CrossFailureKind, Cr
 from .template_aspect_ratio_model import ApertureAspectRatioAuthority
 from .template_family_membership import MembershipState
 from .template_direct_role_aperture_domain import assess_direct_role_aperture_domain_authority
-from .template_direct_role_authority import intrinsic_direct_role_authority_bases
+from .template_direct_role_authority import DirectRoleInputPreparation, intrinsic_direct_role_authority_bases
 from .template_feasible_geometry import project_format_placement
 from .template_frame_width import SourceFrameWidthAuthority, calibrate_source_frame_width
 from .template_lattice_authority import global_lattice_authority_matches_fit
@@ -157,6 +157,8 @@ class PhaseMemberOutputWork:
     local_binding_count: int = 0
     late_projection_count: int = 0
     phase_authority_check_bound: int = 0
+    direct_role_input_lookup_count: int = 0
+    direct_role_input_preparation_count: int = 0
     width_evaluation_count: int = 0
     cross_context_count: int = 0
     cross_evaluated_fit_count: int = 0
@@ -183,6 +185,7 @@ class PhaseMemberOutputWork:
                 or self.cross_context_count > 1 or self.composition_count > 1
                 or self.projection_count > self.composition_count
                 or self.coarse_geometry_preparation_count > self.coarse_geometry_lookup_count
+                or self.direct_role_input_preparation_count > self.direct_role_input_lookup_count
                 or self.budget_evaluation_count > self.output_evaluation_count):
             raise ValueError("phase member output exceeded its single reconstruction")
 
@@ -293,18 +296,25 @@ def _conditional_phase(lane, scope, fit, projection) -> PhaseFitResult:
 
 def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
                                member: PhaseCompetitionMember, *,
-                               coarse_geometry_preparation=None) -> PhaseMemberOutputProof:
+                               coarse_geometry_preparation=None,
+                               direct_role_input_preparation=None) -> PhaseMemberOutputProof:
     """Rebuild a given member without using selected W, H or Cross results."""
     gaps = []
     detail = None
     work = PhaseMemberOutputWork()
     local = late = assessed = width = adjacency = context = placement = None
     outputs = budgets = ()
+    native_before = (0, 0) if direct_role_input_preparation is None else (
+        direct_role_input_preparation.lookup_count, direct_role_input_preparation.preparation_count)
 
     def result():
         measured_work = replace(work, peak_temporary_bytes=max(work.peak_temporary_bytes,
             4096 + work.role_lookup_count * 32 + work.cross_evaluated_fit_count * 1024
             + work.output_evaluation_count * 4096))
+        if direct_role_input_preparation is not None:
+            measured_work = replace(measured_work,
+                direct_role_input_lookup_count=direct_role_input_preparation.lookup_count - native_before[0],
+                direct_role_input_preparation_count=direct_role_input_preparation.preparation_count - native_before[1])
         return PhaseMemberOutputProof(scope.scope_id, member.record_ordinal, local, late,
             assessed, width, adjacency, None if context is None else PhaseMemberCrossContext.from_context(context),
             placement, outputs, budgets,
@@ -333,12 +343,13 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
                 if scope.phase_authority_px is not None and identity in fit.phase_anchor_observation_ids),
             pitch_observation_ids=lane.phase_input.global_lattice_evidence.pitch_observation_ids,
         ))
-    intrinsic = intrinsic_direct_role_authority_bases(
-        phase_input.observations, phase_input.sequence_measurement_sets)
+    intrinsic = (intrinsic_direct_role_authority_bases(phase_input.observations, phase_input.sequence_measurement_sets)
+        if direct_role_input_preparation is None else direct_role_input_preparation.intrinsic_bases())
     refined = _refine_local_role_bindings(fit, phase_input.observations, phase_input.separator_bands,
         intrinsic_coordinate_authority_ids=frozenset(intrinsic))
     local = refined.fit
-    projected, late = _project_late_local_candidate(local, phase_input, allow_direct_rank=True)
+    projected, late = _project_late_local_candidate(local, phase_input, allow_direct_rank=True,
+        direct_role_input_preparation=direct_role_input_preparation)
     work = replace(work, role_lookup_count=refined.role_lookup_count,
         local_binding_count=refined.binding_count, late_projection_count=int(late is not None))
     if projected is None:
@@ -349,7 +360,8 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
     if not _phase_residual_compatible(fit):
         gaps.append(PhaseMemberOutputGap.RESIDUAL_INCOMPATIBLE)
     phase = _conditional_phase(lane, scope, fit, late or member.projection)
-    phase = _attach_selected_candidate_authorities(phase, phase_input, directly_observed_ordinals=())
+    phase = _attach_selected_candidate_authorities(phase, phase_input, directly_observed_ordinals=(),
+        direct_role_input_preparation=direct_role_input_preparation)
     analysis = derive_adjacency_relations(fit, phase.adjacency_continuity_observations)
     ordinals = tuple(fact.relation_ordinal for fact in analysis.adjacency_facts)
     scales = lane.lane.scan_canvas.axis_scales
@@ -363,7 +375,8 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
             if width.basis == SourceFrameWidthAuthorityBasis.INDEPENDENT_COMPLETE_FRAMES else ()),
     ))
     assessed = _apply_final_lattice_contract(phase, phase_input,
-        directly_observed_ordinals=ordinals, source_frame_width_authority=width)
+        directly_observed_ordinals=ordinals, source_frame_width_authority=width,
+        direct_role_input_preparation=direct_role_input_preparation)
     fit = assessed.best
     lattice = assessed.global_lattice_authority
     if (lattice is not None and lattice.state == EvidenceState.SUPPORTED
@@ -524,22 +537,25 @@ class CompletePhaseOutputProof:
 
 
 def build_complete_phase_output(lane, *, retained_review_bytes: int = 0) -> CompletePhaseOutputProof | None:
-    return _build_complete_phase_output(lane, retained_review_bytes=retained_review_bytes,
-                                       preparation=CoarsePairGeometryPreparation())
-
-
-def _build_complete_phase_output(lane, *, retained_review_bytes, preparation) -> CompletePhaseOutputProof | None:
     if type(retained_review_bytes) is not int or retained_review_bytes < 0:
         raise ValueError("retained Review bytes must be a nonnegative integer")
     # Resolved single-winner and no-runner cases do not ask for a plural
     # common window. The complete producer ledger is retained in every case.
     if lane.phase_competition.runner_up is None or lane.phase_competition.status == PhaseFitStatus.RESOLVED:
         return None
+    inputs = lane.phase_input
+    return _build_complete_phase_output(lane, retained_review_bytes=retained_review_bytes,
+        preparation=CoarsePairGeometryPreparation(), direct_preparation=DirectRoleInputPreparation(
+            inputs.observations, inputs.separator_bands, inputs.sequence_measurement_sets, inputs.outer_material_boundaries))
+
+
+def _build_complete_phase_output(lane, *, retained_review_bytes, preparation, direct_preparation) -> CompletePhaseOutputProof:
     scopes = lane.phase_competition.competition_scopes
     proofs = []
     units = 0
     retained_bytes = sum(scope.retained_bytes for scope in scopes)
-    preparation_reserve = preparation.reserve_bytes(lane.coarse_support.enclosing_side_facts)
+    preparation_reserve = (preparation.reserve_bytes(lane.coarse_support.enclosing_side_facts)
+                           + direct_preparation.reserved_bytes)
     extent = None if lane.phase_input.source_domain is None else lane.phase_input.source_domain.source_extent
     memory_limit = None if extent is None else 10 * extent.width * extent.height + 32 * 1024 * 1024
     exceeded = lane.phase_competition.status == PhaseFitStatus.BOUND_EXCEEDED or any(
@@ -556,7 +572,7 @@ def _build_complete_phase_output(lane, *, retained_review_bytes, preparation) ->
                     (PhaseMemberOutputGap.WORK_BOUND_EXCEEDED,), None, PhaseMemberOutputWork())
             else:
                 proof = assess_phase_member_output(lane, scope, member,
-                                                  coarse_geometry_preparation=preparation)
+                    coarse_geometry_preparation=preparation, direct_role_input_preparation=direct_preparation)
                 work = proof.work
                 units += (work.role_lookup_count + work.local_binding_count
                     + work.phase_authority_check_bound * len(member.input_fit.role_bindings)
@@ -568,6 +584,7 @@ def _build_complete_phase_output(lane, *, retained_review_bytes, preparation) ->
                     + work.projection_extreme_count + work.composition_count
                     + work.projection_count + work.width_evaluation_count + work.cross_context_count)
                 units += work.coarse_geometry_lookup_count + work.coarse_geometry_preparation_count
+                units += work.direct_role_input_lookup_count + work.direct_role_input_preparation_count
                 exceeded = units > MAX_COMPLETE_PHASE_OUTPUT_WORK_UNITS
             proofs.append(proof)
             retained_bytes += (4096 + len(proof.output_footprints) * 8192
@@ -575,7 +592,9 @@ def _build_complete_phase_output(lane, *, retained_review_bytes, preparation) ->
                 + (0 if proof.cross_context is None else proof.cross_context.competition.receipt.evaluated_fit_count * 1024))
     if (sum(proof.work.coarse_geometry_lookup_count for proof in proofs) != preparation.lookup_count
             or sum(proof.work.coarse_geometry_preparation_count for proof in proofs) != preparation.preparation_count
-            or preparation.retained_bytes > preparation_reserve):
+            or sum(proof.work.direct_role_input_lookup_count for proof in proofs) != direct_preparation.lookup_count
+            or sum(proof.work.direct_role_input_preparation_count for proof in proofs) != direct_preparation.preparation_count
+            or preparation.retained_bytes + direct_preparation.retained_bytes > preparation_reserve):
         raise ValueError("complete phase output lost shared raw geometry work")
     native = tuple(proof for proof in proofs if proof.placement is not None)
     outputs = ()
@@ -617,6 +636,7 @@ def _build_complete_phase_output(lane, *, retained_review_bytes, preparation) ->
         + (0 if proof.cross_context is None else proof.cross_context.competition.receipt.evaluated_fit_count * 1024)
         for proof in proofs)
     retained += len(outputs) * (4096 + 128 * len(native))
-    peak = retained + max((proof.work.peak_temporary_bytes for proof in proofs), default=0) + preparation.retained_bytes
+    peak = (retained + max((proof.work.peak_temporary_bytes for proof in proofs), default=0)
+            + preparation.retained_bytes + direct_preparation.retained_bytes)
     return CompletePhaseOutputProof(scopes, tuple(proofs), outputs, failure, units, peak, exceeded,
                                    common_work_units=common_work)

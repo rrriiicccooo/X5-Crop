@@ -184,7 +184,7 @@ class CurrentRuntimeContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_ID, "x5crop_detection_report_v5")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "x5crop_v5_template_report_111",
+            "x5crop_v5_template_report_112",
         )
         candidate = candidate_gate_assessment(
             {

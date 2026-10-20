@@ -2291,7 +2291,7 @@ Gate 准入。全部成员都具备该条件资格且确立同一固定 source W
 `common_outputs` 可保留预算失败窗口作为诊断，只有 `state=supported` 且 `common_failure=null` 才表示窗口
 验证通过。当前该分支在规范 selection/Gate 后执行，不授予照片序号映射、canonical winner 或自动输出权限。
 
-当前报告 schema 为 111。普通报告保留完整账本和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
+当前报告 schema 为 112。普通报告保留完整账本和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
 重放全部 producer 和独立成员，再比对结果、缺口和工作。成员 Cross 只重复自身 H／纵向域、best/runner、
 求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
 外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source
@@ -2418,6 +2418,10 @@ separator、source-W 与最终权限仍按本成员独立判定。
 同一次最终 lattice 闭合内，fit 对象及评估输入均未改变时保留刚建立的权限事实；状态变化本身不重建
 相同事实，重新推导或绑定的 fit 仍完整重建。成员工作以 `phase_authority_check_bound` 表示最多四阶段
 权限检查的保守上界，与实际原始几何 preparation 次数分别记录。
+全集验证的 direct-role 输入准备绑定完整 observations、separator、measurement sets 与 outer boundaries，
+仅保存最多六份按完整 template 区分的只读原生索引，以及一份 intrinsic 输入索引；角色绑定和本成员
+source-W 的资格仍逐次独立核验。不同输入拒绝复用，满额后继续原准备；lookup、实际 preparation 与
+保留字节独立记账，最坏内存在执行前预留，准备对象随本次全集验证结束释放。
 
 正式输入限于单页 unsigned 16-bit、RGB 三通道、contiguous TIFF；压缩接受 `NONE`、`LZW`、
 `DEFLATE` / `ADOBE_DEFLATE` 或 `ZSTD`。Orientation 1–8 在 decode boundary 规范化，输出写

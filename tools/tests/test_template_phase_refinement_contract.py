@@ -25,7 +25,9 @@ from x5crop.detection.photo_geometry.template_model import (
     SequenceBindingUse,
     SequenceRoleBinding,
 )
-from x5crop.detection.photo_geometry.template_direct_role_authority import assess_direct_role_binding_authority
+from x5crop.detection.photo_geometry.template_direct_role_authority import (
+    DirectRoleInputPreparation, assess_direct_role_binding_authority,
+)
 from x5crop.detection.photo_geometry.template_phase_competition import fit_template_phase
 from x5crop.detection.photo_geometry.template_phase_refinement import (
     _project_retained_late_local_refinements,
@@ -56,6 +58,30 @@ from tools.tests.phase_test_support import _local_line, _phase_candidate_group
 
 
 class TemplatePhaseRefinementContractTest(unittest.TestCase):
+    def test_prepared_native_indexes_keep_member_and_width_assessments_independent(self) -> None:
+        observations = tuple(edge(f"{offset}:{index}", position + offset)
+            for offset in (0.0, 10.0) for index, position in enumerate((100.0, 200.0, 220.0, 320.0)))
+        spec = template(2)
+        measurements = (phase_sequence_measurement("native-index", FiniteInterval(90.0, 360.0)),)
+        phase = fit_template_phase(observations, spec, sequence_measurement_sets=measurements)
+        fits = tuple(member.input_fit for scope in phase.competition_scopes for member in scope.members)
+        self.assertGreater(len(fits), 1)
+        preparation = DirectRoleInputPreparation(observations, (), measurements, ())
+        for fit in fits:
+            for width in (None, FiniteInterval.exact(100.0), FiniteInterval.exact(150.0)):
+                arguments = dict(authorized_source_frame_width_px=width)
+                expected = assess_direct_role_binding_authority(fit, observations, (), measurements, **arguments)
+                actual = assess_direct_role_binding_authority(fit, observations, (), measurements,
+                    input_preparation=preparation, **arguments)
+                self.assertEqual(actual, expected)
+        self.assertEqual(preparation.preparation_count, 1)
+        ledger = preparation.ledger_for(fits[0], observations, (), measurements, ())
+        with self.assertRaises(TypeError):
+            ledger.support_region_counts[observations[0].observation_id] = 0
+        with self.assertRaisesRegex(ValueError, "different registered facts"):
+            assess_direct_role_binding_authority(fits[0], observations + (edge("foreign", 500.0),), (), measurements,
+                input_preparation=preparation)
+
     def test_unchanged_fit_reuses_facts_but_new_inference_rebuilds_them(self) -> None:
         for missing in (False, True):
             with self.subTest(missing=missing):
