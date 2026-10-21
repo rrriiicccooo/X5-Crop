@@ -285,6 +285,13 @@ def _first_persistent(mask: np.ndarray, seed_count: int, persistence: int) -> tu
     return indices, (indices != 0) | persistent[0]
 
 
+def _mad_floor_is_proven(deviations: np.ndarray, center: np.ndarray, minimum_scale: float) -> bool:
+    """Certify the original per-trace MAD floor without choosing a new scale."""
+    bound = math.nextafter(minimum_scale/NORMAL_MAD_SCALE, -math.inf)
+    return bool(np.all(np.isfinite(center)) and np.all(
+        2*np.count_nonzero(deviations > bound, axis=1) < deviations.shape[1]))
+
+
 def _weak_prefixes(sums: np.ndarray, query: ExteriorRegionQuery) -> tuple[np.ndarray, int, int]:
     window, gap = query.window, query.gap
     coordinates = np.arange(window+gap, query.coordinate_count, dtype=np.int32)
@@ -298,7 +305,7 @@ def _weak_prefixes(sums: np.ndarray, query: ExteriorRegionQuery) -> tuple[np.nda
         # uses sum units, including the 25-code minimum noise scale, so the
         # registered dimensionless z predicate remains unchanged.
         base = sums.nbytes + coordinates.nbytes + result.nbytes
-        def credible(field, threshold):
+        def credible(field, threshold, *, certify_floor=False):
             nonlocal peak
             # Partition one trace's complete coordinate domain contiguously.
             # Only scratch storage changes; each original column keeps its
@@ -307,13 +314,22 @@ def _weak_prefixes(sums: np.ndarray, query: ExteriorRegionQuery) -> tuple[np.nda
             center = np.median(scratch, axis=1, overwrite_input=True)
             np.subtract(field.T, center[:, None], out=scratch)
             np.abs(scratch, out=scratch)
-            mad = np.median(scratch, axis=1, overwrite_input=True)
-            scale = np.maximum(KERNEL_AREA*REGISTERED_UINT8_QUANTIZATION_STEP, NORMAL_MAD_SCALE*mad)
+            minimum_scale = KERNEL_AREA*REGISTERED_UINT8_QUANTIZATION_STEP
+            # A strict majority below this outward-safe bound proves that
+            # the original MAD scale is clamped to its existing floor.
+            # Gradient's comparison and reduction use two weak-domain scans.
+            # The removed weak-mask and two persistent availability scans
+            # cover those within the original coordinate/trace work budget.
+            if certify_floor and _mad_floor_is_proven(scratch, center, minimum_scale):
+                scale = np.full_like(center, minimum_scale)
+            else:
+                mad = np.median(scratch, axis=1, overwrite_input=True)
+                scale = np.maximum(minimum_scale, NORMAL_MAD_SCALE*mad)
             np.subtract(field.T, center[:, None], out=scratch)
             scratch /= scale[:, None]
             mask = (scratch >= threshold).T
             peak = max(peak, base + field.nbytes + scratch.nbytes + mask.nbytes
-                       + center.nbytes + 2*mad.nbytes + scale.nbytes)
+                       + 4*center.nbytes)
             return mask
         def contrast(data):
             nonlocal peak
@@ -331,7 +347,7 @@ def _weak_prefixes(sums: np.ndarray, query: ExteriorRegionQuery) -> tuple[np.nda
             return result
         gradient = np.abs(values[coordinates+gap-1]-values[coordinates-gap]).astype(np.float64, order="F")
         peak = max(peak, base + 3*gradient.nbytes)
-        mask = credible(gradient, SPEC.gradient_z_minimum)
+        mask = credible(gradient, SPEC.gradient_z_minimum, certify_floor=True)
         del gradient
         base += mask.nbytes
         mask |= credible(contrast(values), SPEC.tone_or_texture_z_minimum)

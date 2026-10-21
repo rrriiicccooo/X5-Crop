@@ -2,6 +2,7 @@ from __future__ import annotations
 from tools.tests.photo_geometry_support import make_native_test_field
 
 from dataclasses import replace
+import math
 import tracemalloc
 import unittest
 
@@ -9,11 +10,12 @@ import numpy as np
 
 from x5crop.domain import Box, FiniteInterval
 from x5crop.detection.photo_geometry.exterior_region_measurement import (
-    ExteriorRegionAvailability, ExteriorRegionQuery, _box_sums, _first_persistent,
+    ExteriorRegionAvailability, ExteriorRegionQuery, _box_sums, _first_persistent, _mad_floor_is_proven,
     measure_exterior_region,
 )
 from x5crop.detection.photo_geometry.model import PHOTO_BOUNDARY_MEASUREMENT_SPEC as SPEC
 from x5crop.detection.photo_geometry.registered_transition_measurement import measure_trace
+from x5crop.detection.robust_statistics import NORMAL_MAD_SCALE
 from x5crop.run_local_identity import source_identity_scope
 from x5crop.report.read_models import typed_read_model
 from tools.regression.report_validation import _read_common_proof
@@ -179,6 +181,36 @@ class ExteriorRegionMeasurementContractTest(unittest.TestCase):
                                 if all(bool(mask[r,column]) for r in range(row,row+persistence))]
                         self.assertEqual(bool(available[column]), bool(hits))
                         self.assertEqual(int(indices[column]), hits[0] if hits else 0)
+
+    def test_mad_floor_certificate_requires_a_strict_majority_for_every_trace(self):
+        floor = 25.
+        bound = math.nextafter(floor/NORMAL_MAD_SCALE, -math.inf)
+        for values, expected in (([0., bound, 100., 100.], False),
+                                 ([0., 0., bound, 100.], True),
+                                 ([0., 0., bound, 100., 100.], True)):
+            with self.subTest(values=values):
+                deviations = np.array([values, values], dtype=np.float64)
+                proven = _mad_floor_is_proven(deviations, np.zeros(2), floor)
+                self.assertEqual(proven, expected)
+                actual = np.maximum(floor, NORMAL_MAD_SCALE*np.median(deviations, axis=1))
+                if proven:
+                    np.testing.assert_array_equal(actual, np.full(2, floor))
+                else:
+                    self.assertTrue(np.all(actual > floor))
+                self.assertFalse(_mad_floor_is_proven(deviations, np.array([0., np.nan]), floor))
+
+    def test_floor_certificate_scans_fit_removed_availability_work(self):
+        for height in (*range(1, 100), 600, 605, 2048, 2049, 4096, 4097, 20000, 2000000):
+            for scale in (.1, 10., 75.):
+                with self.subTest(height=height, scale=scale):
+                    query = ExteriorRegionQuery(
+                        "lane:0", "horizontal", Box(0, 0, 101, height), scale, "physical-plan:test",
+                    )
+                    if not query.observable:
+                        continue
+                    persistent_count = query.coordinate_count-query.persistence+1
+                    removed_work = query.weak_coordinate_count+2*persistent_count
+                    self.assertLessEqual(2*query.weak_coordinate_count, removed_work)
 
     def test_query_coverage_and_work_cannot_be_silently_shrunk(self):
         result = _measure(_source())
