@@ -2304,6 +2304,25 @@ owner 有界重拟合一次，再重建该成员自身的权限与连续性，�
 不能删除无权 binding 来伪造原成员恢复，也不能将 local 角色升级为 phase anchor。关系缺证、联合状态
 不可行或身份变化时记录 `adjacency_propagation_failed`，保留完整原证据，不继续 W／Cross／输出评估。
 求解成功本身不授予成员资格，holder、source domain、原 anchor ceiling 与其它缺口仍分别保留。
+最终自身 W 状态完成后，`template_native_grid_association.py` 对普通邻接中的实际 native／完整未观察
+Grid 端点建立 `NativeGridAssociationProof`。它复用 `template_feasible_geometry.sequence_feasible_system`
+的原 phase／pitch／W／local delta／scale 联合约束；原生局部边保留自身 full interval，只有既有 nominal
+anchor 或 supported global direct constraint 才能复用对应角色表达式。既有 Grid anchor 的反侧继续消费
+该 Grid 自己的 W；其它 native＋W 推导须有本成员获权的 `FrameWidthInference`，并消费同一 W 变量。
+不能复制两份独立宽度，也不能把 local 角色升级为 anchor。实测 separator／Contact／Overlap
+继续由原关系 owner 负责，不从 incident band 或模型正间距创造新的关联。
+联合系统消费的全部 nominal／global direct 坐标约束均须有现成的无条件坐标权限；仅有 partial-height
+或 outer 条件的锚点在自身 Cross 域闭合前，不得为其它邻接提供物理结论。
+该投影是必要联合约束下的保守包络，不声称包含全部原生变量物理关系的精确集合。两端均已获权且包络
+全负时，保存条件反证；跨零只表示未证明，不能宣称真实存在合法 Overlap。任一端未获权时保留来源，
+不求解后续几何，`joint_system_feasible=null` 表示未评估，不能写成不可行。两端获权且完整包络非负，
+原代表间距也须非负并在包络内，才闭合该条件关联；不从 LP 选择有利代表点，原 Cross 编译仍独立核验。
+联合必要系统不可行与求解器异常分别处理，后者抛实际错误。证明绑定本成员的完整数学输入与权限状态，
+不闭合的关联显式阻断其输出资格，但不删除历史成员或自动批准另一解释。
+`PhaseMemberAdmissionProof` 同时从规范 owner 重放原始及当前 fit 的 holder／source-domain 分类，保留
+完整模型位置、原 holder span、原 `0.02 × (W_min + W_max)` slack、真实 source domain 与终端角色。
+原失败不因后续 fit 成功而获得新权限；当前状态重新失败也阻断资格。Source-terminal 分类只证明真实
+TIFF 外缘的截断位置合法，不能冒充 canonical holder 准入或改写原坐标。
 Cross 使用 `lane_preparation.prepare_template_cross_context` 的同一规范 owner：只共享候选无关 base registration，
 重新编译该成员的纵向域、局部 refinement、初始 H、aspect 和直接 H 校准。直接观察到的 adjacency ordinal
 由本成员的原生连续性证据推导，不能仅由关系标签声明。无法匹配本 fit 的 lattice 不进入其
@@ -2323,7 +2342,7 @@ format/source 状态测量共同 W。共同 H 只从每个成员都已完整关�
 `common_outputs` 可保留预算失败窗口作为诊断，只有 `state=supported` 且 `common_failure=null` 才表示窗口
 验证通过。当前该分支在规范 selection/Gate 后执行，不授予照片序号映射、canonical winner 或自动输出权限。
 
-当前报告 schema 为 115。普通报告保留完整账本和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
+当前报告 schema 为 116。普通报告保留完整账本和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
 重放全部 producer 和独立成员，再比对结果、缺口和工作。成员 Cross 只重复自身 H／纵向域、best/runner、
 求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
 外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source
@@ -2379,6 +2398,12 @@ lattice authority。不新增像素 query 或 phase 搜索；包括第三份提�
 求解成功在原求解入口计数，不能从最终 projection verdict 推断；可行求解仍可能被身份守卫拒绝。
 额外临时上界为 `4096 + 1024(H + S + R)`，保留输入／输出状态另计 `8192 + 2048R`，并入同一 source 内存；
 达到工作上限时保留全部具名成员和 typed 工作缺口，不运行该 refit，也不以先完成的成员代替全集。
+实际 native／Grid 关联每成员只编译一份原联合系统，每 normal 关系至多两次 LP；同一系统、完全相同
+线性目标的两个极值在该成员内复用，至多保留 `count - 1` 项，返回即释放，不缓存权限或跨成员结果。
+未获权的端点只保留来源和未评估状态，不运行 LP。求解前预留 `128 + 8R(R + 10)` 逻辑工作与
+`8192 + 512R(R + 10)` 临时字节，实际 LP 调用另计；关联账本保留量按 `4096 + 1024R` 计入 source。
+原始／当前准入核验按 `4R` 工作与 `2048 + 128R` 字节预留，使用原 holder／source owner，完整模型
+坐标不截断；以上均消费原 600 万全集工作与原 source 内存上限，不新开资源池。
 完整集合及各 producer scope 的独立尺寸检查先编译原生 pair、H 和条件尺寸核验的逻辑上界并预留工作与内存，
 再执行重建；已超界时只保留全部具名成员和 typed unavailable，不继续尺寸重建。成员关联表、共享 pair 和各
 scope 的窗口保留量一起计入同一 source 内存。共同窗口另外计入各 slot 的成员预算与凸包排序逻辑上界，最多消费 4096 个完整成员；

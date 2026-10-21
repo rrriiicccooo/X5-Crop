@@ -55,8 +55,8 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record, validate_placement_feature_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v29"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v30"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v30"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v31"
 RETAINED_PLACEMENT_SCOPE = "retained_canonical_pair_conditional_cross_and_independent_phase_review_proposals"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
@@ -90,6 +90,13 @@ def _complete_phase_output_diagnostic(lane):
             "member_count": len(proof["members"]),
             "qualified_member_count": sum(not member["gaps"] for member in proof["members"]),
             "cross_context_count": sum(member["cross_context"] is not None for member in proof["members"]),
+            "native_grid_association_states": dict(sorted(Counter(
+                member["native_grid_association"]["state"] for member in proof["members"]
+                if member["native_grid_association"] is not None).items())),
+            "native_grid_lp_solve_count": sum(member["work"]["native_grid_lp_solve_count"]
+                                               for member in proof["members"]),
+            "current_holder_unavailable_count": sum(member["admission"] is not None
+                and not member["admission"]["current_holder_admitted"] for member in proof["members"]),
             "adjacency_propagation_count": sum(member["adjacency_propagation"] is not None for member in proof["members"]),
             "adjacency_propagation_success_count": sum(member["adjacency_propagation"] is not None
                 and member["adjacency_propagation"]["output_fit"] is not None for member in proof["members"]),

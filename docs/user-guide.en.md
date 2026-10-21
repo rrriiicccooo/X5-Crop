@@ -58,6 +58,8 @@ top/bottom association, and protection budget. Members with missing qualificatio
 when prerequisites are unmet, their evidence remains and output geometry and budget are explicitly marked unevaluated.
 Registered adjacency relations are jointly checked against each member's original boundaries. Missing independent
 facts or an inability to preserve the original boundary assignments require manual review.
+Reports retain separate proofs for actual native-to-template boundary associations and original/current range admission.
+Classification as clipping at a true source edge does not automatically grant range admission.
 Original complete-photo boundaries independently accepted by every interpretation can establish common dimensions;
 each interpretation retains its own dimension ranges and protection requirements. Reports distinguish a positioning
 stage's common window from the complete historical set. Passing some stages still requires manual review.

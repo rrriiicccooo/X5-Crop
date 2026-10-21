@@ -52,6 +52,14 @@ from .template_registration import local_cross_refinements_closed, membership_pr
 from .template_coarse_sides import CoarsePairGeometryPreparation
 from .template_residual import AdjacencyRelationAnalysis, derive_adjacency_relations
 from .template_adjacency_coverage import AdjacencyCoveragePreparation
+from .template_native_grid_association import (
+    NativeGridAssociationProof, assess_native_grid_association,
+    native_grid_relation_ordinals, native_grid_work_bound, native_grid_bytes_bound,
+)
+from .template_phase_admission import (
+    PhaseMemberAdmissionProof, assess_phase_member_admission,
+    admission_proof_work_bound, admission_proof_bytes_bound,
+)
 
 
 class PhaseMemberOutputGap(str, Enum):
@@ -65,6 +73,8 @@ class PhaseMemberOutputGap(str, Enum):
     LATTICE_IDENTITY_UNQUALIFIED = "lattice_identity_unqualified"
     NATIVE_ADJACENCY_CONTRADICTED = "native_adjacency_contradicted"
     ADJACENCY_PROPAGATION_FAILED = "adjacency_propagation_failed"
+    NATIVE_GRID_ASSOCIATION_UNAVAILABLE = "native_grid_association_unavailable"
+    NATIVE_GRID_ASSOCIATION_CONTRADICTED = "native_grid_association_contradicted"
     SOURCE_WIDTH_CONFLICT = "source_width_conflict"
     CROSS_CONTEXT_UNAVAILABLE = "cross_context_unavailable"
     CROSS_UNRESOLVED = "cross_unresolved"
@@ -206,6 +216,11 @@ class PhaseMemberOutputWork:
     adjacency_nominal_grid_solve_count: int = 0
     adjacency_nominal_grid_solve_success_count: int = 0
     adjacency_refit_work_bound: int = 0
+    admission_check_bound: int = 0
+    native_grid_relation_check_count: int = 0
+    native_grid_input_scan_bound: int = 0
+    native_grid_projection_work_bound: int = 0
+    native_grid_lp_solve_count: int = 0
     coverage_input_preparation_count: int = 0
     coverage_corridor_lookup_count: int = 0
     coverage_corridor_preparation_count: int = 0
@@ -239,6 +254,8 @@ class PhaseMemberOutputWork:
                 or self.coverage_corridor_preparation_count > self.coverage_corridor_lookup_count
                 or (self.coverage_corridor_lookup_count > 0 and self.coverage_input_preparation_count != 1)
                 or self.adjacency_refit_count > 1
+                or self.native_grid_lp_solve_count > 2 * self.native_grid_relation_check_count
+                or self.native_grid_lp_solve_count > 0 and not self.native_grid_projection_work_bound
                 or self.adjacency_direct_fit_count + self.adjacency_nominal_grid_solve_count > self.adjacency_refit_count
                 or self.adjacency_nominal_grid_solve_success_count > self.adjacency_nominal_grid_solve_count
                 or self.cross_context_count > 1 or self.composition_count > 1
@@ -265,7 +282,9 @@ def _member_work_units(work, role_count):
         + work.adjacency_direct_fit_count + work.adjacency_nominal_grid_solve_count
         + work.adjacency_nominal_grid_solve_success_count
         + work.coverage_input_preparation_count + work.coverage_corridor_lookup_count
-        + work.coverage_corridor_preparation_count)
+        + work.coverage_corridor_preparation_count + work.admission_check_bound
+        + work.native_grid_relation_check_count + work.native_grid_projection_work_bound
+        + work.native_grid_lp_solve_count + work.native_grid_input_scan_bound)
 
 
 @dataclass(frozen=True)
@@ -285,6 +304,8 @@ class PhaseMemberOutputProof:
     detail: str | None
     work: PhaseMemberOutputWork
     adjacency_propagation: PhaseMemberAdjacencyPropagation | None = None
+    native_grid_association: NativeGridAssociationProof | None = None
+    admission: PhaseMemberAdmissionProof | None = None
 
     def __post_init__(self) -> None:
         if (not self.scope_id or type(self.record_ordinal) is not int or self.record_ordinal < 0
@@ -293,6 +314,33 @@ class PhaseMemberOutputProof:
             raise ValueError("phase member proof lost its registered identity or gaps")
         if len(self.output_footprints) != len(self.budgets):
             raise ValueError("phase member proof lost output budgets")
+        if (self.admission is not None) != bool(self.work.admission_check_bound):
+            raise ValueError("phase member lost its admission work")
+        if self.admission is not None:
+            if (not self.admission.current_holder_admitted
+                    and PhaseMemberOutputGap.HOLDER_ADMISSION_UNAVAILABLE not in self.gaps
+                    or self.admission.current_source_domain_admitted is False
+                    and PhaseMemberOutputGap.SOURCE_DOMAIN_UNAVAILABLE not in self.gaps):
+                raise ValueError("phase member hid its current admission failure")
+        native_grid = self.native_grid_association
+        if (native_grid is not None) != bool(self.work.native_grid_projection_work_bound):
+            raise ValueError("phase member lost its native/Grid joint work")
+        if native_grid is not None:
+            if (self.phase_assessment is None
+                    or not native_grid.matches_inputs(self.phase_assessment, self.source_frame_width_authority)
+                    or self.work.native_grid_lp_solve_count != native_grid.lp_solve_count
+                    or self.work.native_grid_relation_check_count != len(native_grid.facts)
+                    or tuple(f.relation_ordinal for f in native_grid.facts)
+                        != native_grid_relation_ordinals(self.phase_assessment.best)
+                    or self.work.native_grid_projection_work_bound != native_grid_work_bound(
+                        len(self.phase_assessment.best.role_bindings))):
+                raise ValueError("phase member native/Grid proof changed its own state")
+            expected_gap = (None if native_grid.state == EvidenceState.SUPPORTED else
+                PhaseMemberOutputGap.NATIVE_GRID_ASSOCIATION_CONTRADICTED
+                if native_grid.state == EvidenceState.CONTRADICTED else
+                PhaseMemberOutputGap.NATIVE_GRID_ASSOCIATION_UNAVAILABLE)
+            if expected_gap is not None and expected_gap not in self.gaps:
+                raise ValueError("phase member hid its native/Grid qualification gap")
         propagation = self.adjacency_propagation
         if (propagation is not None) != bool(self.work.adjacency_refit_count):
             raise ValueError("phase member lost its adjacency propagation work")
@@ -316,6 +364,10 @@ class PhaseMemberOutputProof:
                 raise ValueError("conditional member evidence cannot declare a phase winner")
             if self.adjacency is None or self.adjacency.fit != fit:
                 raise ValueError("phase member adjacency belongs to another final fit")
+            if self.admission is not None and (
+                    self.admission.current_model_role_positions_px != fit.model_role_positions_px
+                    or self.work.admission_check_bound != admission_proof_work_bound(len(fit.role_bindings))):
+                raise ValueError("phase member admission changed its final fit")
             if (self.source_frame_width_authority is not None
                     and self.source_frame_width_authority.state == EvidenceState.SUPPORTED
                     and not self.source_frame_width_authority.matches_placement(fit)):
@@ -392,15 +444,34 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
     detail = None
     work = PhaseMemberOutputWork()
     local = late = assessed = width = adjacency = context = placement = propagation = None
+    native_grid = admission = None
+    fit = member.input_fit
+    admission_bound = admission_proof_work_bound(len(fit.role_bindings))
+    if available_work_units < admission_bound:
+        return PhaseMemberOutputProof(scope.scope_id, member.record_ordinal,
+            None, None, None, None, None, None, None, (), (),
+            (PhaseMemberOutputGap.WORK_BOUND_EXCEEDED,), "phase admission work bound exceeded", work)
+    work = replace(work, admission_check_bound=admission_bound)
     coverage_preparation = None
     outputs = budgets = ()
     native_before = (0, 0) if direct_role_input_preparation is None else (
         direct_role_input_preparation.lookup_count, direct_role_input_preparation.preparation_count)
 
     def result():
+        own_admission = admission or assess_phase_member_admission(member.input_fit, fit,
+            holder_span_px=scope.holder_span_px, source_domain=scope.source_domain)
+        if (own_admission.original_holder_admitted != member.holder_admitted
+                or own_admission.original_source_domain_admitted != member.source_domain_admitted
+                or own_admission.original_source_terminal_role_indices != member.source_terminal_role_indices):
+            raise ValueError("phase member admission lost its frozen producer inputs")
+        if not own_admission.current_holder_admitted:
+            gaps.append(PhaseMemberOutputGap.HOLDER_ADMISSION_UNAVAILABLE)
+        if own_admission.current_source_domain_admitted is False:
+            gaps.append(PhaseMemberOutputGap.SOURCE_DOMAIN_UNAVAILABLE)
         measured_work = replace(work, peak_temporary_bytes=max(work.peak_temporary_bytes,
             4096 + work.role_lookup_count * 32 + work.cross_evaluated_fit_count * 1024
-            + work.output_evaluation_count * 4096))
+            + work.output_evaluation_count * 4096)
+            + admission_proof_bytes_bound(len(fit.role_bindings)))
         if coverage_preparation is not None:
             measured_work = replace(measured_work, coverage_input_preparation_count=1,
                 coverage_corridor_lookup_count=coverage_preparation.lookup_count,
@@ -413,7 +484,8 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
         return PhaseMemberOutputProof(scope.scope_id, member.record_ordinal, local, late,
             assessed, width, adjacency, None if context is None else PhaseMemberCrossContext.from_context(context),
             placement, outputs, budgets,
-            tuple(dict.fromkeys(gaps)), detail, measured_work, adjacency_propagation=propagation)
+            tuple(dict.fromkeys(gaps)), detail, measured_work, adjacency_propagation=propagation,
+            native_grid_association=native_grid, admission=own_admission)
 
     unprojected = member.projection is None
     if not unprojected and (not member.projection.eligible or member.projected_fit is None):
@@ -514,6 +586,12 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
         direct_role_input_preparation=direct_role_input_preparation,
         adjacency_coverage_preparation=coverage_preparation)
     fit = assessed.best
+    admission = assess_phase_member_admission(member.input_fit, fit,
+        holder_span_px=scope.holder_span_px, source_domain=scope.source_domain)
+    if not admission.current_holder_admitted:
+        gaps.append(PhaseMemberOutputGap.HOLDER_ADMISSION_UNAVAILABLE)
+    if admission.current_source_domain_admitted is False:
+        gaps.append(PhaseMemberOutputGap.SOURCE_DOMAIN_UNAVAILABLE)
     lattice = assessed.global_lattice_authority
     if (lattice is not None and lattice.state == EvidenceState.SUPPORTED
             and not global_lattice_authority_matches_fit(lattice, fit)):
@@ -543,6 +621,29 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
                     else PhaseMemberOutputGap.PHASE_GEOMETRY_UNAVAILABLE)
     if width.state == EvidenceState.CONTRADICTED:
         gaps.append(PhaseMemberOutputGap.SOURCE_WIDTH_CONFLICT)
+    ordinals = native_grid_relation_ordinals(fit)
+    work = replace(work, native_grid_input_scan_bound=2 * len(fit.role_bindings))
+    if ordinals:
+        projection_bound = native_grid_work_bound(len(fit.role_bindings))
+        pending_work = 0 if coverage_preparation is None else (
+            1 + coverage_preparation.lookup_count + coverage_preparation.preparation_count)
+        if direct_role_input_preparation is not None:
+            pending_work += (direct_role_input_preparation.lookup_count - native_before[0]
+                + direct_role_input_preparation.preparation_count - native_before[1])
+        if (_member_work_units(work, len(fit.role_bindings)) + pending_work
+                + projection_bound + len(ordinals) * 3 > available_work_units):
+            gaps.append(PhaseMemberOutputGap.WORK_BOUND_EXCEEDED)
+            detail = "native/Grid association projection work bound exceeded"
+            return result()
+        native_grid = assess_native_grid_association(assessed, width)
+        work = replace(work, native_grid_relation_check_count=len(ordinals),
+            native_grid_projection_work_bound=projection_bound,
+            native_grid_lp_solve_count=native_grid.lp_solve_count,
+            peak_temporary_bytes=max(work.peak_temporary_bytes, native_grid_bytes_bound(len(fit.role_bindings))))
+        if native_grid.state != EvidenceState.SUPPORTED:
+            gaps.append(PhaseMemberOutputGap.NATIVE_GRID_ASSOCIATION_CONTRADICTED
+                if native_grid.state == EvidenceState.CONTRADICTED else
+                PhaseMemberOutputGap.NATIVE_GRID_ASSOCIATION_UNAVAILABLE)
     if lane.base_cross_registration is None:
         gaps.append(PhaseMemberOutputGap.CROSS_CONTEXT_UNAVAILABLE)
         return result()
@@ -624,8 +725,9 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
         outputs = budgets = ()
         gaps.append(PhaseMemberOutputGap.OUTPUT_UNAVAILABLE)
         detail = str(error)
-    work = replace(work, peak_temporary_bytes=4096 + len(fit.role_bindings) * 1024
-        + work.cross_evaluated_fit_count * 1024 + work.output_evaluation_count * 4096)
+    work = replace(work, peak_temporary_bytes=max(work.peak_temporary_bytes,
+        4096 + len(fit.role_bindings) * 1024
+        + work.cross_evaluated_fit_count * 1024 + work.output_evaluation_count * 4096))
     return result()
 
 
@@ -735,6 +837,21 @@ class CompletePhaseOutputProof:
                 or self.source_size_proof.placement_ids != tuple(None if member.placement is None
                     else member.placement.placement_id for member in self.members)):
             raise ValueError("common source size omitted a complete producer member")
+        for proof, (producer_scope, producer) in zip(self.members,
+                ((s, m) for s in self.scopes for m in s.members), strict=True):
+            admission = proof.admission
+            if admission is not None and (
+                    admission.template_id != producer.input_fit.template.template_id
+                    or admission.direction != producer.input_fit.template.direction
+                    or admission.holder_span_px != producer_scope.holder_span_px
+                    or admission.source_domain != producer_scope.source_domain
+                    or admission.holder_slack_px != (producer_scope.template.frame_width_px.minimum
+                        + producer_scope.template.frame_width_px.maximum) * 0.02
+                    or admission.original_model_role_positions_px != producer.input_fit.model_role_positions_px
+                    or admission.original_holder_admitted != producer.holder_admitted
+                    or admission.original_source_domain_admitted != producer.source_domain_admitted
+                    or admission.original_source_terminal_role_indices != producer.source_terminal_role_indices):
+                raise ValueError("complete phase admission borrowed another producer or domain")
         active_scopes = tuple(scope for scope in self.scopes if scope.members)
         if self.scope_outputs and (tuple(proof.scope_id for proof in self.scope_outputs)
                 != tuple(scope.scope_id for scope in active_scopes)
@@ -786,6 +903,8 @@ def _build_complete_phase_output(lane, *, retained_review_bytes, preparation, di
         for member in scope.members:
             temporary_bound = (4096 + len(member.input_fit.role_bindings) * 1024
                                + MAX_CROSS_PAIRS * 1024 + scope.template.count * 4096)
+            temporary_bound += (native_grid_bytes_bound(len(member.input_fit.role_bindings))
+                + admission_proof_bytes_bound(len(member.input_fit.role_bindings)))
             if not exceeded:
                 temporary_bound += 4096 + 1024 * (len(lane.phase_input.observations)
                     + len(lane.phase_input.separator_bands) + len(member.input_fit.role_bindings))
@@ -810,6 +929,8 @@ def _build_complete_phase_output(lane, *, retained_review_bytes, preparation, di
                 + (0 if proof.phase_assessment is None else len(proof.phase_assessment.best.role_bindings) * 1024)
                 + (0 if proof.adjacency_propagation is None else 8192
                    + len(proof.adjacency_propagation.input_fit.role_bindings) * 2048)
+                + (0 if proof.admission is None else admission_proof_bytes_bound(len(member.input_fit.role_bindings)))
+                + (0 if proof.native_grid_association is None else 4096 + len(member.input_fit.role_bindings) * 1024)
                 + (0 if proof.cross_context is None else proof.cross_context.competition.receipt.evaluated_fit_count * 1024))
     if (sum(proof.work.coarse_geometry_lookup_count for proof in proofs) != preparation.lookup_count
             or sum(proof.work.coarse_geometry_preparation_count for proof in proofs) != preparation.preparation_count

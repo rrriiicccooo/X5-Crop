@@ -20,10 +20,11 @@ from .template_model import (
     OverlapRelation,
     SeparatorRelation,
     SeparatorRelationKind,
+    SequenceFit,
 )
 from .template_cross_model import CrossHeightProjectionBasis
 from .robust_line_fit import _clip_line_region
-from .template_phase_model import GlobalLatticeConstraintKind
+from .template_phase_model import GlobalLatticeAuthority, GlobalLatticeConstraintKind
 from .template_placement import FormatPlacement
 
 
@@ -253,7 +254,14 @@ def _project_pair_vertices(
 def _sequence_system(
     placement: FormatPlacement,
 ) -> tuple[_FeasibleSystem, tuple[_LinearExpression, ...]]:
-    sequence = placement.sequence_fit
+    return sequence_feasible_system(placement.sequence_fit, placement.global_lattice_authority)
+
+
+def sequence_feasible_system(
+    sequence: SequenceFit,
+    global_lattice_authority: GlobalLatticeAuthority | None = None,
+) -> tuple[_FeasibleSystem, tuple[_LinearExpression, ...]]:
+    """Reuse the original correlated state before or after Cross composition."""
     lattice = sequence.phase_lattice_fit
     relations = sequence.adjacency_relations
     nominal_state = sequence.calibrated_nominal_grid_fit_state
@@ -337,7 +345,7 @@ def _sequence_system(
     authority_constraints: list[
         tuple[_LinearExpression, FiniteInterval]
     ] = []
-    authority = placement.global_lattice_authority
+    authority = global_lattice_authority
     if authority is not None:
         for constraint in authority.constraints:
             if (
