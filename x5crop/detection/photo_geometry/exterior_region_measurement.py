@@ -279,7 +279,10 @@ def _first_persistent(mask: np.ndarray, seed_count: int, persistence: int) -> tu
     for shift in range(1, persistence):
         persistent &= mask[shift:shift+count]
     persistent[:seed_count] = False
-    return persistent.argmax(axis=0), persistent.any(axis=0)
+    indices = persistent.argmax(axis=0)
+    # Argmax is zero both for an empty column and a first-row hit. Its
+    # selected first-row value distinguishes those without a second scan.
+    return indices, (indices != 0) | persistent[0]
 
 
 def _weak_prefixes(sums: np.ndarray, query: ExteriorRegionQuery) -> tuple[np.ndarray, int, int]:
@@ -297,15 +300,18 @@ def _weak_prefixes(sums: np.ndarray, query: ExteriorRegionQuery) -> tuple[np.nda
         base = sums.nbytes + coordinates.nbytes + result.nbytes
         def credible(field, threshold):
             nonlocal peak
-            scratch = field.copy()
-            center = np.median(scratch, axis=0, overwrite_input=True)
-            np.subtract(field, center, out=scratch)
+            # Partition one trace's complete coordinate domain contiguously.
+            # Only scratch storage changes; each original column keeps its
+            # own median/MAD and the returned mask keeps source coordinates.
+            scratch = field.T.copy()
+            center = np.median(scratch, axis=1, overwrite_input=True)
+            np.subtract(field.T, center[:, None], out=scratch)
             np.abs(scratch, out=scratch)
-            mad = np.median(scratch, axis=0, overwrite_input=True)
+            mad = np.median(scratch, axis=1, overwrite_input=True)
             scale = np.maximum(KERNEL_AREA*REGISTERED_UINT8_QUANTIZATION_STEP, NORMAL_MAD_SCALE*mad)
-            np.subtract(field, center, out=scratch)
-            scratch /= scale
-            mask = scratch >= threshold
+            np.subtract(field.T, center[:, None], out=scratch)
+            scratch /= scale[:, None]
+            mask = (scratch >= threshold).T
             peak = max(peak, base + field.nbytes + scratch.nbytes + mask.nbytes
                        + center.nbytes + 2*mad.nbytes + scale.nbytes)
             return mask
@@ -319,11 +325,11 @@ def _weak_prefixes(sums: np.ndarray, query: ExteriorRegionQuery) -> tuple[np.nda
             peak = max(peak, base + prefix.nbytes + left.nbytes + right.nbytes
                        + 2*left.nbytes)
             left -= right
-            result = left.astype(np.float64)
+            result = left.astype(np.float64, order="F")
             result /= window
             np.abs(result, out=result)
             return result
-        gradient = np.abs(values[coordinates+gap-1]-values[coordinates-gap]).astype(np.float64)
+        gradient = np.abs(values[coordinates+gap-1]-values[coordinates-gap]).astype(np.float64, order="F")
         peak = max(peak, base + 3*gradient.nbytes)
         mask = credible(gradient, SPEC.gradient_z_minimum)
         del gradient
@@ -337,12 +343,16 @@ def _weak_prefixes(sums: np.ndarray, query: ExteriorRegionQuery) -> tuple[np.nda
         mask |= credible(contrast(differences), SPEC.tone_or_texture_z_minimum)
         peak = max(previous_peak, peak + differences.nbytes)
         del differences
-        available = mask.any(axis=0)
-        stopped = coordinates[mask.argmax(axis=0)].astype(float) + KERNEL_RADIUS_PX - .5
+        indices = mask.argmax(axis=0)
+        available = (indices != 0) | mask[0]
+        stopped = coordinates[indices].astype(float)
+        stopped += KERNEL_RADIUS_PX
+        stopped -= .5
+        peak = max(peak, base + indices.nbytes + 2*available.nbytes + stopped.nbytes + 4*(end-begin))
         stopped[~available] = np.nan
         result[begin:end] = stopped
         blocks += 1
-        del mask, available, stopped
+        del mask, available, stopped, indices
     return result, peak, blocks
 
 

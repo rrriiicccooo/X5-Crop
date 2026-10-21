@@ -9,7 +9,7 @@ import numpy as np
 
 from x5crop.domain import Box, FiniteInterval
 from x5crop.detection.photo_geometry.exterior_region_measurement import (
-    ExteriorRegionAvailability, ExteriorRegionQuery, _box_sums,
+    ExteriorRegionAvailability, ExteriorRegionQuery, _box_sums, _first_persistent,
     measure_exterior_region,
 )
 from x5crop.detection.photo_geometry.model import PHOTO_BOUNDARY_MEASUREMENT_SPEC as SPEC
@@ -145,6 +145,40 @@ class ExteriorRegionMeasurementContractTest(unittest.TestCase):
         tiny = _measure(np.zeros((20,20),dtype=np.uint8))
         self.assertEqual(tiny.availability,ExteriorRegionAvailability.QUERY_UNOBSERVABLE)
         self.assertEqual(tiny.work.pixel_query_count,0)
+
+    def test_even_and_odd_weak_domains_match_scalar_traces_with_texture(self):
+        rng = np.random.default_rng(811)
+        for height in (600, 605):
+            source = rng.integers(0, 256, (height, 101), dtype=np.uint8)
+            for layout in ("horizontal", "vertical"):
+                with self.subTest(height=height, layout=layout):
+                    result = _measure(source, layout=layout)
+                    query = result.query
+                    for side in (0, 1):
+                        sums, _ = _box_sums((source if side == 0 else source[::-1])[:query.read_depth])
+                        for column in range(0, query.trace_count, 7):
+                            scalar = measure_trace(sums[:, column]/25.,
+                                FiniteInterval(query.window+query.gap, query.coordinate_count-1), 10., SPEC)
+                            credible = ((scalar.gradient_z >= SPEC.gradient_z_minimum) |
+                                (np.maximum(scalar.tone_z, scalar.texture_z) >= SPEC.tone_or_texture_z_minimum))
+                            expected = (None if not credible.any() else
+                                float(scalar.coordinates[np.flatnonzero(credible)[0]])+1.5)
+                            if side and expected is not None:
+                                expected = height-1.-expected
+                            self.assertEqual(result.sides[side].weak_prefix_px[column], expected)
+
+    def test_persistent_availability_distinguishes_first_row_from_no_hit(self):
+        mask = np.array([[0,1,0,0], [0,1,0,0], [0,0,1,0],
+                         [0,0,1,0], [0,0,1,0], [0,0,0,1]], dtype=bool)
+        for persistence in (1, 2):
+            for seed_count in (0, 2):
+                with self.subTest(persistence=persistence, seed_count=seed_count):
+                    indices, available = _first_persistent(mask, seed_count, persistence)
+                    for column in range(mask.shape[1]):
+                        hits = [row for row in range(seed_count, len(mask)-persistence+1)
+                                if all(bool(mask[r,column]) for r in range(row,row+persistence))]
+                        self.assertEqual(bool(available[column]), bool(hits))
+                        self.assertEqual(int(indices[column]), hits[0] if hits else 0)
 
     def test_query_coverage_and_work_cannot_be_silently_shrunk(self):
         result = _measure(_source())
