@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass
 import math
 
@@ -11,11 +13,15 @@ from .model import (
     BoundaryEvidenceState,
     BoundaryRole,
     SPATIAL_SUPPORT_REGION_COUNT,
+    spatial_support_region_index,
 )
+from .measurement_model import SequenceTransitionObservation
 from .observation_types import (
+    BasicAxisProfile,
     AggregateEdgeResolution,
     BoundaryEdgeObservation,
     OuterMaterialBoundaryObservation,
+    BoundaryEdgeMeasurementBasis,
     SeparatorBandMeasurementBasis,
     SeparatorBandObservation,
     SeparatorMaterialPolarity,
@@ -27,6 +33,101 @@ class _ResolvedMaterialBand:
     band: SeparatorBandObservation
     left_edge: BoundaryEdgeObservation
     right_edge: BoundaryEdgeObservation
+
+
+def validate_material_band_sources(material_bands, sequence_edges, cross_height_edges,
+                                   broad_material_edges, edge_resolutions, outer_boundaries, *,
+                                   transition_by_id: Mapping[str, SequenceTransitionObservation],
+                                   profiles: Mapping[SeparatorBandMeasurementBasis, BasicAxisProfile],
+                                   registered_region_transition_ids: Mapping[
+                                       SeparatorBandMeasurementBasis, tuple[tuple[ObservationId, ...], ...]]):
+    """Bind raw material to its own edges; this grants no terminal or ordinal."""
+    sources = {
+        SeparatorBandMeasurementBasis.DIRECT_TRACE: {
+            edge.observation_id: edge for edge in sequence_edges
+            if edge.measurement_basis in (BoundaryEdgeMeasurementBasis.DIRECT_TRACE,
+                                          BoundaryEdgeMeasurementBasis.DIRECT_WITH_AGGREGATE)},
+        SeparatorBandMeasurementBasis.CROSS_HEIGHT_AGGREGATE: {
+            edge.observation_id: edge for edge in cross_height_edges},
+        SeparatorBandMeasurementBasis.BROAD_MATERIAL_TRACE: {
+            edge.observation_id: edge for edge in broad_material_edges},
+    }
+    bands = {band.observation_id: band for band in material_bands}
+    pairs = {(band.measurement_basis, band.left_edge_observation_id, band.right_edge_observation_id)
+             for band in material_bands}
+    if len(bands) != len(material_bands) or len(pairs) != len(material_bands):
+        raise ValueError("raw material bands must be registered once")
+    runs_by_basis = {basis: {run.run_id: run for run in profile.runs} for basis, profile in profiles.items()}
+    for basis, profile in profiles.items():
+        if (profile.axis_name != "sequence" or len({run.run_id for run in profile.runs}) != len(profile.runs)
+                or {identity for run in profile.runs for identity in run.transition_ids}
+                != {identity for region in registered_region_transition_ids[basis] for identity in region}):
+            raise ValueError("raw material profile lost its complete registered region transitions")
+        if profile.trace_coordinates_px != tuple(sorted({trace for run in profile.runs for trace in run.trace_coordinates_px})):
+            raise ValueError("raw material profile changed its complete registered trace inventory")
+        for run in profile.runs:
+            if tuple(sorted({transition_by_id[str(identity)].trace_coordinate_px
+                             for identity in run.transition_ids})) != run.trace_coordinates_px:
+                raise ValueError("raw material run changed its registered trace coordinates")
+    from .separator_observations import separator_native_candidate_pairs
+    native_pairs = {basis: separator_native_candidate_pairs(profile, tuple(sources[basis].values()), transition_by_id)
+                    for basis, profile in profiles.items()}
+    for band in material_bands:
+        edges = sources[band.measurement_basis]
+        left, right = edges.get(band.left_edge_observation_id), edges.get(band.right_edge_observation_id)
+        if left is None or right is None:
+            raise ValueError("raw material band lost its original edge source")
+        runs = runs_by_basis[band.measurement_basis]
+        if any(edge.run_id not in runs or not set(edge.transition_ids).issubset(runs[edge.run_id].transition_ids)
+               for edge in (left, right)):
+            raise ValueError("raw material edge leaves its original registered run")
+        polarity = {(-1, 1): SeparatorMaterialPolarity.DARK,
+                    (1, -1): SeparatorMaterialPolarity.LIGHT}.get((left.polarity, right.polarity))
+        gap = FiniteInterval(
+            max(0., right.fit_position_interval_px.minimum-left.fit_position_interval_px.maximum),
+            max(0., right.fit_position_interval_px.maximum-left.fit_position_interval_px.minimum))
+        if (band.left_run_id != left.run_id or band.right_run_id != right.run_id
+                or left.fit_position_interval_px.center >= right.fit_position_interval_px.center
+                or polarity is None or band.material_polarity != polarity
+                or band.gap_interval_px != gap
+                or band.continuous_support_fraction != min(
+                    left.continuous_support_fraction, right.continuous_support_fraction)):
+            raise ValueError("raw material band changed its original edge geometry or polarity")
+        try:
+            left_points, right_points = (
+                {identity: transition_by_id[str(identity)] for identity in edge.transition_ids}
+                for edge in (left, right))
+            points = left_points | right_points
+            retained_traces = {points[identity].trace_coordinate_px for identity in band.transition_ids}
+        except KeyError as exc:
+            raise ValueError("raw material band lost its registered transitions") from exc
+        left_by_trace, right_by_trace = (
+            {point.trace_coordinate_px: point for point in values.values()}
+            for values in (left_points, right_points))
+        adjacent_traces = (set(native_pairs[band.measurement_basis].get((left.run_id, right.run_id), ()))
+                           & set(left.trace_coordinates_px) & set(right.trace_coordinates_px))
+        expected = tuple(sorted((identity for identity, point in points.items()
+                                 if point.trace_coordinate_px in adjacent_traces), key=str))
+        if (band.transition_ids != expected
+                or not retained_traces.issubset(left_by_trace.keys() & right_by_trace.keys())
+                or any(left_by_trace[trace].canonical_coordinate_px >= right_by_trace[trace].canonical_coordinate_px
+                       for trace in retained_traces)):
+            raise ValueError("raw material band lost its complete paired trace transitions or native adjacency")
+        region_counts = Counter(spatial_support_region_index(profiles[band.measurement_basis].trace_coordinates_px, trace)
+                                for trace in retained_traces)
+        if any(region.sample_count > region_counts[region.region_index] for region in band.material_regions):
+            raise ValueError("raw material samples exceed their registered paired traces")
+    resolutions = {item.support_observation_id: item for item in edge_resolutions}
+    edges = {edge.observation_id: edge for edge in sequence_edges}
+    for outer in outer_boundaries:
+        for identity in outer.supporting_band_observation_ids:
+            band = bands.get(identity)
+            resolved = (None if band is None else _resolve_material_band(
+                band, edge_resolutions=resolutions, edges_by_id=edges))
+            if resolved is None or {
+                    resolved.left_edge.observation_id, resolved.right_edge.observation_id} != {
+                    outer.boundary_edge_observation_id, outer.exterior_edge_observation_id}:
+                raise ValueError("outer material boundary lost its registered raw material pair")
 
 
 def _resolve_material_band(

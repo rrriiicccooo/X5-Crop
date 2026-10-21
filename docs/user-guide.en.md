@@ -85,6 +85,9 @@ When photo ownership is established and several complete top/bottom interpretati
 them all. Automatic approval requires every interpretation to pass content containment and source-wide safety checks.
 Touching or overlapping photos use the same checks and remain in review when evidence is insufficient.
 
+Development reports retain the original material bands and boundary sources behind outer-material candidates.
+Photo ordinals and the true first and last boundaries still require independent evidence.
+
 Separator material is checked for adjacency using the actual coordinates on each scan line. A line with an intervening
 boundary does not support the outer pair. Local and source-wide separator relationships are checked separately; relations
 with insufficient evidence remain subject to review.

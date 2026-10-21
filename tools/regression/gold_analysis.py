@@ -68,6 +68,7 @@ COMPARATOR_SOURCE_PATHS = (
     "tools/regression/development_run.py",
     "tools/regression/gold_analysis.py",
     "tools/regression/gold_geometry.py",
+    "tools/regression/material_registration_validation.py",
     "tools/regression/phase_output_validation.py",
     "tools/regression/report_sequence_validation.py",
     "tools/regression/report_validation.py",

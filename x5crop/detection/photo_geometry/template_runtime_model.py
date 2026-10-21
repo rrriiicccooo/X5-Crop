@@ -164,9 +164,12 @@ class RegisteredTemplateLane:
     bottom_regions: tuple[SideTransitionRegion, ...]
     transition_by_id: Mapping[str, SequenceTransitionObservation]
     sequence_profile: BasicAxisProfile
+    cross_height_profile: BasicAxisProfile
+    broad_material_profile: BasicAxisProfile
     cross_profile: BasicAxisProfile
     sequence_edges: tuple[BoundaryEdgeObservation, ...]
     separator_bands: tuple[SeparatorBandObservation, ...]
+    raw_material_bands: tuple[SeparatorBandObservation, ...]
     outer_material_boundaries: tuple[
         OuterMaterialBoundaryObservation,
         ...,
@@ -459,7 +462,9 @@ class RegisteredTemplateLane:
                     raise ValueError(
                         "bound aggregate support leaves its direct edge"
                     )
-        if self.sequence_profile.axis_name != "sequence" or self.cross_profile.axis_name != "cross":
+        if (any(profile.axis_name != "sequence" for profile in (
+                self.sequence_profile, self.cross_height_profile, self.broad_material_profile))
+                or self.cross_profile.axis_name != "cross"):
             raise ValueError("template profiles must retain sequence and cross axes")
         if len({item.observation_id for item in self.sequence_edges}) != len(self.sequence_edges):
             raise ValueError("sequence edges must be registered once")
@@ -484,6 +489,19 @@ class RegisteredTemplateLane:
             raise ValueError(
                 "outer material boundaries must stay inside the placement edge ledger"
             )
+        from .outer_material import validate_material_band_sources
+        validate_material_band_sources(self.raw_material_bands, self.sequence_edges,
+            self.cross_height_edges, self.broad_material_edges,
+            (*self.cross_height_edge_resolutions, *self.broad_material_edge_resolutions),
+            self.outer_material_boundaries, transition_by_id=self.transition_by_id,
+            profiles={SeparatorBandMeasurementBasis.DIRECT_TRACE: self.sequence_profile,
+                      SeparatorBandMeasurementBasis.CROSS_HEIGHT_AGGREGATE: self.cross_height_profile,
+                      SeparatorBandMeasurementBasis.BROAD_MATERIAL_TRACE: self.broad_material_profile},
+            registered_region_transition_ids={basis: tuple(region.transition_ids for region in regions)
+                for basis, regions in (
+                    (SeparatorBandMeasurementBasis.DIRECT_TRACE, self.side_regions),
+                    (SeparatorBandMeasurementBasis.CROSS_HEIGHT_AGGREGATE, self.cross_height_regions),
+                    (SeparatorBandMeasurementBasis.BROAD_MATERIAL_TRACE, self.broad_material_regions))})
         if any(
             binding.role.value != expected
             for bindings, expected in (

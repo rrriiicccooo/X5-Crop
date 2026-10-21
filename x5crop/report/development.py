@@ -146,6 +146,8 @@ def development_report_facts(
                     "sequence_profile": typed_read_model(
                         lane.prepared.sequence_profile
                     ),
+                    "cross_height_profile": typed_read_model(lane.prepared.cross_height_profile),
+                    "broad_material_profile": typed_read_model(lane.prepared.broad_material_profile),
                     "cross_profile": typed_read_model(lane.prepared.cross_profile),
                 },
                 "observations": {
@@ -154,6 +156,9 @@ def development_report_facts(
                     ),
                     "separator_bands": typed_read_model(
                         lane.prepared.separator_bands
+                    ),
+                    "raw_material_bands": typed_read_model(
+                        lane.prepared.raw_material_bands
                     ),
                     "outer_material_boundaries": typed_read_model(
                         lane.prepared.outer_material_boundaries

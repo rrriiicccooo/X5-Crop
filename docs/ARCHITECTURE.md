@@ -573,6 +573,18 @@ resolution、pair、typed failure 和工作量；Debug 不重新测量或求解�
 可以消费它来纠正首尾角色；Contact/Overlap owner 仍只查看加入 outer boundary 之前的基础 edge ledger，
 因此 outer material 不能伪造 adjacency topology。Normal report 与 Debug 分别显示 observation、权限使用
 和冲突；未进入选定 placement 的事实只作 validation。
+登记账本的 `raw_material_bands` 及三份原生 profile 保留 direct、cross-height 与 broad 三类投影前材料带和
+全部原始 run（包括未拟合的中间障碍），包含尚未进入 placement 的支持。Profile 须保留原 region 的全部
+transition 及完整 trace 并集。每份原始带须回链到同一测量基础、原左右顺序及明暗极性的两条 edge、run 和原 gap；
+trace 两端须满足原 owner 的原生相邻性，保留全部合格 trace 的完整双端 transition，各区域材料样本数
+不得超过同区域的配对 trace 数。外侧候选的 supporting ID 必须解析到这些原对象及同一物理边对。
+该保留不追加像素查询、拟合、角色、rank 或 ordinal；原生回链按每源三份有限 profile 核验，不逐成员重建。
+开发报告用 `material_registration_validation.py` 从完整原输入重放原 aggregate 投影、outer 候选及 placement
+边集合，拒绝缺失支持、伪造身份及投影后的材料统计或几何变化。原始像素统计仍来自同次登记测量，回读不
+重新采样 TIFF。仅合法派生 run-local 名称可以一一对应，原始支持 ID 和全部物理字段必须保持；
+多份相同物理记录仍核验完整数量，同一原始物理边对不能换 ID 重复登记。
+材料的原生回链只证明局部边对和角色假设；真实终端、同一照片 START/END 配对及绝对照片序号须另有
+独立证据。完整查询覆盖、原生坐标获权、fit 的首末绑定或 source-clipped 分类不能替代这些关联。
 
 短轴 coarse owner 使用固定、候选无关的 `COARSE_STRIP_SHORT` 查询：sharp channel 使用 5 条固定
 trace，broad channel 使用 9 条固定 trace（每个长轴区域 3 条），两组坐标合并为一个 registered union。

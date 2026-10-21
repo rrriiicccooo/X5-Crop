@@ -106,7 +106,7 @@ def runtime_axis_profile(axis_name: str) -> BasicAxisProfile:
     return BasicAxisProfile(
         axis_name=axis_name,
         coordinate_count=1,
-        trace_coordinates_px=(0,),
+        trace_coordinates_px=(() if axis_name == "sequence" else (0,)),
         runs=(),
     )
 
@@ -268,9 +268,12 @@ def prepared_template_lane() -> PreparedTemplateLane:
         bottom_regions=(),
         transition_by_id={},
         sequence_profile=runtime_axis_profile("sequence"),
+        cross_height_profile=runtime_axis_profile("sequence"),
+        broad_material_profile=runtime_axis_profile("sequence"),
         cross_profile=runtime_axis_profile("cross"),
         sequence_edges=(),
         separator_bands=(),
+        raw_material_bands=(),
         outer_material_boundaries=(),
         top_cross_bindings=(),
         bottom_cross_bindings=(),

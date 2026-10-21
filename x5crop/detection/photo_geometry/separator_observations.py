@@ -294,50 +294,20 @@ def _separator_band_from_edges(
     )
 
 
-def build_format_separator_bands(
+def separator_native_candidate_pairs(
     profile: BasicAxisProfile,
     edges: tuple[BoundaryEdgeObservation, ...],
     transitions: dict[str, SequenceTransitionObservation],
-    field: PhotoBoundaryMeasurementField,
-    boundary_axis: BoundaryAxis,
-    frame_width_px: PositiveInterval,
-    *,
-    measurement_basis: SeparatorBandMeasurementBasis,
-) -> tuple[SeparatorBandObservation, ...]:
-    """Verify adjacent dark-valley or light-peak edges as material.
-
-    Format gap priors never filter observations.  A normal, very wide or
-    otherwise abnormal directly visible band enters the same material
-    measurement while it remains narrower than one complete format frame.
-    A region wide enough to contain a frame cannot prove one adjacency.
-    Placement authority is assigned only after role binding.
-    The two edges must be neighbours on a trace. Skipping over another
-    transition would turn photo content or several structures into one false
-    separator and creates quadratic work.
-    """
-
-    ordered = tuple(
-        sorted(
-            edges,
-            key=lambda item: (
-                item.fit_position_interval_px.center,
-                str(item.observation_id),
-            ),
-        )
-    )
-    if len(ordered) < 2:
-        return ()
-    if not isinstance(frame_width_px, PositiveInterval):
-        raise TypeError("separator frame-width authority must be positive")
-    runs_by_id = {run.run_id: run for run in profile.runs}
-    edges_by_run_id = {edge.run_id: edge for edge in ordered}
+) -> dict[tuple[str, str], list[int]]:
+    """Retain original native neighbours, including unfitted run barriers."""
+    edges_by_run_id = {edge.run_id: edge for edge in edges}
     edge_native_positions = {
         edge.run_id: {
             transitions[str(identity)].trace_coordinate_px:
             transitions[str(identity)].canonical_coordinate_px
             for identity in edge.transition_ids
         }
-        for edge in ordered
+        for edge in edges
     }
     native_runs_by_trace: dict[int, dict[float, set[str]]] = {}
     for run in profile.runs:
@@ -374,6 +344,39 @@ def build_format_separator_bands(
                 candidate_pairs.setdefault((left.run_id, right.run_id), []).append(
                     trace
                 )
+    return candidate_pairs
+
+
+def build_format_separator_bands(
+    profile: BasicAxisProfile,
+    edges: tuple[BoundaryEdgeObservation, ...],
+    transitions: dict[str, SequenceTransitionObservation],
+    field: PhotoBoundaryMeasurementField,
+    boundary_axis: BoundaryAxis,
+    frame_width_px: PositiveInterval,
+    *,
+    measurement_basis: SeparatorBandMeasurementBasis,
+) -> tuple[SeparatorBandObservation, ...]:
+    """Verify adjacent dark-valley or light-peak edges as material.
+
+    Format gap priors never filter observations.  A normal, very wide or
+    otherwise abnormal directly visible band enters the same material
+    measurement while it remains narrower than one complete format frame.
+    A region wide enough to contain a frame cannot prove one adjacency.
+    Placement authority is assigned only after role binding.
+    The two edges must be neighbours on a trace. Skipping over another
+    transition would turn photo content or several structures into one false
+    separator and creates quadratic work.
+    """
+    ordered = tuple(sorted(edges, key=lambda item: (
+        item.fit_position_interval_px.center, str(item.observation_id))))
+    if len(ordered) < 2:
+        return ()
+    if not isinstance(frame_width_px, PositiveInterval):
+        raise TypeError("separator frame-width authority must be positive")
+    runs_by_id = {run.run_id: run for run in profile.runs}
+    edges_by_run_id = {edge.run_id: edge for edge in ordered}
+    candidate_pairs = separator_native_candidate_pairs(profile, ordered, transitions)
 
     values: dict[str, SeparatorBandObservation] = {}
     for left_run_id, right_run_id in sorted(candidate_pairs):

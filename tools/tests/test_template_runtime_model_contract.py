@@ -333,6 +333,7 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
         from tools.tests.measurement_fixture_support import _broad_point
         from x5crop.detection.photo_geometry.broad_material_association import associate_registered_broad_material
         from x5crop.detection.photo_geometry.registered_measurement import measure_registered_queries
+        from x5crop.detection.photo_geometry.profile_adapters import sequence_profile_from_regions
         from x5crop.detection.photo_geometry.transition_tracking import track_broad_material_transition_regions
 
         prepared = _prepared()
@@ -368,9 +369,12 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
             return track_broad_material_transition_regions((item,), reference_trace_px=40.0,
                 boundary_axis_scale_px_per_mm=query.boundary_axis_scale_px_per_mm)
 
+        transitions = {str(item.transition_id): item for item in raw}
+        original_regions = regions(measured)
         prepared = replace(prepared, measurement_sets=measurements, measurement_work=work,
-            transition_by_id={str(item.transition_id): item for item in raw},
-            broad_material_regions=regions(measured))
+            transition_by_id=transitions, broad_material_regions=original_regions,
+            broad_material_profile=sequence_profile_from_regions(original_regions,
+                coordinate_count=prepared.sequence_profile.coordinate_count, transition_by_id=transitions))
         partial = replace(measured, broad_material_transitions=raw[:-1],
             broad_material_association=associate_registered_broad_material(query, raw[:-1]))
         partial_regions = regions(partial)

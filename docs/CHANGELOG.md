@@ -73,7 +73,7 @@
   报告的 4096 项本地转换模板按最近使用顺序淘汰，保持重复证据分支独立可变。
   固定区间值直接生成独立的 minimum／maximum 记录，保留全部字段与端点转换语义。
 - 对全部既有候选核验遗漏的唯一获权 separator 伙伴；仅原生完整可见宽度超过原物理上限时保留为
-  关联反证，不补绑定、不调整排序、不借 source W。报告进入当前 schema 118，独立 Review 显示各解释的
+  关联反证，不补绑定、不调整排序、不借 source W。报告进入当前 schema 119，独立 Review 显示各解释的
   `geometry_basis` 并重放十二类完整映射。Coverage／continuity
   校验共用 typed owner，并从开发报告原证据重建，删除重复判据。
   最终保留解释的 `retained_adjacency_assessments` 同时出现在普通及 development 报告，从原登记事实
@@ -119,6 +119,13 @@
 - 未建立 nominal 状态时继续保留原 phase-anchor 资格账本，修复通用 `nominal_grid_state_missing`
   掩盖原锚点缺权的问题；未编译锚点与已消费的 Grid 坐标约束分开记录，local 原生角色缺口保持独立。
   同时报告未编译成员数及其中未获权锚点数。已有 anchor 事实不等于已取得 Grid 状态，不新增 LP 或裁切权限。
+- 原始材料带及三类原生 profile 在投影前完整保留，外侧候选的 supporting ID 回链至实际 edge、run、
+  gap、原生相邻 trace 和完整双端 transition；核验原极性、区域样本数及 run／trace 账本完整性。
+  开发报告从原始材料和 edge resolution 重放全部投影、outer 候选及 placement 边集合，拒绝两份副本
+  一致引用不存在支持的情况。S021 保留 33 份原始材料带及原有 15 份投影记录，恢复此前未保留的
+  `separator-band:24` 原生来源；它位于片带中段，只支持局部材料／END 角色假设，不证明真实终端或照片序号。
+  原生角色、同照片边对、真实终端与绝对序号分别核验；原 6 项坐标／覆盖、11 项跨零及 27 项 holder
+  缺口仍缺独立物理关联，不因材料来源完整而升级资格。
 - 完整历史成员对实际 native／Grid 邻接复用原相关状态，保存必要约束下的保守 gap 包络、坐标权限、
   原代表和实际 LP 次数；不升级 local anchor、不新增正 gap 假设或 Overlap、不选择有利代表。
   完整 native 坐标及已有实测邻接进入同一联合系统；物理 Frame W 与拟合 source W 分开，

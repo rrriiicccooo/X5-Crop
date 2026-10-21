@@ -757,12 +757,10 @@ def prepare_template_lane(
             sequence_measurement_sets,
         )
     )
+    raw_material_bands = (*direct_separator_bands, *cross_height_separator_bands,
+                          *broad_material_separator_bands)
     observed_outer_material_boundaries = observe_outer_material_boundaries(
-        (
-            *direct_separator_bands,
-            *cross_height_separator_bands,
-            *broad_material_separator_bands,
-        ),
+        raw_material_bands,
         (
             *cross_height_edge_resolutions,
             *broad_material_edge_resolutions,
@@ -849,9 +847,12 @@ def prepare_template_lane(
         bottom_regions=bottom_regions,
         transition_by_id=transition_by_id,
         sequence_profile=sequence_profile,
+        cross_height_profile=cross_height_profile,
+        broad_material_profile=broad_material_profile,
         cross_profile=cross_profile,
         sequence_edges=placement_sequence_edges,
         separator_bands=separator_bands,
+        raw_material_bands=raw_material_bands,
         outer_material_boundaries=outer_material_boundaries,
         top_cross_bindings=(),
         bottom_cross_bindings=(),

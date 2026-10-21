@@ -118,7 +118,9 @@ from x5crop.detection.photo_geometry.broad_material_association import (
 from x5crop.detection.photo_geometry.measurement_model import (
     PhotoBoundaryMeasurementQuery, PhotoBoundaryMeasurementSet, BroadMaterialTraceObservation,
 )
-from x5crop.detection.photo_geometry.observation_types import BoundaryEdgeObservation, SeparatorBandObservation
+from x5crop.detection.photo_geometry.observation_types import (
+    AggregateEdgeResolution, BoundaryEdgeObservation, SeparatorBandObservation,
+)
 from x5crop.detection.photo_geometry.template_adjacency_topology import (
     AdjacencyContinuityObservation, observe_adjacency_continuity,
     assess_phase_candidate_adjacency, PhaseCandidateAdjacencyAssessment,
@@ -2230,7 +2232,8 @@ def _read_common_proof(value: Any, model: type) -> Any:
                      SourceScanGeometry, HolderFillAssessment, FormatPlacement, ExteriorRegionMeasurement,
                      TemplateCrossInput, CoarseStripSupport, PhotoBoundaryMeasurementSet, CrossRegistrationWorkReceipt,
                      IndependentPhaseReview, IndependentPhaseReviewPortfolio, MatchedHolder, TemplatePhaseInput,
-                     SeparatorBandObservation, BoundaryEdgeObservation, BroadMaterialTraceObservation, BroadAssociationResult,
+                     SeparatorBandObservation, BoundaryEdgeObservation, AggregateEdgeResolution,
+                     BroadMaterialTraceObservation, BroadAssociationResult,
                      AdjacencyContinuityObservation, AdjacencyObservationCoverage, OverlapEdgePairObservation,
                      SourceFrameWidthAuthority, OuterMaterialBoundaryObservation,
                      PhaseCandidateAdjacencyAssessment, PhaseCompetitionScope, CompletePhaseOutputProof,
@@ -4156,6 +4159,8 @@ def _validate_development(record: dict[str, Any]) -> None:
             lane, development["measurement"]["queries"]
         )
         _validate_separator_material_states(lane["observations"]["separator_bands"])
+        from .material_registration_validation import validate_registered_material_evidence
+        validate_registered_material_evidence(lane)
         _validate_sequence_output_line_provenance(lane)
         phase = _read_common_proof(lane["phase_competition"], PhaseFitResult)
         continuity = () if phase.best is None else observe_adjacency_continuity(
