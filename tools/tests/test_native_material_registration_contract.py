@@ -14,7 +14,9 @@ from x5crop.detection.photo_geometry.observation_types import (
 )
 from x5crop.detection.photo_geometry.outer_material import observe_outer_material_boundaries, validate_material_band_sources
 from x5crop.detection.photo_geometry.template_phase_model import TemplatePhaseInput
+from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
 from x5crop.domain import FiniteInterval, ObservationId, PositiveInterval
+from x5crop.formats import FramePhysicalSpec
 from x5crop.report.read_models import typed_read_model
 
 
@@ -42,6 +44,11 @@ def _source_kwargs(edges):
                                                   for basis, profile in profiles.items()}}
 
 
+def _source_geometry(gap=20.):
+    return SourceScanGeometry.create(FramePhysicalSpec(100., 240., gap),
+        width_scale_px_per_mm=PositiveInterval.exact(1.), height_scale_px_per_mm=PositiveInterval.exact(1.))
+
+
 def _fixture():
     measured = _measurement()
     edges = tuple(replace(phase_edge(name, position), qualified_anchor_roles=(BoundaryRole.START,),
@@ -63,7 +70,7 @@ def _fixture():
         outer_material_boundaries=outer,
         sequence_measurement_sets=(measured,))
     profiles = _profiles(edges)
-    lane = {"phase_input":typed_read_model(phase),
+    lane = {"phase_input":typed_read_model(phase), "source_scan_geometry":typed_read_model(_source_geometry()),
         "search":{key: typed_read_model(profiles[basis]) for basis, key in (
             (SeparatorBandMeasurementBasis.DIRECT_TRACE, "sequence_profile"),
             (SeparatorBandMeasurementBasis.CROSS_HEIGHT_AGGREGATE, "cross_height_profile"),
@@ -132,6 +139,20 @@ class NativeMaterialRegistrationContractTest(unittest.TestCase):
         changed["observations"]["outer_material_boundaries"][0]["material_interval_px"]["maximum"] += 1.
         with self.assertRaisesRegex(ValueError, "original registered evidence"):
             validate_registered_material_evidence(changed)
+
+    def test_later_wider_fitted_gap_does_not_invent_an_original_outer_candidate(self):
+        _edges, _band, _outer, lane = _fixture()
+        lane["source_scan_geometry"] = typed_read_model(_source_geometry(gap=2.))
+        for parent in (lane["observations"], lane["phase_input"]):
+            parent["outer_material_boundaries"] = []
+        validate_registered_material_evidence(lane)
+
+    def test_later_narrower_fitted_gap_does_not_erase_original_outer_evidence(self):
+        _edges, _band, _outer, lane = _fixture()
+        lane["phase_input"]["template"]["nominal_gap_px"] = {"minimum":0., "maximum":2.}
+        lane["phase_input"]["template"]["pitch_px"] = {"minimum":102., "maximum":102.}
+        lane["phase_input"]["template"]["phase_lattice_authority"]["period_px"] = {"minimum":102., "maximum":102.}
+        validate_registered_material_evidence(lane)
 
     def test_consistent_copies_cannot_drop_one_end_or_part_of_a_paired_trace(self):
         edges, band, _outer, original = _fixture()

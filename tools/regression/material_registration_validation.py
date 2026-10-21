@@ -17,6 +17,8 @@ from x5crop.detection.photo_geometry.outer_material import (
     observe_outer_material_boundaries, validate_material_band_sources,
 )
 from x5crop.detection.photo_geometry.template_direct_role_authority import intrinsic_direct_role_authority_bases
+from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
+from x5crop.detection.photo_geometry.template_measurement_plan import _gap_interval_px, _scaled_extent
 from x5crop.detection.photo_geometry.template_phase_model import TemplatePhaseInput
 from x5crop.report.read_models import typed_read_model
 from x5crop.domain import ObservationId
@@ -105,9 +107,15 @@ def validate_registered_material_evidence(lane):
     recorded = read("separator_bands", SeparatorBandObservation)
     if _derived_physical_records(projected) != _derived_physical_records(recorded):
         raise ValueError("registered separator material changed its original projection")
+    # Registration preceded pitch/W calibration. Rebuild its fixed format
+    # ceiling from the original scale authority, never a later fitted gap.
+    geometry = _read_common_proof(lane["source_scan_geometry"], SourceScanGeometry)
+    frame, scale = geometry.frame_spec, geometry.width_state.scale_authority
+    original_width = _scaled_extent(frame.frame_width_mm, scale, *frame.width_factor_bounds)
+    registration_gap = _gap_interval_px(frame, scale, original_width)
     observed = observe_outer_material_boundaries(bands, resolutions, resolved,
         direction=phase_input.template.direction,
-        maximum_material_width_px=phase_input.template.gap_prior_px.maximum,
+        maximum_material_width_px=registration_gap.maximum,
         intrinsic_authority_edge_ids=frozenset(intrinsic_direct_role_authority_bases(
             resolved, phase_input.sequence_measurement_sets)))
     expected_edges = placement_sequence_edges_with_material_support(
