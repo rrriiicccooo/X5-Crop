@@ -349,6 +349,7 @@ def _project_late_local_candidate(
     direct_role_input_preparation=None,
     adjacency_relations: tuple[AdjacencyRelation, ...] | None = None,
     projection_work: _projection.CandidateProjectionWork | None = None,
+    available_projection_work_units: int | None = None,
 ) -> tuple[SequenceFit | None, PhaseCandidateAuthorityProjection | None]:
     """Yield unsupported late local bindings back to this candidate's lattice.
 
@@ -363,6 +364,9 @@ def _project_late_local_candidate(
     at which it was attached.
     """
 
+    if available_projection_work_units is not None and (
+            type(available_projection_work_units) is not int or available_projection_work_units < 0):
+        raise ValueError("late candidate projection work must be a nonnegative integer")
     relations = fit.adjacency_relations if adjacency_relations is None else adjacency_relations
     relation_refit = relations != fit.adjacency_relations
     if relation_refit and not phase_input.sequence_measurement_sets:
@@ -400,19 +404,31 @@ def _project_late_local_candidate(
             ),
             reason=authority.reason or "direct-role evidence is contradicted",
         )
-    if authority.state != EvidenceState.UNAVAILABLE and not relation_refit:
+    missing_nominal_state = (allow_direct_rank and authority.state == EvidenceState.SUPPORTED
+        and fit.calibrated_nominal_grid_fit_state is None
+        and phase_input.calibrated_nominal_grid_prior is not None
+        and phase_input.calibrated_nominal_grid_prior.state == EvidenceState.SUPPORTED
+        and any(fit.role_bindings[i] is None and fit.role_bindings[i + 1] is None
+                for i in range(0, len(fit.role_bindings), 2)))
+    if authority.state != EvidenceState.UNAVAILABLE and not relation_refit and not missing_nominal_state:
         return fit, None
     unsupported_bindings = tuple(
         fit.role_bindings[role_index]
         for role_index in authority.unsupported_role_indices
     )
-    if not relation_refit and (not unsupported_bindings or any(
+    if not relation_refit and not missing_nominal_state and (not unsupported_bindings or any(
         binding is None
         or binding.use != SequenceBindingUse.LOCAL_REFINEMENT
         for binding in unsupported_bindings
     )):
         return fit, None
 
+    projection_bound = _projection.candidate_projection_work_bound(
+        fit, len(phase_input.observations), len(phase_input.separator_bands))
+    if available_projection_work_units is not None and projection_bound > available_projection_work_units:
+        raise _projection.CandidateProjectionWorkBoundError("late candidate projection work bound exceeded")
+    if projection_work is not None:
+        projection_work.projection_work_bound = projection_bound
     template = phase_input.template
     if direct_role_input_preparation is None:
         facts, separator_pairs, _support = _observations.prepare_projection_facts(
@@ -461,7 +477,7 @@ def _project_late_local_candidate(
         ),
         work=projection_work,
     )
-    if projected is not None and relation_refit and (
+    if projected is not None and (relation_refit or missing_nominal_state) and (
             projected.fit.template != fit.template
             or projected.fit.phase_lattice_fit.integer_slot_offset
                 != fit.phase_lattice_fit.integer_slot_offset
@@ -472,7 +488,7 @@ def _project_late_local_candidate(
         return None, replace(projection,
             outcome=PhaseCandidateProjectionOutcome.DISCRETE_IDENTITY_CHANGED,
             basis=None,
-            reason="registered adjacency refit changed native bindings, phase-anchor permissions or existing relation evidence")
+            reason="fixed-member refit changed native bindings, phase-anchor permissions or existing relation evidence")
     if projected is not None and not projected.residual_compatible:
         # Initial competition separates compatible and incompatible refits.
         # A late refit has no new competition pass, so it cannot silently
@@ -506,14 +522,16 @@ def _project_retained_late_local_refinements(
     ambiguous = len(candidates) == 2
     if ambiguous and source_frame_width_authority is not None:
         raise ValueError("ambiguous local projection cannot share selected source W")
+    projection_calls = tuple(_projection.CandidateProjectionWork() for _ in candidates)
     records = tuple(
         _project_late_local_candidate(
             candidate,
             phase_input,
             source_frame_width_authority=source_frame_width_authority,
             allow_direct_rank=allow_direct_rank,
+            projection_work=calls,
         )
-        for candidate in candidates
+        for candidate, calls in zip(candidates, projection_calls, strict=True)
     )
     projections = tuple(
         projection for _fit, projection in records if projection is not None
@@ -527,13 +545,7 @@ def _project_retained_late_local_refinements(
         )
     )
     projected, projection = records[0]
-    nominal_solve_count = sum(
-        item.outcome in {
-            PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID,
-            PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID_CONFLICT,
-        }
-        for item in projections
-    )
+    nominal_solve_count = sum(item.nominal_grid_solve_count for item in projection_calls)
     receipt = replace(
         result.receipt,
         selected_direct_role_projection_evaluation_count=(
@@ -550,11 +562,7 @@ def _project_retained_late_local_refinements(
         ),
         selected_nominal_grid_solve_success_count=(
             result.receipt.selected_nominal_grid_solve_success_count
-            + sum(
-                item.outcome
-                == PhaseCandidateProjectionOutcome.CALIBRATED_NOMINAL_GRID
-                for item in projections
-            )
+            + sum(item.nominal_grid_solve_success_count for item in projection_calls)
         ),
         inferred_role_count=(
             len(retained_fits[0].unbound_role_indices)

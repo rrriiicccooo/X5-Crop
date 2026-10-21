@@ -51,6 +51,18 @@ class CandidateProjectionWork:
     direct_fit_count: int = 0
     nominal_grid_solve_count: int = 0
     nominal_grid_solve_success_count: int = 0
+    projection_work_bound: int = 0
+
+
+class CandidateProjectionWorkBoundError(ValueError):
+    """A fixed-member projection was stopped before preparing or solving it."""
+
+
+def candidate_projection_work_bound(fit, observation_count, separator_band_count):
+    if any(type(v) is not int or v < 0 for v in (observation_count, separator_band_count)):
+        raise ValueError("candidate projection requires bounded input counts")
+    roles = len(fit.role_bindings)
+    return 128 + 4 * roles * (observation_count + separator_band_count + roles)
 
 
 def _interval_hull(

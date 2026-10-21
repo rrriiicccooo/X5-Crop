@@ -2297,6 +2297,10 @@ anchor ceiling 均保留。过滤 holder、按 rank 排序、连续合并和 bes
 `complete_recorded_phase_validation`。已失败 projection 与残差不相容成员保留缺口；早期未投影成员从自己的
 原 fit 接受已登记原生事实检查，不能因无排名或旧作用域而消失。其它成员逐一从自身 fit 重建一次原生补边、
 至多一次晚期 projection、自身 direct/global/nominal/adjacency 权限、独立初始 source W/H 及本成员 source W。
+原生坐标全部获权仍不代表缺失 Frame 已有 Grid 状态。若该 fit 尚无 nominal 联合状态、存在完整未观察
+Frame，且当前已登记 prior／query 可用，则同一次晚期 projection 必须由原 owner 编译本成员的状态；
+保留全部原生绑定、template、integer offset 和原关系，不新增搜索或删除无权 phase anchor。原 producer
+作用域及其当时未登记的 prior／query 保持冻结，新结果只证明当前完整输入下的条件状态。
 原生补边后的 continuity 若产生尚未消费的独立 separator／Overlap 事实，先用同一固定成员 projection
 owner 有界重拟合一次，再重建该成员自身的权限与连续性，随后才测量 W、编译 Cross。原 producer
 记录保持冻结；`PhaseMemberAdjacencyPropagation` 保留输入 fit、完整关系分析、projection 与可选输出 fit。
@@ -2309,8 +2313,12 @@ Grid 端点建立 `NativeGridAssociationProof`。它复用 `template_feasible_ge
 的原 phase／pitch／W／local delta／scale 联合约束；原生局部边保留自身 full interval，只有既有 nominal
 anchor 或 supported global direct constraint 才能复用对应角色表达式。既有 Grid anchor 的反侧继续消费
 该 Grid 自己的 W；其它 native＋W 推导须有本成员获权的 `FrameWidthInference`，并消费同一 W 变量。
-不能复制两份独立宽度，也不能把 local 角色升级为 anchor。实测 separator／Contact／Overlap
-继续由原关系 owner 负责，不从 incident band 或模型正间距创造新的关联。
+不能复制两份独立宽度，也不能把 local 角色升级为 anchor。无条件获权的 local native 以原完整区间
+作为独立坐标变量；相同 observation 只保留一个变量。完整 native Frame 的两边只接受原 template 物理
+W 区间，允许实际 Frame 宽度不同，不强制等于拟合 source W。双方原生边均获权时，已登记实测
+separator／Contact／Overlap 的原 signed gap 约束进入同一系统；普通关系不补正 gap 假设。
+证明保存全部消耗的边对、物理区间、独立变量身份、Grid 原失败及未获权角色；不从 incident band
+或模型正间距创造新的关联。
 联合系统消费的全部 nominal／global direct 坐标约束均须有现成的无条件坐标权限；仅有 partial-height
 或 outer 条件的锚点在自身 Cross 域闭合前，不得为其它邻接提供物理结论。
 该投影是必要联合约束下的保守包络，不声称包含全部原生变量物理关系的精确集合。两端均已获权且包络
@@ -2321,6 +2329,8 @@ anchor 或 supported global direct constraint 才能复用对应角色表达式�
 不闭合的关联显式阻断其输出资格，但不删除历史成员或自动批准另一解释。
 `PhaseMemberAdmissionProof` 同时从规范 owner 重放原始及当前 fit 的 holder／source-domain 分类，保留
 完整模型位置、原 holder span、原 `0.02 × (W_min + W_max)` slack、真实 source domain 与终端角色。
+每个原始／当前越界模型角色单独保存原生 binding 的 identity、代表及完整区间；未绑定时全部原生字段
+为空。绑定存在只表示记录了观察，不替代独立角色权限；未绑定模型终端不能冒充已观察边界越源的反证。
 原失败不因后续 fit 成功而获得新权限；当前状态重新失败也阻断资格。Source-terminal 分类只证明真实
 TIFF 外缘的截断位置合法，不能冒充 canonical holder 准入或改写原坐标。
 Cross 使用 `lane_preparation.prepare_template_cross_context` 的同一规范 owner：只共享候选无关 base registration，
@@ -2342,7 +2352,7 @@ format/source 状态测量共同 W。共同 H 只从每个成员都已完整关�
 `common_outputs` 可保留预算失败窗口作为诊断，只有 `state=supported` 且 `common_failure=null` 才表示窗口
 验证通过。当前该分支在规范 selection/Gate 后执行，不授予照片序号映射、canonical winner 或自动输出权限。
 
-当前报告 schema 为 116。普通报告保留完整账本和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
+当前报告 schema 为 117。普通报告保留完整账本和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
 重放全部 producer 和独立成员，再比对结果、缺口和工作。成员 Cross 只重复自身 H／纵向域、best/runner、
 求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
 外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source
@@ -2393,16 +2403,16 @@ lattice authority。不新增像素 query 或 phase 搜索；包括第三份提�
 原生补边、晚期 projection、已登记关系传播、W、Cross、compose 和 envelope projection，沿用各 owner 的数值上限；
 单独记录 role lookup/binding、已登记事实检查逻辑上界、邻接／trace 检查、Cross 新增 local fit/event、
 数值 fit、projection extreme、output/budget。六个 pass 的独立验证合计上限为 `6 × 1,000,000` 逻辑工作单位。
-关系传播先按当前剩余额度预留 `4R(H + S + R) + 128` 的逻辑工作上界，H／S 为原 edge／separator 数；
-每成员最多调用一次固定映射 projection，最多一次 direct fit 或一次 nominal Grid solve。实际调用及 Grid
+晚期 projection 与关系传播分别按当前剩余额度预留 `4R(H + S + R) + 128` 的逻辑工作上界，H／S 为原 edge／separator 数；
+每阶段每成员最多调用一次固定映射 projection，最多一次 direct fit 或一次 nominal Grid solve。实际调用及 Grid
 求解成功在原求解入口计数，不能从最终 projection verdict 推断；可行求解仍可能被身份守卫拒绝。
 额外临时上界为 `4096 + 1024(H + S + R)`，保留输入／输出状态另计 `8192 + 2048R`，并入同一 source 内存；
 达到工作上限时保留全部具名成员和 typed 工作缺口，不运行该 refit，也不以先完成的成员代替全集。
-实际 native／Grid 关联每成员只编译一份原联合系统，每 normal 关系至多两次 LP；同一系统、完全相同
+实际 native／Grid 关联每成员只编译一份联合系统，每 normal 关系至多两次 LP；同一系统、完全相同
 线性目标的两个极值在该成员内复用，至多保留 `count - 1` 项，返回即释放，不缓存权限或跨成员结果。
-未获权的端点只保留来源和未评估状态，不运行 LP。求解前预留 `128 + 8R(R + 10)` 逻辑工作与
-`8192 + 512R(R + 10)` 临时字节，实际 LP 调用另计；关联账本保留量按 `4096 + 1024R` 计入 source。
-原始／当前准入核验按 `4R` 工作与 `2048 + 128R` 字节预留，使用原 holder／source owner，完整模型
+未获权的端点只保留来源和未评估状态，不运行 LP。求解前预留 `128 + 32R(R + 10)` 逻辑工作与
+`8192 + 512R(R + 10)` 临时字节，实际 LP 调用另计；关联账本保留量按 `4096 + 2048R` 计入 source。
+原始／当前准入核验及越界角色记录按 `6R` 工作与 `2048 + 512R` 字节预留，使用原 holder／source owner，完整模型
 坐标不截断；以上均消费原 600 万全集工作与原 source 内存上限，不新开资源池。
 完整集合及各 producer scope 的独立尺寸检查先编译原生 pair、H 和条件尺寸核验的逻辑上界并预留工作与内存，
 再执行重建；已超界时只保留全部具名成员和 typed unavailable，不继续尺寸重建。成员关联表、共享 pair 和各

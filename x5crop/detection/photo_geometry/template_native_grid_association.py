@@ -18,7 +18,7 @@ from scipy.optimize import linprog
 
 from ...domain import EvidenceState, FiniteInterval, ObservationId
 from .template_lattice_authority import global_lattice_authority_matches_fit
-from .template_model import SeparatorRelation, SequenceBindingUse, SequenceFit
+from .template_model import ContactRelation, SeparatorRelation, SequenceBindingUse, SequenceFit
 from .template_phase_model import GlobalLatticeConstraintKind, PhaseFitResult
 
 
@@ -99,6 +99,36 @@ class NativeGridGapFact:
         object.__setattr__(self, "state", state)
 
 
+class NativeGridConstraintKind(str, Enum):
+    NATIVE_FRAME_WIDTH = "native_frame_physical_width"
+    MEASURED_RELATION = "registered_measured_relation"
+
+
+@dataclass(frozen=True)
+class NativeGridIndependentConstraint:
+    kind: NativeGridConstraintKind
+    ordinal: int
+    first_role_index: int
+    second_role_index: int
+    observation_ids: tuple[ObservationId, ObservationId]
+    signed_span_interval_px: FiniteInterval
+
+    def __post_init__(self):
+        if (not isinstance(self.kind, NativeGridConstraintKind)
+                or type(self.ordinal) is not int or self.ordinal < 1
+                or any(type(i) is not int or i < 0 for i in (self.first_role_index, self.second_role_index))
+                or self.second_role_index != self.first_role_index + 1
+                or len(self.observation_ids) != 2
+                or any(not isinstance(i, ObservationId) for i in self.observation_ids)
+                or not isinstance(self.signed_span_interval_px, FiniteInterval)):
+            raise ValueError("native/Grid independent constraint lost its physical inputs")
+        first = 2 * (self.ordinal - 1) if self.kind == NativeGridConstraintKind.NATIVE_FRAME_WIDTH else 2 * self.ordinal - 1
+        if self.first_role_index != first or (
+                self.kind == NativeGridConstraintKind.NATIVE_FRAME_WIDTH
+                and self.signed_span_interval_px.minimum <= 0):
+            raise ValueError("native/Grid independent constraint changed its role pair")
+
+
 @dataclass(frozen=True)
 class NativeGridAssociationProof:
     input_fingerprint: str
@@ -106,10 +136,19 @@ class NativeGridAssociationProof:
     variable_count: int
     inequality_count: int
     lp_solve_count: int
+    native_variable_observation_ids: tuple[ObservationId, ...] = ()
+    independent_constraints: tuple[NativeGridIndependentConstraint, ...] = ()
+    grid_authority_failure: str | None = None
+    unqualified_grid_anchor_role_indices: tuple[int, ...] = ()
+    unqualified_native_role_indices: tuple[int, ...] = ()
     state: EvidenceState = field(init=False)
 
     def __post_init__(self) -> None:
         ordinals = tuple(f.relation_ordinal for f in self.facts)
+        for indices in (self.unqualified_grid_anchor_role_indices, self.unqualified_native_role_indices):
+            if (not isinstance(indices, tuple) or any(type(i) is not int or i < 0 for i in indices)
+                    or tuple(sorted(set(indices))) != indices):
+                raise ValueError("native/Grid qualification lost its original role indices")
         if (len(self.input_fingerprint) != 64
                 or any(c not in "0123456789abcdef" for c in self.input_fingerprint)
                 or not self.facts or ordinals != tuple(sorted(set(ordinals)))
@@ -118,6 +157,13 @@ class NativeGridAssociationProof:
                 or self.variable_count not in (0,) and self.variable_count < 3
                 or bool(self.variable_count) != bool(self.inequality_count)
                 or bool(self.variable_count) != bool(self.lp_solve_count)
+                or len(set(self.native_variable_observation_ids)) != len(self.native_variable_observation_ids)
+                or any(not isinstance(i, ObservationId) for i in self.native_variable_observation_ids)
+                or len(set(self.independent_constraints)) != len(self.independent_constraints)
+                or not self.variable_count and (self.native_variable_observation_ids or self.independent_constraints)
+                or self.grid_authority_failure is not None and (
+                    type(self.grid_authority_failure) is not str or not self.grid_authority_failure or self.lp_solve_count)
+                or self.unqualified_grid_anchor_role_indices and self.grid_authority_failure is None
                 or not 0 <= self.lp_solve_count <= 2 * len(self.facts)
                 or self.lp_solve_count == 0 and any(f.joint_system_feasible is not None for f in self.facts)):
             raise ValueError("native/Grid association lost complete bounded work")
@@ -175,7 +221,7 @@ def native_grid_relation_ordinals(fit: SequenceFit) -> tuple[int, ...]:
 def native_grid_work_bound(role_count: int) -> int:
     if type(role_count) is not int or role_count < 2 or role_count % 2:
         raise ValueError("native/Grid work requires a positive even role count")
-    return 128 + 8 * role_count * (role_count + 10)
+    return 128 + 32 * role_count * (role_count + 10)
 
 
 def native_grid_bytes_bound(role_count: int) -> int:
@@ -183,7 +229,7 @@ def native_grid_bytes_bound(role_count: int) -> int:
     return 8192 + 512 * role_count * (role_count + 10)
 
 
-def _grid_authorized(phase):
+def _grid_qualification(phase):
     fit = phase.best
     global_authority = _qualified_global(phase)
     state = fit.calibrated_nominal_grid_fit_state
@@ -196,8 +242,6 @@ def _grid_authorized(phase):
                 and fit.role_bindings[i].use == SequenceBindingUse.PHASE_ANCHOR
                 and fit.role_bindings[i].observation_id == identity
                 for i, identity in zip(state.phase_anchor_role_indices, state.phase_anchor_observation_ids, strict=True)))
-    if global_authority is None and not nominal_supported:
-        return False
     # The shared system consumes every retained coordinate constraint, not
     # only the native endpoint at this particular adjacency. Cross-dependent
     # partial-height anchors cannot supply a pre-Cross physical conclusion.
@@ -207,9 +251,82 @@ def _grid_authorized(phase):
                         if c.kind == GlobalLatticeConstraintKind.DIRECT_ROLE_COORDINATE)
     direct = phase.direct_role_binding_authority
     facts = {} if direct is None else {f.role_index: f for f in direct.facts}
-    return all(i in facts and fit.role_bindings[i] is not None
+    missing = tuple(sorted(i for i in required if not (i in facts and fit.role_bindings[i] is not None
                and facts[i].observation_id == fit.role_bindings[i].observation_id
-               and facts[i].has_unconditional_coordinate_authority for i in required)
+               and facts[i].has_unconditional_coordinate_authority)))
+    if global_authority is None and not nominal_supported:
+        failure = (evidence.failure_kind.value if evidence is not None and evidence.failure_kind is not None
+                   else "nominal_grid_state_missing" if state is None else "nominal_grid_identity_unqualified")
+        return False, failure, missing
+    return (False, "grid_anchor_coordinate_authority_unavailable", missing) if missing else (True, None, ())
+
+
+def _grid_authorized(phase):
+    return _grid_qualification(phase)[0]
+
+
+def _independent_native_system(phase, anchors, facts_by_role):
+    """Keep native coordinates and their existing physical relations together.
+
+    Native/local variables never constrain their model roles. A complete
+    native Frame consumes the original physical template width, allowing
+    different observed Frames to have different widths. Only an explicit
+    measured relation contributes a native adjacency strip.
+    """
+    from .template_feasible_geometry import sequence_feasible_system, _FeasibleSystem
+
+    fit = phase.best
+    system, roles = sequence_feasible_system(fit, _qualified_global(phase))
+    authorized = {i for i, b in enumerate(fit.role_bindings) if b is not None
+        and i in facts_by_role and facts_by_role[i].observation_id == b.observation_id
+        and facts_by_role[i].has_unconditional_coordinate_authority}
+    shared = {fit.role_bindings[i].observation_id: i for i in anchors}
+    by_id = {b.observation_id: b for b in fit.role_bindings if b is not None}
+    native_ids = tuple(dict.fromkeys(b.observation_id for i, b in enumerate(fit.role_bindings)
+        if b is not None and i in authorized and b.observation_id not in shared))
+    native_indices = {identity: len(system.bounds) + i for i, identity in enumerate(native_ids)}
+    dimension = len(system.bounds) + len(native_ids)
+    native_expressions = {}
+    for i in sorted(authorized):
+        identity = fit.role_bindings[i].observation_id
+        coefficients = np.zeros(dimension, dtype=np.float64)
+        if identity in shared:
+            expression = roles[shared[identity]]
+            coefficients[:len(system.bounds)] = expression.coefficients
+            constant = expression.constant
+        else:
+            coefficients[native_indices[identity]] = 1.0
+            constant = 0.0
+        native_expressions[i] = (coefficients, constant)
+    rows = [np.pad(row, (0, len(native_ids))) for row in system.inequalities[0]]
+    limits = list(system.inequalities[1])
+    constraints = []
+
+    def retain(kind, ordinal, first, second, interval):
+        if first not in native_expressions or second not in native_expressions:
+            return
+        left, right = native_expressions[first], native_expressions[second]
+        coefficients = fit.template.direction * (right[0] - left[0])
+        constant = fit.template.direction * (right[1] - left[1])
+        rows.extend((coefficients, -coefficients))
+        limits.extend((interval.maximum - constant, constant - interval.minimum))
+        constraints.append(NativeGridIndependentConstraint(kind, ordinal, first, second,
+            (fit.role_bindings[first].observation_id, fit.role_bindings[second].observation_id),
+            FiniteInterval(interval.minimum, interval.maximum)))
+
+    for first in range(0, len(fit.role_bindings), 2):
+        retain(NativeGridConstraintKind.NATIVE_FRAME_WIDTH, first // 2 + 1,
+               first, first + 1, fit.template.frame_width_px)
+    for relation in fit.adjacency_relations:
+        if isinstance(relation, SeparatorRelation) and not relation.is_measured:
+            continue
+        span = FiniteInterval.exact(0.0) if isinstance(relation, ContactRelation) else relation.signed_gap_interval_px
+        retain(NativeGridConstraintKind.MEASURED_RELATION, relation.relation_ordinal,
+               2 * relation.relation_ordinal - 1, 2 * relation.relation_ordinal, span)
+    bounds = system.bounds + tuple((by_id[i].full_position_interval_px.minimum,
+                                    by_id[i].full_position_interval_px.maximum) for i in native_ids)
+    return (_FeasibleSystem(bounds, (np.asarray(rows), np.asarray(limits))), roles,
+            native_expressions, native_ids, tuple(constraints))
 
 
 def assess_native_grid_association(phase: PhaseFitResult, source_frame_width_authority=None):
@@ -220,13 +337,15 @@ def assess_native_grid_association(phase: PhaseFitResult, source_frame_width_aut
     ordinals = native_grid_relation_ordinals(fit)
     if not ordinals:
         return None
-    # Imported at execution time: placement composes from this same owner,
-    # while this sequence-only proof must be available before Cross exists.
-    from .template_feasible_geometry import sequence_feasible_system
     system = roles = None
-    grid_authorized = _grid_authorized(phase)
+    native_expressions = None
+    native_ids = independent_constraints = ()
+    grid_authorized, grid_failure, unqualified_anchors = _grid_qualification(phase)
     direct = phase.direct_role_binding_authority
     facts_by_role = {} if direct is None else {f.role_index: f for f in direct.facts}
+    unqualified_native = tuple(i for i, b in enumerate(fit.role_bindings) if b is not None
+        and (i not in facts_by_role or facts_by_role[i].observation_id != b.observation_id
+             or not facts_by_role[i].has_unconditional_coordinate_authority))
     anchors = set()
     nominal = fit.calibrated_nominal_grid_fit_state
     if nominal is not None:
@@ -269,13 +388,10 @@ def assess_native_grid_association(phase: PhaseFitResult, source_frame_width_aut
     def expression(source):
         if source.basis == NativeGridBoundaryBasis.GRID:
             role = roles[source.role_index]
-            return role.coefficients, FiniteInterval.exact(role.constant)
-        if source.native_role_index in anchors:
-            coefficients = roles[source.native_role_index].coefficients.copy()
-            offset = FiniteInterval.exact(roles[source.native_role_index].constant)
-        else:
-            coefficients = np.zeros(len(system.bounds), dtype=np.float64)
-            offset = source.native_full_interval_px
+            return np.pad(role.coefficients, (0, len(native_ids))), FiniteInterval.exact(role.constant)
+        coordinates = native_expressions[source.native_role_index]
+        coefficients = coordinates[0].copy()
+        offset = FiniteInterval.exact(coordinates[1])
         if source.basis in (NativeGridBoundaryBasis.NATIVE_WIDTH, NativeGridBoundaryBasis.ANCHOR_GRID_WIDTH):
             coefficients[1] += fit.template.direction * (1 if source.role_index % 2 else -1)
         return coefficients, offset
@@ -293,7 +409,8 @@ def assess_native_grid_association(phase: PhaseFitResult, source_frame_width_aut
             facts.append(NativeGridGapFact(ordinal, end, start, None, canonical, None))
             continue
         if system is None:
-            system, roles = sequence_feasible_system(fit, _qualified_global(phase))
+            system, roles, native_expressions, native_ids, independent_constraints = _independent_native_system(
+                phase, anchors, facts_by_role)
         end_coefficients, end_offset = expression(end)
         start_coefficients, start_offset = expression(start)
         objective = direction * (start_coefficients - end_coefficients)
@@ -330,4 +447,5 @@ def assess_native_grid_association(phase: PhaseFitResult, source_frame_width_aut
         facts.append(NativeGridGapFact(ordinal, end, start, bounds, canonical, not infeasible))
     return NativeGridAssociationProof(_input_fingerprint(phase, width), tuple(facts),
         0 if system is None else len(system.bounds),
-        0 if system is None else len(system.inequalities[1]), solve_count)
+        0 if system is None else len(system.inequalities[1]), solve_count,
+        native_ids, independent_constraints, grid_failure, unqualified_anchors, unqualified_native)

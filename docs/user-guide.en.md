@@ -60,6 +60,8 @@ Registered adjacency relations are jointly checked against each member's origina
 facts or an inability to preserve the original boundary assignments require manual review.
 Reports retain separate proofs for actual native-to-template boundary associations and original/current range admission.
 Classification as clipping at a true source edge does not automatically grant range admission.
+Reports list the native pairs and measured adjacencies used in joint validation, roles lacking qualification,
+and the original observation, when present, for each model coordinate outside the admitted range.
 Original complete-photo boundaries independently accepted by every interpretation can establish common dimensions;
 each interpretation retains its own dimension ranges and protection requirements. Reports distinguish a positioning
 stage's common window from the complete historical set. Passing some stages still requires manual review.

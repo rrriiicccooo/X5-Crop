@@ -55,8 +55,8 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record, validate_placement_feature_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v30"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v31"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v31"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v32"
 RETAINED_PLACEMENT_SCOPE = "retained_canonical_pair_conditional_cross_and_independent_phase_review_proposals"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
@@ -95,8 +95,17 @@ def _complete_phase_output_diagnostic(lane):
                 if member["native_grid_association"] is not None).items())),
             "native_grid_lp_solve_count": sum(member["work"]["native_grid_lp_solve_count"]
                                                for member in proof["members"]),
+            "native_grid_independent_constraint_count": sum(len(member["native_grid_association"]["independent_constraints"])
+                for member in proof["members"] if member["native_grid_association"] is not None),
+            "late_nominal_grid_solve_count": sum(member["work"]["late_nominal_grid_solve_count"]
+                                                for member in proof["members"]),
+            "late_nominal_grid_solve_success_count": sum(member["work"]["late_nominal_grid_solve_success_count"]
+                                                        for member in proof["members"]),
             "current_holder_unavailable_count": sum(member["admission"] is not None
                 and not member["admission"]["current_holder_admitted"] for member in proof["members"]),
+            "current_holder_unbound_model_count": sum(member["admission"] is not None
+                and any(v["observation_id"] is None for v in member["admission"]["current_holder_violations"])
+                for member in proof["members"]),
             "adjacency_propagation_count": sum(member["adjacency_propagation"] is not None for member in proof["members"]),
             "adjacency_propagation_success_count": sum(member["adjacency_propagation"] is not None
                 and member["adjacency_propagation"]["output_fit"] is not None for member in proof["members"]),

@@ -16,7 +16,7 @@ from x5crop.detection.photo_geometry.template_phase_admission import (
 from x5crop.detection.photo_geometry.template_source_domain import (
     PhaseSourceDomain,
 )
-from x5crop.domain import Box, FiniteInterval, WorkspaceExtent
+from x5crop.domain import Box, FiniteInterval, ObservationId, WorkspaceExtent
 
 
 def _source_domain(
@@ -159,6 +159,47 @@ class PhaseAdmissionProofContractTest(unittest.TestCase):
         self.assertFalse(proof.current_source_domain_admitted)
         self.assertEqual(proof.current_source_terminal_role_indices, ())
 
+    def test_unbound_source_terminal_retains_missing_native_evidence(self) -> None:
+        clipped = _move_fit(self.base_fit, -200.0)
+        clipped = replace(clipped, role_bindings=(None, *clipped.role_bindings[1:]), phase_support_coverage=1.0)
+        proof = assess_phase_member_admission(clipped, clipped,
+            holder_span_px=self.holder, source_domain=self.domain)
+        self.assertFalse(proof.current_holder_admitted)
+        self.assertTrue(proof.current_source_domain_admitted)
+        self.assertEqual(len(proof.current_holder_violations), 1)
+        v = proof.current_holder_violations[0]
+        self.assertEqual(v.role_index, 0)
+        self.assertTrue(v.source_terminal_clipped)
+        self.assertIsNone(v.observation_id)
+        self.assertIsNone(v.native_full_interval_px)
+        with self.assertRaises(ValueError):
+            replace(proof, current_holder_admitted=True)
+        with self.assertRaises(ValueError):
+            replace(proof, current_holder_violations=())
+
+    def test_holder_violation_cannot_borrow_another_native_binding(self) -> None:
+        clipped = _move_fit(self.base_fit, -200.0)
+        proof = assess_phase_member_admission(clipped, clipped,
+            holder_span_px=self.holder, source_domain=self.domain)
+        self.assertEqual(proof.current_holder_violations[0].observation_id,
+                         clipped.role_bindings[0].observation_id)
+        borrowed = replace(proof.current_holder_violations[0], observation_id=ObservationId('unrelated-native'))
+        forged = replace(proof, current_holder_violations=(borrowed,))
+        self.assertFalse(forged.matches_current_fit(clipped))
+        self.assertFalse(forged.matches_inputs(clipped, clipped, self.holder, self.domain))
+
+    def test_violation_keeps_the_original_binding_numeric_tolerance(self) -> None:
+        clipped = _move_fit(self.base_fit, -200.0)
+        binding = clipped.role_bindings[0]
+        interval = FiniteInterval.exact(binding.canonical_position_px + 5.0e-10)
+        binding = replace(binding, fit_position_interval_px=FiniteInterval.exact(binding.canonical_position_px),
+                          full_position_interval_px=interval)
+        clipped = replace(clipped, role_bindings=(binding, *clipped.role_bindings[1:]))
+        proof = assess_phase_member_admission(clipped, clipped,
+            holder_span_px=self.holder, source_domain=self.domain)
+        self.assertEqual(proof.current_holder_violations[0].native_full_interval_px, interval)
+        self.assertFalse(proof.current_holder_admitted)
+
     def test_source_domain_classification_rejects_internal_wrong_side_and_empty_geometry(self) -> None:
         cases = (
             ("internal role", _move_fit(self.base_fit, -300.0), self.domain),
@@ -272,8 +313,8 @@ class PhaseAdmissionProofContractTest(unittest.TestCase):
                     admission_proof_work_bound(value)
                 with self.assertRaises((TypeError, ValueError)):
                     admission_proof_bytes_bound(value)
-        self.assertEqual(admission_proof_work_bound(4), 16)
-        self.assertEqual(admission_proof_bytes_bound(4), 2560)
+        self.assertEqual(admission_proof_work_bound(4), 24)
+        self.assertEqual(admission_proof_bytes_bound(4), 4096)
 
         invalid = (
             {"direction": True},

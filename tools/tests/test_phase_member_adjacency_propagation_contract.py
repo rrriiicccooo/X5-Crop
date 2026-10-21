@@ -383,7 +383,8 @@ class PhaseMemberAdjacencyPropagationContractTest(unittest.TestCase):
             projection.outcome,
             PhaseCandidateProjectionOutcome.TOPOLOGY_BINDING_UNAVAILABLE,
         )
-        self.assertEqual(work, CandidateProjectionWork())
+        self.assertEqual(replace(work, projection_work_bound=0), CandidateProjectionWork())
+        self.assertGreater(work.projection_work_bound, 0)
 
     def test_grid_counter_reports_success_and_infeasible_attempts_at_solver_entry(self):
         fit, phase_input, analysis, _edges, _bands = self._fixture(
@@ -433,7 +434,8 @@ class PhaseMemberAdjacencyPropagationContractTest(unittest.TestCase):
         )
         self.assertIsNone(output)
         self.assertIsNotNone(projection)
-        self.assertEqual(work, CandidateProjectionWork())
+        self.assertEqual(replace(work, projection_work_bound=0), CandidateProjectionWork())
+        self.assertGreater(work.projection_work_bound, 0)
 
     def test_propagation_record_rejects_ledger_or_identity_mutations(self):
         fit, phase_input, analysis, _edges, _bands = self._fixture("narrow")

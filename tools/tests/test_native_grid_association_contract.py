@@ -505,6 +505,7 @@ class NativeGridAssociationContractTests(unittest.TestCase):
 
     def test_local_native_keeps_full_interval_and_never_becomes_anchor(self) -> None:
         fit = placement_sequence(phase_template(2), missing=(2, 3))
+        fit = replace(fit, template=replace(fit.template, frame_width_px=PositiveInterval(50.0, 150.0)))
         binding = fit.role_bindings[1]
         assert binding is not None
         local = replace(
@@ -600,6 +601,7 @@ class NativeGridAssociationContractTests(unittest.TestCase):
 
     def test_canonical_negative_or_unenclosed_gap_cannot_use_a_favorable_lp_point(self) -> None:
         fit = placement_sequence(phase_template(2), missing=(2, 3))
+        fit = replace(fit, template=replace(fit.template, frame_width_px=PositiveInterval(50.0, 150.0)))
         binding = fit.role_bindings[1]
         assert binding is not None
         canonical_negative = replace(
@@ -737,7 +739,7 @@ class NativeGridAssociationContractTests(unittest.TestCase):
         self.assertFalse(proof.matches_inputs(phase, _failed_width_authority()))
 
     def test_bounds_and_typed_resource_fields_reject_bool_or_invalid_counts(self) -> None:
-        self.assertEqual(native.native_grid_work_bound(4), 576)
+        self.assertEqual(native.native_grid_work_bound(4), 1920)
         self.assertEqual(native.native_grid_bytes_bound(4), 36864)
         for value in (True, 1.0, 0, -2, 3):
             with self.subTest(value=value):
