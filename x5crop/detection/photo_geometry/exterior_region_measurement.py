@@ -336,16 +336,27 @@ def _weak_prefixes(sums: np.ndarray, query: ExteriorRegionQuery) -> tuple[np.nda
             prefix = np.empty((len(data)+1, data.shape[1]), dtype=np.int64)
             prefix[0] = 0
             np.cumsum(data, axis=0, out=prefix[1:])
-            left = prefix[coordinates-gap]-prefix[coordinates-gap-window]
-            right = prefix[coordinates+gap+window]-prefix[coordinates+gap]
-            peak = max(peak, base + prefix.nbytes + left.nbytes + right.nbytes
-                       + 2*left.nbytes)
-            left -= right
+            count = len(coordinates)
+            displacement = window+2*gap
+            if displacement < count:
+                # The two complete window-start domains overlap. Compute
+                # their union once, then subtract the original two views.
+                windows = prefix[window:window+count+displacement]-prefix[:count+displacement]
+                left = windows[:count]-windows[displacement:displacement+count]
+            else:
+                left = prefix[window:window+count]-prefix[:count]
+                right = (prefix[displacement+window:displacement+window+count]
+                         - prefix[displacement:displacement+count])
+                left -= right
+            # Union windows use fewer than 2*count rows; include prefix,
+            # integer differences and the float result under the same bound.
+            peak = max(peak, base + prefix.nbytes + 4*left.nbytes)
             result = left.astype(np.float64, order="F")
             result /= window
             np.abs(result, out=result)
             return result
-        gradient = np.abs(values[coordinates+gap-1]-values[coordinates-gap]).astype(np.float64, order="F")
+        gradient = np.abs(values[window+2*gap-1:query.coordinate_count+gap-1]
+                          - values[window:query.coordinate_count-gap]).astype(np.float64, order="F")
         peak = max(peak, base + 3*gradient.nbytes)
         mask = credible(gradient, SPEC.gradient_z_minimum, certify_floor=True)
         del gradient

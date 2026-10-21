@@ -31,11 +31,11 @@ def _source():
     return gray
 
 
-def _measure(gray, *, layout="horizontal", box=None):
+def _measure(gray, *, layout="horizontal", box=None, scale=10.):
     if box is None:
         box = Box(0,0,gray.shape[1],gray.shape[0])
     field = make_native_test_field(gray if layout == "horizontal" else gray.T.copy(), layout)
-    query = ExteriorRegionQuery("lane:0",layout,box,10.,"physical-plan:test")
+    query = ExteriorRegionQuery("lane:0",layout,box,scale,"physical-plan:test")
     return measure_exterior_region(field,query)
 
 
@@ -150,24 +150,28 @@ class ExteriorRegionMeasurementContractTest(unittest.TestCase):
 
     def test_even_and_odd_weak_domains_match_scalar_traces_with_texture(self):
         rng = np.random.default_rng(811)
+        overlapping_window_domains = set()
         for height in (600, 605):
             source = rng.integers(0, 256, (height, 101), dtype=np.uint8)
-            for layout in ("horizontal", "vertical"):
-                with self.subTest(height=height, layout=layout):
-                    result = _measure(source, layout=layout)
-                    query = result.query
-                    for side in (0, 1):
-                        sums, _ = _box_sums((source if side == 0 else source[::-1])[:query.read_depth])
-                        for column in range(0, query.trace_count, 7):
-                            scalar = measure_trace(sums[:, column]/25.,
-                                FiniteInterval(query.window+query.gap, query.coordinate_count-1), 10., SPEC)
-                            credible = ((scalar.gradient_z >= SPEC.gradient_z_minimum) |
-                                (np.maximum(scalar.tone_z, scalar.texture_z) >= SPEC.tone_or_texture_z_minimum))
-                            expected = (None if not credible.any() else
-                                float(scalar.coordinates[np.flatnonzero(credible)[0]])+1.5)
-                            if side and expected is not None:
-                                expected = height-1.-expected
-                            self.assertEqual(result.sides[side].weak_prefix_px[column], expected)
+            for scale in (10., 75., 300.):
+                for layout in ("horizontal", "vertical"):
+                    with self.subTest(height=height, scale=scale, layout=layout):
+                        result = _measure(source, layout=layout, scale=scale)
+                        query = result.query
+                        overlapping_window_domains.add(query.window+2*query.gap < query.weak_coordinate_count)
+                        for side in (0, 1):
+                            sums, _ = _box_sums((source if side == 0 else source[::-1])[:query.read_depth])
+                            for column in range(0, query.trace_count, 7):
+                                scalar = measure_trace(sums[:, column]/25.,
+                                    FiniteInterval(query.window+query.gap, query.coordinate_count-1), scale, SPEC)
+                                credible = ((scalar.gradient_z >= SPEC.gradient_z_minimum) |
+                                    (np.maximum(scalar.tone_z, scalar.texture_z) >= SPEC.tone_or_texture_z_minimum))
+                                expected = (None if not credible.any() else
+                                    float(scalar.coordinates[np.flatnonzero(credible)[0]])+1.5)
+                                if side and expected is not None:
+                                    expected = height-1.-expected
+                                self.assertEqual(result.sides[side].weak_prefix_px[column], expected)
+        self.assertEqual(overlapping_window_domains, {False, True})
 
     def test_persistent_availability_distinguishes_first_row_from_no_hit(self):
         mask = np.array([[0,1,0,0], [0,1,0,0], [0,0,1,0],
