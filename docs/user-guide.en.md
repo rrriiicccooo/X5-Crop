@@ -62,6 +62,8 @@ Reports retain separate proofs for actual native-to-template boundary associatio
 Classification as clipping at a true source edge does not automatically grant range admission.
 Reports list the native pairs and measured adjacencies used in joint validation, roles lacking qualification,
 and the original observation, when present, for each model coordinate outside the admitted range.
+When a calibrated template has not been established, reports still list the original positioning anchors and their
+qualification gaps. Raw observations with incomplete associations continue to require manual review.
 Original complete-photo boundaries independently accepted by every interpretation can establish common dimensions;
 each interpretation retains its own dimension ranges and protection requirements. Reports distinguish a positioning
 stage's common window from the complete historical set. Passing some stages still requires manual review.

@@ -55,8 +55,8 @@ from .gold_geometry import (
 from .report_validation import validate_current_report_record, validate_placement_feature_record
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v31"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v32"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v32"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v33"
 RETAINED_PLACEMENT_SCOPE = "retained_canonical_pair_conditional_cross_and_independent_phase_review_proposals"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
@@ -96,6 +96,12 @@ def _complete_phase_output_diagnostic(lane):
             "native_grid_lp_solve_count": sum(member["work"]["native_grid_lp_solve_count"]
                                                for member in proof["members"]),
             "native_grid_independent_constraint_count": sum(len(member["native_grid_association"]["independent_constraints"])
+                for member in proof["members"] if member["native_grid_association"] is not None),
+            "native_grid_uncompiled_anchor_member_count": sum(bool(member["native_grid_association"]["uncompiled_grid_anchor_role_indices"])
+                for member in proof["members"] if member["native_grid_association"] is not None),
+            "native_grid_uncompiled_unqualified_anchor_count": sum(len(set(
+                member["native_grid_association"]["uncompiled_grid_anchor_role_indices"]).intersection(
+                member["native_grid_association"]["unqualified_grid_anchor_role_indices"]))
                 for member in proof["members"] if member["native_grid_association"] is not None),
             "late_nominal_grid_solve_count": sum(member["work"]["late_nominal_grid_solve_count"]
                                                 for member in proof["members"]),

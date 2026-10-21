@@ -2319,6 +2319,12 @@ W 区间，允许实际 Frame 宽度不同，不强制等于拟合 source W。�
 separator／Contact／Overlap 的原 signed gap 约束进入同一系统；普通关系不补正 gap 假设。
 证明保存全部消耗的边对、物理区间、独立变量身份、Grid 原失败及未获权角色；不从 incident band
 或模型正间距创造新的关联。
+尚无 nominal 联合状态且没有匹配的获权 global 系统时，仍逐项审计该 fit 原有的 `PHASE_ANCHOR`，
+以 `uncompiled_grid_anchor_role_indices` 保存未编译的原锚点，以 `unqualified_grid_anchor_role_indices`
+另列其中缺少无条件坐标权限的角色。Local 缺权只进入原生角色账本，不冒充 phase-anchor 缺口。
+`nominal_grid_state_missing` 不得掩盖已有原生 anchor 的资格状态；即使全部原锚点获权，未编译状态
+仍不授予 Grid 权限，不运行下游 LP。该审计只消费原 binding／direct-role fact，逐角色扫描与至多 R 项
+索引继续使用原联合投影的工作及保留量上界，不重放像素跟踪或新增测量。
 联合系统消费的全部 nominal／global direct 坐标约束均须有现成的无条件坐标权限；仅有 partial-height
 或 outer 条件的锚点在自身 Cross 域闭合前，不得为其它邻接提供物理结论。
 该投影是必要联合约束下的保守包络，不声称包含全部原生变量物理关系的精确集合。两端均已获权且包络
@@ -2352,7 +2358,7 @@ format/source 状态测量共同 W。共同 H 只从每个成员都已完整关�
 `common_outputs` 可保留预算失败窗口作为诊断，只有 `state=supported` 且 `common_failure=null` 才表示窗口
 验证通过。当前该分支在规范 selection/Gate 后执行，不授予照片序号映射、canonical winner 或自动输出权限。
 
-当前报告 schema 为 117。普通报告保留完整账本和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
+当前报告 schema 为 118。普通报告保留完整账本和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
 重放全部 producer 和独立成员，再比对结果、缺口和工作。成员 Cross 只重复自身 H／纵向域、best/runner、
 求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
 外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source

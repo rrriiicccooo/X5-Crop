@@ -73,7 +73,7 @@
   报告的 4096 项本地转换模板按最近使用顺序淘汰，保持重复证据分支独立可变。
   固定区间值直接生成独立的 minimum／maximum 记录，保留全部字段与端点转换语义。
 - 对全部既有候选核验遗漏的唯一获权 separator 伙伴；仅原生完整可见宽度超过原物理上限时保留为
-  关联反证，不补绑定、不调整排序、不借 source W。报告进入当前 schema 117，独立 Review 显示各解释的
+  关联反证，不补绑定、不调整排序、不借 source W。报告进入当前 schema 118，独立 Review 显示各解释的
   `geometry_basis` 并重放十二类完整映射。Coverage／continuity
   校验共用 typed owner，并从开发报告原证据重建，删除重复判据。
   最终保留解释的 `retained_adjacency_assessments` 同时出现在普通及 development 报告，从原登记事实
@@ -107,6 +107,14 @@
   3 份原 phase anchor 缺权，不授予物理反证。另有 4 份缺获权 W 推断、
   8 份缺独立 Overlap；模型的正 `P-W` 不能替代实际端点关联。
   唯一覆盖不完整项的 158 列均在 TIFF 外，登记查询已完整执行，不能裁短 required domain 冒充完整。
+  剩余 6 份现分开核验原 phase anchor 与实际目标 native：2 份共同缺 edge89 anchor 及 edge120 目标资格，
+  另 3 份分别缺 edge20／70／100／123、edge80、edge25 的原 anchor 资格；覆盖超 TIFF 的 1 份两类坐标均获权。
+  当前没有可直接传播的合格 typed 事实。部分第三高度区域存在 raw transition 候选，但原规范 track
+  未通过区域 quota 或 tone／texture，或完整 raw 集合与原 edge 没有共同物理直线；逐点相容不能代替
+  完整 track，也不能摘点拼接新权限。
+- 未建立 nominal 状态时继续保留原 phase-anchor 资格账本，修复通用 `nominal_grid_state_missing`
+  掩盖原锚点缺权的问题；未编译锚点与已消费的 Grid 坐标约束分开记录，local 原生角色缺口保持独立。
+  同时报告未编译成员数及其中未获权锚点数。已有 anchor 事实不等于已取得 Grid 状态，不新增 LP 或裁切权限。
 - 完整历史成员对实际 native／Grid 邻接复用原相关状态，保存必要约束下的保守 gap 包络、坐标权限、
   原代表和实际 LP 次数；不升级 local anchor、不新增正 gap 假设或 Overlap、不选择有利代表。
   完整 native 坐标及已有实测邻接进入同一联合系统；物理 Frame W 与拟合 source W 分开，
@@ -115,6 +123,8 @@
   原始／当前 holder 与真实 source-domain 分类由同一 owner 独立重放，原失败保持，当前失败也阻断资格。
   S021 原 32 份中的 27 份 holder 缺口均为未绑定模型终端 source-clipped，已观察原生端点没有越源，
   当前 fit 重新核验仍全部不满足 holder；未发现可从既有源截断分类转授的 canonical holder 权限。
+  已登记 52 份未绑定直接观察和 2 份 outer-material 事实仍缺本成员终端／序号关联；原生 edge 完整区间
+  均位于 TIFF 内部，未找到可独立传入这些模型终端的物理证据，不转授 lane 或其它成员的完整 Frame 权限。
   越界角色分别记录本成员原生 observation／完整区间或明确未绑定；范围过滤失败不冒充拓扑反证。
   晚期投影、后续前置核验和输入扫描分别预留工作，成功求解后被身份守卫拒绝仍计入实际调用；
   成员证明内存使用同一 owner 预留和汇总，不漏计准入及 native／Grid 账本。

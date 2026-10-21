@@ -141,11 +141,13 @@ class NativeGridAssociationProof:
     grid_authority_failure: str | None = None
     unqualified_grid_anchor_role_indices: tuple[int, ...] = ()
     unqualified_native_role_indices: tuple[int, ...] = ()
+    uncompiled_grid_anchor_role_indices: tuple[int, ...] = ()
     state: EvidenceState = field(init=False)
 
     def __post_init__(self) -> None:
         ordinals = tuple(f.relation_ordinal for f in self.facts)
-        for indices in (self.unqualified_grid_anchor_role_indices, self.unqualified_native_role_indices):
+        for indices in (self.unqualified_grid_anchor_role_indices, self.unqualified_native_role_indices,
+                        self.uncompiled_grid_anchor_role_indices):
             if (not isinstance(indices, tuple) or any(type(i) is not int or i < 0 for i in indices)
                     or tuple(sorted(set(indices))) != indices):
                 raise ValueError("native/Grid qualification lost its original role indices")
@@ -164,6 +166,10 @@ class NativeGridAssociationProof:
                 or self.grid_authority_failure is not None and (
                     type(self.grid_authority_failure) is not str or not self.grid_authority_failure or self.lp_solve_count)
                 or self.unqualified_grid_anchor_role_indices and self.grid_authority_failure is None
+                or self.uncompiled_grid_anchor_role_indices and (
+                    self.grid_authority_failure is None or self.lp_solve_count
+                    or not set(self.uncompiled_grid_anchor_role_indices).intersection(
+                        self.unqualified_grid_anchor_role_indices).issubset(self.unqualified_native_role_indices))
                 or not 0 <= self.lp_solve_count <= 2 * len(self.facts)
                 or self.lp_solve_count == 0 and any(f.joint_system_feasible is not None for f in self.facts)):
             raise ValueError("native/Grid association lost complete bounded work")
@@ -249,6 +255,13 @@ def _grid_qualification(phase):
     if global_authority is not None:
         required.update(c.role_index for c in global_authority.constraints
                         if c.kind == GlobalLatticeConstraintKind.DIRECT_ROLE_COORDINATE)
+    # No compiled state does not mean no original anchor obligations. Keep
+    # their coordinate failures visible without treating these bindings as
+    # constraints of an authorized Grid or running a downstream LP.
+    uncompiled = (() if state is not None or global_authority is not None else
+                  tuple(i for i, b in enumerate(fit.role_bindings)
+                        if b is not None and b.use == SequenceBindingUse.PHASE_ANCHOR))
+    required.update(uncompiled)
     direct = phase.direct_role_binding_authority
     facts = {} if direct is None else {f.role_index: f for f in direct.facts}
     missing = tuple(sorted(i for i in required if not (i in facts and fit.role_bindings[i] is not None
@@ -257,8 +270,9 @@ def _grid_qualification(phase):
     if global_authority is None and not nominal_supported:
         failure = (evidence.failure_kind.value if evidence is not None and evidence.failure_kind is not None
                    else "nominal_grid_state_missing" if state is None else "nominal_grid_identity_unqualified")
-        return False, failure, missing
-    return (False, "grid_anchor_coordinate_authority_unavailable", missing) if missing else (True, None, ())
+        return False, failure, missing, uncompiled
+    return ((False, "grid_anchor_coordinate_authority_unavailable", missing, ())
+            if missing else (True, None, (), ()))
 
 
 def _grid_authorized(phase):
@@ -340,7 +354,7 @@ def assess_native_grid_association(phase: PhaseFitResult, source_frame_width_aut
     system = roles = None
     native_expressions = None
     native_ids = independent_constraints = ()
-    grid_authorized, grid_failure, unqualified_anchors = _grid_qualification(phase)
+    grid_authorized, grid_failure, unqualified_anchors, uncompiled_anchors = _grid_qualification(phase)
     direct = phase.direct_role_binding_authority
     facts_by_role = {} if direct is None else {f.role_index: f for f in direct.facts}
     unqualified_native = tuple(i for i, b in enumerate(fit.role_bindings) if b is not None
@@ -448,4 +462,5 @@ def assess_native_grid_association(phase: PhaseFitResult, source_frame_width_aut
     return NativeGridAssociationProof(_input_fingerprint(phase, width), tuple(facts),
         0 if system is None else len(system.bounds),
         0 if system is None else len(system.inequalities[1]), solve_count,
-        native_ids, independent_constraints, grid_failure, unqualified_anchors, unqualified_native)
+        native_ids, independent_constraints, grid_failure, unqualified_anchors, unqualified_native,
+        uncompiled_grid_anchor_role_indices=uncompiled_anchors)
