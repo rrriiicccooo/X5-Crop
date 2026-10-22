@@ -23,6 +23,7 @@ def _fixture():
     proofs = [{"scope_id": "scope:complete", "record_ordinal": index, "gaps": [] if index == 0 else ["unqualified"],
                "native_grid_association": None, "admission": None} for index in range(2)]
     lane = {"phase_input": {"sequence_measurement_sets": typed_read_model((measurement,))},
+        "base_cross_registration": {"observations": []},
         "observations": {"sequence_edges": typed_read_model(tuple(edges)), "cross_height_edges": [],
                          "broad_material_edges": [], "raw_top_bottom_lines": []},
         "phase_competition": {"competition_scopes": [{"scope_id": "scope:complete", "members": members}]},
@@ -38,6 +39,12 @@ def _audit(lane, references):
 
 
 class GoldNativeAssociationContractTest(unittest.TestCase):
+    def test_candidate_local_cross_refinements_do_not_enter_independent_spatial_probe(self):
+        lane, references = _fixture()
+        baseline = _audit(lane, references)["native_spatial_incidence"]
+        lane["observations"]["raw_top_bottom_lines"] = [{"observation_id": "candidate-local:1"}]
+        self.assertEqual(_audit(lane, references)["native_spatial_incidence"], baseline)
+
     def test_same_native_pair_keeps_all_conditioned_ordinals_and_their_qualification(self):
         lane, references = _fixture()
         original = deepcopy(lane)

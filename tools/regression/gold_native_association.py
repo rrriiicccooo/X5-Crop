@@ -194,7 +194,7 @@ def native_association_diagnostic(lane, references, *, count, read_proof):
         "member_count": len(original), "qualified_member_count": None if qualified is None else len(qualified),
         "member_output_evaluation_state": "not_evaluated" if complete is None else "evaluated",
         "native_spatial_incidence": native_spatial_incidence_probe(
-            observations["sequence_edges"], observations["raw_top_bottom_lines"]),
+            observations["sequence_edges"], lane["base_cross_registration"]["observations"]),
         "physically_refuted_member_keys": (None if complete is None else complete["refuted_member_keys"]),
         "common_obligation_member_keys": (None if complete is None else complete["common_member_keys"]),
         "physically_refuted_member_count": (None if complete is None else len(complete["refuted_member_keys"])),
