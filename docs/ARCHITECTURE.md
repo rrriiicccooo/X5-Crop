@@ -2815,8 +2815,22 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   联合顶点，按实际 trace 端点投影，分别保留域分离、必要域重叠及物理域未保留。支撑域的 hull 重叠不证明
   trace 间的像素连接；已登记采样完全相同而连接点断开的反例必须继续拒绝同照片、终端和序号权限。
   每条记录另列 Runtime 反证集合和仍需覆盖的具名集合；该离线探针不参与上述 Runtime 反证归约。
-  该诊断随 development gold 绑定 source SHA 与 comparator manifest；分析记录／汇总 schema 为 34／35。
-  它只帮助区分测量缺口与关联缺口，不进入 Runtime，不改变黄金包含判据、Gate 或共同窗口资格。
+  `gold_native_connections.py` 再从同一原始 TIFF 直接测量全部原生 sequence／base Cross 的两个 trace
+  端点的原测量 kernel 邻域。查询只取原观测、冻结扫描尺度、完整位置／斜率联合域及原测量 halo，不读取
+  候选、模板或人工参考；缺少联合域时使用明确标注的原区间和方向搜索界，不由模型补足物理身份。
+  原生 uint16 RGB 以现有 Rec.709 owner 和一原生码值噪声下限测量，不做百分位截断。逐行 gradient、
+  tone、texture 的 median／MAD 始终使用完整原图行；先合并查询所需行域，再有界批量测量，最后截取
+  局部响应，禁止在小窗口内重算基线。正负极性分别保存四连通分量、原 anchor 命中及是否到达查询外沿；
+  source clipping、源外 kernel 和原生像素摘要同时保留。该摘要只绑定测量区域，不授予身份。
+  邻域半径就是原 halo，不覆盖两个登记 trace 之间的完整 lattice 间隔；邻域外的延续与连接保持未证实。
+  新增 source 像素读取与既有像素工作合计不超过 `128 × source_pixels`；派生 mask 的邻居／anchor
+  访问上界另列。全部查询先预留同一 `10 × source_pixels + 32 MiB` 临时量，超界时整组不测量，
+  不公开有利前缀。批量 owner 与原单行 owner 保持逐值相同，横竖方向和局部窗口大小不改变同源响应。
+  连通响应只证明信号路径；弱响应或路径在窗口内终止不能证明物理边界不存在，L 形或闭合图案也可能
+  来自照片内容，不能独立证明同照片边对、真实终端或绝对序号。因此本测量保持三类权限 unavailable，
+  不消费到 Runtime 或成员资格；这项限制必须与实际资格变化分别报告。
+  以上诊断随 development gold 绑定 source SHA 与 comparator manifest；分析记录／汇总 schema 为 35／36。
+  它们帮助区分测量缺口与关联缺口，不改变黄金包含判据、Gate 或共同窗口资格。
   `tools/verify accuracy` 继续负责完整 release detection gate。
 - 边界特征研究使用 `tools/verify diagnostic --gold-boundary-features --axes HW --output-root <new-root>`。
   黄金只限定离线窗口，不修改 reference 或参与 Runtime 选边；同 source SHA 的全部 count task 一起绑定。

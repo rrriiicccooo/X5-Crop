@@ -43,3 +43,39 @@ def positive_mad_z(
     np.maximum(result, 0.0, out=result)
     result[~np.isfinite(result)] = 0.0
     return result
+
+
+def positive_mad_z_rows(
+    values: np.ndarray,
+    *,
+    minimum_scale: float = 0.0,
+) -> np.ndarray:
+    """Return one positive robust z-score normalization per matrix row.
+
+    ``values`` must contain finite measurements.  The registered transition
+    owner supplies finite float64 measurements; non-finite input is
+    rejected rather than changing the finite-sample denominator.  Keeping the
+    row reduction vectorized makes a batch of native traces avoid a Python call
+    per trace while using the same median/MAD constants as
+    :func:`positive_mad_z`.
+    """
+
+    if not math.isfinite(minimum_scale) or minimum_scale < 0.0:
+        raise ValueError("robust minimum scale must be finite and non-negative")
+    if values.ndim != 2:
+        raise ValueError("row robust normalization requires a two-dimensional array")
+    numeric = values.astype(np.float64, copy=False)
+    if not np.all(np.isfinite(numeric)):
+        raise ValueError("row robust normalization requires finite values")
+    if numeric.shape[1] == 0:
+        return numeric
+    center = np.median(numeric, axis=1)
+    deviations = np.abs(numeric - center[:, None])
+    mad = np.median(deviations, axis=1)
+    scale = np.maximum(minimum_scale, NORMAL_MAD_SCALE * mad)
+    valid = scale > np.finfo(np.float64).eps
+    result = numeric - center[:, None]
+    result[~valid] = 0.0
+    np.divide(result, scale[:, None], out=result, where=valid[:, None])
+    np.maximum(result, 0.0, out=result)
+    return result

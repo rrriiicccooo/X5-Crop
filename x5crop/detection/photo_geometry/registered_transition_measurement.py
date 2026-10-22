@@ -11,6 +11,7 @@ from ...domain import FiniteInterval
 from ..robust_statistics import (
     REGISTERED_UINT8_QUANTIZATION_STEP,
     positive_mad_z,
+    positive_mad_z_rows,
 )
 from .model import PhotoBoundaryMeasurementSpec
 from .trace_support import PIXEL_CENTER_HALF_EXTENT_PX
@@ -35,6 +36,44 @@ class TraceMeasurement:
     right_texture: np.ndarray
     temporary_bytes: int
     broad_material: "BroadMaterialTraceMeasurement | None" = None
+
+
+@dataclass(frozen=True)
+class TraceRowsMeasurement:
+    """Local transition measurements for a batch of registered traces."""
+
+    coordinates: np.ndarray
+    gradient_z: np.ndarray
+    tone_z: np.ndarray
+    texture_z: np.ndarray
+    signed_gradient: np.ndarray
+    left_tone: np.ndarray
+    right_tone: np.ndarray
+    left_texture: np.ndarray
+    right_texture: np.ndarray
+    temporary_bytes: int
+
+    def __post_init__(self) -> None:
+        arrays = (
+            self.gradient_z,
+            self.tone_z,
+            self.texture_z,
+            self.signed_gradient,
+            self.left_tone,
+            self.right_tone,
+            self.left_texture,
+            self.right_texture,
+        )
+        if (
+            self.coordinates.ndim != 1
+            or self.coordinates.dtype != np.int32
+            or any(item.ndim != 2 for item in arrays)
+            or any(item.dtype != np.float64 for item in arrays)
+            or len({item.shape for item in arrays}) != 1
+            or any(item.shape[1] != self.coordinates.size for item in arrays)
+            or self.temporary_bytes < 0
+        ):
+            raise ValueError("trace rows measurement is invalid")
 
 
 def trace_storage_bytes(measured: TraceMeasurement) -> int:
@@ -180,16 +219,25 @@ def _window_means(
     window: int,
     gap: int,
 ) -> tuple[np.ndarray, np.ndarray]:
-    prefix = np.empty(values.size + 1, dtype=np.float64)
-    prefix[0] = 0.0
-    np.cumsum(values, dtype=np.float64, out=prefix[1:])
     left_stop = coordinates - gap
     left_start = left_stop - window
     right_start = coordinates + gap
     right_stop = right_start + window
-    left = (prefix[left_stop] - prefix[left_start]) / float(window)
-    right = (prefix[right_stop] - prefix[right_start]) / float(window)
-    return left, right
+    if values.ndim == 1:
+        prefix = np.empty(values.size + 1, dtype=np.float64)
+        prefix[0] = 0.0
+        np.cumsum(values, dtype=np.float64, out=prefix[1:])
+        left = (prefix[left_stop] - prefix[left_start]) / float(window)
+        right = (prefix[right_stop] - prefix[right_start]) / float(window)
+        return left, right
+    if values.ndim == 2:
+        prefix = np.empty((values.shape[0], values.shape[1] + 1), dtype=np.float64)
+        prefix[:, 0] = 0.0
+        np.cumsum(values, axis=1, dtype=np.float64, out=prefix[:, 1:])
+        left = (prefix[:, left_stop] - prefix[:, left_start]) / float(window)
+        right = (prefix[:, right_stop] - prefix[:, right_start]) / float(window)
+        return left, right
+    raise ValueError("window means require a one- or two-dimensional array")
 
 
 def _material_scale_measurement(
@@ -509,6 +557,178 @@ def measure_trace(
             + (0 if broad_material is None else broad_material.temporary_bytes)
         ),
         broad_material=broad_material,
+    )
+
+
+def _trace_rows_temporary_bytes(
+    values: np.ndarray,
+    coordinates: np.ndarray,
+    differences: np.ndarray,
+    left_tone: np.ndarray,
+    right_tone: np.ndarray,
+    tone: np.ndarray,
+    left_texture: np.ndarray,
+    right_texture: np.ndarray,
+    texture: np.ndarray,
+    signed_gradient: np.ndarray,
+    gradient: np.ndarray,
+    gradient_z: np.ndarray,
+    tone_z: np.ndarray,
+    texture_z: np.ndarray,
+) -> int:
+    """Conservatively bound all numeric buffers live during row measurement."""
+
+    rows, trace_length = values.shape
+    prefix_bytes = np.dtype(np.float64).itemsize * rows * (
+        (trace_length + 1) + trace_length
+    )
+    retained = sum(
+        item.nbytes
+        for item in (
+            values,
+            coordinates,
+            differences,
+            left_tone,
+            right_tone,
+            tone,
+            left_texture,
+            right_texture,
+            texture,
+            signed_gradient,
+            gradient,
+            gradient_z,
+            tone_z,
+            texture_z,
+        )
+    )
+    coordinate_values = max(
+        gradient.nbytes,
+        tone.nbytes,
+        texture.nbytes,
+        signed_gradient.nbytes,
+    )
+    # np.diff, vectorized arithmetic, and the row-wise median/MAD reduction
+    # may each retain an additional full matrix briefly.  The scalar row
+    # reductions are serial, so the largest such workspace is sufficient.
+    arithmetic_bytes = (
+        differences.nbytes
+        + 2 * tone.nbytes
+        + 2 * texture.nbytes
+        + 2 * signed_gradient.nbytes
+        + 4 * coordinate_values
+        + 8 * rows * np.dtype(np.float64).itemsize
+    )
+    return int(retained + prefix_bytes + arithmetic_bytes)
+
+
+def measure_trace_rows(
+    values_u8: np.ndarray,
+    interval: FiniteInterval,
+    scale_px_per_mm: float,
+    spec: PhotoBoundaryMeasurementSpec,
+    *,
+    intensity_quantum: float | None = None,
+) -> TraceRowsMeasurement:
+    """Measure local transitions for all rows in one frozen trace domain.
+
+    This is the row-vectorized counterpart of :func:`measure_trace`.  It only
+    computes the local transition arrays and does not perform broad-material,
+    peak, identity, or role selection. The default units are uint8 codes;
+    unclipped native intensities require an explicit positive quantum.
+    """
+
+    if intensity_quantum is None and values_u8.dtype != np.uint8:
+        raise ValueError("trace rows require a two-dimensional uint8 array")
+    quantum = REGISTERED_UINT8_QUANTIZATION_STEP if intensity_quantum is None else intensity_quantum
+    if (values_u8.ndim != 2 or values_u8.dtype.kind not in "uif"
+            or not np.all(np.isfinite(values_u8))
+            or isinstance(quantum, bool) or not math.isfinite(quantum) or quantum <= 0.0):
+        raise ValueError("registered trace rows require finite intensities and an explicit positive quantum")
+    window = spec.local_window_px(scale_px_per_mm)
+    gap = spec.transition_gap_px(scale_px_per_mm)
+    trace_length = values_u8.shape[1]
+    lower = max(window + gap, int(math.ceil(interval.minimum)))
+    upper = min(
+        trace_length - window - gap,
+        int(math.floor(interval.maximum)) + 1,
+    )
+    if upper <= lower:
+        coordinates = np.empty(0, dtype=np.int32)
+        empty = np.empty((values_u8.shape[0], 0), dtype=np.float64)
+        return TraceRowsMeasurement(
+            coordinates,
+            empty,
+            empty.copy(),
+            empty.copy(),
+            empty.copy(),
+            empty.copy(),
+            empty.copy(),
+            empty.copy(),
+            empty.copy(),
+            0,
+        )
+
+    coordinates = np.arange(lower, upper, dtype=np.int32)
+    values = values_u8.astype(np.float64, copy=False)
+    left_tone, right_tone = _window_means(values, coordinates, window, gap)
+    tone = np.abs(right_tone - left_tone)
+    differences = np.abs(np.diff(values, axis=1))
+    texture_coordinates = np.clip(
+        coordinates,
+        window + gap,
+        differences.shape[1] - window - gap,
+    )
+    left_texture, right_texture = _window_means(
+        differences,
+        texture_coordinates,
+        window,
+        gap,
+    )
+    texture = np.abs(right_texture - left_texture)
+    signed_gradient = (
+        values[:, np.minimum(values.shape[1] - 1, coordinates + gap - 1)]
+        - values[:, coordinates - gap]
+    )
+    gradient = np.abs(signed_gradient)
+    gradient_z = positive_mad_z_rows(
+        gradient,
+        minimum_scale=quantum,
+    )
+    tone_z = positive_mad_z_rows(
+        tone,
+        minimum_scale=quantum,
+    )
+    texture_z = positive_mad_z_rows(
+        texture,
+        minimum_scale=quantum,
+    )
+    temporary_bytes = _trace_rows_temporary_bytes(
+        values,
+        coordinates,
+        differences,
+        left_tone,
+        right_tone,
+        tone,
+        left_texture,
+        right_texture,
+        texture,
+        signed_gradient,
+        gradient,
+        gradient_z,
+        tone_z,
+        texture_z,
+    )
+    return TraceRowsMeasurement(
+        coordinates=coordinates,
+        gradient_z=gradient_z,
+        tone_z=tone_z,
+        texture_z=texture_z,
+        signed_gradient=signed_gradient,
+        left_tone=left_tone,
+        right_tone=right_tone,
+        left_texture=left_texture,
+        right_texture=right_texture,
+        temporary_bytes=temporary_bytes,
     )
 
 

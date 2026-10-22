@@ -276,6 +276,7 @@ class GoldAnalysisContractTest(unittest.TestCase):
             "source_placement_state": source_placement_state,
             "phase_status": "resolved",
             "phase_failure_kind": None,
+            "native_endpoint_connection_diagnostic": None,
             "native_boundary_association_diagnostic": {
                 "reference_boundaries": [], "member_count": 0, "qualified_member_count": 0,
                 "member_output_evaluation_state": "evaluated",

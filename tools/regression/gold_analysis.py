@@ -30,6 +30,7 @@ from x5crop.detection.photo_geometry.template_phase_review import MAX_INDEPENDEN
 from x5crop.detection.photo_geometry.template_source_clipped import SOURCE_CLIPPED_CLASS_COUNT
 from x5crop.detection.source_core import SourceStripValidationDomain
 from x5crop.domain import Box
+from x5crop.io.tiff import read_tiff
 from x5crop.formats import (
     APERTURE_COMPATIBILITY_SPEC,
     ENCLOSING_SUPPORT_APERTURE_CALIBRATION_SPEC,
@@ -54,10 +55,11 @@ from .gold_geometry import (
 )
 from .report_validation import _read_common_proof, validate_current_report_record, validate_placement_feature_record
 from .gold_native_association import native_association_diagnostic
+from .gold_native_connections import native_local_connection_diagnostic
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v34"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v35"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v35"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v36"
 RETAINED_PLACEMENT_SCOPE = "retained_canonical_pair_conditional_cross_and_independent_phase_review_proposals"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
@@ -70,6 +72,7 @@ COMPARATOR_SOURCE_PATHS = (
     "tools/regression/gold_analysis.py",
     "tools/regression/gold_geometry.py",
     "tools/regression/gold_native_association.py",
+    "tools/regression/gold_native_connections.py",
     "tools/regression/gold_spatial_incidence.py",
     "tools/regression/material_registration_validation.py",
     "tools/regression/phase_output_validation.py",
@@ -541,6 +544,21 @@ def native_boundary_association_diagnostic(geometry, lane):
         references.append({"ordinal": item["ordinal"], "role": item["role"], "line_id": item["line_id"],
             "review_basis": item["line"]["review_basis"], "position_at_trace_zero_px": zero, "slope": one - zero})
     return native_association_diagnostic(lane, references, count=int(geometry["count"]), read_proof=_read_common_proof)
+
+
+def native_endpoint_connection_diagnostic(source, *, source_lane, sequence_edges, side_lines, existing_pixel_work):
+    """Keep the native pixel measurement API separate from reference geometry."""
+    before = source.stat()
+    rgb, _profile, _warnings = read_tiff(source)
+    scales = source_lane["scan_canvas"]["axis_scales"]
+    result = native_local_connection_diagnostic(rgb,
+        layout="horizontal" if scales["source_width_axis"] == "x" else "vertical",
+        sequence_edges=sequence_edges, side_lines=side_lines, scales=scales,
+        existing_pixel_work=existing_pixel_work)
+    after = source.stat()
+    if before.st_size != after.st_size or before.st_mtime_ns != after.st_mtime_ns:
+        raise ValueError("source stat identity changed across native endpoint measurement")
+    return result
 
 
 def gold_lattice_fit(geometry: dict[str, Any]) -> dict[str, Any] | None:
@@ -1287,6 +1305,13 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         production_lanes = report["photo_geometry"]["lanes"]
         if len(development_lanes) != 1 or len(production_lanes) != 1:
             raise ValueError("current gold analysis requires one physical lane")
+        native_connections = native_endpoint_connection_diagnostic(source,
+            source_lane=report["development"]["measurement"]["source_lanes"][0],
+            sequence_edges=development_lanes[0]["observations"]["sequence_edges"],
+            side_lines=development_lanes[0]["base_cross_registration"]["observations"],
+            existing_pixel_work=development_lanes[0]["measurement_work"]["pixel_query_count"])
+        if source.stat().st_size != before.st_size or source.stat().st_mtime_ns != before.st_mtime_ns:
+            raise ValueError("source stat identity changed across gold and endpoint analysis")
         placement_state = report["photo_geometry"]["source_placement_selection"][
             "state"
         ]
@@ -1426,6 +1451,7 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         "complete_phase_output_diagnostic": _complete_phase_output_diagnostic(development_lanes[0]),
         "native_boundary_association_diagnostic": native_boundary_association_diagnostic(
             record["confirmed_geometry"], development_lanes[0]),
+        "native_endpoint_connection_diagnostic": native_connections,
         "global_lattice_authority_state": (
             None if global_lattice is None else global_lattice["state"]
         ),
@@ -2892,6 +2918,19 @@ def _summary(
                     "conditioned_ordinal_conflicts")}}
                 for row in completed],
         },
+        "native_endpoint_connections": {
+            "task_count": len(completed),
+            "state_counts": dict(sorted(Counter("not_measured" if row["native_endpoint_connection_diagnostic"] is None
+                else row["native_endpoint_connection_diagnostic"]["state"] for row in completed).items())),
+            "tasks": [{"sample_id": row["sample_id"], "source_sha256": row["source_sha256"],
+                "measurement": None if row["native_endpoint_connection_diagnostic"] is None else {
+                    key: row["native_endpoint_connection_diagnostic"].get(key) for key in (
+                        "state", "query_scope", "bound_failures", "registered_query_count", "completed_query_count",
+                        "source_clipped_query_count", "anchor_signal_query_count", "continuing_signal_query_count",
+                        "registered_pixel_work", "existing_pixel_work", "pixel_work_limit", "mask_site_work_bound",
+                        "peak_temporary_bytes", "same_photo_pair_authority", "terminal_authority", "ordinal_authority")}}
+                for row in completed],
+        },
         "proposal_candidate_conformance_matrix": {
             proposal_state: dict(sorted(candidate_states.items()))
             for proposal_state, candidate_states in sorted(
@@ -3264,6 +3303,7 @@ def run_gold_analysis(
                 "phase_status": None,
                 "phase_failure_kind": None,
                 "native_boundary_association_diagnostic": None,
+                "native_endpoint_connection_diagnostic": None,
                 "global_lattice_authority_state": None,
                 "global_lattice_authority_basis": None,
                 "source_frame_width_authority_state": None,
