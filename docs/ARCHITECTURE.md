@@ -2785,7 +2785,8 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   `--sample-id` 进行专项诊断；该入口只薄调用同一 analysis owner，不复制验证或改变默认 `report` gate。
   `gold_native_association.py` 负责离线原生关联对账：人工线先经同一 canonical 映射，逐一比较 placement、
   cross-height、broad 三份完整边账本及其全部 retained transition 物理区间，保留区间 hull 命中但完整点集
-  不相容的区别；另列尚未拟合成边的全部原始点、原 query 与空间支持分区。原始点相容不等于同一 track，
+  不相容的区别；`1e-7 px` 仅用于该对账的浮点比较。另列全部原始点（含未拟合部分）、各 query 的空间
+  支持分区与明确标注的跨 query 并集。原始点相容不等于同一 track，
   也不构成新增的坐标、材料或照片身份权限。`human_width_estimate` 不标为直接参考。
   同一物理边按 START／END 分别列出原始历史 fit 的所有条件序号及各成员自身输出资格；合法 Contact 的
   END(k)／START(k+1) 另列为共享角色使用，不冒充同角色序号竞争。照片边对的独立身份仍只来自人工参考，
