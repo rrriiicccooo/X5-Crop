@@ -2791,6 +2791,8 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   END(k)／START(k+1) 另列为共享角色使用，不冒充同角色序号竞争。照片边对的独立身份仍只来自人工参考，
   fit 内配对、全部查询已执行或未发现反证不能反向证明该身份。全集成员 key 必须与原 producer 完全一致，
   坐标／覆盖、跨零和未绑定 holder 终端三组缺口允许交叉，不把历史子集的数字当作全集总数。
+  未启动全集输出证明分支时仍保留原始历史映射，但成员资格与共同窗口数量记为 null，并明确标注未评估，
+  不能把它统计为零合格成员、窗口失败或已排除。
   该诊断随 development gold 绑定 source SHA 与 comparator manifest；分析记录／汇总 schema 为 33／34。
   它只帮助区分测量缺口与关联缺口，不进入 Runtime，不改变黄金包含判据、Gate 或共同窗口资格。
   `tools/verify accuracy` 继续负责完整 release detection gate。

@@ -136,6 +136,20 @@ class GoldNativeAssociationContractTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "historical membership"):
             _audit(lane, references)
 
+    def test_optional_complete_proof_preserves_history_without_inventing_a_verdict(self):
+        lane, references = _fixture()
+        lane["complete_phase_output"] = None
+        result = _audit(lane, references)
+        self.assertEqual(result["member_count"], 2)
+        self.assertIsNone(result["qualified_member_count"])
+        self.assertEqual(result["member_output_evaluation_state"], "not_evaluated")
+        self.assertIsNone(result["complete_output_state"])
+        self.assertIsNone(result["complete_common_output_count"])
+        self.assertEqual(result["reference_boundaries"][0]["signal_class"], "intrinsic_coordinate_observed")
+        assignments = result["reference_pairs"][0]["conditioned_input_pairs"][0]["assignments"]
+        self.assertEqual([item["ordinal"] for item in assignments], [1, 2])
+        self.assertTrue(all(item["qualified_member_keys"] is None for item in assignments))
+
     def test_missing_or_duplicated_native_transition_fails_loudly(self):
         for duplicate in (False, True):
             lane, references = _fixture()

@@ -33,7 +33,7 @@ def _key(member):
 
 def _assignments(values, qualified):
     return [{"ordinal": ordinal, "member_keys": [list(key) for key in sorted(keys)],
-             "qualified_member_keys": [list(key) for key in sorted(keys & qualified)]}
+             "qualified_member_keys": (None if qualified is None else [list(key) for key in sorted(keys & qualified)])}
             for ordinal, keys in sorted(values.items())]
 
 
@@ -61,12 +61,13 @@ def native_association_diagnostic(lane, references, *, count, read_proof):
         tuple(read_proof(edge, BoundaryEdgeObservation) for edge in observations["sequence_edges"]),
         tuple(read_proof(query, PhotoBoundaryMeasurementSet) for query in queries),
     )
-    proofs = {_key(member): member for member in lane["complete_phase_output"]["members"]}
+    complete = lane["complete_phase_output"]
+    proofs = {} if complete is None else {_key(member): member for member in complete["members"]}
     original = {(scope["scope_id"], member["record_ordinal"]): member
                 for scope in lane["phase_competition"]["competition_scopes"] for member in scope["members"]}
-    if proofs.keys() != original.keys():
+    if complete is not None and proofs.keys() != original.keys():
         raise ValueError("native association audit lost complete historical membership")
-    qualified = {key for key, member in proofs.items() if not member["gaps"]}
+    qualified = None if complete is None else {key for key, member in proofs.items() if not member["gaps"]}
     edge_ordinals = defaultdict(lambda: defaultdict(set))
     pair_ordinals = defaultdict(lambda: defaultdict(set))
     shared_contact_uses = []
@@ -189,7 +190,8 @@ def native_association_diagnostic(lane, references, *, count, read_proof):
                 holder.append({**base, "violations": violations})
     return {
         "contract": NATIVE_ASSOCIATION_CONTRACT, "evidence_scope": "gold_only_not_runtime_authority",
-        "member_count": len(original), "qualified_member_count": sum(not member["gaps"] for member in proofs.values()),
+        "member_count": len(original), "qualified_member_count": None if qualified is None else len(qualified),
+        "member_output_evaluation_state": "not_evaluated" if complete is None else "evaluated",
         "reference_boundaries": boundaries, "reference_pairs": pairs,
         "ordinal_assignment_basis": "conditioned_original_input_fit",
         "conditioned_ordinal_conflicts": [{"observation_id": identity, "role": role, "assignments": _assignments(values, qualified)}
@@ -197,6 +199,6 @@ def native_association_diagnostic(lane, references, *, count, read_proof):
         "shared_contact_uses": shared_contact_uses,
         "member_gap_groups_may_overlap": True, "coordinate_or_coverage_members": coordinate,
         "mixed_sign_members": mixed, "unbound_holder_terminal_members": holder,
-        "complete_output_state": lane["complete_phase_output"]["state"],
-        "complete_common_output_count": len(lane["complete_phase_output"]["common_outputs"]),
+        "complete_output_state": None if complete is None else complete["state"],
+        "complete_common_output_count": None if complete is None else len(complete["common_outputs"]),
     }

@@ -2879,7 +2879,8 @@ def _summary(
                 for row in completed for boundary in row["native_boundary_association_diagnostic"]["reference_boundaries"]).items())),
             "tasks": [{"sample_id": row["sample_id"], "source_sha256": row["source_sha256"],
                 **{key: row["native_boundary_association_diagnostic"][key] for key in (
-                    "member_count", "qualified_member_count", "complete_output_state", "complete_common_output_count")},
+                    "member_count", "qualified_member_count", "member_output_evaluation_state",
+                    "complete_output_state", "complete_common_output_count")},
                 **{key + "_count": len(row["native_boundary_association_diagnostic"][key]) for key in (
                     "coordinate_or_coverage_members", "mixed_sign_members", "unbound_holder_terminal_members",
                     "conditioned_ordinal_conflicts")}}
