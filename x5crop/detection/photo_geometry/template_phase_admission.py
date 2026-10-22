@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from hashlib import sha256
 import math
+from numbers import Real
 
 from ...domain import FiniteInterval, ObservationId
-from .template_model import SequenceFit
+from .template_model import SequenceFit, adjacency_relation_evidence_identity
 from .template_source_domain import PhaseSourceDomain
 
 
@@ -26,7 +28,7 @@ def _strict_role_count(role_count: object) -> int:
 def admission_proof_work_bound(role_count: int) -> int:
     """Return the fixed role-sized work bound for an admission proof."""
 
-    return 6 * _strict_role_count(role_count)
+    return 20 * _strict_role_count(role_count)
 
 
 def admission_proof_bytes_bound(role_count: int) -> int:
@@ -112,6 +114,35 @@ def _holder_violations(fit, holder_span_px, slack, terminals):
         if coordinate < holder_span_px.minimum - slack or coordinate > holder_span_px.maximum + slack)
 
 
+def _geometry_fingerprint(fit: SequenceFit) -> str:
+    """Bind raw/current coordinates, native assignments and relation identity.
+
+    Stream one role/relation at a time. Numeric normalization survives JSON
+    float decoding; the digest includes no newly allocated proof names.
+    This is an identity check, never a new coordinate or admission fact.
+    """
+    def value(item):
+        if isinstance(item, FiniteInterval):
+            return float(item.minimum), float(item.maximum)
+        if isinstance(item, tuple):
+            return tuple(value(child) for child in item)
+        if isinstance(item, Real):
+            return float(item)
+        return item
+    digest = sha256()
+    digest.update(repr(value((fit.template.template_id, fit.template.direction,
+        fit.template.count, fit.template.frame_width_px, fit.template.pitch_px))).encode("utf-8"))
+    for position, interval, full, binding in zip(fit.model_role_positions_px, fit.model_role_intervals_px,
+            fit.model_full_role_intervals_px, fit.role_bindings, strict=True):
+        native = (None if binding is None else (binding.use.value, str(binding.observation_id),
+            str(binding.evidence_group_id), binding.canonical_position_px,
+            binding.fit_position_interval_px, binding.full_position_interval_px))
+        digest.update(repr(value((position, interval, full, native))).encode("utf-8"))
+    for relation in fit.adjacency_relations:
+        digest.update(repr(value(adjacency_relation_evidence_identity(relation))).encode("utf-8"))
+    return digest.hexdigest()
+
+
 @dataclass(frozen=True)
 class PhaseMemberAdmissionProof:
     """The minimal raw/current geometry facts needed to replay admission."""
@@ -129,10 +160,16 @@ class PhaseMemberAdmissionProof:
     current_source_domain_admitted: bool | None
     original_source_terminal_role_indices: tuple[int, ...]
     current_source_terminal_role_indices: tuple[int, ...]
+    original_geometry_fingerprint: str
+    current_geometry_fingerprint: str
     original_holder_violations: tuple[HolderModelRangeViolation, ...] = ()
     current_holder_violations: tuple[HolderModelRangeViolation, ...] = ()
 
     def __post_init__(self) -> None:
+        if any(type(identity) is not str or len(identity) != 64
+               or any(char not in "0123456789abcdef" for char in identity)
+               for identity in (self.original_geometry_fingerprint, self.current_geometry_fingerprint)):
+            raise ValueError("phase admission lost its native geometry identity")
         if type(self.template_id) is not str or not self.template_id:
             raise TypeError("phase admission template identity must be a non-empty string")
         if type(self.direction) is not int or self.direction not in {-1, 1}:
@@ -228,7 +265,9 @@ class PhaseMemberAdmissionProof:
         if source_domain is not None and not isinstance(source_domain, PhaseSourceDomain):
             return False
         if (
-            original.template.template_id != self.template_id
+            _geometry_fingerprint(original) != self.original_geometry_fingerprint
+            or _geometry_fingerprint(current) != self.current_geometry_fingerprint
+            or original.template.template_id != self.template_id
             or current.template.template_id != self.template_id
             or original.template.direction != self.direction
             or current.template.direction != self.direction
@@ -258,13 +297,15 @@ class PhaseMemberAdmissionProof:
         )
 
     def matches_original_fit(self, fit: SequenceFit) -> bool:
-        return (fit.template.template_id == self.template_id and fit.template.direction == self.direction
+        return (_geometry_fingerprint(fit) == self.original_geometry_fingerprint
+            and fit.template.template_id == self.template_id and fit.template.direction == self.direction
             and fit.model_role_positions_px == self.original_model_role_positions_px
             and self.original_holder_violations == _holder_violations(
                 fit, self.holder_span_px, self.holder_slack_px, self.original_source_terminal_role_indices))
 
     def matches_current_fit(self, fit: SequenceFit) -> bool:
-        return (fit.template.template_id == self.template_id and fit.template.direction == self.direction
+        return (_geometry_fingerprint(fit) == self.current_geometry_fingerprint
+            and fit.template.template_id == self.template_id and fit.template.direction == self.direction
             and fit.model_role_positions_px == self.current_model_role_positions_px
             and self.current_holder_violations == _holder_violations(
                 fit, self.holder_span_px, self.holder_slack_px, self.current_source_terminal_role_indices))
@@ -349,6 +390,8 @@ def assess_phase_member_admission(
         current_source_domain_admitted=current_source_domain_admitted,
         original_source_terminal_role_indices=original_terminals,
         current_source_terminal_role_indices=current_terminals,
+        original_geometry_fingerprint=_geometry_fingerprint(original_fit),
+        current_geometry_fingerprint=_geometry_fingerprint(current_fit),
         original_holder_violations=_holder_violations(original_fit, holder_span_px, holder_slack_px, original_terminals),
         current_holder_violations=_holder_violations(current_fit, holder_span_px, holder_slack_px, current_terminals),
     )

@@ -54,7 +54,10 @@ The primary and retained competing interpretation each check their own boundarie
 Reports show evidence for registered partners and physical conflicts. Incomplete coverage of competing interpretations
 requires manual review; fitting two proposals into one window alone does not qualify the result for automatic output.
 Reports retain all competing members from each positioning stage and check each member's own width, height,
-top/bottom association, and protection budget. Members with missing qualification evidence remain in the set;
+top/bottom association, and protection budget. Reports distinguish qualified, physically refuted, and unresolved members.
+Refuted records and their evidence remain visible; common windows cover the complete remaining set. Missing evidence,
+failed fitting, or failed budgets do not exclude an interpretation. This validation does not automatically select another proposal.
+Members with missing qualification evidence remain in the set;
 when prerequisites are unmet, their evidence remains and output geometry and budget are explicitly marked unevaluated.
 Registered adjacency relations are jointly checked against each member's original boundaries. Missing independent
 facts or an inability to preserve the original boundary assignments require manual review.

@@ -2358,6 +2358,8 @@ separator／Contact／Overlap 的原 signed gap 约束进入同一系统；普�
 不闭合的关联显式阻断其输出资格，但不删除历史成员或自动批准另一解释。
 `PhaseMemberAdmissionProof` 同时从规范 owner 重放原始及当前 fit 的 holder／source-domain 分类，保留
 完整模型位置、原 holder span、原 `0.02 × (W_min + W_max)` slack、真实 source domain 与终端角色。
+原始／当前几何摘要另绑定完整模型位置区间、原生 role／observation／evidence-group 绑定及已登记关系身份；
+模型坐标相同但原生绑定不同的解释不能共享该证明。摘要逐角色／关系流式计算，不保存第二份 fit。
 每个原始／当前越界模型角色单独保存原生 binding 的 identity、代表及完整区间；未绑定时全部原生字段
 为空。绑定存在只表示记录了观察，不替代独立角色权限；未绑定模型终端不能冒充已观察边界越源的反证。
 原失败不因后续 fit 成功而获得新权限；当前状态重新失败也阻断资格。Source-terminal 分类只证明真实
@@ -2369,19 +2371,29 @@ placement；资格缺口和真实矛盾分别保存，不借首选的 W/H/Cross�
 自身 W/H/Cross 前置证明不通过的成员保留全部已评估事实，标记 `output_prerequisite_unavailable`，
 不再物化下游固定输出或预算；这表示未评估，不表示预算通过或成员已被物理排除，全集共同窗口仍失败。
 
+`template_member_refutation.py` 只归约本成员已经重放的明确原生反证：唯一登记伙伴的关联冲突，或获权
+native／Grid 必要联合系统不可行、完整 gap 包络全负。原生身份、当前 fit 和原 producer 几何摘要必须
+同时绑定；反证保留实际伙伴或联合 gap fact，不只保存失败标签。缺证、跨零、未运行求解、残差、holder、
+预算或一般拟合失败均不能产生排除。成员的原记录、全部缺口和已评估事实仍在账本，
+`disposition=physically_refuted` 只解除这份条件解释的共同窗口义务，不排除其原始 observation 的其它映射。
+其余记录分别为 `qualified_output` 或 `unresolved`；未知成员仍阻断完整证明。
+
 成员证明只核验条件几何与保护预算；它不是 canonical proposal，不包含完整 placement feature、Content veto 或
 Gate 准入。`template_common_source_size.py` 为完整具名集合另建独立尺寸证明：只取每个解释均独立认可的
 相同完整原生 pair；至少两对原始 observation 与 evidence group 均不重复，完整共同 pair 的宽度 hull 从初始
 format/source 状态测量共同 W。共同 H 只从每个成员都已完整关联的同一直接 aperture top/bottom pair 独立重建，
 不消费 W 推导的 aspect H。各成员原有完整 Frame、direct-lattice、W/H 和输出保护保持原样；共同测量的固定
 代表必须落入每个成员自己的条件尺寸范围，否则明确不可用，不能再从区间交集中另选数值。
-全部成员都具备条件资格，并有相同固定 source W/H 身份或上述独立共同尺寸证明后，才使用共享固定框 owner
+完整 producer 账本按同一纯 owner 分成具名反证集合和仍需覆盖的完整集合；各 scope 与历史全集均保存精确
+分区，不能以缺证或更有利的子集替代后者。仍需覆盖的全部成员都具备条件资格，并有相同固定 source W/H
+身份或上述独立共同尺寸证明后，才使用共享固定框 owner
 核验逐 slot 共同窗口及每个成员预算。各非空 producer scope 的尺寸与窗口另行具名保存，严格核对本 scope
-的完整成员和全部 slot；scope 通过不替代所有历史成员的全集证明，不得用一部分成员代表全集。
+的完整分区和全部 slot；scope 通过不替代历史全集证明。全部成员被反证时保存 `empty_member_set`，
+空集合不产生尺寸或窗口成功；只剩一个成员仍不进入本分支的 plural 共同窗口，也不晋升 canonical winner。
 `common_outputs` 可保留预算失败窗口作为诊断，只有 `state=supported` 且 `common_failure=null` 才表示窗口
 验证通过。当前该分支在规范 selection/Gate 后执行，不授予照片序号映射、canonical winner 或自动输出权限。
 
-当前报告 schema 为 119。普通报告保留完整账本和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
+当前报告 schema 为 120。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
 重放全部 producer 和独立成员，再比对结果、缺口和工作。成员 Cross 只重复自身 H／纵向域、best/runner、
 求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
 外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source
@@ -2441,8 +2453,11 @@ lattice authority。不新增像素 query 或 phase 搜索；包括第三份提�
 线性目标的两个极值在该成员内复用，至多保留 `count - 1` 项，返回即释放，不缓存权限或跨成员结果。
 未获权的端点只保留来源和未评估状态，不运行 LP。求解前预留 `128 + 32R(R + 10)` 逻辑工作与
 `8192 + 512R(R + 10)` 临时字节，实际 LP 调用另计；关联账本保留量按 `4096 + 2048R` 计入 source。
-原始／当前准入核验及越界角色记录按 `6R` 工作与 `2048 + 512R` 字节预留，使用原 holder／source owner，完整模型
+原始／当前准入核验、几何摘要及越界角色记录按 `20R` 工作与 `2048 + 512R` 字节预留，使用原 holder／source owner，完整模型
 坐标不截断；以上均消费原 600 万全集工作与原 source 内存上限，不新开资源池。
+成员反证归约预留至多 `R + 1` 项检查和 `256 + 32R` 字节；全集与 scope 分区构建按 `3M + 2S` 工作
+及每记录 384 字节保留量计入同一共同证明，分区存储在成员重建前预留；M／S 为完整记录／作用域数。
+反证不会减少已消耗的成员重建工作。
 完整集合及各 producer scope 的独立尺寸检查先编译原生 pair、H 和条件尺寸核验的逻辑上界并预留工作与内存，
 再执行重建；已超界时只保留全部具名成员和 typed unavailable，不继续尺寸重建。成员关联表、共享 pair 和各
 scope 的窗口保留量一起计入同一 source 内存。共同窗口另外计入各 slot 的成员预算与凸包排序逻辑上界，最多消费 4096 个完整成员；
@@ -2610,6 +2625,7 @@ Linux开发/CI使用`renameat2(RENAME_NOREPLACE)`。目标在最终检查之后�
 | `photo_geometry/template_native_retention.py`、`template_source_clipped.py` | 从既有 projection 记录按十二个原生依据/端点类与六个源截断类保留完整解释及分类工作量 |
 | `photo_geometry/template_intrinsic_review_refit.py`、`template_phase_review.py` | 原 compose 失败后的单次固定 intrinsic 重拟合、完整反证、独立初始 source/Cross Review 上下文与有界物化；不参与 canonical competition 或 Gate |
 | `photo_geometry/template_phase_membership.py`、`template_phase_output.py` | 完整 producer 成员账本、独立成员 W/H/Cross 条件几何证明、完整集合共同窗口验证及独立工作 receipt；不选择 winner 或授予自动批准 |
+| `photo_geometry/template_member_refutation.py` | 归约本成员的明确原生物理反证；保留完整记录，解除具名条件解释的共同窗口义务；不将缺证当排除或选择 winner |
 | `photo_geometry/template_common_source_size.py` | 全部具名成员共同认可的原生完整 pair、独立直接 H、共同固定尺寸及逐成员条件尺寸对账；不改写成员自身几何 |
 | `photo_geometry/template_gate.py` | selected-only CandidateGate facts；不生成、选择或删除 proposal |
 | `x5crop/detection/output_deskew.py` | approved-only 6–24 trace、role-free、candidate-independent 的可选输出角度 observation |
@@ -2794,7 +2810,11 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   坐标／覆盖、跨零和未绑定 holder 终端三组缺口允许交叉，不把历史子集的数字当作全集总数。
   未启动全集输出证明分支时仍保留原始历史映射，但成员资格与共同窗口数量记为 null，并明确标注未评估，
   不能把它统计为零合格成员、窗口失败或已排除。
-  该诊断随 development gold 绑定 source SHA 与 comparator manifest；分析记录／汇总 schema 为 33／34。
+  `gold_spatial_incidence.py` 不读取候选 fit、模板或人工参考，完整比较两轴原生观测支撑域：保持位置／斜率
+  联合顶点，按实际 trace 端点投影，分别保留域分离、必要域重叠及物理域未保留。支撑域的 hull 重叠不证明
+  trace 间的像素连接；已登记采样完全相同而连接点断开的反例必须继续拒绝同照片、终端和序号权限。
+  每条记录另列 Runtime 反证集合和仍需覆盖的具名集合；该离线探针不参与上述 Runtime 反证归约。
+  该诊断随 development gold 绑定 source SHA 与 comparator manifest；分析记录／汇总 schema 为 34／35。
   它只帮助区分测量缺口与关联缺口，不进入 Runtime，不改变黄金包含判据、Gate 或共同窗口资格。
   `tools/verify accuracy` 继续负责完整 release detection gate。
 - 边界特征研究使用 `tools/verify diagnostic --gold-boundary-features --axes HW --output-root <new-root>`。

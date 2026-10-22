@@ -56,8 +56,8 @@ from .report_validation import _read_common_proof, validate_current_report_recor
 from .gold_native_association import native_association_diagnostic
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v33"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v34"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v34"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v35"
 RETAINED_PLACEMENT_SCOPE = "retained_canonical_pair_conditional_cross_and_independent_phase_review_proposals"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
@@ -70,6 +70,7 @@ COMPARATOR_SOURCE_PATHS = (
     "tools/regression/gold_analysis.py",
     "tools/regression/gold_geometry.py",
     "tools/regression/gold_native_association.py",
+    "tools/regression/gold_spatial_incidence.py",
     "tools/regression/material_registration_validation.py",
     "tools/regression/phase_output_validation.py",
     "tools/regression/report_sequence_validation.py",
@@ -92,6 +93,9 @@ def _complete_phase_output_diagnostic(lane):
             "state": proof["state"], "scope": proof["scope"],
             "member_count": len(proof["members"]),
             "qualified_member_count": sum(not member["gaps"] for member in proof["members"]),
+            "physically_refuted_member_count": len(proof["refuted_member_keys"]),
+            "common_obligation_member_count": len(proof["common_member_keys"]),
+            "member_disposition_counts": dict(sorted(Counter(member["disposition"] for member in proof["members"]).items())),
             "cross_context_count": sum(member["cross_context"] is not None for member in proof["members"]),
             "native_grid_association_states": dict(sorted(Counter(
                 member["native_grid_association"]["state"] for member in proof["members"]
@@ -128,6 +132,7 @@ def _complete_phase_output_diagnostic(lane):
             "source_size_state": None if proof["source_size_proof"] is None else proof["source_size_proof"]["state"],
             "scope_outputs": [{"scope_id": item["scope_id"], "state": item["state"],
                 "member_count": len(item["source_size_proof"]["member_keys"]),
+                "physically_refuted_member_count": len(item["refuted_member_keys"]),
                 "source_size_state": item["source_size_proof"]["state"],
                 "source_size_gaps": item["source_size_proof"]["gaps"],
                 "width_pair_count": len(item["source_size_proof"]["width_pairs"]),
@@ -2880,6 +2885,7 @@ def _summary(
             "tasks": [{"sample_id": row["sample_id"], "source_sha256": row["source_sha256"],
                 **{key: row["native_boundary_association_diagnostic"][key] for key in (
                     "member_count", "qualified_member_count", "member_output_evaluation_state",
+                    "physically_refuted_member_count", "common_obligation_member_count",
                     "complete_output_state", "complete_common_output_count")},
                 **{key + "_count": len(row["native_boundary_association_diagnostic"][key]) for key in (
                     "coordinate_or_coverage_members", "mixed_sign_members", "unbound_holder_terminal_members",

@@ -313,7 +313,7 @@ class PhaseAdmissionProofContractTest(unittest.TestCase):
                     admission_proof_work_bound(value)
                 with self.assertRaises((TypeError, ValueError)):
                     admission_proof_bytes_bound(value)
-        self.assertEqual(admission_proof_work_bound(4), 24)
+        self.assertEqual(admission_proof_work_bound(4), 80)
         self.assertEqual(admission_proof_bytes_bound(4), 4096)
 
         invalid = (

@@ -279,6 +279,7 @@ class GoldAnalysisContractTest(unittest.TestCase):
             "native_boundary_association_diagnostic": {
                 "reference_boundaries": [], "member_count": 0, "qualified_member_count": 0,
                 "member_output_evaluation_state": "evaluated",
+                "physically_refuted_member_count": 0, "common_obligation_member_count": 0,
                 "complete_output_state": "unavailable", "complete_common_output_count": 0,
                 "coordinate_or_coverage_members": [], "mixed_sign_members": [],
                 "unbound_holder_terminal_members": [], "conditioned_ordinal_conflicts": [],

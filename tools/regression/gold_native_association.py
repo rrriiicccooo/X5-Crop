@@ -14,9 +14,10 @@ from x5crop.detection.photo_geometry.measurement_model import PhotoBoundaryMeasu
 from x5crop.detection.photo_geometry.observation_types import BoundaryEdgeObservation
 from x5crop.detection.photo_geometry.model import independent_spatial_support_count
 from x5crop.detection.photo_geometry.template_direct_role_authority import intrinsic_direct_role_authority_bases
+from .gold_spatial_incidence import native_spatial_incidence_probe
 
 
-NATIVE_ASSOCIATION_CONTRACT = "x5crop_gold_native_association_diagnostic_v1"
+NATIVE_ASSOCIATION_CONTRACT = "x5crop_gold_native_association_diagnostic_v2"
 _EDGE_POOLS = ("sequence_edges", "cross_height_edges", "broad_material_edges")
 _TRANSITION_POOLS = ("transitions", "cross_height_transitions", "broad_material_transitions")
 _DIRECT_REFERENCE_BASES = frozenset({"directly_visible", "visible_content_limit"})
@@ -192,6 +193,12 @@ def native_association_diagnostic(lane, references, *, count, read_proof):
         "contract": NATIVE_ASSOCIATION_CONTRACT, "evidence_scope": "gold_only_not_runtime_authority",
         "member_count": len(original), "qualified_member_count": None if qualified is None else len(qualified),
         "member_output_evaluation_state": "not_evaluated" if complete is None else "evaluated",
+        "native_spatial_incidence": native_spatial_incidence_probe(
+            observations["sequence_edges"], observations["raw_top_bottom_lines"]),
+        "physically_refuted_member_keys": (None if complete is None else complete["refuted_member_keys"]),
+        "common_obligation_member_keys": (None if complete is None else complete["common_member_keys"]),
+        "physically_refuted_member_count": (None if complete is None else len(complete["refuted_member_keys"])),
+        "common_obligation_member_count": (None if complete is None else len(complete["common_member_keys"])),
         "reference_boundaries": boundaries, "reference_pairs": pairs,
         "ordinal_assignment_basis": "conditioned_original_input_fit",
         "conditioned_ordinal_conflicts": [{"observation_id": identity, "role": role, "assignments": _assignments(values, qualified)}

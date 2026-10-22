@@ -62,6 +62,7 @@ from .template_phase_admission import (
     PhaseMemberAdmissionProof, assess_phase_member_admission,
     admission_proof_work_bound, admission_proof_bytes_bound,
 )
+from .template_member_refutation import PhaseMemberPhysicalRefutation, phase_member_physical_refutation
 
 
 class PhaseMemberOutputGap(str, Enum):
@@ -87,6 +88,12 @@ class PhaseMemberOutputGap(str, Enum):
     OUTPUT_PREREQUISITE_UNAVAILABLE = "output_prerequisite_unavailable"
     OUTPUT_BUDGET_UNAVAILABLE = "output_budget_unavailable"
     WORK_BOUND_EXCEEDED = "work_bound_exceeded"
+
+
+class PhaseMemberDisposition(str, Enum):
+    QUALIFIED_OUTPUT = "qualified_output"
+    PHYSICALLY_REFUTED = "physically_refuted"
+    UNRESOLVED = "unresolved"
 
 
 # Separate validation work from the measurement compiler's single-pass budget.
@@ -250,6 +257,7 @@ class PhaseMemberOutputWork:
     projection_count: int = 0
     output_evaluation_count: int = 0
     budget_evaluation_count: int = 0
+    physical_refutation_check_count: int = 0
     peak_temporary_bytes: int = 0
 
     def __post_init__(self) -> None:
@@ -296,7 +304,8 @@ def _member_work_units(work, role_count):
         + work.native_grid_relation_check_count + work.native_grid_projection_work_bound
         + work.native_grid_lp_solve_count + work.native_grid_input_scan_bound
         + work.late_projection_work_bound + work.late_direct_fit_count
-        + work.late_nominal_grid_solve_count + work.late_nominal_grid_solve_success_count)
+        + work.late_nominal_grid_solve_count + work.late_nominal_grid_solve_success_count
+        + work.physical_refutation_check_count)
 
 
 def _member_retained_bytes(proof, role_count):
@@ -306,7 +315,8 @@ def _member_retained_bytes(proof, role_count):
            + len(proof.adjacency_propagation.input_fit.role_bindings) * 2048)
         + (0 if proof.admission is None else admission_proof_bytes_bound(role_count))
         + (0 if proof.native_grid_association is None else 4096 + role_count * 2048)
-        + (0 if proof.cross_context is None else proof.cross_context.competition.receipt.evaluated_fit_count * 1024))
+        + (0 if proof.cross_context is None else proof.cross_context.competition.receipt.evaluated_fit_count * 1024)
+        + (0 if proof.physical_refutation is None else 256 + role_count * 32))
 
 
 def _pre_cross_work_reserve(fit, phase_input):
@@ -318,7 +328,7 @@ def _pre_cross_work_reserve(fit, phase_input):
     # Four authority/fact passes, native input scan, two adjacency scans,
     # four coverage passes (lookup + preparation), each final trace, and
     # eight raw-input lookups/preparations plus W/coverage/solver counters.
-    return 4 * registered + 6 * roles + 10 * adjacent + adjacent * traces + 20
+    return 4 * registered + 7 * roles + 10 * adjacent + adjacent * traces + 21
 
 
 @dataclass(frozen=True)
@@ -340,6 +350,8 @@ class PhaseMemberOutputProof:
     adjacency_propagation: PhaseMemberAdjacencyPropagation | None = None
     native_grid_association: NativeGridAssociationProof | None = None
     admission: PhaseMemberAdmissionProof | None = None
+    physical_refutation: PhaseMemberPhysicalRefutation | None = field(init=False)
+    disposition: PhaseMemberDisposition = field(init=False)
 
     def __post_init__(self) -> None:
         if (not self.scope_id or type(self.record_ordinal) is not int or self.record_ordinal < 0
@@ -348,6 +360,8 @@ class PhaseMemberOutputProof:
             raise ValueError("phase member proof lost its registered identity or gaps")
         if len(self.output_footprints) != len(self.budgets):
             raise ValueError("phase member proof lost output budgets")
+        if self.adjacency is not None and self.phase_assessment is None:
+            raise ValueError("phase member adjacency lacks its own final phase assessment")
         if (self.late_projection is not None) != bool(self.work.late_projection_count):
             raise ValueError("phase member lost its late projection work")
         if (self.admission is not None) != bool(self.work.admission_check_bound):
@@ -447,6 +461,20 @@ class PhaseMemberOutputProof:
             or any(state != MembershipState.COMPLETE for state in self.cross_context.membership_scope_states)
         ):
             raise ValueError("qualified phase member lacks complete safe output")
+        expected_checks = (0 if self.adjacency is None and native_grid is None else
+            1 + (0 if self.adjacency is None else len(self.adjacency.registered_role_associations))
+            + (0 if native_grid is None else len(native_grid.facts)))
+        if self.work.physical_refutation_check_count != expected_checks:
+            raise ValueError("phase member lost its physical refutation work")
+        refutation = phase_member_physical_refutation(self.adjacency, native_grid)
+        if refutation is not None and self.admission is None:
+            raise ValueError("member refutation lacks its original and current producer identity")
+        if refutation is not None and not self.gaps:
+            raise ValueError("physically refuted member cannot acquire output qualification")
+        object.__setattr__(self, "physical_refutation", refutation)
+        object.__setattr__(self, "disposition", (
+            PhaseMemberDisposition.PHYSICALLY_REFUTED if refutation is not None else
+            PhaseMemberDisposition.UNRESOLVED if self.gaps else PhaseMemberDisposition.QUALIFIED_OUTPUT))
 
     @property
     def state(self) -> EvidenceState:
@@ -504,10 +532,14 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
             gaps.append(PhaseMemberOutputGap.HOLDER_ADMISSION_UNAVAILABLE)
         if own_admission.current_source_domain_admitted is False:
             gaps.append(PhaseMemberOutputGap.SOURCE_DOMAIN_UNAVAILABLE)
-        measured_work = replace(work, peak_temporary_bytes=max(work.peak_temporary_bytes,
+        refutation_checks = (0 if adjacency is None and native_grid is None else
+            1 + (0 if adjacency is None else len(adjacency.registered_role_associations))
+            + (0 if native_grid is None else len(native_grid.facts)))
+        measured_work = replace(work, physical_refutation_check_count=refutation_checks,
+            peak_temporary_bytes=max(work.peak_temporary_bytes,
             4096 + work.role_lookup_count * 32 + work.cross_evaluated_fit_count * 1024
             + work.output_evaluation_count * 4096)
-            + admission_proof_bytes_bound(len(fit.role_bindings)))
+            + admission_proof_bytes_bound(len(fit.role_bindings)) + 256 + len(fit.role_bindings) * 32)
         if coverage_preparation is not None:
             measured_work = replace(measured_work, coverage_input_preparation_count=1,
                 coverage_corridor_lookup_count=coverage_preparation.lookup_count,
@@ -808,6 +840,7 @@ class PhaseScopeOutputProof:
     common_outputs: tuple[CommonOutputFootprint, ...]
     common_failure: str | None
     work_units: int
+    refuted_member_keys: tuple[tuple[str, int], ...] = ()
     state: EvidenceState = field(init=False)
 
     def __post_init__(self) -> None:
@@ -815,6 +848,9 @@ class PhaseScopeOutputProof:
             if self.common_outputs and self.common_failure is None else EvidenceState.UNAVAILABLE)
         if (not self.scope_id or type(self.output_slot_count) is not int or self.output_slot_count <= 0
                 or any(key[0] != self.scope_id for key in self.source_size_proof.member_keys)
+                or any(key[0] != self.scope_id for key in self.refuted_member_keys)
+                or len(set(self.refuted_member_keys)) != len(self.refuted_member_keys)
+                or set(self.refuted_member_keys).intersection(self.source_size_proof.member_keys)
                 or type(self.work_units) is not int or self.work_units < self.source_size_proof.work_units
                 or self.common_outputs and (len(self.common_outputs) != self.output_slot_count
                     or tuple(output.lane_ordinal for output in self.common_outputs)
@@ -886,12 +922,20 @@ class CompletePhaseOutputProof:
     source_size_proof: CommonSourceSizeProof | None = None
     scope_outputs: tuple[PhaseScopeOutputProof, ...] = ()
     state: EvidenceState = field(init=False)
+    common_member_keys: tuple[tuple[str, int], ...] = field(init=False)
+    refuted_member_keys: tuple[tuple[str, int], ...] = field(init=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "state", EvidenceState.SUPPORTED
             if self.common_outputs and self.common_failure is None else EvidenceState.UNAVAILABLE)
         expected = tuple((scope.scope_id, member.record_ordinal)
                          for scope in self.scopes for member in scope.members)
+        active = tuple(member for member in self.members if member.physical_refutation is None)
+        active_keys = tuple((member.scope_id, member.record_ordinal) for member in active)
+        refuted_keys = tuple((member.scope_id, member.record_ordinal) for member in self.members
+                             if member.physical_refutation is not None)
+        object.__setattr__(self, "common_member_keys", active_keys)
+        object.__setattr__(self, "refuted_member_keys", refuted_keys)
         if (tuple((p.scope_id, p.record_ordinal) for p in self.members) != expected
                 or type(self.bound_exceeded) is not bool
                 or type(self.work_units) is not int or self.work_units < 0
@@ -900,11 +944,11 @@ class CompletePhaseOutputProof:
                 or self.scope != "complete_recorded_phase_validation"):
             raise ValueError("complete phase output omitted or changed a producer member")
         if self.common_outputs and (self.bound_exceeded
-                or any(member.state != EvidenceState.SUPPORTED for member in self.members)):
+                or not active or any(member.state != EvidenceState.SUPPORTED for member in active)):
             raise ValueError("common phase window lacks a qualified complete member set")
-        if self.source_size_proof is not None and (self.source_size_proof.member_keys != expected
+        if self.source_size_proof is not None and (self.source_size_proof.member_keys != active_keys
                 or self.source_size_proof.placement_ids != tuple(None if member.placement is None
-                    else member.placement.placement_id for member in self.members)):
+                    else member.placement.placement_id for member in active)):
             raise ValueError("common source size omitted a complete producer member")
         for proof, (producer_scope, producer) in zip(self.members,
                 ((s, m) for s in self.scopes for m in s.members), strict=True):
@@ -925,20 +969,24 @@ class CompletePhaseOutputProof:
         if self.scope_outputs and (tuple(proof.scope_id for proof in self.scope_outputs)
                 != tuple(scope.scope_id for scope in active_scopes)
                 or any(proof.source_size_proof.member_keys != tuple((scope.scope_id, member.record_ordinal)
-                    for member in scope.members) for proof, scope in zip(self.scope_outputs, active_scopes, strict=True))):
+                    for member in self.members if member.scope_id == scope.scope_id
+                    and member.physical_refutation is None)
+                    or proof.refuted_member_keys != tuple(key for key in refuted_keys if key[0] == scope.scope_id)
+                    for proof, scope in zip(self.scope_outputs, active_scopes, strict=True))):
             raise ValueError("scope common window omitted or changed a producer member")
         offset = 0
         for scope, proof in zip(active_scopes, self.scope_outputs):
             named = self.members[offset:offset + len(scope.members)]
             offset += len(scope.members)
+            named = tuple(member for member in named if member.physical_refutation is None)
             if (proof.output_slot_count != scope.template.count
                     or proof.source_size_proof.placement_ids != tuple(
                         None if member.placement is None else member.placement.placement_id for member in named)):
                 raise ValueError("scope common window changed its producer slots or placements")
             _validate_named_common_windows(proof.common_outputs, named, proof.source_size_proof, scope.template.count)
         if self.common_outputs:
-            slots = self.members[0].placement.output_slot_count
-            _validate_named_common_windows(self.common_outputs, self.members, self.source_size_proof, slots)
+            slots = active[0].placement.output_slot_count
+            _validate_named_common_windows(self.common_outputs, active, self.source_size_proof, slots)
             if self.common_failure is None and any(not output.budget_supported or not output.source_authority_supported
                                                   for output in self.common_outputs):
                 raise ValueError("complete common window lacks every member's safe budget")
@@ -961,7 +1009,8 @@ def _build_complete_phase_output(lane, *, retained_review_bytes, preparation, di
     scopes = lane.phase_competition.competition_scopes
     proofs = []
     units = 0
-    retained_bytes = sum(scope.retained_bytes for scope in scopes)
+    partition_bytes = 384 * sum(len(scope.members) for scope in scopes)
+    retained_bytes = partition_bytes + sum(scope.retained_bytes for scope in scopes)
     preparation_reserve = (preparation.reserve_bytes(lane.coarse_support.enclosing_side_facts)
                            + direct_preparation.reserved_bytes)
     extent = None if lane.phase_input.source_domain is None else lane.phase_input.source_domain.source_extent
@@ -973,7 +1022,8 @@ def _build_complete_phase_output(lane, *, retained_review_bytes, preparation, di
             temporary_bound = (4096 + len(member.input_fit.role_bindings) * 1024
                                + MAX_CROSS_PAIRS * 1024 + scope.template.count * 4096)
             temporary_bound += (native_grid_bytes_bound(len(member.input_fit.role_bindings))
-                + admission_proof_bytes_bound(len(member.input_fit.role_bindings)))
+                + admission_proof_bytes_bound(len(member.input_fit.role_bindings))
+                + 256 + len(member.input_fit.role_bindings) * 32)
             if not exceeded:
                 temporary_bound += 4096 + 1024 * (len(lane.phase_input.observations)
                     + len(lane.phase_input.separator_bands) + len(member.input_fit.role_bindings))
@@ -1007,6 +1057,11 @@ def _build_complete_phase_output(lane, *, retained_review_bytes, preparation, di
         height_scale_px_per_mm=scales.height_axis_px_per_mm)
 
     size_reserved_bytes = 0
+    # Every historical key remains in proofs. Only explicit native physical
+    # refutations remove a common-output obligation; all unknowns still block.
+    active = tuple(proof for proof in proofs if proof.physical_refutation is None)
+    partition_work = 3 * len(proofs) + 2 * len(scopes)
+    units += partition_work
 
     def source_size(members):
         nonlocal exceeded, size_reserved_bytes
@@ -1014,6 +1069,9 @@ def _build_complete_phase_output(lane, *, retained_review_bytes, preparation, di
         ids = tuple(None if proof.placement is None else proof.placement.placement_id for proof in members)
         phases = tuple(proof.phase_assessment for proof in members)
         contexts = tuple(proof.cross_context for proof in members)
+        if not members:
+            size_reserved_bytes += 4096
+            return prove_common_source_size(initial, (), (), (), (), ())
         work_bound = common_source_size_work_bound(phases, contexts, len(lane.phase_input.observations))
         size_bytes = 4096 + len(members) * 256 + 512 * max(
             (0 if phase is None else len(phase.best.role_bindings) // 2 for phase in phases), default=0)
@@ -1026,16 +1084,19 @@ def _build_complete_phase_output(lane, *, retained_review_bytes, preparation, di
         size_reserved_bytes += size_bytes
         return prove_common_source_size(initial, keys, ids, phases, contexts, lane.phase_input.observations)
 
-    size_proof = None if not proofs else source_size(proofs)
+    size_proof = None if not proofs else source_size(active)
     scope_outputs = []
-    common_work = 0 if size_proof is None else size_proof.work_units
-    units += common_work
+    common_work = partition_work + (0 if size_proof is None else size_proof.work_units)
+    units += common_work - partition_work
     offset = 0
     for scope in scopes:
         members = tuple(proofs[offset:offset + len(scope.members)])
         offset += len(scope.members)
         if not members:
             continue
+        refuted_keys = tuple((member.scope_id, member.record_ordinal) for member in members
+                             if member.physical_refutation is not None)
+        members = tuple(member for member in members if member.physical_refutation is None)
         size = source_size(members)
         units += size.work_units
         common_work += size.work_units
@@ -1052,34 +1113,34 @@ def _build_complete_phase_output(lane, *, retained_review_bytes, preparation, di
         if scope_windows:
             size_reserved_bytes += window_storage
         scope_outputs.append(PhaseScopeOutputProof(scope.scope_id, scope.template.count, size, scope_windows, scope_failure,
-                                                  size.work_units + spent))
+                                                  size.work_units + spent, refuted_keys))
     outputs = ()
     failure = None
     if not scopes or not proofs:
         failure = "registered phase member set is unavailable"
     elif (exceeded or memory_limit is not None and retained_review_bytes + retained_bytes
-            + preparation_reserve + size_reserved_bytes + _common_window_storage_bound(proofs) > memory_limit):
+            + preparation_reserve + size_reserved_bytes + _common_window_storage_bound(active) > memory_limit):
         exceeded = True
         failure = "complete phase reconstruction work bound exceeded"
-    elif any(proof.state != EvidenceState.SUPPORTED for proof in proofs):
+    elif any(proof.state != EvidenceState.SUPPORTED for proof in active):
         failure = "one or more complete phase members lack independent output qualification"
     else:
-        outputs, failure, spent, overflow = _common_member_windows(tuple(proofs), size_proof,
+        outputs, failure, spent, overflow = _common_member_windows(active, size_proof,
             MAX_COMPLETE_PHASE_OUTPUT_WORK_UNITS - units)
         units += spent
         common_work += spent
         exceeded = exceeded or overflow
-    retained = sum(scope.retained_bytes for scope in scopes) + sum(
+    retained = partition_bytes + sum(scope.retained_bytes for scope in scopes) + sum(
         _member_retained_bytes(proof, len(producer.input_fit.role_bindings))
         for proof, producer in zip(proofs, (m for scope in scopes for m in scope.members), strict=True))
-    retained += _common_window_storage_bound(proofs) if outputs else 0
+    retained += _common_window_storage_bound(active) if outputs else 0
     retained += sum(4096 + len(scope.source_size_proof.member_keys) * 256
         + len(scope.source_size_proof.width_pairs) * 512
         + (0 if not scope.common_outputs else sum(4096 + 1024 * len(output.members)
             + 128 * sum(len(member.mandatory_source_footprint) for member in output.members)
             for output in scope.common_outputs))
         for scope in scope_outputs)
-    retained += 0 if size_proof is None else 4096 + len(proofs) * 256 + len(size_proof.width_pairs) * 512
+    retained += 0 if size_proof is None else 4096 + len(active) * 256 + len(size_proof.width_pairs) * 512
     peak = (retained + max((proof.work.peak_temporary_bytes for proof in proofs), default=0)
             + preparation.retained_bytes + direct_preparation.retained_bytes)
     return CompletePhaseOutputProof(scopes, tuple(proofs), outputs, failure, units, peak, exceeded,

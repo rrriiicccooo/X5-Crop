@@ -23,9 +23,11 @@ def _fixture():
     proofs = [{"scope_id": "scope:complete", "record_ordinal": index, "gaps": [] if index == 0 else ["unqualified"],
                "native_grid_association": None, "admission": None} for index in range(2)]
     lane = {"phase_input": {"sequence_measurement_sets": typed_read_model((measurement,))},
-        "observations": {"sequence_edges": typed_read_model(tuple(edges)), "cross_height_edges": [], "broad_material_edges": []},
+        "observations": {"sequence_edges": typed_read_model(tuple(edges)), "cross_height_edges": [],
+                         "broad_material_edges": [], "raw_top_bottom_lines": []},
         "phase_competition": {"competition_scopes": [{"scope_id": "scope:complete", "members": members}]},
-        "complete_phase_output": {"members": proofs, "state": "unavailable", "common_outputs": []}}
+        "complete_phase_output": {"members": proofs, "state": "unavailable", "common_outputs": [],
+                                  "refuted_member_keys": [], "common_member_keys": [["scope:complete", 0], ["scope:complete", 1]]}}
     references = [{"ordinal": 1, "role": role, "line_id": "gold:" + role, "review_basis": "directly_visible",
                    "position_at_trace_zero_px": position, "slope": 0.} for role, position in (("start", 10.), ("end", 20.))]
     return lane, references

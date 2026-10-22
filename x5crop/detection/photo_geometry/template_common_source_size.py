@@ -22,6 +22,7 @@ class CommonSourceSizeGap(str, Enum):
     INDEPENDENT_HEIGHT_PAIR_UNAVAILABLE = "independent_height_pair_unavailable"
     CONDITIONAL_SIZE_CONFLICT = "conditional_size_conflict"
     WORK_BOUND_EXCEEDED = "work_bound_exceeded"
+    EMPTY_MEMBER_SET = "empty_member_set"
 
 
 @dataclass(frozen=True)
@@ -52,7 +53,9 @@ class CommonSourceSizeProof:
     def __post_init__(self) -> None:
         object.__setattr__(self, "state", EvidenceState.SUPPORTED
             if self.source_geometry is not None and not self.gaps else EvidenceState.UNAVAILABLE)
-        if (not self.member_keys or len(set(self.member_keys)) != len(self.member_keys)
+        if ((not self.member_keys and self.gaps != (CommonSourceSizeGap.EMPTY_MEMBER_SET,))
+                or self.member_keys and CommonSourceSizeGap.EMPTY_MEMBER_SET in self.gaps
+                or len(set(self.member_keys)) != len(self.member_keys)
                 or any(not scope or type(ordinal) is not int or ordinal < 0 for scope, ordinal in self.member_keys)
                 or len(self.conditional_extents) != len(self.member_keys)
                 or len(self.placement_ids) != len(self.member_keys)
@@ -103,7 +106,8 @@ def common_source_size_work_bound(phases, contexts, observation_count):
 
 def unavailable_common_source_size(initial, member_keys, placement_ids):
     return CommonSourceSizeProof(tuple(member_keys), tuple(placement_ids), initial, (), None,
-        (None,) * len(member_keys), None, (CommonSourceSizeGap.WORK_BOUND_EXCEEDED,), 0)
+        (None,) * len(member_keys), None,
+        (CommonSourceSizeGap.WORK_BOUND_EXCEEDED if member_keys else CommonSourceSizeGap.EMPTY_MEMBER_SET,), 0)
 
 
 def prove_common_source_size(initial, member_keys, placement_ids, phases, contexts, observations) -> CommonSourceSizeProof:
@@ -115,6 +119,9 @@ def prove_common_source_size(initial, member_keys, placement_ids, phases, contex
     """
     if not (len(member_keys) == len(placement_ids) == len(phases) == len(contexts)):
         raise ValueError("common source size omitted a named interpretation")
+    if not member_keys:
+        return CommonSourceSizeProof((), (), initial, (), None, (), None,
+                                     (CommonSourceSizeGap.EMPTY_MEMBER_SET,), 0)
     shared = None
     height = None
     height_complete = True
