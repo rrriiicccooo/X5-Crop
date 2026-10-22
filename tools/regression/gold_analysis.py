@@ -52,11 +52,12 @@ from .gold_geometry import (
     validate_proposal_coverage,
     validate_selected_candidate_coverage,
 )
-from .report_validation import validate_current_report_record, validate_placement_feature_record
+from .report_validation import _read_common_proof, validate_current_report_record, validate_placement_feature_record
+from .gold_native_association import native_association_diagnostic
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v32"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v33"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v33"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v34"
 RETAINED_PLACEMENT_SCOPE = "retained_canonical_pair_conditional_cross_and_independent_phase_review_proposals"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
@@ -68,6 +69,7 @@ COMPARATOR_SOURCE_PATHS = (
     "tools/regression/development_run.py",
     "tools/regression/gold_analysis.py",
     "tools/regression/gold_geometry.py",
+    "tools/regression/gold_native_association.py",
     "tools/regression/material_registration_validation.py",
     "tools/regression/phase_output_validation.py",
     "tools/regression/report_sequence_validation.py",
@@ -524,6 +526,16 @@ def _referenced_sequence_roles(
                 }
             )
     return tuple(roles)
+
+
+def native_boundary_association_diagnostic(geometry, lane):
+    references = []
+    for item in _referenced_sequence_roles(geometry):
+        zero, one = (line_axis_position(geometry, item["line"], axis="sequence", reference_trace_px=trace)
+                     for trace in (0.0, 1.0))
+        references.append({"ordinal": item["ordinal"], "role": item["role"], "line_id": item["line_id"],
+            "review_basis": item["line"]["review_basis"], "position_at_trace_zero_px": zero, "slope": one - zero})
+    return native_association_diagnostic(lane, references, count=int(geometry["count"]), read_proof=_read_common_proof)
 
 
 def gold_lattice_fit(geometry: dict[str, Any]) -> dict[str, Any] | None:
@@ -1407,6 +1419,8 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
             "failure_kind"
         ),
         "complete_phase_output_diagnostic": _complete_phase_output_diagnostic(development_lanes[0]),
+        "native_boundary_association_diagnostic": native_boundary_association_diagnostic(
+            record["confirmed_geometry"], development_lanes[0]),
         "global_lattice_authority_state": (
             None if global_lattice is None else global_lattice["state"]
         ),
@@ -2859,6 +2873,18 @@ def _summary(
             sorted(proposal_states.items())
         ),
         "retained_placement_gold": _retained_placement_summary(completed),
+        "native_boundary_association": {
+            "task_count": len(completed),
+            "signal_class_counts": dict(sorted(Counter(boundary["signal_class"]
+                for row in completed for boundary in row["native_boundary_association_diagnostic"]["reference_boundaries"]).items())),
+            "tasks": [{"sample_id": row["sample_id"], "source_sha256": row["source_sha256"],
+                **{key: row["native_boundary_association_diagnostic"][key] for key in (
+                    "member_count", "qualified_member_count", "complete_output_state", "complete_common_output_count")},
+                **{key + "_count": len(row["native_boundary_association_diagnostic"][key]) for key in (
+                    "coordinate_or_coverage_members", "mixed_sign_members", "unbound_holder_terminal_members",
+                    "conditioned_ordinal_conflicts")}}
+                for row in completed],
+        },
         "proposal_candidate_conformance_matrix": {
             proposal_state: dict(sorted(candidate_states.items()))
             for proposal_state, candidate_states in sorted(
@@ -3230,6 +3256,7 @@ def run_gold_analysis(
                 "source_placement_state": None,
                 "phase_status": None,
                 "phase_failure_kind": None,
+                "native_boundary_association_diagnostic": None,
                 "global_lattice_authority_state": None,
                 "global_lattice_authority_basis": None,
                 "source_frame_width_authority_state": None,

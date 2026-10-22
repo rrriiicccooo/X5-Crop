@@ -2381,7 +2381,7 @@ format/source 状态测量共同 W。共同 H 只从每个成员都已完整关�
 `common_outputs` 可保留预算失败窗口作为诊断，只有 `state=supported` 且 `common_failure=null` 才表示窗口
 验证通过。当前该分支在规范 selection/Gate 后执行，不授予照片序号映射、canonical winner 或自动输出权限。
 
-当前报告 schema 为 118。普通报告保留完整账本和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
+当前报告 schema 为 119。普通报告保留完整账本和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
 重放全部 producer 和独立成员，再比对结果、缺口和工作。成员 Cross 只重复自身 H／纵向域、best/runner、
 求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
 外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source
@@ -2783,6 +2783,16 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   drift 都使 release detection gate 失败。
   保留开发分析产物使用 `tools/verify diagnostic --gold-analysis --output-root <path>`，可用重复的
   `--sample-id` 进行专项诊断；该入口只薄调用同一 analysis owner，不复制验证或改变默认 `report` gate。
+  `gold_native_association.py` 负责离线原生关联对账：人工线先经同一 canonical 映射，逐一比较 placement、
+  cross-height、broad 三份完整边账本及其全部 retained transition 物理区间，保留区间 hull 命中但完整点集
+  不相容的区别；另列尚未拟合成边的全部原始点、原 query 与空间支持分区。原始点相容不等于同一 track，
+  也不构成新增的坐标、材料或照片身份权限。`human_width_estimate` 不标为直接参考。
+  同一物理边按 START／END 分别列出原始历史 fit 的所有条件序号及各成员自身输出资格；合法 Contact 的
+  END(k)／START(k+1) 另列为共享角色使用，不冒充同角色序号竞争。照片边对的独立身份仍只来自人工参考，
+  fit 内配对、全部查询已执行或未发现反证不能反向证明该身份。全集成员 key 必须与原 producer 完全一致，
+  坐标／覆盖、跨零和未绑定 holder 终端三组缺口允许交叉，不把历史子集的数字当作全集总数。
+  该诊断随 development gold 绑定 source SHA 与 comparator manifest；分析记录／汇总 schema 为 33／34。
+  它只帮助区分测量缺口与关联缺口，不进入 Runtime，不改变黄金包含判据、Gate 或共同窗口资格。
   `tools/verify accuracy` 继续负责完整 release detection gate。
 - 边界特征研究使用 `tools/verify diagnostic --gold-boundary-features --axes HW --output-root <new-root>`。
   黄金只限定离线窗口，不修改 reference 或参与 Runtime 选边；同 source SHA 的全部 count task 一起绑定。

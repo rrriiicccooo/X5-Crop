@@ -276,6 +276,12 @@ class GoldAnalysisContractTest(unittest.TestCase):
             "source_placement_state": source_placement_state,
             "phase_status": "resolved",
             "phase_failure_kind": None,
+            "native_boundary_association_diagnostic": {
+                "reference_boundaries": [], "member_count": 0, "qualified_member_count": 0,
+                "complete_output_state": "unavailable", "complete_common_output_count": 0,
+                "coordinate_or_coverage_members": [], "mixed_sign_members": [],
+                "unbound_holder_terminal_members": [], "conditioned_ordinal_conflicts": [],
+            },
             "global_lattice_authority_state": "supported",
             "global_lattice_authority_basis": "direct_role_system",
             "source_frame_width_authority_state": "supported",
@@ -377,6 +383,23 @@ class GoldAnalysisContractTest(unittest.TestCase):
                 },
             },
         }
+
+    def test_native_association_summary_preserves_scope_and_shared_member_groups(self):
+        record = self._analysis_record("A", source_sha256="a" * 64, role="nominal", decision="needs_review",
+            candidate="safe", unsafe_auto=False, physical_frame_id="physical:A")
+        record["native_boundary_association_diagnostic"].update(
+            reference_boundaries=[{"signal_class": "aggregate_raw_only"}], member_count=12, qualified_member_count=2,
+            coordinate_or_coverage_members=[{"member_key": ["scope", 1]}],
+            mixed_sign_members=[{"member_key": ["scope", 1]}],
+            unbound_holder_terminal_members=[{"member_key": ["scope", 1]}])
+        summary = _summary((record,), {"fixture": True})["native_boundary_association"]
+        self.assertEqual(summary["signal_class_counts"], {"aggregate_raw_only": 1})
+        task = summary["tasks"][0]
+        self.assertEqual((task["member_count"], task["qualified_member_count"]), (12, 2))
+        self.assertEqual(task["complete_output_state"], "unavailable")
+        self.assertEqual(task["complete_common_output_count"], 0)
+        self.assertEqual([task[group + "_count"] for group in (
+            "coordinate_or_coverage_members", "mixed_sign_members", "unbound_holder_terminal_members")], [1, 1, 1])
 
     def test_summary_separates_unsafe_auto_from_review_candidate(self) -> None:
         shared_sha = "a" * 64
