@@ -295,11 +295,11 @@ class DependencyInstallerContractTest(unittest.TestCase):
             "module_origin": "/user/site/PIL/__init__.py",
             "distributions": {
                 "pillow": {
-                    "version": "12.3.0",
+                    "version": pillow.pip_version,
                     "root": "/user/site",
                 },
                 "Pillow": {
-                    "version": "12.3.0",
+                    "version": pillow.pip_version,
                     "root": "/user/site",
                 },
             },
@@ -307,7 +307,7 @@ class DependencyInstallerContractTest(unittest.TestCase):
 
         self.assertEqual(
             pip_package_for_record(pillow, record),
-            ("Pillow", "12.3.0"),
+            ("Pillow", pillow.pip_version),
         )
 
     def test_uninstaller_never_removes_preexisting_or_changed_packages(self) -> None:
