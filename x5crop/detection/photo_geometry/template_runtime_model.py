@@ -57,7 +57,7 @@ from .template_cross_model import (
     CrossRoleBinding,
     TemplateCrossInput,
 )
-from .template_common_output import CommonHOutput, CommonHOutputAuthority, common_h_fit_members
+from .template_common_output import CommonHOutput, CommonHOutputAuthority, CompleteCrossHeightCalibration, common_h_fit_members
 from .template_phase_model import PhaseFitStatus
 from .template_direct_role_aperture_domain import (
     DirectRoleApertureDomainAuthority,
@@ -609,6 +609,7 @@ class PreparedTemplateLane(RegisteredTemplateLane):
     cross_registration_work: CrossRegistrationWorkReceipt
     evidence_use_ledger: tuple[EvidenceUseFact, ...] = ()
     base_cross_registration: RegisteredCrossEvidence | None = None
+    complete_height_calibration: CompleteCrossHeightCalibration | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -624,6 +625,10 @@ class PreparedTemplateLane(RegisteredTemplateLane):
             raise ValueError("prepared template must retain compiled identity")
         if not isinstance(self.source_scan_geometry, SourceScanGeometry):
             raise TypeError("prepared template lane requires source geometry")
+        if self.complete_height_calibration is not None and (
+                not isinstance(self.complete_height_calibration, CompleteCrossHeightCalibration)
+                or self.complete_height_calibration.source_geometry != self.source_scan_geometry):
+            raise ValueError("prepared source H lost its complete Cross calibration")
         if not isinstance(
             self.source_frame_width_authority,
             SourceFrameWidthAuthority,

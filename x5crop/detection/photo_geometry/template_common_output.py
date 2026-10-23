@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from ...domain import EvidenceState
+from ...domain import EvidenceState, FiniteInterval, ObservationId
 from ...run_local_identity import run_local_id
 from ..gate_checks import DetectionFailureFact, GateGap, failure_fact
 from ..source_core import SourceLaneEvidence
@@ -34,6 +34,84 @@ from .template_family_membership import MembershipProjectionCoverage
 from .template_phase_model import PhaseFitResult, PhaseFitStatus
 from .template_placement import FormatPlacement
 from .template_registration import CrossRegistrationWorkReceipt, local_cross_refinements_closed
+from .template_registration import membership_projection_coverage
+from .source_geometry import SourceScanGeometry
+
+
+@dataclass(frozen=True)
+class CompleteCrossHeightCalibration:
+    """An OR envelope of all direct H interpretations, never a new fit.
+
+    The representative only sizes the source's fixed output. It is not an H
+    observation shared by the alternatives and cannot feed Cross selection.
+    """
+
+    initial_source_geometry: SourceScanGeometry
+    member_observation_pairs: tuple[tuple[ObservationId, ...], ...]
+    member_height_intervals_px: tuple[FiniteInterval, ...]
+    group_member_indices: tuple[tuple[int, ...], tuple[int, ...]]
+    member_height_evaluation_count: int
+    height_hull_px: FiniteInterval
+    source_geometry: SourceScanGeometry
+
+    def __post_init__(self) -> None:
+        pairs = self.member_observation_pairs
+        heights = self.member_height_intervals_px
+        if (not 1 < len(pairs) <= MAX_CROSS_PAIRS or len(heights) != len(pairs)
+                or type(self.member_height_evaluation_count) is not int
+                or self.member_height_evaluation_count != len(pairs)
+                or len(set(pairs)) != len(pairs)
+                or any(len(pair) != 2 or len(set(pair)) != 2 for pair in pairs)
+                or any(not isinstance(identity, ObservationId) for pair in pairs for identity in pair)
+                or any(height.minimum <= 0 for height in heights)
+                or self.initial_source_geometry.height_state.observation_ids
+                or len(self.group_member_indices) != 2
+                or any(type(i) is not int or not 0 <= i < len(pairs)
+                       for view in self.group_member_indices for i in view)
+                or set(i for view in self.group_member_indices for i in view) != set(range(len(pairs)))
+                or any(len(set(view)) != len(view) for view in self.group_member_indices)
+                or self.height_hull_px != FiniteInterval(min(h.minimum for h in heights), max(h.maximum for h in heights))):
+            raise ValueError("complete Cross height lost an alternative or its OR envelope")
+        expected = _source_from_complete_heights(self.initial_source_geometry, pairs, self.height_hull_px)
+        if replace(expected, geometry_id=self.source_geometry.geometry_id) != self.source_geometry:
+            raise ValueError("complete Cross height changed source dimensions or provenance")
+
+
+def _source_from_complete_heights(source, pairs, height):
+    return SourceScanGeometry.from_axis_states(source.frame_spec, source.width_state,
+        source.height_state.intersect_observed_extent(height,
+            observation_ids=tuple(sorted({identity for pair in pairs for identity in pair}, key=str))))
+
+
+def complete_cross_height_calibration(
+    source: SourceScanGeometry, *, phase: PhaseFitResult, cross: CrossFitCompetition,
+    registration: CrossRegistrationWorkReceipt, observations, cross_input: TemplateCrossInput,
+) -> CompleteCrossHeightCalibration | None:
+    """Size from a complete direct-H set before any output or budget exists.
+
+    All member fits and the original Cross input remain unchanged. A later
+    member-authority, content or budget failure still withholds the source.
+    """
+    if (phase.status != PhaseFitStatus.RESOLVED or source.height_state.observation_ids
+            or cross.aperture_aspect_ratio_authority.consumed_for_cross_inference):
+        return None
+    members = common_h_fit_members(cross, registration)
+    if members is None or any(fit.boundary_use != OutputBoundaryUse.APERTURE_PAIR for fit in members[0]):
+        return None
+    if membership_projection_coverage(registration.membership, observations,
+            (*cross_input.top_bindings, *cross_input.bottom_bindings)) is None:
+        return None
+    fits, mapping = members
+    if any(reconcile_direct_aperture_height(cross.aperture_aspect_ratio_authority,
+            fit.height_compatibility_px).blocks_cross_resolution for fit in fits):
+        return None
+    pairs = tuple(fit.bound_observation_ids for fit in fits)
+    if len(set(pairs)) != len(pairs):
+        return None
+    heights = tuple(fit.height_compatibility_px for fit in fits)
+    height = FiniteInterval(min(h.minimum for h in heights), max(h.maximum for h in heights))
+    return CompleteCrossHeightCalibration(source, pairs, heights, mapping, len(heights), height,
+        _source_from_complete_heights(source, pairs, height))
 
 
 def common_member_center_authority(fit: CrossFit) -> EnclosingSupportApertureAuthority:

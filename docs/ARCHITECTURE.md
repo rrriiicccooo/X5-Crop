@@ -1472,7 +1472,7 @@ Report 从原 query/transition 重放每个 scope，逐项核对实际计数；D
 这类线可以生成单独的待检查裁切范围，以 `family_assignment_unresolved` 标记其分组权限缺口。
 Canonical best、runner、状态与 source H 由只含 canonical binding 的视图决定；附加提案不能替换它们，
 在原全局工作量上限内不改变其批准结果；真实超界仍按统一 bound 拒绝。它不形成已获权 candidate，
-不校准 source H，不充当缺边精修
+单份条件提案不校准 source H，不充当缺边精修
 anchor/opposite 或外侧角色反证，也不能通过排除另一组
 候选间接消歧。Canonical 成员、全部 raw 并集、final observation 与条件标记由运行时和开发报告双向校验。
 同一 pair owner 只枚举一次物理配对；canonical 选择和包含条件线的提案选择使用同一求解函数的两个权限视图。
@@ -1616,6 +1616,29 @@ Normal 校验要求非空域组数量与 phase 状态对应；development 校验
 域覆盖查询在同次调用内建立有序有限 trace 视图，以二分查找核验每个原闭区间的 `0.5 px` 包含条件，
 避免为每份上下边组合逐域扫描全部 trace；逐候选域、覆盖序号、pair／fit 上限与权限判据保持。
 临时视图仅保留既有 T 个坐标，调用结束即释放，不建立跨成员缓存。
+
+照片长轴归属已经 resolved、短轴仍为完整直接 aperture 竞争时，
+`template_common_output.complete_cross_height_calibration` 可建立 `CompleteCrossHeightCalibration`。
+它复用共同 H 的完整成员 owner：两份权限视图全部成员、完整 membership 投影和已闭合的局部精修，
+每个成员都须有直接双侧角色、完整物理方向／H 与独立空间／纵向支持，且逐成员比例检查不阻断。
+单侧推导、support 用途、未完成搜索、未覆盖成员或单份条件提案均不能取得这项校准。
+
+该证明将全部成员自己的直接 `height_compatibility_px` 取保守 hull，再与原 source H 状态相交；W 状态
+保持。Hull 表示互斥解释的 OR 包络，不将各成员 H 求交、不声称其观察同时成立，也不增加独立 rank。
+原成员区间可以不相交；`JointAxisGeometry.canonical_state()` 仍只产生整源固定输出尺寸的确定性代表，
+代表可以位于离散区间之间，不能成为照片高度观察或新的成员几何。证明保存初始／校准 source identity、
+全部 observation pair、各自 H、两视图精确映射与实际成员 H 评价次数，后者等于成员数且不超过
+`MAX_CROSS_PAIRS`。归约与来源去重只访问原有有界账本，不新增像素、拟合、候选或 LP。
+
+校准严格发生在原 Cross 求解之后、placement 组成和预算之前。原始 `cross_input`、两份 fit view、
+每个成员的 native H、方向、raw 支撑和全部联合可行状态保持，不以新 H 重跑精修、配对、比例或选择。
+新 source identity 随全部 placement 重建；原生边界、联合状态与 mandatory 不变，固定尺寸与对应预算
+重新生成。只有正式 canonical context 使用该证明，历史 phase 成员继续从自身初始 H 独立建立上下文。
+此项校准不授予 selection：成员自己的 aperture domain、enclosing 竞争、内容、范围与共同窗口预算仍由
+原 `CommonHOutputAuthority → CandidateGate → DecisionGate` 核验，任一缺口仍阻止 TIFF 输出。
+普通报告校验初始设计 H、整源尺寸与共同成员映射；开发报告从原 Cross 输入重放完整集合，拒绝删成员、
+改 H、删证明或把校准结果回填为原始输入。它与跨 phase 的 `CommonSourceSizeProof` 是不同证明，
+不替代后者的同一独立原生 W／H 证据要求。
 
 ### 8.2 `ENCLOSING_SUPPORT_PAIR`
 
@@ -1917,6 +1940,7 @@ Registration、prepared lane 和 report 绑定同一物理域与原始 trace；�
 support span、独立区间中点或黄金坐标重新估计。所有 lane、slot、retained placement 与共同输出
 复用同一 `SourceFixedOutputSize`：`source_geometry_id`、`frame_width_px`、`frame_height_px`、
 `margin_ratio_per_side=0.05`。Source 状态无法共同闭合时不能获得整张自动输出权限。
+唯一直接 H 与第 8.1 节的完整直接 H 解释集合都可在输出组成前校准 source H；校准不读取输出预算。
 
 ```text
 requested W = 1.1 × source W
@@ -2393,7 +2417,7 @@ format/source 状态测量共同 W。共同 H 只从每个成员都已完整关�
 `common_outputs` 可保留预算失败窗口作为诊断，只有 `state=supported` 且 `common_failure=null` 才表示窗口
 验证通过。当前该分支在规范 selection/Gate 后执行，不授予照片序号映射、canonical winner 或自动输出权限。
 
-当前报告 schema 为 120。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
+当前报告 schema 为 121。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
 重放全部 producer 和独立成员，再比对结果、缺口和工作。成员 Cross 只重复自身 H／纵向域、best/runner、
 求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
 外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source

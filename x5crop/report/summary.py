@@ -68,6 +68,7 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                 "source_scan_geometry": typed_read_model(
                     lane.prepared.source_scan_geometry
                 ),
+                "complete_height_calibration": typed_read_model(lane.prepared.complete_height_calibration),
                 "source_frame_width_authority": typed_read_model(
                     lane.prepared.source_frame_width_authority
                 ),

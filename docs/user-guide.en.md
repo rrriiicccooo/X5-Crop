@@ -87,6 +87,10 @@ Other interpretations must independently pass every safety check.
 When photo ownership is established and several complete top/bottom interpretations remain, one fixed box may protect
 them all. Automatic approval requires every interpretation to pass content containment and source-wide safety checks.
 Touching or overlapping photos use the same checks and remain in review when evidence is insufficient.
+When every interpretation has direct top and bottom measurements, the height range covering the complete set may
+establish one source-wide photo height before fixed boxes are generated. Each interpretation retains its native
+boundaries and full protection requirements. Missing members, insufficient evidence, or an over-budget common window
+still require review.
 
 Development reports retain the original material bands and boundary sources behind outer-material candidates.
 Photo ordinals and the true first and last boundaries still require independent evidence.
@@ -112,8 +116,9 @@ source-space window = 1.1W × 1.1H
 per-side margin = 5%
 ```
 
-The fixed box permits the script to select a position only; measurement, residual, direction, or score cannot change
-its size. It must contain all visible TIFF content, including tilted corners. When credible evidence requires a complete
+Once independent evidence establishes the source-wide W/H, the fixed box permits the script to select a position only;
+residual, direction, score, or an insufficient budget cannot change its size. It must contain all visible TIFF content,
+including tilted corners. When credible evidence requires a complete
 physical envelope that cannot fit inside the fixed box, the whole source enters `needs_review`. An offset within the
 fixed box is not independently rejected when all visible photograph content remains protected.
 

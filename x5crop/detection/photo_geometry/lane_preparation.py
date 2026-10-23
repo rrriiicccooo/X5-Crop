@@ -69,6 +69,7 @@ from .template_registration import (
     register_template_local_cross_refinements,
 )
 from .template_cross import calibrate_source_frame_height, fit_template_cross
+from .template_common_output import CompleteCrossHeightCalibration, complete_cross_height_calibration
 from .template_cross_model import TemplateCrossInput, CrossFitCompetition, CrossRoleBinding
 from .template_contact import observe_contact_edges
 from .template_overlap import observe_overlap_edge_pairs
@@ -170,6 +171,7 @@ class TemplateCrossContext:
     source_width_fit: SequenceFit | None
     independent_member_context: bool
     phase_competition: PhaseFitResult
+    complete_height_calibration: CompleteCrossHeightCalibration | None = None
 
     def __post_init__(self) -> None:
         if (self.independent_member_context and self.source_frame_width_authority.state.value == "supported"
@@ -182,6 +184,15 @@ class TemplateCrossContext:
             raise ValueError("Cross context lost its independent initial H")
         expected = calibrate_source_frame_height(apply_inferred_aperture_height(
             initial, self.competition.aperture_aspect_ratio_authority), self.competition)
+        if self.complete_height_calibration is not None:
+            if self.independent_member_context:
+                raise ValueError("an independent phase member cannot calibrate another competition's H")
+            proof = complete_cross_height_calibration(expected, phase=self.phase_competition,
+                cross=self.competition, registration=self.registration.work_receipt,
+                observations=self.registration.observations, cross_input=self.cross_input)
+            if proof != self.complete_height_calibration:
+                raise ValueError("Cross context lost its complete alternative height proof")
+            expected = proof.source_geometry
         if replace(expected, geometry_id=self.source_scan_geometry.geometry_id) != self.source_scan_geometry:
             raise ValueError("Cross context H does not follow its own Cross authority")
 
@@ -286,9 +297,15 @@ def prepare_template_cross_context(
         source_geometry, competition.aperture_aspect_ratio_authority,
     )
     source_geometry = calibrate_source_frame_height(source_geometry, competition)
+    height_calibration = None if sequence_fits is not None else complete_cross_height_calibration(
+        source_geometry, phase=phase, cross=competition, registration=cross.work_receipt,
+        observations=cross.observations, cross_input=inputs)
+    if height_calibration is not None:
+        source_geometry = height_calibration.source_geometry
     return TemplateCrossContext(source_geometry, inputs, cross, competition,
                                 top_bindings, bottom_bindings, initial_source,
-                                source_frame_width_authority, phase.best, sequence_fits is not None, phase)
+                                source_frame_width_authority, phase.best, sequence_fits is not None, phase,
+                                height_calibration)
 
 
 def _profile_capacity(
@@ -1153,6 +1170,7 @@ def prepare_template_lane(
         **registered_values,
         cross_registration_work=cross.work_receipt,
         base_cross_registration=base_cross,
+        complete_height_calibration=context.complete_height_calibration,
         template_spec=template,
         source_scan_geometry=source_geometry,
         source_frame_width_authority=source_frame_width_authority,

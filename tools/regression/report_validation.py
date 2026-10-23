@@ -24,6 +24,7 @@ from x5crop.detection.photo_geometry.template_measurement_plan import _bounds_fo
 from x5crop.detection.photo_geometry.exterior_region_measurement import ExteriorRegionMeasurement
 from x5crop.detection.photo_geometry.template_common_output import (
     CommonHOutput, CommonHOutputAuthority, assess_common_h_output_authority,
+    CompleteCrossHeightCalibration, complete_cross_height_calibration,
 )
 from x5crop.detection.photo_geometry.template_output import common_direct_use_budget_assessment
 from x5crop.detection.photo_geometry.output_model import OutputFootprint, fixed_output_coverage
@@ -64,7 +65,8 @@ from x5crop.detection.photo_geometry.template_acceptability_features import (
     PlacementFeatureMissingReason,
     PlacementFeatureUnit,
 )
-from x5crop.detection.photo_geometry.template_cross import fit_template_cross
+from x5crop.detection.photo_geometry.template_cross import calibrate_source_frame_height, fit_template_cross
+from x5crop.detection.photo_geometry.template_aspect_ratio import apply_inferred_aperture_height
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossBoundaryFamilyResolution,
     CrossBoundaryFamilyUse,
@@ -2226,7 +2228,7 @@ _PROOF_READ_CACHE: ContextVar[dict | None] = ContextVar("report_proof_read_cache
 
 def _read_common_proof(value: Any, model: type) -> Any:
     """Rehydrate only explicitly allowed current evidence roots for pure owners."""
-    if model not in (OutputFootprint, CommonHOutput, CommonHOutputAuthority, PhaseFitResult,
+    if model not in (OutputFootprint, CommonHOutput, CommonHOutputAuthority, CompleteCrossHeightCalibration, PhaseFitResult,
                      CrossFitCompetition, CrossRoleBinding, PhotoBoundaryObservation, CrossBoundaryFamilyResolution,
                      RobustLineFitReceipt, ConstrainedLineFitReceipt,
                      SourceScanGeometry, HolderFillAssessment, FormatPlacement, ExteriorRegionMeasurement,
@@ -2399,12 +2401,8 @@ def _validate_common_authority_provenance(lane, production_lane, query_records) 
     bindings = project_cross_solver_bindings(tuple(_read_common_proof(item, CrossRoleBinding)
                          for item in lane["observations"]["registered_top_bottom_bindings"]))
     coverage = membership_projection_coverage(registration.membership, observations, bindings)
-    # An unresolved direct-pair set does not calibrate its own source H. Use
-    # the prepared lane state, before the cross-lane source intersection.
-    source = _read_common_proof(production_lane["source_scan_geometry"], SourceScanGeometry)
     if cross.aperture_aspect_ratio_authority.consumed_for_cross_inference:
         raise ValueError("common H authority lost its original fixed-height input")
-    fixed_height = source.height_state.extent_projection_px()
     top_queries = [item["query"] for item in query_records if item["query"]["lane_id"] == lane["lane_id"]
                    and item["query"]["purpose"] == QueryPurpose.TOP_CORRIDOR.value]
     if len(top_queries) != 1:
@@ -2421,6 +2419,71 @@ def _validate_common_authority_provenance(lane, production_lane, query_records) 
     # All source and binding identities, intervals, work and authority remain exact.
     if actual != expected:
         raise ValueError("common H member authority or membership coverage is not reproducible")
+
+
+def _validate_complete_height_source(lane, *, holder) -> None:
+    if "complete_height_calibration" not in lane:
+        raise ValueError("source lost its complete Cross height calibration record")
+    raw = lane["complete_height_calibration"]
+    source = _read_common_proof(lane["source_scan_geometry"], SourceScanGeometry)
+    if raw is None:
+        if source.height_state.observation_ids and lane["cross_status"] != CrossFitStatus.RESOLVED.value:
+            raise ValueError("unresolved Cross source H lost its complete calibration proof")
+        return
+    proof = _read_common_proof(raw, CompleteCrossHeightCalibration)
+    if proof.source_geometry != source or holder is None:
+        raise ValueError("complete Cross height changed its source identity")
+    scales = holder["axis_scales"]
+    initial = SourceScanGeometry.create(source.frame_spec,
+        width_scale_px_per_mm=PositiveInterval(**scales["width_axis_px_per_mm"]),
+        height_scale_px_per_mm=PositiveInterval(**scales["height_axis_px_per_mm"]))
+    if (proof.initial_source_geometry.height_state != initial.height_state
+            or proof.initial_source_geometry.width_state != source.width_state):
+        raise ValueError("complete Cross height changed its initial physical source state")
+    common = lane["common_h_output"]
+    if common is not None:
+        placements = tuple(_read_common_proof(p, FormatPlacement) for p in common["placements"])
+        if (proof.member_observation_pairs != tuple(p.cross_fit.bound_observation_ids for p in placements)
+                or proof.member_height_intervals_px != tuple(p.cross_fit.height_compatibility_px for p in placements)
+                or raw["group_member_indices"] != common["group_member_indices"]):
+            raise ValueError("complete Cross height lost a common output member")
+
+
+def _validate_complete_height_provenance(lane, production_lane) -> None:
+    raw = lane.get("complete_height_calibration")
+    if raw != production_lane.get("complete_height_calibration"):
+        raise ValueError("development complete Cross height changed production facts")
+    source = _read_common_proof(production_lane["source_scan_geometry"], SourceScanGeometry)
+    prior = SourceScanGeometry.create(source.frame_spec,
+        width_scale_px_per_mm=source.width_state.scale_authority,
+        height_scale_px_per_mm=source.height_state.scale_authority)
+    initial = SourceScanGeometry.from_axis_states(source.frame_spec, source.width_state, prior.height_state)
+    cross = _read_common_proof(lane["cross_competition"], CrossFitCompetition)
+    inputs = _read_common_proof(lane["cross_input"], TemplateCrossInput)
+    if (inputs.fixed_height_px != initial.height_state.extent_projection_px()
+            or inputs.canonical_fixed_height_px != inputs.fixed_height_px.center):
+        raise ValueError("Cross calibration fed its output back into the initial H input")
+    initial = calibrate_source_frame_height(apply_inferred_aperture_height(
+        initial, cross.aperture_aspect_ratio_authority), cross)
+    actual = None if raw is None else _read_common_proof(raw, CompleteCrossHeightCalibration)
+    if actual is not None:
+        initial = replace(initial, geometry_id=actual.initial_source_geometry.geometry_id)
+    expected = complete_cross_height_calibration(initial,
+        phase=_read_common_proof(lane["phase_competition"], PhaseFitResult),
+        cross=cross,
+        registration=_read_common_proof(lane["cross_registration_work"], CrossRegistrationWorkReceipt),
+        observations=tuple(_read_common_proof(o, PhotoBoundaryObservation)
+            for o in lane["observations"]["raw_top_bottom_lines"]),
+        cross_input=inputs)
+    if expected is None and actual is None:
+        if (initial.width_state != source.width_state or initial.height_state != source.height_state):
+            raise ValueError("source H does not reproduce its original Cross authority")
+        return
+    if actual is None:
+        raise ValueError("source lost its complete Cross height calibration proof")
+    if expected is None or replace(expected, source_geometry=replace(expected.source_geometry,
+            geometry_id=actual.source_geometry.geometry_id)) != actual:
+        raise ValueError("complete Cross height does not reproduce its full physical competition")
 
 
 def _validate_holder_fill_provenance(lane, production_lane, measurement, *, layout: str) -> None:
@@ -2934,6 +2997,7 @@ def _validate_geometry(
         common = lane["common_h_output"]
         validate_common_h_output(common, expected_source_extent=expected_source_extent)
         _common_authority_record(lane)
+        _validate_complete_height_source(lane, holder=holder)
         if common is not None:
             expected_source = expected_shared or _read_common_proof(lane["source_scan_geometry"], SourceScanGeometry)
             for placement in common["placements"]:
@@ -4184,6 +4248,7 @@ def _validate_development(record: dict[str, Any]) -> None:
         if replayed != recorded:
             raise ValueError("adjacency continuity changed its registered physical evidence")
         _validate_retained_adjacency_assessments(lane, production_lane, development["measurement"]["queries"])
+        _validate_complete_height_provenance(lane, production_lane)
         if cross_competition["receipt"]["fitted_observation_count"] != sum(
             item["independent_support_region_count"] >= MINIMUM_INDEPENDENT_SUPPORT_REGIONS
             for item in registered_cross.values()
