@@ -1764,6 +1764,8 @@ footprint、typed generation failure 与带 physical frame ID 的逐帧诊断。
 的同源任务混成一个答案；多正例不归一化，unavailable 不产生负例。可用但有 placement 歧义的统计只消费
 明确的 discrete phase ambiguity 或 non-equivalent Cross fits，不将 coverage 缺口或所有 Review 算作歧义。
 集合物化本身不增加评分、准入权限、content requery 或自动输出，只建立特征/排序可复核的输入与标签。
+开发排序的 `canonical_*` 诊断统计包含已有原始拟合的 Cross 备选；该描述性分组不扩大 Runtime
+canonical selection 的两份权限集合。
 Primary 尚无 placement identity 而 runner 已能物化时，集合保留 runner 的原角色，不伪造 primary，也不丢弃该候选。
 
 候选特征由 `template_acceptability_features.py` 独占，冻结为
