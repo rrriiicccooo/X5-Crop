@@ -1,5 +1,7 @@
 """Cross projection support checks remain short-circuited without changing authority."""
 
+from dataclasses import replace
+import random
 from unittest.mock import patch
 import unittest
 
@@ -11,6 +13,8 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     CrossLongitudinalProjectionBasis,
     CrossRoleBinding,
 )
+from x5crop.detection.photo_geometry.template_cross_longitudinal import CrossBindingDomainCoverage
+import x5crop.detection.photo_geometry.template_cross_longitudinal as longitudinal_owner
 import x5crop.detection.photo_geometry.template_cross_candidates as candidates_owner
 
 
@@ -45,6 +49,46 @@ def direct_pair(*, top_spanning: bool, bottom_spanning: bool,
 
 
 class CrossProjectionSupportEvaluationContractTest(unittest.TestCase):
+    def test_prepared_binding_coverage_preserves_each_complete_pair_proof(self):
+        rng = random.Random(6215)
+        groups = (support_domains()[0], (
+            FiniteInterval(0.5, 20.5), FiniteInterval(40.5, 60.5), FiniteInterval(80.5, 100.5)))
+        for _ in range(160):
+            top, bottom = direct_pair(
+                top_spanning=rng.choice((False, True)), bottom_spanning=rng.choice((False, True)),
+                top_traces=tuple(sorted(rng.sample(range(0, 101, 10), rng.randrange(2, 12)))),
+                bottom_traces=tuple(sorted(rng.sample(range(0, 101, 10), rng.randrange(2, 12)))))
+            coverage = CrossBindingDomainCoverage((top, bottom), groups)
+            inputs = dict(fixed_height=FiniteInterval.exact(240.0), canonical_height_px=240.0,
+                          minimum_shared_trace_support=2, longitudinal_support_domain_groups_px=groups)
+            expected = _direct_candidate(top, bottom, **inputs)
+            with self.subTest(top=top.trace_coordinates_px, bottom=bottom.trace_coordinates_px):
+                self.assertEqual(_direct_candidate(top, bottom, **inputs,
+                    binding_domain_coverage=coverage), expected)
+                # Pair direction and H remain live inputs after neutral coverage has been prepared.
+                self.assertEqual(_direct_candidate(top, bottom, **{**inputs,
+                    "fixed_height": FiniteInterval.exact(220.0)}, binding_domain_coverage=coverage),
+                    _direct_candidate(top, bottom, **{**inputs, "fixed_height": FiniteInterval.exact(220.0)}))
+
+    def test_coverage_reuse_keeps_original_bindings_and_each_domain_group(self):
+        top, bottom = direct_pair(top_spanning=True, bottom_spanning=False,
+                                  bottom_traces=(0, 40))
+        groups = support_domains()
+        coverage = CrossBindingDomainCoverage((top, bottom), groups)
+        with patch.object(longitudinal_owner, "_ordered_finite_traces",
+                          wraps=longitudinal_owner._ordered_finite_traces) as ordered:
+            for _ in range(8):
+                self.assertFalse(coverage.covers_all(bottom))
+                self.assertTrue(coverage.covers_all(top))
+            self.assertEqual(ordered.call_count, 2)
+        with self.assertRaisesRegex(ValueError, "different bindings"):
+            coverage.covers_all(replace(bottom, trace_coordinates_px=(0, 40, 80)))
+        with self.assertRaisesRegex(ValueError, "different template domains"):
+            _direct_candidate(top, bottom, fixed_height=FiniteInterval.exact(240.0),
+                canonical_height_px=240.0, minimum_shared_trace_support=2,
+                longitudinal_support_domain_groups_px=((FiniteInterval(0.0, 100.0),),),
+                binding_domain_coverage=coverage)
+
     def test_covers_all_domains_is_checked_only_when_short_circuit_needs_it(self):
         expected = {
             (False, False): (0, CrossLongitudinalProjectionBasis.COMPLETE_TEMPLATE_DOMAINS),

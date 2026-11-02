@@ -49,7 +49,7 @@ from .template_cross_support import (
     fit_enclosing_support,
     support_permission_view,
 )
-from .template_cross_longitudinal import covers_all_template_domains
+from .template_cross_longitudinal import CrossBindingDomainCoverage, covers_all_template_domains
 from .template_aspect_ratio import (
     consume_aperture_aspect_ratio_for_cross,
     reconcile_direct_aperture_height,
@@ -130,6 +130,8 @@ def _enumerate_cross_pairs(inputs: TemplateCrossInput) -> _CrossPairPool:
     candidates: list[_Candidate] = []
     failures: set[CrossFailureKind] = set()
     canonical_failures: set[CrossFailureKind] = set()
+    domain_coverage = CrossBindingDomainCoverage(
+        (*inputs.top_bindings, *inputs.bottom_bindings), inputs.longitudinal_support_domain_groups_px)
     ordered_top = tuple(sorted(inputs.top_bindings, key=lambda item: (
         item.full_interval_px.minimum, str(item.observation_id),
     )))
@@ -153,6 +155,7 @@ def _enumerate_cross_pairs(inputs: TemplateCrossInput) -> _CrossPairPool:
                 minimum_shared_trace_support=inputs.minimum_shared_trace_support,
                 longitudinal_support_domain_groups_px=inputs.longitudinal_support_domain_groups_px,
                 source_direction=inputs.source_direction,
+                binding_domain_coverage=domain_coverage,
             )
             if failure is not None:
                 failures.add(failure)

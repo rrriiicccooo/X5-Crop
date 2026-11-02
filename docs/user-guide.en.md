@@ -92,6 +92,10 @@ establish one source-wide photo height before fixed boxes are generated. Each in
 boundaries and full protection requirements. Missing members, insufficient evidence, or an over-budget common window
 still require review.
 
+Short-axis search completeness, independent boundary evidence, and output eligibility are checked separately.
+Even a completed search requires review when independent support is missing or later fitting exceeds its work limit.
+Completed queries alone do not establish that no other boundary interpretation exists.
+
 Development reports retain the original material bands and boundary sources behind outer-material candidates.
 Photo ordinals and the true first and last boundaries still require independent evidence.
 

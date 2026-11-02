@@ -508,6 +508,7 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
     detail = None
     work = PhaseMemberOutputWork()
     local = late = assessed = width = adjacency = context = placement = propagation = None
+    member_cross_context = None
     native_grid = admission = None
     fit = member.input_fit
     admission_bound = admission_proof_work_bound(len(fit.role_bindings))
@@ -550,7 +551,7 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
                 direct_role_input_lookup_count=direct_role_input_preparation.lookup_count - native_before[0],
                 direct_role_input_preparation_count=direct_role_input_preparation.preparation_count - native_before[1])
         return PhaseMemberOutputProof(scope.scope_id, member.record_ordinal, local, late,
-            assessed, width, adjacency, None if context is None else PhaseMemberCrossContext.from_context(context),
+            assessed, width, adjacency, member_cross_context,
             placement, outputs, budgets,
             tuple(dict.fromkeys(gaps)), detail, measured_work, adjacency_propagation=propagation,
             native_grid_association=native_grid, admission=own_admission)
@@ -766,6 +767,7 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
                 coarse_geometry_preparation_count=coarse_geometry_preparation.preparation_count - before[1])
     if context is None:
         return result()
+    member_cross_context = PhaseMemberCrossContext.from_context(context)
     cross = context.competition
     local_work = context.registration.work_receipt
     base_work = lane.base_cross_registration.work_receipt
@@ -778,10 +780,8 @@ def assess_phase_member_output(lane, scope: PhaseCompetitionScope,
     if cross.status != CrossFitStatus.RESOLVED or cross.best is None:
         gaps.append(PhaseMemberOutputGap.CROSS_UNRESOLVED)
         return result()
-    coverage = membership_projection_coverage(context.registration.membership_receipt,
-        context.registration.observations,
-        (*context.cross_input.top_bindings, *context.cross_input.bottom_bindings))
-    if coverage is None or not local_cross_refinements_closed(context.registration.work_receipt):
+    if (not member_cross_context.membership_projection_complete
+            or not member_cross_context.local_refinements_closed):
         gaps.append(PhaseMemberOutputGap.CROSS_MEMBERSHIP_INCOMPLETE)
     direct = assessed.direct_role_binding_authority
     if direct is not None and direct.aperture_domain_required_role_indices:

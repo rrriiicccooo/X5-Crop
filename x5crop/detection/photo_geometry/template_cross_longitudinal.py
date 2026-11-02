@@ -12,6 +12,7 @@ from .template_cross_model import (
     CrossLongitudinalProjectionAuthority,
     CrossLongitudinalProjectionBasis,
     CrossLongitudinalProjectionFailureKind,
+    CrossRoleBinding,
 )
 
 
@@ -59,6 +60,31 @@ def covers_all_template_domains(
         and all(_domain_has_trace(traces, domain) for domain in domains)
         for domains in domain_groups
     )
+
+
+class CrossBindingDomainCoverage:
+    """Neutral per-binding coverage, limited to one Cross input's domains."""
+
+    def __init__(self, bindings: tuple[CrossRoleBinding, ...],
+                 domain_groups: tuple[tuple[FiniteInterval, ...], ...]):
+        self.domain_groups = domain_groups
+        self._bindings = {id(binding): binding for binding in bindings}
+        self._coverage: dict[int, tuple[bool, ...]] = {}
+
+    def for_binding(self, binding: CrossRoleBinding) -> tuple[bool, ...]:
+        key = id(binding)
+        if self._bindings.get(key) is not binding:
+            raise ValueError("Cross domain coverage belongs to different bindings")
+        covered = self._coverage.get(key)
+        if covered is None:
+            traces = _ordered_finite_traces(binding.trace_coordinates_px)
+            covered = tuple(bool(domains) and all(_domain_has_trace(traces, domain) for domain in domains)
+                            for domains in self.domain_groups)
+            self._coverage[key] = covered
+        return covered
+
+    def covers_all(self, binding: CrossRoleBinding) -> bool:
+        return bool(self.domain_groups) and all(self.for_binding(binding))
 
 
 def assess_cross_longitudinal_projection(

@@ -190,6 +190,28 @@ class TemplateFamilyMembershipContractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             replace(complete, work=replace(complete.work, raw_union_atom_visit_count=13 * 12 + 1))
 
+    def test_exact_filtered_union_reuses_its_own_proof_at_the_visit_limit(self):
+        problem = _problem({'H': (0, 100), 'A': (40, 60)}, {'H'})
+        scope = enumerate_membership_scope(**{**problem, 'remaining_visits': 2})
+        self.assertEqual(scope.state, MembershipState.COMPLETE)
+        self.assertEqual(scope.maximal_member_groups, ((ObservationId('A'), ObservationId('H')),))
+        self.assertEqual(scope.work.visited_count, 2)
+        self.assertEqual(scope.work.union_lookahead_count, 0)
+        self.assertEqual(scope.work.union_lookahead_reuse_count, 1)
+        exhausted = enumerate_membership_scope(**{**problem, 'remaining_visits': 1})
+        self.assertEqual(exhausted.state, MembershipState.SEARCH_BOUND_EXCEEDED)
+        self.assertEqual(exhausted.maximal_member_groups, ())
+        with self.assertRaises(ValueError):
+            replace(scope, work=replace(scope.work, union_lookahead_reuse_count=0))
+
+    def test_filtered_anchor_only_leaf_reuses_joint_anchor_proof(self):
+        problem = _problem({'A': (0, 100), 'B': (40, 60)}, {'A', 'B'})
+        scope = enumerate_membership_scope(**{**problem, 'remaining_visits': 1})
+        self.assertEqual(scope.state, MembershipState.COMPLETE)
+        self.assertEqual(scope.maximal_member_groups, ((ObservationId('A'), ObservationId('B')),))
+        self.assertEqual(scope.work.visited_count, 1)
+        self.assertEqual(scope.work.union_lookahead_reuse_count, 1)
+
     def test_multiple_mandatory_anchors_need_a_joint_domain(self):
         groups = {'A': (0, 10), 'B': (100, 110), 'C': (50, 60)}
         intervals = {('A', 0): (0, 1), ('A', 10): (-100, 100), ('B', 100): (0, 1),

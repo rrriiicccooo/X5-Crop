@@ -1478,6 +1478,10 @@ anchor/opposite 或外侧角色反证，也不能通过排除另一组
 同一 pair owner 只枚举一次物理配对；canonical 选择和包含条件线的提案选择使用同一求解函数的两个权限视图。
 仅在一侧 source-spanning continuity 需要另一侧完整域支持时，计算该侧全域覆盖；原局部 pair 支持、
 combined trace 准入与最终纵向投影证明仍逐对完整核验，不重复计算未被当前条件消费的全域布尔值。
+同次 Cross 配对只为原输入 binding 按需准备各原始 domain group 的完整覆盖布尔值，同一 binding 至多
+排序一次 trace、检查一次各域。准备绑定原对象和完整域，最多保留输入 binding 数乘域组数的布尔值；
+随本次配对返回释放。共享／合并 trace、相反侧支持、H、方向与最终权限仍按 pair 独立核验，不复用
+其它成员的覆盖，不缓存配对结果。
 两视图的实际 fit 与单侧推导次数相加，受原 4096 总上限约束；配对枚举只计一次。展示位置至多保留一份
 含条件 binding 的 Cross fit，不追加 phase 搜索、source H 校准或像素查询。
 `CrossFitCompetition.fit_groups` 和 `conditional_fit_groups` 分别保留两权限视图在离散选择前生成的
@@ -1496,11 +1500,17 @@ Raster trace 不连续不等于物理边界不同；完整并集重拟合能够�
 完整物理约束拟合至多 `2R`，
 两者分别计数，合计不超过 `5R`；原有缺边精修至多再增加 `R`。
 归属搜索另记实际访问、raw union 输入与 identity 检查、物理域与 raw interval、裁剪与顶点检查、
-可行集合及极大性检查次数。令一次 scope 有 A 个原子、T 个原始 transition、Q 条 query trace、V 次访问：
+可行集合及极大性检查次数。每个搜索节点的 required 已由 anchor 或父节点完整 union 证明可行，
+pending 中的每个原子也已分别与该 required 的完整原始 union 一起核验。因此 pending 至多一个时，
+whole-union 直接复用这份相同集合证明，以 `union_lookahead_reuse_count` 单独记账，不再消耗实际
+oracle 访问；两个及以上 pending 仍完整求交，不能用两两相容代替联合域。Excluded 的极大性扩展仍
+逐项检查，复用不新增成员、不缓存子集、不改变 raw、权限或每条 lane 的 4096 次实际核验上限。
+令一次 scope 有 A 个原子、T 个原始 transition、Q 条 query trace、V 次实际访问、N 个搜索节点：
 原子输入访问不超过 `AV`，raw union 输入不超过 `ATV`，identity 检查不超过 `TV`；每个无身份冲突集合至多 Q 条约束，
-裁剪至多 `2Q` 次、顶点检查至多 `4Q²+10Q` 次，极大性检查至多 `AV`。临时 DFS 深度至多 A，
-递归节点、分支及最大深度分别记账；节点不超过 `2 × 分支 + 1`，分支过滤不超过 `A × 分支`。
-当前分支只保存整数 mask 和原子索引，不保留全部可行子集；完整极大解释与预检前 union 计划最多 V 组，获准拟合的唯一 union 数还须
+裁剪至多 `2Q` 次、顶点检查至多 `4Q²+10Q` 次，极大性检查至多 `AN`。临时 DFS 深度至多 A，
+递归节点、分支及最大深度分别记账；节点不超过 `2 × 分支 + 1 <= 2V+1`，分支过滤不超过 `A × 分支`。
+完整 scope 的节点数等于实际 whole-union 访问加证明复用次数；耗尽时最多多一个未完成节点。
+当前分支只保存整数 mask 和原子索引，不保留全部可行子集；完整极大解释与预检前 union 计划最多 N 组，获准拟合的唯一 union 数还须
 满足 `3R/2R` 预检。
 有 trace 冲突时极大集合数量可以指数增长，二维物理参数空间不提供一般多项式枚举保证；4096 是明确
 工作上限，不是完整性保证。搜索预算不替代下游 512 observation 和 4096 pair/fit 的实际计数与拒绝合同。
@@ -2417,7 +2427,7 @@ format/source 状态测量共同 W。共同 H 只从每个成员都已完整关�
 `common_outputs` 可保留预算失败窗口作为诊断，只有 `state=supported` 且 `common_failure=null` 才表示窗口
 验证通过。当前该分支在规范 selection/Gate 后执行，不授予照片序号映射、canonical winner 或自动输出权限。
 
-当前报告 schema 为 121。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
+当前报告 schema 为 122。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
 重放全部 producer 和独立成员，再比对结果、缺口和工作。成员 Cross 只重复自身 H／纵向域、best/runner、
 求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
 外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source
@@ -2549,6 +2559,8 @@ role/support 缓存孔径位置极值，最多 `2 × (1 + 联合状态数)` 项�
 `FiniteInterval`／`PositiveInterval` 的固定 minimum／maximum 值直接构建独立叶子 dict，不占模型模板
 名额；非标量端点仍走原转换，子类继续按其全部公开字段转换。
 该复用不缓存物理评估、成员资格或跨 source 结果。
+同一历史成员的 Cross 上下文建立后，其 membership 投影覆盖和局部精修闭合只核验一次，资格检查与
+最终成员账本引用同一不可变摘要；上下文变化及其它成员仍独立重建，不重复扫描相同 raw 并集。
 粗边共同方向闭合复用 `physical_line_region_in_slopes`，以共同斜率区间直接初始化联合位置/斜率域，
 再裁剪完整原始物理区间；零宽斜率、点和线段均保留，不对斜率额外应用像素容差。单侧准备和每对
 共同方向、代表拟合与连续性绑定完整原生输入。完整成员验证内用一个显式传递的准备对象复用不依赖 H 的

@@ -46,6 +46,7 @@ class MembershipWork:
     search_branch_count: int = 0
     search_maximum_depth: int = 0
     union_lookahead_count: int = 0
+    union_lookahead_reuse_count: int = 0
     raw_union_atom_visit_count: int = 0
     raw_union_input_count: int = 0
     raw_identity_check_count: int = 0
@@ -71,7 +72,9 @@ class MembershipWork:
             )
             or self.physical_region_count != self.empty_region_count + self.feasible_set_count
             or self.anchor_check_count > 1
-            or not self.union_lookahead_count <= self.search_node_count <= self.union_lookahead_count + 1
+            or not (self.union_lookahead_count + self.union_lookahead_reuse_count
+                    <= self.search_node_count
+                    <= self.union_lookahead_count + self.union_lookahead_reuse_count + 1)
             or self.search_branch_count > self.union_lookahead_count
             or (self.search_node_count and self.search_node_count > 2 * self.search_branch_count + 1)
             or (self.search_node_count == 0) != (self.search_maximum_depth == 0)
@@ -109,7 +112,7 @@ class MembershipScope:
             or any(tuple(sorted(set(group), key=str)) != group
                    or not set(self.anchor_observation_ids).issubset(group)
                    or len(group) > self.atom_count for group in self.maximal_member_groups)
-            or len(self.maximal_member_groups) > self.work.union_lookahead_count
+            or len(self.maximal_member_groups) > self.work.search_node_count
             or self.work.visited_count > MAXIMUM_MEMBERSHIP_VISITS
             or self.work.initial_filter_count > self.atom_count - len(self.anchor_observation_ids)
             or self.work.branch_filter_count > self.atom_count * self.work.search_branch_count
@@ -120,9 +123,10 @@ class MembershipScope:
             or self.work.raw_interval_count > self.query_trace_count * self.work.physical_region_count
             or self.work.polygon_vertex_evaluation_count > self.work.physical_region_count * (
                 4 * self.query_trace_count ** 2 + 10 * self.query_trace_count)
-            or self.work.maximality_variable_visit_count > self.atom_count * self.work.union_lookahead_count
+            or self.work.maximality_variable_visit_count > self.atom_count * self.work.search_node_count
             or (self.state == MembershipState.COMPLETE and (
-                self.work.search_node_count != self.work.union_lookahead_count
+                self.work.search_node_count != (self.work.union_lookahead_count
+                                               + self.work.union_lookahead_reuse_count)
                 or self.work.maximality_variable_visit_count != self.work.maximality_extension_check_count
             ))
             or (self.state == MembershipState.NO_INDEPENDENT_ANCHOR and any(
@@ -227,6 +231,9 @@ def enumerate_membership_scope(
     remaining-union lookahead closes a compatible branch only after checking
     every previously excluded atom for a feasible extension. Every oracle
     checks the complete raw union, without pairwise substitution or a cache.
+    A search node reuses its own exact prior feasibility check when at most
+    one pending atom remains; all pending atoms passed the full required-union
+    filter. It never substitutes pairwise compatibility for a larger union.
     No fit, loss, role permission, support ranking, or placement result prunes
     a set. Exhaustion exposes work only, never a purportedly complete prefix.
     """
@@ -297,7 +304,15 @@ def enumerate_membership_scope(
         work['search_node_count'] += 1
         work['search_maximum_depth'] = max(work['search_maximum_depth'], depth)
         union = required | sum(1 << index for index in pending)
-        if feasible(union, 'union_lookahead_count'):
+        # Required is feasible by the anchor check or the parent's filter.
+        # With one pending atom its full union was checked by that same
+        # filter. Repeating either check spends the shared oracle allowance
+        # without adding evidence. Two or more pending atoms still require
+        # a joint check, even if every pair was individually feasible.
+        known_union = len(pending) <= 1
+        if known_union:
+            work['union_lookahead_reuse_count'] += 1
+        if known_union or feasible(union, 'union_lookahead_count'):
             for index in excluded:
                 work['maximality_variable_visit_count'] += 1
                 if feasible(union | (1 << index), 'maximality_extension_check_count'):

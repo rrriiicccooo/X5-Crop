@@ -37,6 +37,7 @@ from .template_cross_model import (
     CrossRoleBinding,
 )
 from .template_cross_longitudinal import (
+    CrossBindingDomainCoverage,
     assess_cross_longitudinal_projection,
     covered_template_domain_ordinals,
     covers_all_template_domains,
@@ -92,6 +93,7 @@ def _direct_candidate(
     minimum_shared_trace_support: int,
     longitudinal_support_domain_groups_px: tuple[tuple[FiniteInterval, ...], ...] = (),
     source_direction: SharedStripDirection | None = None,
+    binding_domain_coverage: CrossBindingDomainCoverage | None = None,
 ) -> tuple[_Candidate | None, CrossFailureKind | None]:
     # Aperture coordinates require photo-boundary role authority on both
     # sides. Role-unknown material/holder lines belong to the separate
@@ -105,6 +107,19 @@ def _direct_candidate(
     shift = _intersect(top.full_interval_px, _subtract(bottom.full_interval_px, fixed_height))
     if height is None or shift is None:
         return None, CrossFailureKind.FIXED_HEIGHT_INCOMPATIBLE
+    if (binding_domain_coverage is not None
+            and binding_domain_coverage.domain_groups is not longitudinal_support_domain_groups_px
+            and binding_domain_coverage.domain_groups != longitudinal_support_domain_groups_px):
+        raise ValueError("Cross domain coverage belongs to different template domains")
+
+    def covers_domains(binding: CrossRoleBinding) -> bool:
+        return (covers_all_template_domains(binding.trace_coordinates_px, longitudinal_support_domain_groups_px)
+                if binding_domain_coverage is None else binding_domain_coverage.covers_all(binding))
+
+    def covers_group(binding: CrossRoleBinding, index: int, domains: tuple[FiniteInterval, ...]) -> bool:
+        return (covers_all_template_domains(binding.trace_coordinates_px, (domains,))
+                if binding_domain_coverage is None else binding_domain_coverage.for_binding(binding)[index])
+
     support_traces = _shared_trace_coordinates(top, bottom)
     combined_traces = tuple(
         sorted(
@@ -118,7 +133,7 @@ def _direct_candidate(
         # Each candidate must independently close the local pair before its
         # non-shared traces can contribute to full-extent authority. Different
         # candidates are alternative domains, never additional support votes.
-        def permits_combined_traces(domains: tuple[FiniteInterval, ...]) -> bool:
+        def permits_combined_traces(index: int, domains: tuple[FiniteInterval, ...]) -> bool:
             shared_domain_count = len(
                 covered_template_domain_ordinals(support_traces, domains)
             )
@@ -129,16 +144,16 @@ def _direct_candidate(
                     MINIMUM_INDEPENDENT_SUPPORT_REGIONS, len(domains)
                 )
                 and (
-                    covers_all_template_domains(top.trace_coordinates_px, (domains,))
-                    or covers_all_template_domains(bottom.trace_coordinates_px, (domains,))
+                    covers_group(top, index, domains)
+                    or covers_group(bottom, index, domains)
                 )
             )
 
         authority_traces = (
             combined_traces
             if all(
-                permits_combined_traces(domains)
-                for domains in longitudinal_support_domain_groups_px
+                permits_combined_traces(index, domains)
+                for index, domains in enumerate(longitudinal_support_domain_groups_px)
             )
             else support_traces
         )
@@ -169,13 +184,11 @@ def _direct_candidate(
         )
         or (
             top.source_spanning_continuous
-            and covers_all_template_domains(
-                bottom.trace_coordinates_px, longitudinal_support_domain_groups_px)
+            and covers_domains(bottom)
         )
         or (
             bottom.source_spanning_continuous
-            and covers_all_template_domains(
-                top.trace_coordinates_px, longitudinal_support_domain_groups_px)
+            and covers_domains(top)
         ),
     )
     if source_direction is None:
