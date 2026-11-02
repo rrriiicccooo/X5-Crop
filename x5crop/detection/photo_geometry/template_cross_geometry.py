@@ -10,6 +10,10 @@ from .output_model import SharedStripDirection
 from .template_cross_model import CrossRoleBinding
 
 
+def cross_direction_id(observation_ids: Sequence[str]) -> str:
+    return "template-cross-direction:" + ":".join(map(str, observation_ids))
+
+
 def hull_intervals(
     intervals: Sequence[FiniteInterval],
 ) -> FiniteInterval:
@@ -73,7 +77,7 @@ def shared_direction_for(
         max(common.minimum, sum(canonical_values) / len(canonical_values)),
     )
     return SharedStripDirection(
-        direction_id="template-cross-direction:" + ":".join(map(str, identities)),
+        direction_id=cross_direction_id(identities),
         selected_observation_ids=identities,
         # Compatibility closes one canonical direction. Safety retains all
         # directly measured source-spanning variation; a local opposite side

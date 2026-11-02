@@ -18,6 +18,7 @@ from x5crop.detection.photo_geometry.template_phase_model import PhaseFitResult,
 from x5crop.detection.photo_geometry.template_phase_competition import fit_template_phase
 from x5crop.detection.photo_geometry.template_phase_output import CompletePhaseOutputProof, build_complete_phase_output
 from x5crop.detection.photo_geometry.template_registration import RegisteredCrossEvidence, register_cross_evidence
+from x5crop.detection.photo_geometry.template_cross_geometry import cross_direction_id
 
 
 _ALLOCATED_PREFIXES = frozenset({
@@ -36,6 +37,20 @@ def assert_replayed_facts(expected, actual, *, protected_native_ids=None) -> Non
 
     def compare(left, right, path):
         if type(left) is dict and type(right) is dict and left.keys() == right.keys():
+            if ("direction_id" in left and "selected_observation_ids" in left
+                    and any(isinstance(value, str) and value.startswith("template-cross-direction:")
+                            for value in (left["direction_id"], right["direction_id"]))):
+                for value in (left, right):
+                    if value["direction_id"] != cross_direction_id(value["selected_observation_ids"]):
+                        raise ValueError(f"complete phase direction identity changed its own members at {path}")
+                # Composite IDs are derived from the same ordered physical
+                # references, not another freely allocated namespace.
+                compare(left["selected_observation_ids"], right["selected_observation_ids"],
+                        f"{path}.selected_observation_ids")
+                for key in left:
+                    if key not in {"direction_id", "selected_observation_ids"}:
+                        compare(left[key], right[key], f"{path}.{key}")
+                return
             for key in left:
                 compare(left[key], right[key], f"{path}.{key}")
         elif type(left) is list and type(right) is list and len(left) == len(right):

@@ -1998,8 +1998,8 @@ Enclosing support 本身只证明真实 aperture 位于两条 support 之间，�
 center_offset_ratio = (gold_aperture_center - support_midpoint) / H
 ```
 
-当前 v19 calibration 按完整 development cohort 的同一资格规则纳入 3 个 selected unique enclosing pair、
-且黄金 top/bottom 均为 `directly_visible` 的 source（135 一源、120-66 两源，不以最终批准或预算筛选）；
+当前 v20 calibration 按完整 development cohort 的同一资格规则纳入 4 个 selected unique enclosing pair、
+且黄金 top/bottom 均为 `directly_visible` 的 source（135 两源、120-66 两源，不以最终批准或预算筛选）；
 同源 count 先取中位数，再对 source hull 以 `0.001H` 向外量化，得到 `[-0.003H, +0.010H]`。
 该先验只用于唯一已选 support，不适用于共同包络；有限 development 支持尚不证明 sealed 或未见来源泛化。Calibration
 同时绑定 development cohort SHA、eligibility revision 和精确 observation-set SHA；source 数量相同但成员、
@@ -2444,6 +2444,8 @@ format/source 状态测量共同 W。共同 H 只从每个成员都已完整关�
 求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
 外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source
 state、interval、成员和引用关系必须一致。编号预留只防止碰撞，不能产生证据或权限。
+`template-cross-direction` 先按自身有序 observation 列表核对组合身份，再用同一双射比较成员；
+它不是新的自由编号空间。完整角度、角色、原始点、坐标和保护原生 ID 不因组合编号而豁免。
 成员注册线集合按角色、物理线类型与原生 transition 集合排序；新增线的运行内编号变化不得改变集合次序。
 
 ## 12. 工作量、性能与 TIFF

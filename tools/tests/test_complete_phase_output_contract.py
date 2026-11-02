@@ -82,6 +82,40 @@ class CompletePhaseOutputContractTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "nonnegative integers"):
             PhaseMemberOutputWork(cross_context_count=True)
 
+    def test_cross_direction_reuses_the_same_native_bijection_and_preserves_its_physical_graph(self):
+        from copy import deepcopy
+        from x5crop.detection.photo_geometry.template_cross_geometry import cross_direction_id
+        def facts(local):
+            ids = [local, "format-role-bound-line:45"]
+            return {"bindings": [{"id": local, "role": "top", "raw": "photo-transition:7", "position": 100.0},
+                                 {"id": ids[1], "role": "bottom", "raw": "photo-transition:8", "position": 340.0}],
+                    "direction": {"direction_id": cross_direction_id(ids), "selected_observation_ids": ids,
+                        "canonical_angle_degrees": 0.0, "full_angle_interval_degrees": [-0.2, 0.2],
+                        "observed_angle_interval_degrees": [-0.1, 0.1]}}
+        expected, actual = facts("format-role-bound-line:50"), facts("format-role-bound-line:61")
+        protected = {"format-role-bound-line:45"}
+        assert_replayed_facts(expected, actual, protected_native_ids=protected)
+        for field in ("canonical_angle_degrees", "full_angle_interval_degrees", "observed_angle_interval_degrees"):
+            changed = deepcopy(actual)
+            changed["direction"][field] = 0.1 if field == "canonical_angle_degrees" else [-0.1, 0.2]
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "physical facts changed"):
+                assert_replayed_facts(expected, changed, protected_native_ids=protected)
+        for field, value in (("raw", "photo-transition:9"), ("position", 101.0), ("role", "bottom")):
+            changed = deepcopy(actual); changed["bindings"][0][field] = value
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "physical facts changed"):
+                assert_replayed_facts(expected, changed, protected_native_ids=protected)
+        for ids in (["format-role-bound-line:61", "format-role-bound-line:46"],
+                    ["format-role-bound-line:45", "format-role-bound-line:61"],
+                    ["format-role-bound-line:61", "format-role-bound-line:61"]):
+            changed = deepcopy(actual)
+            changed["direction"]["selected_observation_ids"] = ids
+            changed["direction"]["direction_id"] = cross_direction_id(ids)
+            with self.subTest(ids=ids), self.assertRaisesRegex(ValueError, "physical facts changed"):
+                assert_replayed_facts(expected, changed, protected_native_ids=protected)
+        changed = deepcopy(actual); changed["direction"]["direction_id"] = expected["direction"]["direction_id"]
+        with self.assertRaisesRegex(ValueError, "own members"):
+            assert_replayed_facts(expected, changed, protected_native_ids=protected)
+
     def test_replay_restores_registered_line_names_and_reserves_existing_ordinals(self):
         with source_identity_scope(reserved_ids=("format-role-bound-line:7",),
                 registered_keys=(("format-role-bound-line", ("top", "native:1"), "format-role-bound-line:3"),)):
