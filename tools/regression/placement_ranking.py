@@ -55,6 +55,7 @@ class RankingExample:
             or self.role not in {
                 "primary",
                 "runner",
+                "cross_runner",
                 "conditional",
                 "native_endpoint",
                 "source_clipped_terminal",
@@ -257,7 +258,7 @@ def _evaluate(
         ranked_index = max(range(len(candidates)), key=lambda index: scores[index]) if candidates else None
         ranked = None if ranked_index is None else candidates[ranked_index]
         canonical_indices = [index for index, item in enumerate(candidates)
-                             if item.role in {"primary", "runner"}]
+                             if item.role in {"primary", "runner", "cross_runner"}]
         canonical_index = max(canonical_indices, key=lambda index: scores[index]) if canonical_indices else None
         canonical = None if canonical_index is None else candidates[canonical_index]
         primary = next((item for item in candidates if item.role == "primary"), None)

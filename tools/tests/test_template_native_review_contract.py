@@ -53,6 +53,45 @@ from x5crop.formats import FramePhysicalSpec
 
 
 class NativeReviewContractTests(TestCase):
+    def test_cross_runner_ledger_accepts_bounded_three_and_rejects_wrong_owner(self):
+        from copy import deepcopy
+        from tools.regression.report_validation import _validate_cross_runner_proposal_ledger
+
+        phase_best = {"fit": "phase-best"}
+        cross_runner = {
+            "placement_id": "cross-runner",
+            "sequence_fit": phase_best,
+            "cross_fit": {"fit": "cross-runner-fit"},
+        }
+        lane = {
+            "phase_competition": {"best": phase_best},
+            "cross_competition": {"runner_up": cross_runner["cross_fit"]},
+        }
+        production_lane = {"cross_runner_proposal_placement_id": "cross-runner"}
+        placement = {
+            "placements": [
+                {"placement_id": "selected"},
+                {"placement_id": "runner"},
+                cross_runner,
+            ],
+            "selected_placement_id": "selected",
+            "runner_up_placement_id": "runner",
+            "cross_runner_proposal_placement_id": "cross-runner",
+            "conditional_proposal_placement_id": None,
+        }
+        _validate_cross_runner_proposal_ledger(placement, lane, production_lane)
+
+        too_many = deepcopy(placement)
+        too_many["placements"].append({"placement_id": "extra"})
+        with self.assertRaisesRegex(ValueError, "cross runner bound"):
+            _validate_cross_runner_proposal_ledger(too_many, lane, production_lane)
+
+        for field in ("sequence_fit", "cross_fit"):
+            wrong_owner = deepcopy(placement)
+            wrong_owner["placements"][2][field] = {"fit": "other-owner"}
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "phase or Cross owner"):
+                _validate_cross_runner_proposal_ledger(wrong_owner, lane, production_lane)
+
     def test_report_cannot_forge_geometry_basis_or_cross_family_classes(self):
         from copy import deepcopy
         from tools.regression.report_validation import _read_common_proof

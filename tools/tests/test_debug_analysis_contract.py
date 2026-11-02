@@ -545,6 +545,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
             placement_competition=SimpleNamespace(
                 placements=(canonical,), runner_up_placement_id=None,
                 conditional_proposal_placement_id=None,
+                cross_runner_proposal_placement_id=None,
             ),
             placement_proposal=SimpleNamespace(placement_id="canonical"),
             independent_phase_review=SimpleNamespace(
@@ -625,6 +626,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
             selected_placement_id="winner",
             runner_up_placement_id="runner",
             conditional_proposal_placement_id=None,
+            cross_runner_proposal_placement_id=None,
         )
         geometry = SimpleNamespace(
             lane_reconstructions=(

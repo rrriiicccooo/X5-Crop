@@ -168,7 +168,7 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
                 ("resolve_output_slots", ResolvedOutputSlots((1,))),
                 ("prepare_template_lane", prepared),
                 ("_shared_geometry", runner.source_scan_geometry),
-                ("_placements", (None, runner, None)),
+                ("_placements", (None, runner, None, None)),
                 ("select_lane_template_placement", competition),
             ):
                 stack.enter_context(patch(owner + name, return_value=value))
@@ -227,7 +227,7 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
                 ("resolve_output_slots", ResolvedOutputSlots((1,))),
                 ("prepare_template_lane", prepared),
                 ("_shared_geometry", placement.source_scan_geometry),
-                ("_placements", (placement, None, None)),
+                ("_placements", (placement, None, None, None)),
                 ("select_lane_template_placement", competition),
             ):
                 stack.enter_context(patch(owner + name, return_value=value))
@@ -284,7 +284,7 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
                 ("resolve_output_slots", ResolvedOutputSlots((1,))),
                 ("prepare_template_lane", prepared),
                 ("_shared_geometry", placement.source_scan_geometry),
-                ("_placements", (placement, None, None)),
+                ("_placements", (placement, None, None, None)),
                 ("select_lane_template_placement", competition),
             ):
                 stack.enter_context(patch(owner + name, return_value=value))
@@ -627,6 +627,28 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
             replace(three.placement_competition, selected_placement_id=conditional.placement_id)
         with self.assertRaisesRegex(ValueError, "work exceeds"):
             replace(three, work=retained.work)
+        cross_runner = replace(placement, placement_id="placement:cross-runner")
+        four = replace(
+            three.placement_competition,
+            placements=(placement, runner, cross_runner, conditional),
+            cross_runner_proposal_placement_id=cross_runner.placement_id,
+        )
+        self.assertEqual(len(four.placements), 4)
+        for field in ("selected_placement_id", "runner_up_placement_id", "conditional_proposal_placement_id"):
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "canonical eligibility"):
+                replace(four, **{field: cross_runner.placement_id})
+        with self.assertRaisesRegex(ValueError, "canonical eligibility"):
+            replace(four, cross_runner_proposal_placement_id=None)
+        with self.assertRaisesRegex(ValueError, "identities"):
+            replace(four, placements=(*four.placements, replace(placement, placement_id="fifth")))
+        unavailable_primary = replace(
+            proposal, state=TemplateProposalState.UNAVAILABLE, output_footprints=(),
+            failure=failure_fact(GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE),
+            direct_use_budget_assessments=(),
+            acceptability_features=build_placement_acceptability_features(placement, (), ()),
+        )
+        self.assertIs(source_lane_proposal(unavailable_primary, (runner_proposal,), runner_id=None),
+                      unavailable_primary)
         unavailable_runner = replace(
             runner_proposal, state=TemplateProposalState.UNAVAILABLE,
             output_footprints=(), failure=failure_fact(GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE),

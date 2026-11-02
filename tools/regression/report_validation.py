@@ -2663,6 +2663,7 @@ def _validate_independent_phase_attempt(
         item["placement_id"]
         for item in (lane["placement_proposal"], *lane["alternative_placement_proposals"])
     } | {lane["selected_placement_id"], lane["runner_up_placement_id"],
+         lane.get("cross_runner_proposal_placement_id"),
          lane["conditional_proposal_placement_id"]}
     common = lane["common_h_output"]
     if common is not None:
@@ -2973,6 +2974,8 @@ def _validate_geometry(
         lane_id = lane.get("lane_id")
         if not isinstance(lane_id, str) or not lane_id:
             raise ValueError("source lane identity is invalid")
+        if "cross_runner_proposal_placement_id" not in lane:
+            raise ValueError("source lane lost its cross runner identity")
         raw_scopes = lane.get("phase_competition_scopes")
         if not isinstance(raw_scopes, list):
             raise ValueError("source lane lost its complete phase member ledger")
@@ -3017,12 +3020,16 @@ def _validate_geometry(
         proposal = lane["placement_proposal"]
         alternatives = lane.get("alternative_placement_proposals")
         runner_id = lane.get("runner_up_placement_id")
+        cross_runner_id = lane.get("cross_runner_proposal_placement_id")
         conditional_id = lane.get("conditional_proposal_placement_id")
-        alternative_ids = [identity for identity in (runner_id, conditional_id) if identity is not None]
+        alternative_ids = [identity for identity in (runner_id, cross_runner_id, conditional_id) if identity is not None]
         if (
             not isinstance(alternatives, list)
             or [item.get("placement_id") for item in alternatives] != alternative_ids
             or len(set(alternative_ids)) != len(alternative_ids)
+            or cross_runner_id is not None and (runner_id is None
+                or cross_runner_id in {proposal["placement_id"], lane.get("selected_placement_id"), runner_id})
+            or cross_runner_id is not None and cross_runner_id == conditional_id
             or conditional_id is not None and (
                 conditional_id in {proposal["placement_id"], lane.get("selected_placement_id")}
                 or lane.get("conditional_proposal_failure_kind") != CrossFailureKind.FAMILY_ASSIGNMENT_UNRESOLVED.value
@@ -3444,6 +3451,44 @@ def _validate_geometry(
         or source_selection["runner_up_placement_ids"] != lane_runner_ids
     ):
         raise ValueError("proposal, eligibility, and source selection disagree")
+
+
+def _validate_cross_runner_proposal_ledger(
+    placement: dict[str, Any],
+    lane: dict[str, Any],
+    production_lane: dict[str, Any],
+) -> None:
+    """Validate the bounded orthogonal Cross runner without re-solving it."""
+
+    placements = placement.get("placements")
+    if not isinstance(placements, list):
+        raise ValueError("cross runner ledger is unavailable")
+    cross_runner_id = placement.get("cross_runner_proposal_placement_id")
+    conditional_id = placement.get("conditional_proposal_placement_id")
+    if cross_runner_id != production_lane.get("cross_runner_proposal_placement_id"):
+        raise ValueError("cross runner identity changed between production and development")
+    maximum = 2 + int(cross_runner_id is not None) + int(conditional_id is not None)
+    if len(placements) > maximum:
+        raise ValueError("retained placement set exceeds its cross runner bound")
+    if cross_runner_id is None:
+        return
+    if placement.get("runner_up_placement_id") is None or cross_runner_id in {
+        placement.get("selected_placement_id"),
+        placement.get("runner_up_placement_id"),
+        conditional_id,
+    }:
+        raise ValueError("cross runner acquired canonical or conditional identity")
+    member = next(
+        (item for item in placements if item.get("placement_id") == cross_runner_id),
+        None,
+    )
+    if member is None:
+        raise ValueError("cross runner identity is missing from retained placements")
+    if (
+        member.get("sequence_fit") != lane["phase_competition"].get("best")
+        or member.get("cross_fit") != lane["cross_competition"].get("runner_up")
+    ):
+        raise ValueError("cross runner placement changed its phase or Cross owner")
 
 
 def _validate_phase_candidate_projection(
@@ -4013,7 +4058,8 @@ def _validate_development(record: dict[str, Any]) -> None:
         if (
             not isinstance(placement, dict)
             or set(placement) != {"placements", "selected_placement_id", "runner_up_placement_id",
-                "state", "failure", "direct_role_aperture_domain_authority", "conditional_proposal_placement_id"}
+                "cross_runner_proposal_placement_id", "state", "failure",
+                "direct_role_aperture_domain_authority", "conditional_proposal_placement_id"}
             or not isinstance(work, dict)
             or work.get("placement_evaluation_count")
             != len(placement.get("placements", ()))
@@ -4110,23 +4156,24 @@ def _validate_development(record: dict[str, Any]) -> None:
         validate_complete_phase_output(lane, production_lane, development["measurement"],
             layout=record["measurement"]["layout"], read_proof=_read_common_proof)
         placements = placement.get("placements")
-        if not isinstance(placements, list) or len(placements) > 3:
+        if not isinstance(placements, list) or len(placements) > 4:
             raise ValueError("retained placement set exceeds its compiled bound")
+        _validate_cross_runner_proposal_ledger(placement, lane, production_lane)
+        cross_runner_id = placement.get("cross_runner_proposal_placement_id")
         conditional_id = placement.get("conditional_proposal_placement_id")
         conditional_ids = {
             item["placement_id"] for item in placements
             if any(binding["conditional_family_ids"] for binding in item["cross_fit"]["direct_bindings"])
         }
+        ids = [item["placement_id"] for item in placements]
         if (
             conditional_id != production_lane.get("conditional_proposal_placement_id")
             or conditional_ids != (set() if conditional_id is None else {conditional_id})
-            or len(placements) > 2 and conditional_id is None
             or conditional_id is not None and conditional_id in {
                 placement.get("selected_placement_id"), placement.get("runner_up_placement_id"),
             }
         ):
             raise ValueError("conditional placement changed canonical eligibility")
-        ids = [item["placement_id"] for item in placements]
         proposed_ids = [item["placement_id"] for item in retained]
         evaluated = work.get("proposal_output_evaluation_count")
         if (

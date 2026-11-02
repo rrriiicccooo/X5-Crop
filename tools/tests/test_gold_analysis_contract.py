@@ -672,6 +672,7 @@ class GoldAnalysisContractTest(unittest.TestCase):
             ["source_clipped_terminal", "native_endpoint"],
             ["intrinsic_refit", "source_clipped_terminal"],
             ["primary", "unknown_phase_kind"],
+            ["primary", "cross_runner"],
         ):
             record["retained_placement_gold_labels"] = [label(role) for role in invalid_roles]
             # Give repeated roles distinct IDs so role/order validation is exercised.
@@ -686,6 +687,34 @@ class GoldAnalysisContractTest(unittest.TestCase):
         self.assertEqual(_retained_placement_summary((record,))["at_least_one_safe_task_count"], 1)
         record["retained_placement_gold_labels"][0]["output_footprints"] = []
         with self.assertRaisesRegex(ValueError, "invalid retained placement gold label"):
+            _retained_placement_summary((record,))
+
+    def test_cross_runner_label_is_retained_between_runner_and_conditional(self) -> None:
+        record = self._analysis_record(
+            "cross-runner", source_sha256="e" * 64, role="nominal",
+            decision="needs_review", proposal="unsafe", candidate="not_available",
+            unsafe_auto=False, physical_frame_id="B1|B2",
+        )
+        original = record["retained_placement_gold_labels"][0]
+
+        def label(role: str, index: int) -> dict[str, object]:
+            item = deepcopy(original)
+            item["placement_id"] = f"placement:{role}:{index}"
+            item["role"] = role
+            item["acceptability_features"]["placement_id"] = item["placement_id"]
+            return item
+
+        record["retained_placement_gold_labels"] = [
+            label("primary", 0), label("runner", 1),
+            label("cross_runner", 2), label("conditional", 3),
+        ]
+        summary = _retained_placement_summary((record,))
+        self.assertEqual(summary["placement_label_counts"], {"unsafe": 4})
+
+        record["retained_placement_gold_labels"] = [
+            label("primary", 0), label("cross_runner", 1), label("runner", 2),
+        ]
+        with self.assertRaisesRegex(ValueError, "invalid retained placement identities"):
             _retained_placement_summary((record,))
 
     def test_release_readiness_requires_current_calibration_provenance(

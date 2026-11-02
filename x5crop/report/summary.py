@@ -263,6 +263,9 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                 "runner_up_placement_id": (
                     lane.placement_competition.runner_up_placement_id
                 ),
+                "cross_runner_proposal_placement_id": (
+                    lane.placement_competition.cross_runner_proposal_placement_id
+                ),
                 "conditional_proposal_placement_id": (
                     lane.placement_competition.conditional_proposal_placement_id
                 ),

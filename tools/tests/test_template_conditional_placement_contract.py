@@ -177,7 +177,7 @@ class ConditionalPlacementContractTest(unittest.TestCase):
                 side_effect=(primary, phase_placement, alternative),
             ) as compose:
                 result = _placements(self.prepared, source_geometry=object())
-                self.assertEqual(result, (primary, alternative, None))
+                self.assertEqual(result, (primary, alternative, None, None))
             self.assertEqual(compose.call_count, 3)
             self.assertIs(compose.call_args.kwargs["sequence_fit"], self.phase.best)
             self.assertIs(compose.call_args.kwargs["cross_fit"], cross_runner)
@@ -185,8 +185,39 @@ class ConditionalPlacementContractTest(unittest.TestCase):
             self.assertEqual(self.phase.status, PhaseFitStatus.UNRESOLVED)
             self.assertEqual(self.phase.failure_kind, PhaseFailureKind.FIXED_TEMPLATE_MISMATCH)
 
-    def test_composable_phase_runner_keeps_the_single_alternative_slot(self) -> None:
+    def test_phase_and_cross_runners_survive_together_without_cross_product(self) -> None:
+        self.phase.status = PhaseFitStatus.RESOLVED
+        cross_runner = object()
+        family = object()
+        self.prepared.cross_competition.runner_up = cross_runner
+        self.prepared.cross_competition.conditional_proposal = family
+        with patch(
+            "x5crop.detection.photo_geometry.detector._compose",
+            side_effect=lambda prepared, **kwargs: SimpleNamespace(
+                placement_id=(id(kwargs["sequence_fit"]), id(kwargs["cross_fit"])), **kwargs,
+            ),
+        ) as compose:
+            best, runner, cross_proposal, conditional = _placements(self.prepared, source_geometry=object())
+        self.assertEqual(compose.call_count, 4)
+        self.assertIs(runner.sequence_fit, self.phase.runner_up)
+        self.assertIs(runner.cross_fit, self.prepared.cross_competition.best)
+        for proposal, cross in ((best, self.prepared.cross_competition.best),
+                                (cross_proposal, cross_runner), (conditional, family)):
+            self.assertIs(proposal.sequence_fit, self.phase.best)
+            self.assertIs(proposal.cross_fit, cross)
+            self.assertIs(proposal.global_lattice_authority, self.primary_authority)
+        self.assertIsNone(runner.global_lattice_authority)
+
+    def test_cross_proposal_deduplicates_existing_geometry_and_keeps_compose_failure(self) -> None:
+        self.phase.status = PhaseFitStatus.UNRESOLVED
         self.prepared.cross_competition.runner_up = object()
-        result, _, _ = self.route()
-        self.assertIs(result[1].sequence_fit, self.phase.runner_up)
-        self.assertIs(result[1].cross_fit, self.prepared.cross_competition.best)
+        primary = SimpleNamespace(placement_id="primary")
+        phase_runner = SimpleNamespace(placement_id="phase-runner")
+        for cross_proposal in (None, primary, phase_runner):
+            with self.subTest(cross_proposal=cross_proposal), patch(
+                "x5crop.detection.photo_geometry.detector._compose",
+                side_effect=(primary, phase_runner, cross_proposal),
+            ) as compose:
+                self.assertEqual(_placements(self.prepared, source_geometry=object()),
+                                 (primary, phase_runner, None, None))
+            self.assertEqual(compose.call_count, 3)

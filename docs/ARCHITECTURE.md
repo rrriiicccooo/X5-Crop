@@ -1743,18 +1743,22 @@ Runtime 仍由第 9.1 节的硬事实选择。排名分数不是可用概率，�
 footprint，不读取 Runtime 决定来制造正例。内部预算等风险代理必须先与真实黄金结果对照，不能把代理
 全部永久硬化后再期待评分提高覆盖，也不能未经验证整体关闭它们。
 
-Canonical 集合范围固定为每条 lane 已组成的 best、单个 runner 与至多一份有条件 Cross 提案，最多三个
-placement，不是整个 phase/cross 搜索空间。先尝试已有 phase runner；只有它无法组成 placement 或与 primary 相同时，才用 primary phase
-与已有 Cross runner 填充空缺的备选位置。两种路径各用对应 phase 的原有约束，不能借用另一 phase 的
-source W，也不清除原失败。Canonical 部分最多尝试 primary 与两种既有备选组合，保留数不超过两个。
-有条件 Cross 提案只与 primary phase 及其已有 lattice authority 组成第三份提案，不能占用 runner 位置或
-成为 selected placement；不展开 phase/cross 笛卡尔积。每个 placement 由同一 production projection
+保留集合固定为每条 lane 已组成的 best、单个 canonical runner、至多一份正交 Cross runner 提案及
+至多一份有条件 Cross 提案，最多四个 placement，不是整个 phase/cross 搜索空间。先尝试已有 phase
+runner；primary phase 与已有 Cross runner 独立组成一份备选，使用 primary 自身的 lattice authority。
+已有 phase runner 无法组成不同 placement 时，Cross 备选填充原 runner；否则通过
+`cross_runner_proposal_placement_id` 另行保留，不能成为 selected、canonical runner 或 source proposal
+的失败替代。相同 placement identity 只物化一次；组成失败保持原失败，不新增 Cross 求解。两种路径
+各用对应 phase 的原有约束，不能借用另一 phase 的 source W，也不清除原失败。Canonical selection
+仍只消费原 primary 与单个 runner。有条件 Cross 提案只与 primary phase 及其已有 lattice authority
+组成另一份提案，不能占用 runner 位置或成为 selected placement；不展开 phase/cross 笛卡尔积。
+每个 placement 由同一 production projection
 与 output owner 恰好物化一次完整 footprint 或 typed unavailable；primary 与 alternative 分开保存，选中输出
 直接复用 primary。Primary 投影失败时撤下原拟合 winner，保留 placement 与原始投影 failure；
 不能选择没有完整 footprint 的方案，也不因此晋升 runner。报告和黄金分析只读取这些同次 runtime facts，不重新求解几何。物化次数与实际逐 slot
-输出评估次数进入工作量 receipt，分别不超过 3 与全部保留 placement 的 slot 总数。
+输出评估次数进入工作量 receipt，分别不超过 4 与全部保留 placement 的 slot 总数。
 黄金逐候选标签仍由唯一方向性 comparator 产生；保留集合中没有安全候选，不能外推为所有潜在裁切均不可用。
-第 11 节的独立 phase Review 记录另计，保留集合总上限为三十三份，不能进入 canonical selection。
+第 11 节的独立 phase Review 记录另计，保留集合总上限为三十四份，不能进入 canonical selection。
 Gold record 在同一 source SHA、format/count 身份下保存每份 placement ID、canonical 或独立 Review 角色、实际
 footprint、typed generation failure 与带 physical frame ID 的逐帧诊断。集合按 task 计数，不将不同 count
 的同源任务混成一个答案；多正例不归一化，unavailable 不产生负例。可用但有 placement 歧义的统计只消费
@@ -2272,7 +2276,8 @@ Broad 原子与关联、Cross line／family receipt 共用 typed 解码，核对
 
 每条 lane 可另存一份 `independent_phase_review`，含最多三十份完整解释。它属于固定 `review_only` scope，独立于 canonical
 competition、alternatives、source proposal、共同 H、selected output 与两级 Gate；普通与 development
-报告保存相同的完整记录。黄金保留集合上限为三十三份，原 canonical 两份与 conditional 一份的合同不变。
+报告保存相同的完整记录。黄金保留集合上限为三十四份；canonical selection 两份与额外 Cross 提案的
+边界由第 9 节定义，独立 Review 不占用这些位置。
 记录按 `native_endpoint → source_clipped_terminal → intrinsic_refit` 排序，各自上限为十二、六、十二份。
 
 原生端点记录在既有 phase authority projection 池压缩前单次扫描选出：成功 projection 取其 output fit，失败
@@ -2439,7 +2444,7 @@ format/source 状态测量共同 W。共同 H 只从每个成员都已完整关�
 `common_outputs` 可保留预算失败窗口作为诊断，只有 `state=supported` 且 `common_failure=null` 才表示窗口
 验证通过。当前该分支在规范 selection/Gate 后执行，不授予照片序号映射、canonical winner 或自动输出权限。
 
-当前报告 schema 为 123。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
+当前报告 schema 为 124。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
 重放全部 producer 和独立成员，再比对结果、缺口和工作。成员 Cross 只重复自身 H／纵向域、best/runner、
 求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
 外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source

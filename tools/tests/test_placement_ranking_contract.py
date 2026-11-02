@@ -66,6 +66,13 @@ class PlacementRankingContractTest(unittest.TestCase):
             self.assertFalse(set(model["training_source_sha256s"]) &
                              {source for source, assigned in folds.items() if assigned == fold})
 
+    def test_cross_runner_is_a_canonical_ranking_role(self):
+        example = RankingExample(
+            "cross-runner", "a" * 64, "placement:cross-runner", "cross_runner",
+            True, (None,) * len(FEATURE_NAMES),
+        )
+        self.assertEqual(example.role, "cross_runner")
+
     def test_weighted_moments_are_alignment_independent_and_remain_strict_provenance(self):
         # Source 1 contributes two candidates, source 2 one: weights 1/4, 1/4, 1/2.
         examples = (self._example(1, 0.0, False), self._example(1, 1.0, True),

@@ -140,7 +140,7 @@ def _placements(
     prepared: PreparedTemplateLane,
     *,
     source_geometry: SourceScanGeometry,
-) -> tuple[FormatPlacement | None, FormatPlacement | None, FormatPlacement | None]:
+) -> tuple[FormatPlacement | None, FormatPlacement | None, FormatPlacement | None, FormatPlacement | None]:
     """Compose existing fits; conditional constraints do not select a winner."""
 
     phase = prepared.phase_competition
@@ -227,19 +227,24 @@ def _placements(
         )
     if best is not None and runner is not None and best.placement_id == runner.placement_id:
         runner = None
-    # An axis-level runner need not compose into a distinct source placement.
-    # The vacant proposal slot can still use the other existing Cross fit,
-    # with the primary phase's own constraints and unchanged eligibility.
-    if runner is None and cross.runner_up is not None:
-        runner = _compose(
+    # Preserve the existing Cross runner independently of the phase runner.
+    # It uses only the primary phase's constraints; no Cartesian search or
+    # additional Cross solve is needed to retain this orthogonal alternative.
+    cross_runner = None
+    if cross.runner_up is not None:
+        cross_runner = _compose(
             prepared,
             sequence_fit=phase.best,
             global_lattice_authority=best_lattice_authority,
             cross_fit=cross.runner_up,
             source_geometry=source_geometry,
         )
-    if best is not None and runner is not None and best.placement_id == runner.placement_id:
-        runner = None
+    if cross_runner is not None and cross_runner.placement_id in {
+        item.placement_id for item in (best, runner) if item is not None
+    }:
+        cross_runner = None
+    if runner is None:
+        runner, cross_runner = cross_runner, None
     family_proposal = None
     if cross.conditional_proposal is not None:
         family_proposal = _compose(
@@ -249,7 +254,7 @@ def _placements(
             cross_fit=cross.conditional_proposal,
             source_geometry=source_geometry,
         )
-    return best, runner, family_proposal
+    return best, runner, cross_runner, family_proposal
 
 
 def _materialize_placement_proposal(
@@ -408,7 +413,7 @@ def reconstruct_photo_geometry(
         strict=True,
     ):
         geometry = shared_geometry or lane.source_scan_geometry
-        best, runner, family_proposal = _placements(
+        best, runner, cross_runner, family_proposal = _placements(
             lane,
             source_geometry=geometry,
         )
@@ -419,7 +424,7 @@ def reconstruct_photo_geometry(
                 lane, best, layout=layout,
             )
         alternatives = []
-        for placement in (runner, family_proposal):
+        for placement in (runner, cross_runner, family_proposal):
             if placement is None:
                 continue
             alternative, evaluations = _materialize_placement_proposal(
@@ -439,7 +444,7 @@ def reconstruct_photo_geometry(
                 global_lattice_authority=best.global_lattice_authority, cross_fit=fit,
                 source_geometry=geometry) for fit in members[0])
             if all(p is not None for p in composed):
-                retained = {p.placement_id: p for p in (best, runner, family_proposal) if p is not None}
+                retained = {p.placement_id: p for p in (best, runner, cross_runner, family_proposal) if p is not None}
                 reusable = tuple((retained[p.placement_id], p.output_footprints)
                                  for p in (proposal, *alternatives)
                                  if p is not None and p.state == TemplateProposalState.GENERATED)
@@ -488,10 +493,12 @@ def reconstruct_photo_geometry(
                 and proposal is not None and proposal.state == TemplateProposalState.UNAVAILABLE):
             assert proposal.failure is not None
             competition = withhold_lane_winner(competition, failure=proposal.failure)
-        if family_proposal is not None:
+        if cross_runner is not None or family_proposal is not None:
             competition = replace(
-                competition, placements=(*competition.placements, family_proposal),
-                conditional_proposal_placement_id=family_proposal.placement_id,
+                competition, placements=(*competition.placements,
+                    *(p for p in (cross_runner, family_proposal) if p is not None)),
+                cross_runner_proposal_placement_id=None if cross_runner is None else cross_runner.placement_id,
+                conditional_proposal_placement_id=None if family_proposal is None else family_proposal.placement_id,
             )
         if proposal is None:
             proposal = TemplatePlacementProposal(

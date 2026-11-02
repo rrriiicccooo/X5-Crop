@@ -1018,10 +1018,21 @@ def _frame_diagnostics_with_physical_identity(
 def _retained_placement_gold_labels(
     record: dict[str, Any], lane: dict[str, Any],
 ) -> list[dict[str, Any]]:
+    cross_runner_id = lane.get("cross_runner_proposal_placement_id")
+    conditional_id = lane.get("conditional_proposal_placement_id")
+
+    def alternative_role(item: dict[str, Any]) -> str:
+        placement_id = item["placement_id"]
+        if placement_id == conditional_id:
+            return "conditional"
+        if placement_id == cross_runner_id:
+            return "cross_runner"
+        return "runner"
+
     proposals = (
         ("primary", lane["placement_proposal"]),
-        *(("conditional" if item["placement_id"] == lane["conditional_proposal_placement_id"]
-           else "runner", item) for item in lane["alternative_placement_proposals"]),
+        *((alternative_role(item), item)
+          for item in lane["alternative_placement_proposals"]),
     )
     portfolio = lane["independent_phase_review"]
     if portfolio is not None:
@@ -1078,7 +1089,7 @@ def _retained_placement_summary(records: Sequence[dict[str, Any]]) -> dict[str, 
         canonical_roles = roles[:independent_start]
         independent_roles = roles[independent_start:]
         if (
-            len(labels) > 3 + MAX_INDEPENDENT_PHASE_REVIEWS or len(set(ids)) != len(ids)
+            len(labels) > 4 + MAX_INDEPENDENT_PHASE_REVIEWS or len(set(ids)) != len(ids)
             or independent_roles != [
                 kind for kind in independent_kinds
                 for role in independent_roles if role == kind
@@ -1090,7 +1101,10 @@ def _retained_placement_summary(records: Sequence[dict[str, Any]]) -> dict[str, 
             or canonical_roles
             not in ([], ["primary"], ["runner"], ["primary", "runner"],
                     ["conditional"], ["primary", "conditional"], ["runner", "conditional"],
-                    ["primary", "runner", "conditional"])
+                    ["primary", "runner", "conditional"],
+                    ["runner", "cross_runner"], ["primary", "runner", "cross_runner"],
+                    ["runner", "cross_runner", "conditional"],
+                    ["primary", "runner", "cross_runner", "conditional"])
         ):
             raise ValueError("invalid retained placement identities")
         counts: Counter[str] = Counter()

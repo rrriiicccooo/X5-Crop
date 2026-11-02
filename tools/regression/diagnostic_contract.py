@@ -103,7 +103,7 @@ def bounded_work(
         <= MAX_PHASE_OBSERVATIONS * count * 2 * int(row["phase_fit_pass_count"])
         and int(row["local_refinement_binding_count"])
         <= count * 2 * int(row["phase_fit_pass_count"])
-        and int(row["placement_evaluation_count"]) <= 2
+        and int(row["placement_evaluation_count"]) <= 4
         and int(row["boundary_evaluation_count"])
         <= int(row["placement_evaluation_count"]) * count * 4
         and int(row["content_evaluation_count"]) <= 1

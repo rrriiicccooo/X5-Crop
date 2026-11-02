@@ -779,7 +779,7 @@ class PreparedTemplateLane(RegisteredTemplateLane):
 
 @dataclass(frozen=True)
 class TemplatePlacementCompetition:
-    """Canonical winner/runner plus one explicitly conditional review proposal."""
+    """Canonical winner/runner plus bounded Cross-only review alternatives."""
 
     placements: tuple[FormatPlacement, ...]
     selected_placement_id: str | None
@@ -790,6 +790,7 @@ class TemplatePlacementCompetition:
         DirectRoleApertureDomainAuthority | None
     ) = None
     conditional_proposal_placement_id: str | None = None
+    cross_runner_proposal_placement_id: str | None = None
     common_h_output: CommonHOutput | None = None
     common_h_authority: CommonHOutputAuthority | None = None
 
@@ -807,17 +808,24 @@ class TemplatePlacementCompetition:
                 "placement competition aperture-domain authority is invalid"
             )
         ids = tuple(item.placement_id for item in self.placements)
-        if len(ids) > 3 or len(set(ids)) != len(ids) or any(not isinstance(item, FormatPlacement) for item in self.placements):
+        if len(ids) > 4 or len(set(ids)) != len(ids) or any(not isinstance(item, FormatPlacement) for item in self.placements):
             raise ValueError("placement competition identities are invalid")
         conditional_id = self.conditional_proposal_placement_id
         conditional_ids = {item.placement_id for item in self.placements
                            if item.cross_fit.conditional_family_ids}
         if conditional_ids != (set() if conditional_id is None else {conditional_id}) or (
-            len(ids) > 2 and conditional_id is None
+            len(ids) > 2 + int(self.cross_runner_proposal_placement_id is not None) and conditional_id is None
         ) or conditional_id is not None and conditional_id in {
             self.selected_placement_id, self.runner_up_placement_id,
         }:
             raise ValueError("conditional placement cannot acquire canonical eligibility")
+        cross_runner_id = self.cross_runner_proposal_placement_id
+        if cross_runner_id is not None and (
+            self.runner_up_placement_id is None or cross_runner_id not in ids or cross_runner_id in {
+                self.selected_placement_id, self.runner_up_placement_id, conditional_id,
+            }
+        ) or len(ids) > 2 + int(cross_runner_id is not None) + int(conditional_id is not None):
+            raise ValueError("Cross runner proposal cannot acquire canonical eligibility")
         common = self.common_h_output
         authority = self.common_h_authority
         if (common is None) != (authority is None) or common is not None and (
@@ -1127,12 +1135,19 @@ class TemplateLaneReconstruction:
         alternatives = self.alternative_placement_proposals
         alternative_ids = tuple(identity for identity in (
             self.placement_competition.runner_up_placement_id,
+            self.placement_competition.cross_runner_proposal_placement_id,
             self.placement_competition.conditional_proposal_placement_id,
         ) if identity is not None)
         if tuple(item.placement_id for item in alternatives) != alternative_ids or any(
             item.lane_id != self.lane_id for item in alternatives
         ):
-            raise ValueError("alternative proposals must retain the runner and conditional placement")
+            raise ValueError("alternative proposals must retain the runner and Cross proposals")
+        cross_runner_id = self.placement_competition.cross_runner_proposal_placement_id
+        if cross_runner_id is not None:
+            cross_runner = next(item for item in placements if item.placement_id == cross_runner_id)
+            if (cross_runner.sequence_fit != self.prepared.phase_competition.best
+                    or cross_runner.cross_fit != self.prepared.cross_competition.runner_up):
+                raise ValueError("Cross runner proposal changed its original phase or Cross fit")
         retained = tuple(
             item for item in (proposal, *alternatives)
             if item.placement_id is not None
