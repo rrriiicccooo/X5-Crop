@@ -503,16 +503,14 @@ def _observe_boundary_fit(
         fit_receipt=fitted.receipt,
         left_background_preference_fraction=(
             sum(
-                point.transition.left_texture_mean
-                < point.transition.right_texture_mean
+                point.transition.background_preference_side < 0
                 for point in inliers
             )
             / len(inliers)
         ),
         right_background_preference_fraction=(
             sum(
-                point.transition.right_texture_mean
-                < point.transition.left_texture_mean
+                point.transition.background_preference_side > 0
                 for point in inliers
             )
             / len(inliers)

@@ -638,6 +638,17 @@ Runtime 与当前报告都拒绝旧区域点 schema、虚构空间区域、跨 q
 
 ### 6.4 Cross observation
 
+TOP／BOTTOM 的灰度定位、梯度、tone、原一维纹理和全部 trace 保持独立原始事实。定位完成后，
+`native_background_texture.py` 为全部原始 transition 登记原生 uint16 RGB 局部窗口；窗口中心固定为
+原测量选中的峰坐标，不能按新纹理重新选点。先登记两侧整批窗口，再核验源像素、工作与临时量，
+最后才读取像素；不读取 template、phase、fit、照片序号或人工参考。
+新纹理使用同一 Rec.709 owner，不做 percentile 截断；在原 `0.25 mm` 窗口与 `0.05 mm` gap 内，
+分别对长轴和短轴相邻像素差的绝对值求均值并相加。两侧差异必须超过一个原生码值才形成纹理偏好；
+相等、低于该噪声下限或核越出 source 时不投票。原一维值继续保存在 transition 中，
+`NativeBackgroundTextureQuery`／`NativeBackgroundTexture` 另存完整核、原峰、source extent、原生单位及结果。
+同一原生边仍要求至少两个独立区域和正确外侧偏好严格过半，不重复增加 rank。
+此项测量只增加局部角色依据，不证明外侧连通、片夹材质、同照片、片段身份或未观察区间的连续性。
+
 Top/bottom observation 的局部线段先保持独立。方向相同、坐标接近、残差较小或 trace 较多都不足以
 证明多个 fragment 属于同一物理 side track；必须有 source-spanning 连续性，或明确的空间连接和
 独立长轴支持。
@@ -1557,8 +1568,9 @@ fixed-H placement、相同 4096 pair 上界和同一 Gate，不建立第二套 d
 的有界归约。
 
 一条短局部线不能外推整条片带。两个不同合法 side tracks 是两个 placements；不按梯度、support
-数量或 residual 的未经校准标量硬选。已有两侧各具独立区域支撑的 direct top+bottom 闭环时，不再执行
-“缺失 opposite”的局部精修；
+数量或 residual 的未经校准标量硬选。只有 direct top+bottom 同时通过既有 H、原生方向、独立区域和
+完整 template-domain pair 纵向资格时，才不再执行“缺失 opposite”的局部精修；单域局部闭环不能取消
+整源补边作用域或让原会生成的全域竞争消失。此检查复用同一 direct-pair owner；
 同一批 raw transitions 的重复拟合不能成为第二个 placement。
 
 Direct top+bottom 的局部方向只验证两侧能否属于同一 fixed-H aperture，并计算逐 trace outward
@@ -2427,7 +2439,7 @@ format/source 状态测量共同 W。共同 H 只从每个成员都已完整关�
 `common_outputs` 可保留预算失败窗口作为诊断，只有 `state=supported` 且 `common_failure=null` 才表示窗口
 验证通过。当前该分支在规范 selection/Gate 后执行，不授予照片序号映射、canonical winner 或自动输出权限。
 
-当前报告 schema 为 122。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
+当前报告 schema 为 123。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
 重放全部 producer 和独立成员，再比对结果、缺口和工作。成员 Cross 只重复自身 H／纵向域、best/runner、
 求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
 外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source
@@ -2499,7 +2511,16 @@ scope 的窗口保留量一起计入同一 source 内存。共同窗口另外计
 达到上限则全集证明失效，余下成员显式记录工作缺口；已完成前缀不能用于共同批准。
 峰值计入全部账本、保留成员、已有独立 Review 和当前临时构建；它是逻辑工作量，不能替代 RSS 实测。
 
-任何上界不足都显式产生 `producer_bound_exceeded`，不得 silent first-N。像素工作上限为
+任何上界不足都显式产生 `producer_bound_exceeded`，不得 silent first-N。
+原生二维纹理在旧 baseline 数组释放后消费已登记窗口，不增加顶层 query intent；窗口数不超过原
+TOP／BOTTOM 完成坐标数的两倍，对应已登记峰的两个极性分区。整批窗口先与已有 coarse、exterior
+及 precision 像素工作共同预检；任一工作或内存超界，两侧整批不可用，不读取有利前缀。
+单窗短轴高度 `h = 2(window+gap)+3`、长轴宽度 `w = 2radius+1`，源通道与相邻像素访问上界为
+`3hw + 4[h(w-1)+(h-1)w] + 8h + 4window`，临时量上界 `32hw+64h` bytes；不与已经释放的
+baseline 缓冲相加。Coverage 分别保存登记／完成窗口数、实际新增像素工作和整批超界状态，报告从
+原 transition 的原峰与固定尺度重建全部核及计数，不接受移动核、遗漏窗口或未计原生读取。
+
+像素工作上限为
 `128 × source_pixels`，峰值临时内存上限为 `10 × source_pixels + 32 MiB`。不得恢复通用 DP、
 beam、未校准的第二套 Grid/phase vote 搜索、候选笛卡尔积、完整链 materialization/cache、逐帧尺寸、
 candidate-dependent query 或 content-driven placement；概率层也只能消费已经生成且硬合法的有界候选。
@@ -2624,6 +2645,7 @@ Linux开发/CI使用`renameat2(RENAME_NOREPLACE)`。目标在最终检查之后�
 | `photo_geometry/coarse_strip_support.py`、`coarse_enclosing_model.py`、`coarse_enclosing_support.py`、`template_coarse_sides.py` | role-free coarse query、sharp/broad 固定 trace view、粗片带 interval、完整 raw side、Cross 内的单侧登记与共同物理闭合 |
 | `photo_geometry/template_measurement_plan*.py` | pixel-free 模板、有限 query intents、停止与工作上界 |
 | `photo_geometry/exterior_region_measurement.py` | 固定外侧带的全列区域／弱信号事实、注册身份与实际工作账本；不授予片夹或输出权限 |
+| `photo_geometry/native_background_texture.py` | 原 transition 的原生二维纹理核、完整源域、整批工作预检及角色纹理依据；不授予边界身份或连续性 |
 | `photo_geometry/corridors.py` | 候选无关 top/bottom 与完整 `W/pitch` sequence 查询走廊 |
 | `photo_geometry/registered_*.py`、`observations.py`、`separator_*.py` | 一次性 measurement、role-free edge 与 material band |
 | `photo_geometry/cross_height_transition_measurement.py`、`broad_material_transition_measurement.py`、`broad_material_association.py` | 同一 registered baseline 上的三区域局部弱信号、逐线双尺度宽缓 material 测量及有界完整关联 |

@@ -52,7 +52,7 @@ class QueryPurpose(str, Enum):
     SEQUENCE_ANCHOR_WINDOW = "sequence_anchor_window"
 
 
-REGISTERED_NORMALIZATION_REVISION = "registered-cross-normalization-baseline-v1"
+REGISTERED_NORMALIZATION_REVISION = "registered-cross-normalization-native-background-v2"
 
 
 @dataclass(frozen=True)

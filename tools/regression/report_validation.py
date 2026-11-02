@@ -3876,6 +3876,8 @@ def _validate_broad_material_traces(raw: dict[str, Any], query: PhotoBoundaryMea
 
 
 def _validate_registered_normalization(record: dict[str, Any]) -> None:
+    from x5crop.detection.photo_geometry.native_background_texture import validate_native_background_textures
+    from x5crop.domain import WorkspaceExtent
     development = record["development"]
     measurement = development["measurement"]
     domains = {item["domain"]["lane_id"]: item["domain"] for item in measurement["source_lanes"]}
@@ -3885,6 +3887,12 @@ def _validate_registered_normalization(record: dict[str, Any]) -> None:
         members = tuple(item for item in measurement["queries"] if item["query"]["lane_id"] == lane_id)
         queries = tuple(_read_measurement_query(item["query"]) for item in members)
         for raw, query in zip(members, queries, strict=True):
+            decoded = _read_common_proof(
+                {field.name: raw[field.name] for field in fields(PhotoBoundaryMeasurementSet)},
+                PhotoBoundaryMeasurementSet)
+            extent = record["measurement"]["source_extent"]
+            validate_native_background_textures(decoded, WorkspaceExtent(extent["width"], extent["height"]),
+                                                PHOTO_BOUNDARY_MEASUREMENT_SPEC)
             association = _validate_broad_material_traces(raw, query)
             if (association is not None and association.state == BroadAssociationState.BOUND_EXCEEDED
                     and lane["placement_competition"]["selected_placement_id"] is not None):
@@ -3938,7 +3946,8 @@ def _validate_registered_normalization(record: dict[str, Any]) -> None:
                     or coverage["registered_trace_count"] != len(query.trace_positions_px)
                     or coverage["registered_coordinate_count"] != count
                     or not 0 <= coverage["completed_coordinate_count"] <= count
-                    or coverage["pixel_query_count"] != coverage["completed_coordinate_count"] * factor
+                    or coverage["pixel_query_count"] != (coverage["completed_coordinate_count"] * factor
+                                                         + coverage["native_texture_pixel_query_count"])
                     or coverage["peak_temporary_bytes"] < retained_minimum
                     or coverage["complete"] and (
                         coverage["completed_coordinate_count"] != count

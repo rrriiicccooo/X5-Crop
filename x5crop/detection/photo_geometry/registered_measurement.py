@@ -35,6 +35,7 @@ from .registered_transition_measurement import (
     trace_storage_bytes,
 )
 from .physical_identity import physical_observation_id
+from .native_background_texture import native_background_texture_query, measure_native_background_texture
 
 
 _BASELINE_WINDOWS = (
@@ -184,6 +185,7 @@ def _measure_query(
                         peak_width_px=peak.peak_width_px,
                         prominence=peak.prominence,
                         local_noise=peak.local_noise,
+                        texture_sample_coordinate_px=int(measured.coordinates[peak.coordinate_index]),
                     )
                 )
         if premeasured is not None:
@@ -440,6 +442,9 @@ def measure_registered_queries(
     spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
     *,
     registration_start: int = 0,
+    existing_pixel_query_count: int = 0,
+    max_pixel_query_count: int | None = None,
+    max_peak_temporary_bytes: int | None = None,
 ) -> tuple[PhotoBoundaryMeasurementSet, ...]:
     """Execute the complete pre-registered query lattice deterministically."""
 
@@ -478,4 +483,51 @@ def measure_registered_queries(
         # Each lattice is fully consumed before another is premeasured.
         # Reports retain scalar/transition facts, never these pixel arrays.
         del premeasured
-    return tuple(results[query.query_id] for query in queries)
+    return _add_native_background_textures(field, tuple(results[query.query_id] for query in queries), spec,
+        existing_pixel_query_count=existing_pixel_query_count,
+        max_pixel_query_count=max_pixel_query_count,
+        max_peak_temporary_bytes=max_peak_temporary_bytes)
+
+
+def _add_native_background_textures(field, measurements, spec, *, existing_pixel_query_count=0,
+                                  max_pixel_query_count=None, max_peak_temporary_bytes=None):
+    pixels = field.source_extent.width * field.source_extent.height
+    pixel_limit = 128 * pixels if max_pixel_query_count is None else max_pixel_query_count
+    memory_limit = 10 * pixels + 32 * 1024 * 1024 if max_peak_temporary_bytes is None else max_peak_temporary_bytes
+    if any(type(value) is not int or value < 0 for value in (existing_pixel_query_count, pixel_limit, memory_limit)):
+        raise ValueError("native background texture requires finite source work bounds")
+    # Freeze every window from the full raw transition batch, before any new
+    # pixel read. Source bounds and work failure cannot select a useful prefix.
+    plans = {m.query.query_id: tuple(native_background_texture_query(field.source_extent, m.query, t, spec)
+                                    for t in m.transitions)
+             for m in measurements if m.state == EvidenceState.SUPPORTED
+             and m.query.purpose in (QueryPurpose.TOP_CORRIDOR, QueryPurpose.BOTTOM_CORRIDOR)}
+    extra = sum(q.pixel_query_count for batch in plans.values() for q in batch)
+    peak = max(max((q.peak_temporary_bytes for batch in plans.values() for q in batch), default=0),
+               max((m.coverage.peak_temporary_bytes for m in measurements), default=0))
+    bound_exceeded = (existing_pixel_query_count + sum(m.coverage.pixel_query_count for m in measurements)
+                      + extra > pixel_limit or peak > memory_limit)
+    results = []
+    for measured in measurements:
+        batch = plans.get(measured.query.query_id)
+        if batch is None:
+            results.append(measured)
+            continue
+        count = len(batch)
+        if bound_exceeded:
+            coverage = replace(measured.coverage, complete=False, native_texture_query_count=count,
+                native_texture_completed_count=0, native_texture_bound_exceeded=True)
+            results.append(replace(measured, state=EvidenceState.UNAVAILABLE, transitions=(), coverage=coverage))
+            continue
+        transitions = tuple(replace(t, native_background_texture=measure_native_background_texture(field, q))
+                            for t, q in zip(measured.transitions, batch, strict=True))
+        work = sum(q.pixel_query_count for q in batch)
+        total = measured.coverage.pixel_query_count + work
+        coverage = replace(measured.coverage, pixel_query_count=total,
+            streaming_block_count=max(1, math.ceil(total / spec.maximum_streaming_block_pixels)),
+            peak_temporary_bytes=max(measured.coverage.peak_temporary_bytes,
+                                     max((q.peak_temporary_bytes for q in batch), default=0)),
+            native_texture_query_count=count, native_texture_completed_count=count,
+            native_texture_pixel_query_count=work)
+        results.append(replace(measured, transitions=transitions, coverage=coverage))
+    return tuple(results)

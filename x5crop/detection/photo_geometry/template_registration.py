@@ -1205,6 +1205,7 @@ def local_cross_refinement_anchors(top_bindings, bottom_bindings, fixed_height_p
     )
 
     def has_direct_opposite_closure(anchor: CrossRoleBinding) -> bool:
+        from .template_cross_candidates import _direct_candidate
         opposites = (
             bottom_bindings
             if anchor.role == BoundaryRole.TOP
@@ -1244,6 +1245,14 @@ def local_cross_refinement_anchors(top_bindings, bottom_bindings, fixed_height_p
                     or opposite_direction.maximum < anchor_direction.minimum
                 )
             ):
+                continue
+            top, bottom = ((anchor, opposite) if anchor.role == BoundaryRole.TOP else (opposite, anchor))
+            candidate, _failure = _direct_candidate(top, bottom,
+                fixed_height=fixed_height_px, canonical_height_px=fixed_height_px.center,
+                minimum_shared_trace_support=MINIMUM_INDEPENDENT_SUPPORT_REGIONS,
+                longitudinal_support_domain_groups_px=domains)
+            if (candidate is None or not candidate.direction_ready
+                    or candidate.longitudinal_projection_authority.state != EvidenceState.SUPPORTED):
                 continue
             return True
         return False

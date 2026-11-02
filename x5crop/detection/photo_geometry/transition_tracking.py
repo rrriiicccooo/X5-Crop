@@ -23,7 +23,7 @@ from .model import (
     PhotoBoundaryMeasurementSpec,
     independent_spatial_support_count,
 )
-from .measurement_model import PhotoBoundaryMeasurementSet
+from .measurement_model import PhotoBoundaryMeasurementSet, transition_background_preference_side
 from .cross_height_transition_measurement import spatial_region_trace_ordinals
 from .broad_material_transition_measurement import broad_material_trace_support_qualified
 from .broad_material_association import BroadAssociationState
@@ -551,16 +551,14 @@ def _track_transition_regions(
                 / len(selected),
                 left_background_preference_fraction=(
                     sum(
-                        point.transition.left_texture_mean
-                        < point.transition.right_texture_mean
+                        transition_background_preference_side(point.transition) < 0
                         for point in selected
                     )
                     / len(selected)
                 ),
                 right_background_preference_fraction=(
                     sum(
-                        point.transition.right_texture_mean
-                        < point.transition.left_texture_mean
+                        transition_background_preference_side(point.transition) > 0
                         for point in selected
                     )
                     / len(selected)

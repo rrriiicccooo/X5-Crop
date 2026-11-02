@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ...domain import (
+    Box,
     EvidenceState,
     FiniteInterval,
     MeasurementIdentity,
@@ -133,6 +134,98 @@ class PhotoBoundaryMeasurementQuery:
             )
 
 
+NATIVE_BACKGROUND_TEXTURE_REVISION = "native-rgb-rec709-two-axis-texture-v1"
+NATIVE_BACKGROUND_TEXTURE_QUANTUM = 1.0
+
+
+@dataclass(frozen=True)
+class NativeBackgroundTextureQuery:
+    """A frozen local pixel domain with no role or placement input."""
+
+    query_id: str
+    boundary_axis: BoundaryAxis
+    trace_coordinate_px: int
+    boundary_coordinate_px: int
+    source_extent: WorkspaceExtent
+    window_px: int
+    gap_px: int
+    trace_radius_px: int
+    basis: str = NATIVE_BACKGROUND_TEXTURE_REVISION
+
+    @property
+    def requested_box(self) -> Box:
+        low = self.boundary_coordinate_px - self.window_px - self.gap_px - 1
+        high = self.boundary_coordinate_px + self.window_px + self.gap_px + 2
+        first = self.trace_coordinate_px - self.trace_radius_px
+        last = self.trace_coordinate_px + self.trace_radius_px + 1
+        return (Box(first, low, last, high) if self.boundary_axis == BoundaryAxis.Y
+                else Box(low, first, high, last))
+
+    @property
+    def observable(self) -> bool:
+        box = self.requested_box
+        return (box.left >= 0 and box.top >= 0 and box.right <= self.source_extent.width
+                and box.bottom <= self.source_extent.height)
+
+    @property
+    def pixel_query_count(self) -> int:
+        if not self.observable:
+            return 0
+        h, w = 2 * (self.window_px + self.gap_px) + 3, 2 * self.trace_radius_px + 1
+        edges = h * (w - 1) + (h - 1) * w
+        return 3 * h * w + 4 * edges + 8 * h + 4 * self.window_px
+
+    @property
+    def peak_temporary_bytes(self) -> int:
+        if not self.observable:
+            return 0
+        h, w = 2 * (self.window_px + self.gap_px) + 3, 2 * self.trace_radius_px + 1
+        return 32 * h * w + 64 * h
+
+    def __post_init__(self) -> None:
+        if (not isinstance(self.query_id, str) or not self.query_id or self.basis != NATIVE_BACKGROUND_TEXTURE_REVISION
+                or not isinstance(self.boundary_axis, BoundaryAxis)
+                or not isinstance(self.source_extent, WorkspaceExtent)
+                or any(type(value) is not int or value < 0 for value in (
+                    self.trace_coordinate_px, self.boundary_coordinate_px))
+                or any(type(value) is not int or value <= 0 for value in (
+                    self.window_px, self.gap_px, self.trace_radius_px))):
+            raise ValueError("native background texture lost its registered kernel")
+
+
+@dataclass(frozen=True)
+class NativeBackgroundTexture:
+    """A local texture fact, not a photo identity or continuity certificate."""
+
+    query: NativeBackgroundTextureQuery
+    state: EvidenceState
+    left_texture_mean: float | None
+    right_texture_mean: float | None
+
+    @property
+    def background_preference_side(self) -> int:
+        if self.state != EvidenceState.SUPPORTED:
+            return 0
+        if self.left_texture_mean + NATIVE_BACKGROUND_TEXTURE_QUANTUM < self.right_texture_mean:
+            return -1
+        if self.right_texture_mean + NATIVE_BACKGROUND_TEXTURE_QUANTUM < self.left_texture_mean:
+            return 1
+        return 0
+
+    def __post_init__(self) -> None:
+        if (not isinstance(self.query, NativeBackgroundTextureQuery) or not isinstance(self.state, EvidenceState)
+                or self.state not in (EvidenceState.SUPPORTED, EvidenceState.UNAVAILABLE)):
+            raise ValueError("native background texture requires its registered query")
+        if self.query.observable != (self.state == EvidenceState.SUPPORTED):
+            raise ValueError("native background texture cannot clip its kernel")
+        means = self.left_texture_mean, self.right_texture_mean
+        if (self.state == EvidenceState.UNAVAILABLE and means != (None, None)) or (
+                self.state == EvidenceState.SUPPORTED and any(
+                    type(value) not in (float, int) or not math.isfinite(value) or not 0 <= value <= 2 * 65535
+                    for value in means)):
+            raise ValueError("native background texture has invalid native intensity units")
+
+
 @dataclass(frozen=True)
 class PhotoBoundaryTransition:
     transition_id: ObservationId
@@ -153,6 +246,8 @@ class PhotoBoundaryTransition:
     peak_width_px: float
     prominence: float
     local_noise: float
+    texture_sample_coordinate_px: int | None = None
+    native_background_texture: NativeBackgroundTexture | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -190,10 +285,32 @@ class PhotoBoundaryTransition:
             or self.peak_width_px <= 0.0
         ):
             raise ValueError("photo-boundary transition is invalid")
+        native = self.native_background_texture
+        if native is not None and (not isinstance(native, NativeBackgroundTexture)
+                or native.query.query_id != self.query_id
+                or native.query.trace_coordinate_px != self.trace_coordinate_px
+                or native.query.boundary_coordinate_px != self.texture_sample_coordinate_px):
+            raise ValueError("native texture changed its original transition or localization")
+        if self.texture_sample_coordinate_px is not None and (
+                type(self.texture_sample_coordinate_px) is not int
+                or not self.localization_interval_px.contains(self.texture_sample_coordinate_px, epsilon=1.0e-12)):
+            raise ValueError("texture sampling coordinate left its original localization peak")
 
     @property
     def coordinate_px(self) -> float:
         return self.canonical_coordinate_px
+
+    @property
+    def background_preference_side(self) -> int:
+        return transition_background_preference_side(self)
+
+
+def transition_background_preference_side(transition) -> int:
+    native = getattr(transition, "native_background_texture", None)
+    if native is not None:
+        return native.background_preference_side
+    return (int(transition.right_texture_mean < transition.left_texture_mean)
+            - int(transition.left_texture_mean < transition.right_texture_mean))
 
 
 class MaterialBackgroundSide(str, Enum):
@@ -439,6 +556,10 @@ class PhotoBoundaryCoverageReceipt:
     streaming_block_count: int
     peak_temporary_bytes: int
     complete: bool
+    native_texture_query_count: int = 0
+    native_texture_completed_count: int = 0
+    native_texture_pixel_query_count: int = 0
+    native_texture_bound_exceeded: bool = False
 
     def __post_init__(self) -> None:
         counts = (
@@ -449,6 +570,9 @@ class PhotoBoundaryCoverageReceipt:
             self.pixel_query_count,
             self.streaming_block_count,
             self.peak_temporary_bytes,
+            self.native_texture_query_count,
+            self.native_texture_completed_count,
+            self.native_texture_pixel_query_count,
         )
         if not self.query_id or any(value < 0 for value in counts):
             raise ValueError("measurement coverage receipt is invalid")
@@ -456,7 +580,16 @@ class PhotoBoundaryCoverageReceipt:
             self.registered_trace_count == self.completed_trace_count
             and self.registered_coordinate_count
             == self.completed_coordinate_count
+            and self.native_texture_query_count == self.native_texture_completed_count
+            and not self.native_texture_bound_exceeded
         )
+        if (type(self.native_texture_bound_exceeded) is not bool
+                or any(type(value) is not int for value in (self.native_texture_query_count,
+                    self.native_texture_completed_count, self.native_texture_pixel_query_count))
+                or self.native_texture_query_count > 2 * self.completed_coordinate_count
+                or self.native_texture_completed_count > self.native_texture_query_count
+                or self.native_texture_pixel_query_count > self.pixel_query_count):
+            raise ValueError("native texture work lost its coverage bounds")
         if self.complete != derived:
             raise ValueError(
                 "measurement coverage completion is inconsistent"

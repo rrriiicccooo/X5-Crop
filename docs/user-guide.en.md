@@ -95,6 +95,9 @@ still require review.
 Short-axis search completeness, independent boundary evidence, and output eligibility are checked separately.
 Even a completed search requires review when independent support is missing or later fitting exceeds its work limit.
 Completed queries alone do not establish that no other boundary interpretation exists.
+The program also compares two-dimensional texture on both sides of a boundary in the original pixels, adding
+background information that a single scan line may miss. Local texture alone does not establish that fragments
+belong to one photo boundary, and a local closure cannot cancel a required source-wide check.
 
 Development reports retain the original material bands and boundary sources behind outer-material candidates.
 Photo ordinals and the true first and last boundaries still require independent evidence.

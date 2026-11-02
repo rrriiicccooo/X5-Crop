@@ -550,6 +550,10 @@ def prepare_template_lane(
         field,
         queries,
         registration_start=len(coarse_measurement_sets),
+        existing_pixel_query_count=(exterior_region_measurement.work.pixel_query_count
+                                   + sum(m.coverage.pixel_query_count for m in coarse_measurement_sets)),
+        max_pixel_query_count=measurement_plan.pixel_bounds.max_pixel_queries,
+        max_peak_temporary_bytes=measurement_plan.pixel_bounds.max_peak_temporary_bytes,
     )
     measurement_sets = (*coarse_measurement_sets, *precision_measurement_sets)
     (top_measurement,) = tuple(
