@@ -22,7 +22,10 @@ from x5crop.detection.photo_geometry.template_adjacency_topology import (
 )
 from x5crop.detection.photo_geometry.template_contact import observe_contact_edges
 from x5crop.detection.photo_geometry.model import BoundaryEvidenceState, BoundaryRole
-from x5crop.detection.photo_geometry.observation_types import SeparatorMaterialRegionState
+from x5crop.detection.photo_geometry.observation_types import (
+    SeparatorMaterialPolarity,
+    SeparatorMaterialRegionState,
+)
 from x5crop.detection.photo_geometry.template_residual import (
     ResidualPattern,
     derive_adjacency_relations,
@@ -140,6 +143,46 @@ def _unbound_separator_case(missing_role=2, *, direction=1, partner=None, region
 
 
 class TemplateAdjacencyTopologyContractTests(unittest.TestCase):
+    def test_unbound_material_inside_frame_does_not_prove_photo_ordinal(self):
+        fit = placement_sequence(phase_template(2))
+        selected = _edges(*fit.model_role_positions_px)
+        measurement = phase_sequence_measurement(
+            "interior-material", FiniteInterval(0.0, 500.0),
+        )
+        baseline = assess_phase_candidate_adjacency(
+            fit, selected, (), (measurement,),
+        )
+        self.assertEqual(baseline.state, EvidenceState.SUPPORTED)
+        for polarity in SeparatorMaterialPolarity:
+            with self.subTest(polarity=polarity):
+                left = replace(
+                    phase_edge("interior:left", 140.0),
+                    qualified_anchor_roles=(BoundaryRole.END,),
+                    polarity=-1 if polarity == SeparatorMaterialPolarity.DARK else 1,
+                )
+                right = replace(
+                    phase_edge("interior:right", 150.0),
+                    qualified_anchor_roles=(BoundaryRole.START,),
+                    polarity=-left.polarity,
+                )
+                band = phase_separator(
+                    "interior:material", left, right, FiniteInterval(9.6, 10.4),
+                    material_polarity=polarity,
+                )
+                self.assertLess(fit.model_full_role_intervals_px[0].maximum,
+                                left.full_position_interval_px.minimum)
+                self.assertLess(right.full_position_interval_px.maximum,
+                                fit.model_full_role_intervals_px[1].minimum)
+                assessment = assess_phase_candidate_adjacency(
+                    fit, (*selected, left, right), (band,), (measurement,),
+                )
+                # Source-wide material supports a possible ordered pair. With
+                # neither endpoint bound, it does not identify a photo gap.
+                self.assertEqual(assessment.state, baseline.state)
+                self.assertEqual(assessment.continuity, baseline.continuity)
+                self.assertFalse(assessment.registered_role_associations)
+                self.assertIs(assessment.fit, fit)
+
     def test_registered_partner_proof_binds_only_the_validation_ordinal(self):
         for missing in (1, 2):
             for direction in (-1, 1):

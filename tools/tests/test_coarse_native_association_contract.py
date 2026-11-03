@@ -530,6 +530,40 @@ class CoarseNativeAssociationContractTest(unittest.TestCase):
         proofs, _ = self._associate(self._case(native_top_signal="c" * 64))
         self.assertEqual(self._roles(proofs), {BoundaryRole.BOTTOM})
 
+    def test_same_original_peaks_do_not_grant_local_edge_continuity(self) -> None:
+        for role in (BoundaryRole.TOP, BoundaryRole.BOTTOM):
+            with self.subTest(role=role):
+                case = self._case()
+                base = case[2]
+                observations = tuple(
+                    replace(observation,
+                            independent_support_region_count=2,
+                            continuous_support_fraction=0.1,
+                            source_spanning_continuous=False)
+                    if observation.role == role else observation
+                    for observation in base.observations
+                )
+                field = "top_bindings" if role == BoundaryRole.TOP else "bottom_bindings"
+                local = replace(
+                    getattr(base, field)[0],
+                    independent_support_region_count=2,
+                    continuous_support_fraction=0.1,
+                    source_spanning_continuous=False,
+                )
+                self.assertTrue(local.role_authorized)
+                changed_base = self._ns_replace(
+                    base, observations=observations, **{field: (local,)},
+                )
+                proofs, _ = self._associate((case[0], case[1], changed_base, *case[3:]))
+                self.assertEqual(self._roles(proofs),
+                                 {BoundaryRole.TOP, BoundaryRole.BOTTOM} - {role})
+                # All exact original-peak correspondences still exist. Local
+                # role authority cannot supply the missing continuous span.
+                self.assertEqual(
+                    tuple(item.transition_ids for item in observations),
+                    tuple(item.transition_ids for item in base.observations),
+                )
+
     def test_potential_alias_in_opposite_corridor_cannot_be_ignored(self) -> None:
         case = self._case()
         coarse, top, bottom = case[1]

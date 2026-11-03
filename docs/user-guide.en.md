@@ -83,6 +83,9 @@ verified and protected. A score cannot replace these conditions or enlarge the f
 The program checks complete separator material already identified in the scan. An interpretation is rejected if it
 omits the other side of that material and thereby requires a photo wider than the format's physical upper limit.
 Other interpretations must independently pass every safety check.
+Material strips can also lie inside a photo. Competing interpretations remain when the correspondence between
+boundaries and photo ordinals is unproven. Local support or shared measurement points alone do not establish a
+continuous edge; another long edge cannot supply that missing proof to reduce protection.
 
 When photo ownership is established and several complete top/bottom interpretations remain, one fixed box may protect
 them all. Automatic approval requires every interpretation to pass content containment and source-wide safety checks.

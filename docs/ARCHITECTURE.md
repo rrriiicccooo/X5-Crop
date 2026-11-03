@@ -306,8 +306,8 @@ placement evidence，也不能把源边未观测区域补成背景；它只提�
 与组外为空均保留原统计语义；gradient、secondary、broad 各自计数，不共享统计或更改阈值。
 同一原图列、相同 window／gap 与相同位置区间不构成跨 query 的同峰证明。完整域与 corridor 的
 组外 local noise、可信峰组和 polarity partition 可能不同；被窗口截去的竞争峰不能视为不存在。
-Sharp track 当前不保存完整原峰组来源，不能仅按区间重合把精测长线或 native broad 的物理约束
-转授给它；共享 baseline 也不授予边界身份。
+Sharp track 的跨 query 关联只按第 6.4 节完整原峰来源及连续延续合同成立；区间重合、共享 baseline
+或原峰对应本身均不授予整条边的连续身份，不能单独转授精测长线或 native broad 的物理约束。
 `registered_normalization_revision` 绑定计划与报告身份。开发报告重建登记合同，拒绝基线缺失、额外
 边界证据、lane 范围漂移或不完整工作账本；不保留旧小窗口归一化路径。
 
@@ -656,6 +656,8 @@ source-spanning 连续支持。完整账本包含所有 observation、恢复的�
 和完整 membership 的每个 maximal union。凡含全部对应峰的解释，都须包含目标原生线的完整 raw 集合；
 存在不同延续、未完成搜索或多个独立 canonical 匹配时不建立关联。该证明只增加各解释共同必需的
 物理约束及已验证连续域，不选择解释，不增加 rank，不把支撑边改为 aperture，也不证明照片序号或终端。
+局部边可以已获角色及 Cross pair 的纵向投影权限，但这两项不补足该边自身的 source-spanning 连续性。
+只有共同原始点的片段或相互竞争的延续，不能借另一侧完整边、某一长线或全部延续的并集取得连续资格。
 
 TOP／BOTTOM 的灰度定位、梯度、tone、原一维纹理和全部 trace 保持独立原始事实。定位完成后，
 `native_background_texture.py` 为全部原始 transition 登记原生 uint16 RGB 局部窗口；窗口中心固定为
@@ -1034,6 +1036,9 @@ material role authority 的唯一 owner。它先把共享任一 physical edge �
 aperture 边缘内部。Phase 保留原角色与 material 所授角色的并集，再由既有全局约束与候选竞争判断；
 两种解释仍是同一 observation/component，不能重复计为独立票数或 rank，也不借此增加坐标权限。原角色不能借 material
 的相反角色权限获得 native coordinate；最终仍须通过自身的 direct-role ledger。
+即使唯一三区域 pair 的完整原生区间严格位于某个 Frame 的所有可能边界以内，两端均未绑定时，
+也不能只据几何内含把它升级为该照片必须遵守的间隔或拓扑反证。正向 pair 角色权限不建立照片序号；
+关联反证仍须满足第 7.1 节的候选自身绑定、伙伴、完整走廊和原生物理条件。
 所有 partial-height band 仍留在同一个 component 中供 provenance、反证与一次
 相关权限传递使用，但不能创造第二份 phase/rank authority。该 owner 不读取新像素、不选择 ordinal、
 placement 或 winner，也不按强度分数消解多解。
