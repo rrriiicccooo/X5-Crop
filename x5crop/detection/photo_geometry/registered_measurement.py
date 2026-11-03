@@ -34,6 +34,7 @@ from .registered_transition_measurement import (
     measured_transition_peaks,
     trace_storage_bytes,
 )
+from .transition_peak_capture import TransitionPeakCapture, peak_source_receipt
 from .physical_identity import physical_observation_id
 from .native_background_texture import native_background_texture_query, measure_native_background_texture
 
@@ -62,6 +63,7 @@ def _measure_query(
     premeasured: tuple[TraceMeasurement, ...] | None = None,
     retained_temporary_bytes: int = 0,
     premeasurement_peak_bytes: int = 0,
+    peak_source_budget_bytes: int | None = None,
 ) -> PhotoBoundaryMeasurementSet:
     registered_coordinate_count = sum(
         max(
@@ -80,6 +82,11 @@ def _measure_query(
     pixel_query_count = 0
     completed_coordinates = 0
     completed_traces = 0
+    source_traces = []
+    source_capture = (TransitionPeakCapture(
+        32 * 1024 * 1024 + 10 * field.source_extent.width * field.source_extent.height
+        if peak_source_budget_bytes is None else peak_source_budget_bytes)
+        if query.purpose in (QueryPurpose.TOP_CORRIDOR, QueryPurpose.BOTTOM_CORRIDOR) else None)
     try:
         axis_extent = (
             field.source_extent.width
@@ -114,9 +121,13 @@ def _measure_query(
                     if query.boundary_axis == BoundaryAxis.X
                     else field.source_gray[:, trace]
                 )
-                measured = measure_trace(values, interval, scale, spec)
+                measured = measure_trace(values, interval, scale, spec,
+                    peak_source_context=((field.source_id, field.source_extent, query.boundary_axis, trace)
+                        if source_capture is not None and source_capture.complete else None))
             else:
                 measured = premeasured[trace_ordinal]
+            if measured.peak_source is not None and (premeasured is None or query.purpose in _BASELINE_PURPOSES):
+                source_traces.append(measured.peak_source)
             coordinate_count = max(
                 0,
                 int(math.floor(interval.maximum))
@@ -146,6 +157,7 @@ def _measure_query(
                     QueryPurpose.TOP_CORRIDOR,
                     QueryPurpose.BOTTOM_CORRIDOR,
                 },
+                peak_source_capture=source_capture,
                 )
             )
             for peak in peaks:
@@ -186,6 +198,7 @@ def _measure_query(
                         prominence=peak.prominence,
                         local_noise=peak.local_noise,
                         texture_sample_coordinate_px=int(measured.coordinates[peak.coordinate_index]),
+                        peak_source=peak.source_reference,
                     )
                 )
         if premeasured is not None:
@@ -227,6 +240,7 @@ def _measure_query(
             peak_temporary=peak_temporary,
             complete=False,
         )
+        _, receipt, sources, groups = peak_source_receipt((), receipt, source_traces, source_capture)
         return PhotoBoundaryMeasurementSet(
             query=query,
             state=EvidenceState.UNAVAILABLE,
@@ -234,6 +248,7 @@ def _measure_query(
             cross_height_transitions=(),
             coverage=receipt,
             broad_material_transitions=(),
+            peak_trace_sources=sources, peak_source_groups=groups,
         )
     receipt = _coverage_receipt(
         query,
@@ -245,14 +260,17 @@ def _measure_query(
         peak_temporary=peak_temporary,
         complete=True,
     )
+    transitions, receipt, sources, groups = peak_source_receipt(
+        tuple(transitions), receipt, source_traces, source_capture)
     return PhotoBoundaryMeasurementSet(
         query=query,
         state=EvidenceState.SUPPORTED,
-        transitions=tuple(transitions),
+        transitions=transitions,
         cross_height_transitions=cross_height_transitions,
         coverage=receipt,
         broad_material_transitions=broad_material_transitions,
         broad_material_association=broad_material_association,
+        peak_trace_sources=sources, peak_source_groups=groups,
     )
 
 
@@ -324,6 +342,7 @@ def _premeasure_registered_windows(
     baseline: PhotoBoundaryMeasurementQuery,
     windows: tuple[PhotoBoundaryMeasurementQuery, ...],
     spec: PhotoBoundaryMeasurementSpec,
+    capture_peak_sources: bool = True,
 ) -> tuple[dict[str, tuple[TraceMeasurement, ...]], int, int]:
     queries = (baseline, *windows)
     first = baseline
@@ -345,6 +364,8 @@ def _premeasure_registered_windows(
             scale,
             spec,
             include_broad_material=baseline.purpose == QueryPurpose.SEQUENCE_BASELINE,
+            peak_source_context=((field.source_id, field.source_extent, first.boundary_axis, trace)
+                if baseline.purpose == QueryPurpose.CROSS_BASELINE and capture_peak_sources else None),
         )
         retained_bytes += trace_storage_bytes(measured)
         # All earlier traces remain live. The per-trace work allowance is
@@ -445,6 +466,8 @@ def measure_registered_queries(
     existing_pixel_query_count: int = 0,
     max_pixel_query_count: int | None = None,
     max_peak_temporary_bytes: int | None = None,
+    existing_peak_source_retained_bytes: int = 0,
+    existing_peak_source_value_visit_bound: int = 0,
 ) -> tuple[PhotoBoundaryMeasurementSet, ...]:
     """Execute the complete pre-registered query lattice deterministically."""
 
@@ -463,34 +486,63 @@ def measure_registered_queries(
         for query in (baseline, *windows)
     }
     results = {}
+    source_limit = (10 * field.source_extent.width * field.source_extent.height + 32 * 1024 * 1024
+                    if max_peak_temporary_bytes is None else max_peak_temporary_bytes)
+    origin_retained = existing_peak_source_retained_bytes
+    pixel_limit = 128 * field.source_extent.width * field.source_extent.height if max_pixel_query_count is None else max_pixel_query_count
+    source_visits, registered_pixels = 0, existing_pixel_query_count
+    for query in queries:
+        coordinates = sum(max(0, math.floor(interval.maximum) - math.ceil(interval.minimum) + 1)
+                          for interval in query.search_intervals_px)
+        is_baseline = query.purpose in _BASELINE_PURPOSES
+        radius = spec.local_measurement_work_radius_px(query.boundary_axis_scale_px_per_mm.maximum)
+        registered_pixels += coordinates * (2 * radius + 2 if is_baseline or query.query_id not in groups else 1)
+        if query.purpose == QueryPurpose.CROSS_BASELINE:
+            source_visits += 5 * coordinates + 32 * len(query.trace_positions_px)
+        elif query.purpose in (QueryPurpose.TOP_CORRIDOR, QueryPurpose.BOTTOM_CORRIDOR):
+            source_visits += 256 * coordinates + 32
+    capture_sources = registered_pixels + existing_peak_source_value_visit_bound + source_visits <= pixel_limit
+
+    def retain(result):
+        nonlocal origin_retained
+        result = replace(result, coverage=replace(result.coverage,
+            peak_temporary_bytes=result.coverage.peak_temporary_bytes + origin_retained))
+        origin_retained += result.coverage.peak_source_retained_bytes
+        results[result.query.query_id] = result
     for query in queries:
         if query.query_id in results:
             continue
         group = groups.get(query.query_id)
         if group is None:
-            results[query.query_id] = _measure_query(field, query, spec)
+            retain(_measure_query(field, query, spec,
+                peak_source_budget_bytes=(max(0, source_limit - origin_retained) if capture_sources else 0)))
             continue
         baseline, windows = group
         premeasured, retained_bytes, peak_bytes = _premeasure_registered_windows(
-            field, baseline, windows, spec,
+            field, baseline, windows, spec, capture_sources,
         )
         for member in sorted((baseline, *windows), key=lambda item: item.registration_index):
-            results[member.query_id] = _measure_query(
+            retain(_measure_query(
                 field, member, spec, premeasured=premeasured[member.query_id],
                 retained_temporary_bytes=retained_bytes,
                 premeasurement_peak_bytes=peak_bytes,
-            )
+                peak_source_budget_bytes=(max(0, source_limit - origin_retained - peak_bytes) if capture_sources else 0),
+            ))
         # Each lattice is fully consumed before another is premeasured.
         # Reports retain scalar/transition facts, never these pixel arrays.
         del premeasured
     return _add_native_background_textures(field, tuple(results[query.query_id] for query in queries), spec,
         existing_pixel_query_count=existing_pixel_query_count,
         max_pixel_query_count=max_pixel_query_count,
-        max_peak_temporary_bytes=max_peak_temporary_bytes)
+        max_peak_temporary_bytes=max_peak_temporary_bytes,
+        existing_peak_source_retained_bytes=existing_peak_source_retained_bytes,
+        existing_peak_source_value_visit_bound=existing_peak_source_value_visit_bound)
 
 
 def _add_native_background_textures(field, measurements, spec, *, existing_pixel_query_count=0,
-                                  max_pixel_query_count=None, max_peak_temporary_bytes=None):
+                                  max_pixel_query_count=None, max_peak_temporary_bytes=None,
+                                  existing_peak_source_retained_bytes=0,
+                                  existing_peak_source_value_visit_bound=0):
     pixels = field.source_extent.width * field.source_extent.height
     pixel_limit = 128 * pixels if max_pixel_query_count is None else max_pixel_query_count
     memory_limit = 10 * pixels + 32 * 1024 * 1024 if max_peak_temporary_bytes is None else max_peak_temporary_bytes
@@ -503,9 +555,12 @@ def _add_native_background_textures(field, measurements, spec, *, existing_pixel
              for m in measurements if m.state == EvidenceState.SUPPORTED
              and m.query.purpose in (QueryPurpose.TOP_CORRIDOR, QueryPurpose.BOTTOM_CORRIDOR)}
     extra = sum(q.pixel_query_count for batch in plans.values() for q in batch)
-    peak = max(max((q.peak_temporary_bytes for batch in plans.values() for q in batch), default=0),
+    origin_retained = existing_peak_source_retained_bytes + sum(m.coverage.peak_source_retained_bytes for m in measurements)
+    peak = max(origin_retained + max((q.peak_temporary_bytes for batch in plans.values() for q in batch), default=0),
                max((m.coverage.peak_temporary_bytes for m in measurements), default=0))
     bound_exceeded = (existing_pixel_query_count + sum(m.coverage.pixel_query_count for m in measurements)
+                      + existing_peak_source_value_visit_bound
+                      + sum(m.coverage.peak_source_value_visit_bound for m in measurements)
                       + extra > pixel_limit or peak > memory_limit)
     results = []
     for measured in measurements:
@@ -516,7 +571,10 @@ def _add_native_background_textures(field, measurements, spec, *, existing_pixel
         count = len(batch)
         if bound_exceeded:
             coverage = replace(measured.coverage, complete=False, native_texture_query_count=count,
-                native_texture_completed_count=0, native_texture_bound_exceeded=True)
+                native_texture_completed_count=0, native_texture_bound_exceeded=True,
+                peak_source_reference_count=0,
+                peak_source_retained_bytes=(measured.coverage.peak_source_retained_bytes
+                    - sum(t.peak_source.retained_bytes for t in measured.transitions if t.peak_source is not None)))
             results.append(replace(measured, state=EvidenceState.UNAVAILABLE, transitions=(), coverage=coverage))
             continue
         transitions = tuple(replace(t, native_background_texture=measure_native_background_texture(field, q))
@@ -526,7 +584,7 @@ def _add_native_background_textures(field, measurements, spec, *, existing_pixel
         coverage = replace(measured.coverage, pixel_query_count=total,
             streaming_block_count=max(1, math.ceil(total / spec.maximum_streaming_block_pixels)),
             peak_temporary_bytes=max(measured.coverage.peak_temporary_bytes,
-                                     max((q.peak_temporary_bytes for q in batch), default=0)),
+                                     origin_retained + max((q.peak_temporary_bytes for q in batch), default=0)),
             native_texture_query_count=count, native_texture_completed_count=count,
             native_texture_pixel_query_count=work)
         results.append(replace(measured, transitions=transitions, coverage=coverage))

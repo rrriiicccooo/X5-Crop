@@ -123,7 +123,7 @@ class CoarseStripSupportContractTest(unittest.TestCase):
         backing = np.zeros(100, dtype=np.float64)
         trace = TraceMeasurement(
             **{field.name: backing[10:30] for field in fields(TraceMeasurement)
-               if field.name not in {"temporary_bytes", "broad_material"}},
+               if field.name not in {"temporary_bytes", "broad_material", "peak_source"}},
             temporary_bytes=0,
         )
         self.assertEqual(trace_storage_bytes(trace), backing.nbytes)
@@ -232,6 +232,7 @@ class CoarseStripSupportContractTest(unittest.TestCase):
                     observed_direction_interval_degrees=FiniteInterval(-2.0, 2.0),
                     trace_position_intervals_px=tuple(p.physical_position_interval_px for p in points),
                     fit_residual_px=0.0,
+                    retained_transitions=points,
                 ) for index, (base, coordinate, points) in enumerate(zip(
                     (support.minimum_track, support.maximum_track), (40.0, 160.0), side_points, strict=True,
                 )))
@@ -264,7 +265,8 @@ class CoarseStripSupportContractTest(unittest.TestCase):
                 rejected_points[opposite] = incompatible
                 rejected_tracks = list(tracks)
                 rejected_tracks[opposite] = replace(tracks[opposite],
-                    trace_position_intervals_px=tuple(point.physical_position_interval_px for point in incompatible))
+                    trace_position_intervals_px=tuple(point.physical_position_interval_px for point in incompatible),
+                    retained_transitions=tuple(incompatible))
                 self.assertIsNone(_shared_tracks(measurement.query,
                     minimum_track=rejected_tracks[0], maximum_track=rejected_tracks[1],
                     minimum_transitions=rejected_points[0], maximum_transitions=rejected_points[1],
@@ -308,6 +310,12 @@ class CoarseStripSupportContractTest(unittest.TestCase):
                 fit_residual_px=0.0,
                 independent_support_region_count=3,
                 source_spanning_continuous=True,
+                retained_transitions=tuple(replace(transitions[0],
+                    transition_id=ObservationId(f"test:{side.value}:{trace}"),
+                    trace_coordinate_px=trace,
+                    physical_position_interval_px=(FiniteInterval.exact(position) if trace in (50, 250)
+                        else FiniteInterval(position - 0.25, position + 0.25)),
+                    localization_interval_px=FiniteInterval.exact(position)) for trace in own_traces),
             )
 
         for constrained in (False, True):

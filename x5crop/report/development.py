@@ -44,6 +44,8 @@ def _measurement_set_read_model(measurement_set: object) -> dict[str, object]:
         ),
         "broad_material_association": typed_read_model(measurement_set.broad_material_association),
         "coarse_aggregate": typed_read_model(measurement_set.coarse_aggregate),
+        "peak_trace_sources": typed_read_model(measurement_set.peak_trace_sources),
+        "peak_source_groups": typed_read_model(measurement_set.peak_source_groups),
     }
 
 
@@ -90,6 +92,7 @@ def development_report_facts(
     return {
         "measurement": {
             "field": {
+                "source_id": workspace.boundary_measurement_field.source_id,
                 "provenance": typed_read_model(
                     workspace.boundary_measurement_field.provenance
                 ),
@@ -298,6 +301,7 @@ def development_report_facts(
                     "pixel_query_count": (
                         lane.prepared.measurement_work.pixel_query_count
                     ),
+                    "peak_source_value_visit_bound": lane.prepared.measurement_work.peak_source_value_visit_bound,
                     "basic_profile_coordinate_count": (
                         lane.prepared.sequence_profile.coordinate_count
                         + lane.prepared.cross_profile.coordinate_count

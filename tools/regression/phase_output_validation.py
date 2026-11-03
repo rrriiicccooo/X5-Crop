@@ -19,6 +19,7 @@ from x5crop.detection.photo_geometry.template_phase_competition import fit_templ
 from x5crop.detection.photo_geometry.template_phase_output import CompletePhaseOutputProof, build_complete_phase_output
 from x5crop.detection.photo_geometry.template_registration import RegisteredCrossEvidence, register_cross_evidence
 from x5crop.detection.photo_geometry.template_cross_geometry import cross_direction_id
+from x5crop.detection.photo_geometry.coarse_native_association_model import CoarseNativeLineAssociation
 
 
 _ALLOCATED_PREFIXES = frozenset({
@@ -227,6 +228,8 @@ def validate_complete_phase_output(lane, production, measurement, *, layout, rea
     prepared = SimpleNamespace(lane=source_lane, layout=layout, phase_input=inputs,
         phase_competition=phase, source_scan_geometry=read_proof(lane["source_scan_geometry"], SourceScanGeometry),
         base_cross_registration=base, measurement_sets=queries,
+        coarse_native_associations=tuple(read_proof(item, CoarseNativeLineAssociation)
+                                        for item in production["coarse_native_associations"]),
         coarse_support=read_proof(lane["search"]["coarse_strip_support"], CoarseStripSupport),
         width_axis=width_axis, height_axis=height_axis, width_authority_px=width_authority,
         height_authority_px=height_authority, measurement_plan=SimpleNamespace(cross_bounds=bounds))

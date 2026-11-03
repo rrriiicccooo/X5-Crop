@@ -2231,6 +2231,9 @@ _PROOF_READ_CACHE: ContextVar[dict | None] = ContextVar("report_proof_read_cache
 
 def _read_common_proof(value: Any, model: type) -> Any:
     """Rehydrate only explicitly allowed current evidence roots for pure owners."""
+    from x5crop.detection.photo_geometry.coarse_native_association_model import (
+        CoarseNativeAssociationWork, CoarseNativeLineAssociation,
+    )
     if model not in (OutputFootprint, CommonHOutput, CommonHOutputAuthority, CompleteCrossHeightCalibration, PhaseFitResult,
                      CrossFitCompetition, CrossRoleBinding, PhotoBoundaryObservation, CrossBoundaryFamilyResolution,
                      RobustLineFitReceipt, ConstrainedLineFitReceipt,
@@ -2242,7 +2245,8 @@ def _read_common_proof(value: Any, model: type) -> Any:
                      AdjacencyContinuityObservation, AdjacencyObservationCoverage, OverlapEdgePairObservation,
                      SourceFrameWidthAuthority, OuterMaterialBoundaryObservation,
                      PhaseCandidateAdjacencyAssessment, PhaseCompetitionScope, CompletePhaseOutputProof,
-                     RegisteredCrossEvidence, SourceLaneEvidence, BasicAxisProfile):
+                     RegisteredCrossEvidence, SourceLaneEvidence, BasicAxisProfile,
+                     CoarseNativeAssociationWork, CoarseNativeLineAssociation):
         raise ValueError("unsupported common-output proof root")
     cache = _PROOF_READ_CACHE.get()
     key = (id(value), model)
@@ -3939,10 +3943,12 @@ def _validate_registered_normalization(record: dict[str, Any]) -> None:
         lane_id = lane["lane_id"]
         members = tuple(item for item in measurement["queries"] if item["query"]["lane_id"] == lane_id)
         queries = tuple(_read_measurement_query(item["query"]) for item in members)
+        decoded_measurements = []
         for raw, query in zip(members, queries, strict=True):
             decoded = _read_common_proof(
                 {field.name: raw[field.name] for field in fields(PhotoBoundaryMeasurementSet)},
                 PhotoBoundaryMeasurementSet)
+            decoded_measurements.append(decoded)
             extent = record["measurement"]["source_extent"]
             validate_native_background_textures(decoded, WorkspaceExtent(extent["width"], extent["height"]),
                                                 PHOTO_BOUNDARY_MEASUREMENT_SPEC)
@@ -4009,6 +4015,12 @@ def _validate_registered_normalization(record: dict[str, Any]) -> None:
                 ):
                     raise ValueError("normalization baseline work receipt is incomplete")
         work = lane["measurement_work"]
+        from x5crop.detection.photo_geometry.coarse_native_association_model import CoarseNativeAssociationWork
+        raw_association_work = work["coarse_native_association_work"]
+        association_work = (None if raw_association_work is None else
+                            _read_common_proof(raw_association_work, CoarseNativeAssociationWork))
+        association_peak = 0 if association_work is None else association_work.peak_temporary_bytes
+        association_visits = 0 if association_work is None else association_work.value_visit_bound
         receipts = [item["coverage"] for item in members]
         dense = exterior[lane_id].work
         if (
@@ -4017,7 +4029,7 @@ def _validate_registered_normalization(record: dict[str, Any]) -> None:
             or work["measurement_query_count"] != len(receipts) + 1
             or work["completed_query_count"] != sum(item["complete"] for item in receipts) + 1
             or work["pixel_query_count"] != sum(item["pixel_query_count"] for item in receipts) + dense.pixel_query_count
-            or work["peak_temporary_bytes"] != max([dense.peak_temporary_bytes, *(item["peak_temporary_bytes"] for item in receipts)])
+            or work["peak_temporary_bytes"] != max([dense.peak_temporary_bytes, *(item["peak_temporary_bytes"] for item in receipts)]) + association_peak
         ):
             raise ValueError("normalization baseline work lost its lane ledger")
         bounds, _ = _bounds_for_lane(exterior[lane_id].query.work_box, len(queries)+1, lane["template_spec"]["count"])
@@ -4026,10 +4038,25 @@ def _validate_registered_normalization(record: dict[str, Any]) -> None:
             or sum(len(q.trace_positions_px) for q in queries)+dense.registered_trace_count > bounds.max_trace_positions
             or sum(max(1, int(math.ceil(i.width))+1) for q in queries for i in q.search_intervals_px)
                 + dense.coordinate_sample_count > bounds.max_coordinate_samples
-            or work["pixel_query_count"] > bounds.max_pixel_queries
+            or work["pixel_query_count"] + sum(item["peak_source_value_visit_bound"] for item in receipts)
+                + association_visits > bounds.max_pixel_queries
             or work["peak_temporary_bytes"] > bounds.max_peak_temporary_bytes
         ):
             raise ValueError("combined sparse/exterior measurement exceeds the compiled lane budget")
+        from x5crop.detection.photo_geometry.transition_peak_validation import validate_peak_source_measurements
+        extent = WorkspaceExtent(**record["measurement"]["source_extent"])
+        source_id = record["measurement"]["source_id"]
+        if measurement["field"]["source_id"] != source_id:
+            raise ValueError("development measurement changed the canonical source identity")
+        validate_peak_source_measurements(decoded_measurements, source_id=source_id, source_extent=extent)
+        if "work" in lane and lane["work"]["peak_source_value_visit_bound"] != (
+                sum(item["peak_source_value_visit_bound"] for item in receipts) + association_visits):
+            raise ValueError("lane source work changed its complete coverage/association ledger")
+        if "base_cross_registration" in lane:
+            from .peak_source_validation import validate_development_peak_associations
+            production = next(item for item in record["photo_geometry"]["lanes"] if item["lane_id"] == lane_id)
+            validate_development_peak_associations(lane, production, tuple(decoded_measurements),
+                source_id=source_id, source_extent=extent, bounds=bounds, read_proof=_read_common_proof)
 
 
 def _validate_development(record: dict[str, Any]) -> None:
@@ -4457,6 +4484,8 @@ def _validate_current_report_record(record: dict[str, Any]) -> None:
     if record["configuration"]["measurement"].get("coarse_broad_intensity") != native_coarse_intensity_read_model():
         raise ValueError("report changed native coarse intensity units or scope")
     source_extent = validate_report_source_extent(record)
+    from .peak_source_validation import validate_ordinary_peak_associations
+    validate_ordinary_peak_associations(record, read_proof=_read_common_proof, source_extent=source_extent)
     _validate_geometry(record, source_extent)
     _validate_gate(record["candidate_gate"], "candidate")
     _validate_gate(record["decision"]["gate"], "decision")

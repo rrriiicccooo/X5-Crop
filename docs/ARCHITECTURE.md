@@ -642,6 +642,21 @@ Runtime 与当前报告都拒绝旧区域点 schema、虚构空间区域、跨 q
 
 ### 6.4 Cross observation
 
+Sharp coarse 与 TOP／BOTTOM 在已登记灰度测量中保留原峰来源：source 身份、轴和实际 trace、完整
+归一化域、固定核与阈值，以及坐标／gradient／tone／texture／有符号梯度数组的 SHA。每个峰组另存
+完整可信域、自然梯度极性分区、全部候选原峰坐标和原分峰方式。只有两个 view 都完整包含该组、
+全部来源字段和所选原峰相同时，才证明它们来自同一原始峰；坐标接近或区间相交不构成此证明。
+组外噪声、定位区间和完整物理区间仍分别属于各自测量，不互相替换。来源捕获超界时丢弃整批引用，
+原测量可保留，失败前的引用不能取得权限。
+
+`coarse_native_association` 只消费候选无关的 base Cross registration。原 sharp track 的每个保留峰都须
+在两份完整 TOP／BOTTOM 查询的原 trace 峰账本中有唯一原生对应；另一查询存在可能覆盖同一原峰的
+观察时保持缺证，不能因内部角色不同而忽略。原生线须是非条件的直接登记、外侧角色获权、覆盖三区域并具有原查询定义的
+source-spanning 连续支持。完整账本包含所有 observation、恢复的原始 atom、失败／成功 family raw union
+和完整 membership 的每个 maximal union。凡含全部对应峰的解释，都须包含目标原生线的完整 raw 集合；
+存在不同延续、未完成搜索或多个独立 canonical 匹配时不建立关联。该证明只增加各解释共同必需的
+物理约束及已验证连续域，不选择解释，不增加 rank，不把支撑边改为 aperture，也不证明照片序号或终端。
+
 TOP／BOTTOM 的灰度定位、梯度、tone、原一维纹理和全部 trace 保持独立原始事实。定位完成后，
 `native_background_texture.py` 为全部原始 transition 登记原生 uint16 RGB 局部窗口；窗口中心固定为
 原测量选中的峰坐标，不能按新纹理重新选点。先登记两侧整批窗口，再核验源像素、工作与临时量，
@@ -1955,6 +1970,13 @@ Registration、prepared lane 和 report 绑定同一物理域与原始 trace；�
 每条 observation 增加一次至多 2N 个半平面裁剪，工作量 `O(N²)`、临时与保留顶点 `O(N)`；每帧只投影
 已保存顶点，不增加像素读取、拟合、候选或输出状态数量。
 
+Sharp enclosing side 取得第 6.4 节的独立原峰关联后，原 observation、pair、三区域 raw 区间及 observed
+direction 保持。关联在原 coarse 位置／共享方向域内，按原 coarse straight residual 和完整原生 raw
+半平面预编译一次联合直线域，供各候选在同一 slope 下消费；不借用较窄的原生统计位置边际。
+完整原生区间另进入局部 outward departure 的最大值及原 endpoint 准入闭合，不与重复观察相加。
+连续测量域只扩到关联原生线的实际首末 trace；域外仍使用原 coarse 与原生完整 observed direction
+的 hull 保护外推。完整物理交集为空时不生成该关联，不以窄统计 fit 补救。
+
 `APERTURE_PAIR` 的两轴保护相互影响：短轴外扩会增加 sequence 斜线在角点处的位移，
 长轴外扩也会增加 top/bottom 的位移。先在原完整 frame span 求逐边 signed departure，
 保留已经由位置包络覆盖的负余量。令基础长、短轴最大保护量为 `rx, ry`，对应线族最大绝对斜率为
@@ -2464,7 +2486,7 @@ format/source 状态测量共同 W。共同 H 只从每个成员都已完整关�
 `common_outputs` 可保留预算失败窗口作为诊断，只有 `state=supported` 且 `common_failure=null` 才表示窗口
 验证通过。当前该分支在规范 selection/Gate 后执行，不授予照片序号映射、canonical winner 或自动输出权限。
 
-当前报告 schema 为 126。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
+当前报告 schema 为 127。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
 重放全部 producer 和独立成员，再比对结果、缺口和工作。成员 Cross 只重复自身 H／纵向域、best/runner、
 求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
 外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source
@@ -2551,6 +2573,20 @@ baseline 缓冲相加。Coverage 分别保存登记／完成窗口数、实际�
 `128 × source_pixels`，峰值临时内存上限为 `10 × source_pixels + 32 MiB`。不得恢复通用 DP、
 beam、未校准的第二套 Grid/phase vote 搜索、候选笛卡尔积、完整链 materialization/cache、逐帧尺寸、
 candidate-dependent query 或 content-driven placement；概率层也只能消费已经生成且硬合法的有界候选。
+
+原峰来源沿用上述资源池。完整信号摘要按每条 Q 个坐标预留 `5Q+32` 次值访问，每份峰组捕获按
+查询坐标数预留 `256Q+32`，覆盖捕获、typed query／替换检查与最终来源对账，包含最终丢弃的组；
+source／group／reference 保留量分别按 `1024`、
+`2048+256(U+P)`、`512` bytes 计入，U／P 为该组可靠梯度坐标数／候选峰数。固定捕获开销为 1024 bytes。
+累计来源保留量与尚在使用的 baseline 数组、原生纹理缓冲共同预检；新增值访问与既有像素工作之和
+仍不得超过原 `128N`。关联每 lane 至多两条原 sharp track，不新增像素、拟合或 Cross 配额：令 L 为
+精测点、来源组、可靠梯度坐标、全部登记／family／原 atom raw 及各 maximal union raw 上界的合计，
+M 为单条登记线的最大点数，预留 `4096+128L+64(M+8)²` 次逻辑访问和
+`8192+256L+2048M` bytes 临时／保留上界；超界不生成证明前缀，长度预检本身计 4096 次。
+普通报告保存成功关联、完整 base 竞争输入及实际消费的同状态约束；开发报告再与原 field、
+baseline、query view、逐峰来源和粗轨 raw 账本重放，并独立对账新增工作及共同资源上限。
+精测前先按完整登记查询预检来源值访问；无法容纳时不计算摘要或捕获来源组，原测量仍按自身预算
+执行，并明确保留来源超界状态。尚未尝试组捕获时只计其 32 次固定预检，不凭预算失败前缀转授权限。
 
 性能合同是 24-source 完整用户路径平均不超过 5 秒；同一均值不超过 3 秒是明确记录但不阻断
 提交、发布或平台 receipt 的 challenge。正式性能验证属于发布验收，绑定同一 release commit；
@@ -2684,6 +2720,8 @@ Linux开发/CI使用`renameat2(RENAME_NOREPLACE)`。目标在最终检查之后�
 | `photo_geometry/template_measurement_plan*.py` | pixel-free 模板、有限 query intents、停止与工作上界 |
 | `photo_geometry/exterior_region_measurement.py` | 固定外侧带的全列区域／弱信号事实、注册身份与实际工作账本；不授予片夹或输出权限 |
 | `photo_geometry/native_background_texture.py` | 原 transition 的原生二维纹理核、完整源域、整批工作预检及角色纹理依据；不授予边界身份或连续性 |
+| `photo_geometry/transition_peak_source.py`、`transition_peak_capture.py`、`transition_peak_validation.py` | 原峰完整来源、受限捕获及 field／baseline／query view／raw 引用对账 |
+| `photo_geometry/coarse_native_association.py`、`coarse_native_association_model.py` | 候选无关的 coarse／native 原峰对应、完整延续集合的共同必要约束及一次性联合物理域 |
 | `photo_geometry/corridors.py` | 候选无关 top/bottom 与完整 `W/pitch` sequence 查询走廊 |
 | `photo_geometry/registered_*.py`、`observations.py`、`separator_*.py` | 一次性 measurement、role-free edge 与 material band |
 | `photo_geometry/cross_height_transition_measurement.py`、`broad_material_transition_measurement.py`、`broad_material_association.py` | 同一 registered baseline 上的三区域局部弱信号、逐线双尺度宽缓 material 测量及有界完整关联 |

@@ -584,10 +584,19 @@ def _support_cross_vertices(
     ):
         raise ValueError("enclosing support span differs from its native intervals")
     polygons = []
-    for position, traces, intervals, residual in (
-        (bounds[0], support.top_trace_coordinates_px, support.top_trace_intervals_px, support.top_straight_model_residual_px),
-        (bounds[1], support.bottom_trace_coordinates_px, support.bottom_trace_intervals_px, support.bottom_straight_model_residual_px),
+    for binding, position, traces, intervals, residual in (
+        (top_binding, bounds[0], support.top_trace_coordinates_px, support.top_trace_intervals_px, support.top_straight_model_residual_px),
+        (bottom_binding, bounds[1], support.bottom_trace_coordinates_px, support.bottom_trace_intervals_px, support.bottom_straight_model_residual_px),
     ):
+        associated = binding.coarse_native_constraint
+        if associated is not None:
+            region = associated.physical_line_region
+            vertices = tuple((p + m * (support.reference_trace_px - region.reference_trace_px), m)
+                             for p, m in region.vertices)
+            # The candidate-independent region was compiled from these exact
+            # coarse intervals/directions and every necessary native interval.
+            polygons.append(vertices)
+            continue
         vertices = tuple(dict.fromkeys((
             (position[0], bounds[2][0]), (position[1], bounds[2][0]),
             (position[1], bounds[2][1]), (position[0], bounds[2][1]),

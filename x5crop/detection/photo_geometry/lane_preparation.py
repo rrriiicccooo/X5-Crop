@@ -17,6 +17,7 @@ from .corridors import (
     source_lane_box,
 )
 from .coarse_strip_support import observe_coarse_strip_support
+from .coarse_native_association import associate_coarse_native_lines
 from .template_coarse_sides import (
     coarse_enclosing_binding as _coarse_enclosing_binding,
     register_coarse_side_facts,
@@ -39,6 +40,7 @@ from .outer_material import observe_outer_material_boundaries
 from .output_model import ResolvedOutputSlots, SharedStripDirection
 from .profile_adapters import cross_profile_from_regions, sequence_profile_from_regions
 from .registered_measurement import measure_registered_queries
+from .transition_peak_validation import validate_peak_source_measurements
 from .sequence_edge_families import merge_sequence_edge_families
 from .separator_observations import build_format_separator_bands
 from .observation_types import (
@@ -256,6 +258,12 @@ def prepare_template_cross_context(
     coarse_bottom = () if enclosing is None else (
         _coarse_enclosing_binding(enclosing.maximum_track, BoundaryRole.BOTTOM, pair_id=pair_id),
     )
+    constraints = {proof.coarse_track.observation_id: proof.constraint
+                   for proof in registered.coarse_native_associations}
+    coarse_top = tuple(replace(binding, coarse_native_constraint=constraints.get(binding.observation_id))
+                       for binding in coarse_top)
+    coarse_bottom = tuple(replace(binding, coarse_native_constraint=constraints.get(binding.observation_id))
+                          for binding in coarse_bottom)
     fitted_count = len(project_cross_solver_bindings((
         *cross.top_bindings, *cross.bottom_bindings, *coarse_top, *coarse_bottom,
     )))
@@ -554,6 +562,8 @@ def prepare_template_lane(
                                    + sum(m.coverage.pixel_query_count for m in coarse_measurement_sets)),
         max_pixel_query_count=measurement_plan.pixel_bounds.max_pixel_queries,
         max_peak_temporary_bytes=measurement_plan.pixel_bounds.max_peak_temporary_bytes,
+        existing_peak_source_retained_bytes=sum(m.coverage.peak_source_retained_bytes for m in coarse_measurement_sets),
+        existing_peak_source_value_visit_bound=sum(m.coverage.peak_source_value_visit_bound for m in coarse_measurement_sets),
     )
     measurement_sets = (*coarse_measurement_sets, *precision_measurement_sets)
     (top_measurement,) = tuple(
@@ -825,6 +835,8 @@ def prepare_template_lane(
         }.issubset(placement_sequence_edge_ids)
     )
     coverage = tuple(item.coverage for item in measurement_sets)
+    validate_peak_source_measurements(measurement_sets, source_id=field.source_id,
+                                      source_extent=field.source_extent, coarse_support=coarse_support)
     work = TemplateMeasurementWorkReceipt(
         measurement_query_count=len(coverage) + 1,
         pixel_query_count=sum(item.pixel_query_count for item in coverage) + exterior_region_measurement.work.pixel_query_count,
@@ -837,7 +849,7 @@ def prepare_template_lane(
         exterior_work=exterior_region_measurement.work,
     )
     measurement_plan.validate_measurement_receipt(
-        pixel_query_count=work.pixel_query_count,
+        pixel_query_count=work.pixel_query_count + work.peak_source_value_visit_bound,
         peak_temporary_bytes=work.peak_temporary_bytes,
     )
     registered = RegisteredTemplateLane(
@@ -1151,6 +1163,18 @@ def prepare_template_lane(
         ),
     )
     base_cross = cross
+    associations, association_work = associate_coarse_native_lines(
+        registered.coarse_support, registered.measurement_sets, base_cross,
+        maximum_value_visits=max(0, measurement_plan.pixel_bounds.max_pixel_queries
+                                 - work.pixel_query_count - work.peak_source_value_visit_bound),
+        maximum_temporary_bytes=max(0, measurement_plan.pixel_bounds.max_peak_temporary_bytes
+                                    - work.peak_temporary_bytes))
+    work = replace(work, coarse_native_association_work=association_work,
+                   peak_temporary_bytes=work.peak_temporary_bytes + association_work.peak_temporary_bytes)
+    measurement_plan.validate_measurement_receipt(
+        pixel_query_count=work.pixel_query_count + work.peak_source_value_visit_bound,
+        peak_temporary_bytes=work.peak_temporary_bytes)
+    registered = replace(registered, coarse_native_associations=associations, measurement_work=work)
     context = prepare_template_cross_context(
         registered, base_cross, template=template, phase=phase,
         source_geometry=source_geometry,

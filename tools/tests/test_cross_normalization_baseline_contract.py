@@ -23,11 +23,40 @@ from x5crop.detection.photo_geometry.model import (
 from x5crop.detection.photo_geometry.registered_measurement import measure_registered_queries
 from x5crop.detection.photo_geometry import registered_measurement
 from x5crop.detection.photo_geometry.registered_transition_measurement import measure_trace
+from x5crop.detection.photo_geometry.transition_peak_validation import validate_peak_source_measurements
 from x5crop.report.development import _measurement_set_read_model
 from tools.regression.report_validation import _validate_registered_normalization
 
 
 class CrossNormalizationBaselineContractTest(unittest.TestCase):
+    def test_peak_sources_bind_the_original_field_and_complete_query_view(self):
+        field = make_native_test_field(self._source(None), "horizontal")
+        bottom, baseline = measure_registered_queries(field, self._queries())
+        validate = lambda members: validate_peak_source_measurements(
+            members, source_id=field.source_id, source_extent=field.source_extent)
+        validate((bottom, baseline))
+        original = next(group for group in bottom.peak_source_groups if group.complete)
+        foreign = replace(original, source=replace(original.source, source_id="foreign-field"))
+        forged_transitions = tuple(replace(point, peak_source=replace(point.peak_source, group_id=foreign.primitive_id))
+            if point.peak_source is not None and point.peak_source.group_id == original.primitive_id else point
+            for point in bottom.transitions)
+        forged = replace(bottom, transitions=forged_transitions,
+            peak_source_groups=tuple(foreign if group is original else group for group in bottom.peak_source_groups))
+        with self.assertRaisesRegex(ValueError, "source/kernel context"):
+            validate((forged, baseline))
+        changed_view = replace(original, measurement_domain_px=(
+            original.measurement_domain_px[0] + 1, original.measurement_domain_px[1]))
+        forged = replace(bottom, peak_source_groups=tuple(
+            changed_view if group is original else group for group in bottom.peak_source_groups))
+        with self.assertRaisesRegex(ValueError, "query view"):
+            validate((forged, baseline))
+        with self.assertRaisesRegex(ValueError, "normalization source"):
+            validate((bottom, replace(baseline, peak_trace_sources=())))
+        understated = replace(bottom, coverage=replace(bottom.coverage,
+            peak_source_value_visit_bound=bottom.coverage.peak_source_value_visit_bound - 1))
+        with self.assertRaisesRegex(ValueError, "value work"):
+            validate((understated, baseline))
+
     @staticmethod
     def _queries():
         traces = (0, 10, 20, 30, 40, 50)
@@ -211,10 +240,13 @@ class CrossNormalizationBaselineContractTest(unittest.TestCase):
             make_native_test_field(self._source(1926), "horizontal"),
             ExteriorRegionQuery("lane:0", "horizontal", Box(0, 0, 51, 1998), 81.5144220962, "plan:test"),
         )
+        source_id = measured[2].peak_trace_sources[0].source_id
         record = {
-            "measurement": {"layout": "horizontal", "source_extent": {"width": 51, "height": 1998}},
+            "measurement": {"layout": "horizontal", "source_id": source_id,
+                            "source_extent": {"width": 51, "height": 1998}},
             "development": {
                 "measurement": {
+                    "field": {"source_id": source_id},
                     "source_lanes": [{"domain": {
                         "lane_id": "lane:0", "source_axis_long": "x",
                         "work_box": {"left": 0, "top": 0, "right": 51, "bottom": 1998},
@@ -231,6 +263,7 @@ class CrossNormalizationBaselineContractTest(unittest.TestCase):
             value["development"]["lanes"][0]["measurement_work"] = {
                 "coverage_receipts": deepcopy(receipts),
                 "exterior_work": typed_read_model(exterior.work),
+                "coarse_native_association_work": None,
                 "measurement_query_count": len(receipts) + 1,
                 "completed_query_count": sum(item["complete"] for item in receipts) + 1,
                 "pixel_query_count": sum(item["pixel_query_count"] for item in receipts) + exterior.work.pixel_query_count,

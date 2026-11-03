@@ -487,7 +487,7 @@ def _frame_boundary_residuals(
                 extrapolation = _support_direction_departure_px(binding, state_slope, sequence_span)
                 signed_departures[role] = departure
                 base[role] += departure + extrapolation
-                observed = binding.observed_direction_interval_degrees
+                observed = _support_observed_direction(binding)
                 state_slopes[role] = 0.0 if observed is None else max(
                     abs(math.tan(math.radians(angle)) - state_slope)
                     for angle in (observed.minimum, observed.maximum)
@@ -505,10 +505,11 @@ def _frame_boundary_residuals(
 
     # One shared trace ledger is essential: an interior reference frame can
     # cover a trace that neither of the two extreme reference frames covers.
-    admitted = {role: {i for i, trace in enumerate(binding.trace_coordinates_px)
+    support_intervals = {role: tuple(_support_trace_intervals(binding)) for role, binding in bindings.items()}
+    admitted = {role: {i for i, (trace, _) in enumerate(support_intervals[role])
                        if sequence_span.contains(float(trace))}
                 for role, binding in bindings.items()}
-    endpoint_count = sum(len(binding.trace_position_intervals_px) for binding in bindings.values())
+    endpoint_count = sum(len(items) for items in support_intervals.values())
     for _ in range(endpoint_count + 1):
         support_closure = None
         if enclosing:
@@ -563,8 +564,7 @@ def _frame_boundary_residuals(
                                        max(sequence_span.maximum, max(endpoints)))
         added = False
         for role, binding in bindings.items():
-            traces = binding.trace_coordinates_px if binding.trace_position_intervals_px else ()
-            for index, (trace, interval) in enumerate(zip(traces, binding.trace_position_intervals_px, strict=True)):
+            for index, (trace, interval) in enumerate(support_intervals[role]):
                 if index in admitted[role] or not expanded_span.contains(float(trace)):
                     continue
                 admitted[role].add(index)
@@ -615,6 +615,23 @@ def _frame_boundary_residuals(
     raise ValueError("aperture protection exceeded its registered endpoint bound")
 
 
+def _support_trace_intervals(binding: CrossRoleBinding):
+    yield from zip(binding.trace_coordinates_px if binding.trace_position_intervals_px else (),
+                   binding.trace_position_intervals_px, strict=True)
+    associated = binding.coarse_native_constraint
+    if associated is not None:
+        yield from zip(associated.trace_coordinates_px, associated.trace_position_intervals_px, strict=True)
+
+
+def _support_observed_direction(binding: CrossRoleBinding):
+    original = binding.observed_direction_interval_degrees
+    associated = binding.coarse_native_constraint
+    if original is None or associated is None:
+        return original
+    native = associated.observed_direction_interval_degrees
+    return FiniteInterval(min(original.minimum, native.minimum), max(original.maximum, native.maximum))
+
+
 def _support_cross_outward_departure_px(
     placement: FormatPlacement,
     frame: TemplateFrame,
@@ -640,16 +657,7 @@ def _support_cross_outward_departure_px(
     if state_slope is None:
         raise ValueError("enclosing support state lost its shared slope")
     raw_departure = 0.0
-    trace_coordinates = (
-        binding.trace_coordinates_px
-        if binding.trace_position_intervals_px
-        else ()
-    )
-    for trace, interval in zip(
-        trace_coordinates,
-        binding.trace_position_intervals_px,
-        strict=True,
-    ):
+    for trace, interval in _support_trace_intervals(binding):
         trace_px = float(trace)
         if not support.contains(trace_px):
             continue
@@ -670,12 +678,16 @@ def _support_direction_departure_px(
     state_slope: float,
     support: FiniteInterval,
 ) -> float:
-    """Protect only extrapolation beyond the original measured trace domain."""
-    direction_uncertainty = binding.observed_direction_interval_degrees
+    """Protect extrapolation beyond independently proven continuous support."""
+    direction_uncertainty = _support_observed_direction(binding)
     if direction_uncertainty is None:
         return 0.0
     lower = float(binding.trace_coordinates_px[0])
     upper = float(binding.trace_coordinates_px[-1])
+    associated = binding.coarse_native_constraint
+    if associated is not None:
+        lower = min(lower, float(associated.trace_coordinates_px[0]))
+        upper = max(upper, float(associated.trace_coordinates_px[-1]))
     extrapolation_deltas = tuple(
         endpoint - min(max(endpoint, lower), upper)
         for endpoint in (support.minimum, support.maximum)

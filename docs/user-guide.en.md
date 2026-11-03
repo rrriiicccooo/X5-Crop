@@ -101,6 +101,10 @@ axis for manual review. These proposals still require complete safety qualificat
 The program also compares two-dimensional texture on both sides of a boundary in the original pixels, adding
 background information that a single scan line may miss. Local texture alone does not establish that fragments
 belong to one photo boundary, and a local closure cannot cancel a required source-wide check.
+When coarse and fine measurements are proven to share the same original boundary peaks, and an independently
+continuous edge and every competing continuation pass validation, the program can use the fuller measured span
+to protect output. Original intervals and local variation remain protected. Extrapolation beyond that span still
+carries its full uncertainty; missing evidence requires manual review.
 
 Development reports retain the original material bands and boundary sources behind outer-material candidates.
 Photo ordinals and the true first and last boundaries still require independent evidence.

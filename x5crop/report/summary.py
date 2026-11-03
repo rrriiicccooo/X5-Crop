@@ -25,6 +25,7 @@ def measurement_summary(detection: object, workspace: object) -> dict[str, Any]:
     return {
         "owner": "PhotoBoundaryMeasurementField",
         "source_extent": typed_read_model(field.source_extent),
+        "source_id": field.source_id,
         "layout": field.layout,
         "scan_canvas_state": detection.source_core.scan_canvas_state.value,
         "incomplete_reasons": list(detection.source_core.incomplete_reasons),
@@ -69,6 +70,11 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                     lane.prepared.source_scan_geometry
                 ),
                 "complete_height_calibration": typed_read_model(lane.prepared.complete_height_calibration),
+                "coarse_native_associations": typed_read_model(lane.prepared.coarse_native_associations),
+                "coarse_native_base_registration": typed_read_model(
+                    lane.prepared.base_cross_registration if lane.prepared.coarse_native_associations else None),
+                "coarse_native_association_work": typed_read_model(
+                    lane.prepared.measurement_work.coarse_native_association_work),
                 "source_frame_width_authority": typed_read_model(
                     lane.prepared.source_frame_width_authority
                 ),

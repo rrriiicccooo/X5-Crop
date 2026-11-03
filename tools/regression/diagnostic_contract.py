@@ -19,6 +19,7 @@ from x5crop.detection.photo_geometry.template_measurement_plan_model import (
 WORK_FIELDS = (
     "measurement_query_count",
     "pixel_query_count",
+    "peak_source_value_visit_bound",
     "basic_profile_coordinate_count",
     "basic_profile_run_count",
     "registered_sequence_observation_count",
@@ -119,7 +120,7 @@ def bounded_work(
         )
         and aggregate_identity
         and structural_bounds
-        and metrics["pixel_query_count"] <= source_pixels * 128
+        and metrics["pixel_query_count"] + metrics["peak_source_value_visit_bound"] <= source_pixels * 128
         and metrics["peak_temporary_bytes"]
         <= peak_temporary_limit_bytes(source_pixels)
         and all(type(value) is int and 0 <= value <= peak_temporary_limit_bytes(source_pixels)

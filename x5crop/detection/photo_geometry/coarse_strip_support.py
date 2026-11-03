@@ -56,6 +56,7 @@ from .registered_transition_measurement import (
     broad_material_trace_measurement,
 )
 from .physical_identity import physical_observation_id
+from .transition_peak_capture import TransitionPeakCapture, peak_source_receipt
 from .template_measurement_plan_model import TemplateMeasurementPlan
 
 
@@ -432,6 +433,7 @@ def _measure_coarse_short_trace_lattice(
     query: PhotoBoundaryMeasurementQuery,
     *,
     source_rgb: np.ndarray,
+    peak_source_field: PhotoBoundaryMeasurementField | None = None,
 ) -> tuple[tuple[TraceMeasurement, ...], int]:
     """Measure each registered coarse-short trace once for both channels."""
 
@@ -445,12 +447,15 @@ def _measure_coarse_short_trace_lattice(
     retained_bytes = samples.nbytes
     peak_bytes = retained_bytes
     for ordinal in range(len(query.trace_positions_px)):
+        position = query.trace_positions_px[ordinal]
         trace = measure_trace(
             samples[ordinal],
             query.search_intervals_px[ordinal],
             query.boundary_axis_scale_px_per_mm.maximum,
             PHOTO_BOUNDARY_MEASUREMENT_SPEC,
             include_broad_material=False,
+            peak_source_context=(None if peak_source_field is None else (
+                peak_source_field.source_id, peak_source_field.source_extent, query.boundary_axis, position)),
         )
         position = query.trace_positions_px[ordinal]
         rgb = (source_rgb[position, :, :] if query.boundary_axis == BoundaryAxis.X
@@ -775,6 +780,7 @@ def observe_coarse_strip_support(
             short_samples,
             short_measurement.query,
             source_rgb=field.source_rgb,
+            peak_source_field=field,
         )
     )
     broad_regions, broad_temporary = (
@@ -839,6 +845,10 @@ def observe_coarse_strip_support(
         ),
     )
     template = measurement_plan.template_spec
+    peak_source_capture = TransitionPeakCapture(max(0,
+        measurement_plan.pixel_bounds.max_peak_temporary_bytes
+        - sum(item.coverage.peak_temporary_bytes for item in measurements)
+        - 1024 * (len(short_trace_measurements) + 2 * len(sharp_trace_ordinals))))
     (
         shared_direction,
         enclosing_support,
@@ -850,7 +860,22 @@ def observe_coarse_strip_support(
         aggregate_interval_px=direct_short,
         expected_height_px=template.frame_height_px,
         reference_trace_px=long_authority.center,
+        peak_source_capture=peak_source_capture,
     )
+    coarse_raw = (() if enclosing_support is None else tuple(
+        item for track in (enclosing_support.minimum_track, enclosing_support.maximum_track)
+        for item in track.retained_transitions))
+    _, origin_coverage, origin_sources, origin_groups = peak_source_receipt(
+        coarse_raw, measurements[1].coverage,
+        tuple(trace.peak_source for trace in short_trace_measurements if trace.peak_source is not None),
+        peak_source_capture)
+    raw_bytes = 1024 * len(coarse_raw)
+    origin_coverage = replace(origin_coverage,
+        peak_temporary_bytes=origin_coverage.peak_temporary_bytes + raw_bytes,
+        peak_source_retained_bytes=origin_coverage.peak_source_retained_bytes + raw_bytes,
+        peak_source_value_visit_bound=origin_coverage.peak_source_value_visit_bound + 8 * len(coarse_raw))
+    measurements = (measurements[0], replace(measurements[1], coverage=origin_coverage,
+        peak_trace_sources=origin_sources, peak_source_groups=origin_groups))
     group_span = (
         template.frame_width_px.maximum
         + max(0, template.count - 1) * template.pitch_px.maximum

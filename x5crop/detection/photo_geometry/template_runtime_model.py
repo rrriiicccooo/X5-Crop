@@ -8,7 +8,7 @@ contains no search algorithm and no historical candidate representation.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
 from typing import TYPE_CHECKING
@@ -21,6 +21,7 @@ from ..gate_checks import DetectionFailureFact, TypedAssessment
 from ..source_core import SourceLaneEvidence
 from .content_veto_model import ContentVetoFact
 from .coarse_strip_support import CoarseStripSupport
+from .coarse_native_association_model import CoarseNativeAssociationWork, CoarseNativeLineAssociation
 from .exterior_region_measurement import ExteriorRegionMeasurement, ExteriorRegionWork
 from .line_observations import PhotoBoundaryObservation, SideTransitionRegion
 from .measurement_model import (
@@ -100,6 +101,19 @@ class TemplateMeasurementWorkReceipt:
     peak_temporary_bytes: int
     coverage_receipts: tuple[PhotoBoundaryCoverageReceipt, ...]
     exterior_work: ExteriorRegionWork | None = None
+    coarse_native_association_work: CoarseNativeAssociationWork | None = None
+
+    @property
+    def peak_source_value_visit_bound(self) -> int:
+        return (sum(item.peak_source_value_visit_bound for item in self.coverage_receipts)
+                + (0 if self.coarse_native_association_work is None else
+                   self.coarse_native_association_work.value_visit_bound))
+
+    @property
+    def peak_source_retained_bytes(self) -> int:
+        return (sum(item.peak_source_retained_bytes for item in self.coverage_receipts)
+                + (0 if self.coarse_native_association_work is None else
+                   self.coarse_native_association_work.retained_bytes))
 
     def __post_init__(self) -> None:
         values = (
@@ -125,10 +139,13 @@ class TemplateMeasurementWorkReceipt:
             raise ValueError("measurement pixel receipt does not match coverage")
         if self.completed_query_count != sum(item.complete for item in self.coverage_receipts) + extra:
             raise ValueError("measurement completion receipt does not match coverage")
+        association = self.coarse_native_association_work
+        if association is not None and not isinstance(association, CoarseNativeAssociationWork):
+            raise TypeError("measurement work requires typed native association work")
         if self.peak_temporary_bytes != max([
             (self.exterior_work.peak_temporary_bytes if extra else 0),
             *(item.peak_temporary_bytes for item in self.coverage_receipts),
-        ]):
+        ]) + (0 if association is None else association.peak_temporary_bytes):
             raise ValueError("measurement peak receipt does not match coverage")
 
 
@@ -184,6 +201,7 @@ class RegisteredTemplateLane:
     measurement_work: TemplateMeasurementWorkReceipt
     measurement_plan: TemplateMeasurementPlan
     exterior_region_measurement: ExteriorRegionMeasurement
+    coarse_native_associations: tuple[CoarseNativeLineAssociation, ...] = field(default=(), kw_only=True)
 
     def __post_init__(self) -> None:
         if not isinstance(self.lane, SourceLaneEvidence):
@@ -571,6 +589,15 @@ class RegisteredTemplateLane:
                 if binding.observation_id in coarse_tracks
             ):
                 raise ValueError("coarse binding changed its measured support")
+        associations = {item.coarse_track.observation_id: item for item in self.coarse_native_associations}
+        if (len(associations) != len(self.coarse_native_associations)
+                or any(item.coarse_track not in (() if enclosing is None else
+                           (enclosing.minimum_track, enclosing.maximum_track))
+                       for item in self.coarse_native_associations)
+                or any(binding.coarse_native_constraint != (
+                    associations[binding.observation_id].constraint if binding.observation_id in associations else None)
+                       for binding in (*self.top_cross_bindings, *self.bottom_cross_bindings))):
+            raise ValueError("Cross binding lost its independent coarse/native association")
         native_bindings = tuple(item for item in (*self.top_cross_bindings, *self.bottom_cross_bindings)
                                 if item.coarse_side_fact is not None)
         from .template_coarse_sides import coarse_enclosing_binding

@@ -118,6 +118,7 @@ def _transition(
         peak_width_px=peak.peak_width_px,
         prominence=peak.prominence,
         local_noise=peak.local_noise,
+        peak_source=peak.source_reference,
     )
 
 
@@ -364,6 +365,8 @@ def _fit_track(
         fit_residual_px=float(np.median(np.abs(residuals))),
         independent_support_region_count=SPATIAL_SUPPORT_REGION_COUNT,
         source_spanning_continuous=True,
+        retained_transitions=(tuple(point.transition for point in retained)
+            if measurement_basis == CoarseEnclosingMeasurementBasis.SHARP_TRANSITION else ()),
     )
 
 
@@ -781,6 +784,7 @@ def _observe_sharp_coarse_short_axis(
     aggregate_interval_px: FiniteInterval,
     expected_height_px: PositiveInterval | FiniteInterval,
     reference_trace_px: float,
+    peak_source_capture=None,
 ) -> tuple[CoarseSharedDirection | None, CoarseEnclosingSupport | None]:
     """Compile sharp native transitions from the complete sparse lattice."""
 
@@ -837,6 +841,7 @@ def _observe_sharp_coarse_short_axis(
             measured,
             PHOTO_BOUNDARY_MEASUREMENT_SPEC,
             split_gradient_reversals=True,
+            peak_source_capture=peak_source_capture,
         )
         minimum = _unique_nearest(
             peaks,
@@ -881,6 +886,9 @@ def _observe_sharp_coarse_short_axis(
                 side=CoarseSupportSide.MAXIMUM,
             )
         )
+    if peak_source_capture is not None and not peak_source_capture.complete:
+        minimum_values = [replace(item, peak_source=None) for item in minimum_values]
+        maximum_values = [replace(item, peak_source=None) for item in maximum_values]
     return _compile_coarse_enclosing_pair(
         sharp_query,
         measurement_basis=(
@@ -1002,6 +1010,7 @@ def observe_coarse_short_axis_tracks(
     aggregate_interval_px: FiniteInterval | None,
     expected_height_px: PositiveInterval | FiniteInterval,
     reference_trace_px: float,
+    peak_source_capture=None,
 ) -> tuple[
     CoarseSharedDirection | None,
     CoarseEnclosingSupport | None,
@@ -1033,6 +1042,7 @@ def observe_coarse_short_axis_tracks(
         aggregate_interval_px=aggregate_interval_px,
         expected_height_px=expected_height_px,
         reference_trace_px=reference_trace_px,
+        peak_source_capture=peak_source_capture,
     )
     # Broad paths remain independent until the sole Cross support sweep.
     return (

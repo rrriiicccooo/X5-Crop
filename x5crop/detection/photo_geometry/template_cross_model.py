@@ -23,6 +23,7 @@ from .template_aspect_ratio_model import (
 )
 from .template_model import TemplateSpec
 from .coarse_enclosing_model import CoarseEnclosingSideFact, CoarseEnclosingTrack, CoarseSideRegistrationReceipt
+from .coarse_native_association_model import CoarseNativeLineConstraint
 
 
 def cross_role_authorized_by_measurement(
@@ -549,10 +550,19 @@ class CrossRoleBinding:
     conditional_family_ids: tuple[str, ...] = ()
     physical_line_region: PhysicalLineRegion | None = None
 
+    coarse_native_constraint: CoarseNativeLineConstraint | None = None
+
     coarse_side_fact: CoarseEnclosingSideFact | None = None
     coarse_side_track: CoarseEnclosingTrack | None = None
 
     def __post_init__(self) -> None:
+        if self.coarse_native_constraint is not None:
+            constraint = self.coarse_native_constraint
+            if (not isinstance(constraint, CoarseNativeLineConstraint)
+                    or constraint.coarse_observation_id != self.observation_id
+                    or constraint.role != self.role or self.role_authorized
+                    or self.enclosing_pair_id is None or self.coarse_side_fact is not None):
+                raise ValueError("native association cannot replace a coarse support identity or role")
         if (self.coarse_side_fact is None) != (self.coarse_side_track is None):
             raise ValueError("coarse binding requires both its raw path and fitted track")
         if self.coarse_side_fact is not None:

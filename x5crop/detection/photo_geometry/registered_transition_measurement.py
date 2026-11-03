@@ -3,17 +3,24 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
+from hashlib import sha256
 import math
 
 import numpy as np
 
 from ...domain import FiniteInterval
+from ...domain import WorkspaceExtent
 from ..robust_statistics import (
     REGISTERED_UINT8_QUANTIZATION_STEP,
     positive_mad_z,
     positive_mad_z_rows,
 )
 from .model import PhotoBoundaryMeasurementSpec
+from .model import BoundaryAxis
+from .transition_peak_source import (
+    TransitionPeakGroupSource, TransitionPeakReference, TransitionPeakTraceSource,
+)
+from .transition_peak_capture import TransitionPeakCapture
 from .trace_support import PIXEL_CENTER_HALF_EXTENT_PX
 
 
@@ -36,6 +43,7 @@ class TraceMeasurement:
     right_texture: np.ndarray
     temporary_bytes: int
     broad_material: "BroadMaterialTraceMeasurement | None" = None
+    peak_source: TransitionPeakTraceSource | None = None
 
 
 @dataclass(frozen=True)
@@ -92,7 +100,7 @@ def trace_storage_bytes(measured: TraceMeasurement) -> int:
                 while isinstance(root.base, np.ndarray):
                     root = root.base
                 buffers[id(root)] = root.nbytes
-    return sum(buffers.values())
+    return sum(buffers.values()) + (0 if measured.peak_source is None else measured.peak_source.retained_bytes)
 
 
 @dataclass(frozen=True)
@@ -189,6 +197,8 @@ class MeasuredTransitionPeak:
     local_noise: float
     polarity: int
     coordinate_index: int
+    source_group: TransitionPeakGroupSource | None = None
+    source_reference: TransitionPeakReference | None = None
 
 
 @dataclass(frozen=True)
@@ -472,6 +482,7 @@ def measure_trace(
     spec: PhotoBoundaryMeasurementSpec,
     *,
     include_broad_material: bool = False,
+    peak_source_context: tuple[str, WorkspaceExtent, BoundaryAxis, int] | None = None,
 ) -> TraceMeasurement:
     window = spec.local_window_px(scale_px_per_mm)
     gap = spec.transition_gap_px(scale_px_per_mm)
@@ -527,20 +538,25 @@ def measure_trace(
         if include_broad_material
         else None
     )
+    gradient_z = positive_mad_z(gradient, minimum_scale=REGISTERED_UINT8_QUANTIZATION_STEP)
+    tone_z = positive_mad_z(tone, minimum_scale=REGISTERED_UINT8_QUANTIZATION_STEP)
+    texture_z = positive_mad_z(texture, minimum_scale=REGISTERED_UINT8_QUANTIZATION_STEP)
+    source = None
+    if peak_source_context is not None:
+        if values_u8.dtype != np.uint8:
+            raise ValueError("original peak source requires canonical uint8 gray")
+        digest = sha256()
+        for array in (coordinates, gradient_z, tone_z, texture_z, signed_gradient):
+            digest.update(memoryview(array).cast("B"))
+        source_id, source_extent, boundary_axis, trace_coordinate = peak_source_context
+        source = TransitionPeakTraceSource(source_id, source_extent, boundary_axis,
+            trace_coordinate, (int(coordinates[0]), int(coordinates[-1])), window, gap,
+            float(spec.gradient_z_minimum), float(spec.tone_or_texture_z_minimum), digest.hexdigest())
     return TraceMeasurement(
         coordinates=coordinates,
-        gradient_z=positive_mad_z(
-            gradient,
-            minimum_scale=REGISTERED_UINT8_QUANTIZATION_STEP,
-        ),
-        tone_z=positive_mad_z(
-            tone,
-            minimum_scale=REGISTERED_UINT8_QUANTIZATION_STEP,
-        ),
-        texture_z=positive_mad_z(
-            texture,
-            minimum_scale=REGISTERED_UINT8_QUANTIZATION_STEP,
-        ),
+        gradient_z=gradient_z,
+        tone_z=tone_z,
+        texture_z=texture_z,
         signed_gradient=signed_gradient,
         left_tone=left_tone,
         right_tone=right_tone,
@@ -555,8 +571,10 @@ def measure_trace(
             + right_texture.nbytes
             + gradient.nbytes
             + (0 if broad_material is None else broad_material.temporary_bytes)
+            + (2048 if source is not None else 0)
         ),
         broad_material=broad_material,
+        peak_source=source,
     )
 
 
@@ -757,6 +775,7 @@ def measured_transition_peaks(
     spec: PhotoBoundaryMeasurementSpec,
     *,
     split_gradient_reversals: bool,
+    peak_source_capture: TransitionPeakCapture | None = None,
 ) -> tuple[MeasuredTransitionPeak, ...]:
     coordinates = measurement.coordinates
     gradient_supported = measurement.gradient_z >= spec.gradient_z_minimum
@@ -820,6 +839,24 @@ def measured_transition_peaks(
             statistics = _zero_median_statistics(localization)
             noise_statistics[key] = statistics
         local_noise = _group_local_noise(localization, group, statistics)
+        source_group = None
+        if measurement.peak_source is not None and peak_source_capture is not None and peak_source_capture.complete:
+            if peak_source_capture.reserve_group(int(group.size), int(reliable_gradient.size), len(peak_candidates)):
+                natural_runs = (polarity_runs if split_gradient_reversals else tuple(np.split(reliable_gradient, np.flatnonzero(
+                    np.diff(measurement.signed_gradient[reliable_gradient] > 0.0)) + 1))
+                    if reliable_gradient.size else ())
+                source_group = TransitionPeakGroupSource(
+                    source=measurement.peak_source,
+                    measurement_domain_px=(int(coordinates[0]), int(coordinates[-1])),
+                    credible_group_domain_px=(int(coordinates[group[0]]), int(coordinates[group[-1]])),
+                    reliable_gradient_partitions=tuple((
+                        1 if measurement.signed_gradient[run[0]] > 0 else -1,
+                        tuple(map(int, coordinates[run]))) for run in natural_runs),
+                    candidate_peak_coordinates_px=tuple(int(coordinates[index]) for index in peak_candidates),
+                    selection_basis="gradient" if polarity_runs else "secondary",
+                    split_gradient_reversals=split_gradient_reversals,
+                )
+                peak_source_capture.retain(source_group)
         for ordinal, peak_index in enumerate(peak_candidates):
             prominence = max(0.0, float(localization[peak_index]) - local_noise)
             half_height = (
@@ -918,6 +955,10 @@ def measured_transition_peaks(
                     local_noise=local_noise,
                     polarity=peak_polarity,
                     coordinate_index=peak_index,
+                    source_group=source_group,
+                    source_reference=(None if source_group is None or not polarity_runs else
+                        TransitionPeakReference(source_group.primitive_id, ordinal,
+                            int(coordinates[peak_index]), peak_polarity)),
                 )
             )
     return tuple(records)

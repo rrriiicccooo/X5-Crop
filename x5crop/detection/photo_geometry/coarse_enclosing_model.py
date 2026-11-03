@@ -12,7 +12,8 @@ import math
 
 from ...domain import EvidenceState, FiniteInterval, ObservationId
 from .model import SPATIAL_SUPPORT_REGION_COUNT
-from .measurement_model import BroadMaterialTraceObservation, PhotoBoundaryMeasurementQuery, MaterialBackgroundSide
+from .measurement_model import (BroadMaterialTraceObservation, PhotoBoundaryMeasurementQuery,
+    MaterialBackgroundSide, PhotoBoundaryTransition)
 
 
 class CoarseSupportSide(str, Enum):
@@ -246,8 +247,17 @@ class CoarseEnclosingTrack:
     fit_residual_px: float
     independent_support_region_count: int
     source_spanning_continuous: bool
+    retained_transitions: tuple[PhotoBoundaryTransition, ...] = ()
 
     def __post_init__(self) -> None:
+        if self.measurement_basis == CoarseEnclosingMeasurementBasis.SHARP_TRANSITION and not self.retained_transitions:
+            raise ValueError("sharp coarse track requires its complete retained raw peak ledger")
+        if self.retained_transitions and (
+            tuple(item.trace_coordinate_px for item in self.retained_transitions) != self.trace_coordinates_px
+            or tuple(item.physical_position_interval_px for item in self.retained_transitions) != self.trace_position_intervals_px
+            or len({item.transition_id for item in self.retained_transitions}) != len(self.retained_transitions)
+        ):
+            raise ValueError("coarse track changed its complete retained raw peak ledger")
         if (
             not isinstance(self.side, CoarseSupportSide)
             or not isinstance(
