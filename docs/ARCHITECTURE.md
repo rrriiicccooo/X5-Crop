@@ -2593,7 +2593,7 @@ winner/runner、provenance、footprint 或输出像素。
 复用同一 typed resolution；不同 pass、直接观察子集与 source 分别准备，不共享权限结果。
 同一 phase 输入的坐标、角色与 separator 身份以 O(N+R+P) 只读索引供 seed 和迭代复用；索引绑定
 原观察与 pair tuple，随该次 pass 释放。依赖 seed、拟合参数或邻接关系的匹配状态仍逐次计算。
-同一 phase pass 另保留至多 16 份 `_linear_fit` 的完整数值输入与四标量结果，绑定该次原事实索引。
+同一 phase pass 另保留至多 16 份 `_linear_fit` 的完整数值输入及位置／W／pitch／拟合 basis，绑定该次原事实索引。
 键保留有序 role／原始 fact 身份、完整邻接关系、direction、各轴及 gap／phase authority 和初始 W／pitch；
 低秩拟合仍依赖原初值，不能省略。不同原始 fact 不因 ID 相同而复用；不缓存匹配结果、完整 fit、候选、
 成员或权限，不跨 pass／source。命中后各 seed 继续独立执行身份保留、单调裁剪、关系实现和权限核验。
