@@ -68,6 +68,10 @@ def _aggregate_phase_work(
         fit_pass_count=sum(item.fit_pass_count for item in receipts),
         phase_producer_scope_count=sum(item.phase_producer_scope_count for item in receipts),
         phase_producer_record_count=sum(item.phase_producer_record_count for item in receipts),
+        lattice_fit_lookup_count=sum(item.lattice_fit_lookup_count for item in receipts),
+        lattice_fit_evaluation_count=sum(item.lattice_fit_evaluation_count for item in receipts),
+        lattice_fit_reuse_count=sum(item.lattice_fit_reuse_count for item in receipts),
+        lattice_fit_cache_peak_entry_count=max(item.lattice_fit_cache_peak_entry_count for item in receipts),
         separator_lattice_hypothesis_count=sum(
             item.separator_lattice_hypothesis_count for item in receipts
         ),

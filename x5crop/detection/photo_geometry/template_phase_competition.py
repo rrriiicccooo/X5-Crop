@@ -730,53 +730,61 @@ def fit_template_phase(
     # The admission scan is at most R coordinates per existing fitted seed:
     # O(H * R), without new hypotheses, queries, lookups or fit passes.
     matching_index = _fitting._PhaseMatchingIndex(direct, roles, separator_pairs)
-    local_candidates = tuple(
-        value
-        for value in (
-            _fitting._fit_seed(
-                seed,
-                direct,
-                separator_pairs,
-                roles,
-                template,
-                seed.adjacency_relations,
-                pitch_authority,
-                phase_authority_px,
-                fit_residual_limit_px,
-                effective_phase_anchor_authority_ceiling,
-                matching_index=matching_index,
-            )
-            for seed in sorted(
-                seeds,
-                key=lambda item: (
-                    item.phase_px,
-                    item.pitch_px,
-                    tuple(map(repr, item.adjacency_relations)),
-                    tuple(
-                        (role_index, str(observation_id))
-                        for role_index, observation_id in item.required_bindings
+    linear_preparation = _fitting._PhaseLinearFitPreparation(matching_index)
+    try:
+        local_candidates = tuple(
+            value
+            for value in (
+                _fitting._fit_seed(
+                    seed,
+                    direct,
+                    separator_pairs,
+                    roles,
+                    template,
+                    seed.adjacency_relations,
+                    pitch_authority,
+                    phase_authority_px,
+                    fit_residual_limit_px,
+                    effective_phase_anchor_authority_ceiling,
+                    matching_index=matching_index,
+                    linear_fit_preparation=linear_preparation,
+                )
+                for seed in sorted(
+                    seeds,
+                    key=lambda item: (
+                        item.phase_px,
+                        item.pitch_px,
+                        tuple(map(repr, item.adjacency_relations)),
+                        tuple(
+                            (role_index, str(observation_id))
+                            for role_index, observation_id in item.required_bindings
+                        ),
                     ),
-                ),
+                )
+            )
+            if value is not None
+            and _candidate_respects_holder_or_terminal_source(
+                value.fit,
+                holder_span_px=holder_span_px,
+                holder_slack_px=width0 * 0.04,
+                source_domain=source_domain,
+            )
+            and (
+                phase_authority_px is None
+                or not (
+                    value.fit.phase_lattice_fit.absolute_phase_interval_px.maximum
+                    < phase_authority_px.minimum
+                    or phase_authority_px.maximum
+                    < value.fit.phase_lattice_fit.absolute_phase_interval_px.minimum
+                )
             )
         )
-        if value is not None
-        and _candidate_respects_holder_or_terminal_source(
-            value.fit,
-            holder_span_px=holder_span_px,
-            holder_slack_px=width0 * 0.04,
-            source_domain=source_domain,
-        )
-        and (
-            phase_authority_px is None
-            or not (
-                value.fit.phase_lattice_fit.absolute_phase_interval_px.maximum
-                < phase_authority_px.minimum
-                or phase_authority_px.maximum
-                < value.fit.phase_lattice_fit.absolute_phase_interval_px.minimum
-            )
-        )
-    )
-    del matching_index
+    finally:
+        linear_preparation.clear()
+    lattice_fit_work = (linear_preparation.lookup_count, linear_preparation.evaluation_count,
+        linear_preparation.reuse_count, linear_preparation.peak_entry_count,
+        linear_preparation.peak_temporary_bytes)
+    del matching_index, linear_preparation
     # A binding tuple does not identify its joint state, protection intervals
     # or later local-role lookup. Only identical complete fits are duplicates.
     candidates = tuple(dict.fromkeys(local_candidates))
@@ -1021,10 +1029,16 @@ def fit_template_phase(
         ),
         phase_hypothesis_count=len(seeds),
         phase_offset_lookup_count=len(seeds),
+        lattice_fit_lookup_count=lattice_fit_work[0],
+        lattice_fit_evaluation_count=lattice_fit_work[1],
+        lattice_fit_reuse_count=lattice_fit_work[2],
+        lattice_fit_cache_peak_entry_count=lattice_fit_work[3],
         direct_observation_count=len(direct),
         inferred_role_count=(0 if best is None else len(best.fit.unbound_role_indices)),
         peak_temporary_bytes=max(
             seed_peak_bytes,
+            seed_peak_bytes + len(local_candidates) * len(roles) * 96
+            + lattice_fit_work[4],
             len(seeds) * len(roles) * 32 + len(ordered) * len(roles) * 96,
             overlap_validation_peak_bytes,
         ) + (len(roles) * 128 if terminal_records else 0)

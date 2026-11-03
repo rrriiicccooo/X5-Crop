@@ -22,11 +22,17 @@ from .line_observations import PhysicalLineRegion
 
 
 MAX_TEMPLATE_FIT_PASSES = 6
+MAX_PHASE_LATTICE_FIT_CACHE_ENTRIES = 16
 TEMPLATE_ROLE_REFINEMENT_RADIUS_RATIO = 0.11
 MIN_TEMPLATE_ROLE_REFINEMENT_RADIUS_PX = 3.0
 GENERIC_SEPARATOR_GAP_MINIMUM_FRAME_RATIO = 0.02
 GENERIC_SEPARATOR_GAP_MAXIMUM_FRAME_RATIO = 0.20
 from .model import BoundaryRole
+
+
+def phase_lattice_fit_cache_bytes(role_count: int, entry_count: int) -> int:
+    """Bound the retained exact-input keys plus one current lookup key."""
+    return 1024 + (entry_count + 1) * (1024 + 1024 * role_count)
 
 
 def template_role_refinement_radius_px(pitch_px: float) -> float:
@@ -1655,6 +1661,10 @@ class TemplateSearchReceipt:
     selected_nominal_grid_solve_success_count: int = 0
     phase_producer_scope_count: int = 0
     phase_producer_record_count: int = 0
+    lattice_fit_lookup_count: int = 0
+    lattice_fit_evaluation_count: int = 0
+    lattice_fit_reuse_count: int = 0
+    lattice_fit_cache_peak_entry_count: int = 0
 
     def __post_init__(self) -> None:
         values = (
@@ -1686,6 +1696,10 @@ class TemplateSearchReceipt:
             self.selected_nominal_grid_solve_success_count,
             self.phase_producer_scope_count,
             self.phase_producer_record_count,
+            self.lattice_fit_lookup_count,
+            self.lattice_fit_evaluation_count,
+            self.lattice_fit_reuse_count,
+            self.lattice_fit_cache_peak_entry_count,
         )
         if any(not isinstance(value, int) or value < 0 for value in values):
             raise ValueError("template work receipt values must be non-negative integers")
@@ -1706,6 +1720,21 @@ class TemplateSearchReceipt:
             raise ValueError("phase producer scopes exceed the actual fit passes")
         if self.phase_offset_lookup_count > self.phase_hypothesis_count:
             raise ValueError("phase offset lookups exceed phase hypotheses")
+        if (
+            any(type(value) is not int for value in (
+                self.lattice_fit_lookup_count, self.lattice_fit_evaluation_count,
+                self.lattice_fit_reuse_count, self.lattice_fit_cache_peak_entry_count))
+            or self.lattice_fit_lookup_count
+            != self.lattice_fit_evaluation_count + self.lattice_fit_reuse_count
+            or self.lattice_fit_lookup_count > self.phase_hypothesis_count * (self.role_count + 5)
+            or self.lattice_fit_cache_peak_entry_count
+            > min(MAX_PHASE_LATTICE_FIT_CACHE_ENTRIES, self.lattice_fit_evaluation_count)
+            or (self.lattice_fit_cache_peak_entry_count == 0)
+            != (self.lattice_fit_evaluation_count == 0)
+            or self.lattice_fit_lookup_count and self.peak_temporary_bytes
+            < phase_lattice_fit_cache_bytes(self.role_count, self.lattice_fit_cache_peak_entry_count)
+        ):
+            raise ValueError("phase lattice-fit reuse work is inconsistent")
         if (
             self.candidate_direct_role_authority_terminal_count
             > self.candidate_direct_role_authority_evaluation_count

@@ -304,6 +304,10 @@ placement evidence，也不能把源边未观测区域补成背景；它只提�
 峰组 local noise 仍取组外完整信号中位数；只有有限数组中，精确扣除本组零值后，组外严格多数为零时，
 可直接返回同一零中位数，避免每峰重复创建整条 trace 的 mask 和 partition。恰好一半为零、非有限数组
 与组外为空均保留原统计语义；gradient、secondary、broad 各自计数，不共享统计或更改阈值。
+同一原图列、相同 window／gap 与相同位置区间不构成跨 query 的同峰证明。完整域与 corridor 的
+组外 local noise、可信峰组和 polarity partition 可能不同；被窗口截去的竞争峰不能视为不存在。
+Sharp track 当前不保存完整原峰组来源，不能仅按区间重合把精测长线或 native broad 的物理约束
+转授给它；共享 baseline 也不授予边界身份。
 `registered_normalization_revision` 绑定计划与报告身份。开发报告重建登记合同，拒绝基线缺失、额外
 边界证据、lane 范围漂移或不完整工作账本；不保留旧小窗口归一化路径。
 
@@ -2460,7 +2464,7 @@ format/source 状态测量共同 W。共同 H 只从每个成员都已完整关�
 `common_outputs` 可保留预算失败窗口作为诊断，只有 `state=supported` 且 `common_failure=null` 才表示窗口
 验证通过。当前该分支在规范 selection/Gate 后执行，不授予照片序号映射、canonical winner 或自动输出权限。
 
-当前报告 schema 为 125。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
+当前报告 schema 为 126。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
 重放全部 producer 和独立成员，再比对结果、缺口和工作。成员 Cross 只重复自身 H／纵向域、best/runner、
 求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
 外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source
@@ -2589,6 +2593,17 @@ winner/runner、provenance、footprint 或输出像素。
 复用同一 typed resolution；不同 pass、直接观察子集与 source 分别准备，不共享权限结果。
 同一 phase 输入的坐标、角色与 separator 身份以 O(N+R+P) 只读索引供 seed 和迭代复用；索引绑定
 原观察与 pair tuple，随该次 pass 释放。依赖 seed、拟合参数或邻接关系的匹配状态仍逐次计算。
+同一 phase pass 另保留至多 16 份 `_linear_fit` 的完整数值输入与四标量结果，绑定该次原事实索引。
+键保留有序 role／原始 fact 身份、完整邻接关系、direction、各轴及 gap／phase authority 和初始 W／pitch；
+低秩拟合仍依赖原初值，不能省略。不同原始 fact 不因 ID 相同而复用；不缓存匹配结果、完整 fit、候选、
+成员或权限，不跨 pass／source。命中后各 seed 继续独立执行身份保留、单调裁剪、关系实现和权限核验。
+最多四轮匹配与原单调裁剪保持；H 个原 seed、R 个 role 的 lookup 保守上界为 `H(R+5)`。
+Lookup 等于实际 evaluation 加 reuse；峰值项数不超过 16 或实际 evaluation 数。按最近使用顺序淘汰，
+淘汰后继续原求解；失败／异常结果不进入缓存，正常和异常退出均清空。
+执行前按最大容量核对原固定 32 MiB allowance；实际保留 E 项时，含一份当前 key 的逻辑字节上界为
+`1024+(E+1)(1024+1024R)`，包括所持有的已实现邻接 relation 及其区间，与当时原 seed、候选同时
+保留量合计进入 source 临时内存 receipt。
+报告分别记录上述 lookup／evaluation／reuse／peak，不把数值复用计作减少离散 seed 或 Cross raw union。
 单次 matching 的 expected role positions 和 Pareto compatibility axes 各计算一次；固定 W 的区间
 相容性直接比较差值端点。联合可行投影共用一条顶点路径，保留完整联合约束与求解上限。
 原生双边界与 fixed W/H 的二维集合共用区间矩形和有符号跨度条带的交点枚举，每次计入 12 个端点

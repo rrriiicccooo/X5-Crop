@@ -26,6 +26,8 @@ from .template_model import (
     SequenceRoleBinding,
     TemplateRole,
     TemplateSpec,
+    MAX_PHASE_LATTICE_FIT_CACHE_ENTRIES,
+    phase_lattice_fit_cache_bytes,
     adjacency_prefix_coefficients,
     adjacency_prefix_positions,
     adjacency_prefix_intervals,
@@ -108,6 +110,68 @@ class _PhaseMatchingIndex:
             or self.roles != roles
         ):
             raise ValueError("phase matching index belongs to a different input")
+
+
+@dataclass
+class _PhaseLinearFitPreparation:
+    """Exact numerical results for one fixed matching input, never permissions."""
+
+    index: _PhaseMatchingIndex
+    _results: dict[tuple[object, ...], tuple[float, float, float, LatticeParameterFitBasis]] = field(
+        default_factory=dict, init=False, repr=False)
+    lookup_count: int = field(default=0, init=False)
+    evaluation_count: int = field(default=0, init=False)
+    reuse_count: int = field(default=0, init=False)
+    peak_entry_count: int = field(default=0, init=False)
+
+    def __post_init__(self) -> None:
+        from .template_measurement_plan_model import MAXIMUM_PEAK_TEMPORARY_FIXED_ALLOWANCE_BYTES
+        if phase_lattice_fit_cache_bytes(len(self.index.roles), MAX_PHASE_LATTICE_FIT_CACHE_ENTRIES) > MAXIMUM_PEAK_TEMPORARY_FIXED_ALLOWANCE_BYTES:
+            raise ValueError("lattice-fit preparation exceeds the original source memory allowance")
+
+    @property
+    def peak_temporary_bytes(self) -> int:
+        return (0 if not self.lookup_count else phase_lattice_fit_cache_bytes(
+            len(self.index.roles), self.peak_entry_count))
+
+    def clear(self) -> None:
+        self._results.clear()
+
+    def fit(
+        self,
+        matches: tuple[tuple[TemplateRole, _candidate_model._AnchorFact], ...],
+        *, width: float, pitch: float, direction: int,
+        relations: tuple[AdjacencyRelation, ...],
+        width_authority: PositiveInterval, pitch_authority: FiniteInterval,
+        gap_authority: FiniteInterval, phase_authority: FiniteInterval | None,
+    ) -> tuple[float, float, float, LatticeParameterFitBasis]:
+        if any(
+            self.index.role_by_index.get(role.role_index) != role
+            or self.index.direct_by_id.get(anchor.observation_id) is not anchor
+            for role, anchor in matches
+        ):
+            raise ValueError("lattice-fit preparation belongs to a different input")
+        # Fixed facts remain bound to this exact index. Row order and the full
+        # relation/authority input stay in the key; low-rank seed W/pitch matter.
+        key = (tuple((role.role_index, anchor.observation_id) for role, anchor in matches),
+               width, pitch, direction, relations, width_authority, pitch_authority,
+               gap_authority, phase_authority)
+        self.lookup_count += 1
+        if key in self._results:
+            self.reuse_count += 1
+            value = self._results.pop(key)
+            self._results[key] = value
+            return value
+        self.evaluation_count += 1
+        value = _linear_fit(matches, width=width, pitch=pitch, direction=direction,
+            relations=relations, width_authority=width_authority,
+            pitch_authority=pitch_authority, gap_authority=gap_authority,
+            phase_authority=phase_authority)
+        if len(self._results) == MAX_PHASE_LATTICE_FIT_CACHE_ENTRIES:
+            self._results.pop(next(iter(self._results)))
+        self._results[key] = value
+        self.peak_entry_count = max(self.peak_entry_count, len(self._results))
+        return value
 
 
 def _match_roles(
@@ -753,10 +817,14 @@ def _fit_seed(
     ) = None,
     *,
     matching_index: _PhaseMatchingIndex | None = None,
+    linear_fit_preparation: _PhaseLinearFitPreparation | None = None,
 ) -> _candidate_model._BoundFit | None:
     matching_roles = template.roles
     index = matching_index or _PhaseMatchingIndex(direct, matching_roles, separator_pairs)
     index.validate_input(direct, matching_roles, separator_pairs)
+    if linear_fit_preparation is not None and linear_fit_preparation.index is not index:
+        raise ValueError("lattice-fit preparation belongs to a different matching input")
+    linear_fit = _linear_fit if linear_fit_preparation is None else linear_fit_preparation.fit
     width = (
         template.frame_width_px.minimum
         + template.frame_width_px.maximum
@@ -834,7 +902,7 @@ def _fit_seed(
         # The same direct rows therefore already have their final bounded fit.
         if updated_matches == matches:
             break
-        updated = _linear_fit(
+        updated = linear_fit(
             updated_matches,
             width=width,
             pitch=pitch,
@@ -879,7 +947,7 @@ def _fit_seed(
                 for role, anchor in matches
                 if (role.role_index, anchor.observation_id) in required
             )
-            phase, width, pitch, fit_basis = _linear_fit(
+            phase, width, pitch, fit_basis = linear_fit(
                 defining_matches,
                 width=seed_width,
                 pitch=seed.pitch_px,
@@ -906,7 +974,7 @@ def _fit_seed(
             ):
                 return None
             seed_identity_replayed = True
-        phase, width, pitch, retained_basis = _linear_fit(
+        phase, width, pitch, retained_basis = linear_fit(
             retained,
             width=width,
             pitch=pitch,

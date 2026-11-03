@@ -29,6 +29,7 @@ from x5crop.detection.photo_geometry.template_common_output import (
 from x5crop.detection.photo_geometry.template_output import common_direct_use_budget_assessment
 from x5crop.detection.photo_geometry.output_model import OutputFootprint, fixed_output_coverage
 from x5crop.detection.photo_geometry.template_holder_fill import HolderFillAssessment
+from x5crop.detection.photo_geometry.template_model import TemplateSearchReceipt
 from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
 from x5crop.detection.photo_geometry.template_phase_review import (
     IndependentPhaseReview, IndependentPhaseReviewPortfolio,
@@ -3795,6 +3796,10 @@ def _validate_phase_competition(value: object) -> None:
         "selected_nominal_grid_solve_success_count",
         "phase_producer_scope_count",
         "phase_producer_record_count",
+        "lattice_fit_lookup_count",
+        "lattice_fit_evaluation_count",
+        "lattice_fit_reuse_count",
+        "lattice_fit_cache_peak_entry_count",
     }
     if not isinstance(receipt, dict) or set(receipt) != receipt_fields:
         raise ValueError("phase-candidate work receipt schema is invalid")
@@ -3808,6 +3813,7 @@ def _validate_phase_competition(value: object) -> None:
     authority_count = receipt[
         "candidate_direct_role_authority_evaluation_count"
     ]
+    TemplateSearchReceipt(**receipt)
     projection_count = receipt[
         "candidate_direct_role_projection_evaluation_count"
     ]
