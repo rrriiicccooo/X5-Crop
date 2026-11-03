@@ -325,6 +325,10 @@ class CrossRegistrationWorkReceipt:
     local_refinement_scope_count: int = 0
     local_refinement_scopes: tuple[LocalCrossRefinementScope, ...] = ()
 
+    @property
+    def membership_cache_peak_temporary_bytes(self) -> int:
+        return max((scope.cache_temporary_bytes for scope in self.membership.scopes), default=0) if self.membership else 0
+
     def __post_init__(self) -> None:
         if (
             any(type(value) is not int for value in (

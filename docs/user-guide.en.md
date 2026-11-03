@@ -94,7 +94,8 @@ still require review.
 
 Short-axis search completeness, independent boundary evidence, and output eligibility are checked separately.
 Even a completed search requires review when independent support is missing or later fitting exceeds its work limit.
-Completed queries alone do not establish that no other boundary interpretation exists.
+Reports distinguish search completeness from whether the complete set meets later fitting limits; completing the search
+does not itself grant output eligibility.
 When both photo positioning and top/bottom boundaries are ambiguous, reports retain existing alternatives for each
 axis for manual review. These proposals still require complete safety qualification.
 The program also compares two-dimensional texture on both sides of a boundary in the original pixels, adding

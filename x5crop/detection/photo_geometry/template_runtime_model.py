@@ -662,6 +662,9 @@ class PreparedTemplateLane(RegisteredTemplateLane):
             raise TypeError("prepared template lane requires its exact cross input")
         if not isinstance(self.cross_registration_work, CrossRegistrationWorkReceipt):
             raise TypeError("prepared lane requires cross registration work")
+        if (self.cross_registration_work.membership_cache_peak_temporary_bytes
+                > self.measurement_plan.pixel_bounds.max_peak_temporary_bytes):
+            raise ValueError("membership cache exceeds the compiled source memory bound")
         validate_membership_registration(
             self.cross_registration_work.membership, self.cross_boundary_family_resolutions,
             {item.observation_id: MembershipAtom(item.observation_id, item.transition_ids,
@@ -1124,6 +1127,8 @@ class TemplateLaneReconstruction:
         ):
             raise ValueError("incomplete broad association cannot select a placement")
         placements = self.placement_competition.placements
+        if self.work.peak_temporary_bytes < self.prepared.cross_registration_work.membership_cache_peak_temporary_bytes:
+            raise ValueError("placement work omitted the membership cache memory")
         if any(item.lane_id != self.lane_id for item in placements):
             raise ValueError("placement competition crosses lane authority")
         proposal = self.placement_proposal

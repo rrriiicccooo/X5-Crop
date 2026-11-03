@@ -1463,13 +1463,17 @@ gradient、全部顶点的 first-order gap，并要求 `gap <= robust_fit_tolera
 在这个固定原子宇宙内，以同 trace 不同 identity 冲突和完整物理域为空作单调剪枝，完整枚举所有包含极大集合。
 确定性 include/exclude 搜索分别保留强制、待选与此前排除的原子。完整待选并集可行时，逐一检验此前排除
 原子的单扩展；均不可行才闭合该极大解释，否则拒绝这份非极大解释。完整并集不可行时才分支，加入
-原子后仍用同一联合原始物理域过滤待选及排除集合，不以成对相容代替联合可行性，不缓存搜索结论。
+原子后仍用同一联合原始物理域过滤待选及排除集合，不以成对相容代替联合可行性。
+同一 scope 的原子、anchor、原始 transition、query 与尺度固定后，初始／分支过滤和极大性扩展可以
+按原整数 mask 复用已完成的完整 raw 核验布尔结果。True／False 均保留；不复用子集、超集或其它
+scope，不缓存物理多边形、拟合、角色或搜索分组。Anchor 与真实 whole-union 查询继续实际核验，
+预算耗尽、异常或未完成的检查不得进入缓存。
 极大性只表示无法再加入一个完整原子，不证明成员身份或角色权限。
 无独立 anchor 时明确记为不适用；多个 anchor 联合不可行时不删除任何 anchor。搜索不读取拟合结果、
 背景角色授权、黄金或 placement。已有 raw union 不重复物化；新 union 的不同成员解释分别保留来源，
 只共用一次完整数值拟合。每份新 family 绑定其原始未解决 parent，原 raw 和全部原 observation 继续保存。
-同 lane 两侧及全部 family 共用至多 4096 次完整原始集合核验；anchor、初始及分支过滤、完整并集与极大性
-扩展均计入该额度。访问前检查预算，任一 scope 耗尽时整批不添加新线，
+同 lane 两侧及全部 family 共用至多 4096 次实际完整原始集合核验；anchor、初始及分支过滤、完整并集与
+极大性扩展的实际计算均计入该额度，查询与证明复用另外记账。访问前检查预算，任一 scope 耗尽时整批不添加新线，
 不能输出此前完成的搜索前缀。全部搜索完成后，以每角色原 run 数 R、原唯一 family 拟合数 U、原约束
 拟合数 C、新唯一 union 数 K 预检 `R+U+K <= 3R` 与 `C+K <= 2R`；任一侧失败时两侧均不执行新增拟合。
 新增拟合都通过预检后才开始，失败保留完整解释及明确的不可用结果，不根据成功次数截取前 N 组。
@@ -1515,11 +1519,19 @@ Raster trace 不连续不等于物理边界不同；完整并集重拟合能够�
 pending 中的每个原子也已分别与该 required 的完整原始 union 一起核验。因此 pending 至多一个时，
 whole-union 直接复用这份相同集合证明，以 `union_lookahead_reuse_count` 单独记账，不再消耗实际
 oracle 访问；两个及以上 pending 仍完整求交，不能用两两相容代替联合域。Excluded 的极大性扩展仍
-逐项检查，复用不新增成员、不缓存子集、不改变 raw、权限或每条 lane 的 4096 次实际核验上限。
+逐项查询，只有相同完整 mask 的已完成结果才能复用；不新增成员、不缓存子集、不改变 raw、权限或
+每条 lane 的 4096 次实际核验上限。
 令一次 scope 有 A 个原子、T 个原始 transition、Q 条 query trace、V 次实际访问、N 个搜索节点：
 原子输入访问不超过 `AV`，raw union 输入不超过 `ATV`，identity 检查不超过 `TV`；每个无身份冲突集合至多 Q 条约束，
 裁剪至多 `2Q` 次、顶点检查至多 `4Q²+10Q` 次，极大性检查至多 `AN`。临时 DFS 深度至多 A，
-递归节点、分支及最大深度分别记账；节点不超过 `2 × 分支 + 1 <= 2V+1`，分支过滤不超过 `A × 分支`。
+递归节点、分支及最大深度分别记账；节点不超过 `2 × 分支 + 1 <= 2V+1`，实际及复用的分支过滤合计
+不超过 `A × 分支`。失败 whole-union 不读缓存，故每个实际分支仍消耗一次原实际核验。
+令 B 为分支数，全部 lookup 为 L，则 `L <= 1+A+AB+N+AN <= (3A+2)V+2A+2`。
+布尔结果与用途两套复用计数之和须一致；完整 scope 的 `L=V+reuse`，耗尽至多多一次未完成查询。
+缓存最多 V 项，计入原 source 临时内存。首次访问前用当前 A 与剩余额度预检最大保留量，不得超过
+原固定 32 MiB allowance；实际逻辑字节上界为 `256+E×(192+8×ceil(A/30))`，E 为峰值项数。
+无查询则为 0；有查询但尚无已完成项时保留常量开销。正常、耗尽及异常返回均显式清空，不依赖
+Python 闭包循环的延后回收。各 scope 顺序执行，峰值取最大值并进入原 source work receipt。
 完整 scope 的节点数等于实际 whole-union 访问加证明复用次数；耗尽时最多多一个未完成节点。
 当前分支只保存整数 mask 和原子索引，不保留全部可行子集；完整极大解释与预检前 union 计划最多 N 组，获准拟合的唯一 union 数还须
 满足 `3R/2R` 预检。
@@ -1655,7 +1667,9 @@ Normal 校验要求非空域组数量与 phase 状态对应；development 校验
 校准严格发生在原 Cross 求解之后、placement 组成和预算之前。原始 `cross_input`、两份 fit view、
 每个成员的 native H、方向、raw 支撑和全部联合可行状态保持，不以新 H 重跑精修、配对、比例或选择。
 新 source identity 随全部 placement 重建；原生边界、联合状态与 mandatory 不变，固定尺寸与对应预算
-重新生成。只有正式 canonical context 使用该证明，历史 phase 成员继续从自身初始 H 独立建立上下文。
+重新生成。H hull 扩大不保证确定性尺寸代表或固定窗口扩大；新增较低 H 的解释可能降低代表。
+预算失败不能反向修改 hull、尺寸代表或成员集合。只有正式 canonical context 使用该证明，历史 phase
+成员继续从自身初始 H 独立建立上下文。
 此项校准不授予 selection：成员自己的 aperture domain、enclosing 竞争、内容、范围与共同窗口预算仍由
 原 `CommonHOutputAuthority → CandidateGate → DecisionGate` 核验，任一缺口仍阻止 TIFF 输出。
 普通报告校验初始设计 H、整源尺寸与共同成员映射；开发报告从原 Cross 输入重放完整集合，拒绝删成员、
@@ -2446,7 +2460,7 @@ format/source 状态测量共同 W。共同 H 只从每个成员都已完整关�
 `common_outputs` 可保留预算失败窗口作为诊断，只有 `state=supported` 且 `common_failure=null` 才表示窗口
 验证通过。当前该分支在规范 selection/Gate 后执行，不授予照片序号映射、canonical winner 或自动输出权限。
 
-当前报告 schema 为 124。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
+当前报告 schema 为 125。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
 重放全部 producer 和独立成员，再比对结果、缺口和工作。成员 Cross 只重复自身 H／纵向域、best/runner、
 求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
 外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source
@@ -2476,8 +2490,8 @@ domain pixels / peak temporary bytes
 ```
 
 Canonical 部分最多保留两份 placement；primary 复用已有 lattice authority，runner 最多追加一次只读的
-direct-role 与 global-lattice 评估。有条件 Cross 提案最多增加一份 placement，复用 primary 的 phase 与
-lattice authority。不新增像素 query 或 phase 搜索；包括第三份提案在内的全部 footprint projection、
+direct-role 与 global-lattice 评估。正交 Cross runner 与有条件 Cross 提案各最多增加一份 placement，
+复用 primary 的 phase 与 lattice authority。不新增像素 query 或 phase 搜索；至多四份提案的全部 footprint projection、
 物化和 output evaluation 由同一 receipt 逐次计数。
 独立 phase Review 使用自己的 receipt：既有 projection record 数 M、角色数 R 的原生分类工作为 O(MR)，
 每条记录只进入一种依据、至多四个角色类；分类、比较、完整身份去重分别计数。保留状态与临时索引

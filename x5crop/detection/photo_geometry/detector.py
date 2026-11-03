@@ -664,6 +664,7 @@ def reconstruct_photo_geometry(
                     peak_temporary_bytes=max(
                         lane.measurement_work.peak_temporary_bytes,
                         phase_receipt.peak_temporary_bytes,
+                        lane.cross_registration_work.membership_cache_peak_temporary_bytes,
                     ),
                     bound_exceeded=bound_exceeded,
                     common_h_composition_count=values.common_h_composition_count,

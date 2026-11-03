@@ -111,8 +111,12 @@ class TemplateFamilyMembershipContractTest(unittest.TestCase):
             (ObservationId('A'), ObservationId('C'), ObservationId('H')),
             (ObservationId('B'), ObservationId('H')),
         ))
-        self.assertGreater(scope.work.maximality_extension_check_count, 0)
-        self.assertEqual(scope.work.maximality_extension_check_count, scope.work.maximality_variable_visit_count)
+        self.assertGreater(scope.work.maximality_variable_visit_count, 0)
+        self.assertEqual(
+            scope.work.maximality_variable_visit_count,
+            scope.work.maximality_extension_check_count
+            + scope.work.maximality_extension_reuse_count,
+        )
 
     def test_full_raw_union_work_counts_overlapping_atoms(self):
         problem = _problem({'H': (0, 100), 'A': (40, 60)}, {'H'})
@@ -135,6 +139,7 @@ class TemplateFamilyMembershipContractTest(unittest.TestCase):
         empty = enumerate_membership_scope(**{**problem, 'remaining_visits': 0})
         self.assertEqual(empty.work.visited_count, 0)
         self.assertEqual(empty.maximal_member_groups, ())
+        self.assertEqual(empty.cache_temporary_bytes, 256)
         frozen = tuple(sorted(atom.observation_id for atom in problem['atoms']))
         with self.assertRaises(ValueError):
             MembershipReceipt(MembershipState.COMPLETE, (scope,), (), frozen)
@@ -203,6 +208,71 @@ class TemplateFamilyMembershipContractTest(unittest.TestCase):
         self.assertEqual(exhausted.maximal_member_groups, ())
         with self.assertRaises(ValueError):
             replace(scope, work=replace(scope.work, union_lookahead_reuse_count=0))
+
+    def test_scope_local_mask_cache_reuses_true_and_false_with_purpose_ledger(self):
+        groups = {'H': (100, 110), 'A': (0, 10), 'B': (0, 20), 'C': (20, 30)}
+        problem = _problem(groups, {'H'})
+        scope = enumerate_membership_scope(**problem)
+        variables = sorted(set(groups) - {'H'})
+        feasible = []
+        for mask in range(1 << len(variables)):
+            group = frozenset({'H'} | {
+                name for index, name in enumerate(variables) if mask & (1 << index)
+            })
+            if self._lp_feasible(problem, group):
+                feasible.append(group)
+        expected = {
+            group for group in feasible
+            if not any(group < other for other in feasible)
+        }
+        self.assertEqual({frozenset(group) for group in scope.maximal_member_groups}, expected)
+        work = scope.work
+        self.assertGreater(work.cached_feasible_reuse_count, 0)
+        self.assertGreater(work.cached_infeasible_reuse_count, 0)
+        self.assertEqual(
+            work.feasibility_lookup_count,
+            work.visited_count + work.cached_feasible_reuse_count
+            + work.cached_infeasible_reuse_count,
+        )
+        self.assertEqual(
+            work.cached_feasible_reuse_count + work.cached_infeasible_reuse_count,
+            work.initial_filter_reuse_count + work.branch_filter_reuse_count
+            + work.maximality_extension_reuse_count,
+        )
+        self.assertLessEqual(
+            work.initial_filter_count + work.initial_filter_reuse_count,
+            scope.atom_count - len(scope.anchor_observation_ids),
+        )
+        self.assertLessEqual(
+            work.branch_filter_count + work.branch_filter_reuse_count,
+            scope.atom_count * work.search_branch_count,
+        )
+
+        changed = enumerate_membership_scope(**_problem(
+            groups, {'H'},
+            {('A', 0): (999, 1000), ('A', 10): (999, 1000)},
+        ))
+        self.assertEqual(changed.work.cached_feasible_reuse_count, 0)
+        self.assertTrue(all(ObservationId("A") not in group
+                            for group in changed.maximal_member_groups))
+        self.assertGreater(changed.work.cache_peak_entry_count, 0)
+        self.assertEqual(
+            scope.cache_temporary_bytes,
+            256 + scope.work.cache_peak_entry_count
+            * (192 + 8 * ((scope.atom_count + 29) // 30)),
+        )
+        self.assertEqual(
+            enumerate_membership_scope(**_problem(self.groups, set())).cache_temporary_bytes,
+            0,
+        )
+        with self.assertRaises(ValueError):
+            replace(scope, work=replace(work, feasibility_lookup_count=work.feasibility_lookup_count + 1))
+        with self.assertRaises(ValueError):
+            replace(scope, work=replace(work, initial_filter_reuse_count=work.initial_filter_reuse_count + 1))
+        with self.assertRaises(ValueError):
+            replace(scope, work=replace(work, cached_feasible_reuse_count=work.cached_feasible_reuse_count + 1))
+        with self.assertRaises(ValueError):
+            replace(scope, work=replace(work, cache_peak_entry_count=0))
 
     def test_filtered_anchor_only_leaf_reuses_joint_anchor_proof(self):
         problem = _problem({'A': (0, 100), 'B': (40, 60)}, {'A', 'B'})

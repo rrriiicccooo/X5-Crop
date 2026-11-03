@@ -11,11 +11,11 @@ from x5crop.detection.photo_geometry.template_model import (
 from x5crop.detection.photo_geometry.template_measurement_plan_model import (
     MAX_CROSS_PAIRS,
     MAX_PHASE_OBSERVATIONS,
+    MAXIMUM_PEAK_TEMPORARY_BYTES_PER_SOURCE_PIXEL,
+    MAXIMUM_PEAK_TEMPORARY_FIXED_ALLOWANCE_BYTES,
 )
 
 
-MAXIMUM_PEAK_TEMPORARY_BYTES_PER_SOURCE_PIXEL = 10
-MAXIMUM_PEAK_TEMPORARY_FIXED_ALLOWANCE_BYTES = 32 * 1024 * 1024
 WORK_FIELDS = (
     "measurement_query_count",
     "pixel_query_count",

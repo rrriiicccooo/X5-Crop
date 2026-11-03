@@ -311,6 +311,7 @@ class TemplateRegistrationContractTest(unittest.TestCase):
         lane = {
             "lane_id": "lane:0",
             "cross_registration_work": typed_read_model(registered.work_receipt),
+            "work": {"peak_temporary_bytes": registered.work_receipt.membership_cache_peak_temporary_bytes},
             "observations": {
                 "cross_boundary_family_resolutions": typed_read_model(registered.family_resolutions),
                 "raw_top_bottom_lines": typed_read_model(registered.observations),
@@ -510,6 +511,7 @@ class TemplateRegistrationContractTest(unittest.TestCase):
         lane = {
             "lane_id": "lane:0",
             "cross_registration_work": typed_read_model(registered.work_receipt),
+            "work": {"peak_temporary_bytes": registered.work_receipt.membership_cache_peak_temporary_bytes},
             "observations": {
                 "cross_boundary_family_resolutions": typed_read_model(registered.family_resolutions),
                 "raw_top_bottom_lines": typed_read_model(registered.observations),
@@ -732,6 +734,7 @@ class TemplateRegistrationContractTest(unittest.TestCase):
         lane = {
             "lane_id": "lane:0",
             "cross_registration_work": typed_read_model(registered.work_receipt),
+            "work": {"peak_temporary_bytes": registered.work_receipt.membership_cache_peak_temporary_bytes},
             "observations": {
                 "cross_boundary_family_resolutions": typed_read_model(registered.family_resolutions),
                 "raw_top_bottom_lines": typed_read_model(registered.observations),

@@ -26,6 +26,8 @@ from .template_measurement_plan_model import (
     MAX_PLACEMENT_CHECKS,
     MAX_REGISTERED_QUERIES,
     MAX_WORK_UNITS,
+    MAXIMUM_PEAK_TEMPORARY_BYTES_PER_SOURCE_PIXEL,
+    MAXIMUM_PEAK_TEMPORARY_FIXED_ALLOWANCE_BYTES,
     MeasurementAxis,
     MeasurementIntentKind,
     MeasurementUnit,
@@ -488,7 +490,8 @@ def _bounds_for_lane(
         max_trace_positions=2 * (work_box.width + work_box.height),
         max_coordinate_samples=coordinate_upper_bound,
         max_pixel_queries=source_pixels * 128,
-        max_peak_temporary_bytes=source_pixels * 10 + 32 * 1024 * 1024,
+        max_peak_temporary_bytes=(source_pixels * MAXIMUM_PEAK_TEMPORARY_BYTES_PER_SOURCE_PIXEL
+                                 + MAXIMUM_PEAK_TEMPORARY_FIXED_ALLOWANCE_BYTES),
     )
     return pixel, TemplateWorkBounds(
         max_query_intents=query_count,

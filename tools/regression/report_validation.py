@@ -1404,6 +1404,8 @@ def _validate_cross_measurement_support(
         frozenset(ObservationId(identity) for identity, binding in registered.items()
                   if identity in raw_ids and binding['evidence'] == 'template_local_refinement'), receipt.fit_attempt_count)
     if receipt.membership is not None:
+        if receipt.membership_cache_peak_temporary_bytes > lane.get("work", {}).get("peak_temporary_bytes", 0):
+            raise ValueError("membership cache memory is absent from the source work receipt")
         family_by_id = {family.family_id: family for family in families}
         remaining = MAXIMUM_MEMBERSHIP_VISITS
         for scope in receipt.membership.scopes:
