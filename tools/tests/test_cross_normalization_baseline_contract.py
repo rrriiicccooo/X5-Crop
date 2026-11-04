@@ -264,6 +264,7 @@ class CrossNormalizationBaselineContractTest(unittest.TestCase):
                 "coverage_receipts": deepcopy(receipts),
                 "exterior_work": typed_read_model(exterior.work),
                 "coarse_native_association_work": None,
+                "native_continuity_work": None,
                 "measurement_query_count": len(receipts) + 1,
                 "completed_query_count": sum(item["complete"] for item in receipts) + 1,
                 "pixel_query_count": sum(item["pixel_query_count"] for item in receipts) + exterior.work.pixel_query_count,
