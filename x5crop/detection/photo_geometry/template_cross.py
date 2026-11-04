@@ -844,8 +844,8 @@ def _select_cross_competition(
             == EvidenceState.SUPPORTED
             and (
                 not (
-                    candidate.top.source_spanning_continuous
-                    or candidate.bottom.source_spanning_continuous
+                    candidate.top.effective_source_spanning_continuous
+                    or candidate.bottom.effective_source_spanning_continuous
                 )
                 or candidate.pair_support_mode == CrossPairSupportMode.SHARED_TRACES
                 or candidate.longitudinal_projection_authority.basis
@@ -906,13 +906,13 @@ def _select_cross_competition(
         item
         for item in top
         if item.role_authorized and item.has_independent_spatial_support
-        and item.source_spanning_continuous
+        and item.effective_source_spanning_continuous
     )
     spanning_bottom = tuple(
         item
         for item in bottom
         if item.role_authorized and item.has_independent_spatial_support
-        and item.source_spanning_continuous
+        and item.effective_source_spanning_continuous
     )
     template_spanning_top = tuple(
         item
@@ -949,8 +949,8 @@ def _select_cross_competition(
         spanning_pairs = [
             item
             for item in direct_candidates
-            if item.top.source_spanning_continuous
-            and item.bottom.source_spanning_continuous
+            if item.top.effective_source_spanning_continuous
+            and item.bottom.effective_source_spanning_continuous
         ]
         candidates = spanning_pairs
     elif bool(spanning_top) != bool(spanning_bottom):

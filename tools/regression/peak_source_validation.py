@@ -18,8 +18,8 @@ def validate_ordinary_peak_associations(record, *, read_proof, source_extent):
         proofs = tuple(read_proof(value, CoarseNativeLineAssociation) for value in lane["coarse_native_associations"])
         if len(proofs) > 2 or len({proof.coarse_track.side for proof in proofs}) != len(proofs):
             raise ValueError("coarse/native association changed its two original sides")
-        raw_base = lane["coarse_native_base_registration"]
-        if bool(proofs) != (raw_base is not None):
+        raw_base = lane["base_cross_registration"]
+        if (bool(proofs) or lane["native_continuity"] is not None) != (raw_base is not None):
             raise ValueError("native association lost its candidate-independent base registration")
         base = None if raw_base is None else read_proof(raw_base, RegisteredCrossEvidence)
         alternatives = None if base is None else native_line_alternatives(base)
@@ -63,15 +63,18 @@ def validate_development_peak_associations(lane, production_lane, measurements, 
     validate_peak_source_measurements(measurements, source_id=source_id,
                                       source_extent=source_extent, coarse_support=coarse)
     base = read_proof(lane["base_cross_registration"], RegisteredCrossEvidence)
-    if production_lane["coarse_native_base_registration"] != (
-            lane["base_cross_registration"] if production_lane["coarse_native_associations"] else None):
+    if production_lane["base_cross_registration"] != (
+            lane["base_cross_registration"] if (production_lane["coarse_native_associations"]
+                or production_lane["native_continuity"] is not None) else None):
         raise ValueError("ordinary native association changed its original base registration")
     work = lane["measurement_work"]
     base_visits = sum(item.coverage.peak_source_value_visit_bound for item in measurements)
     base_peak = max(work["exterior_work"]["peak_temporary_bytes"],
                     *(item.coverage.peak_temporary_bytes for item in measurements))
     proofs, association_work = associate_coarse_native_lines(coarse, measurements, base,
-        maximum_value_visits=max(0, bounds.max_pixel_queries - work["pixel_query_count"] - base_visits),
+        maximum_value_visits=max(0, bounds.max_pixel_queries - work["pixel_query_count"]
+                                + (0 if work["native_continuity_work"] is None else
+                                   work["native_continuity_work"]["pixel_query_count"]) - base_visits),
         maximum_temporary_bytes=max(0, bounds.max_peak_temporary_bytes - base_peak))
     if (typed_read_model(proofs) != production_lane["coarse_native_associations"]
             or typed_read_model(association_work) != work["coarse_native_association_work"]

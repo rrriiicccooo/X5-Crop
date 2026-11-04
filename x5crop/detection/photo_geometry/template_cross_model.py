@@ -24,6 +24,7 @@ from .template_aspect_ratio_model import (
 from .template_model import TemplateSpec
 from .coarse_enclosing_model import CoarseEnclosingSideFact, CoarseEnclosingTrack, CoarseSideRegistrationReceipt
 from .coarse_native_association_model import CoarseNativeLineConstraint
+from .native_trace_continuity import NativeTraceContinuityConstraint
 
 
 def cross_role_authorized_by_measurement(
@@ -551,11 +552,24 @@ class CrossRoleBinding:
     physical_line_region: PhysicalLineRegion | None = None
 
     coarse_native_constraint: CoarseNativeLineConstraint | None = None
+    native_continuity_constraint: NativeTraceContinuityConstraint | None = None
 
     coarse_side_fact: CoarseEnclosingSideFact | None = None
     coarse_side_track: CoarseEnclosingTrack | None = None
 
     def __post_init__(self) -> None:
+        constraint = self.native_continuity_constraint
+        if constraint is not None:
+            original = dict(zip(self.trace_coordinates_px, self.trace_position_intervals_px, strict=True))
+            extended = dict(zip(constraint.trace_coordinates_px, constraint.trace_position_intervals_px, strict=True))
+            if (not isinstance(constraint, NativeTraceContinuityConstraint)
+                    or constraint.observation_id != self.observation_id or constraint.role != self.role
+                    or self.evidence != CrossEvidence.DIRECT or not self.role_authorized
+                    or self.conditional_family_ids or self.independent_support_region_count < 3
+                    or self.physical_line_region != constraint.original_physical_line_region
+                    or any(extended.get(trace) != interval for trace, interval in original.items())):
+                raise ValueError("native continuity cannot replace its original identity or role")
+            constraint.physical_line_region
         if self.coarse_native_constraint is not None:
             constraint = self.coarse_native_constraint
             if (not isinstance(constraint, CoarseNativeLineConstraint)
@@ -715,6 +729,25 @@ class CrossRoleBinding:
         object.__setattr__(self, "source_observation_ids", source)
 
     @property
+    def effective_source_spanning_continuous(self) -> bool:
+        return self.source_spanning_continuous or self.native_continuity_constraint is not None
+
+    @property
+    def effective_trace_coordinates_px(self) -> tuple[int, ...]:
+        constraint = self.native_continuity_constraint
+        return self.trace_coordinates_px if constraint is None else constraint.trace_coordinates_px
+
+    @property
+    def effective_trace_position_intervals_px(self) -> tuple[FiniteInterval, ...]:
+        constraint = self.native_continuity_constraint
+        return self.trace_position_intervals_px if constraint is None else constraint.trace_position_intervals_px
+
+    @property
+    def effective_physical_line_region(self) -> PhysicalLineRegion | None:
+        constraint = self.native_continuity_constraint
+        return self.physical_line_region if constraint is None else constraint.physical_line_region
+
+    @property
     def has_independent_spatial_support(self) -> bool:
         """Whether this measured line meets the ordinary two-region minimum.
 
@@ -740,9 +773,9 @@ class CrossRoleBinding:
         if (
             not self.role_authorized
             or self.canonical_direction_degrees is None
-            or len(self.trace_coordinates_px) < 2
-            or target_trace_px < self.trace_coordinates_px[0] - 0.5
-            or target_trace_px > self.trace_coordinates_px[-1] + 0.5
+            or len(self.effective_trace_coordinates_px) < 2
+            or target_trace_px < self.effective_trace_coordinates_px[0] - 0.5
+            or target_trace_px > self.effective_trace_coordinates_px[-1] + 0.5
         ):
             return None
         return math.tan(

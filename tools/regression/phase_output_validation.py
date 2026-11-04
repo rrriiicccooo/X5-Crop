@@ -225,9 +225,12 @@ def validate_complete_phase_output(lane, production, measurement, *, layout, rea
         ("max_fitted_observations", "maximum_fitted_observations"),
         ("max_compatible_pairs", "maximum_compatible_pairs"),
         ("max_evaluated_fits", "maximum_evaluated_fits"))})
+    from x5crop.detection.photo_geometry.native_trace_continuity import NativeTraceContinuityEvidence
     prepared = SimpleNamespace(lane=source_lane, layout=layout, phase_input=inputs,
         phase_competition=phase, source_scan_geometry=read_proof(lane["source_scan_geometry"], SourceScanGeometry),
         base_cross_registration=base, measurement_sets=queries,
+        native_continuity=(None if production["native_continuity"] is None else
+            read_proof(production["native_continuity"], NativeTraceContinuityEvidence)),
         coarse_native_associations=tuple(read_proof(item, CoarseNativeLineAssociation)
                                         for item in production["coarse_native_associations"]),
         coarse_support=read_proof(lane["search"]["coarse_strip_support"], CoarseStripSupport),

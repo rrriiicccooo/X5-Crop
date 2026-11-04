@@ -179,15 +179,15 @@ def _direct_candidate(
         trace_coordinates_px=authority_traces,
         domain_groups=longitudinal_support_domain_groups_px,
         source_spanning_continuous=(
-            top.source_spanning_continuous
-            and bottom.source_spanning_continuous
+            top.effective_source_spanning_continuous
+            and bottom.effective_source_spanning_continuous
         )
         or (
-            top.source_spanning_continuous
+            top.effective_source_spanning_continuous
             and covers_domains(bottom)
         )
         or (
-            bottom.source_spanning_continuous
+            bottom.effective_source_spanning_continuous
             and covers_domains(top)
         ),
     )
@@ -259,7 +259,7 @@ def _single_candidate(
         supporting_observation_ids=(binding.observation_id,),
         trace_coordinates_px=binding.trace_coordinates_px,
         domain_groups=longitudinal_support_domain_groups_px,
-        source_spanning_continuous=binding.source_spanning_continuous,
+        source_spanning_continuous=binding.effective_source_spanning_continuous,
         require_complete_template_domains=True,
     )
     complete_domain_exception = (
@@ -339,7 +339,7 @@ def _retained_grid_candidate(
                 trace_coordinates_px=binding.trace_coordinates_px,
                 domain_groups=longitudinal_support_domain_groups_px,
                 source_spanning_continuous=(
-                    binding.source_spanning_continuous
+                    binding.effective_source_spanning_continuous
                 ),
                 require_complete_template_domains=True,
             )

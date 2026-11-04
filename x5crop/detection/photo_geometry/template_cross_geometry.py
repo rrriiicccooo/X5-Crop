@@ -63,7 +63,7 @@ def shared_direction_for(
     spanning_intervals = tuple(
         item.full_direction_interval_degrees
         for item in direct
-        if item.source_spanning_continuous
+        if item.effective_source_spanning_continuous
     )
     safety_intervals = spanning_intervals or full_intervals
     safety = hull_intervals(

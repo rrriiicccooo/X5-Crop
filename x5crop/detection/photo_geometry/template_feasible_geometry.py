@@ -597,6 +597,20 @@ def _support_cross_vertices(
             # coarse intervals/directions and every necessary native interval.
             polygons.append(vertices)
             continue
+        native = binding.native_continuity_constraint
+        if native is not None:
+            region = native.physical_line_region
+            vertices = tuple((p + m * (support.reference_trace_px - region.reference_trace_px), m)
+                             for p, m in region.vertices)
+            # Consume the complete already-compiled native domain, while
+            # retaining the enclosing pair's original position/direction bounds.
+            for a, b, limit in ((1.0, 0.0, position[1]), (-1.0, 0.0, -position[0]),
+                                (0.0, 1.0, bounds[2][1]), (0.0, -1.0, -bounds[2][0])):
+                vertices = _clip_line_region(vertices, a, b, limit)
+            if not vertices:
+                raise ValueError("selected placement has no joint feasible state")
+            polygons.append(vertices)
+            continue
         vertices = tuple(dict.fromkeys((
             (position[0], bounds[2][0]), (position[1], bounds[2][0]),
             (position[1], bounds[2][1]), (position[0], bounds[2][1]),

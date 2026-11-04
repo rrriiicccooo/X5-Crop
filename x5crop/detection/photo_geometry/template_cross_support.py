@@ -149,7 +149,7 @@ def _candidate(
         SPATIAL_SUPPORT_REGION_COUNT,
         independent_spatial_support_count(registered_traces, traces),
     )
-    source_spanning = top.source_spanning_continuous and bottom.source_spanning_continuous
+    source_spanning = top.effective_source_spanning_continuous and bottom.effective_source_spanning_continuous
     # A material/holder support may become the output boundary itself, so a
     # two-region local fragment cannot be extrapolated across the strip merely
     # because its trace coordinates happen to touch three template domains.
@@ -175,7 +175,7 @@ def _candidate(
         # the last frame. A non-spanning support must bracket the complete
         # candidate extent before its measured line can become the output.
         and all(
-            binding.source_spanning_continuous
+            binding.effective_source_spanning_continuous
             or all(
                 binding.trace_coordinates_px[0] <= domains[0].minimum
                 and binding.trace_coordinates_px[-1] >= domains[-1].maximum

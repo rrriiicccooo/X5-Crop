@@ -75,7 +75,9 @@ COMPARATOR_SOURCE_PATHS = (
     "tools/regression/gold_native_connections.py",
     "tools/regression/gold_spatial_incidence.py",
     "tools/regression/material_registration_validation.py",
+    "tools/regression/native_continuity_validation.py",
     "tools/regression/phase_output_validation.py",
+    "tools/regression/peak_source_validation.py",
     "tools/regression/report_sequence_validation.py",
     "tools/regression/report_validation.py",
     "tools/regression/report_value_validation.py",
@@ -1323,7 +1325,8 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
             source_lane=report["development"]["measurement"]["source_lanes"][0],
             sequence_edges=development_lanes[0]["observations"]["sequence_edges"],
             side_lines=development_lanes[0]["base_cross_registration"]["observations"],
-            existing_pixel_work=development_lanes[0]["measurement_work"]["pixel_query_count"])
+            existing_pixel_work=(development_lanes[0]["measurement_work"]["pixel_query_count"]
+                                 + development_lanes[0]["work"]["peak_source_value_visit_bound"]))
         if source.stat().st_size != before.st_size or source.stat().st_mtime_ns != before.st_mtime_ns:
             raise ValueError("source stat identity changed across gold and endpoint analysis")
         placement_state = report["photo_geometry"]["source_placement_selection"][

@@ -1200,7 +1200,7 @@ def local_cross_refinement_anchors(top_bindings, bottom_bindings, fixed_height_p
         and binding.full_direction_interval_degrees is not None
         and binding.has_independent_spatial_support
         and (
-            binding.source_spanning_continuous
+            binding.effective_source_spanning_continuous
             or covers_all_template_domains(
                 binding.trace_coordinates_px,
                 domains,

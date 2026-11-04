@@ -22,6 +22,7 @@ from ..source_core import SourceLaneEvidence
 from .content_veto_model import ContentVetoFact
 from .coarse_strip_support import CoarseStripSupport
 from .coarse_native_association_model import CoarseNativeAssociationWork, CoarseNativeLineAssociation
+from .native_trace_continuity import NativeTraceContinuityEvidence, NativeTraceContinuityWork
 from .exterior_region_measurement import ExteriorRegionMeasurement, ExteriorRegionWork
 from .line_observations import PhotoBoundaryObservation, SideTransitionRegion
 from .measurement_model import (
@@ -102,20 +103,25 @@ class TemplateMeasurementWorkReceipt:
     coverage_receipts: tuple[PhotoBoundaryCoverageReceipt, ...]
     exterior_work: ExteriorRegionWork | None = None
     coarse_native_association_work: CoarseNativeAssociationWork | None = None
+    native_continuity_work: NativeTraceContinuityWork | None = None
 
     @property
     def peak_source_value_visit_bound(self) -> int:
         return (sum(item.peak_source_value_visit_bound for item in self.coverage_receipts)
                 + (0 if self.coarse_native_association_work is None else
-                   self.coarse_native_association_work.value_visit_bound))
+                   self.coarse_native_association_work.value_visit_bound)
+                + (0 if self.native_continuity_work is None else self.native_continuity_work.value_visit_bound))
 
     @property
     def peak_source_retained_bytes(self) -> int:
         return (sum(item.peak_source_retained_bytes for item in self.coverage_receipts)
                 + (0 if self.coarse_native_association_work is None else
-                   self.coarse_native_association_work.retained_bytes))
+                   self.coarse_native_association_work.retained_bytes)
+                + (0 if self.native_continuity_work is None else self.native_continuity_work.retained_bytes))
 
     def __post_init__(self) -> None:
+        if self.native_continuity_work is not None and not isinstance(self.native_continuity_work, NativeTraceContinuityWork):
+            raise TypeError("native continuity work must retain its typed source receipt")
         values = (
             self.measurement_query_count,
             self.pixel_query_count,
@@ -135,7 +141,8 @@ class TemplateMeasurementWorkReceipt:
         if self.measurement_query_count != len(self.coverage_receipts) + extra:
             raise ValueError("measurement receipt count must cover every query")
         if self.pixel_query_count != (sum(item.pixel_query_count for item in self.coverage_receipts)
-                + (self.exterior_work.pixel_query_count if extra else 0)):
+                + (self.exterior_work.pixel_query_count if extra else 0)
+                + (0 if self.native_continuity_work is None else self.native_continuity_work.pixel_query_count)):
             raise ValueError("measurement pixel receipt does not match coverage")
         if self.completed_query_count != sum(item.complete for item in self.coverage_receipts) + extra:
             raise ValueError("measurement completion receipt does not match coverage")
@@ -145,7 +152,8 @@ class TemplateMeasurementWorkReceipt:
         if self.peak_temporary_bytes != max([
             (self.exterior_work.peak_temporary_bytes if extra else 0),
             *(item.peak_temporary_bytes for item in self.coverage_receipts),
-        ]) + (0 if association is None else association.peak_temporary_bytes):
+        ]) + (0 if association is None else association.peak_temporary_bytes) + (
+                0 if self.native_continuity_work is None else self.native_continuity_work.peak_temporary_bytes):
             raise ValueError("measurement peak receipt does not match coverage")
 
 
@@ -202,8 +210,14 @@ class RegisteredTemplateLane:
     measurement_plan: TemplateMeasurementPlan
     exterior_region_measurement: ExteriorRegionMeasurement
     coarse_native_associations: tuple[CoarseNativeLineAssociation, ...] = field(default=(), kw_only=True)
+    native_continuity: NativeTraceContinuityEvidence | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
+        if ((self.native_continuity is None) != (self.measurement_work.native_continuity_work is None)
+                or self.native_continuity is not None and (
+                not isinstance(self.native_continuity, NativeTraceContinuityEvidence)
+                or self.measurement_work.native_continuity_work != self.native_continuity.work)):
+            raise ValueError("registered lane lost its independent continuity work")
         if not isinstance(self.lane, SourceLaneEvidence):
             raise TypeError("registered template lane requires source authority")
         if not isinstance(self.measurement_plan, TemplateMeasurementPlan):
@@ -644,6 +658,14 @@ class PreparedTemplateLane(RegisteredTemplateLane):
             self.base_cross_registration, RegisteredCrossEvidence,
         ):
             raise TypeError("prepared lane requires candidate-independent base Cross registration")
+        if self.native_continuity is not None and self.base_cross_registration is None:
+            raise ValueError("native continuity lost its candidate-independent parent registration")
+        constraints = {} if self.native_continuity is None else {
+            item.observation_id: item.constraint for item in self.native_continuity.assessments if item.constraint is not None}
+        if any(binding.native_continuity_constraint != (
+                constraints.get(binding.observation_id) if binding.evidence == CrossEvidence.DIRECT else None)
+               for binding in (*self.top_cross_bindings, *self.bottom_cross_bindings)):
+            raise ValueError("prepared Cross changed its independent continuity constraint")
         if not isinstance(self.template_spec, TemplateSpec):
             raise TypeError("prepared template lane requires a template spec")
         if self.template_spec.count != self.output_slot_count:

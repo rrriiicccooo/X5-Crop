@@ -138,6 +138,7 @@ def development_report_facts(
                 "cross_input": typed_read_model(lane.prepared.cross_input),
                 "phase_input": typed_read_model(lane.prepared.phase_input),
                 "base_cross_registration": typed_read_model(lane.prepared.base_cross_registration),
+                "native_continuity": typed_read_model(lane.prepared.native_continuity),
                 "source_scan_geometry": typed_read_model(lane.prepared.source_scan_geometry),
                 "complete_height_calibration": typed_read_model(lane.prepared.complete_height_calibration),
                 "complete_phase_output": typed_read_model(lane.complete_phase_output),

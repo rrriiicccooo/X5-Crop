@@ -659,6 +659,31 @@ source-spanning 连续支持。完整账本包含所有 observation、恢复的�
 局部边可以已获角色及 Cross pair 的纵向投影权限，但这两项不补足该边自身的 source-spanning 连续性。
 只有共同原始点的片段或相互竞争的延续，不能借另一侧完整边、某一长线或全部延续的并集取得连续资格。
 
+`native_trace_bridge_measurement.py` 与 `native_trace_continuity.py` 在 base registration 后补测原生边的
+缺失尾段；输入只有原始灰度场、完整注册查询、原峰和非条件直接边，不读取 template、phase、W/H 或
+人工参考。Parent 已有正确外侧角色、三区域支持、单一原始 raster run 及非空位置／斜率联合域时，
+才检查原查询两端的候选无关延续。两份原始 TOP／BOTTOM 峰账本共同检查别名；所有可能原峰须唯一、
+保留完整来源，并共同满足原物理域和既有 source-spanning 端部／缺测步长合同。不能从多个原峰中挑选。
+
+每份原 corridor 的 search／ownership 必须恒定；密集尾段沿用原完整 baseline、尺度、核、阈值、
+极性分区和原峰选择器，逐行完整测量后才截取 corridor。两个 corridor 共用相同 baseline 的实际行
+归一化，不能在小窗口重算噪声。原端点选中峰必须命中同一正／负四连通响应，分量不能触及 corridor
+坐标外沿；全部所需原峰都须命中该分量。分量内每条密集 trace 恰有一个原测量峰，原峰坐标及其完整
+物理区间不能与其它峰混同。分叉、弱信号、来源冲突或缺测只形成 unavailable，不物理排除旧解释。
+补测涉及的全部原 trace 的完整信号摘要须与旧 baseline 相同；所有密集原峰完整区间与 parent 原生联合域求交，
+没有共同状态时不生成证明，不选择有利代表点。
+原 corridor 包含核在源边不可观察的坐标时，整个新证明保持 unavailable；不裁短 intent 或抛出生产异常。
+
+成功证明作为 `native_continuity_constraint` 附加在同一 direct binding 上。原 observation、raw、角色、
+三区域数、原 `source_spanning_continuous`、拟合位置及方向保持；有效连续资格和同状态物理域由该独立
+证明提供，新增的全部密集原始区间进入保护。Cross 选择、纵向权限、缺边精修及输出消费同一资格。
+aperture 与 enclosing 两种用途都消费完整密集区间；enclosing 复用同一物理域与原 pair 的位置／方向界求交，
+连续域外仍保留原方向不确定性保护，不只把连续资格接入准入。
+每个历史成员仍独立核验自己的其余事实。它不新增 phase anchor、rank、照片序号、真实终端或另一侧角色，
+不合并原 family 或删除旧成员。原 source-spanning 合同不变，不能仅因一个连通分量而授予资格。
+普通及 development 报告保存原 base、完整查询／峰账本、密集 mask、全部逐行峰和逐 parent 结果；
+报告从同一 owner 重放来源、连接、物理域及全部工作，不接受漏块、删峰、替换来源或移除已消费约束。
+
 TOP／BOTTOM 的灰度定位、梯度、tone、原一维纹理和全部 trace 保持独立原始事实。定位完成后，
 `native_background_texture.py` 为全部原始 transition 登记原生 uint16 RGB 局部窗口；窗口中心固定为
 原测量选中的峰坐标，不能按新纹理重新选点。先登记两侧整批窗口，再核验源像素、工作与临时量，
@@ -2593,6 +2618,26 @@ baseline、query view、逐峰来源和粗轨 raw 账本重放，并独立对账
 精测前先按完整登记查询预检来源值访问；无法容纳时不计算摘要或捕获来源组，原测量仍按自身预算
 执行，并明确保留来源超界状态。尚未尝试组捕获时只计其 32 次固定预检，不凭预算失败前缀转授权限。
 
+原生连续桥接是原 TOP／BOTTOM intent 的有界子测量，至多两份 corridor plan、每份至多两个合并尾段，
+不更改原 sparse query／trace 的完成计数。全部 plan 和整个 batch 的工作／内存在读取前共同预检；
+不足时不测量有利前缀，新增证明保持 unavailable，原测量继续按自身合同核验。密集峰用固定 64-byte
+记录、hex 与逐行 offset 保存，逐行解码；不同时保留全部 Python peak 对象。数值、编码及元数据均计入
+原 source 总池，失败的结构预检也单独记账。
+
+令共享 baseline 组的完整源行长度为 L、实际核可观察坐标数为 Q、合并行数为 N，pixel 上界为
+`Σ N[L+Q(2radius+2)]`；完整行读取不能因 corridor 较窄而漏计。令全部 corridor 密集坐标数为 C、
+行数为 T、原 trace 摘要数为 K，mask、峰扫描、编码及摘要访问由测量 owner 单独计数；同一个
+`validate_native_trace_bridge_batch` 从 plan 重建资源合同，不能在报告工具复制或缩小公式。
+额外证明令 B／O／P 分别为 base binding／observation／原 TOP+BOTTOM transition 数，V 为最大原生域顶点数，
+规划访问上界为 `4096+128(B+O+P)+16BP(V+2P+8)`，包括逐次裁剪可能增加的域顶点；
+规划临时上界为 `4096+256(BP+B+P)` bytes。没有满足已有资格 flags 的 parent 时不访问原峰账本；
+开始规划后，原 raster run 不连通也保留为 unavailable 义务并计入工作。
+每个实际待证 parent 的原点数加计划密集行数为 n，待证数为 J，证明预留
+`4096+32C max(1,J)+Σ64n(n+8)` 次访问；保留量为 `4096+256Σ(support_raw_count+1)+Σ512n` bytes，
+临时量再加 `16C+Σ128n` bytes。规划、完整行像素、峰来源、结构预检、证明与原 coarse／exterior／
+capture／association 工作共同受 `128N_source` 与 `10N_source+32 MiB` 约束。规划尚未完成时明确
+保存 `planning_completed=false`，不能把空集合解释为没有缺口；任何失败均不生成批准前缀。
+
 性能合同是 24-source 完整用户路径平均不超过 5 秒；同一均值不超过 3 秒是明确记录但不阻断
 提交、发布或平台 receipt 的 challenge。正式性能验证属于发布验收，绑定同一 release commit；
 开发提交默认不运行该验证，也不要求每次提交生成性能 receipt。
@@ -2727,6 +2772,7 @@ Linux开发/CI使用`renameat2(RENAME_NOREPLACE)`。目标在最终检查之后�
 | `photo_geometry/native_background_texture.py` | 原 transition 的原生二维纹理核、完整源域、整批工作预检及角色纹理依据；不授予边界身份或连续性 |
 | `photo_geometry/transition_peak_source.py`、`transition_peak_capture.py`、`transition_peak_validation.py` | 原峰完整来源、受限捕获及 field／baseline／query view／raw 引用对账 |
 | `photo_geometry/coarse_native_association.py`、`coarse_native_association_model.py` | 候选无关的 coarse／native 原峰对应、完整延续集合的共同必要约束及一次性联合物理域 |
+| `photo_geometry/native_trace_bridge_measurement.py`、`native_trace_continuity.py` | 原查询密集尾段、完整原峰桥接及同一已获权 Cross 边的独立连续资格；不授予照片序号或终端权限 |
 | `photo_geometry/corridors.py` | 候选无关 top/bottom 与完整 `W/pitch` sequence 查询走廊 |
 | `photo_geometry/registered_*.py`、`observations.py`、`separator_*.py` | 一次性 measurement、role-free edge 与 material band |
 | `photo_geometry/cross_height_transition_measurement.py`、`broad_material_transition_measurement.py`、`broad_material_association.py` | 同一 registered baseline 上的三区域局部弱信号、逐线双尺度宽缓 material 测量及有界完整关联 |

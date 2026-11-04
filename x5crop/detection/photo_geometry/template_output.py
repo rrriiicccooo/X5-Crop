@@ -582,9 +582,9 @@ def _frame_boundary_residuals(
         if not added:
             raw_positions = {} if enclosing else {
                 role: tuple(value for index in admitted[role]
-                            for value in (binding.trace_position_intervals_px[index].minimum,
-                                          binding.trace_position_intervals_px[index].maximum))
-                if binding.trace_position_intervals_px else ()
+                            for value in (binding.effective_trace_position_intervals_px[index].minimum,
+                                          binding.effective_trace_position_intervals_px[index].maximum))
+                if binding.effective_trace_position_intervals_px else ()
                 for role, binding in bindings.items()
             }
             for state, expansion, signed, sources in zip(
@@ -616,8 +616,8 @@ def _frame_boundary_residuals(
 
 
 def _support_trace_intervals(binding: CrossRoleBinding):
-    yield from zip(binding.trace_coordinates_px if binding.trace_position_intervals_px else (),
-                   binding.trace_position_intervals_px, strict=True)
+    yield from zip(binding.effective_trace_coordinates_px if binding.effective_trace_position_intervals_px else (),
+                   binding.effective_trace_position_intervals_px, strict=True)
     associated = binding.coarse_native_constraint
     if associated is not None:
         yield from zip(associated.trace_coordinates_px, associated.trace_position_intervals_px, strict=True)
@@ -682,8 +682,8 @@ def _support_direction_departure_px(
     direction_uncertainty = _support_observed_direction(binding)
     if direction_uncertainty is None:
         return 0.0
-    lower = float(binding.trace_coordinates_px[0])
-    upper = float(binding.trace_coordinates_px[-1])
+    lower = float(binding.effective_trace_coordinates_px[0])
+    upper = float(binding.effective_trace_coordinates_px[-1])
     associated = binding.coarse_native_constraint
     if associated is not None:
         lower = min(lower, float(associated.trace_coordinates_px[0]))
@@ -728,7 +728,7 @@ def _aperture_binding_positions(
         line_projection_basis
         == CrossLineProjectionBasis.RETAINED_REVIEW_STATISTICAL_FIT
     )
-    region = None if use_statistical_fit else binding.physical_line_region
+    region = None if use_statistical_fit else binding.effective_physical_line_region
     direction = (
         binding.fit_direction_interval_degrees
         if use_statistical_fit or region is not None
@@ -751,12 +751,12 @@ def _aperture_binding_positions(
         for trace in (support.minimum, support.maximum):
             interval = region.project(trace)
             positions.extend((interval.minimum, interval.maximum))
-    if binding.trace_position_intervals_px:
+    if binding.effective_trace_position_intervals_px:
         positions.extend(
             value
             for trace, interval in zip(
-                binding.trace_coordinates_px,
-                binding.trace_position_intervals_px,
+                binding.effective_trace_coordinates_px,
+                binding.effective_trace_position_intervals_px,
                 strict=True,
             )
             if support.contains(float(trace))

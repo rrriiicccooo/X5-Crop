@@ -18,6 +18,7 @@ from .corridors import (
 )
 from .coarse_strip_support import observe_coarse_strip_support
 from .coarse_native_association import associate_coarse_native_lines
+from .native_trace_continuity import prepare_native_continuity, apply_native_continuity
 from .template_coarse_sides import (
     coarse_enclosing_binding as _coarse_enclosing_binding,
     register_coarse_side_facts,
@@ -217,6 +218,7 @@ def prepare_template_cross_context(
     are rebuilt from this interpretation's own W and initial source H.
     """
 
+    base = apply_native_continuity(base, registered.native_continuity)
     if sequence_fits is None:
         domains = ()
         try:
@@ -1171,10 +1173,21 @@ def prepare_template_lane(
                                     - work.peak_temporary_bytes))
     work = replace(work, coarse_native_association_work=association_work,
                    peak_temporary_bytes=work.peak_temporary_bytes + association_work.peak_temporary_bytes)
+    continuity = prepare_native_continuity(
+        field, base_cross, registered.measurement_sets,
+        maximum_value_visits=max(0, measurement_plan.pixel_bounds.max_pixel_queries
+                                 - work.pixel_query_count - work.peak_source_value_visit_bound),
+        maximum_temporary_bytes=max(0, measurement_plan.pixel_bounds.max_peak_temporary_bytes
+                                    - work.peak_temporary_bytes))
+    if continuity is not None:
+        work = replace(work, native_continuity_work=continuity.work,
+            pixel_query_count=work.pixel_query_count + continuity.work.pixel_query_count,
+            peak_temporary_bytes=work.peak_temporary_bytes + continuity.work.peak_temporary_bytes)
     measurement_plan.validate_measurement_receipt(
         pixel_query_count=work.pixel_query_count + work.peak_source_value_visit_bound,
         peak_temporary_bytes=work.peak_temporary_bytes)
-    registered = replace(registered, coarse_native_associations=associations, measurement_work=work)
+    registered = replace(registered, coarse_native_associations=associations,
+                         native_continuity=continuity, measurement_work=work)
     context = prepare_template_cross_context(
         registered, base_cross, template=template, phase=phase,
         source_geometry=source_geometry,

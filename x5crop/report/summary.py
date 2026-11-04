@@ -71,10 +71,13 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                 ),
                 "complete_height_calibration": typed_read_model(lane.prepared.complete_height_calibration),
                 "coarse_native_associations": typed_read_model(lane.prepared.coarse_native_associations),
-                "coarse_native_base_registration": typed_read_model(
-                    lane.prepared.base_cross_registration if lane.prepared.coarse_native_associations else None),
+                "base_cross_registration": typed_read_model(
+                    lane.prepared.base_cross_registration if (
+                        lane.prepared.coarse_native_associations or lane.prepared.native_continuity is not None) else None),
                 "coarse_native_association_work": typed_read_model(
                     lane.prepared.measurement_work.coarse_native_association_work),
+                "native_continuity": typed_read_model(lane.prepared.native_continuity),
+                "native_continuity_work": typed_read_model(lane.prepared.measurement_work.native_continuity_work),
                 "source_frame_width_authority": typed_read_model(
                     lane.prepared.source_frame_width_authority
                 ),
