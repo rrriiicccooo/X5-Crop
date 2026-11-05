@@ -111,6 +111,8 @@ carries its full uncertainty; missing evidence requires manual review.
 For independently supported top and bottom edges, the program can measure the missing tail between original sample
 lines. The edge gains a larger proven continuous span only when original peaks, the complete connection, and full
 uncertainty pass validation. Multiple peaks, a broken path, or insufficient measurement budget require review.
+Reusing the same evidence does not add independent support. Source provenance, boundary roles, and full uncertainty
+protection remain subject to their own checks.
 
 Development reports retain the original material bands and boundary sources behind outer-material candidates.
 Photo ordinals and the true first and last boundaries still require independent evidence.

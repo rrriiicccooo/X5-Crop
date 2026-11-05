@@ -7,6 +7,7 @@ from x5crop.detection.photo_geometry.native_trace_continuity import (
     NativeTraceContinuityEvidence, NativeTraceContinuityWork,
     NativeTraceContinuityFailure, NativeTraceContinuityAssessment,
     continuity_requests, continuity_plans, assess_native_continuity, _proof_reservation, _planning_reservation,
+    _planning_metadata_reservation,
 )
 from x5crop.detection.photo_geometry.template_registration import RegisteredCrossEvidence
 from x5crop.detection.photo_geometry.transition_peak_validation import validate_peak_source_measurements
@@ -32,9 +33,11 @@ def validate_native_continuity(record, *, read_proof):
                 validate_peak_source_measurements(evidence.measurements, source_id=source_id, source_extent=extent)
             base = read_proof(lane["base_cross_registration"], RegisteredCrossEvidence)
             if not evidence.planning_completed:
-                if (raw_work != typed_read_model(NativeTraceContinuityWork(0, 0, 0, True))
-                        or evidence.requests or evidence.measurements or evidence.batch is not None):
-                    raise ValueError("unplanned native continuity exposed a measurement prefix")
+                metadata_visits, metadata_bytes = _planning_metadata_reservation(base, evidence.measurements)
+                expected_unplanned = (NativeTraceContinuityWork(metadata_visits, 0, metadata_bytes, True)
+                    if evidence.planning_metadata_completed else NativeTraceContinuityWork(0, 0, 0, True))
+                if raw_work != typed_read_model(expected_unplanned) or evidence.batch is not None:
+                    raise ValueError("unplanned native continuity lost its completed metadata work")
                 requests = ()
             else:
                 requests = continuity_requests(base, evidence.measurements, source_extent=extent)
@@ -49,7 +52,7 @@ def validate_native_continuity(record, *, read_proof):
                     r.preliminary_failure or NativeTraceContinuityFailure.PROOF_BOUND_EXCEEDED,
                     (), None) for r in requests)
                 expected_work = (NativeTraceContinuityWork(planning_visits, planning_bytes, planning_bytes, True)
-                                 if evidence.planning_completed else NativeTraceContinuityWork(0, 0, 0, True))
+                                 if evidence.planning_completed else expected_unplanned)
             else:
                 validate_native_trace_bridge_batch(batch)
                 if batch.plans != plans:
@@ -57,7 +60,7 @@ def validate_native_continuity(record, *, read_proof):
                 expected = assess_native_continuity(requests, evidence.measurements, batch)
                 expected_work = NativeTraceContinuityWork(
                     planning_visits + visits + batch.value_visit_bound + batch.preflight_value_visit_bound,
-                    retained + batch.retained_bytes, peak + batch.peak_temporary_bytes,
+                    retained + batch.retained_bytes, max(planning_bytes, peak + batch.peak_temporary_bytes),
                     batch.bound_exceeded, batch.pixel_query_count)
             if (typed_read_model(expected) != raw["assessments"]
                     or typed_read_model(expected_work) != raw["work"] or raw_work != raw["work"]):

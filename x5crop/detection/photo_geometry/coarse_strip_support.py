@@ -54,6 +54,8 @@ from .registered_transition_measurement import (
     measured_transition_peaks,
     trace_storage_bytes,
     broad_material_trace_measurement,
+    scalar_trace_buffer_reservation,
+    window_prefix_cache_bytes,
 )
 from .physical_identity import physical_observation_id
 from .transition_peak_capture import TransitionPeakCapture, peak_source_receipt
@@ -434,6 +436,7 @@ def _measure_coarse_short_trace_lattice(
     *,
     source_rgb: np.ndarray,
     peak_source_field: PhotoBoundaryMeasurementField | None = None,
+    prefix_cache_budget_bytes: int | None = None,
 ) -> tuple[tuple[TraceMeasurement, ...], int]:
     """Measure each registered coarse-short trace once for both channels."""
 
@@ -446,6 +449,8 @@ def _measure_coarse_short_trace_lattice(
     measured: list[TraceMeasurement] = []
     retained_bytes = samples.nbytes
     peak_bytes = retained_bytes
+    cache_budget = (10 * source_rgb.shape[0] * source_rgb.shape[1] + 32 * 1024 * 1024
+                    if prefix_cache_budget_bytes is None else prefix_cache_budget_bytes)
     for ordinal in range(len(query.trace_positions_px)):
         position = query.trace_positions_px[ordinal]
         trace = measure_trace(
@@ -460,6 +465,12 @@ def _measure_coarse_short_trace_lattice(
         position = query.trace_positions_px[ordinal]
         rgb = (source_rgb[position, :, :] if query.boundary_axis == BoundaryAxis.X
                else source_rgb[:, position, :])
+        required = window_prefix_cache_bytes(rgb.shape[0])
+        native_buffers = 24*rgb.shape[0]-8  # luma, scratch, float64 values/differences
+        need = (retained_bytes + trace_storage_bytes(trace) + native_buffers
+                + scalar_trace_buffer_reservation(rgb.shape[0], trace.coordinates.size,
+                    prefix_cache_capacity_bytes=required))
+        capacity = required if need <= cache_budget else 0
         luma = np.empty(rgb.shape[0], dtype=np.float32)
         scratch = np.empty_like(luma)
         _luma_u16(rgb, luma, scratch, BaseGrayParameters())
@@ -470,6 +481,7 @@ def _measure_coarse_short_trace_lattice(
             query.boundary_axis_scale_px_per_mm.maximum,
             PHOTO_BOUNDARY_MEASUREMENT_SPEC,
             intensity_quantum=NATIVE_COARSE_INTENSITY_QUANTUM,
+            prefix_cache_capacity_bytes=capacity,
         )
         trace = replace(
             trace, broad_material=broad,
@@ -781,6 +793,8 @@ def observe_coarse_strip_support(
             short_measurement.query,
             source_rgb=field.source_rgb,
             peak_source_field=field,
+            prefix_cache_budget_bytes=max(0, measurement_plan.pixel_bounds.max_peak_temporary_bytes
+                - long_temporary-short_temporary),
         )
     )
     broad_regions, broad_temporary = (

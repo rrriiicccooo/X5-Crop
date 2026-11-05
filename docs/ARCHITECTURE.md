@@ -681,6 +681,9 @@ aperture 与 enclosing 两种用途都消费完整密集区间；enclosing 复�
 连续域外仍保留原方向不确定性保护，不只把连续资格接入准入。
 每个历史成员仍独立核验自己的其余事实。它不新增 phase anchor、rank、照片序号、真实终端或另一侧角色，
 不合并原 family 或删除旧成员。原 source-spanning 合同不变，不能仅因一个连通分量而授予资格。
+规划按完整原点账本一次建立两侧索引；同一 parent 的同一 trace 只投影一次，仍检查该 trace 的全部原峰。
+没有成功新增约束或相同约束已经应用时，复用原不可变 registration；不重复构造、验证完整原 family 账本，
+原证据、失败义务与后续每个解释的独立资格检查保持。
 普通及 development 报告保存原 base、完整查询／峰账本、密集 mask、全部逐行峰和逐 parent 结果；
 报告从同一 owner 重放来源、连接、物理域及全部工作，不接受漏块、删峰、替换来源或移除已消费约束。
 
@@ -2629,14 +2632,34 @@ baseline、query view、逐峰来源和粗轨 raw 账本重放，并独立对账
 行数为 T、原 trace 摘要数为 K，mask、峰扫描、编码及摘要访问由测量 owner 单独计数；同一个
 `validate_native_trace_bridge_batch` 从 plan 重建资源合同，不能在报告工具复制或缩小公式。
 额外证明令 B／O／P 分别为 base binding／observation／原 TOP+BOTTOM transition 数，V 为最大原生域顶点数，
-规划访问上界为 `4096+128(B+O+P)+16BP(V+2P+8)`，包括逐次裁剪可能增加的域顶点；
-规划临时上界为 `4096+256(BP+B+P)` bytes。没有满足已有资格 flags 的 parent 时不访问原峰账本；
+E 为进入原点规划的 parent 数：非条件 direct、外侧角色已获权、三区域、尚未 source-spanning 且有原生联合域。
+E 在读取原峰前只按上述原资格确定；原峰、源域或连续性检查失败的请求仍计入，不能按最终成功数缩小预算。
+规划访问上界为 `4096+128(B+O+P)+16BO+16EP(V+2P+8)`；保留全部元数据扫描与 parent 查找，
+仅由真实进入重循环的 E 承担原峰／域裁剪上界。规划临时上界为
+`max(4096+64(B+O), 4096+256(EP+B+P))` bytes。
+E 的 metadata 查找先按 `4096+128(B+O+P)+16BO` 次访问和 `4096+64(B+O)` bytes 预检；不足时
+保存 `planning_metadata_completed=false`，不执行查找。已完成查找而原峰规划仍超界时，保留原输入和
+已执行的 metadata 工作，`planning_completed=false`；不得把这段已执行工作清零。完整规划的临时界
+同时覆盖上述 metadata 阶段。
+没有满足已有资格 flags 的 parent 时不访问原峰账本；
 开始规划后，原 raster run 不连通也保留为 unavailable 义务并计入工作。
 每个实际待证 parent 的原点数加计划密集行数为 n，待证数为 J，证明预留
 `4096+32C max(1,J)+Σ64n(n+8)` 次访问；保留量为 `4096+256Σ(support_raw_count+1)+Σ512n` bytes，
 临时量再加 `16C+Σ128n` bytes。规划、完整行像素、峰来源、结构预检、证明与原 coarse／exterior／
 capture／association 工作共同受 `128N_source` 与 `10N_source+32 MiB` 约束。规划尚未完成时明确
 保存 `planning_completed=false`，不能把空集合解释为没有缺口；任何失败均不生成批准前缀。
+规划与后续测量／证明分阶段执行，报告的连续性峰值取 `max(规划临时量, 证明临时量+batch临时量)`，
+不遗漏已释放的规划阶段，也不把它与后续阶段同时相加。
+
+标量 sharp 与两个 broad 窗口只在同次调用内复用完全相同 values／differences 的累计和；不跨 query、
+source 或灰度／原生 luma 保留缓存。每种尺度仍独立计算窗口、可观察域、统计、峰和完整区间。
+两份 float64 prefix 共需 `16L+8` bytes；生产 caller 在原 source 内存池中，先连同现有保留量与完整 kernel
+缓冲上界预留，容不下时不建缓存并执行同一原计算。共享不减少原 pixel 工作计数，不增加证据或权限。
+统一 row 缓冲 owner 的形状上界为 `R(r,L,Q)=40rL+(168r+4)Q+56r`；标量 sharp 用一份 R，broad 用
+三份 R 加 `256Q` 的归约／统计工作及 `3072` 的原 source receipt 保留／工作，另加实际启用的 prefix。
+该上界覆盖返回存储量与构造临时量；registered caller 以 `Q=L` 保守预检，native coarse caller 另预留
+同时存活的 luma／scratch／numeric／differences 和早先 trace。缓存释放后不进入返回存储；实际曾创建的
+prefix 仍如实计入该次构造峰值，batch 的数组与资源公式保持。
 
 性能合同是 24-source 完整用户路径平均不超过 5 秒；同一均值不超过 3 秒是明确记录但不阻断
 提交、发布或平台 receipt 的 challenge。正式性能验证属于发布验收，绑定同一 release commit；
@@ -3014,7 +3037,17 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   连通响应只证明信号路径；弱响应或路径在窗口内终止不能证明物理边界不存在，L 形或闭合图案也可能
   来自照片内容，不能独立证明同照片边对、真实终端或绝对序号。因此本测量保持三类权限 unavailable，
   不消费到 Runtime 或成员资格；这项限制必须与实际资格变化分别报告。
-  以上诊断随 development gold 绑定 source SHA 与 comparator manifest；分析记录／汇总 schema 为 35／36。
+  v2 另外以冻结原 transition ID、query／轴／trace／ownership 和原选峰像素建立局部锚点；保留原极性
+  与存在的完整 peak reference。只在该原像素、原极性的既有 native16 label 上读响应和是否到达原 query
+  外沿，不扩窗口或改选附近强线。缺 ID、重复 ID、源域／方向不符、像素在 query 外或 kernel 不可观察时，
+  明确保留原义务及 unavailable；未提供原账本与提供空账本分别记录。
+  注册 gray8 与新 native16 归一化上下文不同；原像素位置命中不等于同一原峰、整条物理边界、同照片或
+  真终端。四类身份 authority 均保持 unavailable，component label 只在自身 query／polarity 内有意义。
+  Q／L／P／R 分别为原 measurement query、冻结 line、全部三类原 transition 和 line 原 ID 引用数，新增
+  metadata 预留为 `4096+128(Q+L)+256P+512R` 次访问、`8192+1024(Q+L+P+2R)` bytes；值访问加入
+  原 `128N` 总池，索引／锚点保留量加入原内存预检。先按长度预检，再建索引与读像素，失败整批不读。
+  所需预留量与是否完成处理分别记录，不把失败的预留值声称为已测量工作。
+  以上诊断随 development gold 绑定 source SHA 与 comparator manifest；分析记录／汇总 schema 为 36／37。
   它们帮助区分测量缺口与关联缺口，不改变黄金包含判据、Gate 或共同窗口资格。
   `tools/verify accuracy` 继续负责完整 release detection gate。
 - 边界特征研究使用 `tools/verify diagnostic --gold-boundary-features --axes HW --output-root <new-root>`。

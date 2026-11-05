@@ -33,6 +33,8 @@ from .registered_transition_measurement import (
     measure_trace,
     measured_transition_peaks,
     trace_storage_bytes,
+    scalar_trace_buffer_reservation,
+    window_prefix_cache_bytes,
 )
 from .transition_peak_capture import TransitionPeakCapture, peak_source_receipt
 from .physical_identity import physical_observation_id
@@ -343,6 +345,8 @@ def _premeasure_registered_windows(
     windows: tuple[PhotoBoundaryMeasurementQuery, ...],
     spec: PhotoBoundaryMeasurementSpec,
     capture_peak_sources: bool = True,
+    *,
+    prefix_cache_budget_bytes: int | None = None,
 ) -> tuple[dict[str, tuple[TraceMeasurement, ...]], int, int]:
     queries = (baseline, *windows)
     first = baseline
@@ -352,18 +356,32 @@ def _premeasure_registered_windows(
     scale = first.boundary_axis_scale_px_per_mm.maximum
     retained_bytes = 0
     peak_bytes = 0
+    cache_budget = (10 * field.source_extent.width * field.source_extent.height + 32 * 1024 * 1024
+                    if prefix_cache_budget_bytes is None else prefix_cache_budget_bytes)
+    broad = baseline.purpose == QueryPurpose.SEQUENCE_BASELINE
     for trace_ordinal, trace in enumerate(first.trace_positions_px):
         values = (
             field.source_gray[trace, :]
             if first.boundary_axis == BoundaryAxis.X
             else field.source_gray[:, trace]
         )
+        capacity = 0
+        if broad:
+            required = window_prefix_cache_bytes(values.size)
+            # L coordinates conservatively cover even an unclipped full row.
+            # Only the optional memoization is disabled when the unchanged
+            # kernel plus cache cannot fit the source's remaining pool.
+            need = scalar_trace_buffer_reservation(values.size, values.size,
+                prefix_cache_capacity_bytes=required)
+            if retained_bytes + need <= cache_budget:
+                capacity = required
         measured = measure_trace(
             values,
             baseline.search_intervals_px[trace_ordinal],
             scale,
             spec,
-            include_broad_material=baseline.purpose == QueryPurpose.SEQUENCE_BASELINE,
+            include_broad_material=broad,
+            prefix_cache_capacity_bytes=capacity,
             peak_source_context=((field.source_id, field.source_extent, first.boundary_axis, trace)
                 if baseline.purpose == QueryPurpose.CROSS_BASELINE and capture_peak_sources else None),
         )
@@ -520,6 +538,7 @@ def measure_registered_queries(
         baseline, windows = group
         premeasured, retained_bytes, peak_bytes = _premeasure_registered_windows(
             field, baseline, windows, spec, capture_sources,
+            prefix_cache_budget_bytes=max(0, source_limit-origin_retained),
         )
         for member in sorted((baseline, *windows), key=lambda item: item.registration_index):
             retain(_measure_query(

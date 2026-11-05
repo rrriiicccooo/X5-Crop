@@ -142,16 +142,29 @@ class NativeTraceContinuityEvidence:
     assessments: tuple[NativeTraceContinuityAssessment, ...]
     work: NativeTraceContinuityWork
     planning_completed: bool = True
+    planning_metadata_completed: bool = True
 
     def __post_init__(self):
         ids = tuple(r.parent.observation_id for r in self.requests)
-        if (type(self.planning_completed) is not bool
-                or not self.planning_completed and (self.requests or self.measurements or self.batch is not None
+        if (type(self.planning_completed) is not bool or type(self.planning_metadata_completed) is not bool
+                or self.planning_completed and not self.planning_metadata_completed
+                or self.planning_metadata_completed and (len(self.measurements) != 3
+                    or {m.query.purpose for m in self.measurements} != {
+                        QueryPurpose.CROSS_BASELINE, QueryPurpose.TOP_CORRIDOR, QueryPurpose.BOTTOM_CORRIDOR})
+                or not self.planning_metadata_completed and (self.measurements or self.requests or self.batch is not None
+                    or self.assessments or self.work != NativeTraceContinuityWork(0, 0, 0, True))
+                or not self.planning_completed and (self.requests or self.batch is not None
                     or self.assessments or not self.work.bound_exceeded)
                 or len(set(ids)) != len(ids)
                 or tuple(a.observation_id for a in self.assessments) != ids
                 or self.work.bound_exceeded and any(a.constraint for a in self.assessments)):
             raise ValueError("native continuity omitted a registered parent")
+
+
+def _planning_eligible(binding, parent):
+    return (binding.evidence == "direct" and not binding.conditional_family_ids and binding.role_authorized
+            and parent.independent_support_region_count >= 3
+            and not parent.source_spanning_continuous and parent.physical_line_region is not None)
 
 
 def continuity_requests(registration, measurement_sets, *, source_extent):
@@ -160,18 +173,21 @@ def continuity_requests(registration, measurement_sets, *, source_extent):
                     BoundaryRole.BOTTOM: next(m for m in measurement_sets if m.query.purpose == QueryPurpose.BOTTOM_CORRIDOR)}
     observations = {o.observation_id: o for o in registration.observations}
     complete_peak_inventory = {}
-    for measured in measurements.values():
+    by_role = {}
+    for role, measured in measurements.items():
+        by_id, by_trace = {}, {}
         for point in measured.transitions:
             complete_peak_inventory.setdefault(point.trace_coordinate_px, []).append(point)
+            by_id[point.transition_id] = point
+            by_trace.setdefault(point.trace_coordinate_px, []).append(point)
+        by_role[role] = by_id, by_trace
     requests = []
     for binding in (*registration.top_bindings, *registration.bottom_bindings):
         parent = observations[binding.observation_id]
-        if (binding.evidence != "direct" or binding.conditional_family_ids or not binding.role_authorized
-                or parent.independent_support_region_count < 3
-                or parent.source_spanning_continuous or parent.physical_line_region is None):
+        if not _planning_eligible(binding, parent):
             continue
         measured = measurements[parent.role]
-        by_id = {p.transition_id: p for p in measured.transitions}
+        by_id, by_trace = by_role[parent.role]
         original = tuple(by_id[i] for i in parent.transition_ids)
         polarities = {p.polarity for p in original}
         failure = (None if trace_support_is_one_connected_run(
@@ -197,14 +213,17 @@ def continuity_requests(registration, measurement_sets, *, source_extent):
             failure = failure or NativeTraceContinuityFailure.ORIGINAL_PEAK_UNAVAILABLE
         low, high = parent.trace_coordinates_px[0], parent.trace_coordinates_px[-1]
         outside = {}
-        for point in measured.transitions:
-            trace = point.trace_coordinate_px
+        for trace, points in by_trace.items():
             if low <= trace <= high:
                 continue
+            # Every peak on this same trace uses exactly the same native
+            # projection. Keep the complete point inventory, project once.
             region = parent.physical_line_region.project(float(trace))
-            interval = point.physical_position_interval_px
-            if region.maximum >= interval.minimum and interval.maximum >= region.minimum:
-                outside.setdefault(trace, []).append(point)
+            matching = [point for point in points
+                        if region.maximum >= point.physical_position_interval_px.minimum
+                        and point.physical_position_interval_px.maximum >= region.minimum]
+            if matching:
+                outside[trace] = matching
         if any(len(points) != 1 for points in outside.values()):
             failure = failure or NativeTraceContinuityFailure.RAW_PEAK_COMPETITION
         extensions = tuple(points[0] for points in outside.values() if len(points) == 1)
@@ -278,14 +297,29 @@ def _proof_reservation(requests, plans):
     return visits, retained, peak
 
 
+def _planning_metadata_reservation(registration, measurement_sets):
+    count = len(registration.top_bindings) + len(registration.bottom_bindings)
+    observations = len(registration.observations)
+    points = sum(len(m.transitions) for m in measurement_sets if m.query.purpose in
+                 (QueryPurpose.TOP_CORRIDOR, QueryPurpose.BOTTOM_CORRIDOR))
+    return 4096 + 128*(count+observations+points) + 16*count*observations, 4096 + 64*(count+observations)
+
+
 def _planning_reservation(registration, measurement_sets):
     count = len(registration.top_bindings) + len(registration.bottom_bindings)
+    # Only metadata is inspected here. Failed raw/continuity obligations are
+    # still eligible and charged; no outcome, candidate or source pixel is read.
+    eligible = 0
+    for binding in (*registration.top_bindings, *registration.bottom_bindings):
+        parent = next(o for o in registration.observations if o.observation_id == binding.observation_id)
+        eligible += _planning_eligible(binding, parent)
     points = sum(len(m.transitions) for m in measurement_sets if m.query.purpose in
                  (QueryPurpose.TOP_CORRIDOR, QueryPurpose.BOTTOM_CORRIDOR))
     vertices = max((len(o.physical_line_region.vertices) for o in registration.observations
                     if o.physical_line_region is not None), default=0)
-    return (4096 + 128*(count+len(registration.observations)+points)
-            + 16*count*points*(vertices+2*points+8), 4096 + 256*(count*points+count+points))
+    metadata_visits, metadata_bytes = _planning_metadata_reservation(registration, measurement_sets)
+    return (metadata_visits + 16*eligible*points*(vertices+2*points+8),
+            max(metadata_bytes, 4096 + 256*(eligible*points+count+points)))
 
 
 def _bridge_context(batch, plan_index, low, high, polarity):
@@ -422,15 +456,19 @@ def prepare_native_continuity(field, registration, measurement_sets, *, maximum_
                and b.physical_line_region is not None
                for b in (*registration.top_bindings, *registration.bottom_bindings)):
         return None
-    planning_visits, planning_bytes = _planning_reservation(registration, measurement_sets)
-    if planning_visits > maximum_value_visits or planning_bytes > maximum_temporary_bytes:
+    metadata_visits, metadata_bytes = _planning_metadata_reservation(registration, measurement_sets)
+    if metadata_visits > maximum_value_visits or metadata_bytes > maximum_temporary_bytes:
         return NativeTraceContinuityEvidence((), (), None, (), NativeTraceContinuityWork(
-            0, 0, 0, True), planning_completed=False)
-    requests = continuity_requests(registration, measurement_sets, source_extent=field.source_extent)
-    if not requests:
-        raise ValueError("native continuity planning lost its eligible original parent")
+            0, 0, 0, True), planning_completed=False, planning_metadata_completed=False)
     measurements = tuple(m for m in measurement_sets if m.query.purpose in
                          (QueryPurpose.TOP_CORRIDOR, QueryPurpose.BOTTOM_CORRIDOR, QueryPurpose.CROSS_BASELINE))
+    planning_visits, planning_bytes = _planning_reservation(registration, measurements)
+    if planning_visits > maximum_value_visits or planning_bytes > maximum_temporary_bytes:
+        return NativeTraceContinuityEvidence((), measurements, None, (), NativeTraceContinuityWork(
+            metadata_visits, 0, metadata_bytes, True), planning_completed=False)
+    requests = continuity_requests(registration, measurements, source_extent=field.source_extent)
+    if not requests:
+        raise ValueError("native continuity planning lost its eligible original parent")
     plans = continuity_plans(field, requests, measurements)
     visits, retained, peak = _proof_reservation(requests, plans)
     if (planning_visits + visits + native_trace_bridge_preflight_value_visit_bound(plans) > maximum_value_visits
@@ -445,7 +483,7 @@ def prepare_native_continuity(field, registration, measurement_sets, *, maximum_
     assessments = assess_native_continuity(requests, measurements, batch)
     work = NativeTraceContinuityWork(
         planning_visits + visits + batch.value_visit_bound + batch.preflight_value_visit_bound,
-        retained + batch.retained_bytes, peak + batch.peak_temporary_bytes,
+        retained + batch.retained_bytes, max(planning_bytes, peak + batch.peak_temporary_bytes),
         batch.bound_exceeded, batch.pixel_query_count)
     return NativeTraceContinuityEvidence(requests, measurements, batch, assessments, work)
 
@@ -454,8 +492,14 @@ def apply_native_continuity(registration, evidence):
     if evidence is None:
         return registration
     constraints = {a.observation_id: a.constraint for a in evidence.assessments if a.constraint is not None}
+    if not constraints:
+        return registration
     def apply(bindings):
         return tuple(replace(b, native_continuity_constraint=constraints[b.observation_id])
-                     if b.observation_id in constraints else b for b in bindings)
-    return replace(registration, top_bindings=apply(registration.top_bindings),
-                   bottom_bindings=apply(registration.bottom_bindings))
+                     if b.observation_id in constraints and b.native_continuity_constraint != constraints[b.observation_id]
+                     else b for b in bindings)
+    top, bottom = apply(registration.top_bindings), apply(registration.bottom_bindings)
+    if all(new is old for new, old in zip((*top, *bottom),
+            (*registration.top_bindings, *registration.bottom_bindings), strict=True)):
+        return registration
+    return replace(registration, top_bindings=top, bottom_bindings=bottom)

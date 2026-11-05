@@ -58,8 +58,8 @@ from .gold_native_association import native_association_diagnostic
 from .gold_native_connections import native_local_connection_diagnostic
 
 
-ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v35"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v36"
+ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v36"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v37"
 RETAINED_PLACEMENT_SCOPE = "retained_canonical_pair_conditional_cross_and_independent_phase_review_proposals"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
@@ -548,7 +548,8 @@ def native_boundary_association_diagnostic(geometry, lane):
     return native_association_diagnostic(lane, references, count=int(geometry["count"]), read_proof=_read_common_proof)
 
 
-def native_endpoint_connection_diagnostic(source, *, source_lane, sequence_edges, side_lines, existing_pixel_work):
+def native_endpoint_connection_diagnostic(source, *, source_lane, sequence_edges, side_lines,
+                                        existing_pixel_work, original_measurements):
     """Keep the native pixel measurement API separate from reference geometry."""
     before = source.stat()
     rgb, _profile, _warnings = read_tiff(source)
@@ -556,7 +557,7 @@ def native_endpoint_connection_diagnostic(source, *, source_lane, sequence_edges
     result = native_local_connection_diagnostic(rgb,
         layout="horizontal" if scales["source_width_axis"] == "x" else "vertical",
         sequence_edges=sequence_edges, side_lines=side_lines, scales=scales,
-        existing_pixel_work=existing_pixel_work)
+        existing_pixel_work=existing_pixel_work, original_measurements=original_measurements)
     after = source.stat()
     if before.st_size != after.st_size or before.st_mtime_ns != after.st_mtime_ns:
         raise ValueError("source stat identity changed across native endpoint measurement")
@@ -1325,6 +1326,7 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
             source_lane=report["development"]["measurement"]["source_lanes"][0],
             sequence_edges=development_lanes[0]["observations"]["sequence_edges"],
             side_lines=development_lanes[0]["base_cross_registration"]["observations"],
+            original_measurements=report["development"]["measurement"]["queries"],
             existing_pixel_work=(development_lanes[0]["measurement_work"]["pixel_query_count"]
                                  + development_lanes[0]["work"]["peak_source_value_visit_bound"]))
         if source.stat().st_size != before.st_size or source.stat().st_mtime_ns != before.st_mtime_ns:
@@ -2945,6 +2947,8 @@ def _summary(
                         "state", "query_scope", "bound_failures", "registered_query_count", "completed_query_count",
                         "source_clipped_query_count", "anchor_signal_query_count", "continuing_signal_query_count",
                         "registered_pixel_work", "existing_pixel_work", "pixel_work_limit", "mask_site_work_bound",
+                        "original_peak_anchor_input_state", "original_peak_anchor_processing_state",
+                        "original_peak_anchor_value_work", "original_peak_anchor_retained_bytes", "boundary_identity_authority",
                         "peak_temporary_bytes", "same_photo_pair_authority", "terminal_authority", "ordinal_authority")}}
                 for row in completed],
         },

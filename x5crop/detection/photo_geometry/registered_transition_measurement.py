@@ -223,31 +223,119 @@ class MeasuredBroadMaterialPeak:
     coordinate_index: int
 
 
+def _window_prefix(values: np.ndarray) -> np.ndarray:
+    if values.ndim == 1:
+        prefix = np.empty(values.size + 1, dtype=np.float64)
+        prefix[0] = 0.0
+        np.cumsum(values, dtype=np.float64, out=prefix[1:])
+    elif values.ndim == 2:
+        prefix = np.empty((values.shape[0], values.shape[1] + 1), dtype=np.float64)
+        prefix[:, 0] = 0.0
+        np.cumsum(values, axis=1, dtype=np.float64, out=prefix[:, 1:])
+    else:
+        raise ValueError("window means require a one- or two-dimensional array")
+    return prefix
+
+
+class _WindowPrefix:
+    """Lazy preparation owned by one call and the exact unchanged input array."""
+
+    __slots__ = ("values", "prefix")
+
+    def __init__(self, values: np.ndarray):
+        self.values = values
+        self.prefix = None
+
+    def for_values(self, values: np.ndarray) -> np.ndarray:
+        if values is not self.values:
+            raise ValueError("window prefix belongs to another numeric input")
+        if self.prefix is None:
+            self.prefix = _window_prefix(values)
+        return self.prefix
+
+    @property
+    def temporary_bytes(self) -> int:
+        return 0 if self.prefix is None else self.prefix.nbytes
+
+
+def window_prefix_cache_bytes(source_length: int) -> int:
+    """Two float64 prefixes: L+1 values and L differences-prefix entries."""
+    if type(source_length) is not int or source_length < 0:
+        raise ValueError("prefix source length must be a non-negative integer")
+    return 0 if source_length == 0 else 8 * ((source_length + 1) + source_length)
+
+
+def _prefix_cache_allowed(source_length, capacity):
+    if capacity is not None and (type(capacity) is not int or capacity < 0):
+        raise ValueError("prefix cache capacity must be a non-negative integer or None")
+    return capacity is None or capacity > 0 and capacity >= window_prefix_cache_bytes(source_length)
+
+
+def _trace_rows_buffer_reservation(rows, source_length, coordinate_count):
+    """The existing row owner's array composition, evaluated from shapes only."""
+    if coordinate_count == 0:
+        return 0
+    values = 8 * rows * source_length
+    coordinates = 4 * coordinate_count
+    differences = 8 * rows * max(0, source_length - 1)
+    responses = 11 * 8 * rows * coordinate_count
+    prefixes = 8 * rows * ((source_length + 1) + source_length)
+    # diff + two tone/texture/signed-gradient temporaries + four median/MAD
+    # response workspaces; eight scalar float64 reductions per row.
+    arithmetic = differences + 10 * 8 * rows * coordinate_count + 8 * rows * 8
+    return values + coordinates + differences + responses + prefixes + arithmetic
+
+
+def scalar_trace_buffer_reservation(source_length: int, coordinate_count: int, *,
+                                    include_broad_material: bool = True,
+                                    prefix_cache_capacity_bytes: int | None = None) -> int:
+    """Reserve returned storage PLUS construction scratch before a scalar call.
+
+    One copy of the existing row-construction bound covers the sharp kernel.
+    Broad adds two such bounds for its two scales, plus 32 float64 slots per
+    coordinate for material reductions and median/MAD scratch: scale arrays
+    are already covered; fewer than 16 material float outputs/temporaries,
+    eight statistical work arrays and eight slots for masks/indices fit here.
+    The existing source receipt contributes 1024 retained + 2048 work bytes.
+    Cached prefixes are additional to these original-kernel bounds. The bound
+    also covers standalone broad results; caller-owned native luma/scratch,
+    input numeric/differences and earlier traces must be added by that caller.
+    This function inspects no pixels and allocates no arrays.
+    """
+    if (type(source_length) is not int or source_length < 0 or type(coordinate_count) is not int
+            or not 0 <= coordinate_count <= source_length or type(include_broad_material) is not bool):
+        raise ValueError("scalar buffer reservation requires valid source/coordinate counts and a broad flag")
+    cache_allowed = _prefix_cache_allowed(source_length, prefix_cache_capacity_bytes)
+    if coordinate_count == 0:
+        return 0
+    row = _trace_rows_buffer_reservation(1, source_length, coordinate_count)
+    original_kernel = row * (3 if include_broad_material else 1)
+    if include_broad_material:
+        original_kernel += 32 * 8 * coordinate_count
+    cache = window_prefix_cache_bytes(source_length) if include_broad_material and cache_allowed else 0
+    return original_kernel + 1024 + 2048 + cache
+
+
 def _window_means(
     values: np.ndarray,
     coordinates: np.ndarray,
     window: int,
     gap: int,
+    *,
+    preparation: _WindowPrefix | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     left_stop = coordinates - gap
     left_start = left_stop - window
     right_start = coordinates + gap
     right_stop = right_start + window
+    prefix = _window_prefix(values) if preparation is None else preparation.for_values(values)
     if values.ndim == 1:
-        prefix = np.empty(values.size + 1, dtype=np.float64)
-        prefix[0] = 0.0
-        np.cumsum(values, dtype=np.float64, out=prefix[1:])
         left = (prefix[left_stop] - prefix[left_start]) / float(window)
         right = (prefix[right_stop] - prefix[right_start]) / float(window)
-        return left, right
-    if values.ndim == 2:
-        prefix = np.empty((values.shape[0], values.shape[1] + 1), dtype=np.float64)
-        prefix[:, 0] = 0.0
-        np.cumsum(values, axis=1, dtype=np.float64, out=prefix[:, 1:])
+    else:
         left = (prefix[:, left_stop] - prefix[:, left_start]) / float(window)
         right = (prefix[:, right_stop] - prefix[:, right_start]) / float(window)
-        return left, right
-    raise ValueError("window means require a one- or two-dimensional array")
+    return left, right
 
 
 def _material_scale_measurement(
@@ -257,6 +345,7 @@ def _material_scale_measurement(
     *,
     window: int,
     gap: int,
+    prefixes: tuple[_WindowPrefix, _WindowPrefix] | None = None,
 ) -> tuple[
     np.ndarray,
     np.ndarray,
@@ -289,6 +378,7 @@ def _material_scale_measurement(
         retained,
         window,
         gap,
+        preparation=None if prefixes is None else prefixes[0],
     )
     texture_coordinates = np.clip(
         retained,
@@ -300,6 +390,7 @@ def _material_scale_measurement(
         texture_coordinates,
         window,
         gap,
+        preparation=None if prefixes is None else prefixes[1],
     )
     left_tone[observable] = measured_left
     right_tone[observable] = measured_right
@@ -326,6 +417,7 @@ def broad_material_from_scale_measurements(
     observable_by_scale: tuple[np.ndarray, ...],
     *,
     intensity_quantum: float = REGISTERED_UINT8_QUANTIZATION_STEP,
+    _temporary_prefix_bytes: int = 0,
 ) -> BroadMaterialTraceMeasurement:
     if not math.isfinite(intensity_quantum) or intensity_quantum <= 0.0:
         raise ValueError("broad material intensity quantum must be positive")
@@ -439,7 +531,7 @@ def broad_material_from_scale_measurements(
         right_tone=right_tone_by_scale[broad_index],
         left_texture=left_texture_by_scale[broad_index],
         right_texture=right_texture_by_scale[broad_index],
-        temporary_bytes=sum(item.nbytes for item in arrays),
+        temporary_bytes=sum(item.nbytes for item in arrays) + _temporary_prefix_bytes,
     )
 
 
@@ -451,8 +543,15 @@ def broad_material_trace_measurement(
     spec: PhotoBoundaryMeasurementSpec,
     *,
     intensity_quantum: float = REGISTERED_UINT8_QUANTIZATION_STEP,
+    prefix_cache_capacity_bytes: int | None = None,
+    _prefixes: tuple[_WindowPrefix, _WindowPrefix] | None = None,
 ) -> BroadMaterialTraceMeasurement:
     scales = (spec.local_window_mm, spec.broad_material_window_mm)
+    cache_allowed = _prefix_cache_allowed(values.size, prefix_cache_capacity_bytes)
+    if _prefixes is not None and not cache_allowed:
+        raise ValueError("provided window prefixes exceed the call-local cache capacity")
+    prefixes = (_prefixes if _prefixes is not None else
+                (_WindowPrefix(values), _WindowPrefix(differences)) if cache_allowed else None)
     measured = tuple(
         _material_scale_measurement(
             values,
@@ -460,9 +559,12 @@ def broad_material_trace_measurement(
             coordinates,
             window=max(1, int(math.ceil(window_mm * scale_px_per_mm))),
             gap=spec.transition_gap_px(scale_px_per_mm),
+            prefixes=prefixes,
         )
         for window_mm in scales
     )
+    # Both prefixes stay live across the two physical window scales. They are
+    # call-local scratch, never retained in the returned trace or a cache.
     return broad_material_from_scale_measurements(
         scales,
         tuple(item[0] for item in measured),
@@ -472,6 +574,7 @@ def broad_material_trace_measurement(
         tuple(item[4] for item in measured),
         tuple(item[5] for item in measured),
         intensity_quantum=intensity_quantum,
+        _temporary_prefix_bytes=0 if prefixes is None else sum(p.temporary_bytes for p in prefixes),
     )
 
 
@@ -483,7 +586,9 @@ def measure_trace(
     *,
     include_broad_material: bool = False,
     peak_source_context: tuple[str, WorkspaceExtent, BoundaryAxis, int] | None = None,
+    prefix_cache_capacity_bytes: int | None = None,
 ) -> TraceMeasurement:
+    cache_allowed = _prefix_cache_allowed(values_u8.size, prefix_cache_capacity_bytes)
     window = spec.local_window_px(scale_px_per_mm)
     gap = spec.transition_gap_px(scale_px_per_mm)
     lower = max(window + gap, int(math.ceil(interval.minimum)))
@@ -507,9 +612,11 @@ def measure_trace(
         )
     coordinates = np.arange(lower, upper, dtype=np.int32)
     values = values_u8.astype(np.float64, copy=False)
-    left_tone, right_tone = _window_means(values, coordinates, window, gap)
+    value_prefix = _WindowPrefix(values) if include_broad_material and cache_allowed else None
+    left_tone, right_tone = _window_means(values, coordinates, window, gap, preparation=value_prefix)
     tone = np.abs(right_tone - left_tone)
     differences = np.abs(np.diff(values))
+    difference_prefix = _WindowPrefix(differences) if include_broad_material and cache_allowed else None
     texture_coordinates = np.clip(
         coordinates,
         window + gap,
@@ -520,6 +627,7 @@ def measure_trace(
         texture_coordinates,
         window,
         gap,
+        preparation=difference_prefix,
     )
     texture = np.abs(right_texture - left_texture)
     signed_gradient = (
@@ -534,10 +642,13 @@ def measure_trace(
             coordinates,
             scale_px_per_mm,
             spec,
+            prefix_cache_capacity_bytes=prefix_cache_capacity_bytes,
+            _prefixes=None if value_prefix is None else (value_prefix, difference_prefix),
         )
         if include_broad_material
         else None
     )
+    del value_prefix, difference_prefix
     gradient_z = positive_mad_z(gradient, minimum_scale=REGISTERED_UINT8_QUANTIZATION_STEP)
     tone_z = positive_mad_z(tone, minimum_scale=REGISTERED_UINT8_QUANTIZATION_STEP)
     texture_z = positive_mad_z(texture, minimum_scale=REGISTERED_UINT8_QUANTIZATION_STEP)
@@ -597,46 +708,7 @@ def _trace_rows_temporary_bytes(
     """Conservatively bound all numeric buffers live during row measurement."""
 
     rows, trace_length = values.shape
-    prefix_bytes = np.dtype(np.float64).itemsize * rows * (
-        (trace_length + 1) + trace_length
-    )
-    retained = sum(
-        item.nbytes
-        for item in (
-            values,
-            coordinates,
-            differences,
-            left_tone,
-            right_tone,
-            tone,
-            left_texture,
-            right_texture,
-            texture,
-            signed_gradient,
-            gradient,
-            gradient_z,
-            tone_z,
-            texture_z,
-        )
-    )
-    coordinate_values = max(
-        gradient.nbytes,
-        tone.nbytes,
-        texture.nbytes,
-        signed_gradient.nbytes,
-    )
-    # np.diff, vectorized arithmetic, and the row-wise median/MAD reduction
-    # may each retain an additional full matrix briefly.  The scalar row
-    # reductions are serial, so the largest such workspace is sufficient.
-    arithmetic_bytes = (
-        differences.nbytes
-        + 2 * tone.nbytes
-        + 2 * texture.nbytes
-        + 2 * signed_gradient.nbytes
-        + 4 * coordinate_values
-        + 8 * rows * np.dtype(np.float64).itemsize
-    )
-    return int(retained + prefix_bytes + arithmetic_bytes)
+    return _trace_rows_buffer_reservation(rows, trace_length, coordinates.size)
 
 
 def measure_trace_rows(
