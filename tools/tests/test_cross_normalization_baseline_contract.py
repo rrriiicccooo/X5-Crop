@@ -202,9 +202,9 @@ class CrossNormalizationBaselineContractTest(unittest.TestCase):
         prior_buffers = []
         calls = []
 
-        def observe(*args):
+        def observe(*args, prefix_cache_budget_bytes):
             self.assertTrue(all(reference() is None for reference in prior_buffers))
-            result = original(*args)
+            result = original(*args, prefix_cache_budget_bytes=prefix_cache_budget_bytes)
             calls.append(args[1].purpose)
             prior_buffers.extend(weakref.ref(item.coordinates) for item in result[0][args[1].query_id])
             return result
