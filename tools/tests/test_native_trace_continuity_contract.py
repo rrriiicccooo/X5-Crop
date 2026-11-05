@@ -236,7 +236,7 @@ class NativeTraceContinuityContractTest(unittest.TestCase):
         # Isolate the geometric consumer: a new intermediate native interval
         # restricts a state that all original sparse intervals would permit.
         positions = list(constraint.trace_position_intervals_px)
-        positions[constraint.trace_coordinates_px.index(600)] = FiniteInterval.exact(80.5)
+        positions[constraint.trace_coordinates_px.index(600)] = FiniteInterval(80., 81.)
         bottom = replace(bottom, native_continuity_constraint=replace(
             constraint, trace_position_intervals_px=tuple(positions)))
         traces = case[2][0].query.trace_positions_px
@@ -254,8 +254,10 @@ class NativeTraceContinuityContractTest(unittest.TestCase):
         vertices, _ = _support_cross_vertices(placement)
         self.assertTrue(vertices)
         for _top, position, slope in vertices:
-            self.assertAlmostEqual(position + slope*(600.-280.), 80.5)
-        self.assertIn((600, FiniteInterval.exact(80.5)), tuple(_support_trace_intervals(bottom)))
+            at_new_trace = position + slope*(600.-280.)
+            self.assertGreaterEqual(at_new_trace, 80.-1.0e-9)
+            self.assertLessEqual(at_new_trace, 81.+1.0e-9)
+        self.assertIn((600, FiniteInterval(80., 81.)), tuple(_support_trace_intervals(bottom)))
         self.assertEqual(_support_direction_departure_px(bottom, 0., FiniteInterval(640., 800.)), 0.)
 
     def test_ordinary_replay_requires_the_complete_pixel_proof_and_its_consumed_constraint(self):
