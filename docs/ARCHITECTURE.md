@@ -2636,9 +2636,10 @@ baseline、query view、逐峰来源和粗轨 raw 账本重放，并独立对账
 `Σ N[L+Q(2radius+2)]`；完整行读取不能因 corridor 较窄而漏计。令全部 corridor 密集坐标数为 C、
 行数为 T、原 trace 摘要数为 K，三份 mask、峰扫描、编码及摘要访问由测量 owner 单独计数；同一个
 `validate_native_trace_bridge_batch` 从 plan 重建资源合同，不能在报告工具复制或缩小公式。
-额外证明令 B／O／P／G 分别为 base binding／observation／原 TOP+BOTTOM transition／完整来源组数，V 为最大原生域顶点数，
+额外证明令 B／O／P／G 分别为 base binding／observation／原 TOP+BOTTOM transition／来源组总数，V 为最大原生域顶点数，
 E 为进入原点规划的 parent 数：非条件 direct、外侧角色已获权、三区域、尚未 source-spanning 且有原生联合域。
 E 在读取原峰前只按上述原资格确定；原峰、源域或连续性检查失败的请求仍计入，不能按最终成功数缩小预算。
+G 包含不完整或未被选中的来源组，不按通过资格的组数缩小索引预算。
 规划访问上界为 `4096+128(B+O+P+G)+16BO+16EP(V+2P+8)`；保留全部元数据扫描与 parent 查找，
 仅由真实进入重循环的 E 承担原峰／域裁剪上界。规划临时上界为
 `max(4096+64(B+O+G), 4096+256(EP+B+P+G))` bytes。
