@@ -1537,6 +1537,8 @@ scope，不缓存物理多边形、拟合、角色或搜索分组。Anchor 与�
 `template_family_membership.py` 唯一拥有搜索、极大解释和拟合预检类型，registration 仍独占物化与权限。
 `MembershipReceipt` 保存原观察全集、全部 parent scope、原子与 anchor、完整极大解释、状态和工作量。
 `COMPLETE` 只覆盖实际登记的原子、scope 与进入 solver 的投影，不证明 tracker 未保留的竞争不存在。
+增加采样后，缺测步长、最近连接与整条 run 的信号均值都可能改变；原始点仍在而旧 raw 组停止生成，
+不构成原解释的物理反证。采样改动必须另外对账旧解释，不能以新候选更少或新 membership 完成消歧。
 最近连接或精修的身份稳定也不能代替完整关联证明；反例见
 `Test/gold_analysis/h_contact_assessment_20260921/refinement_projection_audit.json`。
 冻结观察必须恰等于最终 raw 账本扣除新增条件线与后续精修线；精修线数量和额外拟合次数也须对账。
@@ -2851,6 +2853,7 @@ Linux开发/CI使用`renameat2(RENAME_NOREPLACE)`。目标在最终检查之后�
 | `x5crop/io/`、`export/`、`output/` | TIFF domain、affine sampling、metadata 与原子发布 |
 | `tools/verify`、`tools/regression/` | 唯一验证入口、外部 report validator、方向性黄金验收与 accuracy/diagnostic/performance/platform 分层证据 |
 | `tools/regression/report_sequence_validation.py`、`report_value_validation.py` | 独立 sequence/topology/width 检查与纯值检查；主 report validator 单向调用，全部 leaf 纳入 comparator 来源身份 |
+| `tools/regression/cross_retention.py` | 同源现行开发报告之间的 base Cross 原始测量与解释保留审计；不进入 Runtime、Gate 或黄金 verdict |
 | `tools/manual_annotation/` | source-SHA-bound 的本地 proposal、原 TIFF 有界精修、原图坐标人工审核与最内侧可接受裁切基准冻结；不进入 production 或 release |
 
 人工标注器的 canonical record 按 source SHA 聚合：两条共享短轴边和一个物理 `boundary_pool` 只保存
@@ -3015,6 +3018,19 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   drift 都使 release detection gate 失败。
   保留开发分析产物使用 `tools/verify diagnostic --gold-analysis --output-root <path>`，可用重复的
   `--sample-id` 进行专项诊断；该入口只薄调用同一 analysis owner，不复制验证或改变默认 `report` gate。
+  `tools/verify diagnostic --cross-retention --sample-id <id> --before-report <jsonl>
+  --after-report <jsonl> --output <new-json>` 比较两份同源现行 development 报告。两份报告须严格验收，
+  并核对当前黄金 task 的 source SHA、format/count、源文件身份、输入合同、lane 与方向；不读取人工
+  几何进行选择。报告记录各自 SHA。原始点指纹保留完整数值、物理区间、原峰信号 SHA、峰组与 native
+  texture，只归一化 run-local 名称和 trace ordinal；缺失 peak proof 原样保留并单独计数，数值相同不
+  取得原峰身份权限。重复匹配、测量改变和未登记 trace 分别记录，不按距离补配。
+  审计范围仅为 before 的非条件、至少两区域 base Cross binding；tracking、fitted、family 原子／并集、
+  membership 极大并集与 base solver 分层对账，不能拼接分散节点冒充完整解释。完整 raw superset
+  只证明原点保留，新增点与旧边的归属未证时不能排除旧完整状态族。即使 base solver 的 raw 集合完全
+  相同，也不证明 W/H、权限、共同窗口或完整候选宇宙等价；该工具始终无物理反证与 Gate 权限。
+  两份 membership 状态同时保留。既存超界可以是可对账的 Review 状态，不能据其前缀宣布全集完整。
+  精确 base solver raw 保留为退出码 0；测量不可比、仅账本保留、仅 superset 或解释未表示为 1；
+  输入无效为 2。Review 转 auto 且存在上述缺口时另标需保留审计，不将其等同于危险 auto。
   `gold_native_association.py` 负责离线原生关联对账：人工线先经同一 canonical 映射，逐一比较 placement、
   cross-height、broad 三份完整边账本及其全部 retained transition 物理区间，保留区间 hull 命中但完整点集
   不相容的区别；`1e-7 px` 仅用于该对账的浮点比较。另列全部原始点（含未拟合部分）、各 query 的空间

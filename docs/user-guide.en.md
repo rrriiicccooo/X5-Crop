@@ -86,6 +86,8 @@ Other interpretations must independently pass every safety check.
 Material strips can also lie inside a photo. Competing interpretations remain when the correspondence between
 boundaries and photo ordinals is unproven. Local support or shared measurement points alone do not establish a
 continuous edge; another long edge cannot supply that missing proof to reduce protection.
+Fewer generated candidates do not by themselves rule out earlier interpretations; resolving ambiguity still requires
+independent physical evidence.
 
 When photo ownership is established and several complete top/bottom interpretations remain, one fixed box may protect
 them all. Automatic approval requires every interpretation to pass content containment and source-wide safety checks.

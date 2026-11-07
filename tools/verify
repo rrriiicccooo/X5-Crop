@@ -86,7 +86,10 @@ case "${1:-}" in
         ;;
     diagnostic)
         shift
-        if [ "${1:-}" = "--gold-boundary-features" ]; then
+        if [ "${1:-}" = "--cross-retention" ]; then
+            shift
+            "$PYTHON" -m tools.regression.cross_retention "$@"
+        elif [ "${1:-}" = "--gold-boundary-features" ]; then
             shift
             "$PYTHON" -m tools.regression.gold_boundary_features "$@"
         elif [ "${1:-}" = "--gold-analysis" ]; then
