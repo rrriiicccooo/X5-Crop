@@ -217,7 +217,8 @@ def main(argv=None) -> int:
         result["sample_id"] = args.sample_id
         result["report_sha256"] = {"before": sha256_file(args.before_report), "after": sha256_file(args.after_report)}
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        with args.output.open("x", encoding="utf-8") as stream:
+            stream.write(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
     except (OSError, KeyError, TypeError, ValueError) as error:
         print(f"Cross retention: INVALID: {error}", file=sys.stderr)
         return 2

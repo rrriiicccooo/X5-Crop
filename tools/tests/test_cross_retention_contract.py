@@ -1,8 +1,16 @@
 """Recorded raw equality cannot substitute for retained interpretations."""
 
 from copy import deepcopy
+from contextlib import redirect_stderr
+import hashlib
+from io import StringIO
+import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
+from tools.regression import cross_retention as owner
 from tools.regression.cross_retention import _compare_binding, _point_key
 
 
@@ -117,6 +125,31 @@ class CrossRetentionContractTest(unittest.TestCase):
         result = _compare_binding(binding, before, after)
         self.assertEqual([gap["reason"] for gap in result["measurement_gaps"]],
                          ["trace_not_registered", "measurement_changed_or_unavailable"])
+
+    def test_concurrent_artifact_creation_cannot_overwrite_the_other_result(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            source, cohort = root / "source.tif", root / "cohort.jsonl"
+            before, after, output = (root / name for name in ("before.jsonl", "after.jsonl", "audit.json"))
+            source.write_bytes(b"source bytes")
+            cohort.write_text(json.dumps({"sample_id": "test", "source_relative_path": source.name,
+                "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest()}) + "\n", encoding="utf-8")
+            for report in (before, after):
+                report.write_text("{}\n", encoding="utf-8")
+
+            def concurrent_creation(*_args, **_kwargs):
+                output.write_text("other completed audit\n", encoding="utf-8")
+                return {}
+
+            with patch.object(owner, "PROJECT_ROOT", root), \
+                    patch.object(owner, "DEVELOPMENT_GOLD_COHORT_PATH", cohort), \
+                    patch.object(owner, "_read_bound_report", return_value={}), \
+                    patch.object(owner, "compare_reports", side_effect=concurrent_creation), \
+                    redirect_stderr(StringIO()):
+                status = owner.main(["--sample-id", "test", "--before-report", str(before),
+                                     "--after-report", str(after), "--output", str(output)])
+            self.assertEqual(status, 2)
+            self.assertEqual(output.read_text(encoding="utf-8"), "other completed audit\n")
 
 
 if __name__ == "__main__":
