@@ -670,6 +670,11 @@ source-spanning 连续支持。完整账本包含所有 observation、恢复的�
 归一化，不能在小窗口重算噪声。原端点选中峰必须命中同一正／负四连通响应，分量不能触及 corridor
 坐标外沿；全部所需原峰都须命中该分量。分量内每条密集 trace 恰有一个原测量峰，原峰坐标及其完整
 物理区间不能与其它峰混同。分叉、弱信号、来源冲突或缺测只形成 unavailable，不物理排除旧解释。
+原始必需峰的完整来源组必须在自身原 query 内有两侧观测。密集报告另存原选择器的 OR 可信 mask
+（gradient 或 tone／texture），正负四连通 mask 仍使用 AND；三者来自同一响应 owner，并分别保留。
+被选原峰所在的完整 OR 组两侧须有 query 内实际观测的非可信 flank，完整物理区间也须位于该组内。
+AND 分量不触边不能替代此条件：tone 可信组可在窗口外沿被截断，而内部强梯度分量仍完整。
+缺少原组、原组截断或密集组无完整 flank 均不生成连续资格，不缩窗口、改选峰或删除竞争成员。
 补测涉及的全部原 trace 的完整信号摘要须与旧 baseline 相同；所有密集原峰完整区间与 parent 原生联合域求交，
 没有共同状态时不生成证明，不选择有利代表点。
 原 corridor 包含核在源边不可观察的坐标时，整个新证明保持 unavailable；不裁短 intent 或抛出生产异常。
@@ -2629,23 +2634,25 @@ baseline、query view、逐峰来源和粗轨 raw 账本重放，并独立对账
 
 令共享 baseline 组的完整源行长度为 L、实际核可观察坐标数为 Q、合并行数为 N，pixel 上界为
 `Σ N[L+Q(2radius+2)]`；完整行读取不能因 corridor 较窄而漏计。令全部 corridor 密集坐标数为 C、
-行数为 T、原 trace 摘要数为 K，mask、峰扫描、编码及摘要访问由测量 owner 单独计数；同一个
+行数为 T、原 trace 摘要数为 K，三份 mask、峰扫描、编码及摘要访问由测量 owner 单独计数；同一个
 `validate_native_trace_bridge_batch` 从 plan 重建资源合同，不能在报告工具复制或缩小公式。
-额外证明令 B／O／P 分别为 base binding／observation／原 TOP+BOTTOM transition 数，V 为最大原生域顶点数，
+额外证明令 B／O／P／G 分别为 base binding／observation／原 TOP+BOTTOM transition／完整来源组数，V 为最大原生域顶点数，
 E 为进入原点规划的 parent 数：非条件 direct、外侧角色已获权、三区域、尚未 source-spanning 且有原生联合域。
 E 在读取原峰前只按上述原资格确定；原峰、源域或连续性检查失败的请求仍计入，不能按最终成功数缩小预算。
-规划访问上界为 `4096+128(B+O+P)+16BO+16EP(V+2P+8)`；保留全部元数据扫描与 parent 查找，
+规划访问上界为 `4096+128(B+O+P+G)+16BO+16EP(V+2P+8)`；保留全部元数据扫描与 parent 查找，
 仅由真实进入重循环的 E 承担原峰／域裁剪上界。规划临时上界为
-`max(4096+64(B+O), 4096+256(EP+B+P))` bytes。
-E 的 metadata 查找先按 `4096+128(B+O+P)+16BO` 次访问和 `4096+64(B+O)` bytes 预检；不足时
+`max(4096+64(B+O+G), 4096+256(EP+B+P+G))` bytes。
+E 与组索引的 metadata 查找先按 `4096+128(B+O+P+G)+16BO` 次访问和 `4096+64(B+O+G)` bytes 预检；不足时
 保存 `planning_metadata_completed=false`，不执行查找。已完成查找而原峰规划仍超界时，保留原输入和
 已执行的 metadata 工作，`planning_completed=false`；不得把这段已执行工作清零。完整规划的临时界
 同时覆盖上述 metadata 阶段。
+来源组的 primitive ID 已由 typed measurement 构造及捕获预算计算并冻结；规划只复用 ID、组端点和完整性，
+不重新扫描可靠梯度坐标或重复计算来源摘要。
 没有满足已有资格 flags 的 parent 时不访问原峰账本；
 开始规划后，原 raster run 不连通也保留为 unavailable 义务并计入工作。
 每个实际待证 parent 的原点数加计划密集行数为 n，待证数为 J，证明预留
-`4096+32C max(1,J)+Σ64n(n+8)` 次访问；保留量为 `4096+256Σ(support_raw_count+1)+Σ512n` bytes，
-临时量再加 `16C+Σ128n` bytes。规划、完整行像素、峰来源、结构预检、证明与原 coarse／exterior／
+`4096+48C max(1,J)+Σ64n(n+8)` 次访问；保留量为 `4096+256Σ(support_raw_count+1)+Σ512n` bytes，
+临时量再加 `20C+Σ128n` bytes，覆盖独立 OR mask 的解码与完整 flank 检查。规划、完整行像素、峰来源、结构预检、证明与原 coarse／exterior／
 capture／association 工作共同受 `128N_source` 与 `10N_source+32 MiB` 约束。规划尚未完成时明确
 保存 `planning_completed=false`，不能把空集合解释为没有缺口；任何失败均不生成批准前缀。
 规划与后续测量／证明分阶段执行，报告的连续性峰值取 `max(规划临时量, 证明临时量+batch临时量)`，

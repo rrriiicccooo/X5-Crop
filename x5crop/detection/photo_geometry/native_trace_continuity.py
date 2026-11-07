@@ -22,7 +22,7 @@ from .measurement_model import PhotoBoundaryMeasurementSet
 from .model import BoundaryRole, QueryPurpose, PHOTO_BOUNDARY_MEASUREMENT_SPEC as SPEC
 from .native_trace_bridge_measurement import (
     NativeTraceBridgePlan, NativeTraceBridgeBatch, decode_mask,
-    measure_native_trace_bridges, peaks_at_row, native_trace_bridge_preflight_value_visit_bound,
+    measure_native_trace_bridges, peaks_at_row, decode_credible_mask, native_trace_bridge_preflight_value_visit_bound,
     native_trace_bridge_normalization_domain,
 )
 from .robust_line_fit import _clip_line_region
@@ -31,6 +31,7 @@ from .trace_support import source_spanning_continuous_trace_support, trace_suppo
 
 class NativeTraceContinuityFailure(str, Enum):
     ORIGINAL_PEAK_UNAVAILABLE = "original_peak_unavailable"
+    ORIGINAL_GROUP_UNAVAILABLE = "original_peak_group_unavailable"
     ORIGINAL_RUN_UNAVAILABLE = "original_run_unavailable"
     SOURCE_DOMAIN_UNAVAILABLE = "source_domain_unavailable"
     COMPLETE_EXTENSION_UNAVAILABLE = "complete_extension_unavailable"
@@ -38,6 +39,7 @@ class NativeTraceContinuityFailure(str, Enum):
     SOURCE_CONTEXT_CONFLICT = "source_context_conflict"
     DENSE_SIGNAL_UNAVAILABLE = "dense_signal_unavailable"
     DENSE_PEAK_COMPETITION = "dense_peak_competition"
+    DENSE_GROUP_UNAVAILABLE = "dense_peak_group_unavailable"
     PHYSICAL_DOMAIN_UNAVAILABLE = "physical_domain_unavailable"
     MEASUREMENT_BOUND_EXCEEDED = "measurement_bound_exceeded"
     PROOF_BOUND_EXCEEDED = "proof_bound_exceeded"
@@ -174,6 +176,7 @@ def continuity_requests(registration, measurement_sets, *, source_extent):
     observations = {o.observation_id: o for o in registration.observations}
     complete_peak_inventory = {}
     by_role = {}
+    groups_by_role = {}
     for role, measured in measurements.items():
         by_id, by_trace = {}, {}
         for point in measured.transitions:
@@ -181,6 +184,9 @@ def continuity_requests(registration, measurement_sets, *, source_extent):
             by_id[point.transition_id] = point
             by_trace.setdefault(point.trace_coordinate_px, []).append(point)
         by_role[role] = by_id, by_trace
+        # Typed measurement construction already computed these immutable
+        # primitive IDs and charged their full source/group capture work.
+        groups_by_role[role] = {group.primitive_id: group for group in measured.peak_source_groups}
     requests = []
     for binding in (*registration.top_bindings, *registration.bottom_bindings):
         parent = observations[binding.observation_id]
@@ -244,6 +250,11 @@ def continuity_requests(registration, measurement_sets, *, source_extent):
         if _region(parent.physical_line_region,
                    ((p.trace_coordinate_px, p.physical_position_interval_px) for p in support)) is None:
             failure = failure or NativeTraceContinuityFailure.PHYSICAL_DOMAIN_UNAVAILABLE
+        groups = groups_by_role[parent.role]
+        if any(point.peak_source is not None and (
+                groups.get(point.peak_source.group_id) is None
+                or not groups[point.peak_source.group_id].complete) for point in support):
+            failure = failure or NativeTraceContinuityFailure.ORIGINAL_GROUP_UNAVAILABLE
         queried = measured.query.trace_positions_px
         step = float(np.median(np.diff(np.asarray(queried, dtype=np.float64))))
         allowance = step * (SPEC.maximum_missing_lattice_steps + 1) + SPEC.paired_sampling_uncertainty_px
@@ -291,9 +302,9 @@ def _proof_reservation(requests, plans):
                 for p in plans for start, stop in p.trace_intervals_px)
     rows = [len(r.parent.trace_coordinates_px) + sum(high-low for low, high in r.trace_intervals_px)
             for r in requests if r.preliminary_failure is None]
-    visits = 4096 + 32 * sites * max(1, len(rows)) + sum(64*n*(n+8) for n in rows)
+    visits = 4096 + 48 * sites * max(1, len(rows)) + sum(64*n*(n+8) for n in rows)
     retained = 4096 + 256 * sum(len(r.supporting_transition_ids)+1 for r in requests) + sum(512*n for n in rows)
-    peak = retained + 16 * sites + sum(128*n for n in rows)
+    peak = retained + 20 * sites + sum(128*n for n in rows)
     return visits, retained, peak
 
 
@@ -302,7 +313,10 @@ def _planning_metadata_reservation(registration, measurement_sets):
     observations = len(registration.observations)
     points = sum(len(m.transitions) for m in measurement_sets if m.query.purpose in
                  (QueryPurpose.TOP_CORRIDOR, QueryPurpose.BOTTOM_CORRIDOR))
-    return 4096 + 128*(count+observations+points) + 16*count*observations, 4096 + 64*(count+observations)
+    groups = sum(len(m.peak_source_groups) for m in measurement_sets if m.query.purpose in
+                 (QueryPurpose.TOP_CORRIDOR, QueryPurpose.BOTTOM_CORRIDOR))
+    return (4096 + 128*(count+observations+points+groups) + 16*count*observations,
+            4096 + 64*(count+observations+groups))
 
 
 def _planning_reservation(registration, measurement_sets):
@@ -315,24 +329,27 @@ def _planning_reservation(registration, measurement_sets):
         eligible += _planning_eligible(binding, parent)
     points = sum(len(m.transitions) for m in measurement_sets if m.query.purpose in
                  (QueryPurpose.TOP_CORRIDOR, QueryPurpose.BOTTOM_CORRIDOR))
+    groups = sum(len(m.peak_source_groups) for m in measurement_sets if m.query.purpose in
+                 (QueryPurpose.TOP_CORRIDOR, QueryPurpose.BOTTOM_CORRIDOR))
     vertices = max((len(o.physical_line_region.vertices) for o in registration.observations
                     if o.physical_line_region is not None), default=0)
     metadata_visits, metadata_bytes = _planning_metadata_reservation(registration, measurement_sets)
     return (metadata_visits + 16*eligible*points*(vertices+2*points+8),
-            max(metadata_bytes, 4096 + 256*(eligible*points+count+points)))
+            max(metadata_bytes, 4096 + 256*(eligible*points+count+points+groups)))
 
 
 def _bridge_context(batch, plan_index, low, high, polarity):
     strips = tuple(sorted((s for s in batch.strips if s.plan_index == plan_index
                            and s.trace_start_px < high and s.trace_stop_px > low),
                           key=lambda s: s.trace_start_px))
-    chunks, next_trace = [], low
+    chunks, credible_chunks, next_trace = [], [], low
     sources = {}
     for strip in strips:
         first, stop = max(low, strip.trace_start_px), min(high, strip.trace_stop_px)
         if first != next_trace:
             raise ValueError("native continuity lost a complete intermediate trace block")
         chunks.append(decode_mask(strip, polarity)[first-strip.trace_start_px:stop-strip.trace_start_px])
+        credible_chunks.append(decode_credible_mask(strip)[first-strip.trace_start_px:stop-strip.trace_start_px])
         next_trace = stop
         for source in strip.original_trace_sources:
             if source.trace_coordinate_px in sources and sources[source.trace_coordinate_px] != source:
@@ -341,8 +358,23 @@ def _bridge_context(batch, plan_index, low, high, polarity):
     if next_trace != high:
         raise ValueError("native continuity lost its final intermediate trace block")
     mask = np.concatenate(chunks, axis=0)
+    credible = np.concatenate(credible_chunks, axis=0)
     _count, labels = cv2.connectedComponents(mask, connectivity=4, ltype=cv2.CV_32S)
-    return labels, strips, tuple(s.trace_start_px for s in strips), sources
+    return labels, credible, strips, tuple(s.trace_start_px for s in strips), sources
+
+
+def _dense_group_complete(credible_row, column, peak, coordinate_start):
+    """Require both observed OR flanks, not merely an interior AND component."""
+    if not 0 <= column < credible_row.size or not credible_row[column]:
+        return False
+    gaps = np.flatnonzero(credible_row == 0)
+    ordinal = int(np.searchsorted(gaps, column))
+    if ordinal == 0 or ordinal == gaps.size:
+        return False
+    low, high = int(gaps[ordinal-1])+1, int(gaps[ordinal])-1
+    interval = peak.physical_position_interval_px
+    return (interval.minimum >= coordinate_start+low-0.5
+            and interval.maximum <= coordinate_start+high+0.5)
 
 
 def assess_native_continuity(requests, measurements, batch):
@@ -370,7 +402,7 @@ def assess_native_continuity(requests, measurements, batch):
                 if key not in contexts:
                     contexts.clear()
                     contexts[key] = _bridge_context(batch, plan_index, low, high, request.polarity)
-                labels, strips, starts, sources = contexts[key]
+                labels, credible, strips, starts, sources = contexts[key]
                 coordinate_start = strips[0].coordinate_start_px
                 anchor_trace = (parent.trace_coordinates_px[0] if low < parent.trace_coordinates_px[0]
                                 else parent.trace_coordinates_px[-1])
@@ -421,6 +453,10 @@ def assess_native_continuity(requests, measurements, batch):
                     if (peak.polarity != request.polarity or not 0 <= column < labels.shape[1]
                             or labels[int(row), column] != component or aliases != (peak,)):
                         failure = failure or NativeTraceContinuityFailure.DENSE_SIGNAL_UNAVAILABLE
+                        conflicts.add(trace)
+                        continue
+                    if not _dense_group_complete(credible[int(row)], column, peak, coordinate_start):
+                        failure = failure or NativeTraceContinuityFailure.DENSE_GROUP_UNAVAILABLE
                         conflicts.add(trace)
                         continue
                     old = positions.get(trace)

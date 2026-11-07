@@ -203,7 +203,7 @@ class NativeTraceBridgeMeasurementContractTest(unittest.TestCase):
         self.assertEqual([s.trace_coordinate_px for strip in batch.strips for s in strip.original_trace_sources], [2])
 
     def test_mask_shape_hex_padding_and_polarity_are_strict(self):
-        strip = owner.NativeTraceBridgeStrip(0, 1, 2, 5, 10, "11", "02", "", (0, 0), ())
+        strip = owner.NativeTraceBridgeStrip(0, 1, 2, 5, 10, "11", "02", "13", "", (0, 0), ())
         np.testing.assert_array_equal(owner.decode_mask(strip, 1), [[1, 0, 0, 0, 1]])
         np.testing.assert_array_equal(owner.decode_mask(strip, -1), [[0, 1, 0, 0, 0]])
         for encoded in ("20", "0g", "0A", " 1", "0011", ""):
@@ -219,7 +219,7 @@ class NativeTraceBridgeMeasurementContractTest(unittest.TestCase):
 
     def test_packed_peak_rows_reject_forged_records_offsets_and_reserved_bytes(self):
         record = owner._PEAK_RECORD.pack(7, 7., 6.5, 7.5, 4., 3., 0., 1).hex()
-        strip = owner.NativeTraceBridgeStrip(0, 1, 2, 5, 10, "01", "02", record, (0, 1), ())
+        strip = owner.NativeTraceBridgeStrip(0, 1, 2, 5, 10, "01", "02", "07", record, (0, 1), ())
         self.assertEqual(owner.peaks_at_row(strip, 0),
             (owner.NativeTraceBridgePeak(7, 7., FiniteInterval(6.5, 7.5), 1, 4., 3., 0.),))
         self.assertEqual(owner._PEAK_RECORD.size, 64)

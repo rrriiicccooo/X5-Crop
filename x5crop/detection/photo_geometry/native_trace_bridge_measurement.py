@@ -21,7 +21,7 @@ from .measurement_model import PhotoBoundaryMeasurementField
 from .model import BoundaryAxis, PHOTO_BOUNDARY_MEASUREMENT_SPEC as SPEC
 from .registered_measurement import _slice_trace_measurement
 from .registered_transition_measurement import (
-    TraceMeasurement, measure_trace_rows, measured_transition_peaks,
+    TraceMeasurement, measure_trace_rows, measured_transition_peaks, transition_peak_support,
 )
 from .transition_peak_source import TransitionPeakTraceSource
 
@@ -193,6 +193,7 @@ class NativeTraceBridgeStrip:
     coordinate_stop_px: int
     positive_mask_hex: str
     negative_mask_hex: str
+    credible_mask_hex: str
     peak_records_hex: str
     peak_row_offsets: tuple[int, ...]
     original_trace_sources: tuple[TransitionPeakTraceSource, ...]
@@ -204,11 +205,14 @@ class NativeTraceBridgeStrip:
         columns = self.coordinate_stop_px - self.coordinate_start_px
         if rows <= 0 or columns <= 0:
             raise ValueError("bridge strip must have positive shape")
-        for encoded in (self.positive_mask_hex, self.negative_mask_hex):
+        for encoded in (self.positive_mask_hex, self.negative_mask_hex, self.credible_mask_hex):
             _validate_mask_hex(encoded, rows * columns)
         if any(int(self.positive_mask_hex[i:i+2], 16) & int(self.negative_mask_hex[i:i+2], 16)
                for i in range(0, len(self.positive_mask_hex), 2)):
             raise ValueError("bridge positive and negative masks overlap")
+        if any((int(self.positive_mask_hex[i:i+2], 16) | int(self.negative_mask_hex[i:i+2], 16))
+               & ~int(self.credible_mask_hex[i:i+2], 16) for i in range(0, len(self.credible_mask_hex), 2)):
+            raise ValueError("bridge connected signal leaves its original OR grouping support")
         if (type(self.peak_records_hex) is not str
                 or any(c not in "0123456789abcdef" for c in self.peak_records_hex)
                 or type(self.peak_row_offsets) is not tuple or len(self.peak_row_offsets) != rows + 1
@@ -262,6 +266,17 @@ def decode_mask(strip: NativeTraceBridgeStrip, polarity: int) -> np.ndarray:
     if not isinstance(strip, NativeTraceBridgeStrip) or type(polarity) is not int or polarity not in (-1, 1):
         raise ValueError("mask decoding requires a typed strip and polarity +/-1")
     encoded = strip.positive_mask_hex if polarity > 0 else strip.negative_mask_hex
+    return _decode_checked_mask(strip, encoded)
+
+
+def decode_credible_mask(strip: NativeTraceBridgeStrip) -> np.ndarray:
+    """Decode original OR support; an AND component cannot substitute for it."""
+    if not isinstance(strip, NativeTraceBridgeStrip):
+        raise ValueError("group support decoding requires a typed strip")
+    return _decode_checked_mask(strip, strip.credible_mask_hex)
+
+
+def _decode_checked_mask(strip, encoded):
     rows = strip.trace_stop_px - strip.trace_start_px
     columns = strip.coordinate_stop_px - strip.coordinate_start_px
     _validate_mask_hex(encoded, rows * columns)
@@ -386,13 +401,15 @@ def _prepare(plans, maximum_temporary_bytes):
                 + 4 * sum(len(p.source_id) + len(p.original_query_id) + len(p.baseline_query_id) for p in plans))
     # One strip per row is a conservative reservation for every possible block
     # partition. Each view coordinate can create at most one retained peak.
-    hex_bound = 4 * sum(sum(b-a for a, b in p.trace_intervals_px)
+    hex_bound = 6 * sum(sum(b-a for a, b in p.trace_intervals_px)
                         * ((_corridor_domain(p)[1] - _corridor_domain(p)[0] + 7) // 8) for p in plans)
     retained_bound = metadata + 1120 * rows + 128 * sites + hex_bound + 1024 * original_count
-    mask_work = 16 * sites + 64 * rows
+    mask_work = 32 * sites + 96 * rows
     # Keep the existing 256Q+32 peak scan reservation, and separately cover
     # fixed-record packing, hexadecimal validation and one-record decoding.
-    value_work = (hash_work + 640 * sites + 160 * rows + mask_work
+    # The extra group-support mask, its subset checks and row metadata are
+    # included before pixel access; the proof's flank scan is charged later.
+    value_work = (hash_work + 704 * sites + 160 * rows + mask_work
                   + 128 * (len(plans) + sum(len(p.trace_intervals_px) for p in plans)
                            + sum(len(p.original_trace_coordinates_px) for p in plans)))
     required_peak = retained_bound
@@ -401,9 +418,9 @@ def _prepare(plans, maximum_temporary_bytes):
     for group in groups:
         length, width = group.source_length, group.maximum_corridor_width
         fixed = 4096 + 8 * length + 2048 * width
-        # 96 bytes/site includes dense masks and simultaneous packed peak
-        # bytearray/hex construction; the final hex is in retained_bound.
-        per_row = 256 * (length + 1) + 96 * width
+        # The third OR mask and its encoding/validation buffers stay live
+        # beside both AND masks and packed peak construction.
+        per_row = 256 * (length + 1) + 112 * width
         streaming_rows = SPEC.maximum_streaming_block_pixels // length
         available_rows = (maximum_temporary_bytes - retained_bound - fixed) // per_row
         if streaming_rows < 1 or available_rows < 1:
@@ -435,14 +452,16 @@ def _strip(measured, block_start, start, stop, index, plan, sources):
     left, right = _corridor_domain(plan)
     positive = np.empty((stop-start, right-left), dtype=np.uint8)
     negative = np.empty_like(positive)
+    credible = np.empty_like(positive)
     peak_records = bytearray()
     row_offsets = [0]
     for trace in range(start, stop):
         view = _slice_trace_measurement(_row(measured, trace-block_start), plan.coordinate_interval_px)
-        credible = ((view.gradient_z >= SPEC.gradient_z_minimum)
-                    & (np.maximum(view.tone_z, view.texture_z) >= SPEC.tone_or_texture_z_minimum))
-        positive[trace-start] = credible & (view.signed_gradient > 0.0)
-        negative[trace-start] = credible & (view.signed_gradient < 0.0)
+        gradient, secondary, group_support = transition_peak_support(view, SPEC)
+        connected = gradient & (secondary >= SPEC.tone_or_texture_z_minimum)
+        positive[trace-start] = connected & (view.signed_gradient > 0.0)
+        negative[trace-start] = connected & (view.signed_gradient < 0.0)
+        credible[trace-start] = group_support
         for peak in measured_transition_peaks(view, SPEC, split_gradient_reversals=True):
             peak_records.extend(_PEAK_RECORD.pack(int(view.coordinates[peak.coordinate_index]), peak.canonical_coordinate,
                 peak.physical_position_interval.minimum, peak.physical_position_interval.maximum,
@@ -450,13 +469,14 @@ def _strip(measured, block_start, start, stop, index, plan, sources):
         row_offsets.append(len(peak_records) // _PEAK_RECORD.size)
     return NativeTraceBridgeStrip(index, start, stop, left, right,
         np.packbits(positive, bitorder="little").tobytes().hex(),
-        np.packbits(negative, bitorder="little").tobytes().hex(), peak_records.hex(), tuple(row_offsets),
+        np.packbits(negative, bitorder="little").tobytes().hex(),
+        np.packbits(credible, bitorder="little").tobytes().hex(), peak_records.hex(), tuple(row_offsets),
         tuple(sources[t] for t in _original_in_strip(plan, start, stop)))
 
 
 def _retained_strip_bytes(metadata, strips):
     return metadata + sum(1024 + 48 * len(strip.peak_row_offsets) + len(strip.peak_records_hex)
-        + len(strip.positive_mask_hex) + len(strip.negative_mask_hex)
+        + len(strip.positive_mask_hex) + len(strip.negative_mask_hex) + len(strip.credible_mask_hex)
         + 1024 * len(strip.original_trace_sources) for strip in strips)
 
 
@@ -559,5 +579,5 @@ def measure_native_trace_bridges(field: PhotoBoundaryMeasurementField, plans: tu
 
 
 __all__ = ["NativeTraceBridgePlan", "NativeTraceBridgePeak", "NativeTraceBridgeStrip", "NativeTraceBridgeBatch",
-           "native_trace_bridge_preflight_value_visit_bound", "measure_native_trace_bridges", "decode_mask", "peaks_at_row",
+           "native_trace_bridge_preflight_value_visit_bound", "measure_native_trace_bridges", "decode_mask", "decode_credible_mask", "peaks_at_row",
            "validate_native_trace_bridge_batch", "native_trace_bridge_normalization_domain"]

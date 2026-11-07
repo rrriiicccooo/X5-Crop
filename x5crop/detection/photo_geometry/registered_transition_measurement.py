@@ -842,6 +842,14 @@ def _group_local_noise(values: np.ndarray, group: np.ndarray, statistics: tuple[
     return float(np.min(values[group]))
 
 
+def transition_peak_support(measurement: TraceMeasurement, spec: PhotoBoundaryMeasurementSpec):
+    """The original OR grouping support, separate from a connected step mask."""
+    gradient_supported = measurement.gradient_z >= spec.gradient_z_minimum
+    secondary = np.maximum(measurement.tone_z, measurement.texture_z)
+    credible = gradient_supported | (secondary >= spec.tone_or_texture_z_minimum)
+    return gradient_supported, secondary, credible
+
+
 def measured_transition_peaks(
     measurement: TraceMeasurement,
     spec: PhotoBoundaryMeasurementSpec,
@@ -850,20 +858,14 @@ def measured_transition_peaks(
     peak_source_capture: TransitionPeakCapture | None = None,
 ) -> tuple[MeasuredTransitionPeak, ...]:
     coordinates = measurement.coordinates
-    gradient_supported = measurement.gradient_z >= spec.gradient_z_minimum
-    indices = np.flatnonzero(
-        gradient_supported
-        | (
-            np.maximum(measurement.tone_z, measurement.texture_z)
-            >= spec.tone_or_texture_z_minimum
-        )
-    )
+    gradient_supported, secondary, credible = transition_peak_support(measurement, spec)
+    indices = np.flatnonzero(credible)
+    del credible
     if indices.size == 0:
         return ()
     split_at = np.flatnonzero(np.diff(indices) > 1) + 1
     groups = np.split(indices, split_at)
     gradient_supported &= measurement.signed_gradient != 0.0
-    secondary = np.maximum(measurement.tone_z, measurement.texture_z)
     noise_statistics = {}
     records: list[MeasuredTransitionPeak] = []
     for group in groups:
