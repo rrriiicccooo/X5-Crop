@@ -27,11 +27,13 @@ from .gold_analysis import (
 from .report_validation import validate_placement_feature_record
 
 
-RANKING_SCHEMA = "x5crop_development_placement_ranking_v6"
+RANKING_SCHEMA = "x5crop_development_placement_ranking_v7"
 CONDITIONAL_ROLE_SCOPE = "development_label_and_score_only"
 INDEPENDENT_PHASE_ROLE_SCOPE = "development_label_and_score_only"
 MODEL_SPEC = "source_balanced_standardized_ridge_ranking_v2"
 RANKING_RULE = "maximum_score_then_retained_order_v1"
+BUDGET_FILTER_RULE = "existing_budget_passed_then_maximum_score_v1"
+BUDGET_FILTER_SCOPE = "development_selection_experiment_not_admission"
 FOLD_COUNT = 5
 RIDGE_PENALTY = 0.1
 FEATURE_NAMES = tuple(item.name for item in PLACEMENT_FEATURE_DEFINITIONS)
@@ -252,6 +254,11 @@ def _evaluate(
     tasks = []
     for record in records:
         candidates = by_task[record["sample_id"]]
+        budget_states = {item["placement_id"]: item["budget_state"]
+                         for item in record["retained_placement_gold_labels"]}
+        if (len(budget_states) != len(record["retained_placement_gold_labels"])
+                or any(state not in {"passed", "failed", "incomplete", "not_evaluated"} for state in budget_states.values())):
+            raise ValueError("ranking requires the original candidate budget states")
         model = model_by_source[record["source_sha256"]]
         scores = _scores(candidates, model)
         # max returns the first equal score in the retained proposal order.
@@ -261,6 +268,14 @@ def _evaluate(
                              if item.role in {"primary", "runner", "cross_runner"}]
         canonical_index = max(canonical_indices, key=lambda index: scores[index]) if canonical_indices else None
         canonical = None if canonical_index is None else candidates[canonical_index]
+        budget_indices = [index for index, item in enumerate(candidates)
+                          if budget_states[item.placement_id] == "passed"]
+        passed_indices = set(budget_indices)
+        budget_canonical_indices = [index for index in canonical_indices if index in passed_indices]
+        budget_index = max(budget_indices, key=lambda index: scores[index], default=None)
+        budget_canonical_index = max(budget_canonical_indices, key=lambda index: scores[index], default=None)
+        budget_ranked = None if budget_index is None else candidates[budget_index]
+        budget_canonical = None if budget_canonical_index is None else candidates[budget_canonical_index]
         primary = next((item for item in candidates if item.role == "primary"), None)
         feature_groups: dict[tuple[float | None, ...], list[RankingExample]] = {}
         for candidate in candidates:
@@ -277,6 +292,14 @@ def _evaluate(
             "canonical_ranked_placement_id": None if canonical is None else canonical.placement_id,
             "canonical_ranked_role": None if canonical is None else canonical.role,
             "canonical_ranked_geometry_conformance": "not_available" if canonical is None else "safe" if canonical.gold_safe else "unsafe",
+            "budget_passed_candidate_count": len(budget_indices),
+            "budget_passed_canonical_candidate_count": len(budget_canonical_indices),
+            "budget_filtered_placement_id": None if budget_ranked is None else budget_ranked.placement_id,
+            "budget_filtered_role": None if budget_ranked is None else budget_ranked.role,
+            "budget_filtered_geometry_conformance": "not_available" if budget_ranked is None else "safe" if budget_ranked.gold_safe else "unsafe",
+            "budget_filtered_canonical_placement_id": None if budget_canonical is None else budget_canonical.placement_id,
+            "budget_filtered_canonical_role": None if budget_canonical is None else budget_canonical.role,
+            "budget_filtered_canonical_geometry_conformance": "not_available" if budget_canonical is None else "safe" if budget_canonical.gold_safe else "unsafe",
             "canonical_at_least_one_safe_retained": any(candidates[index].gold_safe for index in canonical_indices),
             "primary_geometry_conformance": "not_available" if primary is None else "safe" if primary.gold_safe else "unsafe",
             "ranked_geometry_conformance": "not_available" if ranked is None else "safe" if ranked.gold_safe else "unsafe",
@@ -286,6 +309,7 @@ def _evaluate(
             "candidates": [{
                 "placement_id": item.placement_id, "role": item.role, "ranking_score": float(score),
                 "geometry_conformance": "safe" if item.gold_safe else "unsafe",
+                "budget_state": budget_states[item.placement_id],
                 "development_support_issues": _support_issues(item, model),
             } for item, score in zip(candidates, scores, strict=True)],
             "unavailable_placement_ids": [item["placement_id"] for item in record["retained_placement_gold_labels"]
@@ -293,6 +317,13 @@ def _evaluate(
         })
     summary = {
         "task_count": len(tasks),
+        "source_count": len({item["source_sha256"] for item in tasks}),
+        "generated_candidate_budget_state_counts": dict(sorted(Counter(
+            candidate["budget_state"] for item in tasks for candidate in item["candidates"]).items())),
+        "budget_passed_candidate_count": sum(item["budget_passed_candidate_count"] for item in tasks),
+        "budget_passed_candidate_geometry_conformance_counts": dict(sorted(Counter(
+            candidate["geometry_conformance"] for item in tasks for candidate in item["candidates"]
+            if candidate["budget_state"] == "passed").items())),
         "primary_geometry_conformance_counts": dict(sorted(Counter(item["primary_geometry_conformance"] for item in tasks).items())),
         "ranked_geometry_conformance_counts": dict(sorted(Counter(item["ranked_geometry_conformance"] for item in tasks).items())),
         "at_least_one_safe_retained_task_count": sum(item["at_least_one_safe_retained"] for item in tasks),
@@ -318,6 +349,22 @@ def _evaluate(
         "improvement_task_ids": [item["sample_id"] for item in tasks if item["primary_geometry_conformance"] != "safe" and item["ranked_geometry_conformance"] == "safe"],
         "regression_task_ids": [item["sample_id"] for item in tasks if item["primary_geometry_conformance"] == "safe" and item["ranked_geometry_conformance"] != "safe"],
     }
+    for prefix, conformance_field in (
+        ("budget_filtered", "budget_filtered_geometry_conformance"),
+        ("budget_filtered_canonical", "budget_filtered_canonical_geometry_conformance"),
+    ):
+        summary[prefix + "_geometry_conformance_counts"] = dict(sorted(Counter(
+            item[conformance_field] for item in tasks).items()))
+        for label, suffix in (("unsafe", "_unsafe_task_ids"), ("not_available", "_abstained_task_ids")):
+            summary[prefix + suffix] = [item["sample_id"] for item in tasks if item[conformance_field] == label]
+        summary[prefix + "_selected_source_count"] = len({item["source_sha256"] for item in tasks
+                                                          if item[conformance_field] != "not_available"})
+        summary[prefix + "_unsafe_selected_source_count"] = len({item["source_sha256"] for item in tasks
+                                                                 if item[conformance_field] == "unsafe"})
+        summary[prefix + "_unsafe_regression_task_ids"] = [item["sample_id"] for item in tasks
+            if item["primary_geometry_conformance"] == "safe" and item[conformance_field] == "unsafe"]
+        summary[prefix + "_abstained_primary_safe_task_ids"] = [item["sample_id"] for item in tasks
+            if item["primary_geometry_conformance"] == "safe" and item[conformance_field] == "not_available"]
     return {"summary": summary, "tasks": tasks}
 
 
@@ -336,6 +383,7 @@ def build_development_ranking(records: Sequence[dict[str, Any]]) -> dict[str, An
         "independent_phase_role_scope": INDEPENDENT_PHASE_ROLE_SCOPE,
         "support_check_scope": "numeric_feature_ranges_and_missingness_only",
         "ranking_rule_id": RANKING_RULE, "fold_count": FOLD_COUNT,
+        "budget_filter_rule_id": BUDGET_FILTER_RULE, "budget_filter_scope": BUDGET_FILTER_SCOPE,
         "weighting": "equal_source_total_weight_then_equal_generated_candidate_weight_within_source",
         "fold_assignment": folds, "fold_models": fold_models, "development_fit_model": full_model,
         "source_grouped_oof": _evaluate(records, examples, {source: fold_models[fold] for source, fold in folds.items()}),
@@ -360,6 +408,8 @@ def validate_development_ranking(artifact: dict[str, Any], records: Sequence[dic
         or artifact.get("conditional_role_scope") != CONDITIONAL_ROLE_SCOPE
         or artifact.get("independent_phase_role_scope") != INDEPENDENT_PHASE_ROLE_SCOPE
         or artifact.get("ranking_rule_id") != RANKING_RULE
+        or artifact.get("budget_filter_rule_id") != BUDGET_FILTER_RULE
+        or artifact.get("budget_filter_scope") != BUDGET_FILTER_SCOPE
         or artifact.get("fold_count") != FOLD_COUNT or artifact.get("fold_assignment") != folds
         or len(artifact.get("fold_models", ())) != FOLD_COUNT
     ):

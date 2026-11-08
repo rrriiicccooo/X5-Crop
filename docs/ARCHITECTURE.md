@@ -125,6 +125,11 @@ Direct H 存在时优先承担 cross；ratio authority 的 unavailable 或 physi
 推导与有效 H interval、是否被 cross 消费、相关性和 typed failure。比例阶段不按逐侧 5% 提前拒绝
 不确定性；完整位置、方向与残差传播后，由固定输出窗口统一检查可见内容包含。
 
+`CrossFit.height_compatibility_px` 是当前 Cross 代表位置与 fixed H 的相容域，即使投影模式为
+`COMPLETE_PHYSICAL_INTERVAL`，也不表示已覆盖全部 raw joint 截距与局部 departure。该域不能单独成为
+排除另一份 phase 的物理反证；Contact 转授角色之间的偏窄可见 W 也不自行取得完整 aperture W 资格。
+物理反证仍须取得成员自身的完整轴度量、原生保护状态和全部 Cross 义务；残缺曝光及缺证保持 Review。
+
 Separator 不复用 aperture compatibility。`G_format` 是理论搜索中心；实际 separator gap 由 material
 两侧直接 START/END 与 local advance 拥有。黄金 gap 的局部与跨 source 变化远大于 aperture 轴尺寸，
 用名义 gap 周围的对称混合 guard 会同时过窄又接近零下界；后续如需扩大召回，应单独校准非对称的
@@ -1864,8 +1869,8 @@ geometry 和 output identity 保留为 provenance，不编码为数值特征；s
 `tools/regression/gold_geometry.py` 独占，集合分析由现有 `gold_analysis.py` 扩展，不另建 detector 或黄金池。
 离线排序由 `tools/regression/placement_ranking.py` 独占，使用当前源码绑定、无分析错误的黄金报告；
 入口为 `tools/verify diagnostic --placement-ranking --analysis-root <gold-root> --output-root <new-root>`。
-`x5crop_development_placement_ranking_v6` 同时评价 primary、runner、conditional 与独立 phase Review 的已生成提案；
-全体最高分与只含 primary/runner 的最高分分别保存。有条件及独立 phase 提案只提供开发标签与分数，不取得
+`x5crop_development_placement_ranking_v7` 同时评价 primary、runner、conditional 与独立 phase Review 的已生成提案；
+全体最高分与只含 primary/runner/cross_runner 的最高分分别保存。有条件及独立 phase 提案只提供开发标签与分数，不取得
 canonical selection 或自动输出权限；无完整 footprint 的候选不进入排序。
 至少需要五个 source group。方法在查看该轮结果前冻结为
 `source_balanced_standardized_ridge_ranking_v2`：source SHA 排序后循环分配五折，同源 count 变体同折；
@@ -1879,6 +1884,16 @@ canonical selection 或自动输出权限；无完整 footprint 的候选不进�
 每个 task 的 `opposite_label_feature_collisions` 列出数值特征与缺失模式完全相同、黄金标签却相反的
 候选组，`feature_collision_task_ids` 汇总对应 task。它只诊断现有特征无法区分的候选，不改变分数、
 同分顺序、黄金标签或 Runtime 权限。
+
+同一排序结果另作固定预算预筛实验：只在原记录 `budget_state=passed` 的已生成候选中，按原分数及保留
+顺序取最高者；全体池与原 canonical 描述池分别报告。`failed`、`incomplete`、`not_evaluated` 都不满足
+该条件，没有候选则记为弃选，不回退到未通过方案。该实验不重算预算、不改变训练集、特征、模型或分数，
+不以黄金标签选框，也不把预算代理永久硬化为准入规则。
+逐候选保留原预算状态，逐 task 保存筛选前后选择及标签；summary 分别统计安全、不安全、弃选、已选择
+source 与含任一不安全选择的 source。同源 count 变体只贡献一个 source 分母；弃选不计为安全或已选择。
+原首选安全而实验选错、原首选安全而实验弃选分别列出，不能合并覆盖回退与安全回退。
+`budget_filter_scope=development_selection_experiment_not_admission` 与原 `admission_enabled=false`
+共同冻结，模型分数、预算通过及该实验结果均不授予自动输出。
 
 Artifact 分开保存 source-grouped out-of-fold 开发结果与全量拟合的 in-sample 结果，记录模型参数、训练
 source、transform、feature/label schema、稳定规则、输入和工具 SHA；验证器核对分组、训练集统计、

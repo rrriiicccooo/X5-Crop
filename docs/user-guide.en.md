@@ -88,6 +88,7 @@ boundaries and photo ordinals is unproven. Local support or shared measurement p
 continuous edge; another long edge cannot supply that missing proof to reduce protection.
 Fewer generated candidates do not by themselves rule out earlier interpretations; resolving ambiguity still requires
 independent physical evidence.
+Passing the protection budget does not establish photo ownership; automatic output still requires every safety check.
 
 When photo ownership is established and several complete top/bottom interpretations remain, one fixed box may protect
 them all. Automatic approval requires every interpretation to pass content containment and source-wide safety checks.

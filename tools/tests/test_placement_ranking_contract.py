@@ -8,7 +8,7 @@ from unittest.mock import patch
 import numpy as np
 
 from tools.regression.placement_ranking import (
-    INDEPENDENT_PHASE_ROLE_SCOPE, RANKING_SCHEMA,
+    BUDGET_FILTER_SCOPE, INDEPENDENT_PHASE_ROLE_SCOPE, RANKING_SCHEMA,
     FEATURE_NAMES, RankingExample, _examples, _fit_model, _fold_assignments,
     _model_id, _scores, _source_weights, _training_transform,
     _raw_features, _validate_fitted_model,
@@ -37,6 +37,7 @@ class PlacementRankingContractTest(unittest.TestCase):
                     "placement_id": proposal["placement_id"], "lane_id": proposal["lane_id"],
                     "role": role, "generation_state": "generated",
                     "geometry_conformance": "safe" if value else "unsafe",
+                    "budget_state": "passed",
                     "acceptability_features": proposal["acceptability_features"],
                     "output_footprints": proposal["output_footprints"],
                 })
@@ -121,6 +122,77 @@ class PlacementRankingContractTest(unittest.TestCase):
         self.assertFalse(artifact["admission_enabled"])
         self.assertIsNone(artifact["calibration_id"])
 
+    def test_budget_filter_uses_the_original_receipt_and_never_falls_back(self):
+        records = self._records()
+        before = build_development_ranking(records)
+        records[0]["retained_placement_gold_labels"][1]["budget_state"] = "failed"
+        for candidate, state in zip(records[1]["retained_placement_gold_labels"], ("failed", "not_evaluated")):
+            candidate["budget_state"] = state
+        for candidate in records[2]["retained_placement_gold_labels"]:
+            candidate["budget_state"] = "incomplete"
+        after = build_development_ranking(records)
+        self.assertEqual(before["fold_models"], after["fold_models"])
+        self.assertEqual(before["development_fit_model"], after["development_fit_model"])
+        self.assertEqual(after["budget_filter_scope"], BUDGET_FILTER_SCOPE)
+        for kind in ("source_grouped_oof", "in_sample"):
+            tasks = after[kind]["tasks"]
+            self.assertEqual(tasks[0]["ranked_role"], "runner")
+            self.assertEqual(tasks[0]["budget_filtered_role"], "primary")
+            self.assertEqual(tasks[0]["budget_filtered_geometry_conformance"], "unsafe")
+            for task in tasks[1:3]:
+                self.assertIsNone(task["budget_filtered_placement_id"])
+                self.assertEqual(task["budget_filtered_geometry_conformance"], "not_available")
+                self.assertIsNone(task["budget_filtered_canonical_placement_id"])
+            self.assertEqual(after[kind]["summary"]["budget_filtered_selected_source_count"], 8)
+            self.assertEqual(after[kind]["summary"]["budget_filtered_unsafe_selected_source_count"], 1)
+            self.assertEqual(after[kind]["summary"]["generated_candidate_budget_state_counts"]["incomplete"], 2)
+        self.assertFalse(after["admission_enabled"])
+        validate_development_ranking(after, records)
+
+    def test_budget_filter_counts_unsafe_sources_once_across_count_variants(self):
+        records = self._records()
+        records[0]["retained_placement_gold_labels"][1]["budget_state"] = "failed"
+        variant = deepcopy(records[0])
+        variant["sample_id"] = "count-variant"
+        records.append(variant)
+        artifact = build_development_ranking(records)
+        for kind in ("source_grouped_oof", "in_sample"):
+            summary = artifact[kind]["summary"]
+            self.assertEqual(summary["task_count"], 11)
+            self.assertEqual(summary["source_count"], 10)
+            self.assertEqual(summary["budget_filtered_selected_source_count"], 10)
+            self.assertEqual(summary["budget_filtered_unsafe_selected_source_count"], 1)
+            self.assertEqual(summary["budget_filtered_unsafe_task_ids"], ["S000", "count-variant"])
+
+    def test_heldout_labels_cannot_choose_a_different_budget_passed_candidate(self):
+        records = self._records()
+        before = build_development_ranking(records)
+        records[0]["retained_placement_gold_labels"][0]["geometry_conformance"] = "safe"
+        records[0]["retained_placement_gold_labels"][1]["geometry_conformance"] = "unsafe"
+        after = build_development_ranking(records)
+        fold = before["fold_assignment"][records[0]["source_sha256"]]
+        self.assertEqual(before["fold_models"][fold], after["fold_models"][fold])
+        first, second = (item["source_grouped_oof"]["tasks"][0] for item in (before, after))
+        self.assertEqual(first["budget_filtered_placement_id"], second["budget_filtered_placement_id"])
+        self.assertEqual(second["budget_filtered_geometry_conformance"], "unsafe")
+
+    def test_budget_filter_rejects_unknown_states_and_relabelled_authority(self):
+        records = self._records()
+        artifact = build_development_ranking(records)
+        for mutate in (
+            lambda value: value.update(budget_filter_scope="automatic_output"),
+            lambda value: value.update(budget_filter_rule_id="choose_safe_gold"),
+            lambda value: value["source_grouped_oof"]["tasks"][0].update(budget_filtered_placement_id="different"),
+            lambda value: value["source_grouped_oof"]["summary"].update(budget_filtered_selected_source_count=99),
+        ):
+            changed = deepcopy(artifact)
+            mutate(changed)
+            with self.assertRaises(ValueError):
+                validate_development_ranking(changed, records)
+        records[0]["retained_placement_gold_labels"][0]["budget_state"] = "passed_typo"
+        with self.assertRaisesRegex(ValueError, "original candidate budget"):
+            build_development_ranking(records)
+
     def test_multiple_positive_unavailable_and_ties_preserve_semantics(self):
         records = self._records()
         for record in records:
@@ -171,6 +243,8 @@ class PlacementRankingContractTest(unittest.TestCase):
             self.assertEqual(task["ranked_geometry_conformance"], "safe")
             self.assertEqual(task["canonical_ranked_role"], "runner")
             self.assertEqual(task["canonical_ranked_geometry_conformance"], "unsafe")
+            self.assertEqual(task["budget_filtered_canonical_role"], "runner")
+            self.assertEqual(task["budget_filtered_canonical_geometry_conformance"], "unsafe")
             self.assertFalse(task["canonical_at_least_one_safe_retained"])
         self.assertEqual(artifact["development_fit_model"]["training_candidate_count"], 30)
         self.assertFalse(artifact["admission_enabled"])
@@ -202,7 +276,7 @@ class PlacementRankingContractTest(unittest.TestCase):
             record["retained_placement_gold_labels"][1]["acceptability_features"]["values"][0]["value"] = 0.5
             record["retained_placement_gold_labels"].append(native)
         artifact = build_development_ranking(records)
-        self.assertEqual(artifact["ranking_schema"], "x5crop_development_placement_ranking_v6")
+        self.assertEqual(artifact["ranking_schema"], "x5crop_development_placement_ranking_v7")
         self.assertEqual(
             artifact["independent_phase_role_scope"],
             INDEPENDENT_PHASE_ROLE_SCOPE,
