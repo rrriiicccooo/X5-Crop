@@ -82,8 +82,13 @@ class SequencePeakSourceContractTest(unittest.TestCase):
                                 (new.source_coordinate_px, new.canonical_coordinate_px,
                                  new.physical_position_interval_px, new.polarity, new.gradient_z, new.tone_z, new.texture_z))
                 with self.assertRaisesRegex(ValueError, "normalization source"):
-                    validate_peak_source_measurements(tuple(replace(m, peak_trace_sources=()) if m is baseline else m
-                        for m in measurements), source_id=field.source_id, source_extent=field.source_extent)
+                    # Keep the forged empty receipt self-consistent so the
+                    # missing baseline link, rather than visit accounting,
+                    # is the guard under test.
+                    missing = replace(baseline, peak_trace_sources=(), coverage=replace(baseline.coverage,
+                        peak_source_value_visit_bound=0, peak_source_retained_bytes=0))
+                    validate_peak_source_measurements(tuple(missing if m is baseline else m for m in measurements),
+                        source_id=field.source_id, source_extent=field.source_extent)
 
     def test_sequence_capture_cannot_displace_cross_source_or_native_texture_work(self):
         field, queries = _case(sequence_first=True)
