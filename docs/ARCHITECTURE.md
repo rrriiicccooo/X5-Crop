@@ -2034,9 +2034,20 @@ direction 保持。关联在原 coarse 位置／共享方向域内，按原 coar
 
 `APERTURE_PAIR` 的两轴保护相互影响：短轴外扩会增加 sequence 斜线在角点处的位移，
 长轴外扩也会增加 top/bottom 的位移。先在原完整 frame span 求逐边 signed departure，
-保留已经由位置包络覆盖的负余量。令基础长、短轴最大保护量为 `rx, ry`，对应线族最大绝对斜率为
-`M, N`，以 `dx=(rx+M*ry)/(1-M*N)`、`dy=(ry+N*rx)/(1-M*N)` 闭合保护上界；
-要求 `M*N<1`。逐边只消费自己的 departure、斜率和另一轴上界，不能把方向余量抵消掉。
+保留已经由位置包络覆盖的负余量。每个 aperture state 使用各边自己的 signed departure 和完整绝对
+斜率：令 `k=PIXEL_CENTER_EXTENT_PX`，长轴侧为 `a_s=k+d_s, m_s`，短轴侧为 `b_t=k+d_t, n_t`。
+两轴最大保护量满足 `X=max(k, max_s(a_s+m_s*Y))`、`Y=max(k, max_t(b_t+n_t*X))`。
+代入后直接求最小闭合上界：
+
+```text
+X = max(k, max_s(a_s+m_s*k), max_s,t((a_s+m_s*b_t)/(1-m_s*n_t)))
+Y = max(k, max_t(b_t+n_t*X))
+```
+
+四组 `m_s*n_t` 全部须小于 1；仅增加固定四组算术，不新增求解器或数值迭代。
+各边最终消费 `k+max(0,d_side+slope_side*other_axis_bound)`，位置偏差与斜率保持同边对应，
+不把不同边的最大值重新组合。Enclosing support 继续对全 frame state 使用原共享
+`rx,ry,M,N` 上界及 `dx=(rx+M*ry)/(1-M*N)`、`dy=(ry+N*rx)/(1-M*N)`；其共享 slope 与外推合同不变。
 只对 mandatory 闭合物理保护；固定 requested 不参与求解、不再添加基础或 topology bleed。
 
 同一 frame 的全部可行 reference 状态共享原始 Cross trace 准入账本，包含中间状态的完整跨度。
@@ -2052,6 +2063,8 @@ direction 保持。关联在原 coarse 位置／共享方向域内，按原 coar
 
 上述 aperture 上下界证明使用源轴对齐输出。固定 direction、正 W/H 下，帧内固定的
 线族、斜率界、sequence extent 与 raw 账本使长轴 expansion 为状态的凸函数，实际左端凹、右端凸。
+逐边闭合中的 `a_s,b_t` 随状态为凸函数，`m_s,n_t` 在 frame 内固定且非负，各分母为正的常数；
+四组候选的最大值仍为凸函数，因此逐边闭合保留同一 vertex-hull 证明。
 任一固定 Cross 直线按斜率符号选择这两个端点，其下界凹、上界凸；完整线族与 raw 并集仍保留该性质。
 直接边的位置抵消、推导 opposite 的有符号同状态 H 都是仿射项，因此最终 TOP 凹、BOTTOM 凸。
 状态矩形在任意方向的支撑函数均凸，原 `JointFrameState` 顶点的 footprint hull 覆盖全部连续中间状态。

@@ -387,6 +387,38 @@ def _cross_binding_for_role(
     return sources[0]
 
 
+def _aperture_protection_closure(
+    signed_departures: dict[BoundaryRole, float],
+    slopes: dict[BoundaryRole, float],
+) -> tuple[float, float]:
+    """Bound the four actual side requirements without mixing their extrema.
+
+    With a_s=k+d_s and b_t=k+d_t, the least outer bounds satisfy
+    X=max(k, a_s+m_s*Y), Y=max(k, b_t+n_t*X). Substitution gives four
+    affine cycles, each bounded by (a_s+m_s*b_t)/(1-m_s*n_t).
+    Keep every side's signed departure and complete slope together; the pixel
+    floor, raw trace admission and individual expansions remain unchanged.
+    """
+    pixel = PIXEL_CENTER_EXTENT_PX
+    sequence_roles = (BoundaryRole.START, BoundaryRole.END)
+    cross_roles = (BoundaryRole.TOP, BoundaryRole.BOTTOM)
+    dx = pixel
+    for sequence_role in sequence_roles:
+        a = pixel + signed_departures[sequence_role]
+        m = slopes[sequence_role]
+        dx = max(dx, a + m * pixel)
+        for cross_role in cross_roles:
+            b = pixel + signed_departures[cross_role]
+            n = slopes[cross_role]
+            denominator = 1.0 - m * n
+            if denominator <= 0.0:
+                raise ValueError("aperture protection has no bounded two-axis closure")
+            dx = max(dx, (a + m * b) / denominator)
+    dy = max(pixel, *(pixel + signed_departures[role] + slopes[role] * dx
+                      for role in cross_roles))
+    return dx, dy
+
+
 def _frame_boundary_residuals(
     placement: FormatPlacement,
     frame: TemplateFrame,
@@ -529,15 +561,7 @@ def _frame_boundary_residuals(
         expansions = []
         for state, base, slope, signed in zip(states, bases, slopes, departures, strict=True):
             if support_closure is None:
-                rx = max(base[BoundaryRole.START], base[BoundaryRole.END])
-                ry = max(base[BoundaryRole.TOP], base[BoundaryRole.BOTTOM])
-                m = max(slope[BoundaryRole.START], slope[BoundaryRole.END])
-                n = max(slope[BoundaryRole.TOP], slope[BoundaryRole.BOTTOM])
-                denominator = 1.0 - m * n
-                if denominator <= 0.0:
-                    raise ValueError("aperture protection has no bounded two-axis closure")
-                dx = (rx + m * ry) / denominator
-                dy = (ry + n * rx) / denominator
+                dx, dy = _aperture_protection_closure(signed, slope)
             else:
                 dx, dy = support_closure
             expansion = {role: PIXEL_CENTER_EXTENT_PX + max(

@@ -8,6 +8,7 @@ from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.output_model import OutputBoundaryUse
 from x5crop.detection.photo_geometry.template_cross_model import CrossLineProjectionBasis
 from x5crop.detection.photo_geometry.template_output import (
+    _aperture_protection_closure,
     _footprint,
     _frame_boundary_residuals,
     _state_footprint,
@@ -32,6 +33,54 @@ from tools.tests.output_fixture_support import _lane
 
 
 class TemplateOutputReprojectionContractTest(unittest.TestCase):
+    def test_side_specific_closure_matches_the_independent_linear_inequalities(self) -> None:
+        from scipy.optimize import linprog
+
+        roles = (BoundaryRole.START, BoundaryRole.END, BoundaryRole.TOP, BoundaryRole.BOTTOM)
+        cases = (
+            ((99., 0., 99., 0.), (.005, .06, .005, .06)),
+            ((-120., 90., 70., -80.), (.06, .005, .02, .04)),
+            ((-2., -3., -4., -5.), (.03, .06, .02, .04)),
+            ((0., 0., 0., 0.), (.06, .02, .03, .01)),
+            ((3., 8., -5., 4.), (0., 0., 0., 0.)),
+            ((20., 10., 30., 15.), (.04, .01, .06, .02)),
+        )
+        for departures, slopes in cases:
+            for order in ((0, 1, 2, 3), (2, 3, 0, 1)):
+                signed = dict(zip(roles, (departures[i] for i in order), strict=True))
+                slope = dict(zip(roles, (slopes[i] for i in order), strict=True))
+                with self.subTest(signed=signed, slope=slope):
+                    rows = [(-1., slope[role]) for role in roles[:2]]
+                    rows += [(slope[role], -1.) for role in roles[2:]]
+                    limits = [-1. - signed[role] for role in roles]
+                    oracle = linprog((1., 1.), A_ub=rows, b_ub=limits,
+                                     bounds=((1., None), (1., None)), method="highs-ds")
+                    self.assertTrue(oracle.success, oracle.message)
+                    actual = _aperture_protection_closure(signed, slope)
+                    for value, expected in zip(actual, oracle.x, strict=True):
+                        self.assertAlmostEqual(value, expected, places=8)
+
+    def test_side_specific_closure_keeps_each_position_and_direction_together(self) -> None:
+        roles = (BoundaryRole.START, BoundaryRole.END, BoundaryRole.TOP, BoundaryRole.BOTTOM)
+        signed = dict(zip(roles, (99., 0., 99., 0.), strict=True))
+        slopes = dict(zip(roles, (.005, .06, .005, .06), strict=True))
+        dx, dy = _aperture_protection_closure(signed, slopes)
+        self.assertAlmostEqual(dx, 100. / (1. - .005))
+        self.assertAlmostEqual(dy, dx)
+        self.assertLess(dx, 100. / (1. - .06))
+        for role, other, bound in ((BoundaryRole.START, dy, dx),
+                                   (BoundaryRole.END, dy, dx),
+                                   (BoundaryRole.TOP, dx, dy),
+                                   (BoundaryRole.BOTTOM, dx, dy)):
+            self.assertLessEqual(1. + max(0., signed[role] + slopes[role] * other), bound + 1.e-10)
+
+    def test_side_specific_closure_rejects_a_noncontractive_pair(self) -> None:
+        roles = (BoundaryRole.START, BoundaryRole.END, BoundaryRole.TOP, BoundaryRole.BOTTOM)
+        signed = dict.fromkeys(roles, -10.)
+        slopes = dict(zip(roles, (1., .01, 1., .02), strict=True))
+        with self.assertRaisesRegex(ValueError, "no bounded two-axis closure"):
+            _aperture_protection_closure(signed, slopes)
+
     def test_local_cross_departure_is_retained_in_output_budget(self) -> None:
         template = _template(1)
         sequence = _sequence(template)

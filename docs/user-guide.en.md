@@ -146,7 +146,8 @@ per-side margin = 5%
 ```
 
 Once independent evidence establishes the source-wide W/H, the fixed box permits the script to select a position only;
-residual, direction, score, or an insufficient budget cannot change its size. It must contain all visible TIFF content,
+residual, direction, score, or an insufficient budget cannot change its size.
+Each boundary's own position and angle ranges determine its complete protection. The box must contain all visible TIFF content,
 including tilted corners. When credible evidence requires a complete
 physical envelope that cannot fit inside the fixed box, the whole source enters `needs_review`. An offset within the
 fixed box is not independently rejected when all visible photograph content remains protected.
