@@ -2402,6 +2402,9 @@ outer terminal、获权 intrinsic phase anchor 的独立 evidence-group 数、�
 跨 pass 只携带同模板、同源域的对应类。Rank 0、仅 local、仅 partial 或仅矛盾事实不能取得该保留资格；
 混合记录中的反证与 projection 失败保持，不恢复任何权限。
 
+真实源边截断只说明该解释与 TIFF 外缘的几何关系，不独立证明首末照片的绝对序号；
+完整 source-domain 准入、原生坐标权限和数值预算不能互相代替。
+
 原生端点解释的独立 compose 失败后，才可执行一次固定 `intrinsic_refit`：从原完整 ledger 中保留所有
 具有 intrinsic basis 的原 `PHASE_ANCHOR` 精确绑定（包括原矛盾状态），其余完整事实只作 validation。
 沿用原 template、integer offset、adjacency relations 与 prepared phase authority，使用模板声明的
@@ -2418,6 +2421,12 @@ projection 成功。不具备 intrinsic 或 validation-only 集合、关系依�
 每份最多一次 compose，`global_lattice_authority=None`，使用独立 placement ID namespace。该构建发生在
 canonical selection 与 Gate 完成之后；失败仅使独立槽 unavailable，不改变规范路径或自动批准。
 Report validator 重放独立 source、Cross 上下文、compose、完整保护和预算；Debug 只读展示并明确标为 Review。
+
+初始 source W/H 的 `observation_ids` 为空时，其固定尺寸来自未经实测收紧的 format/canvas 状态，
+不是新增的独立尺寸测量。独立 Review 与 canonical 即使具有完全相同的 canonical frame，仍须分别
+核对各自 source 校准、完整 mandatory 和固定窗口；较大的 Review 窗口通过预算或黄金比较，不证明
+canonical 漏传了尺寸事实，也不授权将该尺寸或窗口转授 canonical。
+
 失败的阶段调用计数须与 typed failure 对应；compose 失败须从同一 registered source/Cross/fit 真实重放，
 才能触发固定重拟合。Development 保存该重拟合的 prepared phase input，重放核对原 ledger 中全部身份、
 源域与完整已登记 sequence measurement sets，再复现固定拟合及 receipt。
