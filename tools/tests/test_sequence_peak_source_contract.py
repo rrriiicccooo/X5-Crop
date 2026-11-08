@@ -86,7 +86,8 @@ class SequencePeakSourceContractTest(unittest.TestCase):
                     # missing baseline link, rather than visit accounting,
                     # is the guard under test.
                     missing = replace(baseline, peak_trace_sources=(), coverage=replace(baseline.coverage,
-                        peak_source_value_visit_bound=0, peak_source_retained_bytes=0))
+                        peak_source_value_visit_bound=baseline.coverage.peak_source_planning_value_visit_bound,
+                        peak_source_retained_bytes=0))
                     validate_peak_source_measurements(tuple(missing if m is baseline else m for m in measurements),
                         source_id=field.source_id, source_extent=field.source_extent)
 
@@ -115,6 +116,51 @@ class SequencePeakSourceContractTest(unittest.TestCase):
                 self.assertFalse(after.coverage.peak_source_capture_attempted)
                 self.assertEqual(tuple(replace(p, peak_source=None) for p in before.transitions), after.transitions)
         self.assertLessEqual(sum(m.coverage.pixel_query_count+m.coverage.peak_source_value_visit_bound for m in limited), limit)
+
+    def test_exhausted_pool_skips_new_preflight_without_uncharged_work(self):
+        field, queries = _case(sequence_first=True)
+        generous = measure_registered_queries(field, queries)
+        original = sum(m.coverage.pixel_query_count for m in generous) + sum(
+            m.coverage.peak_source_value_visit_bound for m in generous
+            if m.query.purpose in (QueryPurpose.TOP_CORRIDOR, QueryPurpose.CROSS_BASELINE))
+        # Three baseline traces and two windows: 96 planning visits plus
+        # 64 failed-capture preflight visits. No signal/group scans fit here.
+        minimum = 32*(3+2)
+        for remaining in (0, 32, 64, minimum):
+            with self.subTest(remaining=remaining):
+                limited = measure_registered_queries(field, queries, max_pixel_query_count=original+remaining)
+                validate_peak_source_measurements(limited, source_id=field.source_id, source_extent=field.source_extent)
+                self.assertLessEqual(sum(m.coverage.pixel_query_count+m.coverage.peak_source_value_visit_bound
+                                         for m in limited), original+remaining)
+                for before, after in zip(generous, limited, strict=True):
+                    if before.query.purpose in (QueryPurpose.TOP_CORRIDOR, QueryPurpose.CROSS_BASELINE):
+                        self.assertEqual(before.transitions, after.transitions)
+                        self.assertEqual(before.peak_source_groups, after.peak_source_groups)
+                    elif before.query.purpose == QueryPurpose.SEQUENCE_ANCHOR_WINDOW:
+                        self.assertFalse(after.coverage.peak_source_capture_attempted)
+                        self.assertTrue(after.coverage.peak_source_bound_exceeded)
+                        self.assertEqual(after.coverage.peak_source_preflight_completed, remaining == minimum)
+                        self.assertEqual(after.coverage.peak_source_value_visit_bound, 32 if remaining == minimum else 0)
+                        self.assertEqual(tuple(replace(p, peak_source=None) for p in before.transitions), after.transitions)
+                    elif before.query.purpose == QueryPurpose.SEQUENCE_BASELINE:
+                        self.assertEqual(after.coverage.peak_source_preflight_completed, remaining == minimum)
+                        self.assertEqual(after.coverage.peak_source_bound_exceeded, remaining < minimum)
+                        self.assertEqual(after.coverage.peak_source_planning_value_visit_bound,
+                                         32*3 if remaining == minimum else 0)
+
+    def test_executed_source_preflight_cannot_be_relabelled_as_unattempted(self):
+        field, queries = _case()
+        measurements = measure_registered_queries(field, queries)
+        baseline = next(m for m in measurements if m.query.purpose == QueryPurpose.SEQUENCE_BASELINE)
+        self.assertGreater(baseline.coverage.peak_source_planning_value_visit_bound, 0)
+        with self.assertRaisesRegex(ValueError, "whole-query state"):
+            replace(baseline.coverage, peak_source_preflight_completed=False)
+        erased = replace(baseline, coverage=replace(baseline.coverage, peak_source_planning_value_visit_bound=0,
+            peak_source_value_visit_bound=(baseline.coverage.peak_source_value_visit_bound
+                                           - baseline.coverage.peak_source_planning_value_visit_bound)))
+        with self.assertRaisesRegex(ValueError, "planning work"):
+            validate_peak_source_measurements(tuple(erased if m is baseline else m for m in measurements),
+                source_id=field.source_id, source_extent=field.source_extent)
 
 
 if __name__ == "__main__":

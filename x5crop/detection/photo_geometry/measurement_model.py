@@ -581,6 +581,8 @@ class PhotoBoundaryCoverageReceipt:
     peak_source_retained_bytes: int = 0
     peak_source_bound_exceeded: bool = False
     peak_source_capture_attempted: bool = False
+    peak_source_preflight_completed: bool = False
+    peak_source_planning_value_visit_bound: int = 0
 
     def __post_init__(self) -> None:
         counts = (
@@ -598,15 +600,21 @@ class PhotoBoundaryCoverageReceipt:
             self.peak_source_group_count,
             self.peak_source_reference_count,
             self.peak_source_retained_bytes,
+            self.peak_source_planning_value_visit_bound,
         )
         if not self.query_id or any(value < 0 for value in counts):
             raise ValueError("measurement coverage receipt is invalid")
         if (type(self.peak_source_bound_exceeded) is not bool
                 or type(self.peak_source_capture_attempted) is not bool
+                or type(self.peak_source_preflight_completed) is not bool
+                or not self.peak_source_preflight_completed and (
+                    self.peak_source_capture_attempted or self.peak_source_value_visit_bound
+                    or self.peak_source_retained_bytes or self.peak_source_planning_value_visit_bound)
                 or self.peak_source_group_count and not self.peak_source_capture_attempted
                 or any(type(value) is not int for value in (
                     self.peak_source_value_visit_bound, self.peak_source_group_count,
-                    self.peak_source_reference_count, self.peak_source_retained_bytes))
+                    self.peak_source_reference_count, self.peak_source_retained_bytes,
+                    self.peak_source_planning_value_visit_bound))
                 or self.peak_source_bound_exceeded and (self.peak_source_group_count or self.peak_source_reference_count)
                 or self.peak_temporary_bytes < self.peak_source_retained_bytes):
             raise ValueError("peak source coverage exceeds its retained memory or whole-query state")

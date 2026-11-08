@@ -67,6 +67,8 @@ def _measure_query(
     retained_temporary_bytes: int = 0,
     premeasurement_peak_bytes: int = 0,
     peak_source_budget_bytes: int | None = None,
+    peak_source_preflight_completed: bool = True,
+    peak_source_planning_value_visit_bound: int = 0,
 ) -> PhotoBoundaryMeasurementSet:
     registered_coordinate_count = sum(
         max(
@@ -89,7 +91,9 @@ def _measure_query(
     source_capture = (TransitionPeakCapture(
         32 * 1024 * 1024 + 10 * field.source_extent.width * field.source_extent.height
         if peak_source_budget_bytes is None else peak_source_budget_bytes)
-        if query.purpose in _PEAK_SOURCE_WINDOWS else None)
+        if query.purpose in _PEAK_SOURCE_WINDOWS and peak_source_preflight_completed else None)
+    source_preflight_skipped = (query.purpose in _PEAK_SOURCE_WINDOWS or query.purpose in _BASELINE_PURPOSES
+                               ) and not peak_source_preflight_completed
     try:
         axis_extent = (
             field.source_extent.width
@@ -243,7 +247,8 @@ def _measure_query(
             peak_temporary=peak_temporary,
             complete=False,
         )
-        _, receipt, sources, groups = peak_source_receipt((), receipt, source_traces, source_capture)
+        _, receipt, sources, groups = peak_source_receipt((), receipt, source_traces, source_capture,
+            preflight_skipped=source_preflight_skipped, planning_value_visit_bound=peak_source_planning_value_visit_bound)
         return PhotoBoundaryMeasurementSet(
             query=query,
             state=EvidenceState.UNAVAILABLE,
@@ -264,7 +269,8 @@ def _measure_query(
         complete=True,
     )
     transitions, receipt, sources, groups = peak_source_receipt(
-        tuple(transitions), receipt, source_traces, source_capture)
+        tuple(transitions), receipt, source_traces, source_capture, preflight_skipped=source_preflight_skipped,
+        planning_value_visit_bound=peak_source_planning_value_visit_bound)
     return PhotoBoundaryMeasurementSet(
         query=query,
         state=EvidenceState.SUPPORTED,
@@ -549,24 +555,31 @@ def measure_registered_queries(
             continue
         baseline, windows = group
         capture_sources = capture_cross_sources
+        source_preflight_completed = True
         if baseline.purpose == QueryPurpose.SEQUENCE_BASELINE:
-            source_visits = (5 * sum(max(0, math.floor(i.maximum) - math.ceil(i.minimum) + 1)
-                                    for i in baseline.search_intervals_px)
-                             + 32 * len(baseline.trace_positions_px))
-            source_visits += sum(256 * sum(max(0, math.floor(i.maximum) - math.ceil(i.minimum) + 1)
-                                          for i in q.search_intervals_px) + 32 for q in windows)
             used_visits = existing_peak_source_value_visit_bound + sum(
                 m.coverage.peak_source_value_visit_bound for m in results.values())
-            # Sum complete per-trace construction bounds, including broad and
-            # optional prefixes. This over-reserves scratch rather than let a
-            # new digest displace an original baseline buffer or Cross fact.
-            length = field.source_extent.width if baseline.boundary_axis == BoundaryAxis.X else field.source_extent.height
-            cache = window_prefix_cache_bytes(length)
-            buffers = sum(scalar_trace_buffer_reservation(length,
-                max(0, math.floor(i.maximum) - math.ceil(i.minimum) + 1),
-                prefix_cache_capacity_bytes=cache) for i in baseline.search_intervals_px)
-            capture_sources = (registered_pixels + used_visits + source_visits <= pixel_limit
-                               and origin_retained + buffers <= source_limit)
+            # Length-only admission precedes the new domain/buffer scans. An
+            # exhausted original pool cannot pay their fixed per-trace/domain
+            # scan and per-window capture preflights.
+            planning_visits = 32 * len(baseline.trace_positions_px)
+            source_preflight_completed = pixel_limit - registered_pixels - used_visits >= planning_visits + 32 * len(windows)
+            capture_sources = False
+            if source_preflight_completed:
+                source_visits = (planning_visits + 5 * sum(max(0, math.floor(i.maximum) - math.ceil(i.minimum) + 1)
+                                        for i in baseline.search_intervals_px)
+                                 + 32 * len(baseline.trace_positions_px))
+                source_visits += sum(256 * sum(max(0, math.floor(i.maximum) - math.ceil(i.minimum) + 1)
+                                              for i in q.search_intervals_px) + 32 for q in windows)
+                # Complete per-trace construction bounds include broad and
+                # optional prefixes, over-reserving all construction scratch.
+                length = field.source_extent.width if baseline.boundary_axis == BoundaryAxis.X else field.source_extent.height
+                cache = window_prefix_cache_bytes(length)
+                buffers = sum(scalar_trace_buffer_reservation(length,
+                    max(0, math.floor(i.maximum) - math.ceil(i.minimum) + 1),
+                    prefix_cache_capacity_bytes=cache) for i in baseline.search_intervals_px)
+                capture_sources = (registered_pixels + used_visits + source_visits <= pixel_limit
+                                   and origin_retained + buffers <= source_limit)
         premeasured, retained_bytes, peak_bytes = _premeasure_registered_windows(
             field, baseline, windows, spec, capture_sources,
             prefix_cache_budget_bytes=max(0, source_limit-origin_retained),
@@ -577,6 +590,10 @@ def measure_registered_queries(
                 retained_temporary_bytes=retained_bytes,
                 premeasurement_peak_bytes=peak_bytes,
                 peak_source_budget_bytes=(max(0, source_limit - origin_retained - peak_bytes) if capture_sources else 0),
+                peak_source_preflight_completed=source_preflight_completed,
+                peak_source_planning_value_visit_bound=(32 * len(baseline.trace_positions_px)
+                    if source_preflight_completed and member is baseline
+                    and baseline.purpose == QueryPurpose.SEQUENCE_BASELINE else 0),
             ))
         # Each lattice is fully consumed before another is premeasured.
         # Reports retain scalar/transition facts, never these pixel arrays.

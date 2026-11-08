@@ -2670,7 +2670,10 @@ baseline、query view、逐峰来源和粗轨 raw 账本重放，并独立对账
 Cross 来源和原生纹理先按原合同完成，随后 Sequence 来源仅使用剩余共同资源；返回 query 顺序和完成
 计数保持原登记。Sequence 先预留完整 baseline 摘要及全部窗口组访问，并以各 trace 的完整 scalar
 构造上界之和保守预检 baseline／broad／可选 prefix 缓冲；超界时不计算新的来源摘要，原峰仍按原规则
-产生。来源组保留量还须与实际 baseline 峰值同时核验。Cross 关联的来源组工作只遍历自身 coarse／
+产生。新增结构规划先按 baseline 每条 trace 32 次、每窗口 32 次预留；连固定预检都不能容纳时不扫描
+来源域、不构造捕获器，明确保存 `peak_source_preflight_completed=false` 和来源超界状态。已完成规划
+的 baseline 工作由 `peak_source_planning_value_visit_bound` 单独记账，即使没有计算摘要也不能清零；
+窗口捕获失败仍计原 32 次预检。来源组保留量还须与实际 baseline 峰值同时核验。Cross 关联的来源组工作只遍历自身 coarse／
 TOP／BOTTOM 输入，不把新增 Sequence 来源重复计入无关关联。所有来源仍计入同一 source 总池。
 `NativeTraceBridgePlan` 冻结 `split_gradient_reversals`，相同归一化行可服务两类选择器；响应 mask、原峰
 及完整物理区间分别保留。Cross 连续证明只接受原反向分峰规则，Sequence 单峰重放不取得 Cross 资格。

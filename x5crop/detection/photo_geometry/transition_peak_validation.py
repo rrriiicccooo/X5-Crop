@@ -98,7 +98,13 @@ def validate_peak_source_measurements(measurements, *, source_id, source_extent,
 def _validate_source_value_work(measurement, *, raw_count=0):
     coverage = measurement.coverage
     base = sum(source.signal_value_visit_count + 32 for source in measurement.peak_trace_sources) + 8 * raw_count
-    expected = ((base + 256 * coverage.registered_coordinate_count + 32,)
-                if coverage.peak_source_capture_attempted else (base, base + 32))
-    if coverage.peak_source_value_visit_bound not in expected:
+    planning = coverage.peak_source_planning_value_visit_bound
+    expected_planning = (32 * len(measurement.query.trace_positions_px)
+        if measurement.query.purpose == QueryPurpose.SEQUENCE_BASELINE and coverage.peak_source_preflight_completed else 0)
+    if planning != expected_planning:
+        raise ValueError("source planning work changed its complete baseline reservation")
+    fixed = (32 if coverage.peak_source_preflight_completed and measurement.query.purpose not in {
+        QueryPurpose.CROSS_BASELINE, QueryPurpose.SEQUENCE_BASELINE} else 0)
+    expected = base + planning + fixed + (256 * coverage.registered_coordinate_count if coverage.peak_source_capture_attempted else 0)
+    if coverage.peak_source_value_visit_bound != expected:
         raise ValueError("peak source value work changed its complete capture/validation bound")

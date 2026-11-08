@@ -44,21 +44,26 @@ class TransitionPeakCapture:
                 raise ValueError("one query changed a complete original peak group")
 
 
-def peak_source_receipt(transitions, receipt, trace_sources, capture):
+def peak_source_receipt(transitions, receipt, trace_sources, capture, *, preflight_skipped=False,
+                        planning_value_visit_bound=0):
     """Charge retained provenance and all attempted group work, even on failure."""
     sources = tuple(trace_sources)
-    failed = capture is not None and not capture.complete
+    if type(planning_value_visit_bound) is not int or planning_value_visit_bound < 0:
+        raise ValueError("source planning requires a finite work reservation")
+    failed = preflight_skipped or capture is not None and not capture.complete
     groups = () if capture is None or failed else tuple(capture.groups.values())
-    if failed:
+    if failed and not preflight_skipped:
         transitions = tuple(replace(item, peak_source=None) for item in transitions)
     references = tuple(item.peak_source for item in transitions if item.peak_source is not None)
+    if preflight_skipped and (planning_value_visit_bound or capture is not None or sources or references):
+        raise ValueError("unattempted source preflight cannot erase performed capture work")
     retained = (sum(source.retained_bytes for source in sources)
                 + sum(group.retained_bytes for group in groups)
                 + sum(reference.retained_bytes for reference in references))
     # Disjoint groups, reliable coordinates and candidates are each bounded
     # by Q. Capture costs at most 64Q; reserve four such passes for capture,
     # typed query/replacement checks and final source-context validation.
-    visit_bound = (sum(source.signal_value_visit_count + 32 for source in sources)
+    visit_bound = (planning_value_visit_bound + sum(source.signal_value_visit_count + 32 for source in sources)
                    + (0 if capture is None else 32 + (256 * receipt.registered_coordinate_count if capture.attempted else 0)))
     peak = max(retained, sum(source.retained_bytes for source in sources)
                + (0 if capture is None else capture.peak_temporary_bytes))
@@ -67,4 +72,6 @@ def peak_source_receipt(transitions, receipt, trace_sources, capture):
         peak_source_value_visit_bound=visit_bound,
         peak_source_group_count=len(groups), peak_source_reference_count=len(references),
         peak_source_retained_bytes=retained, peak_source_bound_exceeded=failed,
-        peak_source_capture_attempted=capture is not None and capture.attempted), sources, groups
+        peak_source_capture_attempted=capture is not None and capture.attempted,
+        peak_source_preflight_completed=capture is not None or bool(sources) or bool(planning_value_visit_bound),
+        peak_source_planning_value_visit_bound=planning_value_visit_bound), sources, groups
