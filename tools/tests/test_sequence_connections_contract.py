@@ -29,7 +29,9 @@ def _case(*, broken=False, transpose=False):
     gray = np.full((180,201),30,dtype=np.uint8)
     for y in range(180):
         edge = 60+round(3*math.sin(2*math.pi*(y-20)/40))
-        gray[y,edge:] = 200
+        # A resolved ramp keeps adjacent signed-response rows four-connected
+        # while preserving measurable sub-sample variation between anchors.
+        gray[y] = (30+170*np.clip((np.arange(201)-edge)/8.,0.,1.)).astype(np.uint8)
     if broken:
         gray[90] = 30
     axis = BoundaryAxis.X
