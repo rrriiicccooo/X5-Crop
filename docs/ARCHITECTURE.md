@@ -409,6 +409,24 @@ seed，不因统计代表 residual 超过连线距离而提前删除。Optional 
 每边最多 `2N+4` 顶点，时间 `O(N²)`、存储 `O(N)`，与原斜率可行性检查同阶，不增加 query、
 TIFF 读取、候选或 LP。闭区间比较仅沿用 `1e-9 px` 数值容差，防止大坐标相消丢掉相切顶点。
 开发报告保留 joint region 并从原始 transition 重建验证，不能用两个独立边际区间替换它。
+拟合器返回的 residual 必须与同次 `selected_points` 顺序一致；按 trace 排序测量点时同步排列 residual，
+使每个残差只与自身的 localization width 配对。代表直线和残差全集不因排序改变。
+
+已有 aggregate 支撑且自身角色获权、带原生物理域与 residual/localization 保护的
+`DIRECT_WITH_AGGREGATE` 长轴边，可在首次 phase、W 与 topology 编译前取得独立连接约束。
+`sequence_connections.py` 只沿父边实际首末 raw trace 之间的原 query corridor 补测，使用同一灰度、
+完整 baseline 归一化和原单峰选择器，不读取候选位置、W、照片模板或黄金。完整父集合先登记，
+原峰来源、极性、同源别名、源域或组侧翼缺证时逐项保存 unavailable，不按最终成功项缩小义务。
+全部原始点须落在同一个四连通有符号响应分量，分量不能碰 corridor 坐标边界；逐行必须只有一个
+相容原峰，无重叠别名，完整 OR 可信组两侧均可观察，且该峰的完整 physical interval 正好覆盖原单峰组。
+每条原 trace 的信号 SHA 与原 baseline 一致，原峰与完整物理区间不得替换。
+
+成功时把全部密集行的完整物理区间与父边原 `PhysicalLineRegion` 求共同域；空集保持 unavailable。
+有效位置范围取该共同域在原 reference 的投影、原 residual/localization 保护、材料中心保护和新密集
+残差保护的 hull。新保护以原 canonical 直线为代表，半径为所有密集点的
+`max(abs(residual) + localization_width / 2) + line_connection_allowance`。父边原 full、物理域、
+canonical、fit、raw 与身份保持，新增约束同时进入 placement 与 topology 观察，实际供 phase、W、
+邻接和输出使用。连接不新增角色、独立 rank、照片边对、序号、终端或物理反证权限；失败不删除旧解释。
 
 同一份 registered 灰度窄带一次产生 gradient、tone、texture、polarity 与纵向一致性等 typed
 measurement。它们共同描述同一个 observation，可以互相加强、否定或形成 missing/conflict；不能把增强图、
@@ -2018,6 +2036,9 @@ Sequence 输出保留原 `physical_line_region` 的联合位置/斜率，按该 
 `JointFrameState` 的对应 native 位置范围裁切；有符号 W 只作为同一线族的位置位移。
 统计 fit 仍是代表，不能替代物理线族；非空物理线族与可达位置裁空时明确报错，不能退回较窄的 fit。
 Report 同时校验 registered observation、phase binding、frame line 与这一次 W 位移的完整来源。
+长轴独立连接约束随直接与 opposite 推导完整传播；输出使用共同物理域，并独立保护全部新增密集行的
+完整 raw interval。Opposite 的 raw departure 只减去同一 Frame、同一 observation 的直接边在该状态中
+的实际位置，消去共享 W 位移，再按输出角色与正反方向取外侧保护；不能将独立 W 边际与已移位位置重复组合。
 
 Cross observation 同样保留全部原始 physical interval 与原 4° 上限确定的联合位置/斜率域。
 该域在 measurement 拟合结束时计算一次，只用于输出保护，不替换代表位置、分组、角色、fixed H 或选择。
@@ -2677,6 +2698,17 @@ Cross 来源和原生纹理先按原合同完成，随后 Sequence 来源仅使�
 TOP／BOTTOM 输入，不把新增 Sequence 来源重复计入无关关联。所有来源仍计入同一 source 总池。
 `NativeTraceBridgePlan` 冻结 `split_gradient_reversals`，相同归一化行可服务两类选择器；响应 mask、原峰
 及完整物理区间分别保留。Cross 连续证明只接受原反向分峰规则，Sequence 单峰重放不取得 Cross 资格。
+Sequence 单峰桥接另保留每峰已测 localization width，固定 8-byte 编码；原 Cross 64-byte 峰记录及
+选择不变。附加编码、构造与访问在同一 bridge owner 的整批资源公式中预留和重放。
+
+长轴连接先释放 baseline NumPy 数组，保留不可变测量账本。原峰保留量加上
+`4096 + 1024(P+G+Q) + 4096(E+H)` bytes 作为持续输入界，P/G/Q/E/H 分别为全部测量点、来源组、
+query、长轴观察数及 lane 短轴 extent。规划覆盖全部 eligible parent，临时索引和失败请求均计费；
+密集测量先预留整个 batch 的最坏峰数、三份 mask、定位宽度与流式缓冲，再读取像素。证明阶段使用
+完整 batch 的实际保留量预检全部父边证明；每个请求的解码数组由独立调用栈释放后才处理下一个，
+全部已生成约束继续保留。规划、完整行读取、编码和证明消费原 source 剩余池；后续失败不清零已执行工作，
+不允许有利前缀。历史 baseline 峰、连接阶段峰与后续 Cross 峰按实际存活阶段取最大值，连接证据的
+持续保留量计入后续阶段，不能把已释放的流式峰重复叠加或漏计仍存活的账本。
 
 原生连续桥接是原 TOP／BOTTOM intent 的有界子测量，至多两份 corridor plan、每份至多两个合并尾段，
 不更改原 sparse query／trace 的完成计数。全部 plan 和整个 batch 的工作／内存在读取前共同预检；
@@ -2856,6 +2888,7 @@ Linux开发/CI使用`renameat2(RENAME_NOREPLACE)`。目标在最终检查之后�
 | `photo_geometry/transition_peak_source.py`、`transition_peak_capture.py`、`transition_peak_validation.py` | 原峰完整来源、受限捕获及 field／baseline／query view／raw 引用对账 |
 | `photo_geometry/coarse_native_association.py`、`coarse_native_association_model.py` | 候选无关的 coarse／native 原峰对应、完整延续集合的共同必要约束及一次性联合物理域 |
 | `photo_geometry/native_trace_bridge_measurement.py`、`native_trace_continuity.py` | 原查询密集尾段、完整原峰桥接及同一已获权 Cross 边的独立连续资格；不授予照片序号或终端权限 |
+| `photo_geometry/sequence_connection_model.py`、`sequence_connections.py` | 原生长轴父集合的独立密集连接、共同物理域、局部保护与分阶段资源；不新增角色、照片序号或终端权限 |
 | `photo_geometry/corridors.py` | 候选无关 top/bottom 与完整 `W/pitch` sequence 查询走廊 |
 | `photo_geometry/registered_*.py`、`observations.py`、`separator_*.py` | 一次性 measurement、role-free edge 与 material band |
 | `photo_geometry/cross_height_transition_measurement.py`、`broad_material_transition_measurement.py`、`broad_material_association.py` | 同一 registered baseline 上的三区域局部弱信号、逐线双尺度宽缓 material 测量及有界完整关联 |
@@ -3068,6 +3101,9 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   drift 都使 release detection gate 失败。
   保留开发分析产物使用 `tools/verify diagnostic --gold-analysis --output-root <path>`，可用重复的
   `--sample-id` 进行专项诊断；该入口只薄调用同一 analysis owner，不复制验证或改变默认 `report` gate。
+  同时指定 `--keep-reports` 时，`development_reports/` 保存正式 CLI 的原始报告；通过校验的文件为
+  `<sample-id>.jsonl`，校验失败时保存 `<sample-id>.invalid.jsonl` 后原样记录失败。该选项必须配合
+  `--output-root`，只增加诊断产物，不改变 detector 或校验路径；无效报告不获得测量或 reference 权限。
   `tools/verify diagnostic --cross-retention --sample-id <id> --before-report <jsonl>
   --after-report <jsonl> --output <new-json>` 比较两份同源现行 development 报告。两份报告须严格验收，
   并核对当前黄金 task 的 source SHA、format/count、源文件身份、输入合同、lane 与方向；不读取人工

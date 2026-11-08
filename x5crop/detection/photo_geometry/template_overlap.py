@@ -130,7 +130,7 @@ def observe_overlap_edge_pairs(
                 for basis in intrinsic.get(edge.observation_id, ())
                 if basis in _INTRINSIC_BASES
             ),
-            _oriented_interval(edge.full_position_interval_px, direction),
+            _oriented_interval(edge.effective_full_position_interval_px, direction),
         )
         for edge in observations
         if any(

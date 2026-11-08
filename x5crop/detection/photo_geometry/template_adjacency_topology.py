@@ -296,11 +296,11 @@ def _signed_gap_interval(
     direction: int,
 ) -> FiniteInterval:
     oriented_end = _oriented_position_interval(
-        end.full_position_interval_px,
+        end.effective_full_position_interval_px,
         direction,
     )
     oriented_start = _oriented_position_interval(
-        next_start.full_position_interval_px,
+        next_start.effective_full_position_interval_px,
         direction,
     )
     return FiniteInterval(
@@ -420,9 +420,9 @@ def unbound_registered_adjacency_counterevidence(
             end is None
             or start is None
             or any(
-                edge.full_position_interval_px.minimum
+                edge.effective_full_position_interval_px.minimum
                 < item.required_interval_px.minimum
-                or edge.full_position_interval_px.maximum
+                or edge.effective_full_position_interval_px.maximum
                 > item.required_interval_px.maximum
                 for edge in (end, start)
             )

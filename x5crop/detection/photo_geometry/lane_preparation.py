@@ -63,7 +63,10 @@ from .template_runtime_model import (
     PreparedTemplateLane,
     RegisteredTemplateLane,
     TemplateMeasurementWorkReceipt,
+    combined_measurement_peak,
 )
+from .sequence_connections import (prepare_sequence_connections, apply_sequence_connections,
+                                   sequence_connection_persistent_input_bound)
 from .template_measurement_plan import compile_template_measurement_plan
 from .template_registration import (
     RegisteredCrossEvidence,
@@ -839,16 +842,24 @@ def prepare_template_lane(
     coverage = tuple(item.coverage for item in measurement_sets)
     validate_peak_source_measurements(measurement_sets, source_id=field.source_id,
                                       source_extent=field.source_extent, coarse_support=coarse_support)
+    original_pixels = sum(item.pixel_query_count for item in coverage)+exterior_region_measurement.work.pixel_query_count
+    sequence_connections = prepare_sequence_connections(field,placement_sequence_edges,measurement_sets,
+        maximum_value_visits=max(0,measurement_plan.pixel_bounds.max_pixel_queries-original_pixels
+                                 -sum(c.peak_source_value_visit_bound for c in coverage)),
+        maximum_temporary_bytes=measurement_plan.pixel_bounds.max_peak_temporary_bytes,
+        persistent_input_bytes=sequence_connection_persistent_input_bound(measurement_sets,
+            len(placement_sequence_edges),measurement_plan.exterior_region_query.work_box.height))
+    sequence_work = None if sequence_connections is None else sequence_connections.work
+    placement_sequence_edges = apply_sequence_connections(placement_sequence_edges,sequence_connections)
+    topology_sequence_edges = apply_sequence_connections(topology_sequence_edges,sequence_connections)
     work = TemplateMeasurementWorkReceipt(
         measurement_query_count=len(coverage) + 1,
-        pixel_query_count=sum(item.pixel_query_count for item in coverage) + exterior_region_measurement.work.pixel_query_count,
+        pixel_query_count=original_pixels+(0 if sequence_work is None else sequence_work.pixel_query_count),
         completed_query_count=sum(item.complete for item in coverage) + 1,
-        peak_temporary_bytes=max(
-            exterior_region_measurement.work.peak_temporary_bytes,
-            *(item.peak_temporary_bytes for item in coverage),
-        ),
+        peak_temporary_bytes=combined_measurement_peak(coverage,exterior_region_measurement.work,sequence_work),
         coverage_receipts=coverage,
         exterior_work=exterior_region_measurement.work,
+        sequence_connection_work=sequence_work,
     )
     measurement_plan.validate_measurement_receipt(
         pixel_query_count=work.pixel_query_count + work.peak_source_value_visit_bound,
@@ -895,6 +906,7 @@ def prepare_template_lane(
         cross_boundary_family_resolutions=(),
         measurement_work=work,
         measurement_plan=measurement_plan,
+        sequence_connections=sequence_connections,
     )
     template = measurement_plan.template_spec
     provisional_phase = fit_template_phase(
@@ -1170,19 +1182,21 @@ def prepare_template_lane(
         maximum_value_visits=max(0, measurement_plan.pixel_bounds.max_pixel_queries
                                  - work.pixel_query_count - work.peak_source_value_visit_bound),
         maximum_temporary_bytes=max(0, measurement_plan.pixel_bounds.max_peak_temporary_bytes
-                                    - work.peak_temporary_bytes))
+                                    - work.late_stage_peak_temporary_bytes))
     work = replace(work, coarse_native_association_work=association_work,
-                   peak_temporary_bytes=work.peak_temporary_bytes + association_work.peak_temporary_bytes)
+                   peak_temporary_bytes=combined_measurement_peak(work.coverage_receipts,work.exterior_work,
+                       work.sequence_connection_work,association_work,work.native_continuity_work))
     continuity = prepare_native_continuity(
         field, base_cross, registered.measurement_sets,
         maximum_value_visits=max(0, measurement_plan.pixel_bounds.max_pixel_queries
                                  - work.pixel_query_count - work.peak_source_value_visit_bound),
         maximum_temporary_bytes=max(0, measurement_plan.pixel_bounds.max_peak_temporary_bytes
-                                    - work.peak_temporary_bytes))
+                                    - work.late_stage_peak_temporary_bytes))
     if continuity is not None:
         work = replace(work, native_continuity_work=continuity.work,
             pixel_query_count=work.pixel_query_count + continuity.work.pixel_query_count,
-            peak_temporary_bytes=work.peak_temporary_bytes + continuity.work.peak_temporary_bytes)
+            peak_temporary_bytes=combined_measurement_peak(work.coverage_receipts,work.exterior_work,
+                work.sequence_connection_work,work.coarse_native_association_work,continuity.work))
     measurement_plan.validate_measurement_receipt(
         pixel_query_count=work.pixel_query_count + work.peak_source_value_visit_bound,
         peak_temporary_bytes=work.peak_temporary_bytes)

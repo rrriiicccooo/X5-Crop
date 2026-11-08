@@ -78,6 +78,8 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                     lane.prepared.measurement_work.coarse_native_association_work),
                 "native_continuity": typed_read_model(lane.prepared.native_continuity),
                 "native_continuity_work": typed_read_model(lane.prepared.measurement_work.native_continuity_work),
+                "sequence_connections": typed_read_model(lane.prepared.sequence_connections),
+                "sequence_connection_work": typed_read_model(lane.prepared.measurement_work.sequence_connection_work),
                 "source_frame_width_authority": typed_read_model(
                     lane.prepared.source_frame_width_authority
                 ),

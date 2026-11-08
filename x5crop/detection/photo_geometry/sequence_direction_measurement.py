@@ -76,6 +76,7 @@ class SequenceRunLineMeasurement:
     continuous_support_fraction: float
     fit_residual_px: float
     physical_line_region: PhysicalLineRegion | None
+    position_protection_interval_px: FiniteInterval
 
     def __post_init__(self) -> None:
         if (
@@ -400,6 +401,8 @@ def sequence_run_line_measurement(
         ),
         fit_residual_px=run.fit_residual_px,
         physical_line_region=physical_region,
+        position_protection_interval_px=FiniteInterval(canonical_position-full_uncertainty,
+                                                     canonical_position+full_uncertainty),
     )
 
 

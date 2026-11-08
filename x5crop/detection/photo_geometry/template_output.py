@@ -331,6 +331,22 @@ def _sequence_outward_departure(
     )
 
 
+def _sequence_raw_outward_departure(frame, boundary, state, direction):
+    evidence = boundary.line_evidence
+    connection = None if evidence is None else evidence.sequence_connection_constraint
+    if connection is None:
+        return None
+    native_position = state.sequence_start_px if boundary.role == BoundaryRole.START else state.sequence_end_px
+    if evidence.physical_position_offset_px != FiniteInterval.exact(0.0):
+        parents = tuple(b for b in (frame.start,frame.end) if b.line_evidence is not None
+            and b.line_evidence.observation_id == evidence.observation_id
+            and b.line_evidence.physical_position_offset_px == FiniteInterval.exact(0.0))
+        if len(parents) != 1:
+            raise ValueError("inferred Sequence raw protection lost its same-state direct parent")
+        native_position = state.sequence_start_px if parents[0].role == BoundaryRole.START else state.sequence_end_px
+    return _sequence_outward_departure(boundary.role,connection.raw_position_interval_px,native_position,direction)
+
+
 def _sequence_line_extent(
     boundary: FrameBoundaryGeometry,
     cross_span: FiniteInterval,
@@ -350,7 +366,7 @@ def _sequence_line_extent(
         for trace in (cross_span.minimum, cross_span.maximum)
     ]
     slope = _maximum_abs_slope(evidence.fit_direction_interval_degrees) if positions else 0.0
-    region = evidence.physical_line_region
+    region = evidence.effective_physical_line_region
     offset = evidence.physical_position_offset_px
     if region is not None and reachable_positions is not None:
         region = physical_line_region_at_positions(region, offset, reachable_positions)
@@ -503,6 +519,13 @@ def _frame_boundary_residuals(
                     boundary.role, extent, position, direction,
                 )
             )
+            raw_departure = _sequence_raw_outward_departure(frame,boundary,state,direction)
+            if raw_departure is not None:
+                # Every dense raw interval remains protected. An inferred
+                # opposite shares this same parent's exact W state: subtract
+                # the direct parent's state once, instead of combining an
+                # independent full-W shift with an already shifted state.
+                departure = max(departure,raw_departure)
             if orientation_slope > 0.0:
                 departure = max(departure, orientation_slope * cross_span.width / 2.0)
             signed_departures[boundary.role] = departure

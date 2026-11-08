@@ -61,7 +61,8 @@ class NativeTraceBridgeMeasurementContractTest(unittest.TestCase):
                 np.testing.assert_array_equal(negative[index], strong & (view.signed_gradient < 0))
                 expected = tuple(owner.NativeTraceBridgePeak(int(view.coordinates[p.coordinate_index]),
                     p.canonical_coordinate, p.physical_position_interval, p.polarity,
-                    p.gradient_z, p.tone_z, p.texture_z) for p in measured_transition_peaks(
+                    p.gradient_z, p.tone_z, p.texture_z,
+                    None if plan.split_gradient_reversals else p.localization_interval.width) for p in measured_transition_peaks(
                         view, SPEC, split_gradient_reversals=plan.split_gradient_reversals))
                 self.assertEqual(owner.peaks_at_row(strip, index), expected)
                 for source in strip.original_trace_sources:

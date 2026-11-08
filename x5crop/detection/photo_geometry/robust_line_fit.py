@@ -471,6 +471,7 @@ def fit_transition_line(
     residuals.flags.writeable = False
 
     selected: list[TransitionPoint] = []
+    selected_indices: list[int] = []
     for trace in sorted(set(point.trace for point in points)):
         indices = np.flatnonzero(traces == trace)
         best = min(
@@ -488,10 +489,15 @@ def fit_transition_line(
             ),
         )
         selected.append(points[int(best)])
+        selected_indices.append(int(best))
     if len(selected) != len(points):
         return fit_transition_line(
             tuple(selected), boundary_scale_px_per_mm, spec
         )
+    # Point selection orders the family by trace. Keep every residual paired
+    # with that same point's localization width in downstream protection.
+    residuals = residuals[selected_indices]
+    residuals.flags.writeable = False
     return TransitionLineFit(
         slope=slope,
         intercept=intercept,

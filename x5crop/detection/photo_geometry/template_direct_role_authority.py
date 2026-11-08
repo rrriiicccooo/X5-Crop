@@ -673,11 +673,11 @@ def _assess_direct_role_binding_authority(
             return True
         alternative = ledger.observations_by_id[alternative_id]
         if role_index % 2 == 0:
-            start_interval = alternative.full_position_interval_px
-            end_interval = opposite.full_position_interval_px
+            start_interval = alternative.effective_full_position_interval_px
+            end_interval = opposite.effective_full_position_interval_px
         else:
-            start_interval = opposite.full_position_interval_px
-            end_interval = alternative.full_position_interval_px
+            start_interval = opposite.effective_full_position_interval_px
+            end_interval = alternative.effective_full_position_interval_px
         if fit.template.direction > 0:
             possible_width = FiniteInterval(
                 end_interval.minimum - start_interval.maximum,

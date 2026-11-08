@@ -19,6 +19,7 @@ from .template_nominal_grid_model import (
     nominal_grid_shared_anchor_roles,
 )
 from .line_observations import PhysicalLineRegion
+from .sequence_connection_model import SequenceConnectionConstraint
 
 
 MAX_TEMPLATE_FIT_PASSES = 6
@@ -1125,8 +1126,18 @@ class SequenceRoleLineEvidence:
     fit_direction_interval_degrees: FiniteInterval
     physical_line_region: PhysicalLineRegion | None = None
     physical_position_offset_px: FiniteInterval = FiniteInterval.exact(0.0)
+    sequence_connection_constraint: SequenceConnectionConstraint | None = None
+
+    @property
+    def effective_physical_line_region(self):
+        return (self.physical_line_region if self.sequence_connection_constraint is None else
+                self.sequence_connection_constraint.physical_line_region)
 
     def __post_init__(self) -> None:
+        constraint = self.sequence_connection_constraint
+        if constraint is not None and (constraint.observation_id != self.observation_id
+                or constraint.original_physical_line_region != self.physical_line_region):
+            raise ValueError("Sequence output connection changed its original native parent")
         if (
             not isinstance(self.observation_id, ObservationId)
             or not math.isfinite(self.reference_trace_px)

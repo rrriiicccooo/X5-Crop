@@ -21,7 +21,9 @@ from x5crop.detection.photo_geometry.robust_line_fit import (
     physical_line_region_in_slopes,
     physical_line_region_at_positions,
     physical_slope_interval,
+    fit_transition_line,
 )
+from x5crop.detection.photo_geometry.model import PHOTO_BOUNDARY_MEASUREMENT_SPEC
 from x5crop.detection.photo_geometry.observations import build_sequence_edge_observations
 from x5crop.detection.photo_geometry.line_observations import PhysicalLineRegion
 from x5crop.detection.photo_geometry.observation_types import (
@@ -68,6 +70,24 @@ def physical_line_region(points, maximum_slope, reference_trace_px):
 
 
 class PhysicalLineRegionContractTest(unittest.TestCase):
+    def test_shuffled_fit_residuals_remain_paired_with_their_selected_points(self) -> None:
+        points = _points((0, 100, 200, 300), ((90, 110), (91, 111), (92, 112), (95, 115)))
+        points = tuple(replace(point, transition=replace(point.transition,
+            localization_interval_px=FiniteInterval(point.coordinate - width, point.coordinate + width)))
+            for point, width in zip(points, (1., 2., 3., 4.), strict=True))
+        for order in ((2, 0, 3, 1), (3, 2, 1, 0)):
+            fitted = fit_transition_line(tuple(points[i] for i in order), 20.,
+                                         PHOTO_BOUNDARY_MEASUREMENT_SPEC)
+            self.assertEqual(fitted.selected_points, points)
+            expected = [point.coordinate - (fitted.slope * point.trace + fitted.intercept)
+                        for point in fitted.selected_points]
+            np.testing.assert_array_equal(fitted.residuals, expected)
+            self.assertFalse(fitted.residuals.flags.writeable)
+            actual_protection = max(abs(residual) + point.transition.localization_interval_px.width / 2.
+                for residual, point in zip(fitted.residuals, fitted.selected_points, strict=True))
+            self.assertEqual(actual_protection, max(abs(residual) + point.transition.localization_interval_px.width / 2.
+                for residual, point in zip(expected, fitted.selected_points, strict=True)))
+
     def test_asymmetric_and_exact_slope_boxes_match_joint_lp(self) -> None:
         for traces, intervals, reference, slopes in (
             ((0, 100, 200), ((100, 102), (102, 104), (104, 106)), 50.0, (0.01, 0.03)),
@@ -109,6 +129,7 @@ class PhysicalLineRegionContractTest(unittest.TestCase):
                 "reference_trace_px": 50.0,
                 "vertices": [[99.0, 0.0], [100.0, 0.02], [101.0, 0.0]],
             },
+            "sequence_connection_constraint": None,
         }
         for direction in (-1, 1):
             evidence = {**deepcopy(edge), "physical_position_offset_px": {
@@ -206,7 +227,8 @@ class PhysicalLineRegionContractTest(unittest.TestCase):
             "cross_height_edges": [], "broad_material_edges": [],
             "broad_material_transition_regions": [],
         }}
-        queries = [{"query": {"lane_id": "line-test"},
+        queries = [{"query": {"lane_id": "line-test", "query_id": "query:physical-line",
+                               "boundary_axis_scale_px_per_mm": {"minimum": 10., "maximum": 10.}},
                     "transitions": typed_read_model(transitions),
                     "cross_height_transitions": [], "broad_material_transitions": []}]
         _validate_sequence_physical_line_regions(lane, queries)

@@ -64,7 +64,7 @@ def _facts(
                     observation.observation_id,
                 ),
                 interval_px=observation.fit_position_interval_px,
-                full_interval_px=observation.full_position_interval_px,
+                full_interval_px=observation.effective_full_position_interval_px,
                 direct=(
                     observation.support_fraction >= 0.35
                     or observation.observation_id in separator_support_ids
@@ -83,6 +83,7 @@ def _facts(
                             observation.fit_direction_interval_degrees
                         ),
                         physical_line_region=observation.physical_line_region,
+                        sequence_connection_constraint=observation.sequence_connection_constraint,
                     )
                     if observation.fit_direction_interval_degrees is not None
                     else None
@@ -562,11 +563,15 @@ def _with_separator_role_authority(
             material = material_intervals.get(observation.observation_id)
             if roles or material is not None:
                 full = observation.full_position_interval_px
+                protection = observation.position_protection_interval_px
                 if material is not None:
                     full = FiniteInterval(
                         min(full.minimum, material.minimum),
                         max(full.maximum, material.maximum),
                     )
+                    if protection is not None:
+                        protection = FiniteInterval(min(protection.minimum,material.minimum),
+                                                    max(protection.maximum,material.maximum))
                 observation = replace(
                     observation,
                     # A narrow material strip can also lie inside an aperture
@@ -584,6 +589,7 @@ def _with_separator_role_authority(
                         else observation.qualified_anchor_roles
                     ),
                     full_position_interval_px=full,
+                    position_protection_interval_px=protection,
                 )
         values.append(observation)
     return tuple(values)

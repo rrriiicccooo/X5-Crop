@@ -77,6 +77,7 @@ class SequencePeakSourceContractTest(unittest.TestCase):
                         originals = tuple(p for p in window.transitions if p.trace_coordinate_px == trace)
                         self.assertEqual(len(replayed), len(originals))
                         for old, new in zip(originals, replayed, strict=True):
+                            self.assertEqual(old.localization_interval_px.width,new.localization_width_px)
                             self.assertEqual((old.peak_source.source_coordinate_px, old.canonical_coordinate_px,
                                 old.physical_position_interval_px, old.polarity, old.gradient_z, old.tone_z, old.texture_z),
                                 (new.source_coordinate_px, new.canonical_coordinate_px,

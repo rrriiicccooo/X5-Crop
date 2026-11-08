@@ -71,6 +71,10 @@ def validate_development_peak_associations(lane, production_lane, measurements, 
     base_visits = sum(item.coverage.peak_source_value_visit_bound for item in measurements)
     base_peak = max(work["exterior_work"]["peak_temporary_bytes"],
                     *(item.coverage.peak_temporary_bytes for item in measurements))
+    sequence_work = work['sequence_connection_work']
+    if sequence_work is not None:
+        base_visits += sequence_work['value_visit_bound']
+        base_peak = max(base_peak,sequence_work['persistent_input_bytes'])+sequence_work['retained_bytes']
     proofs, association_work = associate_coarse_native_lines(coarse, measurements, base,
         maximum_value_visits=max(0, bounds.max_pixel_queries - work["pixel_query_count"]
                                 + (0 if work["native_continuity_work"] is None else

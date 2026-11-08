@@ -90,6 +90,22 @@ from .template_registration import (
 )
 from .template_family_membership import MembershipAtom
 from .observations import validate_broad_material_edge_provenance
+from .sequence_connection_model import SequenceConnectionWork
+from .sequence_connections import SequenceConnectionEvidence
+
+
+def late_measurement_peak(coverage, exterior, sequence=None, association=None, continuity=None):
+    original = max([0 if exterior is None else exterior.peak_temporary_bytes,
+                    *(item.peak_temporary_bytes for item in coverage)])
+    return (max(original,0 if sequence is None else sequence.persistent_input_bytes)
+            +(0 if sequence is None else sequence.retained_bytes)
+            +(0 if association is None else association.peak_temporary_bytes)
+            +(0 if continuity is None else continuity.peak_temporary_bytes))
+
+
+def combined_measurement_peak(coverage, exterior, sequence=None, association=None, continuity=None):
+    late = late_measurement_peak(coverage,exterior,sequence,association,continuity)
+    return max(late,0 if sequence is None else sequence.persistent_input_bytes+sequence.peak_temporary_bytes)
 
 
 @dataclass(frozen=True)
@@ -104,22 +120,32 @@ class TemplateMeasurementWorkReceipt:
     exterior_work: ExteriorRegionWork | None = None
     coarse_native_association_work: CoarseNativeAssociationWork | None = None
     native_continuity_work: NativeTraceContinuityWork | None = None
+    sequence_connection_work: SequenceConnectionWork | None = None
+
+    @property
+    def late_stage_peak_temporary_bytes(self):
+        return late_measurement_peak(self.coverage_receipts,self.exterior_work,self.sequence_connection_work,
+            self.coarse_native_association_work,self.native_continuity_work)
 
     @property
     def peak_source_value_visit_bound(self) -> int:
         return (sum(item.peak_source_value_visit_bound for item in self.coverage_receipts)
                 + (0 if self.coarse_native_association_work is None else
                    self.coarse_native_association_work.value_visit_bound)
-                + (0 if self.native_continuity_work is None else self.native_continuity_work.value_visit_bound))
+                + (0 if self.native_continuity_work is None else self.native_continuity_work.value_visit_bound)
+                + (0 if self.sequence_connection_work is None else self.sequence_connection_work.value_visit_bound))
 
     @property
     def peak_source_retained_bytes(self) -> int:
         return (sum(item.peak_source_retained_bytes for item in self.coverage_receipts)
                 + (0 if self.coarse_native_association_work is None else
                    self.coarse_native_association_work.retained_bytes)
-                + (0 if self.native_continuity_work is None else self.native_continuity_work.retained_bytes))
+                + (0 if self.native_continuity_work is None else self.native_continuity_work.retained_bytes)
+                + (0 if self.sequence_connection_work is None else self.sequence_connection_work.retained_bytes))
 
     def __post_init__(self) -> None:
+        if self.sequence_connection_work is not None and not isinstance(self.sequence_connection_work,SequenceConnectionWork):
+            raise TypeError("Sequence connection requires its typed source work")
         if self.native_continuity_work is not None and not isinstance(self.native_continuity_work, NativeTraceContinuityWork):
             raise TypeError("native continuity work must retain its typed source receipt")
         values = (
@@ -142,18 +168,16 @@ class TemplateMeasurementWorkReceipt:
             raise ValueError("measurement receipt count must cover every query")
         if self.pixel_query_count != (sum(item.pixel_query_count for item in self.coverage_receipts)
                 + (self.exterior_work.pixel_query_count if extra else 0)
-                + (0 if self.native_continuity_work is None else self.native_continuity_work.pixel_query_count)):
+                + (0 if self.native_continuity_work is None else self.native_continuity_work.pixel_query_count)
+                + (0 if self.sequence_connection_work is None else self.sequence_connection_work.pixel_query_count)):
             raise ValueError("measurement pixel receipt does not match coverage")
         if self.completed_query_count != sum(item.complete for item in self.coverage_receipts) + extra:
             raise ValueError("measurement completion receipt does not match coverage")
         association = self.coarse_native_association_work
         if association is not None and not isinstance(association, CoarseNativeAssociationWork):
             raise TypeError("measurement work requires typed native association work")
-        if self.peak_temporary_bytes != max([
-            (self.exterior_work.peak_temporary_bytes if extra else 0),
-            *(item.peak_temporary_bytes for item in self.coverage_receipts),
-        ]) + (0 if association is None else association.peak_temporary_bytes) + (
-                0 if self.native_continuity_work is None else self.native_continuity_work.peak_temporary_bytes):
+        if self.peak_temporary_bytes != combined_measurement_peak(self.coverage_receipts,self.exterior_work,
+                self.sequence_connection_work,association,self.native_continuity_work):
             raise ValueError("measurement peak receipt does not match coverage")
 
 
@@ -211,8 +235,16 @@ class RegisteredTemplateLane:
     exterior_region_measurement: ExteriorRegionMeasurement
     coarse_native_associations: tuple[CoarseNativeLineAssociation, ...] = field(default=(), kw_only=True)
     native_continuity: NativeTraceContinuityEvidence | None = field(default=None, kw_only=True)
+    sequence_connections: SequenceConnectionEvidence | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
+        if ((self.sequence_connections is None) != (self.measurement_work.sequence_connection_work is None)
+                or self.sequence_connections is not None and self.sequence_connections.work != self.measurement_work.sequence_connection_work):
+            raise ValueError("registered Sequence connection lost its complete work")
+        constraints = {} if self.sequence_connections is None else {a.observation_id:a.constraint
+            for a in self.sequence_connections.assessments if a.constraint is not None}
+        if any(p.sequence_connection_constraint != constraints.get(p.observation_id) for p in self.sequence_edges):
+            raise ValueError("registered Sequence edge changed its independent connection")
         if ((self.native_continuity is None) != (self.measurement_work.native_continuity_work is None)
                 or self.native_continuity is not None and (
                 not isinstance(self.native_continuity, NativeTraceContinuityEvidence)

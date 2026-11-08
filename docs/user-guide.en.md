@@ -118,6 +118,11 @@ lines. The edge gains a larger proven continuous span only when original peaks, 
 uncertainty pass validation. Multiple peaks, a broken path, or insufficient measurement budget require review.
 The full signal group used to select each peak must also have both sides observed within the original query.
 A locally connected response does not replace that evidence.
+For independently supported long-axis edges, the program can also measure connections between original points.
+Once original peaks, full signal groups, and a common straight-line range pass validation, those measurements can
+reduce uncertainty in positioning and photo width and contribute to actual output protection. Existing error,
+material-center ranges, and newly measured local variation remain protected. A connected edge alone does not
+establish photo ordinals or the true first and last boundaries.
 Reusing the same evidence does not add independent support. Source provenance, boundary roles, and full uncertainty
 protection remain subject to their own checks.
 

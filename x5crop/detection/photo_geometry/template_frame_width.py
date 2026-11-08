@@ -148,8 +148,8 @@ def _complete_frame_width_observations(fit, direct, sequence_edges, physical):
                 raise ValueError("source W binding leaves the observation ledger")
         start_edge, end_edge = by_id[start.observation_id], by_id[end.observation_id]
         left, right = (start_edge, end_edge) if fit.template.direction > 0 else (end_edge, start_edge)
-        measured = FiniteInterval(right.full_position_interval_px.minimum - left.full_position_interval_px.maximum,
-                                  right.full_position_interval_px.maximum - left.full_position_interval_px.minimum)
+        measured = FiniteInterval(right.effective_full_position_interval_px.minimum - left.effective_full_position_interval_px.maximum,
+                                  right.effective_full_position_interval_px.maximum - left.effective_full_position_interval_px.minimum)
         minimum, maximum = ((measured.minimum, measured.maximum) if physical is None else
             (max(measured.minimum, physical.minimum), min(measured.maximum, physical.maximum)))
         if maximum < minimum or minimum <= 0:
@@ -1175,7 +1175,7 @@ def _yield_local_roles_to_correlated_width(
             item.observation_id
             for item in sequence_edges
             if role in item.qualified_anchor_roles
-            and _overlaps(item.full_position_interval_px, predicted)
+            and _overlaps(item.effective_full_position_interval_px, predicted)
         )
         if compatible != (binding.observation_id,):
             continue

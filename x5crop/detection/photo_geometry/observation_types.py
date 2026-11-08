@@ -7,6 +7,7 @@ import math
 
 from ...domain import EvidenceState, FiniteInterval, ObservationId
 from .line_observations import PhysicalLineRegion
+from .sequence_connection_model import SequenceConnectionConstraint
 from .model import (
     BoundaryEvidenceState,
     BoundaryRole,
@@ -100,8 +101,33 @@ class BoundaryEdgeObservation:
     qualified_anchor_roles: tuple[BoundaryRole, ...] = ()
     evidence_state: BoundaryEvidenceState = BoundaryEvidenceState.SUPPORT
     physical_line_region: PhysicalLineRegion | None = None
+    position_protection_interval_px: FiniteInterval | None = None
+    sequence_connection_constraint: SequenceConnectionConstraint | None = None
+
+    @property
+    def effective_full_position_interval_px(self):
+        constraint = self.sequence_connection_constraint
+        if constraint is None:
+            return self.full_position_interval_px
+        physical = constraint.physical_line_region.project(self.reference_trace_px)
+        protection = self.position_protection_interval_px
+        dense = constraint.position_protection_interval_px
+        return FiniteInterval(min(protection.minimum,dense.minimum,physical.minimum),
+                              max(protection.maximum,dense.maximum,physical.maximum))
 
     def __post_init__(self) -> None:
+        protection, constraint = self.position_protection_interval_px, self.sequence_connection_constraint
+        if protection is not None and (not isinstance(protection,FiniteInterval)
+                or protection.minimum < self.full_position_interval_px.minimum-1.e-9
+                or protection.maximum > self.full_position_interval_px.maximum+1.e-9
+                or not protection.contains(self.fit_position_interval_px.minimum,epsilon=1.e-9)
+                or not protection.contains(self.fit_position_interval_px.maximum,epsilon=1.e-9)):
+            raise ValueError("native Sequence position protection changed its original full envelope")
+        if constraint is not None and (not isinstance(constraint,SequenceConnectionConstraint) or protection is None
+                or constraint.observation_id != self.observation_id
+                or constraint.original_transition_ids != self.transition_ids
+                or constraint.original_physical_line_region != self.physical_line_region):
+            raise ValueError("Sequence connection changed its original parent")
         if (
             not self.run_id
             or not isinstance(self.discovery_interval_px, FiniteInterval)

@@ -134,12 +134,12 @@ def observe_contact_edges(
     for edge in sorted(
         authoritative_edges,
         key=lambda item: (
-            item.full_position_interval_px.minimum,
-            item.full_position_interval_px.maximum,
+            item.effective_full_position_interval_px.minimum,
+            item.effective_full_position_interval_px.maximum,
             str(item.observation_id),
         ),
     ):
-        interval = edge.full_position_interval_px
+        interval = edge.effective_full_position_interval_px
         if component and interval.minimum > component_maximum:
             close_component()
             component = []

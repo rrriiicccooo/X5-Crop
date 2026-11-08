@@ -1237,7 +1237,7 @@ def _runtime_budget_gate_state(check: dict[str, Any]) -> str:
     raise ValueError("Runtime budget Gate receipt has an invalid state")
 
 
-def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
+def run_gold_analysis_task(record: dict[str, Any], *, report_directory: Path | None = None) -> dict[str, Any]:
     physical_prior = _physical_prior_diagnostic(record)
     source = (PROJECT_ROOT / record["source_relative_path"]).resolve()
     before = source.stat()
@@ -1270,7 +1270,13 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
         if len(reports) != 1:
             raise ValueError("gold analysis requires one terminal report")
         report = reports[0]
-        validate_current_report_record(report)
+        try:
+            validate_current_report_record(report)
+        except Exception:
+            if report_directory is not None:
+                with (report_directory / f"{record['sample_id']}.invalid.jsonl").open('xb') as retained:
+                    retained.write((output / 'x5_crop_report.jsonl').read_bytes())
+            raise
         after = source.stat()
         identity = report["runtime_identity"]["source"]
         if (
@@ -1282,6 +1288,11 @@ def run_gold_analysis_task(record: dict[str, Any]) -> dict[str, Any]:
             or identity["mtime_ns"] != before.st_mtime_ns
         ):
             raise ValueError("source stat identity changed across gold analysis")
+        if report_directory is not None:
+            # Preserve the exact validated production report, never a second
+            # detector result or an alternate analysis-only measurement path.
+            with (report_directory / f"{record['sample_id']}.jsonl").open("xb") as retained:
+                retained.write((output / "x5_crop_report.jsonl").read_bytes())
 
         release_detection_gate_failure = None
         try:
@@ -3250,6 +3261,7 @@ def run_gold_analysis(
     output_root: Path,
     *,
     sample_ids: Sequence[str] | None = None,
+    keep_reports: bool = False,
 ) -> dict[str, Any]:
     if output_root.exists() and any(output_root.iterdir()):
         raise ValueError(f"gold analysis output root must be empty: {output_root}")
@@ -3269,6 +3281,9 @@ def run_gold_analysis(
         for record in complete_gold
         if requested is None or record["sample_id"] in requested
     )
+    report_directory = output_root / "development_reports" if keep_reports else None
+    if report_directory is not None:
+        report_directory.mkdir()
     records: list[dict[str, Any]] = []
     for index, record in enumerate(gold, start=1):
         print(
@@ -3276,7 +3291,8 @@ def run_gold_analysis(
             flush=True,
         )
         try:
-            result = run_gold_analysis_task(record)
+            result = (run_gold_analysis_task(record) if report_directory is None else
+                      run_gold_analysis_task(record, report_directory=report_directory))
         except Exception as error:
             print(f"  {type(error).__name__}: {error}", file=sys.stderr, flush=True)
             try:
@@ -3407,6 +3423,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         dest="sample_ids",
         help="limit analysis to one gold task; repeat as needed",
     )
+    parser.add_argument("--keep-reports", action="store_true",
+        help="retain exact validated production reports under output-root/development_reports")
     parser.add_argument(
         "--gate",
         choices=("report", "release"),
@@ -3417,6 +3435,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
     )
     args = parser.parse_args(argv)
+    if args.keep_reports and args.output_root is None:
+        parser.error("--keep-reports requires --output-root")
     if args.gate == "release" and args.sample_ids is not None:
         print(
             "development gold analysis: FAIL: the release gate requires the "
@@ -3429,6 +3449,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_gold_analysis(
             output_root,
             sample_ids=args.sample_ids,
+            **({"keep_reports": True} if args.keep_reports else {}),
         )
 
     try:

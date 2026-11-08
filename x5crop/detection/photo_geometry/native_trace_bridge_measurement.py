@@ -28,6 +28,7 @@ from .transition_peak_source import TransitionPeakTraceSource
 
 _PEAK_RECORD = struct.Struct("<q6db7x")
 _PEAK_HEX_SIZE = 2 * _PEAK_RECORD.size
+_LOCALIZATION_WIDTH = struct.Struct('<d')
 
 
 def _integer(value, name, *, minimum=0):
@@ -166,6 +167,7 @@ class NativeTraceBridgePeak:
     gradient_z: float
     tone_z: float
     texture_z: float
+    localization_width_px: float | None = None
 
     def __post_init__(self):
         _integer(self.source_coordinate_px, "source peak coordinate")
@@ -176,6 +178,12 @@ class NativeTraceBridgePeak:
             raise ValueError("bridge peak lost its original physical interval or polarity")
         for name in ("gradient_z", "tone_z", "texture_z"):
             _finite(getattr(self, name), name, minimum=0.0)
+        if self.localization_width_px is not None:
+            _finite(self.localization_width_px,'localization width',minimum=0.)
+            half = self.localization_width_px/2
+            if (self.canonical_coordinate_px-half < self.physical_position_interval_px.minimum
+                    or self.canonical_coordinate_px+half > self.physical_position_interval_px.maximum):
+                raise ValueError('bridge localization left its complete physical group')
 
 
 def _validate_mask_hex(encoded, site_count):
@@ -200,6 +208,7 @@ class NativeTraceBridgeStrip:
     peak_records_hex: str
     peak_row_offsets: tuple[int, ...]
     original_trace_sources: tuple[TransitionPeakTraceSource, ...]
+    localization_widths_hex: str = ''
 
     def __post_init__(self):
         for name in ("plan_index", "trace_start_px", "trace_stop_px", "coordinate_start_px", "coordinate_stop_px"):
@@ -224,12 +233,16 @@ class NativeTraceBridgeStrip:
                 or any(a > b for a, b in zip(self.peak_row_offsets, self.peak_row_offsets[1:]))
                 or len(self.peak_records_hex) != _PEAK_HEX_SIZE * self.peak_row_offsets[-1]):
             raise ValueError("bridge strip must retain the complete packed peak table and every row offset")
+        if (type(self.localization_widths_hex) is not str
+                or any(c not in '0123456789abcdef' for c in self.localization_widths_hex)
+                or self.localization_widths_hex and len(self.localization_widths_hex) != 16*self.peak_row_offsets[-1]):
+            raise ValueError('bridge localization widths changed their complete peak table')
         for first, last in zip(self.peak_row_offsets, self.peak_row_offsets[1:]):
             if last - first > columns:
                 raise ValueError("bridge row has more candidates than source coordinates")
             previous = self.coordinate_start_px - 1
             for ordinal in range(first, last):
-                peak = _unpack_peak(self.peak_records_hex, ordinal)
+                peak = _unpack_peak(self.peak_records_hex, ordinal,self.localization_widths_hex)
                 if not previous < peak.source_coordinate_px < self.coordinate_stop_px:
                     raise ValueError("bridge peak rows changed their source order or corridor")
                 previous = peak.source_coordinate_px
@@ -243,20 +256,22 @@ class NativeTraceBridgeStrip:
             previous = source.trace_coordinate_px
 
 
-def _unpack_peak(encoded, ordinal):
+def _unpack_peak(encoded, ordinal, localization_widths_hex=''):
     start = ordinal * _PEAK_HEX_SIZE
     record = encoded[start:start + _PEAK_HEX_SIZE]
     if record[114:] != "0" * 14:
         raise ValueError("packed bridge peak has nonzero reserved bytes")
     source, canonical, low, high, gradient, tone, texture, polarity = _PEAK_RECORD.unpack(bytes.fromhex(record))
-    return NativeTraceBridgePeak(source, canonical, FiniteInterval(low, high), polarity, gradient, tone, texture)
+    width = (None if not localization_widths_hex else
+             _LOCALIZATION_WIDTH.unpack(bytes.fromhex(localization_widths_hex[16*ordinal:16*(ordinal+1)]))[0])
+    return NativeTraceBridgePeak(source, canonical, FiniteInterval(low, high), polarity, gradient, tone, texture,width)
 
 
 def peaks_at_row(strip: NativeTraceBridgeStrip, row: int) -> tuple[NativeTraceBridgePeak, ...]:
     """Decode one relative row only; the caller owns its <=768B/peak DTOs."""
     if not isinstance(strip, NativeTraceBridgeStrip) or type(row) is not int or not 0 <= row < strip.trace_stop_px-strip.trace_start_px:
         raise ValueError("peak decoding requires a typed strip and a valid relative row")
-    return tuple(_unpack_peak(strip.peak_records_hex, i)
+    return tuple(_unpack_peak(strip.peak_records_hex, i,strip.localization_widths_hex)
                  for i in range(strip.peak_row_offsets[row], strip.peak_row_offsets[row + 1]))
 
 
@@ -329,6 +344,8 @@ class NativeTraceBridgeBatch:
             if strip.plan_index >= len(self.plans):
                 raise ValueError("bridge strip references an unknown plan")
             plan = self.plans[strip.plan_index]
+            if len(strip.localization_widths_hex) != (0 if plan.split_gradient_reversals else 16*strip.peak_row_offsets[-1]):
+                raise ValueError('bridge peak selector lost its registered localization-width payload')
             if (strip.coordinate_start_px, strip.coordinate_stop_px) != _corridor_domain(plan):
                 raise ValueError("bridge strip changed its original query corridor")
             coverage[strip.plan_index].append((strip.trace_start_px, strip.trace_stop_px))
@@ -398,6 +415,8 @@ def _prepare(plans, maximum_temporary_bytes):
     rows = sum(b-a for p in plans for a, b in p.trace_intervals_px)
     sites = sum(sum(b-a for a, b in p.trace_intervals_px) * (_corridor_domain(p)[1] - _corridor_domain(p)[0])
                 for p in plans)
+    localization_sites = sum(sum(b-a for a,b in p.trace_intervals_px)*(_corridor_domain(p)[1]-_corridor_domain(p)[0])
+                             for p in plans if not p.split_gradient_reversals)
     original_count = sum(sum(1 for _ in _included_original_traces(p)) for p in plans)
     metadata = (8192 + 4096 * len(plans) + 256 * sum(len(p.trace_intervals_px) for p in plans)
                 + 128 * sum(len(p.original_trace_coordinates_px) for p in plans)
@@ -406,13 +425,13 @@ def _prepare(plans, maximum_temporary_bytes):
     # partition. Each view coordinate can create at most one retained peak.
     hex_bound = 6 * sum(sum(b-a for a, b in p.trace_intervals_px)
                         * ((_corridor_domain(p)[1] - _corridor_domain(p)[0] + 7) // 8) for p in plans)
-    retained_bound = metadata + 1120 * rows + 128 * sites + hex_bound + 1024 * original_count
+    retained_bound = metadata + 1120 * rows + 128 * sites + 16*localization_sites + hex_bound + 1024 * original_count
     mask_work = 32 * sites + 96 * rows
     # Keep the existing 256Q+32 peak scan reservation, and separately cover
     # fixed-record packing, hexadecimal validation and one-record decoding.
     # The extra group-support mask, its subset checks and row metadata are
     # included before pixel access; the proof's flank scan is charged later.
-    value_work = (hash_work + 704 * sites + 160 * rows + mask_work
+    value_work = (hash_work + 704 * sites + 64*localization_sites + 160 * rows + mask_work
                   + 128 * (len(plans) + sum(len(p.trace_intervals_px) for p in plans)
                            + sum(len(p.original_trace_coordinates_px) for p in plans)))
     required_peak = retained_bound
@@ -424,6 +443,8 @@ def _prepare(plans, maximum_temporary_bytes):
         # The third OR mask and its encoding/validation buffers stay live
         # beside both AND masks and packed peak construction.
         per_row = 256 * (length + 1) + 112 * width
+        if any(not plans[i].split_gradient_reversals for i in group.plan_indices):
+            per_row += 32*width
         streaming_rows = SPEC.maximum_streaming_block_pixels // length
         available_rows = (maximum_temporary_bytes - retained_bound - fixed) // per_row
         if streaming_rows < 1 or available_rows < 1:
@@ -457,6 +478,7 @@ def _strip(measured, block_start, start, stop, index, plan, sources):
     negative = np.empty_like(positive)
     credible = np.empty_like(positive)
     peak_records = bytearray()
+    localization_widths = bytearray()
     row_offsets = [0]
     for trace in range(start, stop):
         view = _slice_trace_measurement(_row(measured, trace-block_start), plan.coordinate_interval_px)
@@ -470,16 +492,19 @@ def _strip(measured, block_start, start, stop, index, plan, sources):
             peak_records.extend(_PEAK_RECORD.pack(int(view.coordinates[peak.coordinate_index]), peak.canonical_coordinate,
                 peak.physical_position_interval.minimum, peak.physical_position_interval.maximum,
                 peak.gradient_z, peak.tone_z, peak.texture_z, peak.polarity))
+            if not plan.split_gradient_reversals:
+                localization_widths.extend(_LOCALIZATION_WIDTH.pack(peak.localization_interval.width))
         row_offsets.append(len(peak_records) // _PEAK_RECORD.size)
     return NativeTraceBridgeStrip(index, start, stop, left, right,
         np.packbits(positive, bitorder="little").tobytes().hex(),
         np.packbits(negative, bitorder="little").tobytes().hex(),
         np.packbits(credible, bitorder="little").tobytes().hex(), peak_records.hex(), tuple(row_offsets),
-        tuple(sources[t] for t in _original_in_strip(plan, start, stop)))
+        tuple(sources[t] for t in _original_in_strip(plan, start, stop)),localization_widths.hex())
 
 
 def _retained_strip_bytes(metadata, strips):
     return metadata + sum(1024 + 48 * len(strip.peak_row_offsets) + len(strip.peak_records_hex)
+        + len(strip.localization_widths_hex)
         + len(strip.positive_mask_hex) + len(strip.negative_mask_hex) + len(strip.credible_mask_hex)
         + 1024 * len(strip.original_trace_sources) for strip in strips)
 

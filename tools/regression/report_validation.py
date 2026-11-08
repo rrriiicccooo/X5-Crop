@@ -737,6 +737,7 @@ def _validate_sequence_physical_line_regions(
     """Rebuild joint line states from the same registered raw family."""
 
     transitions: dict[str, dict[str, Any]] = {}
+    scales = {q['query']['query_id']:q['query']['boundary_axis_scale_px_per_mm']['maximum'] for q in queries}
     broad_trace_lattices: dict[str, tuple[int, ...]] = {}
     broad_paths: dict[str, tuple[frozenset[str], ...]] = {}
     for query in queries:
@@ -812,6 +813,23 @@ def _validate_sequence_physical_line_regions(
             )
             if expected is None or typed_read_model(expected) != region:
                 raise ValueError("physical line region changed the raw joint feasible set")
+            if edge['measurement_basis'] in {'direct_trace','direct_with_aggregate'}:
+                protection = edge['position_protection_interval_px']
+                if protection is None:
+                    raise ValueError('native Sequence line lost its original position protection')
+                center = edge['canonical_position_px']
+                slope = -math.tan(math.radians(edge['canonical_direction_degrees']))
+                fit = edge['fit_position_interval_px']
+                uncertainty = max(center-fit['minimum'],fit['maximum']-center)
+                local = max(abs(transitions[i]['canonical_coordinate_px']-(center+slope*(
+                    transitions[i]['trace_coordinate_px']-edge['reference_trace_px'])))
+                    +(transitions[i]['localization_interval_px']['maximum']-transitions[i]['localization_interval_px']['minimum'])/2
+                    for i in identities)
+                uncertainty = max(uncertainty,local+PHOTO_BOUNDARY_MEASUREMENT_SPEC.line_connection_allowance_px(
+                    scales[transitions[identities[0]]['query_id']]))
+                if not (math.isclose(protection['minimum'],center-uncertainty,rel_tol=0.,abs_tol=1.e-9)
+                        and math.isclose(protection['maximum'],center+uncertainty,rel_tol=0.,abs_tol=1.e-9)):
+                    raise ValueError('native Sequence line changed its residual/localization protection')
             projection = expected.project(edge["reference_trace_px"])
             if not all(value_validation._interval_contains(edge["full_position_interval_px"], value)
                        for value in (projection.minimum, projection.maximum)):
@@ -861,6 +879,7 @@ def _validate_sequence_output_line_provenance(lane: dict[str, Any]) -> None:
                 "fit_direction_interval_degrees": edge["fit_direction_interval_degrees"],
                 "physical_line_region": edge["physical_line_region"],
                 "physical_position_offset_px": {"minimum": 0.0, "maximum": 0.0},
+                "sequence_connection_constraint": edge["sequence_connection_constraint"],
             }
             if binding.get("line_evidence") != expected:
                 raise ValueError("sequence output line changed its registered physical family")
@@ -2237,6 +2256,8 @@ def _read_common_proof(value: Any, model: type) -> Any:
     from x5crop.detection.photo_geometry.native_trace_continuity import (
         NativeTraceContinuityEvidence, NativeTraceContinuityWork,
     )
+    from x5crop.detection.photo_geometry.sequence_connections import SequenceConnectionEvidence
+    from x5crop.detection.photo_geometry.sequence_connection_model import SequenceConnectionWork
     if model not in (OutputFootprint, CommonHOutput, CommonHOutputAuthority, CompleteCrossHeightCalibration, PhaseFitResult,
                      CrossFitCompetition, CrossRoleBinding, PhotoBoundaryObservation, CrossBoundaryFamilyResolution,
                      RobustLineFitReceipt, ConstrainedLineFitReceipt,
@@ -2250,7 +2271,8 @@ def _read_common_proof(value: Any, model: type) -> Any:
                      PhaseCandidateAdjacencyAssessment, PhaseCompetitionScope, CompletePhaseOutputProof,
                      RegisteredCrossEvidence, SourceLaneEvidence, BasicAxisProfile,
                      CoarseNativeAssociationWork, CoarseNativeLineAssociation,
-                     NativeTraceContinuityEvidence, NativeTraceContinuityWork):
+                     NativeTraceContinuityEvidence, NativeTraceContinuityWork,
+                     SequenceConnectionEvidence, SequenceConnectionWork):
         raise ValueError("unsupported common-output proof root")
     cache = _PROOF_READ_CACHE.get()
     key = (id(value), model)
@@ -4032,6 +4054,12 @@ def _validate_registered_normalization(record: dict[str, Any]) -> None:
         continuity_pixels = 0 if continuity_work is None else continuity_work.pixel_query_count
         continuity_visits = 0 if continuity_work is None else continuity_work.value_visit_bound
         continuity_peak = 0 if continuity_work is None else continuity_work.peak_temporary_bytes
+        from x5crop.detection.photo_geometry.sequence_connection_model import SequenceConnectionWork
+        from x5crop.detection.photo_geometry.template_runtime_model import combined_measurement_peak
+        sequence_work = (None if work['sequence_connection_work'] is None else
+                         _read_common_proof(work['sequence_connection_work'],SequenceConnectionWork))
+        sequence_pixels = 0 if sequence_work is None else sequence_work.pixel_query_count
+        sequence_visits = 0 if sequence_work is None else sequence_work.value_visit_bound
         receipts = [item["coverage"] for item in members]
         dense = exterior[lane_id].work
         if (
@@ -4039,8 +4067,9 @@ def _validate_registered_normalization(record: dict[str, Any]) -> None:
             or work["exterior_work"] != typed_read_model(dense)
             or work["measurement_query_count"] != len(receipts) + 1
             or work["completed_query_count"] != sum(item["complete"] for item in receipts) + 1
-            or work["pixel_query_count"] != sum(item["pixel_query_count"] for item in receipts) + dense.pixel_query_count + continuity_pixels
-            or work["peak_temporary_bytes"] != max([dense.peak_temporary_bytes, *(item["peak_temporary_bytes"] for item in receipts)]) + association_peak + continuity_peak
+            or work["pixel_query_count"] != sum(item["pixel_query_count"] for item in receipts) + dense.pixel_query_count + continuity_pixels + sequence_pixels
+            or work["peak_temporary_bytes"] != combined_measurement_peak(tuple(m.coverage for m in decoded_measurements),
+                dense,sequence_work,association_work,continuity_work)
         ):
             raise ValueError("normalization baseline work lost its lane ledger")
         bounds, _ = _bounds_for_lane(exterior[lane_id].query.work_box, len(queries)+1, lane["template_spec"]["count"])
@@ -4050,7 +4079,7 @@ def _validate_registered_normalization(record: dict[str, Any]) -> None:
             or sum(max(1, int(math.ceil(i.width))+1) for q in queries for i in q.search_intervals_px)
                 + dense.coordinate_sample_count > bounds.max_coordinate_samples
             or work["pixel_query_count"] + sum(item["peak_source_value_visit_bound"] for item in receipts)
-                + association_visits + continuity_visits > bounds.max_pixel_queries
+                + association_visits + continuity_visits + sequence_visits > bounds.max_pixel_queries
             or work["peak_temporary_bytes"] > bounds.max_peak_temporary_bytes
         ):
             raise ValueError("combined sparse/exterior measurement exceeds the compiled lane budget")
@@ -4061,11 +4090,14 @@ def _validate_registered_normalization(record: dict[str, Any]) -> None:
             raise ValueError("development measurement changed the canonical source identity")
         validate_peak_source_measurements(decoded_measurements, source_id=source_id, source_extent=extent)
         if "work" in lane and lane["work"]["peak_source_value_visit_bound"] != (
-                sum(item["peak_source_value_visit_bound"] for item in receipts) + association_visits + continuity_visits):
+                sum(item["peak_source_value_visit_bound"] for item in receipts) + association_visits + continuity_visits + sequence_visits):
             raise ValueError("lane source work changed its complete coverage/association ledger")
         if "base_cross_registration" in lane:
             from .peak_source_validation import validate_development_peak_associations
             production = next(item for item in record["photo_geometry"]["lanes"] if item["lane_id"] == lane_id)
+            from .sequence_connection_validation import validate_development_sequence_connections
+            validate_development_sequence_connections(lane,production,tuple(decoded_measurements),bounds=bounds,
+                exterior=exterior[lane_id],read_proof=_read_common_proof)
             validate_development_peak_associations(lane, production, tuple(decoded_measurements),
                 source_id=source_id, source_extent=extent, bounds=bounds, read_proof=_read_common_proof)
 
@@ -4499,6 +4531,8 @@ def _validate_current_report_record(record: dict[str, Any]) -> None:
     validate_ordinary_peak_associations(record, read_proof=_read_common_proof, source_extent=source_extent)
     from .native_continuity_validation import validate_native_continuity
     validate_native_continuity(record, read_proof=_read_common_proof)
+    from .sequence_connection_validation import validate_sequence_connections
+    validate_sequence_connections(record,read_proof=_read_common_proof)
     _validate_geometry(record, source_extent)
     _validate_gate(record["candidate_gate"], "candidate")
     _validate_gate(record["decision"]["gate"], "decision")

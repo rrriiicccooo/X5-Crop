@@ -273,6 +273,7 @@ def _shift_sequence_line_evidence(
             evidence.fit_direction_interval_degrees
         ),
         physical_line_region=evidence.physical_line_region,
+        sequence_connection_constraint=evidence.sequence_connection_constraint,
         physical_position_offset_px=_advance(
             evidence.physical_position_offset_px, width_px, direction,
         ),
