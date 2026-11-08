@@ -153,6 +153,19 @@ class NativeConnectionProfileContractTest(TestCase):
             )
         np.testing.assert_array_equal(actual, expected)
 
+    def test_row_statistics_preserve_readonly_strided_inputs_and_exact_scalar_values(self) -> None:
+        rng = np.random.default_rng(34931)
+        base = rng.normal(10.,3.,size=(5,98))
+        for values in (base,np.asfortranarray(base),base[::-1,::2],base[:,:97]):
+            before = values.copy()
+            values.flags.writeable = False
+            for minimum in (0.,1.):
+                actual = positive_mad_z_rows(values,minimum_scale=minimum)
+                expected = np.vstack([positive_mad_z(row,minimum_scale=minimum) for row in values])
+                np.testing.assert_array_equal(actual,expected)
+                np.testing.assert_array_equal(values,before)
+                self.assertFalse(np.shares_memory(actual,values))
+
     def test_input_contract_rejects_non_uint8_or_non_matrix_values(self) -> None:
         with self.assertRaises(ValueError):
             owner.measure_trace_rows(

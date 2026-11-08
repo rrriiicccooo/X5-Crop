@@ -69,12 +69,18 @@ def positive_mad_z_rows(
         raise ValueError("row robust normalization requires finite values")
     if numeric.shape[1] == 0:
         return numeric
-    center = np.median(numeric, axis=1)
-    deviations = np.abs(numeric - center[:, None])
-    mad = np.median(deviations, axis=1)
+    # Row responses can be column-contiguous views. Partition one private
+    # row-contiguous buffer, then reuse it for deviations and the final result.
+    # Neither partition changes the caller's measurements or normalization
+    # domain, and no extra median copy remains live beside this workspace.
+    result = np.array(numeric, dtype=np.float64, copy=True, order="C")
+    center = np.median(result, axis=1, overwrite_input=True)
+    np.subtract(numeric, center[:, None], out=result)
+    np.abs(result, out=result)
+    mad = np.median(result, axis=1, overwrite_input=True)
     scale = np.maximum(minimum_scale, NORMAL_MAD_SCALE * mad)
     valid = scale > np.finfo(np.float64).eps
-    result = numeric - center[:, None]
+    np.subtract(numeric, center[:, None], out=result)
     result[~valid] = 0.0
     np.divide(result, scale[:, None], out=result, where=valid[:, None])
     np.maximum(result, 0.0, out=result)

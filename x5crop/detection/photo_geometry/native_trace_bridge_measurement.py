@@ -66,6 +66,7 @@ class NativeTraceBridgePlan:
     coordinate_scale_px_per_mm: float
     original_trace_coordinates_px: tuple[int, ...]
     split_gradient_reversals: bool = True
+    record_peaks: bool = True
 
     def __post_init__(self):
         for name in ("source_id", "original_query_id", "baseline_query_id"):
@@ -79,6 +80,8 @@ class NativeTraceBridgePlan:
             raise ValueError("bridge boundary axis must be typed")
         if type(self.split_gradient_reversals) is not bool:
             raise ValueError("bridge peak selector must retain its original split rule")
+        if type(self.record_peaks) is not bool:
+            raise ValueError("bridge measurement must declare its complete peak stage")
         _finite(self.coordinate_scale_px_per_mm, "coordinate scale", minimum=0.0)
         if self.coordinate_scale_px_per_mm <= 0:
             raise ValueError("coordinate scale must be positive")
@@ -345,7 +348,11 @@ class NativeTraceBridgeBatch:
             if strip.plan_index >= len(self.plans):
                 raise ValueError("bridge strip references an unknown plan")
             plan = self.plans[strip.plan_index]
-            if len(strip.localization_widths_hex) != (0 if plan.split_gradient_reversals else 16*strip.peak_row_offsets[-1]):
+            if not plan.record_peaks and (strip.peak_records_hex or strip.localization_widths_hex
+                                         or any(strip.peak_row_offsets)):
+                raise ValueError('signal-only bridge cannot claim measured peak records')
+            if len(strip.localization_widths_hex) != (0 if plan.split_gradient_reversals or not plan.record_peaks
+                                                     else 16*strip.peak_row_offsets[-1]):
                 raise ValueError('bridge peak selector lost its registered localization-width payload')
             if (strip.coordinate_start_px, strip.coordinate_stop_px) != _corridor_domain(plan):
                 raise ValueError("bridge strip changed its original query corridor")
@@ -388,6 +395,25 @@ class _Group:
     batch_rows: int = 1
 
 
+def _storage_reservation(plans):
+    rows = sum(b-a for p in plans for a,b in p.trace_intervals_px)
+    sites = sum(sum(b-a for a,b in p.trace_intervals_px)*(_corridor_domain(p)[1]-_corridor_domain(p)[0])
+                for p in plans if p.record_peaks)
+    localization_sites = sum(sum(b-a for a,b in p.trace_intervals_px)*(_corridor_domain(p)[1]-_corridor_domain(p)[0])
+                             for p in plans if p.record_peaks and not p.split_gradient_reversals)
+    original_count = sum(sum(1 for _ in _included_original_traces(p)) for p in plans)
+    metadata = (8192 + 4096*len(plans)+256*sum(len(p.trace_intervals_px) for p in plans)
+                +128*sum(len(p.original_trace_coordinates_px) for p in plans)
+                +4*sum(len(p.source_id)+len(p.original_query_id)+len(p.baseline_query_id) for p in plans))
+    mask_hex = 6*sum(sum(b-a for a,b in p.trace_intervals_px)
+                    *((_corridor_domain(p)[1]-_corridor_domain(p)[0]+7)//8) for p in plans)
+    return metadata,metadata+1120*rows+128*sites+16*localization_sites+mask_hex+1024*original_count
+
+
+def native_trace_bridge_retained_byte_bound(plans):
+    return 0 if not plans else _storage_reservation(plans)[1]
+
+
 def _prepare(plans, maximum_temporary_bytes):
     indices = {}
     for index, plan in enumerate(plans):
@@ -416,23 +442,19 @@ def _prepare(plans, maximum_temporary_bytes):
     rows = sum(b-a for p in plans for a, b in p.trace_intervals_px)
     sites = sum(sum(b-a for a, b in p.trace_intervals_px) * (_corridor_domain(p)[1] - _corridor_domain(p)[0])
                 for p in plans)
+    peak_sites = sum(sum(b-a for a,b in p.trace_intervals_px)*(_corridor_domain(p)[1]-_corridor_domain(p)[0])
+                     for p in plans if p.record_peaks)
     localization_sites = sum(sum(b-a for a,b in p.trace_intervals_px)*(_corridor_domain(p)[1]-_corridor_domain(p)[0])
-                             for p in plans if not p.split_gradient_reversals)
-    original_count = sum(sum(1 for _ in _included_original_traces(p)) for p in plans)
-    metadata = (8192 + 4096 * len(plans) + 256 * sum(len(p.trace_intervals_px) for p in plans)
-                + 128 * sum(len(p.original_trace_coordinates_px) for p in plans)
-                + 4 * sum(len(p.source_id) + len(p.original_query_id) + len(p.baseline_query_id) for p in plans))
+                             for p in plans if p.record_peaks and not p.split_gradient_reversals)
     # One strip per row is a conservative reservation for every possible block
     # partition. Each view coordinate can create at most one retained peak.
-    hex_bound = 6 * sum(sum(b-a for a, b in p.trace_intervals_px)
-                        * ((_corridor_domain(p)[1] - _corridor_domain(p)[0] + 7) // 8) for p in plans)
-    retained_bound = metadata + 1120 * rows + 128 * sites + 16*localization_sites + hex_bound + 1024 * original_count
+    metadata,retained_bound = _storage_reservation(plans)
     mask_work = 32 * sites + 96 * rows
     # Keep the existing 256Q+32 peak scan reservation, and separately cover
     # fixed-record packing, hexadecimal validation and one-record decoding.
     # The extra group-support mask, its subset checks and row metadata are
     # included before pixel access; the proof's flank scan is charged later.
-    value_work = (hash_work + 704 * sites + 64*localization_sites + 160 * rows + mask_work
+    value_work = (hash_work + 704 * peak_sites + 64*localization_sites + 160 * rows + mask_work
                   + 128 * (len(plans) + sum(len(p.trace_intervals_px) for p in plans)
                            + sum(len(p.original_trace_coordinates_px) for p in plans)))
     required_peak = retained_bound
@@ -444,7 +466,7 @@ def _prepare(plans, maximum_temporary_bytes):
         # The third OR mask and its encoding/validation buffers stay live
         # beside both AND masks and packed peak construction.
         per_row = 256 * (length + 1) + 112 * width
-        if any(not plans[i].split_gradient_reversals for i in group.plan_indices):
+        if any(plans[i].record_peaks and not plans[i].split_gradient_reversals for i in group.plan_indices):
             per_row += 32*width
         streaming_rows = SPEC.maximum_streaming_block_pixels // length
         available_rows = (maximum_temporary_bytes - retained_bound - fixed) // per_row
@@ -488,8 +510,9 @@ def _strip(measured, block_start, start, stop, index, plan, sources):
         positive[trace-start] = connected & (view.signed_gradient > 0.0)
         negative[trace-start] = connected & (view.signed_gradient < 0.0)
         credible[trace-start] = group_support
-        for peak in measured_transition_peaks(view, SPEC,
-                split_gradient_reversals=plan.split_gradient_reversals):
+        peaks = (measured_transition_peaks(view,SPEC,split_gradient_reversals=plan.split_gradient_reversals)
+                 if plan.record_peaks else ())
+        for peak in peaks:
             peak_records.extend(_PEAK_RECORD.pack(int(view.coordinates[peak.coordinate_index]), peak.canonical_coordinate,
                 peak.physical_position_interval.minimum, peak.physical_position_interval.maximum,
                 peak.gradient_z, peak.tone_z, peak.texture_z, peak.polarity))
@@ -610,4 +633,5 @@ def measure_native_trace_bridges(field: PhotoBoundaryMeasurementField, plans: tu
 
 __all__ = ["NativeTraceBridgePlan", "NativeTraceBridgePeak", "NativeTraceBridgeStrip", "NativeTraceBridgeBatch",
            "native_trace_bridge_preflight_value_visit_bound", "measure_native_trace_bridges", "decode_mask", "decode_credible_mask", "peaks_at_row",
-           "validate_native_trace_bridge_batch", "native_trace_bridge_normalization_domain"]
+           "validate_native_trace_bridge_batch", "native_trace_bridge_normalization_domain",
+           "native_trace_bridge_retained_byte_bound"]

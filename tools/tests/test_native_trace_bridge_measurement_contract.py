@@ -63,7 +63,7 @@ class NativeTraceBridgeMeasurementContractTest(unittest.TestCase):
                     p.canonical_coordinate, p.physical_position_interval, p.polarity,
                     p.gradient_z, p.tone_z, p.texture_z,
                     None if plan.split_gradient_reversals else p.localization_interval.width) for p in measured_transition_peaks(
-                        view, SPEC, split_gradient_reversals=plan.split_gradient_reversals))
+                        view, SPEC, split_gradient_reversals=plan.split_gradient_reversals)) if plan.record_peaks else ()
                 self.assertEqual(owner.peaks_at_row(strip, index), expected)
                 for source in strip.original_trace_sources:
                     if source.trace_coordinate_px == trace:
@@ -87,6 +87,21 @@ class NativeTraceBridgeMeasurementContractTest(unittest.TestCase):
         self.assertFalse(any("authority" in f.name for f in fields(batch)))
         with self.assertRaises(FrozenInstanceError):
             plan.source_id = "other"
+
+    def test_signal_stage_keeps_complete_masks_and_sources_without_extracting_peaks(self):
+        field = _field(_steps())
+        plan = _plan(field,split_gradient_reversals=False,record_peaks=False)
+        with patch.object(owner,'measured_transition_peaks',side_effect=AssertionError('unrequested peak stage')):
+            batch = _measure(field,(plan,))
+        self.assert_scalar_rows(field,batch)
+        owner.validate_native_trace_bridge_batch(batch)
+        for strip in batch.strips:
+            self.assertEqual(strip.peak_records_hex,'')
+            self.assertEqual(strip.localization_widths_hex,'')
+            self.assertTrue(all(offset == 0 for offset in strip.peak_row_offsets))
+        complete = _measure(field,(replace(plan,record_peaks=True),))
+        with self.assertRaisesRegex(ValueError,'signal-only'):
+            replace(complete,plans=(plan,))
 
     def test_overlapping_corridors_share_each_full_normalization_row_once(self):
         field = _field(_steps())

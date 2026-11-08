@@ -157,7 +157,8 @@ class NativeTraceContinuityEvidence:
                     or self.assessments or self.work != NativeTraceContinuityWork(0, 0, 0, True))
                 or not self.planning_completed and (self.requests or self.batch is not None
                     or self.assessments or not self.work.bound_exceeded)
-                or self.batch is not None and any(not p.split_gradient_reversals for p in self.batch.plans)
+                or self.batch is not None and any(not p.split_gradient_reversals or not p.record_peaks
+                                                  for p in self.batch.plans)
                 or len(set(ids)) != len(ids)
                 or tuple(a.observation_id for a in self.assessments) != ids
                 or self.work.bound_exceeded and any(a.constraint for a in self.assessments)):
@@ -381,7 +382,7 @@ def _dense_group_complete(credible_row, column, peak, coordinate_start):
 def assess_native_continuity(requests, measurements, batch):
     """Replay full masks and original peaks; unavailable is never exclusion."""
     from .native_trace_bridge_measurement import decode_mask
-    if batch is not None and any(not p.split_gradient_reversals for p in batch.plans):
+    if batch is not None and any(not p.split_gradient_reversals or not p.record_peaks for p in batch.plans):
         raise ValueError("Cross continuity requires the original split peak selector")
     measurements_by_id = {m.query.query_id: m for m in measurements}
     baseline_sources = {s.trace_coordinate_px: s for m in measurements

@@ -92,6 +92,17 @@ def _cross(registration):
 
 
 class NativeTraceContinuityContractTest(unittest.TestCase):
+    def test_signal_only_payload_cannot_grant_cross_continuity(self):
+        evidence = _prepare(_case())
+        batch = replace(evidence.batch,
+            plans=tuple(replace(p,record_peaks=False) for p in evidence.batch.plans),
+            strips=tuple(replace(s,peak_records_hex='',localization_widths_hex='',
+                peak_row_offsets=(0,)*len(s.peak_row_offsets)) for s in evidence.batch.strips))
+        with self.assertRaisesRegex(ValueError,'split peak selector'):
+            assess_native_continuity(evidence.requests,evidence.measurements,batch)
+        with self.assertRaisesRegex(ValueError,'registered parent'):
+            replace(evidence,batch=batch)
+
     def test_cross_proof_rejects_an_unsplit_sequence_peak_selector(self):
         evidence = _prepare(_case())
         plans = tuple(replace(p, split_gradient_reversals=False) for p in evidence.batch.plans)

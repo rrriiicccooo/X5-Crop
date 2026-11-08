@@ -417,6 +417,12 @@ TIFF 读取、候选或 LP。闭区间比较仅沿用 `1e-9 px` 数值容差，�
 `sequence_connections.py` 只沿父边实际首末 raw trace 之间的原 query corridor 补测，使用同一灰度、
 完整 baseline 归一化和原单峰选择器，不读取候选位置、W、照片模板或黄金。完整父集合先登记，
 原峰来源、极性、同源别名、源域或组侧翼缺证时逐项保存 unavailable，不按最终成功项缩小义务。
+连接测量分两阶段：先按完整原域保存三份密集响应 mask 和原 trace SHA，不提取密集峰；完整重放
+原点分量及源上下文后，仅为必要连接仍成立的父边执行原查询的完整提峰。首像素前即预留信号测量、
+全部潜在精测及两阶段证明的值访问上界，并预检信号、guard 和精测的数据峰；精测物理证明继续按
+完整 batch 实际保留量在使用前预检。精测仍使用完整原 span／corridor，不按分量裁窄。原始失败、
+信号失败及精测失败均在完整父账本中保留。信号通过不产生约束；全部信号失败时，精测义务为空，
+这是已完成的 unavailable，不是工作超界，更不是解释的物理反证。
 全部原始点须落在同一个四连通有符号响应分量，分量不能碰 corridor 坐标边界；逐行必须只有一个
 相容原峰，无重叠别名，完整 OR 可信组两侧均可观察，且该峰的完整 physical interval 正好覆盖原单峰组。
 每条原 trace 的信号 SHA 与原 baseline 一致，原峰与完整物理区间不得替换。
@@ -2706,6 +2712,8 @@ Cross 来源和原生纹理先按原合同完成，随后 Sequence 来源仅使�
 TOP／BOTTOM 输入，不把新增 Sequence 来源重复计入无关关联。所有来源仍计入同一 source 总池。
 `NativeTraceBridgePlan` 冻结 `split_gradient_reversals`，相同归一化行可服务两类选择器；响应 mask、原峰
 及完整物理区间分别保留。Cross 连续证明只接受原反向分峰规则，Sequence 单峰重放不取得 Cross 资格。
+`record_peaks` 默认为 true；false 只表示完整信号阶段，保留每行全零峰 offsets，并要求峰与定位 payload
+均为空。Cross 及 Sequence 正约束入口显式拒绝该阶段，不能把“未提峰”当成“提峰后没有候选”。
 Sequence 单峰桥接另保留每峰已测 localization width，固定 8-byte 编码；原 Cross 64-byte 峰记录及
 选择不变。附加编码、构造与访问在同一 bridge owner 的整批资源公式中预留和重放。
 
@@ -2718,7 +2726,11 @@ query、长轴观察数及 lane 短轴 extent。规划覆盖全部 eligible pare
 不允许有利前缀。历史 baseline 峰、连接阶段峰与后续 Cross 峰按实际存活阶段取最大值，连接证据的
 持续保留量计入后续阶段，不能把已释放的流式峰重复叠加或漏计仍存活的账本。
 完整原峰已被证明不在同一响应分量时，该父边立即保持 unavailable，不再解码无法改变该结果的
-密集峰；整批像素、mask、峰记录、全部父义务和原保守工作费用仍保留，不把失败当成边界或解释的物理反证。
+密集峰；已执行阶段的整批像素、mask、峰记录、全部父义务和原保守工作费用仍保留，不把失败当成边界或解释的物理反证。
+两阶段由同一 bridge owner 分别核算 mask sites、实际提峰 sites 和定位 sites；最坏保留界也由其独占。
+精测的流式容量先扣除整批信号的最坏保留量；最终 receipt 按实际存活的 signal/full 编码、规划、
+guard 与物理证明取阶段最大值。实际信号、guard 和精测费用全部保留；信号失败只避免尚未执行的
+精测，不回退已执行工作。报告从完整信号证据重建精测义务，不能只相信序列化的 guard 结果。
 
 原生连续桥接是原 TOP／BOTTOM intent 的有界子测量，至多两份 corridor plan、每份至多两个合并尾段，
 不更改原 sparse query／trace 的完成计数。全部 plan 和整个 batch 的工作／内存在读取前共同预检；
@@ -2769,6 +2781,9 @@ prefix 仍如实计入该次构造峰值，batch 的数组与资源公式保持�
 `68Q` 与上述 scratch，broad 原构造界更大。Registered baseline 在来源捕获前还预留所有窗口的
 消费峰，跨高度 aggregate 额外包含自己的 `68Q` 返回数组，避免捕获器先占用后续提峰所需资源。
 实际 receipt 同时覆盖 sharp、aggregate、broad 与 coarse 消费阶段，不把阶段最大值盲目相加。
+密集行的 median／MAD 在一份私有行连续缓冲中先后执行；该缓冲依次复用为原值副本、偏差和最终
+响应，允许分区算法原地修改它。原测量、完整归一化域及每行统计值保持，未修改调用者的只读或
+跨步输入；缓冲数少于原 row construction 预留，不增加像素、查询或资源池。
 
 性能合同是 24-source 完整用户路径平均不超过 5 秒；同一均值不超过 3 秒是明确记录但不阻断
 提交、发布或平台 receipt 的 challenge。正式性能验证属于发布验收，绑定同一 release commit；

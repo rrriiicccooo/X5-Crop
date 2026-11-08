@@ -104,6 +104,32 @@ class SequenceConnectionsContractTest(unittest.TestCase):
         self.assertTrue(negative.assessments[0].failure_kind)
         self.assertEqual(apply_sequence_connections((broken[1],),negative),(broken[1],))
 
+    def test_complete_signal_failure_keeps_all_obligations_without_a_peak_refinement(self):
+        case = _case(broken=True)
+        with patch('x5crop.detection.photo_geometry.native_trace_bridge_measurement.measured_transition_peaks',
+                   side_effect=AssertionError('failed connection cannot require peak refinement')):
+            evidence = _prepare(case)
+        self.assertTrue(evidence.planning_completed)
+        self.assertFalse(evidence.work.bound_exceeded)
+        self.assertIsNotNone(evidence.signal_batch)
+        self.assertIsNone(evidence.batch)
+        self.assertEqual(evidence.parents,(case[1],))
+        _validate(case,evidence)
+        with self.assertRaisesRegex(ValueError,'signal stage'):
+            _validate(case,replace(evidence,signal_batch=None))
+        with self.assertRaisesRegex(ValueError,'continuity result'):
+            _validate(case,replace(evidence,requests=(replace(evidence.requests[0],failure_kind=None),)))
+
+    def test_signal_guard_alone_cannot_grant_a_positive_native_constraint(self):
+        from x5crop.detection.photo_geometry.sequence_connections import assess_sequence_connections
+        case = _case()
+        evidence = _prepare(case)
+        self.assertIsNotNone(evidence.assessments[0].constraint)
+        self.assertTrue(all(not p.record_peaks for p in evidence.signal_batch.plans))
+        self.assertTrue(all(p.record_peaks for p in evidence.batch.plans))
+        with self.assertRaises(ValueError):
+            assess_sequence_connections(evidence.parents,evidence.requests,evidence.measurements,evidence.signal_batch)
+
     def test_new_native_states_keep_old_and_new_local_protection_on_both_axes(self):
         for transpose in (False,True):
             with self.subTest(transpose=transpose):
