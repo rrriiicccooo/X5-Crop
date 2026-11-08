@@ -30,6 +30,17 @@ from .trace_support import PIXEL_CENTER_HALF_EXTENT_PX
 PEAK_LOCALIZATION_PROMINENCE_FRACTION = 0.5
 
 
+def transition_peak_scratch_bytes(coordinate_count: int) -> int:
+    """Original 64Q masks/indices plus <=80Q shared ranks and construction.
+
+    At most two localization types retain sorted values and inverse ranks
+    (32Q). Stable ordering, its construction arrays, and current-group rank
+    deletion are covered separately, including the other retained type.
+    All arrays are local to one peak extraction call.
+    """
+    return 144 * coordinate_count
+
+
 @dataclass(frozen=True)
 class TraceMeasurement:
     coordinates: np.ndarray
@@ -301,6 +312,9 @@ def scalar_trace_buffer_reservation(source_length: int, coordinate_count: int, *
     also covers standalone broad results; caller-owned native luma/scratch,
     input numeric/differences and earlier traces must be added by that caller.
     This function inspects no pixels and allocates no arrays.
+    A sharp row's construction bound is at least 212Q bytes. Its retained 68Q
+    plus the extraction scratch 144Q fit within that same phase maximum;
+    broad construction has a larger bound. No extra resource pool is added.
     """
     if (type(source_length) is not int or source_length < 0 or type(coordinate_count) is not int
             or not 0 <= coordinate_count <= source_length or type(include_broad_material) is not bool):
@@ -822,20 +836,46 @@ def measure_trace_rows(
     )
 
 
-def _zero_median_statistics(values: np.ndarray) -> tuple[bool, int]:
-    return bool(np.all(np.isfinite(values))), values.size - int(np.count_nonzero(values))
+@dataclass
+class _GroupNoiseStatistics:
+    finite: bool
+    zero_count: int
+    sorted_values: np.ndarray | None = None
+    ranks: np.ndarray | None = None
 
 
-def _group_local_noise(values: np.ndarray, group: np.ndarray, statistics: tuple[bool, int]) -> float:
+def _zero_median_statistics(values: np.ndarray) -> _GroupNoiseStatistics:
+    return _GroupNoiseStatistics(bool(np.all(np.isfinite(values))),
+                                 values.size - int(np.count_nonzero(values)))
+
+
+def _group_local_noise(values: np.ndarray, group: np.ndarray, statistics: _GroupNoiseStatistics) -> float:
     """Exactly reproduce the outside-group median; groups contain unique indices."""
     outside_count = values.size - group.size
     if outside_count:
-        finite, zero_count = statistics
-        outside_zeros = zero_count - (group.size - int(np.count_nonzero(values[group])))
+        outside_zeros = statistics.zero_count - (group.size - int(np.count_nonzero(values[group])))
         # A strict majority pins both middle order statistics to zero. Equality
         # is insufficient for an even-sized sample; nonfinite values fall back.
-        if finite and outside_zeros > outside_count // 2:
+        if statistics.finite and outside_zeros > outside_count // 2:
             return 0.0
+        if statistics.finite:
+            if statistics.ranks is None:
+                order = np.argsort(values, kind="stable")
+                ranks = np.empty(values.size, dtype=np.intp)
+                ranks[order] = np.arange(values.size, dtype=np.intp)
+                statistics.sorted_values = values[order]
+                statistics.ranks = ranks
+            removed = np.sort(statistics.ranks[group])
+            removed -= np.arange(group.size, dtype=np.intp)
+            middle = (np.asarray((outside_count//2,), dtype=np.intp) if outside_count % 2
+                      else np.asarray((outside_count//2-1, outside_count//2), dtype=np.intp))
+            # Removing sorted ranks d_j shifts every remaining kth rank by
+            # exactly count(d_j-j <= k). Both original median order statistics
+            # survive, including ties and even/odd cardinality.
+            middle += np.searchsorted(removed, middle, side="right")
+            return float(np.mean(statistics.sorted_values[middle]))
+        # Preserve the original NaN/Inf behavior; these are not independent
+        # finite order statistics and must not take the indexed shortcut.
         outside = np.ones(values.size, dtype=bool)
         outside[group] = False
         return float(np.median(values[outside]))
@@ -949,11 +989,11 @@ def measured_transition_peaks(
                 if ordinal == len(peak_candidates) - 1
                 else partitions[ordinal]
             )
-            assigned = group[
+            assigned = group if len(peak_candidates) == 1 else group[
                 (coordinates[group] >= physical_minimum)
                 & (coordinates[group] <= physical_maximum)
             ]
-            peak_position = int(np.flatnonzero(assigned == peak_index)[0])
+            peak_position = int(np.searchsorted(assigned, peak_index))
             left_position = peak_position
             right_position = peak_position
             peak_polarity = (

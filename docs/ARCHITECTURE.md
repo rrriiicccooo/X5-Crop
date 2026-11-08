@@ -445,6 +445,13 @@ Sequence baseline 与 anchor windows 保留原单峰规则，Cross 保留反向�
 不要求整个支持组闭合；既有极性分区保持不变。
 峰选择复用同一梯度资格掩码，以数组索引完成原分组与最大值选择；同值峰仍取较小的原生索引。
 长轴及区域聚合的单峰规则、短轴的反向分区规则不变；索引只在同次 trace 内存活。
+每种 localization 的组外噪声中位数在同次提峰内复用排序与 inverse rank，最多两种，不跨行或查询缓存。
+每组仍完整排除自身全部坐标；删除 rank 为 `d_j` 时，剩余第 k 个值的原 rank 为
+`k + searchsorted(d_j-j, k, side=right)`。奇偶中位数沿原 NumPy mean 合并，严格多数零与非有限值
+保持原处理；完整原峰、定位、物理区间、噪声和 prominence 不改变。行排序及全部组删除合计
+`O(Q log Q)`，替代逐组重扫整行，不能省略弱组或竞争峰。
+只有一个候选峰时，完整物理组已经是其分区，直接复用原组；有序组内的峰索引用二分查找，
+不再构造等价的全组坐标筛选和相等掩码。多峰仍使用原完整分区与定位规则。
 Transition ownership 只分配已有峰，不是像素缺失边界；查询执行完成也不证明
 测量核无法覆盖的源边区域已被观察。
 邻点仍满足同一半高峰条件时，即使低于登记阈值，也继续在当前测量数组中探查实际侧翼。
@@ -509,7 +516,8 @@ polarity 与 background side；分母始终是该区域全部 registered traces�
 位置区间、方向区间、polarity 和 background side 上一致。宽缓通道不伪造 gradient，不降低局部 edge
 阈值，也不扩大既有 query、transition ownership、local measurement halo 或 TIFF 读取。它只复用已经
 完整登记的全长 baseline；新增数组和计算完整进入工作量检查。峰提取的数值 scratch 保守计入每坐标
-64 bytes，并与同时保留的 trace 缓冲相加；该数值缓冲预算不冒充进程 RSS。固定 trace 上的全部峰各
+144 bytes，覆盖原掩码／索引、至多两份排序与反向 rank，以及构造和当前组删除临时量，并与同时保留的
+trace 缓冲相加；该数值缓冲预算不冒充进程 RSS。固定 trace 上的全部峰各
 提取一次。原 cross-height 弱梯度聚合与 sharp 最近邻跟踪保持独立。
 最近邻跟踪的热循环只计算一次候选距离，预先区分 direct 与 aggregate 极性要求；仍按原 trace、
 gap、候选次序和互为唯一最近邻条件遍历，同距歧义、缺测规则与全部计费不变。
@@ -2709,12 +2717,17 @@ query、长轴观察数及 lane 短轴 extent。规划覆盖全部 eligible pare
 全部已生成约束继续保留。规划、完整行读取、编码和证明消费原 source 剩余池；后续失败不清零已执行工作，
 不允许有利前缀。历史 baseline 峰、连接阶段峰与后续 Cross 峰按实际存活阶段取最大值，连接证据的
 持续保留量计入后续阶段，不能把已释放的流式峰重复叠加或漏计仍存活的账本。
+完整原峰已被证明不在同一响应分量时，该父边立即保持 unavailable，不再解码无法改变该结果的
+密集峰；整批像素、mask、峰记录、全部父义务和原保守工作费用仍保留，不把失败当成边界或解释的物理反证。
 
 原生连续桥接是原 TOP／BOTTOM intent 的有界子测量，至多两份 corridor plan、每份至多两个合并尾段，
 不更改原 sparse query／trace 的完成计数。全部 plan 和整个 batch 的工作／内存在读取前共同预检；
 不足时不测量有利前缀，新增证明保持 unavailable，原测量继续按自身合同核验。密集峰用固定 64-byte
 记录、hex 与逐行 offset 保存，逐行解码；不同时保留全部 Python peak 对象。数值、编码及元数据均计入
 原 source 总池，失败的结构预检也单独记账。
+编码校验保持精确小写 hex、长度与末字节 padding 规则；正负 mask 不相交及其并集属于原 OR mask
+使用 packed uint8 位运算核对全部字节，不展开整张位图，也不省略任何峰记录校验。额外 packed
+缓冲仍包含在原 bridge 流式预留中，校验后立即释放。
 
 令共享 baseline 组的完整源行长度为 L、实际核可观察坐标数为 Q、合并行数为 N，pixel 上界为
 `Σ N[L+Q(2radius+2)]`；完整行读取不能因 corridor 较窄而漏计。令全部 corridor 密集坐标数为 C、
@@ -2752,6 +2765,10 @@ source 或灰度／原生 luma 保留缓存。每种尺度仍独立计算窗口�
 该上界覆盖返回存储量与构造临时量；registered caller 以 `Q=L` 保守预检，native coarse caller 另预留
 同时存活的 luma／scratch／numeric／differences 和早先 trace。缓存释放后不进入返回存储；实际曾创建的
 prefix 仍如实计入该次构造峰值，batch 的数组与资源公式保持。
+提峰另以 `144Q` scratch 与实际保留数组取阶段峰值；sharp 的原构造界至少为 `212Q`，可覆盖返回
+`68Q` 与上述 scratch，broad 原构造界更大。Registered baseline 在来源捕获前还预留所有窗口的
+消费峰，跨高度 aggregate 额外包含自己的 `68Q` 返回数组，避免捕获器先占用后续提峰所需资源。
+实际 receipt 同时覆盖 sharp、aggregate、broad 与 coarse 消费阶段，不把阶段最大值盲目相加。
 
 性能合同是 24-source 完整用户路径平均不超过 5 秒；同一均值不超过 3 秒是明确记录但不阻断
 提交、发布或平台 receipt 的 challenge。正式性能验证属于发布验收，绑定同一 release commit；

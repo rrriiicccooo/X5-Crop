@@ -189,7 +189,7 @@ class NativeTraceBridgePeak:
 def _validate_mask_hex(encoded, site_count):
     byte_count = (site_count + 7) // 8
     if (type(encoded) is not str or len(encoded) != 2 * byte_count
-            or any(character not in "0123456789abcdef" for character in encoded)):
+            or encoded.strip("0123456789abcdef")):
         raise ValueError("bridge mask must have the exact lowercase hexadecimal length")
     if site_count % 8 and int(encoded[-2:], 16) >> (site_count % 8):
         raise ValueError("bridge mask has nonzero little-endian padding bits")
@@ -219,14 +219,15 @@ class NativeTraceBridgeStrip:
             raise ValueError("bridge strip must have positive shape")
         for encoded in (self.positive_mask_hex, self.negative_mask_hex, self.credible_mask_hex):
             _validate_mask_hex(encoded, rows * columns)
-        if any(int(self.positive_mask_hex[i:i+2], 16) & int(self.negative_mask_hex[i:i+2], 16)
-               for i in range(0, len(self.positive_mask_hex), 2)):
+        positive,negative,credible = (np.frombuffer(bytes.fromhex(encoded),dtype=np.uint8) for encoded in
+            (self.positive_mask_hex,self.negative_mask_hex,self.credible_mask_hex))
+        if np.any(positive & negative):
             raise ValueError("bridge positive and negative masks overlap")
-        if any((int(self.positive_mask_hex[i:i+2], 16) | int(self.negative_mask_hex[i:i+2], 16))
-               & ~int(self.credible_mask_hex[i:i+2], 16) for i in range(0, len(self.credible_mask_hex), 2)):
+        if np.any((positive | negative) & ~credible):
             raise ValueError("bridge connected signal leaves its original OR grouping support")
+        del positive,negative,credible
         if (type(self.peak_records_hex) is not str
-                or any(c not in "0123456789abcdef" for c in self.peak_records_hex)
+                or self.peak_records_hex.strip("0123456789abcdef")
                 or type(self.peak_row_offsets) is not tuple or len(self.peak_row_offsets) != rows + 1
                 or any(type(i) is not int or i < 0 for i in self.peak_row_offsets)
                 or self.peak_row_offsets[0] != 0
@@ -234,7 +235,7 @@ class NativeTraceBridgeStrip:
                 or len(self.peak_records_hex) != _PEAK_HEX_SIZE * self.peak_row_offsets[-1]):
             raise ValueError("bridge strip must retain the complete packed peak table and every row offset")
         if (type(self.localization_widths_hex) is not str
-                or any(c not in '0123456789abcdef' for c in self.localization_widths_hex)
+                or self.localization_widths_hex.strip('0123456789abcdef')
                 or self.localization_widths_hex and len(self.localization_widths_hex) != 16*self.peak_row_offsets[-1]):
             raise ValueError('bridge localization widths changed their complete peak table')
         for first, last in zip(self.peak_row_offsets, self.peak_row_offsets[1:]):

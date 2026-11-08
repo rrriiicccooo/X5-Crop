@@ -55,6 +55,7 @@ from .registered_transition_measurement import (
     trace_storage_bytes,
     broad_material_trace_measurement,
     scalar_trace_buffer_reservation,
+    transition_peak_scratch_bytes,
     window_prefix_cache_bytes,
 )
 from .physical_identity import physical_observation_id
@@ -496,6 +497,8 @@ def _measure_coarse_short_trace_lattice(
         # measurement; a single-trace maximum cannot describe this batch.
         peak_bytes = max(peak_bytes, retained_bytes + trace.temporary_bytes)
         measured.append(trace)
+    peak_bytes = max(peak_bytes,retained_bytes+max((transition_peak_scratch_bytes(int(t.coordinates.size))
+                                                   for t in measured),default=0))
     return tuple(measured), int(peak_bytes)
 
 
@@ -608,7 +611,8 @@ def _aggregate_short_hull(
     identities = () if direct is None else (physical_observation_id(
         "coarse-short-support", query.query_id, tuple(query.trace_positions_px),
         f"{direct.minimum:.6f}", f"{direct.maximum:.6f}"),)
-    temporary_bytes = aggregate_temporary + measured.temporary_bytes
+    temporary_bytes = aggregate_temporary + max(measured.temporary_bytes,
+        trace_storage_bytes(measured)+transition_peak_scratch_bytes(int(measured.coordinates.size)))
     return direct, identities, temporary_bytes, lookup_count, evidence
 
 

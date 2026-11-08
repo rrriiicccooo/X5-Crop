@@ -35,6 +35,7 @@ from .registered_transition_measurement import (
     trace_storage_bytes,
     scalar_trace_buffer_reservation,
     window_prefix_cache_bytes,
+    transition_peak_scratch_bytes,
 )
 from .transition_peak_capture import TransitionPeakCapture, peak_source_receipt
 from .physical_identity import physical_observation_id
@@ -152,6 +153,9 @@ def _measure_query(
             peak_temporary = max(
                 peak_temporary,
                 retained_temporary_bytes + measured.temporary_bytes,
+                retained_temporary_bytes + (0 if premeasured is not None else trace_storage_bytes(measured))
+                + (0 if query.purpose in _BASELINE_PURPOSES else
+                   transition_peak_scratch_bytes(int(measured.coordinates.size))),
             )
             peaks = (
                 ()
@@ -406,6 +410,13 @@ def _premeasure_registered_windows(
                     query.search_intervals_px[trace_ordinal],
                 )
             )
+    # Reserve all later extraction stages before a window captures provenance.
+    # An aggregate owns eight float64 response arrays plus int32 coordinates;
+    # its source traces remain in retained_bytes throughout consumption.
+    peak_bytes = max(peak_bytes,retained_bytes+max((
+        transition_peak_scratch_bytes(int(item.coordinates.size))
+        +(68*int(item.coordinates.size) if query.purpose == QueryPurpose.SEQUENCE_ANCHOR_WINDOW else 0)
+        for query in windows for item in values_by_query[query.query_id]),default=0))
     return (
         {identity: tuple(values) for identity, values in values_by_query.items()},
         retained_bytes,

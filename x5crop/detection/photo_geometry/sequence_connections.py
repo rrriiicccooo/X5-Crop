@@ -198,6 +198,11 @@ def _assess_one(parent, request, measurements, batch):
     for p in original:
         if labels[p.trace_coordinate_px-low,p.peak_source.source_coordinate_px-coordinate_start] != component:
             failure = failure or "original_connection_unavailable"
+    if failure is not None:
+        # The complete measured batch and parent obligation remain recorded.
+        # A failed necessary connection cannot gain a constraint from later
+        # peak checks, so no dense peak decoding is needed for this parent.
+        return SequenceConnectionAssessment(parent.observation_id,failure,None)
     positions = []
     slope = -math.tan(math.radians(parent.canonical_direction_degrees))
     residual_radius = 0.

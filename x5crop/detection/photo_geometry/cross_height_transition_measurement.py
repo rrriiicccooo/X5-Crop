@@ -24,6 +24,8 @@ from .physical_identity import physical_observation_id
 from .registered_transition_measurement import (
     TraceMeasurement,
     measured_transition_peaks,
+    trace_storage_bytes,
+    transition_peak_scratch_bytes,
 )
 
 
@@ -198,7 +200,8 @@ def measure_cross_height_transition_regions(
     for region_index, ordinals in enumerate(regions):
         measurements = tuple(premeasured[index] for index in ordinals)
         aggregate, signed_values, temporary = _aggregate_region(measurements)
-        peak_temporary_bytes = max(peak_temporary_bytes, temporary)
+        peak_temporary_bytes = max(peak_temporary_bytes, temporary,
+            trace_storage_bytes(aggregate)+transition_peak_scratch_bytes(int(aggregate.coordinates.size)))
         if aggregate.coordinates.size == 0:
             continue
         ownership = common(

@@ -14,6 +14,18 @@ def original_noise(values, group, _statistics=None):
 
 
 class TransitionNoiseExactnessTest(TestCase):
+    def test_one_sorted_row_exactly_serves_all_complement_groups(self):
+        rng = np.random.default_rng(32011)
+        for size in (31,32,511,512):
+            values = rng.integers(-17,18,size).astype(float)/7.
+            statistics = owner._zero_median_statistics(values)
+            groups = np.array_split(rng.permutation(size),11)
+            with patch.object(owner.np,'argsort',wraps=np.argsort) as sort:
+                for group in groups:
+                    np.testing.assert_array_equal(owner._group_local_noise(values,group,statistics),
+                                                  original_noise(values,group))
+                self.assertEqual(sort.call_count,1)
+
     def test_full_peak_records_equal_original_median_path(self):
         rng = np.random.default_rng(81025)
         count = 0

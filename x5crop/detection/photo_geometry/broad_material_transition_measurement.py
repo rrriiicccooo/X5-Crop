@@ -14,7 +14,9 @@ from .model import (
     QueryPurpose,
 )
 from .physical_identity import physical_observation_id
-from .registered_transition_measurement import TraceMeasurement, measured_broad_material_peaks
+from .registered_transition_measurement import (
+    TraceMeasurement, measured_broad_material_peaks, transition_peak_scratch_bytes,
+)
 
 
 BROAD_MATERIAL_MEASUREMENT_REVISION = "x5crop_registered_broad_material_trace_v2"
@@ -61,11 +63,10 @@ def measure_broad_material_transitions(
     for region_index, ordinals in enumerate(regions):
         for ordinal in ordinals:
             measurement = premeasured[ordinal]
-            # Bound masks, indices, gathered signal and median workspace by
-            # eight float64-sized arrays. Retained trace arrays are owned by
-            # the caller; this bound does not describe process RSS.
+            # Retained trace arrays belong to the caller; shared rank caches
+            # and all current peak-selection scratch belong to this stage.
             peak_temporary_bytes = max(
-                peak_temporary_bytes, 64 * int(measurement.coordinates.size),
+                peak_temporary_bytes, transition_peak_scratch_bytes(int(measurement.coordinates.size)),
             )
             ownership = query.transition_ownership_intervals_px[ordinal]
             for peak in measured_broad_material_peaks(measurement, spec):
