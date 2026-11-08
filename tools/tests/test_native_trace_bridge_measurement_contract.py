@@ -62,7 +62,7 @@ class NativeTraceBridgeMeasurementContractTest(unittest.TestCase):
                 expected = tuple(owner.NativeTraceBridgePeak(int(view.coordinates[p.coordinate_index]),
                     p.canonical_coordinate, p.physical_position_interval, p.polarity,
                     p.gradient_z, p.tone_z, p.texture_z) for p in measured_transition_peaks(
-                        view, SPEC, split_gradient_reversals=True))
+                        view, SPEC, split_gradient_reversals=plan.split_gradient_reversals))
                 self.assertEqual(owner.peaks_at_row(strip, index), expected)
                 for source in strip.original_trace_sources:
                     if source.trace_coordinate_px == trace:
@@ -102,6 +102,26 @@ class NativeTraceBridgeMeasurementContractTest(unittest.TestCase):
         radius = SPEC.local_measurement_work_radius_px(first.coordinate_scale_px_per_mm)
         self.assertEqual(batch.pixel_query_count,
                          11 * (field.source_extent.width + coordinates * (2 * radius + 2)))
+
+    def test_unsplit_sequence_selector_does_not_borrow_cross_polarity_candidates(self):
+        gray = np.full((9, 40), 200, dtype=np.uint8)
+        gray[:, 15:17] = 0
+        field = _field(gray)
+        split = _plan(field, coordinate_interval_px=FiniteInterval(4., 34.),
+            trace_intervals_px=((0, 9),), original_trace_coordinates_px=(0, 4, 8))
+        unsplit = replace(split, original_query_id="sequence:original", split_gradient_reversals=False)
+        with patch.object(owner, "measure_trace_rows", wraps=owner.measure_trace_rows) as measured:
+            batch = _measure(field, (split, unsplit))
+        self.assertEqual(sum(call.args[0].shape[0] for call in measured.call_args_list), 9)
+        self.assert_scalar_rows(field, batch)
+        by_plan = {s.plan_index: s for s in batch.strips}
+        self.assertEqual(len(owner.peaks_at_row(by_plan[0], 0)), 2)
+        self.assertEqual(len(owner.peaks_at_row(by_plan[1], 0)), 1)
+        self.assertEqual(by_plan[0].positive_mask_hex, by_plan[1].positive_mask_hex)
+        self.assertEqual(by_plan[0].negative_mask_hex, by_plan[1].negative_mask_hex)
+        self.assertEqual(by_plan[0].credible_mask_hex, by_plan[1].credible_mask_hex)
+        with self.assertRaisesRegex(ValueError, "split rule"):
+            replace(unsplit, split_gradient_reversals=0)
 
     def test_tiny_normalization_on_long_source_row_reserves_the_full_gray_read(self):
         field = _field(_steps(rows=3, columns=20_001))

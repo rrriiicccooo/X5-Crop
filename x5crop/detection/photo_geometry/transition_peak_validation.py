@@ -50,8 +50,11 @@ def validate_peak_source_measurements(measurements, *, source_id, source_extent,
             if source.normalization_domain_px != expected:
                 raise ValueError("peak normalization source changed its original complete domain")
         source_ledger = own
-        if query.purpose in {QueryPurpose.TOP_CORRIDOR, QueryPurpose.BOTTOM_CORRIDOR}:
-            baseline = by_purpose.get(QueryPurpose.CROSS_BASELINE)
+        baseline_purpose = ({QueryPurpose.TOP_CORRIDOR: QueryPurpose.CROSS_BASELINE,
+                             QueryPurpose.BOTTOM_CORRIDOR: QueryPurpose.CROSS_BASELINE,
+                             QueryPurpose.SEQUENCE_ANCHOR_WINDOW: QueryPurpose.SEQUENCE_BASELINE}.get(query.purpose))
+        if baseline_purpose is not None:
+            baseline = by_purpose.get(baseline_purpose)
             if baseline is not None:
                 source_ledger = {source.trace_coordinate_px: source for source in baseline.peak_trace_sources}
         for group in measurement.peak_source_groups:

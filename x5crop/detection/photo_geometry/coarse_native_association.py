@@ -50,9 +50,11 @@ def association_work_bound(measurement_sets, base):
     membership = base.membership_receipt
     points = sum(len(item.transitions) for item in measurement_sets
                  if item.query.purpose in {QueryPurpose.TOP_CORRIDOR, QueryPurpose.BOTTOM_CORRIDOR})
-    groups = sum(len(item.peak_source_groups) for item in measurement_sets)
+    source_measurements = tuple(item for item in measurement_sets if item.query.purpose in {
+        QueryPurpose.COARSE_STRIP_SHORT, QueryPurpose.TOP_CORRIDOR, QueryPurpose.BOTTOM_CORRIDOR})
+    groups = sum(len(item.peak_source_groups) for item in source_measurements)
     group_coordinates = sum(sum(len(run) for _, run in group.reliable_gradient_partitions)
-                            for item in measurement_sets for group in item.peak_source_groups)
+                            for item in source_measurements for group in item.peak_source_groups)
     raw = sum(len(item.transition_ids) for item in base.observations)
     raw += sum(len(item.member_transition_ids) + sum(len(group) for group in item.member_transition_groups)
                for item in base.family_resolutions)

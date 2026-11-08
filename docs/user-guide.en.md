@@ -132,6 +132,8 @@ Debug Analysis shows the primary, runner, and retained proposals with their evid
 reasons for inspection. Reports preserve the original evidence and failure reason for each displayed interpretation;
 displaying one does not grant crop or automatic-output authority. The current Runtime does not use development ranking
 scores to select crops.
+When the budget permits, development reports preserve original-peak provenance on both axes so the same original
+measurement can be checked. Matching provenance alone does not establish boundary continuity, photo identity, or ordinals.
 
 Holder fill is assessed only after placement by asking whether another W fits beyond either outer. It never searches for
 or centers a placement. Both lanes of 135-dual must be complete.

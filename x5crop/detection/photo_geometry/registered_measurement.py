@@ -46,6 +46,7 @@ _BASELINE_WINDOWS = (
     (QueryPurpose.SEQUENCE_BASELINE, frozenset((QueryPurpose.SEQUENCE_ANCHOR_WINDOW,))),
 )
 _BASELINE_PURPOSES = frozenset(purpose for purpose, _windows in _BASELINE_WINDOWS)
+_PEAK_SOURCE_WINDOWS = frozenset(purpose for _baseline, windows in _BASELINE_WINDOWS for purpose in windows)
 
 
 def make_photo_boundary_measurement_field(
@@ -88,7 +89,7 @@ def _measure_query(
     source_capture = (TransitionPeakCapture(
         32 * 1024 * 1024 + 10 * field.source_extent.width * field.source_extent.height
         if peak_source_budget_bytes is None else peak_source_budget_bytes)
-        if query.purpose in (QueryPurpose.TOP_CORRIDOR, QueryPurpose.BOTTOM_CORRIDOR) else None)
+        if query.purpose in _PEAK_SOURCE_WINDOWS else None)
     try:
         axis_extent = (
             field.source_extent.width
@@ -383,7 +384,7 @@ def _premeasure_registered_windows(
             include_broad_material=broad,
             prefix_cache_capacity_bytes=capacity,
             peak_source_context=((field.source_id, field.source_extent, first.boundary_axis, trace)
-                if baseline.purpose == QueryPurpose.CROSS_BASELINE and capture_peak_sources else None),
+                if capture_peak_sources else None),
         )
         retained_bytes += trace_storage_bytes(measured)
         # All earlier traces remain live. The per-trace work allowance is
@@ -498,9 +499,10 @@ def measure_registered_queries(
         range(registration_start, registration_start + len(queries))
     ):
         raise ValueError("measurement queries must be completely pre-registered")
+    baseline_groups = registered_baseline_query_groups(queries)
     groups = {
         query.query_id: (baseline, windows)
-        for baseline, windows in registered_baseline_query_groups(queries)
+        for baseline, windows in baseline_groups
         for query in (baseline, *windows)
     }
     results = {}
@@ -508,6 +510,8 @@ def measure_registered_queries(
                     if max_peak_temporary_bytes is None else max_peak_temporary_bytes)
     origin_retained = existing_peak_source_retained_bytes
     pixel_limit = 128 * field.source_extent.width * field.source_extent.height if max_pixel_query_count is None else max_pixel_query_count
+    if any(type(value) is not int or value < 0 for value in (existing_pixel_query_count, pixel_limit, source_limit)):
+        raise ValueError("registered measurement requires finite source work bounds")
     source_visits, registered_pixels = 0, existing_pixel_query_count
     for query in queries:
         coordinates = sum(max(0, math.floor(interval.maximum) - math.ceil(interval.minimum) + 1)
@@ -519,7 +523,15 @@ def measure_registered_queries(
             source_visits += 5 * coordinates + 32 * len(query.trace_positions_px)
         elif query.purpose in (QueryPurpose.TOP_CORRIDOR, QueryPurpose.BOTTOM_CORRIDOR):
             source_visits += 256 * coordinates + 32
-    capture_sources = registered_pixels + existing_peak_source_value_visit_bound + source_visits <= pixel_limit
+    capture_cross_sources = registered_pixels + existing_peak_source_value_visit_bound + source_visits <= pixel_limit
+
+    # Preserve the existing Cross facts and native-texture reservation before
+    # optional Sequence provenance uses the same source pool. Registration and
+    # returned order stay fixed; neither phase reads candidate geometry.
+    cross_ids = frozenset(q.query_id for baseline, windows in baseline_groups
+                         if baseline.purpose == QueryPurpose.CROSS_BASELINE for q in (baseline, *windows))
+    execution = tuple(q for q in queries if q.query_id in cross_ids) + tuple(
+        q for q in queries if q.query_id not in cross_ids)
 
     def retain(result):
         nonlocal origin_retained
@@ -527,15 +539,34 @@ def measure_registered_queries(
             peak_temporary_bytes=result.coverage.peak_temporary_bytes + origin_retained))
         origin_retained += result.coverage.peak_source_retained_bytes
         results[result.query.query_id] = result
-    for query in queries:
+    for query in execution:
         if query.query_id in results:
             continue
         group = groups.get(query.query_id)
         if group is None:
             retain(_measure_query(field, query, spec,
-                peak_source_budget_bytes=(max(0, source_limit - origin_retained) if capture_sources else 0)))
+                peak_source_budget_bytes=0))
             continue
         baseline, windows = group
+        capture_sources = capture_cross_sources
+        if baseline.purpose == QueryPurpose.SEQUENCE_BASELINE:
+            source_visits = (5 * sum(max(0, math.floor(i.maximum) - math.ceil(i.minimum) + 1)
+                                    for i in baseline.search_intervals_px)
+                             + 32 * len(baseline.trace_positions_px))
+            source_visits += sum(256 * sum(max(0, math.floor(i.maximum) - math.ceil(i.minimum) + 1)
+                                          for i in q.search_intervals_px) + 32 for q in windows)
+            used_visits = existing_peak_source_value_visit_bound + sum(
+                m.coverage.peak_source_value_visit_bound for m in results.values())
+            # Sum complete per-trace construction bounds, including broad and
+            # optional prefixes. This over-reserves scratch rather than let a
+            # new digest displace an original baseline buffer or Cross fact.
+            length = field.source_extent.width if baseline.boundary_axis == BoundaryAxis.X else field.source_extent.height
+            cache = window_prefix_cache_bytes(length)
+            buffers = sum(scalar_trace_buffer_reservation(length,
+                max(0, math.floor(i.maximum) - math.ceil(i.minimum) + 1),
+                prefix_cache_capacity_bytes=cache) for i in baseline.search_intervals_px)
+            capture_sources = (registered_pixels + used_visits + source_visits <= pixel_limit
+                               and origin_retained + buffers <= source_limit)
         premeasured, retained_bytes, peak_bytes = _premeasure_registered_windows(
             field, baseline, windows, spec, capture_sources,
             prefix_cache_budget_bytes=max(0, source_limit-origin_retained),
@@ -550,12 +581,19 @@ def measure_registered_queries(
         # Each lattice is fully consumed before another is premeasured.
         # Reports retain scalar/transition facts, never these pixel arrays.
         del premeasured
-    return _add_native_background_textures(field, tuple(results[query.query_id] for query in queries), spec,
-        existing_pixel_query_count=existing_pixel_query_count,
-        max_pixel_query_count=max_pixel_query_count,
-        max_peak_temporary_bytes=max_peak_temporary_bytes,
-        existing_peak_source_retained_bytes=existing_peak_source_retained_bytes,
-        existing_peak_source_value_visit_bound=existing_peak_source_value_visit_bound)
+        if baseline.purpose == QueryPurpose.CROSS_BASELINE:
+            members = tuple(results[q.query_id] for q in queries if q.query_id in cross_ids)
+            prior_pixels = sum(m.coverage.pixel_query_count for m in members)
+            members = _add_native_background_textures(field, members, spec,
+                existing_pixel_query_count=registered_pixels-prior_pixels,
+                max_pixel_query_count=pixel_limit, max_peak_temporary_bytes=source_limit,
+                existing_peak_source_retained_bytes=existing_peak_source_retained_bytes,
+                existing_peak_source_value_visit_bound=existing_peak_source_value_visit_bound)
+            results.update((m.query.query_id, m) for m in members)
+            registered_pixels += sum(m.coverage.pixel_query_count for m in members) - prior_pixels
+            origin_retained = existing_peak_source_retained_bytes + sum(
+                m.coverage.peak_source_retained_bytes for m in results.values())
+    return tuple(results[query.query_id] for query in queries)
 
 
 def _add_native_background_textures(field, measurements, spec, *, existing_pixel_query_count=0,

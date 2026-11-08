@@ -64,6 +64,7 @@ class NativeTraceBridgePlan:
     trace_intervals_px: tuple[tuple[int, int], ...]
     coordinate_scale_px_per_mm: float
     original_trace_coordinates_px: tuple[int, ...]
+    split_gradient_reversals: bool = True
 
     def __post_init__(self):
         for name in ("source_id", "original_query_id", "baseline_query_id"):
@@ -75,6 +76,8 @@ class NativeTraceBridgePlan:
             raise ValueError("bridge source extent must have integer dimensions")
         if not isinstance(self.boundary_axis, BoundaryAxis):
             raise ValueError("bridge boundary axis must be typed")
+        if type(self.split_gradient_reversals) is not bool:
+            raise ValueError("bridge peak selector must retain its original split rule")
         _finite(self.coordinate_scale_px_per_mm, "coordinate scale", minimum=0.0)
         if self.coordinate_scale_px_per_mm <= 0:
             raise ValueError("coordinate scale must be positive")
@@ -462,7 +465,8 @@ def _strip(measured, block_start, start, stop, index, plan, sources):
         positive[trace-start] = connected & (view.signed_gradient > 0.0)
         negative[trace-start] = connected & (view.signed_gradient < 0.0)
         credible[trace-start] = group_support
-        for peak in measured_transition_peaks(view, SPEC, split_gradient_reversals=True):
+        for peak in measured_transition_peaks(view, SPEC,
+                split_gradient_reversals=plan.split_gradient_reversals):
             peak_records.extend(_PEAK_RECORD.pack(int(view.coordinates[peak.coordinate_index]), peak.canonical_coordinate,
                 peak.physical_position_interval.minimum, peak.physical_position_interval.maximum,
                 peak.gradient_z, peak.tone_z, peak.texture_z, peak.polarity))
