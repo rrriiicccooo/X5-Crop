@@ -15,8 +15,16 @@ _INTERVAL_TYPES = frozenset((FiniteInterval, PositiveInterval))
 
 
 @lru_cache(maxsize=256)
-def _public_field_names(model_type: type) -> tuple[str, ...]:
-    return tuple(field.name for field in fields(model_type) if not field.name.startswith("_"))
+def _model_layout(model_type: type):
+    """Cache class metadata only, in the original conversion precedence."""
+    if issubclass(model_type,bytes):return 'bytes',False,()
+    if issubclass(model_type,Enum):return 'enum',False,()
+    if is_dataclass(model_type):
+        return ('model',model_type.__dataclass_params__.frozen,
+                tuple(field.name for field in fields(model_type) if not field.name.startswith('_')))
+    if issubclass(model_type,dict):return 'dict',False,()
+    if issubclass(model_type,(list,tuple)):return 'sequence',False,()
+    return 'opaque',False,()
 
 
 def typed_read_model(value: Any) -> Any:
@@ -48,30 +56,32 @@ def typed_read_model(value: Any) -> Any:
             minimum, maximum = item.minimum, item.maximum
             return {"minimum": minimum if type(minimum) in _SCALAR_TYPES else convert(minimum),
                     "maximum": maximum if type(maximum) in _SCALAR_TYPES else convert(maximum)}
-        if isinstance(item, bytes):
+        kind,frozen,names = _model_layout(type(item))
+        if kind == 'bytes':
             return f"<bytes:{len(item)}>"
-        if isinstance(item, Enum):
+        if kind == 'enum':
             result = item.value
             if type(result) in (dict, list):
                 opaque_containers.add(id(result))
             return result
-        if is_dataclass(item) and not isinstance(item, type):
+        if kind == 'model':
+            if isinstance(item,type):return item
             key = id(item)
             previous = memo.get(key)
             if previous is not None and previous[0] is item:
                 memo.move_to_end(key)
                 return copy_tree(previous[1])
             result = {name: child if type(child := getattr(item, name)) in _SCALAR_TYPES else convert(child)
-                      for name in _public_field_names(type(item))}
-            if type(item).__dataclass_params__.frozen:
+                      for name in names}
+            if frozen:
                 memo[key] = item, result
                 if len(memo) > 4096:
                     memo.popitem(last=False)
             return result
-        if isinstance(item, dict):
+        if kind == 'dict':
             return {str(key): child if type(child) in _SCALAR_TYPES else convert(child)
                     for key, child in item.items()}
-        if isinstance(item, (list, tuple)):
+        if kind == 'sequence':
             return [child if type(child) in _SCALAR_TYPES else convert(child) for child in item]
         return item
 

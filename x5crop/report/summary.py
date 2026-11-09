@@ -47,18 +47,18 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
         )
         for lane in geometry.lane_reconstructions
     }
-    return {
+    return typed_read_model({
         "selected_scan_canvas_profile_id": selected_profile_id,
-        "matched_holder": typed_read_model(holder),
-        "resolved_slot_count": typed_read_model(core.resolved_slot_count),
-        "resolved_output_slots": typed_read_model(detection.resolved_output_slots),
+        "matched_holder": holder,
+        "resolved_slot_count": core.resolved_slot_count,
+        "resolved_output_slots": detection.resolved_output_slots,
         "output_slot_count": detection.output_slot_count,
-        "slot_identities": typed_read_model(detection.output_slot_identities),
-        "source_placement_proposal": typed_read_model(proposal),
-        "shared_scan_geometry": typed_read_model(selection.shared_scan_geometry),
+        "slot_identities": detection.output_slot_identities,
+        "source_placement_proposal": proposal,
+        "shared_scan_geometry": selection.shared_scan_geometry,
         "source_placement_selection": {
             "state": selection.state.value,
-            "failure": typed_read_model(selection.failure),
+            "failure": selection.failure,
             "selected_placement_ids": list(selection.selected_placement_ids),
             "runner_up_placement_ids": list(selection.runner_up_placement_ids),
         },
@@ -66,39 +66,39 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
             {
                 "lane_id": lane.lane_id,
                 "template_id": lane.prepared.template_spec.template_id,
-                "source_scan_geometry": typed_read_model(
+                "source_scan_geometry": (
                     lane.prepared.source_scan_geometry
                 ),
-                "complete_height_calibration": typed_read_model(lane.prepared.complete_height_calibration),
-                "coarse_native_associations": typed_read_model(lane.prepared.coarse_native_associations),
-                "base_cross_registration": typed_read_model(
+                "complete_height_calibration": lane.prepared.complete_height_calibration,
+                "coarse_native_associations": lane.prepared.coarse_native_associations,
+                "base_cross_registration": (
                     lane.prepared.base_cross_registration if (
                         lane.prepared.coarse_native_associations or lane.prepared.native_continuity is not None) else None),
-                "coarse_native_association_work": typed_read_model(
+                "coarse_native_association_work": (
                     lane.prepared.measurement_work.coarse_native_association_work),
-                "native_continuity": typed_read_model(lane.prepared.native_continuity),
-                "native_continuity_work": typed_read_model(lane.prepared.measurement_work.native_continuity_work),
-                "sequence_connections": typed_read_model(lane.prepared.sequence_connections),
-                "sequence_connection_work": typed_read_model(lane.prepared.measurement_work.sequence_connection_work),
-                "source_frame_width_authority": typed_read_model(
+                "native_continuity": lane.prepared.native_continuity,
+                "native_continuity_work": lane.prepared.measurement_work.native_continuity_work,
+                "sequence_connections": lane.prepared.sequence_connections,
+                "sequence_connection_work": lane.prepared.measurement_work.sequence_connection_work,
+                "source_frame_width_authority": (
                     lane.prepared.source_frame_width_authority
                 ),
-                "source_frame_width_topology_assessment": typed_read_model(
+                "source_frame_width_topology_assessment": (
                     lane.prepared.phase_competition
                     .source_frame_width_topology_assessment
                 ),
-                "retained_adjacency_assessments": typed_read_model(
+                "retained_adjacency_assessments": (
                     lane.prepared.phase_competition.retained_adjacency_assessments
                 ),
-                "phase_competition_scopes": typed_read_model(lane.prepared.phase_competition.competition_scopes),
-                "complete_phase_output": typed_read_model(lane.complete_phase_output),
-                "contact_edge_observations": typed_read_model(
+                "phase_competition_scopes": lane.prepared.phase_competition.competition_scopes,
+                "complete_phase_output": lane.complete_phase_output,
+                "contact_edge_observations": (
                     lane.prepared.phase_input.contact_edge_observations
                 ),
-                "overlap_edge_pair_observations": typed_read_model(
+                "overlap_edge_pair_observations": (
                     lane.prepared.phase_input.overlap_edge_pair_observations
                 ),
-                "aperture_aspect_ratio_authority": typed_read_model(
+                "aperture_aspect_ratio_authority": (
                     lane.prepared.cross_competition
                     .aperture_aspect_ratio_authority
                 ),
@@ -109,10 +109,10 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                     "short_authority": (
                         lane.prepared.coarse_support.short_axis.authority.value
                     ),
-                    "long_interval_px": typed_read_model(
+                    "long_interval_px": (
                         lane.prepared.coarse_support.long_axis.interval_px
                     ),
-                    "short_interval_px": typed_read_model(
+                    "short_interval_px": (
                         lane.prepared.coarse_support.short_axis.interval_px
                     ),
                 },
@@ -180,25 +180,25 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                 "cross_longitudinal_projection_authority": (
                     None
                     if lane.prepared.cross_competition.best is None
-                    else typed_read_model(
+                    else (
                         lane.prepared.cross_competition.best
                         .longitudinal_projection_authority
                     )
                 ),
                 "placement_state": lane.placement_competition.state.value,
-                "placement_failure": typed_read_model(
+                "placement_failure": (
                     lane.placement_competition.failure
                 ),
-                "placement_proposal": typed_read_model(
+                "placement_proposal": (
                     lane.placement_proposal
                 ),
-                "alternative_placement_proposals": typed_read_model(
+                "alternative_placement_proposals": (
                     lane.alternative_placement_proposals
                 ),
-                "independent_phase_review": typed_read_model(
+                "independent_phase_review": (
                     lane.independent_phase_review
                 ),
-                "direct_role_aperture_domain_authority": typed_read_model(
+                "direct_role_aperture_domain_authority": (
                     lane.placement_competition
                     .direct_role_aperture_domain_authority
                 ),
@@ -222,33 +222,33 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                         alignments[lane.lane_id]
                         .maximum_absolute_role_residual_px
                     ),
-                    "adjacency_relations": typed_read_model(
+                    "adjacency_relations": (
                         alignments[lane.lane_id].adjacency_relations
                     ),
-                    "global_lattice_authority": typed_read_model(
+                    "global_lattice_authority": (
                         alignments[lane.lane_id].global_lattice_authority
                     ),
-                    "calibrated_nominal_grid_evidence": typed_read_model(
+                    "calibrated_nominal_grid_evidence": (
                         alignments[lane.lane_id]
                         .calibrated_nominal_grid_evidence
                     ),
-                    "adjacency_observation_coverage": typed_read_model(
+                    "adjacency_observation_coverage": (
                         alignments[lane.lane_id]
                         .adjacency_observation_coverage
                     ),
-                    "adjacency_continuity_observations": typed_read_model(
+                    "adjacency_continuity_observations": (
                         alignments[lane.lane_id]
                         .adjacency_continuity_observations
                     ),
-                    "direct_role_binding_authority": typed_read_model(
+                    "direct_role_binding_authority": (
                         alignments[lane.lane_id]
                         .direct_role_binding_authority
                     ),
-                    "outer_frame_observation_authority": typed_read_model(
+                    "outer_frame_observation_authority": (
                         alignments[lane.lane_id]
                         .outer_frame_observation_authority
                     ),
-                    "frame_width_inference": typed_read_model(
+                    "frame_width_inference": (
                         alignments[lane.lane_id].frame_width_inference
                     ),
                     "unbound_direct_observation_count": len(
@@ -264,8 +264,8 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                     if not lane.output_footprints
                     else lane.output_footprints[0].boundary_use.value
                 ),
-                "common_h_output": typed_read_model(lane.common_h_output),
-                "common_h_authority": typed_read_model(lane.placement_competition.common_h_authority),
+                "common_h_output": lane.common_h_output,
+                "common_h_authority": lane.placement_competition.common_h_authority,
                 "selected_placement_id": (
                     None
                     if lane.selected_placement is None
@@ -284,22 +284,22 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                     None if lane.prepared.cross_competition.conditional_proposal_failure_kind is None
                     else lane.prepared.cross_competition.conditional_proposal_failure_kind.value
                 ),
-                "photo_group_outer": typed_read_model(
+                "photo_group_outer": (
                     None
                     if lane.holder_fill_assessment is None
                     else lane.holder_fill_assessment.outer
                 ),
-                "holder_fill_assessment": typed_read_model(
+                "holder_fill_assessment": (
                     lane.holder_fill_assessment
                 ),
-                "output_footprints": typed_read_model(lane.output_footprints),
-                "calibrated_nominal_grid_authority": typed_read_model(
+                "output_footprints": lane.output_footprints,
+                "calibrated_nominal_grid_authority": (
                     lane.calibrated_nominal_grid_authority
                 ),
-                "enclosing_support_aperture_authority": typed_read_model(
+                "enclosing_support_aperture_authority": (
                     lane.enclosing_support_aperture_authority
                 ),
-                "direct_use_budget_assessments": typed_read_model(
+                "direct_use_budget_assessments": (
                     lane.direct_use_budget_assessments
                 ),
                 "peak_temporary_bytes": max(
@@ -309,4 +309,4 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
             }
             for lane in geometry.lane_reconstructions
         ],
-    }
+    })

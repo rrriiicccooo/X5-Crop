@@ -940,7 +940,6 @@ def _select_transition_peaks(measurement,spec,*,split_gradient_reversals,peak_so
     groups = np.split(indices, split_at)
     gradient_supported &= measurement.signed_gradient != 0.0
     noise_statistics = {}
-    record_type = MeasuredTransitionPeak if side_statistics else TransitionPeakSelection
     records = []
     for group in groups:
         if group.size == 0:
@@ -1080,36 +1079,19 @@ def _select_transition_peaks(measurement,spec,*,split_gradient_reversals,peak_so
                 float(coordinates[int(peak_members[-1])])
                 + PIXEL_CENTER_HALF_EXTENT_PX
             )
-            side_fields = (dict(left_tone=float(measurement.left_tone[peak_index]),
-                               right_tone=float(measurement.right_tone[peak_index]),
-                               left_texture=float(measurement.left_texture[peak_index]),
-                               right_texture=float(measurement.right_texture[peak_index])) if side_statistics else {})
-            records.append(
-                record_type(
-                    localization_interval=FiniteInterval(
-                        peak_minimum,
-                        peak_maximum,
-                    ),
-                    physical_position_interval=FiniteInterval(
-                        physical_minimum,
-                        physical_maximum,
-                    ),
-                    canonical_coordinate=(peak_minimum + peak_maximum) / 2.0,
-                    gradient_z=float(measurement.gradient_z[peak_index]),
-                    tone_z=float(measurement.tone_z[peak_index]),
-                    texture_z=float(measurement.texture_z[peak_index]),
-                    peak_width_px=peak_maximum - peak_minimum,
-                    prominence=prominence,
-                    local_noise=local_noise,
-                    polarity=peak_polarity,
-                    coordinate_index=peak_index,
-                    source_group=source_group,
-                    source_reference=(None if source_group is None or not polarity_runs else
-                        TransitionPeakReference(source_group.primitive_id, ordinal,
-                            int(coordinates[peak_index]), peak_polarity)),
-                    **side_fields,
-                )
-            )
+            # Positional base fields follow TransitionPeakSelection's one
+            # schema. Avoid building and merging a field dictionary per peak.
+            selected=(FiniteInterval(peak_minimum,peak_maximum),
+                FiniteInterval(physical_minimum,physical_maximum),
+                (peak_minimum+peak_maximum)/2.,float(measurement.gradient_z[peak_index]),
+                float(measurement.tone_z[peak_index]),float(measurement.texture_z[peak_index]),
+                peak_maximum-peak_minimum,prominence,local_noise,peak_polarity,peak_index,source_group,
+                None if source_group is None or not polarity_runs else TransitionPeakReference(
+                    source_group.primitive_id,ordinal,int(coordinates[peak_index]),peak_polarity))
+            records.append(MeasuredTransitionPeak(*selected,
+                left_tone=float(measurement.left_tone[peak_index]),right_tone=float(measurement.right_tone[peak_index]),
+                left_texture=float(measurement.left_texture[peak_index]),right_texture=float(measurement.right_texture[peak_index]))
+                if side_statistics else TransitionPeakSelection(*selected))
     return tuple(records)
 
 

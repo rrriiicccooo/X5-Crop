@@ -2611,7 +2611,7 @@ format/source 状态测量共同 W。共同 H 只从每个成员都已完整关�
 `common_outputs` 可保留预算失败窗口作为诊断，只有 `state=supported` 且 `common_failure=null` 才表示窗口
 验证通过。当前该分支在规范 selection/Gate 后执行，不授予照片序号映射、canonical winner 或自动输出权限。
 
-当前报告 schema 为 127。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
+当前报告 schema 为 136。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
 重放全部 producer 和独立成员，再比对结果、缺口和工作。成员 Cross 只重复自身 H／纵向域、best/runner、
 求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
 外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source
@@ -2886,9 +2886,13 @@ Lookup 等于实际 evaluation 加 reuse；峰值项数不超过 16 或实际 ev
 source；计数只包含实际 LP 调用，原 64 次求解与 32 个顶点上限不变。
 同一输出复用已生成的 feasible footprint；每个联合状态的四条边各物化一次。单帧保护闭合仅按本帧
 role/support 缓存孔径位置极值，最多 `2 × (1 + 联合状态数)` 项，每项至多两个浮点值，返回后释放；
-原生 trace 准入、状态乘积、保护范围和预算判据保持一致。报告转换只缓存最多 256 类的公开字段名；
+原生 trace 准入、状态乘积、保护范围和预算判据保持一致。报告转换只缓存最多 256 类的转换类别、
+frozen 标记与公开字段名，避免每个节点重复识别同一类型；不缓存 source 值，原 bytes／Enum／dataclass／
+mapping／sequence 优先级和不透明对象行为保持。
 单次转换最多保留 4096 个 frozen model 的转换模板，命中后复制独立 dict/list 树，不共享可变报告分支，
 按最近使用顺序淘汰旧模板，调用返回即释放；全标量 dict 复制保持独立，Enum 的 opaque 容器行为保持。
+`photo_geometry_summary` 先收集该 source 的完整只读事实，再一次转换整份几何摘要，使不同字段中的
+相同冻结证据复用上述有界模板；不重复为每个字段建立缓存，不跨 source 保留值或共享可变结果。
 `FiniteInterval`／`PositiveInterval` 的固定 minimum／maximum 值直接构建独立叶子 dict，不占模型模板
 名额；非标量端点仍走原转换，子类继续按其全部公开字段转换。
 该复用不缓存物理评估、成员资格或跨 source 结果。
