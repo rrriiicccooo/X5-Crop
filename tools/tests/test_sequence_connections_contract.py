@@ -130,6 +130,17 @@ class SequenceConnectionsContractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             assess_sequence_connections(evidence.parents,evidence.requests,evidence.measurements,evidence.signal_batch)
 
+    def test_signal_guard_does_not_decode_unused_group_support_or_clip_a_line(self):
+        from x5crop.detection.photo_geometry.sequence_connections import guard_sequence_connections
+        case = _case()
+        evidence = _prepare(case)
+        with (patch('x5crop.detection.photo_geometry.native_trace_continuity.decode_credible_mask',
+                    side_effect=AssertionError('guard does not assess complete peak groups')),
+              patch('x5crop.detection.photo_geometry.native_trace_continuity._clip_line_region',
+                    side_effect=AssertionError('guard does not assess a common physical line'))):
+            self.assertEqual(guard_sequence_connections(evidence.parents,evidence.requests,evidence.measurements,
+                                                       evidence.signal_batch),evidence.requests)
+
     def test_new_native_states_keep_old_and_new_local_protection_on_both_axes(self):
         for transpose in (False,True):
             with self.subTest(transpose=transpose):
@@ -160,12 +171,12 @@ class SequenceConnectionsContractTest(unittest.TestCase):
             (s.trace_stop_px-s.trace_start_px)*(s.coordinate_stop_px-s.coordinate_start_px),dtype=np.uint8),
             bitorder='little').tobytes().hex()) for s in evidence.batch.strips)
         altered = replace(evidence,batch=replace(evidence.batch,strips=strips))
-        with self.assertRaisesRegex(ValueError,'continuity result'):
+        with self.assertRaisesRegex(ValueError,'signal masks'):
             _validate(case,altered)
 
     def test_unadmitted_batch_never_reads_a_favorable_prefix(self):
         case = _case()
-        with patch('x5crop.detection.photo_geometry.sequence_connections.measure_native_trace_bridges',
+        with patch('x5crop.detection.photo_geometry.sequence_connections.measure_native_trace_signals',
                    side_effect=AssertionError('unadmitted pixels were read')):
             evidence = _prepare(case,maximum_value_visits=0)
         self.assertFalse(evidence.planning_completed)

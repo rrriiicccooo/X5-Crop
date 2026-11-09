@@ -8,7 +8,7 @@ that two peaks belong to one physical edge.
 
 from __future__ import annotations
 
-from bisect import bisect_left
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass, replace
 from hashlib import sha256
 import math
@@ -21,7 +21,7 @@ from .measurement_model import PhotoBoundaryMeasurementField
 from .model import BoundaryAxis, PHOTO_BOUNDARY_MEASUREMENT_SPEC as SPEC
 from .registered_measurement import _slice_trace_measurement
 from .registered_transition_measurement import (
-    TraceMeasurement, measure_trace_rows, measured_transition_peaks, transition_peak_support,
+    TraceMeasurement, TraceRowsMeasurement, measure_trace_rows, measured_transition_peaks, transition_peak_support,
 )
 from .transition_peak_source import TransitionPeakTraceSource
 
@@ -67,6 +67,7 @@ class NativeTraceBridgePlan:
     original_trace_coordinates_px: tuple[int, ...]
     split_gradient_reversals: bool = True
     record_peaks: bool = True
+    retain_responses: bool = False
 
     def __post_init__(self):
         for name in ("source_id", "original_query_id", "baseline_query_id"):
@@ -82,6 +83,8 @@ class NativeTraceBridgePlan:
             raise ValueError("bridge peak selector must retain its original split rule")
         if type(self.record_peaks) is not bool:
             raise ValueError("bridge measurement must declare its complete peak stage")
+        if type(self.retain_responses) is not bool or self.retain_responses and self.record_peaks:
+            raise ValueError('response retention belongs only to the complete signal stage')
         _finite(self.coordinate_scale_px_per_mm, "coordinate scale", minimum=0.0)
         if self.coordinate_scale_px_per_mm <= 0:
             raise ValueError("coordinate scale must be positive")
@@ -279,7 +282,7 @@ def peaks_at_row(strip: NativeTraceBridgeStrip, row: int) -> tuple[NativeTraceBr
                  for i in range(strip.peak_row_offsets[row], strip.peak_row_offsets[row + 1]))
 
 
-def decode_mask(strip: NativeTraceBridgeStrip, polarity: int) -> np.ndarray:
+def decode_mask(strip: NativeTraceBridgeStrip, polarity: int, *, trace_interval_px=None) -> np.ndarray:
     """Decode one checked row-major mask (one byte/site plus packed input).
 
     This helper allocates the returned uint8 array; its caller owns that
@@ -288,22 +291,29 @@ def decode_mask(strip: NativeTraceBridgeStrip, polarity: int) -> np.ndarray:
     if not isinstance(strip, NativeTraceBridgeStrip) or type(polarity) is not int or polarity not in (-1, 1):
         raise ValueError("mask decoding requires a typed strip and polarity +/-1")
     encoded = strip.positive_mask_hex if polarity > 0 else strip.negative_mask_hex
-    return _decode_checked_mask(strip, encoded)
+    return _decode_checked_mask(strip, encoded, trace_interval_px)
 
 
-def decode_credible_mask(strip: NativeTraceBridgeStrip) -> np.ndarray:
+def decode_credible_mask(strip: NativeTraceBridgeStrip, *, trace_interval_px=None) -> np.ndarray:
     """Decode original OR support; an AND component cannot substitute for it."""
     if not isinstance(strip, NativeTraceBridgeStrip):
         raise ValueError("group support decoding requires a typed strip")
-    return _decode_checked_mask(strip, strip.credible_mask_hex)
+    return _decode_checked_mask(strip, strip.credible_mask_hex, trace_interval_px)
 
 
-def _decode_checked_mask(strip, encoded):
+def _decode_checked_mask(strip, encoded, trace_interval_px=None):
     rows = strip.trace_stop_px - strip.trace_start_px
     columns = strip.coordinate_stop_px - strip.coordinate_start_px
     _validate_mask_hex(encoded, rows * columns)
-    return np.unpackbits(np.frombuffer(bytes.fromhex(encoded), dtype=np.uint8), bitorder="little",
-                         count=rows * columns).reshape(rows, columns)
+    low,high = ((strip.trace_start_px,strip.trace_stop_px) if trace_interval_px is None else trace_interval_px)
+    if (type(low) is not int or type(high) is not int
+            or not strip.trace_start_px <= low < high <= strip.trace_stop_px):
+        raise ValueError('mask decoding requires a source-contained nonempty row range')
+    start = (low-strip.trace_start_px)*columns
+    count = (high-low)*columns
+    first,last = start//8,(start+count+7)//8
+    packed = np.frombuffer(bytes.fromhex(encoded[2*first:2*last]),dtype=np.uint8)
+    return np.unpackbits(packed,bitorder='little',count=start%8+count)[start%8:].reshape(high-low,columns)
 
 
 @dataclass(frozen=True, slots=True)
@@ -320,6 +330,8 @@ class NativeTraceBridgeBatch:
     required_value_visit_bound: int = 0
     required_peak_temporary_bytes: int = 0
     preflight_value_visit_bound: int = 0
+    response_cache_bytes: int = 0
+    response_source_plans: tuple[NativeTraceBridgePlan,...] | None = None
 
     def __post_init__(self):
         if type(self.plans) is not tuple or any(not isinstance(p, NativeTraceBridgePlan) for p in self.plans):
@@ -328,15 +340,20 @@ class NativeTraceBridgeBatch:
             raise ValueError("bridge batch strips must be frozen")
         for name in ("pixel_query_count", "value_visit_bound", "mask_site_work_bound", "retained_bytes",
                      "peak_temporary_bytes", "required_pixel_query_count", "required_value_visit_bound",
-                     "required_peak_temporary_bytes", "preflight_value_visit_bound"):
+                     "required_peak_temporary_bytes", "preflight_value_visit_bound", "response_cache_bytes"):
             _integer(getattr(self, name), name)
         if type(self.bound_exceeded) is not bool:
             raise ValueError("bridge completion state must be a boolean")
         if self.bound_exceeded:
             if self.strips or any((self.pixel_query_count, self.value_visit_bound, self.mask_site_work_bound,
-                                   self.retained_bytes, self.peak_temporary_bytes)):
+                                   self.retained_bytes, self.peak_temporary_bytes,self.response_cache_bytes)):
                 raise ValueError("failed bridge batch cannot expose a measured prefix")
             return
+        expected_cache = native_trace_response_cache_byte_bound(self.plans) if any(p.retain_responses for p in self.plans) else 0
+        if self.response_cache_bytes != expected_cache:
+            raise ValueError('bridge response cache changed its complete reservation')
+        if self.response_source_plans is not None:
+            _reuse_plan_indices(self.plans,self.response_source_plans)
         if (self.pixel_query_count != self.required_pixel_query_count
                 or self.value_visit_bound != self.required_value_visit_bound
                 or self.peak_temporary_bytes != self.required_peak_temporary_bytes
@@ -376,12 +393,79 @@ class NativeTraceBridgeBatch:
                 raise ValueError("bridge batch omitted or duplicated a dense trace interval")
 
 
-def native_trace_bridge_preflight_value_visit_bound(plans) -> int:
+def native_trace_bridge_preflight_value_visit_bound(plans, response_source_plans=None) -> int:
     """Structural work, included once in the batch's combined allowance."""
     if type(plans) is not tuple or any(not isinstance(plan, NativeTraceBridgePlan) for plan in plans):
         raise ValueError("bridge plans must be a frozen tuple of typed plans")
     return (512 + 128 * len(plans) + 128 * sum(len(p.trace_intervals_px) for p in plans)
-            + 64 * sum(len(p.original_trace_coordinates_px) for p in plans))
+            + 64 * sum(len(p.original_trace_coordinates_px) for p in plans)
+            +(0 if response_source_plans is None else native_trace_response_consumption_work(response_source_plans)))
+
+
+def native_trace_response_consumption_work(plans):
+    return (4096+512*sum(b-a for p in plans for a,b in p.trace_intervals_px)+128*len(plans)) if plans else 0
+
+
+def native_trace_response_cache_byte_bound(plans):
+    if not plans:
+        return 0
+    return 8192+4096*len(plans)+sum(1024*(b-a)+64*(b-a)*(_corridor_domain(p)[1]-_corridor_domain(p)[0])
+        for p in plans for a,b in p.trace_intervals_px)+4*sum(_corridor_domain(p)[1]-_corridor_domain(p)[0] for p in plans)
+
+
+def _reuse_plan_indices(plans,sources):
+    if type(sources) is not tuple or any(not isinstance(p,NativeTraceBridgePlan) or p.record_peaks
+                                       or not p.retain_responses for p in sources):
+        raise ValueError('response reuse requires complete retained signal plans')
+    indices = []
+    for p in plans:
+        matches = [i for i,s in enumerate(sources) if replace(p,record_peaks=False,retain_responses=True,
+                    trace_intervals_px=s.trace_intervals_px) == s]
+        if (not p.record_peaks or p.retain_responses or len(matches)!=1
+                or any(not any(a<=low and high<=b for a,b in sources[matches[0]].trace_intervals_px)
+                       for low,high in p.trace_intervals_px)):
+            raise ValueError('refinement changed its original retained response context or coverage')
+        indices.append(matches[0])
+    if len(set(indices)) != len(indices):
+        raise ValueError('refinement duplicated a retained query context')
+    return tuple(indices)
+
+
+_RESPONSE_FIELDS = ('gradient_z','tone_z','texture_z','signed_gradient','left_tone','right_tone','left_texture','right_texture')
+
+
+class NativeTraceResponseCache:
+    """Call-local compact float64 rows; never serialized or shared across sources."""
+    def __init__(self,plans):
+        self.plans,self.rows,self.coordinates,self.signal_batch = plans,{}, {},None
+        self.closed = False
+
+    def capture(self,index,trace,view,source):
+        key = (index,trace)
+        if self.closed or self.signal_batch is not None or key in self.rows:
+            raise ValueError('response cache is sealed or has duplicate traces')
+        coordinates = self.coordinates.get(index)
+        if coordinates is None:
+            coordinates = view.coordinates.copy()
+            coordinates.flags.writeable = False
+            self.coordinates[index] = coordinates
+        elif not np.array_equal(coordinates,view.coordinates):
+            raise ValueError('response cache changed its complete query corridor')
+        # Copy only the corridor, never a view retaining a full baseline block.
+        matrix = np.stack(tuple(getattr(view,name) for name in _RESPONSE_FIELDS))
+        matrix.flags.writeable = False
+        self.rows[key] = (matrix,source)
+
+    def seal(self,batch):
+        expected = {(i,t) for i,p in enumerate(self.plans) for a,b in p.trace_intervals_px for t in range(a,b)}
+        if self.closed or batch.bound_exceeded or batch.plans != self.plans or set(self.rows)!=expected:
+            raise ValueError('response cache omitted its complete measured inventory')
+        self.signal_batch = batch
+
+    def release(self):
+        self.rows.clear()
+        self.coordinates.clear()
+        self.closed = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -414,7 +498,58 @@ def native_trace_bridge_retained_byte_bound(plans):
     return 0 if not plans else _storage_reservation(plans)[1]
 
 
-def _prepare(plans, maximum_temporary_bytes):
+def _value_reservation(plans,hash_work=0,*,reuse_masks=False):
+    rows = sum(b-a for p in plans for a,b in p.trace_intervals_px)
+    sites = lambda predicate: sum(sum(b-a for a,b in p.trace_intervals_px)
+        *(_corridor_domain(p)[1]-_corridor_domain(p)[0]) for p in plans if predicate(p))
+    # Reuse copies the three original packed rows, including unaligned bit
+    # boundaries, then validates the same payload. It does not rebuild support
+    # from responses. 16 visits/site covers unpack/repack and packed validation;
+    # the original response comparisons and mask construction require 32.
+    mask_work = (16 if reuse_masks else 32)*sites(lambda p:True)+96*rows
+    visits = (hash_work+704*sites(lambda p:p.record_peaks)
+        +64*sites(lambda p:p.record_peaks and not p.split_gradient_reversals)+160*rows+mask_work
+        +128*(len(plans)+sum(len(p.trace_intervals_px) for p in plans)
+              +sum(len(p.original_trace_coordinates_px) for p in plans))
+        # Eight float64 fields are read and copied (16 visits/site), and the
+        # shared coordinates are compared (2). The 24-site bound includes
+        # stacking/ownership overhead; row metadata is charged separately.
+        +24*sites(lambda p:p.retain_responses)
+        +512*sum(b-a for p in plans if p.retain_responses for a,b in p.trace_intervals_px))
+    return visits,mask_work
+
+
+def _prepare_refinement(plans,sources,maximum_temporary_bytes):
+    _reuse_plan_indices(plans,sources)
+    metadata,retained = _storage_reservation(plans)
+    context_bytes = 4096+4096*len(sources)+128*sum(len(p.original_trace_coordinates_px) for p in sources)
+    metadata += context_bytes
+    # Unrequested rows are discarded before encoding. Each requested row is
+    # popped before its encoded replacement is appended; one-row overlap is
+    # covered by the same fixed peak-selection scratch owner.
+    mixed = metadata+8192+4096*len(plans)
+    groups = []
+    for i,p in enumerate(plans):
+        width = _corridor_domain(p)[1]-_corridor_domain(p)[0]
+        rows = sum(b-a for a,b in p.trace_intervals_px)
+        # The requested-only dictionary's capacity survives pop(), so its row
+        # metadata stays live beside every encoded replacement.
+        mixed += 1024*rows
+        cached = 64*width
+        encoded = 1120+128*width+(0 if p.split_gradient_reversals else 16*width)+6*((width+7)//8)+1024
+        mixed += rows*max(cached,encoded)+4*width
+        low,high = _normalization_domain(p)
+        groups.append(_Group((i,),p.trace_intervals_px,_axis_lengths(p.source_extent,p.boundary_axis)[0],
+                             low,high,width,1))
+    peak = max(native_trace_response_cache_byte_bound(sources),
+        mixed+4096+2048*max((_corridor_domain(p)[1]-_corridor_domain(p)[0] for p in plans),default=0))
+    visits,mask_work = _value_reservation(plans,reuse_masks=True)
+    return tuple(groups),0,visits,mask_work,peak,metadata,peak<=maximum_temporary_bytes
+
+
+def _prepare(plans, maximum_temporary_bytes, response_source_plans=None):
+    if response_source_plans is not None:
+        return _prepare_refinement(plans,response_source_plans,maximum_temporary_bytes)
     indices = {}
     for index, plan in enumerate(plans):
         key = (plan.boundary_axis, plan.normalization_interval_px, plan.coordinate_scale_px_per_mm)
@@ -439,25 +574,16 @@ def _prepare(plans, maximum_temporary_bytes):
         groups.append(_Group(tuple(members), intervals, length,
                              start, stop, max(_corridor_domain(plans[i])[1] - _corridor_domain(plans[i])[0]
                                               for i in members)))
-    rows = sum(b-a for p in plans for a, b in p.trace_intervals_px)
-    sites = sum(sum(b-a for a, b in p.trace_intervals_px) * (_corridor_domain(p)[1] - _corridor_domain(p)[0])
-                for p in plans)
-    peak_sites = sum(sum(b-a for a,b in p.trace_intervals_px)*(_corridor_domain(p)[1]-_corridor_domain(p)[0])
-                     for p in plans if p.record_peaks)
-    localization_sites = sum(sum(b-a for a,b in p.trace_intervals_px)*(_corridor_domain(p)[1]-_corridor_domain(p)[0])
-                             for p in plans if p.record_peaks and not p.split_gradient_reversals)
     # One strip per row is a conservative reservation for every possible block
     # partition. Each view coordinate can create at most one retained peak.
     metadata,retained_bound = _storage_reservation(plans)
-    mask_work = 32 * sites + 96 * rows
     # Keep the existing 256Q+32 peak scan reservation, and separately cover
     # fixed-record packing, hexadecimal validation and one-record decoding.
     # The extra group-support mask, its subset checks and row metadata are
     # included before pixel access; the proof's flank scan is charged later.
-    value_work = (hash_work + 704 * peak_sites + 64*localization_sites + 160 * rows + mask_work
-                  + 128 * (len(plans) + sum(len(p.trace_intervals_px) for p in plans)
-                           + sum(len(p.original_trace_coordinates_px) for p in plans)))
-    required_peak = retained_bound
+    value_work,mask_work = _value_reservation(plans,hash_work)
+    cache_bound = native_trace_response_cache_byte_bound(plans) if any(p.retain_responses for p in plans) else 0
+    required_peak = retained_bound+cache_bound
     sized = []
     fits = True
     for group in groups:
@@ -469,12 +595,12 @@ def _prepare(plans, maximum_temporary_bytes):
         if any(plans[i].record_peaks and not plans[i].split_gradient_reversals for i in group.plan_indices):
             per_row += 32*width
         streaming_rows = SPEC.maximum_streaming_block_pixels // length
-        available_rows = (maximum_temporary_bytes - retained_bound - fixed) // per_row
+        available_rows = (maximum_temporary_bytes - retained_bound-cache_bound - fixed) // per_row
         if streaming_rows < 1 or available_rows < 1:
             fits = False
         batch_rows = max(1, min(streaming_rows, available_rows,
                                 max(b-a for a, b in group.trace_intervals)))
-        required_peak = max(required_peak, retained_bound + fixed + per_row * batch_rows)
+        required_peak = max(required_peak,retained_bound+cache_bound+fixed+per_row*batch_rows)
         sized.append(replace(group, batch_rows=batch_rows))
     return tuple(sized), pixel_work, value_work, mask_work, required_peak, metadata, fits
 
@@ -495,21 +621,27 @@ def _source(row, plan, trace):
         float(SPEC.tone_or_texture_z_minimum), digest.hexdigest())
 
 
-def _strip(measured, block_start, start, stop, index, plan, sources):
+def _strip(measured, block_start, start, stop, index, plan, sources, response_cache=None, row_masks=None):
     left, right = _corridor_domain(plan)
-    positive = np.empty((stop-start, right-left), dtype=np.uint8)
-    negative = np.empty_like(positive)
-    credible = np.empty_like(positive)
+    if row_masks is not None and (stop != start+1 or response_cache is not None):
+        raise ValueError('retained masks require one complete refinement row')
+    if row_masks is None:
+        positive = np.empty((stop-start, right-left), dtype=np.uint8)
+        negative = np.empty_like(positive)
+        credible = np.empty_like(positive)
     peak_records = bytearray()
     localization_widths = bytearray()
     row_offsets = [0]
     for trace in range(start, stop):
         view = _slice_trace_measurement(_row(measured, trace-block_start), plan.coordinate_interval_px)
-        gradient, secondary, group_support = transition_peak_support(view, SPEC)
-        connected = gradient & (secondary >= SPEC.tone_or_texture_z_minimum)
-        positive[trace-start] = connected & (view.signed_gradient > 0.0)
-        negative[trace-start] = connected & (view.signed_gradient < 0.0)
-        credible[trace-start] = group_support
+        if response_cache is not None:
+            response_cache.capture(index,trace,view,sources.get(trace))
+        if row_masks is None:
+            gradient, secondary, group_support = transition_peak_support(view, SPEC)
+            connected = gradient & (secondary >= SPEC.tone_or_texture_z_minimum)
+            positive[trace-start] = connected & (view.signed_gradient > 0.0)
+            negative[trace-start] = connected & (view.signed_gradient < 0.0)
+            credible[trace-start] = group_support
         peaks = (measured_transition_peaks(view,SPEC,split_gradient_reversals=plan.split_gradient_reversals)
                  if plan.record_peaks else ())
         for peak in peaks:
@@ -519,11 +651,21 @@ def _strip(measured, block_start, start, stop, index, plan, sources):
             if not plan.split_gradient_reversals:
                 localization_widths.extend(_LOCALIZATION_WIDTH.pack(peak.localization_interval.width))
         row_offsets.append(len(peak_records) // _PEAK_RECORD.size)
+    masks = (tuple(np.packbits(mask,bitorder='little').tobytes().hex() for mask in (positive,negative,credible))
+             if row_masks is None else row_masks)
     return NativeTraceBridgeStrip(index, start, stop, left, right,
-        np.packbits(positive, bitorder="little").tobytes().hex(),
-        np.packbits(negative, bitorder="little").tobytes().hex(),
-        np.packbits(credible, bitorder="little").tobytes().hex(), peak_records.hex(), tuple(row_offsets),
+        *masks, peak_records.hex(), tuple(row_offsets),
         tuple(sources[t] for t in _original_in_strip(plan, start, stop)),localization_widths.hex())
+
+
+def _mask_row_hex(strip,encoded,trace):
+    """Copy exactly one original row, including non-byte-aligned starts."""
+    width = strip.coordinate_stop_px-strip.coordinate_start_px
+    start = (trace-strip.trace_start_px)*width
+    first,last = start//8,(start+width+7)//8
+    packed = np.frombuffer(bytes.fromhex(encoded[2*first:2*last]),dtype=np.uint8)
+    bits = np.unpackbits(packed,bitorder='little',count=start%8+width)[start%8:]
+    return np.packbits(bits,bitorder='little').tobytes().hex()
 
 
 def _retained_strip_bytes(metadata, strips):
@@ -544,7 +686,7 @@ def validate_native_trace_bridge_batch(batch: NativeTraceBridgeBatch) -> None:
     if not isinstance(batch, NativeTraceBridgeBatch):
         raise ValueError("bridge work validation requires a typed batch")
     batch.__post_init__()
-    preflight = native_trace_bridge_preflight_value_visit_bound(batch.plans)
+    preflight = native_trace_bridge_preflight_value_visit_bound(batch.plans,batch.response_source_plans)
     if batch.preflight_value_visit_bound != preflight:
         raise ValueError("bridge structural preflight work changed")
     if not batch.plans:
@@ -556,7 +698,7 @@ def validate_native_trace_bridge_batch(batch: NativeTraceBridgeBatch) -> None:
             raise ValueError("empty bridge batch claimed measured work or storage")
         return
     groups, pixels, visits, mask_work, peak, metadata, fits = _prepare(
-        batch.plans, batch.peak_temporary_bytes)
+        batch.plans,batch.peak_temporary_bytes,batch.response_source_plans)
     if (batch.required_pixel_query_count != pixels or batch.required_value_visit_bound != visits):
         raise ValueError("bridge required work changed its complete plans")
     if batch.bound_exceeded:
@@ -582,6 +724,20 @@ def measure_native_trace_bridges(field: PhotoBoundaryMeasurementField, plans: tu
     Peak memory reserves all possible fixed-size peak records before reading any pixel;
     it is deliberately conservative even when the eventual image is flat.
     """
+    if any(p.retain_responses for p in plans):
+        raise ValueError('retained signals require their call-local response owner')
+    return _measure_native_trace_bridges(field,plans,maximum_pixel_queries=maximum_pixel_queries,
+                                        maximum_temporary_bytes=maximum_temporary_bytes)[0]
+
+
+def measure_native_trace_signals(field,plans,*,maximum_pixel_queries,maximum_temporary_bytes):
+    if any(p.record_peaks or not p.retain_responses for p in plans):
+        raise ValueError('retained signal measurement requires signal-only plans')
+    return _measure_native_trace_bridges(field,plans,maximum_pixel_queries=maximum_pixel_queries,
+        maximum_temporary_bytes=maximum_temporary_bytes,capture_responses=True)
+
+
+def _measure_native_trace_bridges(field,plans,*,maximum_pixel_queries,maximum_temporary_bytes,capture_responses=False):
     preflight = native_trace_bridge_preflight_value_visit_bound(plans)
     _integer(maximum_pixel_queries, "maximum pixel queries")
     _integer(maximum_temporary_bytes, "maximum temporary bytes")
@@ -590,12 +746,15 @@ def measure_native_trace_bridges(field: PhotoBoundaryMeasurementField, plans: tu
     if any(plan.source_id != field.source_id or plan.source_extent != field.source_extent for plan in plans):
         raise ValueError("bridge plans belong to another original source field")
     if not plans:
-        return NativeTraceBridgeBatch((), (), 0, 0, 0, 0, 0, preflight > maximum_pixel_queries,
+        batch = NativeTraceBridgeBatch((), (), 0, 0, 0, 0, 0, preflight > maximum_pixel_queries,
                                       preflight_value_visit_bound=preflight)
+        cache = NativeTraceResponseCache(plans) if capture_responses and not batch.bound_exceeded else None
+        if cache is not None:cache.seal(batch)
+        return batch,cache
     groups, pixels, visits, mask_work, peak, metadata, fits = _prepare(plans, maximum_temporary_bytes)
     if not fits or peak > maximum_temporary_bytes or pixels + visits + preflight > maximum_pixel_queries:
-        return NativeTraceBridgeBatch(plans, (), 0, 0, 0, 0, 0, True,
-            pixels, visits, peak, preflight)
+        return NativeTraceBridgeBatch(plans, (), 0, 0, 0, 0, 0, True,pixels,visits,peak,preflight),None
+    cache = NativeTraceResponseCache(plans) if capture_responses else None
     strips = []
     for group in groups:
         first = plans[group.plan_indices[0]]
@@ -621,17 +780,93 @@ def measure_native_trace_bridges(field: PhotoBoundaryMeasurementField, plans: tu
                 active = [segment for segment in active if segment[1] > block_start]
                 for low, high, index in active:
                     start, stop = max(block_start, low), min(block_stop, high)
-                    strips.append(_strip(measured, block_start, start, stop, index, plans[index], sources))
+                    strips.append(_strip(measured,block_start,start,stop,index,plans[index],sources,cache))
                 del measured, values, sources
     frozen = tuple(strips)
     retained = _retained_strip_bytes(metadata, frozen)
     if retained > peak:
         raise RuntimeError("bridge measurement exceeded its pre-reserved retained storage")
-    return NativeTraceBridgeBatch(plans, frozen, pixels, visits, mask_work, retained, peak, False,
-                                  pixels, visits, peak, preflight)
+    batch = NativeTraceBridgeBatch(plans,frozen,pixels,visits,mask_work,retained,peak,False,
+        pixels,visits,peak,preflight,response_cache_bytes=(0 if cache is None else native_trace_response_cache_byte_bound(plans)))
+    if cache is not None:cache.seal(batch)
+    return batch,cache
+
+
+def refine_native_trace_responses(signal,cache,plans,*,maximum_pixel_queries,maximum_temporary_bytes):
+    """Consume the exact retained response rows without another source read."""
+    if (not isinstance(cache,NativeTraceResponseCache) or cache.closed or cache.signal_batch is not signal
+            or signal.bound_exceeded or cache.plans != signal.plans):
+        raise ValueError('refinement lost its same-call complete response owner')
+    indices = _reuse_plan_indices(plans,signal.plans)
+    preflight = native_trace_bridge_preflight_value_visit_bound(plans,signal.plans)
+    _integer(maximum_pixel_queries,'maximum pixel queries')
+    _integer(maximum_temporary_bytes,'maximum temporary bytes')
+    _,pixels,visits,mask_work,peak,metadata,fits = _prepare(plans,maximum_temporary_bytes,signal.plans)
+    if not fits or peak>maximum_temporary_bytes or visits+preflight>maximum_pixel_queries:
+        return NativeTraceBridgeBatch(plans,(),0,0,0,0,0,True,pixels,visits,peak,preflight,
+                                      response_source_plans=signal.plans)
+    expected = {(i,t) for i,p in enumerate(signal.plans) for a,b in p.trace_intervals_px for t in range(a,b)}
+    if set(cache.rows)!=expected:
+        raise ValueError('response cache lost or duplicated a measured trace')
+    requested = {(source,t) for source,p in zip(indices,plans,strict=True)
+                 for a,b in p.trace_intervals_px for t in range(a,b)}
+    # Rebuild the maps: deleting entries alone retains full signal hash-table
+    # capacity alongside the growing encoded refinement. The initial cache
+    # header allowance includes these short-lived metadata copies.
+    cache.rows = {key:value for key,value in cache.rows.items() if key in requested}
+    cache.coordinates = {source:cache.coordinates[source] for source in indices}
+    del expected,requested
+    strips = []
+    for index,(source,plan) in enumerate(zip(indices,plans,strict=True)):
+        coordinates = cache.coordinates[source]
+        originals = sorted((s for s in signal.strips if s.plan_index==source),key=lambda s:s.trace_start_px)
+        starts = tuple(s.trace_start_px for s in originals)
+        for a,b in plan.trace_intervals_px:
+            for trace in range(a,b):
+                matrix,origin = cache.rows.pop((source,trace))
+                if (matrix.dtype != np.float64 or matrix.shape != (8,coordinates.size) or matrix.flags.writeable
+                        or coordinates.flags.writeable):
+                    raise ValueError('response cache changed its exact immutable numeric payload')
+                measured = TraceRowsMeasurement(coordinates,*(matrix[i:i+1] for i in range(8)),temporary_bytes=matrix.nbytes)
+                sources = {} if origin is None else {trace:origin}
+                original = originals[bisect_right(starts,trace)-1]
+                masks = tuple(_mask_row_hex(original,getattr(original,name),trace)
+                    for name in ('positive_mask_hex','negative_mask_hex','credible_mask_hex'))
+                strips.append(_strip(measured,trace,trace,trace+1,index,plan,sources,row_masks=masks))
+                del matrix,measured,sources,origin
+    cache.release()
+    frozen = tuple(strips)
+    retained = _retained_strip_bytes(metadata,frozen)
+    if retained>peak:
+        raise RuntimeError('refinement exceeded its reserved retained storage')
+    return NativeTraceBridgeBatch(plans,frozen,0,visits,mask_work,retained,peak,False,
+                                  0,visits,peak,preflight,response_source_plans=signal.plans)
+
+
+def validate_native_trace_response_reuse(batch,signal):
+    """Bind a reused batch to every original signal row, without source pixels."""
+    if signal.bound_exceeded or batch.response_source_plans != signal.plans:
+        raise ValueError('refinement changed its complete measured signal source')
+    indices = _reuse_plan_indices(batch.plans,signal.plans)
+    for target,source in enumerate(indices):
+        rows = {s.trace_start_px:s for s in batch.strips if s.plan_index==target}
+        for original in signal.strips:
+            if original.plan_index!=source:continue
+            fields = ('positive_mask_hex','negative_mask_hex','credible_mask_hex')
+            decoded = tuple(_decode_checked_mask(original,getattr(original,f)) for f in fields)
+            origins = {s.trace_coordinate_px:s for s in original.original_trace_sources}
+            for trace in range(original.trace_start_px,original.trace_stop_px):
+                strip = rows.get(trace)
+                if strip is None:continue
+                if strip.trace_stop_px!=trace+1 or strip.original_trace_sources != (() if trace not in origins else (origins[trace],)):
+                    raise ValueError('refinement lost its exact original trace source')
+                for field,values in zip(fields,decoded,strict=True):
+                    if not np.array_equal(_decode_checked_mask(strip,getattr(strip,field))[0],values[trace-original.trace_start_px]):
+                        raise ValueError('refinement changed its original complete signal masks')
 
 
 __all__ = ["NativeTraceBridgePlan", "NativeTraceBridgePeak", "NativeTraceBridgeStrip", "NativeTraceBridgeBatch",
            "native_trace_bridge_preflight_value_visit_bound", "measure_native_trace_bridges", "decode_mask", "decode_credible_mask", "peaks_at_row",
            "validate_native_trace_bridge_batch", "native_trace_bridge_normalization_domain",
-           "native_trace_bridge_retained_byte_bound"]
+           "native_trace_bridge_retained_byte_bound", "native_trace_response_cache_byte_bound",
+           "measure_native_trace_signals", "refine_native_trace_responses"]

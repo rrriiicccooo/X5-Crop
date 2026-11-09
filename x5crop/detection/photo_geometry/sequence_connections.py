@@ -14,10 +14,12 @@ from .measurement_model import PhotoBoundaryMeasurementSet
 from .model import QueryPurpose, PHOTO_BOUNDARY_MEASUREMENT_SPEC as SPEC
 from .observation_types import BoundaryEdgeObservation, BoundaryEdgeMeasurementBasis
 from .native_trace_bridge_measurement import (
-    NativeTraceBridgePlan, NativeTraceBridgeBatch, measure_native_trace_bridges, peaks_at_row,
+    NativeTraceBridgePlan, NativeTraceBridgeBatch, peaks_at_row,
     native_trace_bridge_normalization_domain, native_trace_bridge_preflight_value_visit_bound,
     validate_native_trace_bridge_batch,
     native_trace_bridge_retained_byte_bound,
+    measure_native_trace_signals, refine_native_trace_responses, native_trace_response_cache_byte_bound,
+    native_trace_response_consumption_work, validate_native_trace_response_reuse,
     _prepare as _bridge_reservation,
 )
 from .native_trace_continuity import _bridge_context, _dense_group_complete
@@ -177,10 +179,39 @@ def _proof_bounds(parents, requests, plans):
     return visits,retained,memory
 
 
-def _connection_context(parent,request,measurements,batch):
+def _guard_value_bound(parents,requests,plans,measurements):
+    """Signal connectivity only: no peak/flank/physical-line clipping work."""
+    by_query = {m.query.query_id:m for m in measurements}
+    by_plan = {p.original_query_id:p for p in plans}
+    baseline = next(m for m in measurements if m.query.purpose==QueryPurpose.SEQUENCE_BASELINE)
+    all_rows = sum(b-a for p in plans for a,b in p.trace_intervals_px)
+    visits = 4096
+    for parent,request in zip(parents,requests,strict=True):
+        if request.failure_kind is not None:
+            continue
+        plan = by_plan[request.query_id]
+        width = math.floor(plan.coordinate_interval_px.maximum)-math.ceil(plan.coordinate_interval_px.minimum)+1
+        rows = request.trace_interval_px[1]-request.trace_interval_px[0]
+        source_rows = sum(b-a for a,b in plan.trace_intervals_px)
+        # Decode only the requested rows. The 32-site allowance covers packed
+        # unpacking, concatenation, four-neighbour component passes, selection
+        # and corridor tests. Whole intersecting hex strings are still strictly
+        # validated; one extra visit per complete source site bounds that scan.
+        visits += 32*rows*width+source_rows*width
+        # Every strip may be singleton. Include complete strip selection/sort,
+        # original source indexing, raw lookup and parent/measurement scans.
+        visits += (128*(all_rows+len(plans)+len(measurements)+len(baseline.peak_trace_sources)
+                       +len(baseline.query.trace_positions_px)+len(by_query[request.query_id].transitions)
+                       +len(parent.transition_ids))
+                   +16*source_rows*max(1,source_rows.bit_length()))
+    return visits
+
+
+def _connection_context(parent,request,measurements,batch,*,include_credible=True):
     plan_index = next(i for i,p in enumerate(batch.plans) if p.original_query_id==request.query_id)
     low,high = request.trace_interval_px
-    labels,credible,strips,starts,sources = _bridge_context(batch,plan_index,low,high,request.polarity)
+    labels,credible,strips,starts,sources = _bridge_context(batch,plan_index,low,high,request.polarity,
+                                                         include_credible=include_credible)
     coordinate_start = strips[0].coordinate_start_px
     baseline = next(m for m in measurements if m.query.purpose == QueryPurpose.SEQUENCE_BASELINE)
     old_sources = {s.trace_coordinate_px:s for s in baseline.peak_trace_sources}
@@ -207,7 +238,7 @@ def _guard_one(parent,request,measurements,batch):
         return request
     # Only scalar failure survives this stack; decoded contexts are released
     # before another parent or the full peak measurement starts.
-    failure,*_context = _connection_context(parent,request,measurements,batch)
+    failure,*_context = _connection_context(parent,request,measurements,batch,include_credible=False)
     return replace(request,failure_kind=failure)
 
 
@@ -301,26 +332,28 @@ class _PhasedReservation:
     admitted: bool
 
 
-def _phased_reservation(parents,requests,plans,visits,memory,budget):
-    signals = tuple(replace(p,record_peaks=False) for p in plans)
-    guard_visits,_,guard_memory = _proof_bounds(parents,requests,plans)
+def _phased_reservation(parents,requests,plans,measurements,visits,memory,budget):
+    signals = tuple(replace(p,record_peaks=False,retain_responses=True) for p in plans)
+    proof_visits,_,guard_memory = _proof_bounds(parents,requests,plans)
+    guard_visits = _guard_value_bound(parents,requests,plans,measurements)
     signal_preflight = native_trace_bridge_preflight_value_visit_bound(signals)
-    full_preflight = native_trace_bridge_preflight_value_visit_bound(plans)
+    full_preflight = native_trace_bridge_preflight_value_visit_bound(plans,signals)
     # Length-only estimates belong to the complete metadata planning charge.
     # Reserve the two actual bridge preparations before either is executed.
     planning = visits+signal_preflight+full_preflight
     available = max(0,budget.maximum_temporary_bytes-budget.persistent_input_bytes-memory)
     signal_retained = native_trace_bridge_retained_byte_bound(signals)
+    response_cache = native_trace_response_cache_byte_bound(signals)
     full_memory = max(0,available-signal_retained)
     if planning > budget.maximum_value_visits:
         return _PhasedReservation(signals,visits,guard_visits,guard_memory,available,full_memory,0,False)
     _,signal_pixels,signal_values,_,signal_peak,_,signal_fits = _bridge_reservation(signals,available)
-    _,full_pixels,full_values,_,_,_,full_fits = _bridge_reservation(plans,full_memory)
+    _,full_pixels,full_values,_,_,_,full_fits = _bridge_reservation(plans,full_memory,signals)
     full_work = full_pixels+full_values+full_preflight if plans else 0
-    signal_budget = max(0,budget.maximum_value_visits-planning-2*guard_visits-full_work)
+    signal_budget = max(0,budget.maximum_value_visits-planning-guard_visits-proof_visits-full_work)
     admitted = (signal_fits and full_fits
         and signal_pixels+signal_values+signal_preflight <= signal_budget
-        and signal_peak <= available and signal_retained+guard_memory <= available)
+        and signal_peak <= available and signal_retained+response_cache+guard_memory <= available)
     return _PhasedReservation(signals,planning,guard_visits,guard_memory,available,full_memory,
                               signal_budget,admitted)
 
@@ -354,16 +387,17 @@ def prepare_sequence_connections(field, edges, measurements, *, maximum_value_vi
             4096,0,8192,8192,persistent_input_bytes,True),False,budget)
     requests = sequence_connection_requests(parents,measures,source_extent=field.source_extent)
     plans = sequence_connection_plans(field,requests,measures)
-    reservation = _phased_reservation(parents,requests,plans,visits,planning_memory,budget)
+    reservation = _phased_reservation(parents,requests,plans,measures,visits,planning_memory,budget)
     if not reservation.admitted:
         return _unadmitted(parents,measures,requests,planning_memory,budget,reservation)
-    signal = measure_native_trace_bridges(field,reservation.signal_plans,
+    signal,cache = measure_native_trace_signals(field,reservation.signal_plans,
         maximum_pixel_queries=reservation.signal_value_budget,maximum_temporary_bytes=reservation.signal_memory)
     requests = guard_sequence_connections(parents,requests,measures,signal)
     plans = sequence_connection_plans(field,requests,measures)
-    batch = (measure_native_trace_bridges(field,plans,
+    batch = (refine_native_trace_responses(signal,cache,plans,
         maximum_pixel_queries=_full_value_budget(parents,requests,plans,signal,reservation,budget),
         maximum_temporary_bytes=reservation.full_memory) if plans else None)
+    cache.release()
     return _finish(parents,measures,requests,signal,batch,planning_memory,budget,reservation)
 
 
@@ -377,13 +411,14 @@ def _finish(parents,measures,requests,signal,batch,planning_memory,budget,reserv
     else:
         assessments = tuple(SequenceConnectionAssessment(r.observation_id,r.failure_kind or "proof_bound_exceeded",None)
                             for r in requests)
-    batch_values = 0 if batch is None else batch.value_visit_bound+batch.preflight_value_visit_bound
+    release_work = native_trace_response_consumption_work(signal.plans) if batch is None or batch.bound_exceeded else 0
+    batch_values = release_work+(0 if batch is None else batch.value_visit_bound+batch.preflight_value_visit_bound)
     batch_retained = 0 if batch is None else batch.retained_bytes
     actual_visits = (reservation.planning_visits+signal.value_visit_bound+signal.preflight_value_visit_bound
                      +reservation.guard_visits+batch_values+(proof_visits if proof_fits else 0))
     retained = planning_memory+signal.retained_bytes+batch_retained+(proof_retained if proof_fits else 0)
     peak = max(planning_memory,planning_memory+signal.peak_temporary_bytes,
-               planning_memory+signal.retained_bytes+reservation.guard_memory,
+               planning_memory+signal.retained_bytes+signal.response_cache_bytes+reservation.guard_memory,
                planning_memory+signal.retained_bytes+(0 if batch is None else batch.peak_temporary_bytes),
                planning_memory+signal.retained_bytes+batch_retained+proof_memory if proof_fits else retained)
     return SequenceConnectionEvidence(parents,measures,requests,batch,assessments,
@@ -392,13 +427,13 @@ def _finish(parents,measures,requests,signal,batch,planning_memory,budget,reserv
         True,budget,signal)
 
 
-def _validate_bridge_reservation(batch,plans,values,memory):
+def _validate_bridge_reservation(batch,plans,values,memory,response_sources=None):
     validate_native_trace_bridge_batch(batch)
-    if batch.plans != plans:
+    if batch.plans != plans or batch.response_source_plans != response_sources:
         raise ValueError("Sequence connection changed its complete original query views")
     if plans:
-        _,pixels,visits,_,peak,_,fits = _bridge_reservation(plans,memory)
-        exceeded = not fits or peak > memory or pixels+visits+native_trace_bridge_preflight_value_visit_bound(plans)>values
+        _,pixels,visits,_,peak,_,fits = _bridge_reservation(plans,memory,response_sources)
+        exceeded = not fits or peak > memory or pixels+visits+native_trace_bridge_preflight_value_visit_bound(plans,response_sources)>values
         if (batch.bound_exceeded != exceeded or batch.required_pixel_query_count != pixels
                 or batch.required_value_visit_bound != visits or batch.required_peak_temporary_bytes != peak):
             raise ValueError("Sequence measurement changed its complete source reservation")
@@ -427,7 +462,7 @@ def validate_sequence_connection_evidence(evidence, *, source_id, source_extent,
     requests = sequence_connection_requests(evidence.parents,measures,source_extent=source_extent)
     field = SimpleNamespace(source_id=source_id,source_extent=source_extent)
     plans = sequence_connection_plans(field,requests,measures)
-    reservation = _phased_reservation(evidence.parents,requests,plans,visits,memory,budget)
+    reservation = _phased_reservation(evidence.parents,requests,plans,measures,visits,memory,budget)
     if not reservation.admitted:
         expected = _unadmitted(evidence.parents,measures,requests,memory,budget,reservation)
     else:
@@ -442,7 +477,8 @@ def validate_sequence_connection_evidence(evidence, *, source_id, source_extent,
             raise ValueError('Sequence connection omitted or invented its complete refinement obligation')
         if batch is not None:
             _validate_bridge_reservation(batch,plans,_full_value_budget(evidence.parents,requests,plans,signal,reservation,budget),
-                                         reservation.full_memory)
+                                         reservation.full_memory,signal.plans)
+            validate_native_trace_response_reuse(batch,signal)
         expected = _finish(evidence.parents,measures,requests,signal,batch,memory,budget,reservation)
     if evidence != expected:
         raise ValueError("Sequence connection changed its raw continuity result or work")

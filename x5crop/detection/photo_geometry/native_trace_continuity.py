@@ -159,6 +159,7 @@ class NativeTraceContinuityEvidence:
                     or self.assessments or not self.work.bound_exceeded)
                 or self.batch is not None and any(not p.split_gradient_reversals or not p.record_peaks
                                                   for p in self.batch.plans)
+                or self.batch is not None and self.batch.response_source_plans is not None
                 or len(set(ids)) != len(ids)
                 or tuple(a.observation_id for a in self.assessments) != ids
                 or self.work.bound_exceeded and any(a.constraint for a in self.assessments)):
@@ -340,7 +341,7 @@ def _planning_reservation(registration, measurement_sets):
             max(metadata_bytes, 4096 + 256*(eligible*points+count+points+groups)))
 
 
-def _bridge_context(batch, plan_index, low, high, polarity):
+def _bridge_context(batch, plan_index, low, high, polarity, *, include_credible=True):
     strips = tuple(sorted((s for s in batch.strips if s.plan_index == plan_index
                            and s.trace_start_px < high and s.trace_stop_px > low),
                           key=lambda s: s.trace_start_px))
@@ -350,8 +351,9 @@ def _bridge_context(batch, plan_index, low, high, polarity):
         first, stop = max(low, strip.trace_start_px), min(high, strip.trace_stop_px)
         if first != next_trace:
             raise ValueError("native continuity lost a complete intermediate trace block")
-        chunks.append(decode_mask(strip, polarity)[first-strip.trace_start_px:stop-strip.trace_start_px])
-        credible_chunks.append(decode_credible_mask(strip)[first-strip.trace_start_px:stop-strip.trace_start_px])
+        chunks.append(decode_mask(strip,polarity,trace_interval_px=(first,stop)))
+        if include_credible:
+            credible_chunks.append(decode_credible_mask(strip,trace_interval_px=(first,stop)))
         next_trace = stop
         for source in strip.original_trace_sources:
             if source.trace_coordinate_px in sources and sources[source.trace_coordinate_px] != source:
@@ -360,7 +362,7 @@ def _bridge_context(batch, plan_index, low, high, polarity):
     if next_trace != high:
         raise ValueError("native continuity lost its final intermediate trace block")
     mask = np.concatenate(chunks, axis=0)
-    credible = np.concatenate(credible_chunks, axis=0)
+    credible = np.concatenate(credible_chunks, axis=0) if include_credible else None
     _count, labels = cv2.connectedComponents(mask, connectivity=4, ltype=cv2.CV_32S)
     return labels, credible, strips, tuple(s.trace_start_px for s in strips), sources
 
@@ -382,7 +384,8 @@ def _dense_group_complete(credible_row, column, peak, coordinate_start):
 def assess_native_continuity(requests, measurements, batch):
     """Replay full masks and original peaks; unavailable is never exclusion."""
     from .native_trace_bridge_measurement import decode_mask
-    if batch is not None and any(not p.split_gradient_reversals or not p.record_peaks for p in batch.plans):
+    if batch is not None and (batch.response_source_plans is not None
+            or any(not p.split_gradient_reversals or not p.record_peaks for p in batch.plans)):
         raise ValueError("Cross continuity requires the original split peak selector")
     measurements_by_id = {m.query.query_id: m for m in measurements}
     baseline_sources = {s.trace_coordinate_px: s for m in measurements

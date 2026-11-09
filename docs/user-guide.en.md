@@ -123,6 +123,8 @@ Once original peaks, full signal groups, and a common straight-line range pass v
 reduce uncertainty in positioning and photo width and contribute to actual output protection. Existing error,
 material-center ranges, and newly measured local variation remain protected. A connected edge alone does not
 establish photo ordinals or the true first and last boundaries.
+Connection checks can complete more of the required validation within the same resource limits. Missing evidence
+or insufficient measurement budget still requires manual review.
 Reusing the same evidence does not add independent support. Source provenance, boundary roles, and full uncertainty
 protection remain subject to their own checks.
 

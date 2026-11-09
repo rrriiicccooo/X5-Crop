@@ -417,11 +417,14 @@ TIFF 读取、候选或 LP。闭区间比较仅沿用 `1e-9 px` 数值容差，�
 `sequence_connections.py` 只沿父边实际首末 raw trace 之间的原 query corridor 补测，使用同一灰度、
 完整 baseline 归一化和原单峰选择器，不读取候选位置、W、照片模板或黄金。完整父集合先登记，
 原峰来源、极性、同源别名、源域或组侧翼缺证时逐项保存 unavailable，不按最终成功项缩小义务。
-连接测量分两阶段：先按完整原域保存三份密集响应 mask 和原 trace SHA，不提取密集峰；完整重放
-原点分量及源上下文后，仅为必要连接仍成立的父边执行原查询的完整提峰。首像素前即预留信号测量、
+连接测量分两阶段：先按完整原域保存三份密集响应 mask、原 trace SHA 和原 corridor 的只读数值响应，
+不提取密集峰；完整重放原点分量及源上下文后，仅为必要连接仍成立的父边执行原查询的完整提峰。
+精测消费同次保存的响应和原三份 mask，不重新读取源行、归一化或计算完整域 SHA；八个数值字段、
+原 normalization／query／scale／trace 上下文和单峰选择器保持。首像素前即预留信号测量、
 全部潜在精测及两阶段证明的值访问上界，并预检信号、guard 和精测的数据峰；精测物理证明继续按
 完整 batch 实际保留量在使用前预检。精测仍使用完整原 span／corridor，不按分量裁窄。原始失败、
-信号失败及精测失败均在完整父账本中保留。信号通过不产生约束；全部信号失败时，精测义务为空，
+信号失败及精测失败均在完整父账本中保留。Guard 只解码实际请求行的有符号 mask，不解码未使用的
+OR mask，不执行峰组或物理直线裁剪；精测后的完整证明仍分别完成这些核验。信号通过不产生约束；全部信号失败时，精测义务为空，
 这是已完成的 unavailable，不是工作超界，更不是解释的物理反证。
 全部原始点须落在同一个四连通有符号响应分量，分量不能碰 corridor 坐标边界；逐行必须只有一个
 相容原峰，无重叠别名，完整 OR 可信组两侧均可观察，且该峰的完整 physical interval 正好覆盖原单峰组。
@@ -2714,6 +2717,12 @@ TOP／BOTTOM 输入，不把新增 Sequence 来源重复计入无关关联。所
 及完整物理区间分别保留。Cross 连续证明只接受原反向分峰规则，Sequence 单峰重放不取得 Cross 资格。
 `record_peaks` 默认为 true；false 只表示完整信号阶段，保留每行全零峰 offsets，并要求峰与定位 payload
 均为空。Cross 及 Sequence 正约束入口显式拒绝该阶段，不能把“未提峰”当成“提峰后没有候选”。
+`retain_responses` 只允许用于信号阶段。`NativeTraceResponseCache` 是同次调用内的临时 owner，
+按整个原 corridor 复制八份 float64 行，不保留完整 baseline 数组的 view；坐标每 query 只复制一次。
+完整缓存先准入，全部行和坐标只读，且只能由同一个 signal batch 消费。精测 plan 只允许保留原查询
+中的完整待证 span，不能改 source、轴、baseline、query、scale、坐标域、原 trace 或选择器。
+报告不保存数值缓存；signal batch 保存缓存上界，精测 batch 以 `response_source_plans` 绑定完整来源。
+回放逐行核对三份原 mask 和原 trace SHA，Cross 入口拒绝该复用上下文，不能借此获得另一类资格。
 Sequence 单峰桥接另保留每峰已测 localization width，固定 8-byte 编码；原 Cross 64-byte 峰记录及
 选择不变。附加编码、构造与访问在同一 bridge owner 的整批资源公式中预留和重放。
 
@@ -2728,9 +2737,25 @@ query、长轴观察数及 lane 短轴 extent。规划覆盖全部 eligible pare
 完整原峰已被证明不在同一响应分量时，该父边立即保持 unavailable，不再解码无法改变该结果的
 密集峰；已执行阶段的整批像素、mask、峰记录、全部父义务和原保守工作费用仍保留，不把失败当成边界或解释的物理反证。
 两阶段由同一 bridge owner 分别核算 mask sites、实际提峰 sites 和定位 sites；最坏保留界也由其独占。
-精测的流式容量先扣除整批信号的最坏保留量；最终 receipt 按实际存活的 signal/full 编码、规划、
-guard 与物理证明取阶段最大值。实际信号、guard 和精测费用全部保留；信号失败只避免尚未执行的
+信号流式容量先扣除完整编码与完整响应缓存的上界。令 P/T/C 分别为缓存 query 数、密集行数、
+corridor 坐标数，W 为各 query 宽度，缓存按 `8192+4096P+1024T+64C+4ΣW` bytes 预留。
+精测容量扣除整批信号编码的最坏保留量，缓存与编码替换按阶段共同峰值计量：先重建只含待证行的
+字典释放原容量，再逐行弹出数值并生成编码，字典容量在编码增长期间继续计入；当前行提峰 scratch
+另行保留。未请求行、失败的全部缓存及完成后的缓存均释放，后续阶段只保留编码账本和证明。
+最终 receipt 按实际存活的 signal/full 编码、响应缓存、规划、guard 与物理证明取阶段最大值。
+实际信号、guard 和精测费用全部保留；信号失败只避免尚未执行的
 精测，不回退已执行工作。报告从完整信号证据重建精测义务，不能只相信序列化的 guard 结果。
+复制缓存按 `24C+512T` 次值访问计入，覆盖八字段读写、坐标比较与行元数据；消费或丢弃完整缓存另按
+`4096+512T+128P` 计入结构工作。原三份 mask 构造按 `32C+96T`，精测复用原 packed 行、处理非字节
+对齐起点并重新严格校验，按 `16C+96T`；精测不申报新的 pixel 工作，原完整提峰与定位费用保持。
+Guard 与完整物理证明分别准入，不再把未执行的半平面裁剪重复计入 guard。每个实际请求的 corridor
+坐标数为 Cq、原 plan 全部坐标数为 Dq、原 plan 行数为 Tq，guard 预留 `32Cq+Dq` 次逻辑访问：
+包括 packed 解码、拼接、四邻接分量、选择及边界检查，并保守覆盖所触及完整 hex 的校验。
+该逻辑访问口径不是 OpenCV 内部机器指令或内存读写计数。另加固定 4096，逐请求以
+`128(Tall+P+Q+Ksource+Kbaseline+Lq+Rp)+16Tq·max(1,bit_length(Tq))` 覆盖全部 strip 选择与排序、
+原来源、query 和 raw 查找；Tall 为全部 plan 行数，Q 为测量 query 数，Ksource/Kbaseline 为原 baseline
+来源数／trace 数，Lq 为该 query 原 transition 数，Rp 为父边原点数。完整精测证明仍保留原
+`48C+Σ64n(n+8)` 的组侧翼、峰竞争和物理域裁剪上界。所有失败义务和原共同资源上限保持。
 
 原生连续桥接是原 TOP／BOTTOM intent 的有界子测量，至多两份 corridor plan、每份至多两个合并尾段，
 不更改原 sparse query／trace 的完成计数。全部 plan 和整个 batch 的工作／内存在读取前共同预检；
@@ -2740,6 +2765,8 @@ guard 与物理证明取阶段最大值。实际信号、guard 和精测费用�
 编码校验保持精确小写 hex、长度与末字节 padding 规则；正负 mask 不相交及其并集属于原 OR mask
 使用 packed uint8 位运算核对全部字节，不展开整张位图，也不省略任何峰记录校验。额外 packed
 缓冲仍包含在原 bridge 流式预留中，校验后立即释放。
+连续性解码先严格校验完整原 hex，再只展开请求 trace 范围的准确 bit slice，保留非字节对齐的行首；
+不能让外侧 streaming block 的未用行数组随 slice 存活，也不因只用部分行跳过原编码校验。
 
 令共享 baseline 组的完整源行长度为 L、实际核可观察坐标数为 Q、合并行数为 N，pixel 上界为
 `Σ N[L+Q(2radius+2)]`；完整行读取不能因 corridor 较窄而漏计。令全部 corridor 密集坐标数为 C、
