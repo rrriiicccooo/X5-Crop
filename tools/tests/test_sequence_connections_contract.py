@@ -106,7 +106,7 @@ class SequenceConnectionsContractTest(unittest.TestCase):
 
     def test_complete_signal_failure_keeps_all_obligations_without_a_peak_refinement(self):
         case = _case(broken=True)
-        with patch('x5crop.detection.photo_geometry.native_trace_bridge_measurement.measured_transition_peaks',
+        with patch('x5crop.detection.photo_geometry.native_trace_bridge_measurement.measured_transition_peak_geometry',
                    side_effect=AssertionError('failed connection cannot require peak refinement')):
             evidence = _prepare(case)
         self.assertTrue(evidence.planning_completed)

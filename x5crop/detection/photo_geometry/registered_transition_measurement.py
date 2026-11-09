@@ -192,17 +192,30 @@ class BroadMaterialTraceMeasurement:
 
 
 @dataclass(frozen=True)
-class MeasuredTransitionPeak:
+class TracePeakSignals:
+    """Exact selection inputs, without unrelated side-statistic columns."""
+
+    coordinates: np.ndarray
+    gradient_z: np.ndarray
+    tone_z: np.ndarray
+    texture_z: np.ndarray
+    signed_gradient: np.ndarray
+
+    def __post_init__(self):
+        if (self.coordinates.ndim != 1 or self.coordinates.dtype != np.int32
+                or any(a.ndim != 1 or a.dtype != np.float64 or a.shape != self.coordinates.shape
+                       for a in (self.gradient_z,self.tone_z,self.texture_z,self.signed_gradient))):
+            raise ValueError('peak signals must retain their exact coordinate-aligned response rows')
+
+
+@dataclass(frozen=True)
+class TransitionPeakSelection:
     localization_interval: FiniteInterval
     physical_position_interval: FiniteInterval
     canonical_coordinate: float
     gradient_z: float
     tone_z: float
     texture_z: float
-    left_tone: float
-    right_tone: float
-    left_texture: float
-    right_texture: float
     peak_width_px: float
     prominence: float
     local_noise: float
@@ -210,6 +223,14 @@ class MeasuredTransitionPeak:
     coordinate_index: int
     source_group: TransitionPeakGroupSource | None = None
     source_reference: TransitionPeakReference | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class MeasuredTransitionPeak(TransitionPeakSelection):
+    left_tone: float
+    right_tone: float
+    left_texture: float
+    right_texture: float
 
 
 @dataclass(frozen=True)
@@ -882,7 +903,7 @@ def _group_local_noise(values: np.ndarray, group: np.ndarray, statistics: _Group
     return float(np.min(values[group]))
 
 
-def transition_peak_support(measurement: TraceMeasurement, spec: PhotoBoundaryMeasurementSpec):
+def transition_peak_support(measurement: TraceMeasurement | TracePeakSignals, spec: PhotoBoundaryMeasurementSpec):
     """The original OR grouping support, separate from a connected step mask."""
     gradient_supported = measurement.gradient_z >= spec.gradient_z_minimum
     secondary = np.maximum(measurement.tone_z, measurement.texture_z)
@@ -897,6 +918,18 @@ def measured_transition_peaks(
     split_gradient_reversals: bool,
     peak_source_capture: TransitionPeakCapture | None = None,
 ) -> tuple[MeasuredTransitionPeak, ...]:
+    return _select_transition_peaks(measurement,spec,split_gradient_reversals=split_gradient_reversals,
+                                   peak_source_capture=peak_source_capture,side_statistics=True)
+
+
+def measured_transition_peak_geometry(measurement: TraceMeasurement | TracePeakSignals,
+        spec: PhotoBoundaryMeasurementSpec, *, split_gradient_reversals: bool) -> tuple[TransitionPeakSelection,...]:
+    """Use the same selector; materialize only fields consumed by a bridge."""
+    return _select_transition_peaks(measurement,spec,split_gradient_reversals=split_gradient_reversals,
+                                   peak_source_capture=None,side_statistics=False)
+
+
+def _select_transition_peaks(measurement,spec,*,split_gradient_reversals,peak_source_capture,side_statistics):
     coordinates = measurement.coordinates
     gradient_supported, secondary, credible = transition_peak_support(measurement, spec)
     indices = np.flatnonzero(credible)
@@ -907,7 +940,8 @@ def measured_transition_peaks(
     groups = np.split(indices, split_at)
     gradient_supported &= measurement.signed_gradient != 0.0
     noise_statistics = {}
-    records: list[MeasuredTransitionPeak] = []
+    record_type = MeasuredTransitionPeak if side_statistics else TransitionPeakSelection
+    records = []
     for group in groups:
         if group.size == 0:
             continue
@@ -954,7 +988,7 @@ def measured_transition_peaks(
             noise_statistics[key] = statistics
         local_noise = _group_local_noise(localization, group, statistics)
         source_group = None
-        if measurement.peak_source is not None and peak_source_capture is not None and peak_source_capture.complete:
+        if peak_source_capture is not None and measurement.peak_source is not None and peak_source_capture.complete:
             if peak_source_capture.reserve_group(int(group.size), int(reliable_gradient.size), len(peak_candidates)):
                 natural_runs = (polarity_runs if split_gradient_reversals else tuple(np.split(reliable_gradient, np.flatnonzero(
                     np.diff(measurement.signed_gradient[reliable_gradient] > 0.0)) + 1))
@@ -1046,8 +1080,12 @@ def measured_transition_peaks(
                 float(coordinates[int(peak_members[-1])])
                 + PIXEL_CENTER_HALF_EXTENT_PX
             )
+            side_fields = (dict(left_tone=float(measurement.left_tone[peak_index]),
+                               right_tone=float(measurement.right_tone[peak_index]),
+                               left_texture=float(measurement.left_texture[peak_index]),
+                               right_texture=float(measurement.right_texture[peak_index])) if side_statistics else {})
             records.append(
-                MeasuredTransitionPeak(
+                record_type(
                     localization_interval=FiniteInterval(
                         peak_minimum,
                         peak_maximum,
@@ -1060,10 +1098,6 @@ def measured_transition_peaks(
                     gradient_z=float(measurement.gradient_z[peak_index]),
                     tone_z=float(measurement.tone_z[peak_index]),
                     texture_z=float(measurement.texture_z[peak_index]),
-                    left_tone=float(measurement.left_tone[peak_index]),
-                    right_tone=float(measurement.right_tone[peak_index]),
-                    left_texture=float(measurement.left_texture[peak_index]),
-                    right_texture=float(measurement.right_texture[peak_index]),
                     peak_width_px=peak_maximum - peak_minimum,
                     prominence=prominence,
                     local_noise=local_noise,
@@ -1073,6 +1107,7 @@ def measured_transition_peaks(
                     source_reference=(None if source_group is None or not polarity_runs else
                         TransitionPeakReference(source_group.primitive_id, ordinal,
                             int(coordinates[peak_index]), peak_polarity)),
+                    **side_fields,
                 )
             )
     return tuple(records)

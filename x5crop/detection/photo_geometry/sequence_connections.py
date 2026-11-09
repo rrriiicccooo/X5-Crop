@@ -26,6 +26,7 @@ from .native_trace_continuity import _bridge_context, _dense_group_complete
 from .sequence_connection_model import SequenceConnectionConstraint, SequenceConnectionWork, SequenceConnectionBudget
 from .trace_support import trace_support_is_one_connected_run
 from .transition_peak_source import same_transition_peak
+from .robust_line_fit import LINE_REGION_ARITHMETIC_EPSILON_PX
 
 
 @dataclass(frozen=True)
@@ -170,7 +171,12 @@ def _proof_bounds(parents, requests, plans):
     sizes = [r.trace_interval_px[1]-r.trace_interval_px[0] for r in requests if r.failure_kind is None]
     max_sites = max(((r.trace_interval_px[1]-r.trace_interval_px[0])*widths[r.query_id]
                      for r in requests if r.failure_kind is None),default=0)
-    visits = 4096+48*sites+sum(64*n*(n+8) for n in sizes)
+    # Each complete recorded peak also tests its two interval differences
+    # against the original parent's projection (eight scalar operations).
+    # Project all original vertices afresh per row; never a selected prefix.
+    domain_work = sum(128*(r.trace_interval_px[1]-r.trace_interval_px[0])*(len(p.physical_line_region.vertices)+1)
+                      for p,r in zip(parents,requests,strict=True) if r.failure_kind is None)
+    visits = 4096+56*sites+domain_work+sum(64*n*(n+8) for n in sizes)
     retained = 4096+512*sum(sizes)+1024*sum(len(p.transition_ids) for p in parents)
     # One request helper owns all decoded arrays; it returns plain tuples
     # before the next helper allocates another context. All constraints and
@@ -270,9 +276,17 @@ def _assess_one(parent, request, measurements, batch):
     for trace in range(low,high):
         strip = strips[bisect_right(starts,trace)-1]
         peaks = peaks_at_row(strip,trace-strip.trace_start_px)
-        matches = tuple(p for p in peaks if labels[trace-low,p.source_coordinate_px-coordinate_start]==component) if component else ()
+        connected = tuple(p for p in peaks if labels[trace-low,p.source_coordinate_px-coordinate_start]==component) if component else ()
+        projected = parent.physical_line_region.project(float(trace))
+        # This is the necessary projection of the independently established
+        # original joint domain, not a canonical distance or a template window.
+        # Keep tangencies and arithmetic uncertainty; retain every original
+        # record and its full interval even when it cannot belong to this parent.
+        matches = tuple(p for p in connected
+            if p.physical_position_interval_px.maximum-projected.minimum >= -LINE_REGION_ARITHMETIC_EPSILON_PX
+            and p.physical_position_interval_px.minimum-projected.maximum <= LINE_REGION_ARITHMETIC_EPSILON_PX) if component else ()
         if len(matches) != 1:
-            failure = failure or "dense_peak_competition"
+            failure = failure or ("physical_domain_unavailable" if connected and not matches else "dense_peak_competition")
             continue
         peak = matches[0]
         if peak.localization_width_px is None:

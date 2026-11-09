@@ -125,6 +125,9 @@ material-center ranges, and newly measured local variation remain protected. A c
 establish photo ordinals or the true first and last boundaries.
 Connection checks can complete more of the required validation within the same resource limits. Missing evidence
 or insufficient measurement budget still requires manual review.
+An edge can proceed to further validation when an extra connected branch is incompatible with its original
+complete physical range. All branches remain recorded, and a common line, original peaks, and full uncertainty still
+require checks. Newly measured local variation can increase the required protection and still require review.
 Reusing the same evidence does not add independent support. Source provenance, boundary roles, and full uncertainty
 protection remain subject to their own checks.
 

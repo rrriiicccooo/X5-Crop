@@ -91,7 +91,7 @@ class NativeTraceBridgeMeasurementContractTest(unittest.TestCase):
     def test_signal_stage_keeps_complete_masks_and_sources_without_extracting_peaks(self):
         field = _field(_steps())
         plan = _plan(field,split_gradient_reversals=False,record_peaks=False)
-        with patch.object(owner,'measured_transition_peaks',side_effect=AssertionError('unrequested peak stage')):
+        with patch.object(owner,'measured_transition_peak_geometry',side_effect=AssertionError('unrequested peak stage')):
             batch = _measure(field,(plan,))
         self.assert_scalar_rows(field,batch)
         owner.validate_native_trace_bridge_batch(batch)

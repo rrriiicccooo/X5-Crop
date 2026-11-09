@@ -21,7 +21,7 @@ from .measurement_model import PhotoBoundaryMeasurementField
 from .model import BoundaryAxis, PHOTO_BOUNDARY_MEASUREMENT_SPEC as SPEC
 from .registered_measurement import _slice_trace_measurement
 from .registered_transition_measurement import (
-    TraceMeasurement, TraceRowsMeasurement, measure_trace_rows, measured_transition_peaks, transition_peak_support,
+    TraceMeasurement, TracePeakSignals, measure_trace_rows, measured_transition_peak_geometry, transition_peak_support,
 )
 from .transition_peak_source import TransitionPeakTraceSource
 
@@ -409,7 +409,7 @@ def native_trace_response_consumption_work(plans):
 def native_trace_response_cache_byte_bound(plans):
     if not plans:
         return 0
-    return 8192+4096*len(plans)+sum(1024*(b-a)+64*(b-a)*(_corridor_domain(p)[1]-_corridor_domain(p)[0])
+    return 8192+4096*len(plans)+sum(1024*(b-a)+32*(b-a)*(_corridor_domain(p)[1]-_corridor_domain(p)[0])
         for p in plans for a,b in p.trace_intervals_px)+4*sum(_corridor_domain(p)[1]-_corridor_domain(p)[0] for p in plans)
 
 
@@ -431,7 +431,7 @@ def _reuse_plan_indices(plans,sources):
     return tuple(indices)
 
 
-_RESPONSE_FIELDS = ('gradient_z','tone_z','texture_z','signed_gradient','left_tone','right_tone','left_texture','right_texture')
+_RESPONSE_FIELDS = ('gradient_z','tone_z','texture_z','signed_gradient')
 
 
 class NativeTraceResponseCache:
@@ -511,10 +511,10 @@ def _value_reservation(plans,hash_work=0,*,reuse_masks=False):
         +64*sites(lambda p:p.record_peaks and not p.split_gradient_reversals)+160*rows+mask_work
         +128*(len(plans)+sum(len(p.trace_intervals_px) for p in plans)
               +sum(len(p.original_trace_coordinates_px) for p in plans))
-        # Eight float64 fields are read and copied (16 visits/site), and the
-        # shared coordinates are compared (2). The 24-site bound includes
+        # Four float64 fields are read and copied (8 visits/site), and the
+        # shared coordinates are compared (2). The 16-site bound includes
         # stacking/ownership overhead; row metadata is charged separately.
-        +24*sites(lambda p:p.retain_responses)
+        +16*sites(lambda p:p.retain_responses)
         +512*sum(b-a for p in plans if p.retain_responses for a,b in p.trace_intervals_px))
     return visits,mask_work
 
@@ -535,7 +535,7 @@ def _prepare_refinement(plans,sources,maximum_temporary_bytes):
         # The requested-only dictionary's capacity survives pop(), so its row
         # metadata stays live beside every encoded replacement.
         mixed += 1024*rows
-        cached = 64*width
+        cached = 32*width
         encoded = 1120+128*width+(0 if p.split_gradient_reversals else 16*width)+6*((width+7)//8)+1024
         mixed += rows*max(cached,encoded)+4*width
         low,high = _normalization_domain(p)
@@ -621,14 +621,20 @@ def _source(row, plan, trace):
         float(SPEC.tone_or_texture_z_minimum), digest.hexdigest())
 
 
-def _strip(measured, block_start, start, stop, index, plan, sources, response_cache=None, row_masks=None):
+def _append_peak_records(view,plan,peak_records,localization_widths):
+    for peak in measured_transition_peak_geometry(view,SPEC,split_gradient_reversals=plan.split_gradient_reversals):
+        peak_records.extend(_PEAK_RECORD.pack(int(view.coordinates[peak.coordinate_index]), peak.canonical_coordinate,
+            peak.physical_position_interval.minimum, peak.physical_position_interval.maximum,
+            peak.gradient_z, peak.tone_z, peak.texture_z, peak.polarity))
+        if not plan.split_gradient_reversals:
+            localization_widths.extend(_LOCALIZATION_WIDTH.pack(peak.localization_interval.width))
+
+
+def _strip(measured, block_start, start, stop, index, plan, sources, response_cache=None):
     left, right = _corridor_domain(plan)
-    if row_masks is not None and (stop != start+1 or response_cache is not None):
-        raise ValueError('retained masks require one complete refinement row')
-    if row_masks is None:
-        positive = np.empty((stop-start, right-left), dtype=np.uint8)
-        negative = np.empty_like(positive)
-        credible = np.empty_like(positive)
+    positive = np.empty((stop-start, right-left), dtype=np.uint8)
+    negative = np.empty_like(positive)
+    credible = np.empty_like(positive)
     peak_records = bytearray()
     localization_widths = bytearray()
     row_offsets = [0]
@@ -636,23 +642,15 @@ def _strip(measured, block_start, start, stop, index, plan, sources, response_ca
         view = _slice_trace_measurement(_row(measured, trace-block_start), plan.coordinate_interval_px)
         if response_cache is not None:
             response_cache.capture(index,trace,view,sources.get(trace))
-        if row_masks is None:
-            gradient, secondary, group_support = transition_peak_support(view, SPEC)
-            connected = gradient & (secondary >= SPEC.tone_or_texture_z_minimum)
-            positive[trace-start] = connected & (view.signed_gradient > 0.0)
-            negative[trace-start] = connected & (view.signed_gradient < 0.0)
-            credible[trace-start] = group_support
-        peaks = (measured_transition_peaks(view,SPEC,split_gradient_reversals=plan.split_gradient_reversals)
-                 if plan.record_peaks else ())
-        for peak in peaks:
-            peak_records.extend(_PEAK_RECORD.pack(int(view.coordinates[peak.coordinate_index]), peak.canonical_coordinate,
-                peak.physical_position_interval.minimum, peak.physical_position_interval.maximum,
-                peak.gradient_z, peak.tone_z, peak.texture_z, peak.polarity))
-            if not plan.split_gradient_reversals:
-                localization_widths.extend(_LOCALIZATION_WIDTH.pack(peak.localization_interval.width))
+        gradient, secondary, group_support = transition_peak_support(view, SPEC)
+        connected = gradient & (secondary >= SPEC.tone_or_texture_z_minimum)
+        positive[trace-start] = connected & (view.signed_gradient > 0.0)
+        negative[trace-start] = connected & (view.signed_gradient < 0.0)
+        credible[trace-start] = group_support
+        if plan.record_peaks:
+            _append_peak_records(view,plan,peak_records,localization_widths)
         row_offsets.append(len(peak_records) // _PEAK_RECORD.size)
-    masks = (tuple(np.packbits(mask,bitorder='little').tobytes().hex() for mask in (positive,negative,credible))
-             if row_masks is None else row_masks)
+    masks = tuple(np.packbits(mask,bitorder='little').tobytes().hex() for mask in (positive,negative,credible))
     return NativeTraceBridgeStrip(index, start, stop, left, right,
         *masks, peak_records.hex(), tuple(row_offsets),
         tuple(sources[t] for t in _original_in_strip(plan, start, stop)),localization_widths.hex())
@@ -824,16 +822,20 @@ def refine_native_trace_responses(signal,cache,plans,*,maximum_pixel_queries,max
         for a,b in plan.trace_intervals_px:
             for trace in range(a,b):
                 matrix,origin = cache.rows.pop((source,trace))
-                if (matrix.dtype != np.float64 or matrix.shape != (8,coordinates.size) or matrix.flags.writeable
+                if (matrix.dtype != np.float64 or matrix.shape != (4,coordinates.size) or matrix.flags.writeable
                         or coordinates.flags.writeable):
                     raise ValueError('response cache changed its exact immutable numeric payload')
-                measured = TraceRowsMeasurement(coordinates,*(matrix[i:i+1] for i in range(8)),temporary_bytes=matrix.nbytes)
-                sources = {} if origin is None else {trace:origin}
+                view = TracePeakSignals(coordinates,*(matrix[i] for i in range(4)))
                 original = originals[bisect_right(starts,trace)-1]
                 masks = tuple(_mask_row_hex(original,getattr(original,name),trace)
                     for name in ('positive_mask_hex','negative_mask_hex','credible_mask_hex'))
-                strips.append(_strip(measured,trace,trace,trace+1,index,plan,sources,row_masks=masks))
-                del matrix,measured,sources,origin
+                records,widths = bytearray(),bytearray()
+                _append_peak_records(view,plan,records,widths)
+                left,right = _corridor_domain(plan)
+                origins = () if not _original_in_strip(plan,trace,trace+1) else (origin,)
+                strips.append(NativeTraceBridgeStrip(index,trace,trace+1,left,right,*masks,records.hex(),
+                    (0,len(records)//_PEAK_RECORD.size),origins,widths.hex()))
+                del matrix,view,origin
     cache.release()
     frozen = tuple(strips)
     retained = _retained_strip_bytes(metadata,frozen)

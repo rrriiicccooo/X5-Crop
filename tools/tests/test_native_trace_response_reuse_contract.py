@@ -46,7 +46,8 @@ class NativeTraceResponseReuseContractTest(unittest.TestCase):
                 self.assertIsNone(matrix.base)
                 self.assertFalse(matrix.flags.writeable)
                 self.assertEqual(matrix.dtype,np.float64)
-                self.assertEqual(matrix.nbytes,64*matrix.shape[1])
+                self.assertEqual(matrix.shape[0],4)
+                self.assertEqual(matrix.nbytes,32*matrix.shape[1])
             with (patch.object(owner,'measure_trace_rows',side_effect=AssertionError('duplicate normalization')),
                   patch.object(owner,'_source',side_effect=AssertionError('duplicate full-domain hash')),
                   patch.object(owner,'transition_peak_support',side_effect=AssertionError('duplicate mask construction'))):
@@ -103,6 +104,18 @@ class NativeTraceResponseReuseContractTest(unittest.TestCase):
         reused = owner.refine_native_trace_responses(signal,cache,(survivor,),**LIMITS)
         original = _measure(field,(survivor,))
         self.assertEqual(payload(reused),payload(original))
+        owner.validate_native_trace_response_reuse(reused,signal)
+
+    def test_shared_baseline_keeps_each_querys_own_original_source_lattice(self):
+        field=_field(_steps())
+        first=_plan(field,trace_intervals_px=((2,10),),split_gradient_reversals=False)
+        second=replace(first,original_query_id='another-query',coordinate_interval_px=owner.FiniteInterval(40.,72.),
+                       trace_intervals_px=((5,13),),original_trace_coordinates_px=(5,8,20))
+        plans=(first,second)
+        sources=tuple(replace(p,record_peaks=False,retain_responses=True) for p in plans)
+        signal,cache=owner.measure_native_trace_signals(field,sources,**LIMITS)
+        reused=owner.refine_native_trace_responses(signal,cache,plans,**LIMITS)
+        self.assertEqual(payload(reused),payload(_measure(field,plans)))
         owner.validate_native_trace_response_reuse(reused,signal)
 
     def test_partial_mask_decoding_preserves_unaligned_rows_and_full_hex_validation(self):
