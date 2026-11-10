@@ -14,6 +14,8 @@ from ..robust_statistics import (
     REGISTERED_UINT8_QUANTIZATION_STEP,
     positive_mad_z,
     positive_mad_z_rows,
+    positive_mad_z_uint8_rows,
+    UINT8_MAD_HISTOGRAM_MINIMUM_COLUMNS,
 )
 from .model import PhotoBoundaryMeasurementSpec
 from .model import BoundaryAxis
@@ -684,7 +686,12 @@ def measure_trace(
         else None
     )
     del value_prefix, difference_prefix
-    gradient_z = positive_mad_z(gradient, minimum_scale=REGISTERED_UINT8_QUANTIZATION_STEP)
+    # The source dtype proves this absolute difference is exactly 0..255.
+    # Tone/texture and native luma retain their original floating statistics.
+    gradient_z = (positive_mad_z_uint8_rows(gradient.astype(np.uint8)[None, :],
+        minimum_scale=REGISTERED_UINT8_QUANTIZATION_STEP)[0]
+        if values_u8.dtype == np.uint8 and gradient.size >= UINT8_MAD_HISTOGRAM_MINIMUM_COLUMNS
+        else positive_mad_z(gradient, minimum_scale=REGISTERED_UINT8_QUANTIZATION_STEP))
     tone_z = positive_mad_z(tone, minimum_scale=REGISTERED_UINT8_QUANTIZATION_STEP)
     texture_z = positive_mad_z(texture, minimum_scale=REGISTERED_UINT8_QUANTIZATION_STEP)
     source = None
@@ -815,10 +822,9 @@ def measure_trace_rows(
         - values[:, coordinates - gap]
     )
     gradient = np.abs(signed_gradient)
-    gradient_z = positive_mad_z_rows(
-        gradient,
-        minimum_scale=quantum,
-    )
+    gradient_z = (positive_mad_z_uint8_rows(gradient.astype(np.uint8), minimum_scale=quantum)
+        if values_u8.dtype == np.uint8 and gradient.shape[1] >= UINT8_MAD_HISTOGRAM_MINIMUM_COLUMNS
+        else positive_mad_z_rows(gradient, minimum_scale=quantum))
     tone_z = positive_mad_z_rows(
         tone,
         minimum_scale=quantum,
