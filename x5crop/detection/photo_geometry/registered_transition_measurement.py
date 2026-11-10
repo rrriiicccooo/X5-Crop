@@ -361,11 +361,26 @@ def _window_means(
     *,
     preparation: _WindowPrefix | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
+    prefix = _window_prefix(values) if preparation is None else preparation.for_values(values)
+    # Registered coordinates normally form a complete integer range. Exact
+    # source-contained slices avoid four gathered copies and keep dense row
+    # results row-contiguous for the subsequent unchanged normalization.
+    if (coordinates.ndim == 1 and coordinates.dtype.kind in 'iu' and coordinates.size
+            and int(coordinates[-1])-int(coordinates[0]) == coordinates.size-1
+            and int(coordinates[0])-gap-window >= 0
+            and int(coordinates[-1])+gap+window < prefix.shape[-1]
+            and int(coordinates[-1])+gap+window <= np.iinfo(coordinates.dtype).max
+            and np.all(np.diff(coordinates) == 1)):
+        begin, count = int(coordinates[0]), coordinates.size
+        left = (prefix[..., begin-gap:begin-gap+count]
+                - prefix[..., begin-gap-window:begin-gap-window+count])/float(window)
+        right = (prefix[..., begin+gap+window:begin+gap+window+count]
+                 - prefix[..., begin+gap:begin+gap+count])/float(window)
+        return left, right
     left_stop = coordinates - gap
     left_start = left_stop - window
     right_start = coordinates + gap
     right_stop = right_start + window
-    prefix = _window_prefix(values) if preparation is None else preparation.for_values(values)
     if values.ndim == 1:
         left = (prefix[left_stop] - prefix[left_start]) / float(window)
         right = (prefix[right_stop] - prefix[right_start]) / float(window)
@@ -654,23 +669,17 @@ def measure_trace(
     tone = np.abs(right_tone - left_tone)
     differences = np.abs(np.diff(values))
     difference_prefix = _WindowPrefix(differences) if include_broad_material and cache_allowed else None
-    texture_coordinates = np.clip(
-        coordinates,
-        window + gap,
-        differences.size - window - gap,
-    )
     left_texture, right_texture = _window_means(
         differences,
-        texture_coordinates,
+        coordinates,
         window,
         gap,
         preparation=difference_prefix,
     )
     texture = np.abs(right_texture - left_texture)
-    signed_gradient = (
-        values[np.minimum(values.size - 1, coordinates + gap - 1)]
-        - values[coordinates - gap]
-    )
+    # lower/upper already keep every original index inside the source and
+    # its shorter difference row; neither previous clip can be active.
+    signed_gradient = values[lower+gap-1:upper+gap-1]-values[lower-gap:upper-gap]
     gradient = np.abs(signed_gradient)
     broad_material = (
         broad_material_trace_measurement(
@@ -805,22 +814,14 @@ def measure_trace_rows(
     left_tone, right_tone = _window_means(values, coordinates, window, gap)
     tone = np.abs(right_tone - left_tone)
     differences = np.abs(np.diff(values, axis=1))
-    texture_coordinates = np.clip(
-        coordinates,
-        window + gap,
-        differences.shape[1] - window - gap,
-    )
     left_texture, right_texture = _window_means(
         differences,
-        texture_coordinates,
+        coordinates,
         window,
         gap,
     )
     texture = np.abs(right_texture - left_texture)
-    signed_gradient = (
-        values[:, np.minimum(values.shape[1] - 1, coordinates + gap - 1)]
-        - values[:, coordinates - gap]
-    )
+    signed_gradient = values[:, lower+gap-1:upper+gap-1]-values[:, lower-gap:upper-gap]
     gradient = np.abs(signed_gradient)
     gradient_z = (positive_mad_z_uint8_rows(gradient.astype(np.uint8), minimum_scale=quantum)
         if values_u8.dtype == np.uint8 and gradient.shape[1] >= UINT8_MAD_HISTOGRAM_MINIMUM_COLUMNS
