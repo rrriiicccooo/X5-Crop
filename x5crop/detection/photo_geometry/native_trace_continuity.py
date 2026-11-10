@@ -525,7 +525,7 @@ def prepare_native_continuity(field, registration, measurement_sets, *, maximum_
         maximum_temporary_bytes=maximum_temporary_bytes-peak)
     assessments = assess_native_continuity(requests, measurements, batch)
     work = NativeTraceContinuityWork(
-        planning_visits + visits + batch.value_visit_bound + batch.preflight_value_visit_bound,
+        planning_visits + visits + batch.completed_value_visit_bound + batch.preflight_value_visit_bound,
         retained + batch.retained_bytes, max(planning_bytes, peak + batch.peak_temporary_bytes),
         batch.bound_exceeded, batch.pixel_query_count)
     return NativeTraceContinuityEvidence(requests, measurements, batch, assessments, work)

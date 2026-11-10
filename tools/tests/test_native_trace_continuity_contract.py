@@ -94,7 +94,7 @@ def _cross(registration):
 class NativeTraceContinuityContractTest(unittest.TestCase):
     def test_signal_only_payload_cannot_grant_cross_continuity(self):
         evidence = _prepare(_case())
-        batch = replace(evidence.batch,
+        batch = replace(evidence.batch,completed_value_visit_bound=evidence.batch.value_visit_bound,
             plans=tuple(replace(p,record_peaks=False) for p in evidence.batch.plans),
             strips=tuple(replace(s,peak_records_hex='',localization_widths_hex='',
                 peak_row_offsets=(0,)*len(s.peak_row_offsets)) for s in evidence.batch.strips))
@@ -109,8 +109,11 @@ class NativeTraceContinuityContractTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "localization-width payload"):
             replace(evidence.batch, plans=plans)
         # Even a structurally valid unsplit payload cannot grant Cross proof.
-        batch = replace(evidence.batch, plans=plans, strips=tuple(replace(s,
-            localization_widths_hex="00"*8*s.peak_row_offsets[-1]) for s in evidence.batch.strips))
+        from x5crop.detection.photo_geometry.native_trace_bridge_measurement import _completed_value_visit_bound
+        strips = tuple(replace(s,
+            localization_widths_hex="00"*8*s.peak_row_offsets[-1]) for s in evidence.batch.strips)
+        batch = replace(evidence.batch, plans=plans, strips=strips,
+            completed_value_visit_bound=_completed_value_visit_bound(plans,strips,evidence.batch.value_visit_bound))
         with self.assertRaisesRegex(ValueError, "split peak selector"):
             assess_native_continuity(evidence.requests, evidence.measurements, batch)
         with self.assertRaisesRegex(ValueError, "registered parent"):

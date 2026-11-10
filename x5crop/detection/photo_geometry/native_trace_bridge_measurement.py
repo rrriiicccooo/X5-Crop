@@ -332,6 +332,7 @@ class NativeTraceBridgeBatch:
     preflight_value_visit_bound: int = 0
     response_cache_bytes: int = 0
     response_source_plans: tuple[NativeTraceBridgePlan,...] | None = None
+    completed_value_visit_bound: int = 0
 
     def __post_init__(self):
         if type(self.plans) is not tuple or any(not isinstance(p, NativeTraceBridgePlan) for p in self.plans):
@@ -340,13 +341,15 @@ class NativeTraceBridgeBatch:
             raise ValueError("bridge batch strips must be frozen")
         for name in ("pixel_query_count", "value_visit_bound", "mask_site_work_bound", "retained_bytes",
                      "peak_temporary_bytes", "required_pixel_query_count", "required_value_visit_bound",
-                     "required_peak_temporary_bytes", "preflight_value_visit_bound", "response_cache_bytes"):
+                     "required_peak_temporary_bytes", "preflight_value_visit_bound", "response_cache_bytes",
+                     "completed_value_visit_bound"):
             _integer(getattr(self, name), name)
         if type(self.bound_exceeded) is not bool:
             raise ValueError("bridge completion state must be a boolean")
         if self.bound_exceeded:
             if self.strips or any((self.pixel_query_count, self.value_visit_bound, self.mask_site_work_bound,
-                                   self.retained_bytes, self.peak_temporary_bytes,self.response_cache_bytes)):
+                                   self.retained_bytes, self.peak_temporary_bytes,self.response_cache_bytes,
+                                   self.completed_value_visit_bound)):
                 raise ValueError("failed bridge batch cannot expose a measured prefix")
             return
         expected_cache = native_trace_response_cache_byte_bound(self.plans) if any(p.retain_responses for p in self.plans) else 0
@@ -391,6 +394,9 @@ class NativeTraceBridgeBatch:
             if (sum(b-a for a, b in intervals) != sum(b-a for a, b in plan.trace_intervals_px)
                     or _merge_intervals(intervals) != _merge_intervals(plan.trace_intervals_px)):
                 raise ValueError("bridge batch omitted or duplicated a dense trace interval")
+        if (self.completed_value_visit_bound != _completed_value_visit_bound(self.plans,self.strips,self.value_visit_bound)
+                or not self.mask_site_work_bound<=self.completed_value_visit_bound<=self.value_visit_bound):
+            raise ValueError('bridge completed work changed its complete peak inventory')
 
 
 def native_trace_bridge_preflight_value_visit_bound(plans, response_source_plans=None) -> int:
@@ -517,6 +523,26 @@ def _value_reservation(plans,hash_work=0,*,reuse_masks=False):
         +16*sites(lambda p:p.retain_responses)
         +512*sum(b-a for p in plans if p.retain_responses for a,b in p.trace_intervals_px))
     return visits,mask_work
+
+
+def _completed_value_visit_bound(plans,strips,reserved):
+    """Settle only a complete batch; all scans and all recorded peaks count.
+
+    The admission bound retains 704 sites: 256 for original peak extraction,
+    64 for full OR support, and 384 for a potential fixed record. Only fixed
+    record/width packing and validation depend on the emitted inventory.
+    """
+    counts=[0]*len(plans)
+    for strip in strips:
+        counts[strip.plan_index]+=strip.peak_row_offsets[-1]
+    unspent=0
+    for plan,count in zip(plans,counts,strict=True):
+        if not plan.record_peaks:continue
+        width=_corridor_domain(plan)[1]-_corridor_domain(plan)[0]
+        sites=width*sum(b-a for a,b in plan.trace_intervals_px)
+        if count>sites:raise ValueError('bridge peak inventory exceeded its complete coordinate domain')
+        unspent+=(384+(0 if plan.split_gradient_reversals else 64))*(sites-count)
+    return reserved-unspent
 
 
 def _prepare_refinement(plans,sources,maximum_temporary_bytes):
@@ -658,8 +684,12 @@ def _strip(measured, block_start, start, stop, index, plan, sources, response_ca
 
 def _mask_row_hex(strip,encoded,trace):
     """Copy exactly one original row, including non-byte-aligned starts."""
+    if type(trace) is not int or not strip.trace_start_px<=trace<strip.trace_stop_px:
+        raise ValueError('mask row must belong to its original strip')
     width = strip.coordinate_stop_px-strip.coordinate_start_px
     start = (trace-strip.trace_start_px)*width
+    if width%8==0:
+        return encoded[start//4:(start+width)//4]
     first,last = start//8,(start+width+7)//8
     packed = np.frombuffer(bytes.fromhex(encoded[2*first:2*last]),dtype=np.uint8)
     bits = np.unpackbits(packed,bitorder='little',count=start%8+width)[start%8:]
@@ -718,7 +748,9 @@ def measure_native_trace_bridges(field: PhotoBoundaryMeasurementField, plans: tu
     ``maximum_pixel_queries`` is the caller's remaining combined pixel/value
     allowance, including ``preflight_value_visit_bound``. The required value
     bound excludes that separately named preflight. ``mask_site_work_bound``
-    is a subset of ``value_visit_bound``.
+    is a subset of ``value_visit_bound``. The latter keeps the original
+    complete admission reservation; ``completed_value_visit_bound`` settles
+    full-domain scanning plus every actually encoded record after completion.
     Peak memory reserves all possible fixed-size peak records before reading any pixel;
     it is deliberately conservative even when the eventual image is flat.
     """
@@ -785,7 +817,8 @@ def _measure_native_trace_bridges(field,plans,*,maximum_pixel_queries,maximum_te
     if retained > peak:
         raise RuntimeError("bridge measurement exceeded its pre-reserved retained storage")
     batch = NativeTraceBridgeBatch(plans,frozen,pixels,visits,mask_work,retained,peak,False,
-        pixels,visits,peak,preflight,response_cache_bytes=(0 if cache is None else native_trace_response_cache_byte_bound(plans)))
+        pixels,visits,peak,preflight,response_cache_bytes=(0 if cache is None else native_trace_response_cache_byte_bound(plans)),
+        completed_value_visit_bound=_completed_value_visit_bound(plans,frozen,visits))
     if cache is not None:cache.seal(batch)
     return batch,cache
 
@@ -842,7 +875,8 @@ def refine_native_trace_responses(signal,cache,plans,*,maximum_pixel_queries,max
     if retained>peak:
         raise RuntimeError('refinement exceeded its reserved retained storage')
     return NativeTraceBridgeBatch(plans,frozen,0,visits,mask_work,retained,peak,False,
-                                  0,visits,peak,preflight,response_source_plans=signal.plans)
+        0,visits,peak,preflight,response_source_plans=signal.plans,
+        completed_value_visit_bound=_completed_value_visit_bound(plans,frozen,visits))
 
 
 def validate_native_trace_response_reuse(batch,signal):

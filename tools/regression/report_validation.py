@@ -4100,6 +4100,10 @@ def _validate_registered_normalization(record: dict[str, Any]) -> None:
                 exterior=exterior[lane_id],read_proof=_read_common_proof)
             validate_development_peak_associations(lane, production, tuple(decoded_measurements),
                 source_id=source_id, source_extent=extent, bounds=bounds, read_proof=_read_common_proof)
+            from .native_continuity_validation import validate_development_native_continuity
+            validate_development_native_continuity(lane, production, tuple(decoded_measurements),
+                bounds=bounds, exterior=exterior[lane_id], source_id=source_id,
+                source_extent=extent, read_proof=_read_common_proof)
 
 
 def _validate_development(record: dict[str, Any]) -> None:

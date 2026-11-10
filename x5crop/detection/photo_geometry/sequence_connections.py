@@ -286,7 +286,8 @@ def _assess_one(parent, request, measurements, batch):
             if p.physical_position_interval_px.maximum-projected.minimum >= -LINE_REGION_ARITHMETIC_EPSILON_PX
             and p.physical_position_interval_px.minimum-projected.maximum <= LINE_REGION_ARITHMETIC_EPSILON_PX) if component else ()
         if len(matches) != 1:
-            failure = failure or ("physical_domain_unavailable" if connected and not matches else "dense_peak_competition")
+            failure = failure or ("dense_peak_unavailable" if not connected else
+                                 "physical_domain_unavailable" if not matches else "dense_peak_competition")
             continue
         peak = matches[0]
         if peak.localization_width_px is None:
@@ -382,7 +383,7 @@ def _unadmitted(parents,measures,requests,memory,budget,reservation):
 def _full_value_budget(parents,requests,plans,signal,reservation,budget):
     proof_visits,_,_ = _proof_bounds(parents,requests,plans)
     return max(0,budget.maximum_value_visits-reservation.planning_visits-reservation.guard_visits
-        -signal.pixel_query_count-signal.value_visit_bound-signal.preflight_value_visit_bound-proof_visits)
+        -signal.pixel_query_count-signal.completed_value_visit_bound-signal.preflight_value_visit_bound-proof_visits)
 
 
 def prepare_sequence_connections(field, edges, measurements, *, maximum_value_visits, maximum_temporary_bytes,
@@ -426,9 +427,9 @@ def _finish(parents,measures,requests,signal,batch,planning_memory,budget,reserv
         assessments = tuple(SequenceConnectionAssessment(r.observation_id,r.failure_kind or "proof_bound_exceeded",None)
                             for r in requests)
     release_work = native_trace_response_consumption_work(signal.plans) if batch is None or batch.bound_exceeded else 0
-    batch_values = release_work+(0 if batch is None else batch.value_visit_bound+batch.preflight_value_visit_bound)
+    batch_values = release_work+(0 if batch is None else batch.completed_value_visit_bound+batch.preflight_value_visit_bound)
     batch_retained = 0 if batch is None else batch.retained_bytes
-    actual_visits = (reservation.planning_visits+signal.value_visit_bound+signal.preflight_value_visit_bound
+    actual_visits = (reservation.planning_visits+signal.completed_value_visit_bound+signal.preflight_value_visit_bound
                      +reservation.guard_visits+batch_values+(proof_visits if proof_fits else 0))
     retained = planning_memory+signal.retained_bytes+batch_retained+(proof_retained if proof_fits else 0)
     peak = max(planning_memory,planning_memory+signal.peak_temporary_bytes,

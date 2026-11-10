@@ -62,6 +62,12 @@ class SequenceParentDomainContractTest(unittest.TestCase):
         self.assertIsNone(result.constraint)
         self.assertEqual(result.failure_kind,'dense_peak_competition')
 
+    def test_missing_original_component_peak_is_unavailable_instead_of_multiple_competition(self):
+        region=PhysicalLineRegion(0.,((24.5,0.),(25.5,0.)))
+        result=assess(region,((peak(25),),(),(peak(25),)))
+        self.assertIsNone(result.constraint)
+        self.assertEqual(result.failure_kind,'dense_peak_unavailable')
+
     def test_marginal_intersections_do_not_prove_a_common_line(self):
         region=PhysicalLineRegion(0.,((20.,-.05),(30.,-.05),(30.,.05),(20.,.05)))
         rows=((peak(30),),)+((peak(25),),)*9+((peak(19),),)

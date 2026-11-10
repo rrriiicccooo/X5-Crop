@@ -431,7 +431,8 @@ OR mask，不执行峰组或物理直线裁剪；精测后的完整证明仍分�
 每条原 trace 的信号 SHA 与原 baseline 一致，原峰与完整物理区间不得替换。
 相容性先使用父边原始 `PhysicalLineRegion` 在该 trace 的投影：仅排除完整峰区间严格落在该域外、
 不可能属于该父直线族的分支，沿用原 `1e-9 px` 算术容差，保留相切和容差内竞争。不按 canonical
-距离、模板或已选行的前缀域选择峰；域内仍有多峰时保持竞争，无相容峰时保持物理域 unavailable。
+距离、模板或已选行的前缀域选择峰；域内仍有多峰时保持竞争。原响应分量中没有所选原峰时记录
+`dense_peak_unavailable`；已有同分量峰但均与父域不相容时记录 `physical_domain_unavailable`，两者均不授予约束。
 域外原峰仍完整保存在 batch 和其它解释中；这里只否定其属于当前 parent，不排除其物理存在或照片解释。
 筛选后仍核验全 query 的原峰别名和完整 OR 组，不把所选 raw 区间裁成与父域投影的交集。
 
@@ -2611,7 +2612,7 @@ format/source 状态测量共同 W。共同 H 只从每个成员都已完整关�
 `common_outputs` 可保留预算失败窗口作为诊断，只有 `state=supported` 且 `common_failure=null` 才表示窗口
 验证通过。当前该分支在规范 selection/Gate 后执行，不授予照片序号映射、canonical winner 或自动输出权限。
 
-当前报告 schema 为 136。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
+当前报告 schema 为 137。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
 重放全部 producer 和独立成员，再比对结果、缺口和工作。成员 Cross 只重复自身 H／纵向域、best/runner、
 求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
 外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source
@@ -2737,6 +2738,20 @@ baseline 数组的 view；坐标每 query 只复制一次。完整 kernel 和正
 回放逐行核对三份原 mask 和原 trace SHA，Cross 入口拒绝该复用上下文，不能借此获得另一类资格。
 Sequence 单峰桥接另保留每峰已测 localization width，固定 8-byte 编码；原 Cross 64-byte 峰记录及
 选择不变。附加编码、构造与访问在同一 bridge owner 的整批资源公式中预留和重放。
+
+Bridge 将读取前预留与完整测量后结算分开。`value_visit_bound=required_value_visit_bound` 继续保存
+整批最坏预留 U，首像素前的 pixel／value 准入及最坏内存保持原合同；新增 `completed_value_visit_bound`
+保存完成费用 W。令 E 为全部提峰坐标数、P 为完整已编码峰数，L／P_L 为其中采用单峰定位宽度的
+坐标／峰数，完成费用为 `W=U−384(E−P)−64(L−P_L)`。每坐标的完整扫描与 OR 支撑仍按 `320E`
+计费，固定记录的编码、校验与访问按 `384P`，定位宽度按 `64P_L`；mask、来源 SHA、缓存、元数据、
+preflight、guard 和完整物理证明费用均保持。只有完整 strip coverage、offsets、payload 和来源通过后
+才结算；失败 batch 的 W 为 0，但已执行规划、preflight 与其它阶段继续独立收费。物理证明失败、
+最终未被采用的峰同样全部计费，不能按成功父边或有利子集退款。后续共同池使用 W，不把尚未执行
+测量的预期稀疏性用于准入。信号阶段不提峰，W 与 U 相同。
+开发回放从原 coverage、exterior、Sequence 和 association 工作重建 Cross 之前的剩余 pixel／value
+池与 `late_measurement_peak`，绑定原始三份 Cross 测量，依次重放 metadata、planning、proof 与原
+bridge owner 的 U／内存准入；不能仅因最终 W 能容纳就接受成功 batch。字节对齐的原 packed mask
+行直接复制准确 hex 片段，非对齐行仍按原 bit 次序重排，最终完整编码校验与费用上界均保留。
 
 长轴连接先释放 baseline NumPy 数组，保留不可变测量账本。原峰保留量加上
 `4096 + 1024(P+G+Q) + 4096(E+H)` bytes 作为持续输入界，P/G/Q/E/H 分别为全部测量点、来源组、
