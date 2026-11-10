@@ -124,7 +124,7 @@ def positive_mad_z_uint8_rows(values: np.ndarray, *, minimum_scale: float = 0.0)
         del counts, distances, deviations, middle
     scale = np.maximum(minimum_scale, NORMAL_MAD_SCALE*mad)
     valid = scale > np.finfo(np.float64).eps
-    result = values.astype(np.float64)
+    result = np.array(values, dtype=np.float64, copy=True, order='C')
     np.subtract(result, center[:, None], out=result)
     result[~valid] = 0.0
     np.divide(result, scale[:, None], out=result, where=valid[:, None])

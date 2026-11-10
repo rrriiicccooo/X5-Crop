@@ -29,6 +29,7 @@ class Uint8RobustStatisticsContractTest(unittest.TestCase):
                 for minimum in (0., .25, 1., 9.25):
                     with self.subTest(columns=columns, minimum=minimum):
                         actual = positive_mad_z_uint8_rows(data, minimum_scale=minimum)
+                        self.assertTrue(actual.flags.c_contiguous)
                         np.testing.assert_array_equal(actual, positive_mad_z_rows(data, minimum_scale=minimum))
                         expected = np.vstack([positive_mad_z(row, minimum_scale=minimum) for row in data])
                         np.testing.assert_array_equal(actual, expected)

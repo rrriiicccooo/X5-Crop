@@ -12,6 +12,7 @@ from ..domain import FiniteInterval, PositiveInterval
 
 _SCALAR_TYPES = frozenset((str, int, float, bool, type(None)))
 _INTERVAL_TYPES = frozenset((FiniteInterval, PositiveInterval))
+_CONTAINER_TYPES = frozenset((dict, list))
 
 
 @lru_cache(maxsize=256)
@@ -39,12 +40,14 @@ def typed_read_model(value: Any) -> Any:
     def copy_tree(item):
         kind = type(item)
         if kind is dict and id(item) not in opaque_containers:
-            if all(type(child) in _SCALAR_TYPES for child in item.values()):
-                return dict(item)
-            return {key: child if type(child) in _SCALAR_TYPES else copy_tree(child)
-                    for key, child in item.items()}
+            result = item.copy()
+            for key, child in item.items():
+                child_type = type(child)
+                if child_type is dict or child_type is list:
+                    result[key] = copy_tree(child)
+            return result
         if kind is list and id(item) not in opaque_containers:
-            return [child if type(child) in _SCALAR_TYPES else copy_tree(child) for child in item]
+            return [copy_tree(child) if type(child) in _CONTAINER_TYPES else child for child in item]
         return item
 
     def convert(item):

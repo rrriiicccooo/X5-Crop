@@ -278,6 +278,8 @@ x5_crop_output/
   x5_crop_summary.csv
 ```
 
+The JSONL report uses compact UTF-8 encoding, with one complete record per line, and can be read with standard JSON tools.
+
 Exit codes:
 
 - `0`: published successfully with no `runtime_error`;

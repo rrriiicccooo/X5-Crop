@@ -13,7 +13,12 @@ def append_report_jsonl(path: Path, result: dict[str, Any]) -> None:
         raise ValueError("Current report record is missing")
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(result, ensure_ascii=False) + "\n")
+        # The record builder has already traversed the normalized JSON tree.
+        # Shared facts are independently copied; repeating a per-container
+        # circular-reference map adds no report fact. Invalid recursive input
+        # still fails during encoding, before a record is appended.
+        f.write(json.dumps(result, ensure_ascii=False, check_circular=False,
+                           separators=(',', ':')) + "\n")
 
 
 def append_summary_csv(path: Path, result: dict[str, Any]) -> None:

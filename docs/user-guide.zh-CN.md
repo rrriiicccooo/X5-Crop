@@ -221,6 +221,8 @@ x5_crop_output/
   x5_crop_summary.csv
 ```
 
+JSONL 报告使用紧凑 UTF-8 编码，每行一条完整记录，可用标准 JSON 工具读取。
+
 退出码：
 
 - `0`：成功发布且没有 `runtime_error`；

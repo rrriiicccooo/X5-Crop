@@ -2918,6 +2918,9 @@ frozen 标记与公开字段名，避免每个节点重复识别同一类型；�
 mapping／sequence 优先级和不透明对象行为保持。
 单次转换最多保留 4096 个 frozen model 的转换模板，命中后复制独立 dict/list 树，不共享可变报告分支，
 按最近使用顺序淘汰旧模板，调用返回即释放；全标量 dict 复制保持独立，Enum 的 opaque 容器行为保持。
+模板命中后先浅复制 dict，再只递归复制实际 dict/list 子节点，避免先重复扫描标量再重建同一容器；
+不透明叶子仍保留原对象。JSONL 使用紧凑 UTF-8 编码，同一完整规范树不再建立第二份循环引用映射；
+非法递归输入仍在完整编码阶段失败，不向既有文件追加不完整记录。字段、数值、Unicode 与重复事实保持。
 `photo_geometry_summary` 先收集该 source 的完整只读事实，再一次转换整份几何摘要，使不同字段中的
 相同冻结证据复用上述有界模板；不重复为每个字段建立缓存，不跨 source 保留值或共享可变结果。
 `FiniteInterval`／`PositiveInterval` 的固定 minimum／maximum 值直接构建独立叶子 dict，不占模型模板
