@@ -22,6 +22,22 @@ TRANSITION_PEAK_SOURCE_BASIS = "registered-u8-peak-source-v1"
 _NATIVE_PEAK_GROUP_ID = re.compile(r"^native-peak-group:[0-9a-f]{64}$")
 
 
+def peak_reference_matches_measurement(reference_polarity, measured_polarity,
+        gradient_z, tone_z, texture_z, *, gradient_z_minimum, secondary_z_minimum):
+    """Bind selection identity without turning a secondary peak into a gradient.
+
+    A secondary selection has no reliable gradient sign. Its measured signed
+    difference remains a separate observation, including a small nonzero sign.
+    Full source/group/candidate identity is checked by the existing owner.
+    """
+    if reference_polarity in (-1, 1):
+        return reference_polarity == measured_polarity
+    return (reference_polarity == 0
+        and all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+                and v >= 0. for v in (gradient_z, tone_z, texture_z))
+        and gradient_z < gradient_z_minimum and max(tone_z, texture_z) >= secondary_z_minimum)
+
+
 def _require_plain_string(value: object, name: str) -> None:
     if type(value) is not str:
         raise TypeError(f"{name} must be a string")
@@ -428,4 +444,5 @@ __all__ = [
     "TransitionPeakGroupSource",
     "TransitionPeakReference",
     "same_transition_peak",
+    "peak_reference_matches_measurement",
 ]

@@ -218,7 +218,8 @@ def continuity_requests(registration, measurement_sets, *, source_extent):
                for i in measured.query.search_intervals_px):
             failure = failure or NativeTraceContinuityFailure.SOURCE_DOMAIN_UNAVAILABLE
         polarity = next(iter(polarities)) if len(polarities) == 1 else 0
-        if not polarity or any(p.peak_source is None for p in original):
+        if not polarity or any(p.peak_source is None or p.peak_source.polarity not in (-1, 1)
+                               for p in original):
             failure = failure or NativeTraceContinuityFailure.ORIGINAL_PEAK_UNAVAILABLE
         low, high = parent.trace_coordinates_px[0], parent.trace_coordinates_px[-1]
         outside = {}
@@ -236,7 +237,8 @@ def continuity_requests(registration, measurement_sets, *, source_extent):
         if any(len(points) != 1 for points in outside.values()):
             failure = failure or NativeTraceContinuityFailure.RAW_PEAK_COMPETITION
         extensions = tuple(points[0] for points in outside.values() if len(points) == 1)
-        if any(p.polarity != polarity or p.peak_source is None for p in extensions):
+        if any(p.polarity != polarity or p.peak_source is None or p.peak_source.polarity not in (-1, 1)
+               for p in extensions):
             failure = failure or NativeTraceContinuityFailure.ORIGINAL_PEAK_UNAVAILABLE
         support = tuple(sorted((*original, *extensions), key=lambda p: p.trace_coordinate_px))
         for point in support:
@@ -402,6 +404,10 @@ def assess_native_continuity(requests, measurements, batch):
             failure = NativeTraceContinuityFailure.MEASUREMENT_BOUND_EXCEEDED
         measurement = measurements_by_id[request.query_id]
         raw_by_id = {p.transition_id: p for p in measurement.transitions}
+        if failure is None and any(raw_by_id[i].peak_source is None
+                or raw_by_id[i].peak_source.polarity not in (-1, 1)
+                for i in request.supporting_transition_ids):
+            failure = NativeTraceContinuityFailure.ORIGINAL_PEAK_UNAVAILABLE
         if failure is None:
             plan_index = next(i for i, p in enumerate(batch.plans) if p.original_query_id == request.query_id)
             for low, high in request.trace_intervals_px:

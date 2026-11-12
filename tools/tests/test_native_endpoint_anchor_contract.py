@@ -101,6 +101,39 @@ class NativeEndpointAnchorContractTest(unittest.TestCase):
             self.assertIsNone(response["peak_source"])
             self.assertEqual(response["source_coordinate_px"], 60)
 
+    def test_secondary_reference_keeps_actual_sign_without_identity_authority(self):
+        inputs = _inputs()
+        for point in inputs[3][0]['transitions']:
+            point.update(gradient_z=1.,tone_z=6.,texture_z=0.)
+            point['peak_source'].update(polarity=0,candidate_ordinal=0)
+        result = _measure(inputs)
+        for query in result['queries']:
+            response, = query['original_peak_anchor_responses']
+            self.assertEqual(response['state'],'supported')
+            self.assertEqual(response['original_polarity'],-1)
+            self.assertEqual(response['peak_source']['polarity'],0)
+            self.assertEqual(response['source_coordinate_px'],60)
+        self.assert_authority_unavailable(result)
+        for bad in ('strong_gradient','weak_secondary','candidate','zero_sign'):
+            with self.subTest(bad=bad):
+                changed = deepcopy(inputs)
+                for point in changed[3][0]['transitions']:
+                    if bad == 'strong_gradient':
+                        point['gradient_z'] = 3.
+                    elif bad == 'weak_secondary':
+                        point['tone_z'] = 1.
+                    elif bad == 'candidate':
+                        point['peak_source']['candidate_ordinal'] = 2
+                    else:
+                        point['polarity'] = 0
+                denied = _measure(changed)
+                for query in denied['queries']:
+                    response, = query['original_peak_anchor_responses']
+                    self.assertEqual(response['failure_kind'],'original_polarity_unavailable'
+                                     if bad == 'zero_sign' else 'original_peak_source_conflict')
+                    self.assertIsNone(response['native_component_label'])
+                self.assert_authority_unavailable(denied)
+
     def test_missing_ids_are_complete_and_not_joined_by_coordinate(self):
         inputs = _inputs()
         inputs[1][0]["transition_ids"] = ["missing:0", "missing:1", "raw:0", "missing:2"]

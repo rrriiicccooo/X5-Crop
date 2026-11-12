@@ -1093,8 +1093,9 @@ def _select_transition_peaks(measurement,spec,*,split_gradient_reversals,peak_so
                 (peak_minimum+peak_maximum)/2.,float(measurement.gradient_z[peak_index]),
                 float(measurement.tone_z[peak_index]),float(measurement.texture_z[peak_index]),
                 peak_maximum-peak_minimum,prominence,local_noise,peak_polarity,peak_index,source_group,
-                None if source_group is None or not polarity_runs else TransitionPeakReference(
-                    source_group.primitive_id,ordinal,int(coordinates[peak_index]),peak_polarity))
+                None if source_group is None else TransitionPeakReference(
+                    source_group.primitive_id,ordinal,int(coordinates[peak_index]),
+                    peak_polarity if polarity_runs else 0))
             records.append(MeasuredTransitionPeak(*selected,
                 left_tone=float(measurement.left_tone[peak_index]),right_tone=float(measurement.right_tone[peak_index]),
                 left_texture=float(measurement.left_texture[peak_index]),right_texture=float(measurement.right_texture[peak_index]))

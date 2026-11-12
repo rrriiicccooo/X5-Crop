@@ -130,9 +130,14 @@ def sequence_connection_requests(parents, measurements, *, source_extent):
                 failure = failure or "source_domain_unavailable"
             for p in original:
                 ref = p.peak_source
-                if (ref is None or ref.group_id not in groups or not groups[ref.group_id].complete
-                        or p.polarity != parent.polarity or p.polarity == 0):
+                if ref is None or ref.group_id not in groups or not groups[ref.group_id].complete:
                     failure = failure or "original_peak_group_unavailable"
+                    continue
+                if groups[ref.group_id].selection_basis != 'gradient' or ref.polarity not in (-1, 1):
+                    failure = failure or 'original_gradient_unavailable'
+                    continue
+                if p.polarity != parent.polarity or p.polarity == 0:
+                    failure = failure or 'original_polarity_conflict'
                     continue
                 for alias in by_trace[p.trace_coordinate_px]:
                     if not alias.physical_position_interval_px.contains(float(ref.source_coordinate_px)):
@@ -224,6 +229,8 @@ def _connection_context(parent,request,measurements,batch,*,include_credible=Tru
     measured = next(m for m in measurements if m.query.query_id==request.query_id)
     raw = {p.transition_id:p for p in measured.transitions}
     original = tuple(raw[i] for i in parent.transition_ids)
+    if any(p.peak_source is None or p.peak_source.polarity not in (-1, 1) for p in original):
+        return 'original_gradient_unavailable',labels,credible,strips,starts,original,0,coordinate_start
     component = int(labels[original[0].trace_coordinate_px-low,
                            original[0].peak_source.source_coordinate_px-coordinate_start])
     failure = None if component else "dense_signal_unavailable"

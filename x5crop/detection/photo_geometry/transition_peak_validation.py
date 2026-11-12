@@ -4,6 +4,7 @@ import math
 
 from ...domain import FiniteInterval
 from .model import PHOTO_BOUNDARY_MEASUREMENT_SPEC, QueryPurpose
+from .transition_peak_source import peak_reference_matches_measurement
 
 
 def validate_transition_peak_reference(transition, groups):
@@ -14,6 +15,11 @@ def validate_transition_peak_reference(transition, groups):
     if group is None or group.source.trace_coordinate_px != transition.trace_coordinate_px:
         raise ValueError("transition lost its original measured peak group")
     reference.validate_group(group)
+    if not peak_reference_matches_measurement(reference.polarity, transition.polarity,
+            transition.gradient_z, transition.tone_z, transition.texture_z,
+            gradient_z_minimum=group.source.gradient_z_minimum,
+            secondary_z_minimum=group.source.tone_or_texture_z_minimum):
+        raise ValueError('transition changed its original peak selection basis')
     candidates, index = group.candidate_peak_coordinates_px, reference.candidate_ordinal
     low = (group.credible_group_domain_px[0] - .5 if index == 0 else
            math.floor((candidates[index-1] + candidates[index]) / 2) + .5)
@@ -79,6 +85,8 @@ def validate_peak_source_measurements(measurements, *, source_id, source_extent,
         raw = (() if support is None else tuple(point for track in (support.minimum_track, support.maximum_track)
                                                for point in track.retained_transitions))
         references = tuple(item for item in raw if item.peak_source is not None)
+        if coarse.peak_source_groups and len(references) != len(raw):
+            raise ValueError('complete coarse peak capture lost an original selection identity')
         _validate_source_value_work(coarse, raw_count=len(raw))
         if coarse.coverage.peak_source_reference_count != len(references):
             raise ValueError("coarse raw track ledger changed its original peak reference count")

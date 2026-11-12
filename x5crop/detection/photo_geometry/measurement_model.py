@@ -24,10 +24,12 @@ from .model import (
     QueryPurpose,
     SPATIAL_SUPPORT_REGION_COUNT,
     spatial_support_region_index,
+    PHOTO_BOUNDARY_MEASUREMENT_SPEC,
 )
 from .physical_identity import physical_fact_id
 from .transition_peak_source import (
     TransitionPeakGroupSource, TransitionPeakReference, TransitionPeakTraceSource,
+    peak_reference_matches_measurement,
 )
 
 if TYPE_CHECKING:
@@ -304,7 +306,10 @@ class PhotoBoundaryTransition:
             raise ValueError("texture sampling coordinate left its original localization peak")
         if self.peak_source is not None and (
             not isinstance(self.peak_source, TransitionPeakReference)
-            or self.peak_source.polarity != self.polarity
+            or not peak_reference_matches_measurement(self.peak_source.polarity, self.polarity,
+                self.gradient_z, self.tone_z, self.texture_z,
+                gradient_z_minimum=PHOTO_BOUNDARY_MEASUREMENT_SPEC.gradient_z_minimum,
+                secondary_z_minimum=PHOTO_BOUNDARY_MEASUREMENT_SPEC.tone_or_texture_z_minimum)
             or not self.physical_position_interval_px.contains(self.peak_source.source_coordinate_px)
             or self.texture_sample_coordinate_px is not None
             and self.texture_sample_coordinate_px != self.peak_source.source_coordinate_px
@@ -700,6 +705,8 @@ class PhotoBoundaryMeasurementSet:
                     or source.trace_coordinate_px not in trace_positions):
                 raise ValueError("peak source left its original query lattice")
         references = tuple(item for item in self.transitions if item.peak_source is not None)
+        if self.peak_source_groups and len(references) != len(self.transitions):
+            raise ValueError('complete peak capture lost an original selection identity')
         minimum_bytes = (sum(source.retained_bytes for source in self.peak_trace_sources)
             + sum(group.retained_bytes for group in self.peak_source_groups)
             + sum(item.peak_source.retained_bytes for item in references))
@@ -711,20 +718,9 @@ class PhotoBoundaryMeasurementSet:
             raise ValueError("peak source ledger lost retained memory or value work")
         if self.query.purpose != QueryPurpose.COARSE_STRIP_SHORT and self.coverage.peak_source_reference_count != len(references):
             raise ValueError("measurement changed its original peak references")
+        from .transition_peak_validation import validate_transition_peak_reference
         for transition in references:
-            reference = transition.peak_source
-            group = group_by_id.get(reference.group_id)
-            if group is None or group.source.trace_coordinate_px != transition.trace_coordinate_px:
-                raise ValueError("transition lost its original measured peak group")
-            reference.validate_group(group)
-            candidates = group.candidate_peak_coordinates_px
-            index = reference.candidate_ordinal
-            low = (group.credible_group_domain_px[0] - .5 if index == 0 else
-                   math.floor((candidates[index-1] + candidates[index]) / 2) + .5)
-            high = (group.credible_group_domain_px[1] + .5 if index + 1 == len(candidates) else
-                    math.floor((candidates[index] + candidates[index+1]) / 2) + .5)
-            if transition.physical_position_interval_px != FiniteInterval(low, high):
-                raise ValueError("transition changed its original polarity partition")
+            validate_transition_peak_reference(transition, group_by_id)
         if self.coarse_aggregate is not None:
             aggregate = self.coarse_aggregate
             if (not isinstance(aggregate, CoarseAggregateShortEvidence)

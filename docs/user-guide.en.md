@@ -113,6 +113,9 @@ When coarse and fine measurements are proven to share the same original boundary
 continuous edge and every competing continuation pass validation, the program can use the fuller measured span
 to protect output. Original intervals and local variation remain protected. Extrapolation beyond that span still
 carries its full uncertainty; missing evidence requires manual review.
+Peaks selected by tone or texture also retain their full provenance so coarse and fine measurements can identify
+the same original peak. Boundary roles and continuity of the whole edge still require separate validation;
+a weak gradient or local signal alone does not establish photo ownership.
 For independently supported top and bottom edges, the program can measure the missing tail between original sample
 lines. The edge gains a larger proven continuous span only when original peaks, the complete connection, and full
 uncertainty pass validation. Multiple peaks, a broken path, or insufficient measurement budget require review.

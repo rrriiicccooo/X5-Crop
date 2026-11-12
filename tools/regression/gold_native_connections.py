@@ -13,6 +13,8 @@ import math
 import cv2
 import numpy as np
 
+from x5crop.detection.photo_geometry.transition_peak_source import peak_reference_matches_measurement
+
 from x5crop.domain import FiniteInterval
 from x5crop.image.gray import BaseGrayParameters, _luma_u16
 from x5crop.detection.photo_geometry.line_observations import PhysicalLineRegion
@@ -136,7 +138,12 @@ def _original_pixel_record(identity, measurement, point, kind, expected_axis):
             or not isinstance(reference.get("group_id"), str) or not reference["group_id"]
             or type(reference.get("candidate_ordinal")) is not int or reference["candidate_ordinal"] < 0
             or type(reference.get("source_coordinate_px")) is not int or coordinate != sample
-            or type(reference.get("polarity")) is not int or reference["polarity"] != polarity):
+            or type(reference.get("polarity")) is not int
+            or reference["polarity"] == 0 and reference["candidate_ordinal"] != 0
+            or not peak_reference_matches_measurement(reference["polarity"], polarity,
+                point.get('gradient_z'), point.get('tone_z'), point.get('texture_z'),
+                gradient_z_minimum=SPEC.gradient_z_minimum,
+                secondary_z_minimum=SPEC.tone_or_texture_z_minimum)):
         failure = "original_peak_source_conflict"
     else:
         ordinal = point.get("trace_ordinal")

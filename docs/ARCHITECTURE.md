@@ -454,6 +454,11 @@ measurement。它们共同描述同一个 observation，可以互相加强、否
 全部候选原峰坐标和原分峰方式。只有两个 view 都完整包含该组、全部来源字段及所选原峰相同，才证明
 同一原始峰；坐标接近或区间相交不构成此证明。组外噪声、定位区间和完整物理区间仍属于各自测量。
 Sequence baseline 与 anchor windows 保留原单峰规则，Cross 保留反向梯度分峰；重放必须冻结同一选择器。
+完整捕获也为 tone／texture 选出的 secondary 峰保留同一候选引用，其 reference 极性为 0，表示没有
+可靠梯度分区；原 transition 的实际微弱有符号差仍独立保留，可为 -1／0／1。重放核对原梯度低于阈值、
+tone／texture 达到原阈值、单个候选和完整原区间，不能把引用极性改成实际弱差的符号。完整捕获不得
+遗漏任何保留峰的引用；整批失败仍清空来源组及引用。Sequence／Cross 的 AND 连续连接另须可靠梯度引用，
+secondary 身份不能凭局部信号、旧强响应 batch 或来源完整取得该权限；缺可靠梯度与原极性冲突分别记录。
 来源只证明相关原峰，不证明 trace 间连接、照片角色、边对、序号或终端，也不新增独立支撑。
 来源捕获超界时丢弃该 query 整批引用，原测量仍保留，不能转授失败前缀的权限。
 
@@ -699,6 +704,8 @@ Runtime 与当前报告都拒绝旧区域点 schema、虚构空间区域、跨 q
 ### 6.4 Cross observation
 
 Sharp coarse 与 TOP／BOTTOM 按第 6.1 节保留已登记灰度原峰来源，分别核验完整 query view 与原峰。
+相同 secondary 原峰也可核对选峰身份，但边界角色、完整连续范围、全部别名与竞争延续仍须各自通过
+下述独立检查；原始弱梯度本身不建立连续边或任何照片归属。
 
 `coarse_native_association` 只消费候选无关的 base Cross registration。原 sharp track 的每个保留峰都须
 在两份完整 TOP／BOTTOM 查询的原 trace 峰账本中有唯一原生对应；另一查询存在可能覆盖同一原峰的
@@ -2612,7 +2619,7 @@ format/source 状态测量共同 W。共同 H 只从每个成员都已完整关�
 `common_outputs` 可保留预算失败窗口作为诊断，只有 `state=supported` 且 `common_failure=null` 才表示窗口
 验证通过。当前该分支在规范 selection/Gate 后执行，不授予照片序号映射、canonical winner 或自动输出权限。
 
-当前报告 schema 为 137。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
+当前报告 schema 为 138。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
 重放全部 producer 和独立成员，再比对结果、缺口和工作。成员 Cross 只重复自身 H／纵向域、best/runner、
 求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
 外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source
@@ -2704,6 +2711,8 @@ candidate-dependent query 或 content-driven placement；概率层也只能消�
 查询坐标数预留 `256Q+32`，覆盖捕获、typed query／替换检查与最终来源对账，包含最终丢弃的组；
 source／group／reference 保留量分别按 `1024`、
 `2048+256(U+P)`、`512` bytes 计入，U／P 为该组可靠梯度坐标数／候选峰数。固定捕获开销为 1024 bytes。
+每个候选的引用在组捕获时已共同预留，包括 secondary 候选；新增保留的实际引用计入原 retained bytes，
+不能凭既有预留免除实际保留量或扩大后续剩余池。
 累计来源保留量与尚在使用的 baseline 数组、原生纹理缓冲共同预检；新增值访问与既有像素工作之和
 仍不得超过原 `128N`。关联每 lane 至多两条原 sharp track，不新增像素、拟合或 Cross 配额：令 L 为
 精测点、来源组、可靠梯度坐标、全部登记／family／原 atom raw 及各 maximal union raw 上界的合计，
@@ -3258,6 +3267,8 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   与存在的完整 peak reference。只在该原像素、原极性的既有 native16 label 上读响应和是否到达原 query
   外沿，不扩窗口或改选附近强线。缺 ID、重复 ID、源域／方向不符、像素在 query 外或 kernel 不可观察时，
   明确保留原义务及 unavailable；未提供原账本与提供空账本分别记录。
+  secondary 引用的极性 0 只绑定原选峰，按第 6.1 节核对原信号及单候选后，仍以 transition 实际非零
+  极性读取局部响应；实际极性为 0 时保持 unavailable，不由 native16 响应补造原梯度。
   注册 gray8 与新 native16 归一化上下文不同；原像素位置命中不等于同一原峰、整条物理边界、同照片或
   真终端。四类身份 authority 均保持 unavailable，component label 只在自身 query／polarity 内有意义。
   Q／L／P／R 分别为原 measurement query、冻结 line、全部三类原 transition 和 line 原 ID 引用数，新增
