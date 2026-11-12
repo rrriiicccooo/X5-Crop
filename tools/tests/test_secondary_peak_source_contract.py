@@ -164,8 +164,11 @@ class SecondaryPeakSourceContractTest(unittest.TestCase):
             with self.subTest(denied=denied):
                 fixture,case = _association_case(conditional=denied == 'conditional')
                 if denied == 'discontinuous':
-                    case[2] = fixture._ns_replace(case[2],top_bindings=tuple(
-                        replace(b,source_spanning_continuous=False) for b in case[2].top_bindings))
+                    case[2] = fixture._ns_replace(case[2],
+                        observations=tuple(replace(o,source_spanning_continuous=False)
+                            if o.role == BoundaryRole.TOP else o for o in case[2].observations),
+                        top_bindings=tuple(replace(b,source_spanning_continuous=False)
+                            for b in case[2].top_bindings))
                 proofs,_ = fixture._associate(case)
                 self.assertNotIn(BoundaryRole.TOP,fixture._roles(proofs))
 
