@@ -14,7 +14,10 @@ from x5crop.detection.photo_geometry.coarse_enclosing_support import _fit_track
 from x5crop.detection.photo_geometry.coarse_native_association import (
     associate_coarse_native_lines,
 )
-from x5crop.detection.photo_geometry.robust_line_fit import physical_line_region
+from x5crop.detection.photo_geometry.robust_line_fit import (
+    LINE_REGION_ARITHMETIC_EPSILON_PX,
+    physical_line_region,
+)
 from x5crop.detection.photo_geometry.line_observations import (
     PhotoBoundaryObservation,
     PhysicalLineRegion,
@@ -521,10 +524,11 @@ class CoarseNativeAssociationContractTest(unittest.TestCase):
         for trace, interval in zip(native.trace_coordinates_px, native.trace_position_intervals_px, strict=True):
             projected = top.constraint.physical_line_region.project(trace)
             # The compiled region is the intersection of coarse and native
-            # physical states: it must stay inside every native raw interval,
+            # physical states: it stays inside each native raw interval up to
+            # the clipper's existing closed-set arithmetic epsilon,
             # while the proof keeps those complete intervals verbatim above.
-            self.assertGreaterEqual(projected.minimum, interval.minimum)
-            self.assertLessEqual(projected.maximum, interval.maximum)
+            self.assertGreaterEqual(projected.minimum, interval.minimum-LINE_REGION_ARITHMETIC_EPSILON_PX)
+            self.assertLessEqual(projected.maximum, interval.maximum+LINE_REGION_ARITHMETIC_EPSILON_PX)
 
     def test_source_signal_mismatch_blocks_only_that_role(self) -> None:
         proofs, _ = self._associate(self._case(native_top_signal="c" * 64))
