@@ -1077,6 +1077,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         self.assertTrue(all(item["frame_diagnostics"][0]["physical_frame_id"] for item in labels))
         analysis = {
             "sample_id": "retained-set", "count": 1,
+            "source_sha256": "a" * 64, "cohort_role": "nominal",
             "retained_placement_scope": RETAINED_PLACEMENT_SCOPE,
             "retained_placement_gold_labels": labels,
             "decision_status": "needs_review", "placement_failure_gap": "phase_placement_ambiguous",

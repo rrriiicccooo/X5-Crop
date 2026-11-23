@@ -589,6 +589,50 @@ class GoldAnalysisContractTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "invalid retained placement identities"):
             _retained_placement_summary((record,))
 
+    def test_safe_budget_coverage_requires_both_conditions_on_the_same_proposal(self) -> None:
+        record = self._analysis_record(
+            "mixed", source_sha256="a" * 64, role="nominal", decision="needs_review",
+            proposal="safe", candidate="not_available", unsafe_auto=False, physical_frame_id="B1|B2",
+        )
+        safe = record["retained_placement_gold_labels"][0]
+        unsafe = deepcopy(safe)
+        unsafe.update(placement_id="placement:runner",role="runner",
+                      geometry_conformance="unsafe",geometry_failure="synthetic unsafe")
+        unsafe["acceptability_features"]["placement_id"] = unsafe["placement_id"]
+        safe["direct_use_budget_assessments"][0]["state"] = "contradicted"
+        safe["budget_state"] = "failed"
+        record["retained_placement_gold_labels"].append(unsafe)
+        summary = _retained_placement_summary((record,))
+        self.assertEqual(summary["at_least_one_safe_task_count"],1)
+        self.assertEqual(summary["safe_and_budget_passed"],{
+            "task_count":0,"source_count":0,"by_cohort_role":{},
+        })
+
+    def test_safe_budget_coverage_counts_tasks_and_sources_separately_from_placements(self) -> None:
+        first = self._analysis_record(
+            "first", source_sha256="b" * 64, role="nominal", decision="needs_review",
+            proposal="safe", candidate="not_available", unsafe_auto=False, physical_frame_id="B1|B2",
+        )
+        runner = deepcopy(first["retained_placement_gold_labels"][0])
+        runner.update(placement_id="placement:runner",role="runner")
+        runner["acceptability_features"]["placement_id"] = runner["placement_id"]
+        first["retained_placement_gold_labels"].append(runner)
+        second = deepcopy(first)
+        second.update(sample_id="second",cohort_role="challenge")
+        approved = deepcopy(first)
+        approved.update(sample_id="approved",source_sha256="c" * 64,decision_status="approved_auto")
+        covered = _retained_placement_summary((first,second,approved))["safe_and_budget_passed"]
+        self.assertEqual(covered,{
+            "task_count":3,"source_count":2,
+            "by_cohort_role":{
+                "challenge":{"task_count":1,"source_count":1,
+                    "decision_status_counts":{"needs_review":1},"needs_review_task_ids":["second"]},
+                "nominal":{"task_count":2,"source_count":2,
+                    "decision_status_counts":{"approved_auto":1,"needs_review":1},
+                    "needs_review_task_ids":["first"]},
+            },
+        })
+
     def test_native_endpoint_labels_are_independent_and_optional(self) -> None:
         gold = {"count": 1, "confirmed_geometry": {"slots": []}}
         primary = typed_read_model(retained_proposal_fixture("placement:primary"))

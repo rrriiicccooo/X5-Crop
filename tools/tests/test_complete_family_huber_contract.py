@@ -53,6 +53,23 @@ def huber_cost(residuals, delta):
                      for r in residuals)
 
 
+def irregular_long_span_points():
+    # Synthetic irregular sampling and heavy-tailed noise expose premature
+    # termination when the native slope and absolute intercept use very
+    # different numeric scales. No TIFF or golden coordinate is consumed.
+    rng = np.random.default_rng(0)
+    traces = np.sort(rng.choice(np.arange(100,20000),24,replace=False))
+    coordinates = 2600.-.0025*traces+rng.laplace(0.,3.,24)
+    points = []
+    for point,trace,coordinate in zip(points_for((100.,)*24),traces,coordinates,strict=True):
+        interval = FiniteInterval(float(coordinate)-20.,float(coordinate)+20.)
+        raw = replace(point.transition,trace_coordinate_px=int(trace),
+            canonical_coordinate_px=float(coordinate),localization_interval_px=interval,
+            physical_position_interval_px=interval)
+        points.append(TransitionPoint(raw,float(trace),float(coordinate)))
+    return tuple(points)
+
+
 class CompleteFamilyHuberContractTest(unittest.TestCase):
     def check_solution(self, evaluation, points, scale=10.0, spec=SPEC):
         self.assertIsNone(evaluation.failure_kind)
@@ -92,6 +109,45 @@ class CompleteFamilyHuberContractTest(unittest.TestCase):
         self.assertLessEqual(work.gradient_point_evaluation_count, n * (work.edge_count + 2))
         self.assertLessEqual(work.gap_vertex_evaluation_count, 2 * v)
         self.assertLessEqual(work.raw_recheck_point_count, 2 * n)
+
+    def test_original_fit_closes_a_full_interior_family_across_a_long_trace_span(self):
+        points = irregular_long_span_points()
+        initial = fit_transition_line(points,45.,SPEC)
+        evaluation = fit_complete_transition_line(points,45.,SPEC,initial_fit=initial)
+        solution = self.check_solution(evaluation,points,scale=45.)
+        self.assertEqual(initial.selected_points,points)
+        self.assertEqual(evaluation.work.candidate_count,1)
+        self.assertEqual(evaluation.work.edge_count,0)
+        self.assertEqual(evaluation.work.raw_recheck_point_count,len(points))
+        self.assertEqual((solution.slope,solution.intercept),(initial.slope,initial.intercept))
+        self.assertLessEqual(initial.receipt.evaluation_count,SPEC.robust_fit_maximum_evaluations)
+
+    def test_original_fit_is_stable_under_trace_units_origin_mirror_and_input_order(self):
+        points = irregular_long_span_points()
+        baseline = fit_transition_line(points,45.,SPEC)
+        predictions = np.array([baseline.slope*p.trace+baseline.intercept for p in points])
+        for factor,dx,dy in ((2,10000,0.),(4,0,20000.),(-1,30000,2500.)):
+            with self.subTest(factor=factor,dx=dx,dy=dy):
+                transformed = []
+                for point in reversed(points):
+                    coordinate = point.coordinate+dy
+                    raw = replace(point.transition,trace_coordinate_px=int(factor*point.trace+dx),
+                        canonical_coordinate_px=coordinate,
+                        localization_interval_px=FiniteInterval(
+                            point.transition.localization_interval_px.minimum+dy,
+                            point.transition.localization_interval_px.maximum+dy),
+                        physical_position_interval_px=FiniteInterval(
+                            point.transition.physical_position_interval_px.minimum+dy,
+                            point.transition.physical_position_interval_px.maximum+dy))
+                    transformed.append(TransitionPoint(raw,float(raw.trace_coordinate_px),coordinate))
+                transformed = tuple(transformed)
+                fit = fit_transition_line(transformed,45.,SPEC)
+                actual = np.array([fit.slope*(factor*p.trace+dx)+fit.intercept-dy for p in points])
+                np.testing.assert_allclose(actual,predictions,rtol=0.,atol=1.e-5)
+                self.assertAlmostEqual(fit.receipt.cost,baseline.receipt.cost,places=7)
+                self.assertLessEqual(abs(fit.slope),math.tan(math.radians(SPEC.maximum_measurable_line_angle_degrees)))
+                for point,residual in zip(fit.selected_points,fit.residuals,strict=True):
+                    self.assertAlmostEqual(float(residual),point.coordinate-(fit.slope*point.trace+fit.intercept),places=10)
 
     def test_complete_eleven_points_recovers_only_the_feasible_raw_family(self):
         for tail in (102.0, 103.0):

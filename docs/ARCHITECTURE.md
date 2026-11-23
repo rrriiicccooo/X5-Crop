@@ -1537,6 +1537,12 @@ observation。完整 H interval、anchor line uncertainty、local departure、bl
 统一输出包络中受检验；黄金报告可以把已生成 proposal 判为 unsafe，但 eligibility 和正式输出不得因此被
 伪造为 supported。
 
+原始 Huber 直线拟合先将 trace 减中位数，再除以 `max(1 px, trace span)`；两参数分别表示跨完整源跨度
+的像素变化与参考 trace 上的位置。最大物理斜率按同一尺度变换，结果还原原图 slope／intercept 后才
+计算 residual、筛选和保护。原等权损失、像素 delta、容差、128 次迭代上限及完整原点保持，不因数值
+尺度增加物理自由度；该变换复用原 trace 缓冲，不增加像素读取。完整并集的内点仍须通过原有全部
+raw 约束及物理多边形顶点的 first-order gap，数值终止状态不能替代此证明。
+
 Cross registration 是同角色边界 family identity 的唯一 owner。Transition tracking 可以先产生多个局部
 fragment；初次拟合允许一个独立区域内至少两条不同 trace 成线，保留原始区域数与角色假设，其余梯度、
 材质、方向和残差条件不变。照片边界角色授权仍要求至少两个原查询空间区域及正确外侧背景；单区域假设
@@ -2619,7 +2625,7 @@ format/source 状态测量共同 W。共同 H 只从每个成员都已完整关�
 `common_outputs` 可保留预算失败窗口作为诊断，只有 `state=supported` 且 `common_failure=null` 才表示窗口
 验证通过。当前该分支在规范 selection/Gate 后执行，不授予照片序号映射、canonical winner 或自动输出权限。
 
-当前报告 schema 为 138。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
+当前报告 schema 为 139。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
 重放全部 producer 和独立成员，再比对结果、缺口和工作。成员 Cross 只重复自身 H／纵向域、best/runner、
 求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
 外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source
@@ -3173,6 +3179,10 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   先假定歧义阻断多余。阶段收益与回退分别报告首选方案、保留提案、预算资格及安全自动批准；有共同
   根因证据且通往已确认合同的暂时回退可以保留，不要求每次改动立即净增覆盖。候选覆盖和测试通过
   不替代发布能力。证据不足不能提前终止 proposal，也不能为了观察错误绕过 Runtime Gate。
+  `retained_placement_gold.safe_and_budget_passed` 只统计同一份完整提案同时满足黄金几何安全及全部 slot
+  预算通过的 task；分别按 source SHA 去重，并按冻结 cohort role 列出自动／Review 分布和待审 task。
+  多份安全提案只贡献一个 task；安全但预算失败与不安全但预算通过的两份提案不能拼成合格结果。
+  该离线统计不授予 Runtime 资格，也不改变发布判据。
 - 检测能力发布底线是当前 development nominal 全部安全 `approved_auto`，全部角色
   `unsafe_approved_auto = 0`；challenge 的安全 auto 是能力发现，安全 review 同样合格，但不能替代
   nominal 覆盖。未来建立 sealed cohort 后，其 nominal 也必须全部安全自动通过。不得把失败 nominal 改成
@@ -3275,7 +3285,7 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   metadata 预留为 `4096+128(Q+L)+256P+512R` 次访问、`8192+1024(Q+L+P+2R)` bytes；值访问加入
   原 `128N` 总池，索引／锚点保留量加入原内存预检。先按长度预检，再建索引与读像素，失败整批不读。
   所需预留量与是否完成处理分别记录，不把失败的预留值声称为已测量工作。
-  以上诊断随 development gold 绑定 source SHA 与 comparator manifest；分析记录／汇总 schema 为 36／37。
+  以上诊断随 development gold 绑定 source SHA 与 comparator manifest；分析记录／汇总 schema 为 36／38。
   它们帮助区分测量缺口与关联缺口，不改变黄金包含判据、Gate 或共同窗口资格。
   `tools/verify accuracy` 继续负责完整 release detection gate。
 - 边界特征研究使用 `tools/verify diagnostic --gold-boundary-features --axes HW --output-root <new-root>`。

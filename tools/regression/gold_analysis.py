@@ -59,7 +59,7 @@ from .gold_native_connections import native_local_connection_diagnostic
 
 
 ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v36"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v37"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v38"
 RETAINED_PLACEMENT_SCOPE = "retained_canonical_pair_conditional_cross_and_independent_phase_review_proposals"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
@@ -1078,6 +1078,8 @@ def _retained_placement_summary(records: Sequence[dict[str, Any]]) -> dict[str, 
     label_counts: Counter[str] = Counter()
     budget_matrix: dict[str, Counter[str]] = defaultdict(Counter)
     safe_ambiguity_tasks = []
+    safe_budget_tasks = []
+    safe_budget_by_role: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for record in records:
         if record["retained_placement_scope"] != RETAINED_PLACEMENT_SCOPE:
             raise ValueError("invalid retained placement scope")
@@ -1143,6 +1145,10 @@ def _retained_placement_summary(records: Sequence[dict[str, Any]]) -> dict[str, 
         )
         states[state] += 1
         label_counts.update(counts)
+        if any(item["geometry_conformance"] == "safe" and item["budget_state"] == "passed"
+               for item in labels):
+            safe_budget_tasks.append(record)
+            safe_budget_by_role[record["cohort_role"]].append(record)
         if (
             counts["safe"] and record["decision_status"] == "needs_review"
             and (
@@ -1162,6 +1168,21 @@ def _retained_placement_summary(records: Sequence[dict[str, Any]]) -> dict[str, 
             state: dict(sorted(counts.items())) for state, counts in sorted(budget_matrix.items())
         },
         "at_least_one_safe_task_count": states["one_safe"] + states["multiple_safe"],
+        "safe_and_budget_passed": {
+            "task_count": len(safe_budget_tasks),
+            "source_count": len({record["source_sha256"] for record in safe_budget_tasks}),
+            "by_cohort_role": {
+                role: {
+                    "task_count": len(members),
+                    "source_count": len({record["source_sha256"] for record in members}),
+                    "decision_status_counts": dict(sorted(Counter(
+                        record["decision_status"] for record in members).items())),
+                    "needs_review_task_ids": sorted(record["sample_id"] for record in members
+                                                    if record["decision_status"] == "needs_review"),
+                }
+                for role, members in sorted(safe_budget_by_role.items())
+            },
+        },
         "safe_with_placement_ambiguity_task_ids": sorted(safe_ambiguity_tasks),
     }
 

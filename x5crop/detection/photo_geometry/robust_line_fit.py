@@ -432,7 +432,13 @@ def fit_transition_line(
     boundary_scale_px_per_mm: float,
     spec: PhotoBoundaryMeasurementSpec,
 ) -> TransitionLineFit:
-    """Fit one exact candidate-independent family with bounded Huber loss."""
+    """Fit one exact family with source-span-scaled Huber parameters.
+
+    Both parameters use pixel displacement units. A raw source slope can be
+    orders of magnitude smaller than the intercept, making the unchanged xtol
+    stop early despite a large residual gradient. The equivalent slope bound
+    and native coefficients retain the original physical model and loss.
+    """
 
     traces = np.asarray([point.trace for point in points], dtype=np.float64)
     coordinates = np.asarray(
@@ -440,20 +446,23 @@ def fit_transition_line(
     )
     trace_reference = float(np.median(traces))
     centered_traces = traces - trace_reference
+    trace_scale = max(1.0, float(np.ptp(traces)))
+    centered_traces /= trace_scale
     design = np.column_stack((centered_traces, np.ones_like(traces)))
     initial, *_unused = np.linalg.lstsq(design, coordinates, rcond=None)
     maximum_slope = math.tan(
         math.radians(spec.maximum_measurable_line_angle_degrees)
     )
-    initial[0] = min(maximum_slope, max(-maximum_slope, initial[0]))
+    scaled_slope_bound = maximum_slope * trace_scale
+    initial[0] = min(scaled_slope_bound, max(-scaled_slope_bound, initial[0]))
     loss_scale = spec.robust_loss_minimum_scale_mm * boundary_scale_px_per_mm
     result = least_squares(
         lambda coefficients: design @ coefficients - coordinates,
         initial,
         jac=lambda _coefficients: design,
         bounds=(
-            np.asarray((-maximum_slope, -np.inf), dtype=np.float64),
-            np.asarray((maximum_slope, np.inf), dtype=np.float64),
+            np.asarray((-scaled_slope_bound, -np.inf), dtype=np.float64),
+            np.asarray((scaled_slope_bound, np.inf), dtype=np.float64),
         ),
         method="trf",
         ftol=spec.robust_fit_tolerance,
@@ -465,7 +474,7 @@ def fit_transition_line(
     )
     if not result.success or not np.all(np.isfinite(result.x)):
         raise ValueError("robust line fit did not converge")
-    slope = float(result.x[0])
+    slope = float(result.x[0] / trace_scale)
     intercept = float(result.x[1] - slope * trace_reference)
     residuals = coordinates - (slope * traces + intercept)
     residuals.flags.writeable = False

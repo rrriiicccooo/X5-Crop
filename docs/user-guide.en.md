@@ -121,6 +121,9 @@ lines. The edge gains a larger proven continuous span only when original peaks, 
 uncertainty pass validation. Multiple peaks, a broken path, or insufficient measurement budget require review.
 The full signal group used to select each peak must also have both sides observed within the original query.
 A locally connected response does not replace that evidence.
+Boundary fitting over long sampling spans uses a consistent numeric scale to reduce evidence gaps caused by
+premature solver termination. Raw measurements, full uncertainty protection, and boundary eligibility still
+require their own checks.
 For independently supported long-axis edges, the program can also measure connections between original points.
 Once original peaks, full signal groups, and a common straight-line range pass validation, those measurements can
 reduce uncertainty in positioning and photo width and contribute to actual output protection. Existing error,
