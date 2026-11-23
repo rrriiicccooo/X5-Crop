@@ -113,6 +113,74 @@ def _oracle_maximal_sets(
     }
 
 
+def _live_broad_index_storage(frame, module_name: str):
+    """Count live index containers without consulting the association receipt."""
+    slots, seen, entries, receipt = 0, set(), [], None
+
+    def count_container(container):
+        if not isinstance(container, (list, tuple, set)) or id(container) in seen:
+            return 0
+        seen.add(id(container))
+        return len(container)
+
+    def count_numeric(value):
+        if not isinstance(value, int) or id(value) in seen:
+            return 0
+        seen.add(id(value))
+        digits = (value.bit_length() + sys.int_info.bits_per_digit - 1) // sys.int_info.bits_per_digit
+        return (digits * sys.int_info.sizeof_digit + 7) // 8
+
+    cursor = frame
+    while cursor:
+        if cursor.f_globals.get("__name__") == module_name:
+            values = cursor.f_locals
+            if cursor.f_code.co_name == "visit":
+                entry_count = values.get("entry_count")
+                scratch_references = values.get("scratch_references")
+                current_mask = values.get("mask")
+                if isinstance(entry_count, int) and isinstance(scratch_references, int):
+                    entries.append((entry_count, scratch_references,
+                                    current_mask.bit_count() if isinstance(current_mask, int) else None))
+                for name in ("required", "pool", "filtered", "required_set",
+                             "duplicates", "forced", "optional", "conflict"):
+                    slots += count_container(values.get(name))
+                for name in ("mask", "new_mask", "base", "removed", "difference"):
+                    slots += count_numeric(values.get(name))
+                ranges = values.get("ranges")
+                if isinstance(ranges, dict) and id(ranges) not in seen:
+                    seen.add(id(ranges))
+                    slots += len(ranges)
+                    slots += sum(count_container(value) for value in ranges.values())
+                groups = values.get("by_trace")
+                if isinstance(groups, dict) and id(groups) not in seen:
+                    seen.add(id(groups))
+                    slots += len(groups)
+                    slots += sum(count_container(value) for value in groups.values())
+                bounds = values.get("bounds")
+                if isinstance(bounds, tuple) and id(bounds) not in seen:
+                    seen.add(id(bounds))
+                    slots += 2 + sum(count_container(value) for value in bounds[2:])
+            elif cursor.f_code.co_name == "associate_broad_material":
+                # The fixed 64P + 80T input-index contract is checked
+                # separately; count only the global completed path storage
+                # that remains live across DFS frames here.
+                completed = values.get("completed")
+                if isinstance(completed, list) and id(completed) not in seen:
+                    seen.add(id(completed))
+                    slots += len(completed)
+                    for item in completed:
+                        if isinstance(item, tuple) and len(item) == 2:
+                            slots += count_container(item[0])
+                            slots += count_numeric(item[1])
+                physical_cache = values.get("physical_cache", ())
+                slots += 3 * len(physical_cache)
+                receipt = (values.get("completed_references", 0)
+                           + values.get("frame_references", 0)
+                           + 3 * len(physical_cache))
+        cursor = cursor.f_back
+    return slots, tuple(entries), receipt
+
+
 class BroadMaterialAssociationContractTest(unittest.TestCase):
     def test_batched_pair_predicate_preserves_scalar_paths_and_work(self) -> None:
         class ScalarFloat(float):
@@ -669,6 +737,130 @@ class BroadMaterialAssociationContractTest(unittest.TestCase):
         self.assertLessEqual(result.work.seed_count, len(points))
         self.assertLessEqual(result.work.created_path_count, len(points) ** 2)
 
+    def test_entry_mask_scratch_recovers_general_search_and_matches_oracle(self) -> None:
+        traces = tuple(range(11))
+        # A connected component with a dead-end branch.  The branch is linked
+        # into the component, but the DAG viability pass removes two raw
+        # points before DFS.  Later conflict/tail updates make still smaller
+        # entry masks while stale parent containers remain live.
+        rows = (
+            (1, 100.2, 99.2, 101.2), (4, 99.9, 95.9, 103.9),
+            (5, 100.5, 99.5, 101.5), (10, 100.9, 92.9, 108.9),
+            (8, 98.8, 94.8, 102.8), (9, 101.0, 100.8, 101.2),
+            (2, 102.2, 102.15, 102.25), (3, 99.3, 91.3, 107.3),
+            (0, 99.75, 99.25, 100.25), (0, 99.96, 91.96, 107.96),
+            (7, 100.66, 100.61, 100.71), (7, 100.5, 96.5, 104.5),
+            (2, 100.7, 98.7, 102.7), (8, 99.8, 91.8, 107.8),
+            (6, 100.8, 99.8, 101.8),
+        )
+        base = tuple(
+            _broad_point(traces, ordinal, coordinate,
+                         identity=f"entry-mask:{index:02d}",
+                         physical=(low, high))
+            for index, (ordinal, coordinate, low, high) in enumerate(rows)
+        )
+        module_name = associate_broad_material.__module__
+
+        def run_case(points, bounds, *, expect_sparse, expect_full, expect_legacy_overflow):
+            cap = 2 * len(points) * len(traces) + 2 * len(traces)
+            observed = []
+            legacy_values = []
+
+            def inspect_live(frame, event, _argument):
+                if (event != "line"
+                        or frame.f_globals.get("__name__") != module_name
+                        or frame.f_code.co_name not in ("visit", "reference_peak")):
+                    return inspect_live
+                slots, entries, receipt = _live_broad_index_storage(frame, module_name)
+                if entries:
+                    observed.append((slots, receipt, entries))
+                if frame.f_code.co_name == "reference_peak" and "value" in frame.f_locals:
+                    # Estimate the old q-wide reservation independently from
+                    # live frames. This is only a diagnostic contrast: the
+                    # test's correctness proof is the live-object count and
+                    # the independent exhaustive oracle below.
+                    legacy_values.append(
+                        frame.f_locals["value"]
+                        + sum(8 * (len(points) - entry) for entry, _, _ in entries)
+                    )
+                return inspect_live
+
+            previous_trace = sys.gettrace()
+            sys.settrace(inspect_live)
+            try:
+                result = self._associate(points, traces, **bounds)
+            finally:
+                sys.settrace(previous_trace)
+
+            expected = _oracle_maximal_sets(points, traces, **bounds)
+            self.assertEqual(result.state, BroadAssociationState.COMPLETE)
+            self.assertEqual(_path_sets(result), expected)
+            self.assertTrue(observed)
+            self.assertTrue(all(
+                scratch == 8 * entry + 2 * len(traces)
+                for _, _, entries in observed
+                for entry, scratch, _ in entries
+            ))
+            max_live_slots = max(slots for slots, _, _ in observed)
+            self.assertLessEqual(max_live_slots, cap)
+            self.assertLessEqual(max_live_slots, result.work.peak_point_reference_count)
+            receipts = [receipt for _, receipt, _ in observed if receipt is not None]
+            self.assertTrue(receipts)
+            self.assertLessEqual(max(receipts), result.work.peak_point_reference_count)
+            self.assertLessEqual(result.work.peak_point_reference_count, cap)
+            if expect_sparse:
+                self.assertTrue(any(
+                    current is not None and current < entry
+                    for _, _, entries in observed
+                    for entry, _, current in entries
+                ))
+            if expect_full:
+                self.assertTrue(any(
+                    entry == len(points) and current == entry
+                    for _, _, entries in observed
+                    for entry, _, current in entries
+                ))
+            if expect_legacy_overflow:
+                self.assertGreater(max(legacy_values), cap)
+            return result
+
+        bounds = dict(connection_px=2.0, maximum_slope=0.03,
+                      maximum_missing_lattice_steps=0)
+        for reverse, mirror in ((False, False), (True, False),
+                                (False, True), (True, True)):
+            transformed = tuple(_broad_point(
+                traces,
+                traces[-1] - point.transition.trace_ordinal if reverse
+                else point.transition.trace_ordinal,
+                -point.coordinate if mirror else point.coordinate,
+                identity=str(point.transition.transition_id),
+                physical=(-point.transition.physical_position_interval_px.maximum,
+                          -point.transition.physical_position_interval_px.minimum)
+                if mirror else (
+                    point.transition.physical_position_interval_px.minimum,
+                    point.transition.physical_position_interval_px.maximum,
+                ),
+            ) for point in base)
+            with self.subTest(reverse=reverse, mirror=mirror):
+                run_case(
+                    transformed,
+                    bounds,
+                    expect_sparse=True,
+                    expect_full=False,
+                    expect_legacy_overflow=not reverse and not mirror,
+                )
+
+        full_points = self._straight(traces, slope=0.01,
+                                     identity_prefix="entry-mask-full")
+        run_case(
+            full_points,
+            dict(connection_px=0.05, maximum_slope=0.5,
+                 maximum_missing_lattice_steps=1),
+            expect_sparse=False,
+            expect_full=True,
+            expect_legacy_overflow=False,
+        )
+
     def test_live_parent_index_storage_stays_within_original_budget(self) -> None:
         # Inspect actual live containers independently of the receipt counter.
         # These dense forks exposed suspended parent scratch omitted from the
@@ -681,52 +873,17 @@ class BroadMaterialAssociationContractTest(unittest.TestCase):
                 for ordinal in range(trace_count) for branch in range(2))
             cap = 2 * len(points) * trace_count + 2 * trace_count
             observed = []
+            entry_states = []
 
             def inspect_live(frame, event, _argument):
                 if (event != "line" or frame.f_code.co_name != "visit"
                         or frame.f_globals.get("__name__")
                         != associate_broad_material.__module__):
                     return inspect_live
-                slots, seen = 0, set()
-
-                def count_container(container):
-                    if not isinstance(container, (list, tuple, set)) or id(container) in seen:
-                        return 0
-                    seen.add(id(container))
-                    return len(container)
-
-                cursor = frame
-                while cursor:
-                    if cursor.f_globals.get("__name__") == associate_broad_material.__module__:
-                        values = cursor.f_locals
-                        if cursor.f_code.co_name == "visit":
-                            for name in ("required", "pool", "filtered", "required_set",
-                                         "duplicates", "forced", "optional", "conflict"):
-                                slots += count_container(values.get(name))
-                            for name in ("mask", "new_mask", "base", "removed", "difference"):
-                                value = values.get(name)
-                                if isinstance(value, int) and id(value) not in seen:
-                                    seen.add(id(value))
-                                    digits = (value.bit_length() + sys.int_info.bits_per_digit - 1) // sys.int_info.bits_per_digit
-                                    slots += (digits * sys.int_info.sizeof_digit + 7) // 8
-                            ranges = values.get("ranges")
-                            if isinstance(ranges, dict) and id(ranges) not in seen:
-                                seen.add(id(ranges))
-                                slots += len(ranges)
-                                slots += sum(count_container(value) for value in ranges.values())
-                            groups = values.get("by_trace")
-                            if isinstance(groups, dict) and id(groups) not in seen:
-                                seen.add(id(groups))
-                                slots += len(groups)
-                                slots += sum(count_container(value) for value in groups.values())
-                            bounds = values.get("bounds")
-                            if isinstance(bounds, tuple) and id(bounds) not in seen:
-                                seen.add(id(bounds))
-                                slots += 2 + sum(count_container(value) for value in bounds[2:])
-                        elif cursor.f_code.co_name == "associate_broad_material":
-                            slots += 3 * len(values.get("physical_cache", ()))
-                    cursor = cursor.f_back
+                slots, entries, _receipt = _live_broad_index_storage(
+                    frame, associate_broad_material.__module__)
                 observed.append(slots)
+                entry_states.extend(entries)
                 return inspect_live
 
             previous_trace = sys.gettrace()
@@ -738,6 +895,11 @@ class BroadMaterialAssociationContractTest(unittest.TestCase):
             with self.subTest(trace_count=trace_count):
                 self.assertTrue(observed)
                 self.assertLessEqual(max(observed), cap)
+                self.assertTrue(entry_states)
+                self.assertTrue(all(
+                    scratch == 8 * entry + 2 * trace_count
+                    for entry, scratch, _ in entry_states
+                ))
                 self.assertEqual(result.state, BroadAssociationState.BOUND_EXCEEDED)
                 self.assertEqual(result.paths, ())
 

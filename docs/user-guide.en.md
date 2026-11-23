@@ -124,6 +124,8 @@ A locally connected response does not replace that evidence.
 Boundary fitting over long sampling spans uses a consistent numeric scale to reduce evidence gaps caused by
 premature solver termination. Raw measurements, full uncertainty protection, and boundary eligibility still
 require their own checks.
+Broad boundary association can validate more legal interpretations within the same resource limits. An
+incomplete search still requires review.
 For independently supported long-axis edges, the program can also measure connections between original points.
 Once original peaks, full signal groups, and a common straight-line range pass validation, those measurements can
 reduce uncertainty in positioning and photo width and contribute to actual output protection. Existing error,

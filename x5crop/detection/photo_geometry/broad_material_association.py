@@ -650,8 +650,15 @@ def associate_broad_material(
 
             def visit(mask, required, bounds, depth, ranges=None):
                 nonlocal completed_references, frame_references
+                # The entry mask is the largest live search pool for this
+                # frame. Tail updates only remove candidates, while the
+                # parent frame's suspended buffers are accounted separately
+                # by descend(). Keep the q-wide mask limbs below; only the
+                # index-container scratch scales with this entry cardinality.
+                words()
+                entry_count = mask.bit_count()
                 # Every suspended frame retains its own scratch reservation.
-                scratch_references = 8 * q + 2 * t
+                scratch_references = 8 * entry_count + 2 * t
                 references = scratch_references + 2 * mask_references + len(required) + 3 * len(ranges or ())
                 frame_references += references
 

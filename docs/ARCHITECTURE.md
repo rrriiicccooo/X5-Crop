@@ -579,7 +579,9 @@ raw mask 按实际 Python limb 操作计费，存储由运行时 digit 位数和
 多 limb mask 按实际 byte 遍历成本与命中成员数选择稀疏枚举；bit count、转换及逐成员提取均计费，
 密集 mask 保留原逐位置检查。枚举次序和完整路径资格保持，不提高原 `5P²` 上限。
 Mask 使用正数包含／排除运算，初始移位计入进位 limb；补集 AND/XOR 的第三个临时 mask 在运算前
-预留。每个活动栈帧独立预留临时索引空间；递归前
+预留。每个活动栈帧按入口 mask 的完整成员数预留临时索引空间，入口基数计算按完整 mask limb 计费；
+同帧后续排除只缩小成员，原入口缓冲仍由该帧预留覆盖。Mask 数值槽仍按整个分量计量，viability 前的
+完整分量预检、父帧挂起状态及跨分量缓存继续独立计量，不提高原动态引用上限。递归前
 释放分组数据，只保留已计量的候选池、分支序列与必要状态。跨分量存活的点对缓存按 key 和两个
 端点共三个数值槽纳入动态上限，新条目写入前预留；不能用当前分量的临时空间代替全局缓存计量。
 记录搜索深度、完成路径数、索引引用和 polygon 顶点峰值；索引与
@@ -1537,11 +1539,12 @@ observation。完整 H interval、anchor line uncertainty、local departure、bl
 统一输出包络中受检验；黄金报告可以把已生成 proposal 判为 unsafe，但 eligibility 和正式输出不得因此被
 伪造为 supported。
 
-原始 Huber 直线拟合先将 trace 减中位数，再除以 `max(1 px, trace span)`；两参数分别表示跨完整源跨度
-的像素变化与参考 trace 上的位置。最大物理斜率按同一尺度变换，结果还原原图 slope／intercept 后才
-计算 residual、筛选和保护。原等权损失、像素 delta、容差、128 次迭代上限及完整原点保持，不因数值
-尺度增加物理自由度；该变换复用原 trace 缓冲，不增加像素读取。完整并集的内点仍须通过原有全部
-raw 约束及物理多边形顶点的 first-order gap，数值终止状态不能替代此证明。
+原始 Huber 直线拟合先将 trace 减中位数，再除以 `max(1 px, trace span)`，响应坐标同时减自身中位数；
+两参数分别表示跨完整源跨度的像素变化与参考位置上的偏移。最大物理斜率按同一尺度变换，结果还原
+原图 slope／intercept 后才计算 residual、筛选和保护。原等权损失、像素 delta、容差、128 次迭代上限及
+完整原点保持，不因数值尺度增加物理自由度；该变换复用原 trace／响应缓冲，最终 residual 从原始
+测量值重建，不增加像素读取。完整并集的内点仍须通过原有全部 raw 约束及物理多边形顶点的
+first-order gap，数值终止状态不能替代此证明。
 
 Cross registration 是同角色边界 family identity 的唯一 owner。Transition tracking 可以先产生多个局部
 fragment；初次拟合允许一个独立区域内至少两条不同 trace 成线，保留原始区域数与角色假设，其余梯度、

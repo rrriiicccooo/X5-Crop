@@ -434,7 +434,7 @@ def fit_transition_line(
 ) -> TransitionLineFit:
     """Fit one exact family with source-span-scaled Huber parameters.
 
-    Both parameters use pixel displacement units. A raw source slope can be
+    Both parameters use centered pixel displacement units. A raw source slope can be
     orders of magnitude smaller than the intercept, making the unchanged xtol
     stop early despite a large residual gradient. The equivalent slope bound
     and native coefficients retain the original physical model and loss.
@@ -444,6 +444,8 @@ def fit_transition_line(
     coordinates = np.asarray(
         [point.coordinate for point in points], dtype=np.float64
     )
+    coordinate_reference = float(np.median(coordinates))
+    coordinates -= coordinate_reference
     trace_reference = float(np.median(traces))
     centered_traces = traces - trace_reference
     trace_scale = max(1.0, float(np.ptp(traces)))
@@ -475,7 +477,10 @@ def fit_transition_line(
     if not result.success or not np.all(np.isfinite(result.x)):
         raise ValueError("robust line fit did not converge")
     slope = float(result.x[0] / trace_scale)
-    intercept = float(result.x[1] - slope * trace_reference)
+    intercept = float(coordinate_reference + result.x[1] - slope * trace_reference)
+    # Restore exact raw coordinates rather than reconstructing them by adding
+    # the reference: the final residual must use the original measured values.
+    coordinates[:] = tuple(point.coordinate for point in points)
     residuals = coordinates - (slope * traces + intercept)
     residuals.flags.writeable = False
 
