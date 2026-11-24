@@ -14,10 +14,59 @@ from .template_measurement_plan_model import MAXIMUM_PEAK_TEMPORARY_FIXED_ALLOWA
 
 
 MAXIMUM_MEMBERSHIP_VISITS = 4096
+_IDENTITY_WORD_BITS = 30
 
 
 def _cache_temporary_bytes(atom_count: int, entry_count: int) -> int:
     return 256 + entry_count * (192 + 8 * ((atom_count + 29) // 30))
+
+
+def _maximal_working_bytes(atom_count: int, group_count_bound: int) -> int:
+    # Original list, sorting list, immutable output tuple and validation set
+    # may coexist. Identity strings are borrowed; group tuples are new.
+    return 256 + group_count_bound * (256 + 8 * atom_count) if group_count_bound else 0
+
+
+def _identity_memory_plan(
+    atom_count: int, anchor_count: int, transition_count: int, atom_input_count: int,
+    raw_count: int, trace_count: int, visit_budget: int, retained_scope_prefix_bytes: int,
+) -> tuple[int, int, int, int, int, int]:
+    """Conservative working bytes for inputs, DFS, oracle and optional index.
+
+    Input identities/measurements are borrowed. The new dict/set/list slots,
+    frozensets and one-limb Python integers are included here. Each 30-bit
+    word reserves 40 bytes (a list slot and a Python integer); the original
+    A-bit memo keeps its separate, unchanged bound.
+    """
+    inputs = (8192 + 128 * transition_count + 256 * atom_count
+              + 64 * atom_input_count + 64 * (raw_count + trace_count))
+    if not anchor_count:
+        return inputs, 0, 0, 0, 0, retained_scope_prefix_bytes + inputs
+    # At depth <= A, each suspended search frame retains at most six A-long
+    # tuple/list sequences (48 A bytes of references), plus masks, generator
+    # state, local scalars and frame overhead. Reserve 64 A^2 + 4096 A.
+    search = 64 * atom_count ** 2 + 4096 * atom_count
+    # A full raw union retains <= T identities. A non-conflicting physical
+    # call has <= S intervals and <= 2S+4 vertices per polygon. Include the
+    # selected/inputs containers, new FiniteInterval objects and floats, and
+    # old vertices + new list + return tuple coexisting during each clip.
+    oracle = 8192 + 128 * raw_count + 1024 * trace_count + 64 * atom_count
+    base_working = inputs + search + oracle
+    # A complete binary search has <= B+1 <= V+1 leaves. No output prefix
+    # can require more temporary group storage before success/exhaustion.
+    maximal = _maximal_working_bytes(atom_count, visit_budget + 1)
+    words = ((raw_count + _IDENTITY_WORD_BITS - 1) // _IDENTITY_WORD_BITS
+             + (trace_count + _IDENTITY_WORD_BITS - 1) // _IDENTITY_WORD_BITS)
+    retained = 256 + (atom_count - anchor_count + 1) * (256 + 40 * words)
+    # Raw -> four one-limb positions/bits, plus exact trace -> position/bit.
+    # These construction dicts are cleared before any oracle or memo entry.
+    build = 512 + 384 * raw_count + 256 * trace_count
+    # Include old/new one-limb values during |= and coexisting A-bit mask,
+    # negation, selected-bit and XOR scalars, beyond the two scratch lists.
+    check = 512 + 40 * words + 32 * ((atom_count + 29) // 30)
+    peak = (retained_scope_prefix_bytes + base_working + maximal + retained
+            + max(build, check + _cache_temporary_bytes(atom_count, visit_budget)))
+    return base_working, maximal, retained, build, check, peak
 
 
 class MembershipState(str, Enum):
@@ -25,6 +74,36 @@ class MembershipState(str, Enum):
     NO_INDEPENDENT_ANCHOR = "no_independent_anchor"
     SEARCH_BOUND_EXCEEDED = "search_bound_exceeded"
     FIT_BOUND_EXCEEDED = "fit_bound_exceeded"
+
+
+class MembershipIdentityPrecheckState(str, Enum):
+    ENABLED = "enabled"
+    NO_INDEPENDENT_ANCHOR = "no_independent_anchor"
+    MEMORY_ALLOWANCE_EXCEEDED = "memory_allowance_exceeded"
+
+
+@dataclass(frozen=True)
+class MembershipIdentityPlan:
+    state: MembershipIdentityPrecheckState
+    input_transition_count: int
+    atom_transition_input_count: int
+    atom_transition_unique_count: int
+    trace_identity_count: int
+    visit_budget: int
+    retained_scope_prefix_bytes: int
+    base_working_temporary_bytes: int
+    maximal_planned_working_bytes: int
+    index_planned_retained_bytes: int
+    index_planned_build_temporary_bytes: int
+    precheck_planned_temporary_bytes: int
+    planned_peak_temporary_bytes: int
+
+    def __post_init__(self) -> None:
+        if (not isinstance(self.state, MembershipIdentityPrecheckState)
+                or any(type(getattr(self, field.name)) is not int or getattr(self, field.name) < 0
+                       for field in fields(self) if field.name != 'state')
+                or self.visit_budget > MAXIMUM_MEMBERSHIP_VISITS):
+            raise ValueError("membership identity plan is invalid")
 
 
 @dataclass(frozen=True)
@@ -43,6 +122,28 @@ class MembershipTransition:
 
 @dataclass(frozen=True)
 class MembershipWork:
+    input_transition_visit_count: int = 0
+    input_atom_visit_count: int = 0
+    input_raw_visit_count: int = 0
+    identity_index_raw_visit_count: int = 0
+    identity_index_atom_visit_count: int = 0
+    identity_index_raw_input_count: int = 0
+    identity_index_bit_build_count: int = 0
+    identity_index_zero_word_count: int = 0
+    identity_index_word_update_count: int = 0
+    identity_precheck_count: int = 0
+    identity_precheck_atom_visit_count: int = 0
+    identity_precheck_copy_word_count: int = 0
+    identity_precheck_or_word_count: int = 0
+    identity_precheck_popcount_word_count: int = 0
+    identity_word_access_count: int = 0
+    identity_precheck_mask_limb_span_count: int = 0
+    identity_precheck_mask_control_logical_limb_bound: int = 0
+    identity_logical_limb_access_bound: int = 0
+    identity_precheck_pass_without_actual_count: int = 0
+    initial_identity_reject_count: int = 0
+    branch_identity_reject_count: int = 0
+    maximality_identity_reject_count: int = 0
     visited_count: int = 0
     anchor_check_count: int = 0
     initial_filter_count: int = 0
@@ -72,6 +173,11 @@ class MembershipWork:
     maximality_extension_reuse_count: int = 0
     cache_peak_entry_count: int = 0
 
+    @property
+    def identity_reject_count(self) -> int:
+        return (self.initial_identity_reject_count + self.branch_identity_reject_count
+                + self.maximality_identity_reject_count)
+
     def __post_init__(self) -> None:
         if any(type(getattr(self, field.name)) is not int or getattr(self, field.name) < 0
                for field in fields(self)):
@@ -92,18 +198,19 @@ class MembershipWork:
             or (self.search_node_count == 0) != (self.search_maximum_depth == 0)
             or self.search_maximum_depth > self.search_node_count
             or self.maximality_extension_check_count + self.maximality_extension_reuse_count
+            + self.maximality_identity_reject_count
             > self.maximality_variable_visit_count
             or self.maximality_variable_visit_count > (
                 self.maximality_extension_check_count
-                + self.maximality_extension_reuse_count + 1
+                + self.maximality_extension_reuse_count + self.maximality_identity_reject_count + 1
             )
             or self.feasibility_lookup_count < (
                 self.visited_count + self.cached_feasible_reuse_count
-                + self.cached_infeasible_reuse_count
+                + self.cached_infeasible_reuse_count + self.identity_reject_count
             )
             or self.feasibility_lookup_count > (
                 self.visited_count + self.cached_feasible_reuse_count
-                + self.cached_infeasible_reuse_count + 1
+                + self.cached_infeasible_reuse_count + self.identity_reject_count + 1
             )
             or self.cached_feasible_reuse_count + self.cached_infeasible_reuse_count
             != (
@@ -114,6 +221,18 @@ class MembershipWork:
             or self.cache_peak_entry_count > MAXIMUM_MEMBERSHIP_VISITS
             or (self.cache_peak_entry_count == 0) != (self.visited_count == 0)
             or self.polygon_clip_count > 2 * self.raw_interval_count
+            or self.identity_precheck_pass_without_actual_count > 1
+            or self.identity_reject_count > self.identity_precheck_count
+            or self.identity_word_access_count != (
+                2 * self.identity_index_bit_build_count + self.identity_index_zero_word_count
+                + 3 * self.identity_index_word_update_count
+                + 2 * self.identity_precheck_copy_word_count
+                + 3 * self.identity_precheck_or_word_count
+                + self.identity_precheck_popcount_word_count)
+            or self.identity_precheck_mask_control_logical_limb_bound != 32 * (
+                self.identity_precheck_mask_limb_span_count + self.identity_precheck_atom_visit_count)
+            or self.identity_logical_limb_access_bound != (
+                self.identity_word_access_count + self.identity_precheck_mask_control_logical_limb_bound)
         ):
             raise ValueError("membership search lost its work ledger")
 
@@ -127,16 +246,59 @@ class MembershipScope:
     atom_count: int
     raw_transition_count: int
     query_trace_count: int
+    identity_plan: MembershipIdentityPlan
     maximal_member_groups: tuple[tuple[ObservationId, ...], ...]
     work: MembershipWork
 
     @property
     def cache_temporary_bytes(self) -> int:
-        if self.work.feasibility_lookup_count == 0:
-            return 0
-        return _cache_temporary_bytes(self.atom_count, self.work.cache_peak_entry_count)
+        """Membership working scratch and memo bound for the source memory owner.
+
+        Includes the base input mappings, suspended DFS and physical oracle;
+        prior returned receipts and current maximal-list/sort/validation
+        storage are included. Later registration plans/fits are outside it.
+        """
+        plan = self.identity_plan
+        memo = (_cache_temporary_bytes(self.atom_count, self.work.cache_peak_entry_count)
+                if self.work.feasibility_lookup_count else 0)
+        base = (plan.retained_scope_prefix_bytes + plan.base_working_temporary_bytes
+                + _maximal_working_bytes(self.atom_count, self.work.search_branch_count + 1
+                                         if self.work.search_node_count else 0))
+        if plan.state != MembershipIdentityPrecheckState.ENABLED:
+            return base + memo
+        return (base + plan.index_planned_retained_bytes
+                + max(plan.index_planned_build_temporary_bytes,
+                      plan.precheck_planned_temporary_bytes + memo))
+
+    @property
+    def retained_bytes(self) -> int:
+        """Returned scope/plan/work/group storage, with input identities borrowed."""
+        return (8192 + 16 * self.atom_count
+                + sum(96 + 8 * len(group) for group in self.maximal_member_groups))
 
     def __post_init__(self) -> None:
+        plan = self.identity_plan
+        expected_memory = _identity_memory_plan(
+            self.atom_count, len(self.anchor_observation_ids), plan.input_transition_count,
+            plan.atom_transition_input_count, self.raw_transition_count,
+            plan.trace_identity_count, plan.visit_budget, plan.retained_scope_prefix_bytes)
+        has_anchor = bool(self.anchor_observation_ids)
+        enabled = plan.state == MembershipIdentityPrecheckState.ENABLED
+        words = ((self.raw_transition_count + _IDENTITY_WORD_BITS - 1) // _IDENTITY_WORD_BITS
+                 + (plan.trace_identity_count + _IDENTITY_WORD_BITS - 1) // _IDENTITY_WORD_BITS)
+        index_fields = (
+            'identity_index_raw_visit_count', 'identity_index_atom_visit_count',
+            'identity_index_raw_input_count', 'identity_index_bit_build_count',
+            'identity_index_zero_word_count', 'identity_index_word_update_count',
+            'identity_precheck_count', 'identity_precheck_atom_visit_count',
+            'identity_precheck_copy_word_count', 'identity_precheck_or_word_count',
+            'identity_precheck_popcount_word_count', 'identity_precheck_pass_without_actual_count',
+            'identity_word_access_count',
+            'identity_precheck_mask_limb_span_count',
+            'identity_precheck_mask_control_logical_limb_bound', 'identity_logical_limb_access_bound',
+            'initial_identity_reject_count', 'branch_identity_reject_count',
+            'maximality_identity_reject_count',
+        )
         if (
             not self.parent_family_id or self.role not in (BoundaryRole.TOP, BoundaryRole.BOTTOM)
             or self.state not in (MembershipState.COMPLETE, MembershipState.NO_INDEPENDENT_ANCHOR,
@@ -151,10 +313,55 @@ class MembershipScope:
                    or not set(self.anchor_observation_ids).issubset(group)
                    or len(group) > self.atom_count for group in self.maximal_member_groups)
             or len(self.maximal_member_groups) > self.work.search_node_count
+            or len(self.maximal_member_groups) > (self.work.search_branch_count + 1
+                                                  if self.work.search_node_count else 0)
             or self.work.visited_count > MAXIMUM_MEMBERSHIP_VISITS
+            or self.work.visited_count > plan.visit_budget
+            or plan.input_transition_count < self.raw_transition_count
+            or not self.raw_transition_count <= plan.atom_transition_unique_count <= plan.atom_transition_input_count
+            or plan.atom_transition_unique_count > self.atom_count * self.raw_transition_count
+            or not 0 <= plan.trace_identity_count <= self.raw_transition_count
+            or (plan.trace_identity_count == 0) != (self.raw_transition_count == 0)
+            or (self.atom_count == 0) != (plan.atom_transition_input_count == 0)
+            or tuple(getattr(plan, name) for name in (
+                'base_working_temporary_bytes', 'maximal_planned_working_bytes', 'index_planned_retained_bytes',
+                'index_planned_build_temporary_bytes', 'precheck_planned_temporary_bytes',
+                'planned_peak_temporary_bytes')) != expected_memory
+            or (plan.state == MembershipIdentityPrecheckState.NO_INDEPENDENT_ANCHOR) != (not has_anchor)
+            or (has_anchor and enabled != (
+                plan.planned_peak_temporary_bytes <= MAXIMUM_PEAK_TEMPORARY_FIXED_ALLOWANCE_BYTES))
+            or self.work.input_transition_visit_count != plan.input_transition_count
+            or self.work.input_atom_visit_count != self.atom_count
+            or self.work.input_raw_visit_count != (
+                plan.atom_transition_input_count + plan.atom_transition_unique_count)
+            or (not enabled and any(getattr(self.work, name) for name in index_fields))
+            or (enabled and (
+                self.work.identity_index_raw_visit_count != self.raw_transition_count
+                or self.work.identity_index_atom_visit_count != self.atom_count
+                or self.work.identity_index_raw_input_count != plan.atom_transition_unique_count
+                or self.work.identity_index_bit_build_count != self.raw_transition_count + plan.trace_identity_count
+                or self.work.identity_index_zero_word_count != (
+                    self.atom_count - len(self.anchor_observation_ids) + 1) * words
+                or self.work.identity_index_word_update_count != 2 * plan.atom_transition_unique_count
+                or self.work.identity_precheck_copy_word_count != self.work.identity_precheck_count * words
+                or self.work.identity_precheck_popcount_word_count != self.work.identity_precheck_count * words
+                or self.work.identity_precheck_or_word_count != self.work.identity_precheck_atom_visit_count * words
+                or self.work.identity_precheck_atom_visit_count > (
+                    self.atom_count - len(self.anchor_observation_ids)) * self.work.identity_precheck_count
+                or self.work.identity_precheck_mask_limb_span_count < self.work.identity_precheck_atom_visit_count
+                or self.work.identity_precheck_mask_limb_span_count > (
+                    (self.atom_count - len(self.anchor_observation_ids) + 29) // 30
+                    * self.work.identity_precheck_atom_visit_count)
+                or self.work.identity_precheck_count != (
+                    self.work.identity_reject_count + self.work.initial_filter_count
+                    + self.work.branch_filter_count + self.work.maximality_extension_check_count
+                    + self.work.identity_precheck_pass_without_actual_count)
+            ))
             or self.work.initial_filter_count + self.work.initial_filter_reuse_count
+            + self.work.initial_identity_reject_count
             > self.atom_count - len(self.anchor_observation_ids)
             or self.work.branch_filter_count + self.work.branch_filter_reuse_count
+            + self.work.branch_identity_reject_count
             > self.atom_count * self.work.search_branch_count
             or self.work.feasibility_lookup_count > (
                 1 + self.atom_count + self.atom_count * self.work.search_branch_count
@@ -165,6 +372,7 @@ class MembershipScope:
                 self.work.visited_count
                 + self.work.cached_feasible_reuse_count
                 + self.work.cached_infeasible_reuse_count
+                + self.work.identity_reject_count
                 + int(self.state == MembershipState.SEARCH_BOUND_EXCEEDED)
             )
             or self.work.branch_filter_count > self.atom_count * self.work.search_branch_count
@@ -182,10 +390,13 @@ class MembershipScope:
                 or self.work.maximality_variable_visit_count != (
                     self.work.maximality_extension_check_count
                     + self.work.maximality_extension_reuse_count
+                    + self.work.maximality_identity_reject_count
                 )
+                or self.work.identity_precheck_pass_without_actual_count
             ))
             or (self.state == MembershipState.NO_INDEPENDENT_ANCHOR and any(
                 getattr(self.work, field.name) for field in fields(self.work)
+                if field.name not in ('input_transition_visit_count', 'input_atom_visit_count', 'input_raw_visit_count')
             ))
         ):
             raise ValueError("membership scope is invalid or exceeds finite work bounds")
@@ -225,6 +436,11 @@ class MembershipReceipt:
 
     def __post_init__(self) -> None:
         exhausted = any(scope.state == MembershipState.SEARCH_BOUND_EXCEEDED for scope in self.scopes)
+        retained_prefix = 0
+        for scope in self.scopes:
+            if scope.identity_plan.retained_scope_prefix_bytes != retained_prefix:
+                raise ValueError("membership scopes lost retained receipt prefix memory")
+            retained_prefix += scope.retained_bytes
         if (
             self.state not in (MembershipState.COMPLETE, MembershipState.SEARCH_BOUND_EXCEEDED,
                                MembershipState.FIT_BOUND_EXCEEDED)
@@ -277,7 +493,7 @@ def new_membership_groups(
 def enumerate_membership_scope(
     *, parent_family_id: str, role: BoundaryRole, atoms: tuple[MembershipAtom, ...],
     transitions: tuple[MembershipTransition, ...], query_trace_positions_px: tuple[int, ...],
-    scale_px_per_mm: float, remaining_visits: int,
+    scale_px_per_mm: float, remaining_visits: int, retained_scope_prefix_bytes: int = 0,
 ) -> MembershipScope:
     """Enumerate every maximal feasible superset of all independent anchors.
 
@@ -290,27 +506,61 @@ def enumerate_membership_scope(
     one pending atom remains; all pending atoms passed the full required-union
     filter. Completed raw feasibility checks are also reused by exact integer
     masks within this scope for the bounded filter and maximality purposes.
+    On an eligible memo miss, an optional exact raw/trace bitset precheck
+    can reject an identity conflict without an actual visit or memo entry.
+    Passing it always continues to the original full oracle. Anchors and
+    true whole unions always take that original actual path.
     It never substitutes pairwise compatibility for a larger union. No fit,
     loss, role permission, support ranking, or placement result prunes a set.
     Exhaustion exposes work only, never a purportedly complete prefix.
     """
-    if not 0 <= remaining_visits <= MAXIMUM_MEMBERSHIP_VISITS:
+    if (not 0 <= remaining_visits <= MAXIMUM_MEMBERSHIP_VISITS
+            or type(retained_scope_prefix_bytes) is not int or retained_scope_prefix_bytes < 0):
         raise ValueError("membership visit budget is invalid")
-    raw = {item.transition_id: item for item in transitions}
-    members = {item.observation_id: frozenset(item.transition_ids) for item in atoms}
-    if len(raw) != len(transitions) or len(members) != len(atoms) or any(
-        not ids or not ids.issubset(raw) for ids in members.values()
-    ):
+    work: Counter[str] = Counter()
+    raw = {}
+    for item in transitions:
+        work['input_transition_visit_count'] += 1
+        raw[item.transition_id] = item
+    members = {}
+    scope_raw: set[ObservationId] = set()
+    scope_traces: set[float] = set()
+    atom_input_count = atom_unique_count = 0
+    for item in atoms:
+        work['input_atom_visit_count'] += 1
+        atom_input_count += len(item.transition_ids)
+        work['input_raw_visit_count'] += len(item.transition_ids)
+        ids = frozenset(item.transition_ids)
+        atom_unique_count += len(ids)
+        if not ids:
+            raise ValueError("membership atom lost original transition identity")
+        for identity in ids:
+            work['input_raw_visit_count'] += 1
+            if identity not in raw:
+                raise ValueError("membership atom lost original transition identity")
+            scope_raw.add(identity)
+            scope_traces.add(raw[identity].trace_coordinate_px)
+        members[item.observation_id] = ids
+    if len(raw) != len(transitions) or len(members) != len(atoms):
         raise ValueError("membership atom lost original transition identity")
     anchors = tuple(sorted((item.observation_id for item in atoms
                             if item.independent_support_region_count >= 2), key=str))
     variables = tuple(sorted(set(members) - set(anchors), key=str))
-    raw_count = len(set().union(*members.values())) if members else 0
-    work: Counter[str] = Counter()
+    raw_count = len(scope_raw)
+    memory = _identity_memory_plan(len(atoms), len(anchors), len(transitions), atom_input_count,
+                                   raw_count, len(scope_traces), remaining_visits, retained_scope_prefix_bytes)
+    identity_state = (MembershipIdentityPrecheckState.NO_INDEPENDENT_ANCHOR if not anchors else
+                      MembershipIdentityPrecheckState.ENABLED
+                      if memory[-1] <= MAXIMUM_PEAK_TEMPORARY_FIXED_ALLOWANCE_BYTES else
+                      MembershipIdentityPrecheckState.MEMORY_ALLOWANCE_EXCEEDED)
+    identity_plan = MembershipIdentityPlan(identity_state, len(transitions), atom_input_count,
+        atom_unique_count, len(scope_traces), remaining_visits, retained_scope_prefix_bytes, *memory)
 
     def receipt(state: MembershipState, groups: tuple[tuple[ObservationId, ...], ...] = ()) -> MembershipScope:
+        work['identity_logical_limb_access_bound'] = (
+            work['identity_word_access_count'] + work['identity_precheck_mask_control_logical_limb_bound'])
         return MembershipScope(parent_family_id, role, state, anchors, len(atoms), raw_count,
-                               len(query_trace_positions_px), groups, MembershipWork(**work))
+                               len(query_trace_positions_px), identity_plan, groups, MembershipWork(**work))
 
     if not anchors:
         return receipt(MembershipState.NO_INDEPENDENT_ANCHOR)
@@ -326,6 +576,96 @@ def enumerate_membership_scope(
         'branch_filter_count': 'branch_filter_reuse_count',
         'maximality_extension_check_count': 'maximality_extension_reuse_count',
     }
+    identity_reject_fields = {
+        'initial_filter_count': 'initial_identity_reject_count',
+        'branch_filter_count': 'branch_identity_reject_count',
+        'maximality_extension_check_count': 'maximality_identity_reject_count',
+    }
+    raw_words = (raw_count + _IDENTITY_WORD_BITS - 1) // _IDENTITY_WORD_BITS
+    trace_words = (len(scope_traces) + _IDENTITY_WORD_BITS - 1) // _IDENTITY_WORD_BITS
+    anchor_raw_bits: list[int] = []
+    anchor_trace_bits: list[int] = []
+    variable_bits: list[tuple[list[int], list[int]]] = []
+    if identity_state == MembershipIdentityPrecheckState.ENABLED:
+        raw_positions = {}
+        trace_positions = {}
+        try:
+            for raw_index, identity in enumerate(scope_raw):
+                work['identity_index_raw_visit_count'] += 1
+                trace = raw[identity].trace_coordinate_px
+                if trace not in trace_positions:
+                    trace_index = len(trace_positions)
+                    trace_positions[trace] = (trace_index // _IDENTITY_WORD_BITS,
+                                              1 << (trace_index % _IDENTITY_WORD_BITS))
+                    work['identity_index_bit_build_count'] += 1
+                    work['identity_word_access_count'] += 2
+                trace_word, trace_bit = trace_positions[trace]
+                raw_positions[identity] = (raw_index // _IDENTITY_WORD_BITS,
+                    1 << (raw_index % _IDENTITY_WORD_BITS), trace_word, trace_bit)
+                work['identity_index_bit_build_count'] += 1
+                work['identity_word_access_count'] += 2
+            anchor_raw_bits = [0] * raw_words
+            anchor_trace_bits = [0] * trace_words
+            work['identity_index_zero_word_count'] += raw_words + trace_words
+            work['identity_word_access_count'] += raw_words + trace_words
+            for atom_index, key in enumerate((*anchors, *variables)):
+                work['identity_index_atom_visit_count'] += 1
+                if atom_index < len(anchors):
+                    raw_bits, trace_bits = anchor_raw_bits, anchor_trace_bits
+                else:
+                    raw_bits, trace_bits = [0] * raw_words, [0] * trace_words
+                    work['identity_index_zero_word_count'] += raw_words + trace_words
+                    work['identity_word_access_count'] += raw_words + trace_words
+                    variable_bits.append((raw_bits, trace_bits))
+                for identity in members[key]:
+                    work['identity_index_raw_input_count'] += 1
+                    raw_word, raw_bit, trace_word, trace_bit = raw_positions[identity]
+                    raw_bits[raw_word] |= raw_bit
+                    trace_bits[trace_word] |= trace_bit
+                    work['identity_index_word_update_count'] += 2
+                    work['identity_word_access_count'] += 6
+        finally:
+            raw_positions.clear()
+            trace_positions.clear()
+
+    def identity_possible(mask: int) -> bool:
+        # Equal raw and exact-trace cardinalities hold iff no two different
+        # raw identities share a trace. Sharing the same raw remains legal.
+        # Each list element is one 30-bit limb: the counters below count the
+        # actual fixed-width copy/OR/popcount loops, including zero words.
+        work['identity_precheck_count'] += 1
+        raw_bits, trace_bits = anchor_raw_bits.copy(), anchor_trace_bits.copy()
+        work['identity_precheck_copy_word_count'] += raw_words + trace_words
+        work['identity_word_access_count'] += 2 * (raw_words + trace_words)
+        while mask:
+            # Source-level conservative bound, not a CPython instruction or
+            # machine-read counter: for L positive mask limbs, 32(L+1)
+            # covers unary negation, signed AND conversion/temporaries,
+            # bit_length/index arithmetic, XOR and loop bookkeeping. Record
+            # the actual width at every selection; a high sparse bit still
+            # costs its full width, not one selected-atom visit.
+            mask_limbs = (mask.bit_length() + _IDENTITY_WORD_BITS - 1) // _IDENTITY_WORD_BITS
+            work['identity_precheck_mask_limb_span_count'] += mask_limbs
+            work['identity_precheck_mask_control_logical_limb_bound'] += 32 * (mask_limbs + 1)
+            bit = mask & -mask
+            index = bit.bit_length() - 1
+            work['identity_precheck_atom_visit_count'] += 1
+            atom_raw, atom_trace = variable_bits[index]
+            for word_index in range(raw_words):
+                raw_bits[word_index] |= atom_raw[word_index]
+                work['identity_precheck_or_word_count'] += 1
+                work['identity_word_access_count'] += 3
+            for word_index in range(trace_words):
+                trace_bits[word_index] |= atom_trace[word_index]
+                work['identity_precheck_or_word_count'] += 1
+                work['identity_word_access_count'] += 3
+            mask ^= bit
+        raw_cardinality = sum(word.bit_count() for word in raw_bits)
+        trace_cardinality = sum(word.bit_count() for word in trace_bits)
+        work['identity_precheck_popcount_word_count'] += raw_words + trace_words
+        work['identity_word_access_count'] += raw_words + trace_words
+        return raw_cardinality == trace_cardinality
+
     spec = PHOTO_BOUNDARY_MEASUREMENT_SPEC
     allowance = spec.inlier_minimum_threshold_mm * scale_px_per_mm
     cap = math.tan(math.radians(spec.maximum_measurable_line_angle_degrees))
@@ -343,7 +683,13 @@ def enumerate_membership_scope(
             work[reuse_field] += 1
             work['cached_feasible_reuse_count' if result else 'cached_infeasible_reuse_count'] += 1
             return result
+        if (reuse_field is not None and identity_state == MembershipIdentityPrecheckState.ENABLED
+                and not identity_possible(mask)):
+            work[identity_reject_fields[purpose]] += 1
+            return False
         if work['visited_count'] >= remaining_visits:
+            if reuse_field is not None and identity_state == MembershipIdentityPrecheckState.ENABLED:
+                work['identity_precheck_pass_without_actual_count'] += 1
             raise Exhausted
         work['visited_count'] += 1
         work[purpose] += 1
@@ -414,13 +760,30 @@ def enumerate_membership_scope(
         search(included, next_pending, next_excluded, depth + 1)
         search(required, tail, (*excluded, selected), depth + 1)
 
+    result: MembershipScope | None = None
     try:
         if feasible(0, 'anchor_check_count'):
             pending = tuple(index for index in range(len(variables))
                             if feasible(1 << index, 'initial_filter_count'))
             search(0, pending, (), 1)
+        result = receipt(MembershipState.COMPLETE, tuple(sorted(maximal)))
     except Exhausted:
-        return receipt(MembershipState.SEARCH_BOUND_EXCEEDED)
+        result = receipt(MembershipState.SEARCH_BOUND_EXCEEDED)
     finally:
         feasibility_cache.clear()
-    return receipt(MembershipState.COMPLETE, tuple(sorted(maximal)))
+        anchor_raw_bits.clear()
+        anchor_trace_bits.clear()
+        for raw_bits, trace_bits in variable_bits:
+            raw_bits.clear()
+            trace_bits.clear()
+        variable_bits.clear()
+        raw.clear()
+        members.clear()
+        scope_raw.clear()
+        scope_traces.clear()
+        maximal.clear()
+        # search captures itself recursively; break that cell explicitly so
+        # discarded output prefixes and working containers do not await GC.
+        search = None
+    assert result is not None
+    return result

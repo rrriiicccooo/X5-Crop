@@ -1425,9 +1425,10 @@ def _validate_cross_measurement_support(
                   if identity in raw_ids and binding['evidence'] == 'template_local_refinement'), receipt.fit_attempt_count)
     if receipt.membership is not None:
         if receipt.membership_cache_peak_temporary_bytes > lane.get("work", {}).get("peak_temporary_bytes", 0):
-            raise ValueError("membership cache memory is absent from the source work receipt")
+            raise ValueError("membership working memory is absent from the source work receipt")
         family_by_id = {family.family_id: family for family in families}
         remaining = MAXIMUM_MEMBERSHIP_VISITS
+        retained_scope_prefix_bytes = 0
         for scope in receipt.membership.scopes:
             parent = family_by_id[scope.parent_family_id]
             query_ids = {transitions[str(identity)]['query_id'] for identity in parent.member_transition_ids}
@@ -1443,10 +1444,12 @@ def _validate_cross_measurement_support(
                 parent_family_id=parent.family_id, role=parent.role,
                 atoms=tuple(membership_atoms[key] for key in parent.member_observation_ids),
                 transitions=points, query_trace_positions_px=tuple(query['trace_positions_px']),
-                scale_px_per_mm=query['boundary_axis_scale_px_per_mm']['maximum'], remaining_visits=remaining)
+                scale_px_per_mm=query['boundary_axis_scale_px_per_mm']['maximum'], remaining_visits=remaining,
+                retained_scope_prefix_bytes=retained_scope_prefix_bytes)
             if replayed != scope:
                 raise ValueError("membership enumeration or actual work is not reproducible from original measurements")
             remaining -= replayed.work.visited_count
+            retained_scope_prefix_bytes += replayed.retained_bytes
     _validate_local_cross_refinement_scopes(lane, query_records, receipt, registered, raw)
     evaluations = complete_family_evaluations(tuple(families))
     if (

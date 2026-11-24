@@ -960,6 +960,7 @@ def _register_membership_proposals(
            for role, measurement in measurements.items()}
     scopes = []
     remaining = MAXIMUM_MEMBERSHIP_VISITS
+    retained_scope_prefix_bytes = 0
     frozen_ids = tuple(sorted(observations, key=str))
     for family in registered.family_resolutions:
         if family.use != CrossBoundaryFamilyUse.CONDITIONAL_PROPOSAL or family.state != EvidenceState.UNAVAILABLE:
@@ -970,9 +971,11 @@ def _register_membership_proposals(
             transitions=raw[family.role],
             query_trace_positions_px=measurements[family.role].query.trace_positions_px,
             scale_px_per_mm=height_scale_px_per_mm.maximum, remaining_visits=remaining,
+            retained_scope_prefix_bytes=retained_scope_prefix_bytes,
         )
         scopes.append(scope)
         remaining -= scope.work.visited_count
+        retained_scope_prefix_bytes += scope.retained_bytes
     scope_records = tuple(scopes)
     if any(scope.state == MembershipState.SEARCH_BOUND_EXCEEDED for scope in scopes):
         return replace(registered, membership_receipt=MembershipReceipt(

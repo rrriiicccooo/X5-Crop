@@ -1596,6 +1596,11 @@ gradient、全部顶点的 first-order gap，并要求 `gap <= robust_fit_tolera
 按原整数 mask 复用已完成的完整 raw 核验布尔结果。True／False 均保留；不复用子集、超集或其它
 scope，不缓存物理多边形、拟合、角色或搜索分组。Anchor 与真实 whole-union 查询继续实际核验，
 预算耗尽、异常或未完成的检查不得进入缓存。
+上述三类用途在原 memo 未命中后，可先核验完整 raw union 是否存在同 trace 的不同 transition。索引分别
+按精确 raw identity 与 trace coordinate 建立 30-bit 分词位集；合并后两者基数相等，才继续原完整物理核验。
+共享同一 raw 不构成冲突；不同 raw 共用同一 trace 才拒绝。前置拒绝不写入物理 memo、不计实际访问 V，
+并按初始、分支、极大性用途分别计数；通过不授予任何资格。Anchor 和真实 whole-union 不走该前置。
+索引只在同 scope 内存活，不能缓存子集、借用其它 scope、用成对相容替代共同域或增加原核验额度。
 极大性只表示无法再加入一个完整原子，不证明成员身份或角色权限。
 无独立 anchor 时明确记为不适用；多个 anchor 联合不可行时不删除任何 anchor。搜索不读取拟合结果、
 背景角色授权、黄金或 placement。已有 raw union 不重复物化；新 union 的不同成员解释分别保留来源，
@@ -1657,11 +1662,33 @@ oracle 访问；两个及以上 pending 仍完整求交，不能用两两相容�
 递归节点、分支及最大深度分别记账；节点不超过 `2 × 分支 + 1 <= 2V+1`，实际及复用的分支过滤合计
 不超过 `A × 分支`。失败 whole-union 不读缓存，故每个实际分支仍消耗一次原实际核验。
 令 B 为分支数，全部 lookup 为 L，则 `L <= 1+A+AB+N+AN <= (3A+2)V+2A+2`。
-布尔结果与用途两套复用计数之和须一致；完整 scope 的 `L=V+reuse`，耗尽至多多一次未完成查询。
-缓存最多 V 项，计入原 source 临时内存。首次访问前用当前 A 与剩余额度预检最大保留量，不得超过
-原固定 32 MiB allowance；实际逻辑字节上界为 `256+E×(192+8×ceil(A/30))`，E 为峰值项数。
-无查询则为 0；有查询但尚无已完成项时保留常量开销。正常、耗尽及异常返回均显式清空，不依赖
-Python 闭包循环的延后回收。各 scope 顺序执行，峰值取最大值并进入原 source work receipt。
+布尔结果与用途两套复用计数之和须一致；无身份前置时，完整 scope 的 `L=V+reuse`，耗尽至多多一次未完成查询。
+启用身份前置时，令其三类拒绝合计为 C，则完整 scope 为 `L=V+reuse+C`，耗尽恰多一次未完成查询；
+前述 L、B、N 上界保持。全部前置尝试 F 包括拒绝、三类实际核验和最后至多一次前置通过后 V 耗尽的查询。
+完整 scope 的极大性访问等于实际扩展、memo 复用及身份拒绝之和；耗尽至多多一次未完成扩展。
+新增工作独立记录全部角色输入 M、原子输入 A、逐原子原始引用 D 及去重引用、索引构建、固定词的
+copy／OR／popcount 访问。令 Hmask 为每次选原子时实际 mask limb 跨度之和，X 为所选原子访问数，
+变量 mask 的符号运算、临时量和控制工作按 `32(Hmask+X)` 的保守逻辑 limb 上界计费；它不是 CPU 指令数。
+该上界与固定词实际访问分别保存并求和，不能把一个稀疏高位当成一个常量成本。
+
+缓存最多 V 项，其字节上界 `Cmemo(E)=256+E×(192+8×ceil(A/30))`，E 为峰值项数；首次实际核验前
+仍按剩余额度预检原 memo 不超过固定 32 MiB allowance。身份索引是同一池中的可选加速：同时存活的
+完整工作量、索引、memo 和此前 scope 的返回结构预留不能容纳时，明确记录
+`memory_allowance_exceeded`，继续原完整核验路径，不建立新物理 fallback 或额外资源池。
+令 S 为 scope 的不同 trace 数、H 为 anchor 数、Z 为 `ceil(T/30)+ceil(S/30)`，T 为 scope raw 数，
+Rprefix 为此前 scope 返回结构字节上界。输入映射及集合预留为
+`P=8192+128M+256A+64D+64(T+S)`；有 anchor 时另计挂起 DFS 的 `64A²+4096A` 与完整物理 oracle
+的 `8192+128T+1024S+64A`，三者之和为 Pbase。无 anchor 时只计 P 和此前返回结构。
+索引保留 I、构建 J 和前置临时 K 分别为 `256+(A-H+1)(256+40Z)`、`512+384T+256S`、
+`512+40Z+32ceil(A/30)`。极大集合列表、排序、不可变返回及校验容器共同预留
+`Gwork(g)=256+g(256+8A)`（`Gwork(0)=0`）；规划 g 为剩余 V 额度加一，实际 g 为 B+1，尚无节点则为零。
+可选加速准入为 `Rprefix+Pbase+Gwork(g)+I+max(J,K+Cmemo(Vremaining)) <= 32 MiB`。
+实际 source 峰以实际 B、E 代入；未启用时仍核算 Rprefix、Pbase、Gwork 与 memo。
+每个返回 scope 保留 `8192+16A+Σ(96+8|group|)` bytes，原测量与 identity 字符串借用原输入。
+Registration 累加此前返回结构，report 从已独立重放的 scope 重新计算前缀，不能信任自报值。
+正常、耗尽及异常均显式清空 memo、索引、临时极大集合并断开递归自引用；耗尽不保留成功前缀。
+各 scope 顺序执行，包含此前返回结构的峰值进入原 source work receipt；后续新增 union 计划与拟合
+仍由 registration 的原资源合同负责，不能用本搜索峰值冒充它们的完整内存证明。
 完整 scope 的节点数等于实际 whole-union 访问加证明复用次数；耗尽时最多多一个未完成节点。
 当前分支只保存整数 mask 和原子索引，不保留全部可行子集；完整极大解释与预检前 union 计划最多 N 组，获准拟合的唯一 union 数还须
 满足 `3R/2R` 预检。
@@ -2632,7 +2659,7 @@ format/source 状态测量共同 W。共同 H 只从每个成员都已完整关�
 `common_outputs` 可保留预算失败窗口作为诊断，只有 `state=supported` 且 `common_failure=null` 才表示窗口
 验证通过。当前该分支在规范 selection/Gate 后执行，不授予照片序号映射、canonical winner 或自动输出权限。
 
-当前报告 schema 为 139。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
+当前报告 schema 为 140。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
 重放全部 producer 和独立成员，再比对结果、缺口和工作。成员 Cross 只重复自身 H／纵向域、best/runner、
 求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
 外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source
