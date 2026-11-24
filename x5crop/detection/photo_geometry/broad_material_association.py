@@ -617,36 +617,51 @@ def associate_broad_material(
                         result.append(index)
                 return result
 
-            def propagate(pool, ranges, required, bounds, additions):
+            def propagate(mask, pool, ranges, required, bounds, additions,
+                          omitted=None, selected=None):
                 # The branch already supplies every requested addition to
                 # add_required. Repeating an existing required raw is harmless:
                 # its pair bounds are already present in ranges. No difference
                 # of two required sets is needed to discover those additions.
+                # Keep the mask coextensive with this same necessary upper
+                # set, so the next visit can consume the dictionary directly.
+                # A surviving pairwise range never certifies a common line;
+                # final physical feasibility stays with physical_conflict().
                 charge('dominance_member_check_count', len(required))
                 required_set = set(required)
                 result = {}
+                result_mask = mask
+                selected_order = orders[selected] if selected is not None else None
                 for index in pool:
                     charge('dominance_member_check_count')
+                    if (index == omitted
+                            or orders[index] == selected_order and index != selected):
+                        continue
                     if index in required_set:
                         result[index] = bounds[:2]
-                        continue
-                    old = ranges.get(index) if ranges is not None else base_bounds[:2]
-                    if old is None:
-                        continue
-                    lo, hi = max(old[0], bounds[0]), min(old[1], bounds[1])
-                    for prior in additions:
-                        if prior == index:
-                            continue
-                        if orders[prior] == orders[index]:
-                            lo, hi = 1.0, 0.0
-                            break
-                        pair_lo, pair_hi = pair_bounds(prior, index)
-                        lo, hi = max(lo, pair_lo), min(hi, pair_hi)
+                    else:
+                        old = ranges[index] if ranges is not None else base_bounds[:2]
+                        lo, hi = max(old[0], bounds[0]), min(old[1], bounds[1])
+                        for prior in additions:
+                            if prior == index:
+                                continue
+                            if orders[prior] == orders[index]:
+                                lo, hi = 1.0, 0.0
+                                break
+                            pair_lo, pair_hi = pair_bounds(prior, index)
+                            lo, hi = max(lo, pair_lo), min(hi, pair_hi)
+                            if lo > hi:
+                                break
                         if lo > hi:
-                            break
-                    if lo <= hi:
+                            # Parent mask/base, input and tightened masks can
+                            # survive beside the bit and XOR result. The frame
+                            # reserves two masks; preflight the other four.
+                            reference_peak(4 * mask_references)
+                            words()
+                            result_mask ^= bit(index)
+                            continue
                         result[index] = (lo, hi)
-                return result
+                return result_mask, result
 
             def visit(mask, required, bounds, depth, ranges=None):
                 nonlocal completed_references, frame_references
@@ -690,7 +705,6 @@ def associate_broad_material(
                         charge('dominance_member_check_count', len(required))
                         required_set = set(required)
                         dominance_forced = None
-                        new_mask = 0
                         for rank in range(component_start, len(completed)):
                             old = completed[rank][1]
                             difference = 0
@@ -711,8 +725,15 @@ def associate_broad_material(
                                     dominance_forced = index
                                     break
                         difference = 0
-                        pool = members(mask)
-                        filtered = []
+                        if ranges is None:
+                            pool = members(mask)
+                        else:
+                            # Propagation owns an exact necessary upper set.
+                            # Tail exclusions below update this branch-owned
+                            # dictionary with the mask, so its insertion order
+                            # is the original ascending raw order. Each child
+                            # receives a fresh dictionary, never its parent's.
+                            pool = ranges
                         if dominance_forced is not None:
                             # Every explanation omitting this sole raw is
                             # already contained in a qualified completed path.
@@ -721,31 +742,21 @@ def associate_broad_material(
                             updated = add_required(required, bounds, (dominance_forced,), ranges)
                             if updated is None:
                                 return
-                            ranges = propagate(pool, ranges, *updated, (dominance_forced,))
+                            mask, ranges = propagate(mask, pool, ranges, *updated, (dominance_forced,))
                             frame_references -= references
                             required, bounds = updated
                             references = scratch_references + 2 * mask_references + len(required) + 3 * len(ranges)
                             frame_references += references
                             counters['extension_attempt_count'] += 1
                             continue
-                        new_mask = mask
-                        mask_filtered = False
                         by_trace: dict[int, list[int]] = {}
-                        for index in pool:
+                        if ranges is not None:
+                            pool = []
+                        for index in ranges if ranges is not None else pool:
                             charge('dominance_member_check_count')
-                            available = ranges.get(index) if ranges is not None else base_bounds[:2]
-                            if available is not None and max(available[0], bounds[0]) <= min(available[1], bounds[1]):
-                                filtered.append(index)
-                                charge('dominance_member_check_count')
-                                by_trace.setdefault(orders[index], []).append(index)
-                            else:
-                                charge('dominance_member_check_count')
-                                if index in required_set:
-                                    return
-                                words()
-                                new_mask ^= bit(index)
-                                mask_filtered = True
-                        pool = filtered
+                            if ranges is not None:
+                                pool.append(index)
+                            by_trace.setdefault(orders[index], []).append(index)
                         region_counts = [0, 0, 0]
                         for indices in by_trace.values():
                             region_counts[raw_regions[indices[0]]] += 1
@@ -762,20 +773,17 @@ def associate_broad_material(
                                     charge('dominance_member_check_count')
                                     if indices[0] not in required_set:
                                         forced.append(indices[0])
-                        mask = new_mask
                         if forced:
                             updated = add_required(required, bounds, forced, ranges)
                             if updated is None:
                                 return
-                            ranges = propagate(pool, ranges, *updated, forced)
+                            mask, ranges = propagate(mask, pool, ranges, *updated, forced)
                             frame_references -= references
                             required, bounds = updated
                             references = scratch_references + 2 * mask_references + len(required) + 3 * len(ranges)
                             frame_references += references
                             counters['extension_attempt_count'] += 1
                             continue
-                        if mask_filtered and any(contained(mask, old) for _, old in completed[component_start:]):
-                            return
                         if duplicates:
                             removed = 0
                             for index in duplicates:
@@ -786,7 +794,6 @@ def associate_broad_material(
                             removed = 0
                             by_trace.clear()
                             required_set.clear()
-                            filtered = ()
                             forced = ()
                             optional = conflict = ()
                             indices = ()
@@ -796,16 +803,24 @@ def associate_broad_material(
                                 updated = add_required(required, bounds, (index,), ranges)
                                 if updated is None:
                                     continue
+                                reference_peak(2 * mask_references)
                                 words()
                                 counters['extension_attempt_count'] += 1
-                                descend(base | bit(index), *updated,
-                                        propagate(pool, ranges, *updated, (index,)), len(duplicates))
+                                child_mask, child_ranges = propagate(
+                                    base | bit(index), pool, ranges, *updated, (index,), selected=index)
+                                descend(child_mask, *updated, child_ranges, len(duplicates))
+                                child_mask = 0
+                                child_ranges = None
                                 updated = None
                             # The final choice also contains the zero-peak
                             # case. Its frame is reused, so only branches that
                             # require a new trace increase the search depth.
                             words()
                             mask = base | bit(duplicates[-1])
+                            if ranges is not None:
+                                charge('dominance_member_check_count', len(duplicates) - 1)
+                                for rank in range(len(duplicates) - 1):
+                                    del ranges[duplicates[rank]]
                             counters['extension_attempt_count'] += 1
                             continue
                         conflict = next(((first, second) for first, second in zip(pool, pool[1:])
@@ -845,7 +860,6 @@ def associate_broad_material(
                         )))
                         by_trace.clear()
                         required_set.clear()
-                        filtered = ()
                         forced = ()
                         conflict = ()
                         indices = ()
@@ -856,13 +870,20 @@ def associate_broad_material(
                             updated = add_required(required, bounds, optional[rank + 1:], ranges)
                             if updated is None:
                                 continue
+                            reference_peak(2 * mask_references)
                             words()
                             counters['extension_attempt_count'] += 1
-                            descend(mask ^ bit(index), *updated,
-                                    propagate(pool, ranges, *updated, optional[rank + 1:]), len(optional))
+                            child_mask, child_ranges = propagate(
+                                mask ^ bit(index), pool, ranges, *updated, optional[rank + 1:], index)
+                            descend(child_mask, *updated, child_ranges, len(optional))
+                            child_mask = 0
+                            child_ranges = None
                             updated = None
                         words()
                         mask ^= bit(optional[-1])
+                        if ranges is not None:
+                            charge('dominance_member_check_count')
+                            del ranges[optional[-1]]
                         counters['extension_attempt_count'] += 1
                 finally:
                     frame_references -= references

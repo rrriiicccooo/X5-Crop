@@ -584,6 +584,10 @@ Mask 使用正数包含／排除运算，初始移位计入进位 limb；补集 
 完整分量预检、父帧挂起状态及跨分量缓存继续独立计量，不提高原动态引用上限。递归前
 释放分组数据，只保留已计量的候选池、分支序列与必要状态。跨分量存活的点对缓存按 key 和两个
 端点共三个数值槽纳入动态上限，新条目写入前预留；不能用当前分量的临时空间代替全局缓存计量。
+必要区间传播同时维护完全同域的 raw mask，只移除既有必要条件已经否定的成员，并跳过 child 明确
+排除的成员；后续直接遍历该分支自己的区间字典建立 pool／trace 分组，省去重复解码和筛选。每个 child
+拥有独立字典，同帧尾分支删除同步更新；原插入顺序保持原 raw 顺序。位操作、删除与实际遍历逐项
+计费，新增 mask 同存临时值在操作前预留。必要范围仍不是共同直线证明，最终完整物理域检查不变。
 记录搜索深度、完成路径数、索引引用和 polygon 顶点峰值；索引与
 顶点分别按 8/16 bytes，输入索引结构按 `64P + 80T` bytes 保守计入数值缓冲，再与同时保留的测量数组
 相加。该新前端工作合同独立于 Cross/phase 的已有上限，后续拟合仍受原有上限约束。
@@ -2177,8 +2181,8 @@ Enclosing support 本身只证明真实 aperture 位于两条 support 之间，�
 center_offset_ratio = (gold_aperture_center - support_midpoint) / H
 ```
 
-当前 v20 calibration 按完整 development cohort 的同一资格规则纳入 4 个 selected unique enclosing pair、
-且黄金 top/bottom 均为 `directly_visible` 的 source（135 两源、120-66 两源，不以最终批准或预算筛选）；
+当前 v21 calibration 按完整 development cohort 的同一资格规则纳入 3 个 selected unique enclosing pair、
+且黄金 top/bottom 均为 `directly_visible` 的 source（135 一源、120-66 两源，不以最终批准或预算筛选）；
 同源 count 先取中位数，再对 source hull 以 `0.001H` 向外量化，得到 `[-0.003H, +0.010H]`。
 该先验只用于唯一已选 support，不适用于共同包络；有限 development 支持尚不证明 sealed 或未见来源泛化。Calibration
 同时绑定 development cohort SHA、eligibility revision 和精确 observation-set SHA；source 数量相同但成员、

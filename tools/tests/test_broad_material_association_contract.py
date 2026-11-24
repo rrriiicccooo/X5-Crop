@@ -113,7 +113,9 @@ def _oracle_maximal_sets(
     }
 
 
-def _live_broad_index_storage(frame, module_name: str):
+def _live_broad_index_storage(frame, module_name: str, *,
+                             temporary_masks=(), temporary_mask_slots=0,
+                             returned_required=None):
     """Count live index containers without consulting the association receipt."""
     slots, seen, entries, receipt = 0, set(), [], None
 
@@ -130,6 +132,23 @@ def _live_broad_index_storage(frame, module_name: str):
         digits = (value.bit_length() + sys.int_info.bits_per_digit - 1) // sys.int_info.bits_per_digit
         return (digits * sys.int_info.sizeof_digit + 7) // 8
 
+    def count_ranges(ranges):
+        if not isinstance(ranges, dict) or id(ranges) in seen:
+            return 0
+        seen.add(id(ranges))
+        return len(ranges) + sum(count_container(value) for value in ranges.values())
+
+    def count_bounds(bounds):
+        if not isinstance(bounds, tuple) or id(bounds) in seen:
+            return 0
+        seen.add(id(bounds))
+        return 2 + sum(count_container(value) for value in bounds[2:])
+
+    def count_updated(updated):
+        if not isinstance(updated, tuple) or len(updated) != 2:
+            return 0
+        return count_container(updated[0]) + count_bounds(updated[1])
+
     cursor = frame
     while cursor:
         if cursor.f_globals.get("__name__") == module_name:
@@ -142,24 +161,51 @@ def _live_broad_index_storage(frame, module_name: str):
                     entries.append((entry_count, scratch_references,
                                     current_mask.bit_count() if isinstance(current_mask, int) else None))
                 for name in ("required", "pool", "filtered", "required_set",
-                             "duplicates", "forced", "optional", "conflict"):
+                             "duplicates", "forced", "optional", "conflict", "indices",
+                             "region_counts"):
                     slots += count_container(values.get(name))
-                for name in ("mask", "new_mask", "base", "removed", "difference"):
+                for name in ("mask", "new_mask", "base", "removed", "difference", "child_mask"):
                     slots += count_numeric(values.get(name))
-                ranges = values.get("ranges")
-                if isinstance(ranges, dict) and id(ranges) not in seen:
-                    seen.add(id(ranges))
-                    slots += len(ranges)
-                    slots += sum(count_container(value) for value in ranges.values())
+                slots += count_ranges(values.get("ranges"))
+                slots += count_ranges(values.get("child_ranges"))
+                slots += count_updated(values.get("updated"))
                 groups = values.get("by_trace")
                 if isinstance(groups, dict) and id(groups) not in seen:
                     seen.add(id(groups))
                     slots += len(groups)
                     slots += sum(count_container(value) for value in groups.values())
-                bounds = values.get("bounds")
-                if isinstance(bounds, tuple) and id(bounds) not in seen:
-                    seen.add(id(bounds))
-                    slots += 2 + sum(count_container(value) for value in bounds[2:])
+                slots += count_bounds(values.get("bounds"))
+            elif cursor.f_code.co_name == "descend":
+                slots += count_numeric(values.get("child_mask"))
+                slots += count_container(values.get("child_required"))
+                slots += count_bounds(values.get("child_bounds"))
+                slots += count_ranges(values.get("child_ranges"))
+            elif cursor.f_code.co_name == "propagate":
+                for name in ("pool", "required", "required_set", "additions"):
+                    slots += count_container(values.get(name))
+                for name in ("mask", "result_mask"):
+                    slots += count_numeric(values.get(name))
+                slots += count_ranges(values.get("ranges"))
+                slots += count_ranges(values.get("result"))
+                slots += count_bounds(values.get("bounds"))
+                slots += count_container(values.get("old"))
+            elif cursor.f_code.co_name == "add_required":
+                for name in ("required", "changed", "changed_set", "additions",
+                             "lower_owners", "upper_owners"):
+                    slots += count_container(values.get(name))
+                slots += count_ranges(values.get("ranges"))
+                slots += count_bounds(values.get("bounds"))
+                slots += count_container(values.get("cached"))
+            elif cursor.f_code.co_name == "members":
+                slots += count_numeric(values.get("mask"))
+                slots += count_container(values.get("result"))
+                data = values.get("data")
+                if isinstance(data, bytes) and id(data) not in seen:
+                    seen.add(id(data))
+                    slots += (len(data) + 7) // 8
+            elif cursor.f_code.co_name == "viability":
+                for name in ("pool", "forward", "backward", "result"):
+                    slots += count_container(values.get(name))
             elif cursor.f_code.co_name == "associate_broad_material":
                 # The fixed 64P + 80T input-index contract is checked
                 # separately; count only the global completed path storage
@@ -172,13 +218,35 @@ def _live_broad_index_storage(frame, module_name: str):
                         if isinstance(item, tuple) and len(item) == 2:
                             slots += count_container(item[0])
                             slots += count_numeric(item[1])
+                slots += count_ranges(values.get("physical_cache"))
+                slots += count_numeric(values.get("initial_mask"))
                 physical_cache = values.get("physical_cache", ())
-                slots += 3 * len(physical_cache)
                 receipt = (values.get("completed_references", 0)
                            + values.get("frame_references", 0)
                            + 3 * len(physical_cache))
         cursor = cursor.f_back
+    slots += sum(count_numeric(value) for value in temporary_masks)
+    slots += temporary_mask_slots + count_updated(returned_required)
     return slots, tuple(entries), receipt
+
+
+def _broad_storage_snapshot(frame, event, argument, module_name):
+    """Include returned objects and the binary result beside a bit operand."""
+    temporary_masks, temporary_slots, returned_required = (), 0, None
+    if event == "return" and frame.f_code.co_name == "bit":
+        temporary_masks = (argument,)
+        raw_count = len(frame.f_locals["ranks"])
+        digits = (raw_count + sys.int_info.bits_per_digit - 1) // sys.int_info.bits_per_digit
+        # At the binary operation the old operand, returned bit and new
+        # result can coexist. Reserve the result's full component width;
+        # this is independent of the implementation's receipt reservation.
+        temporary_slots = (digits * sys.int_info.sizeof_digit + 7) // 8
+    elif event == "return" and frame.f_code.co_name == "add_required":
+        returned_required = argument
+    return _live_broad_index_storage(
+        frame, module_name, temporary_masks=temporary_masks,
+        temporary_mask_slots=temporary_slots, returned_required=returned_required,
+    )
 
 
 class BroadMaterialAssociationContractTest(unittest.TestCase):
@@ -572,6 +640,121 @@ class BroadMaterialAssociationContractTest(unittest.TestCase):
         self.assertEqual(result.state, BroadAssociationState.COMPLETE)
         self.assertEqual(_path_sets(result), expected)
 
+    def test_propagated_upper_set_completes_without_redecoding_or_filtering(self) -> None:
+        traces = tuple(180 * index for index in range(11))
+        # A numeric fork counterexample, translated away from source pixels.
+        # Repeatedly decoding and filtering the un-tightened parent masks
+        # exhausted the original 5P² cap before this search was complete.
+        rows = (
+            (0, 0, -12.5, 17.5), (1, -3.5, -15.5, 10.5),
+            (2, -22.5, -24.5, -20.5), (2, -4, -18.5, 10.5),
+            (3, 5.5, -0.5, 14.5), (4, 3, -8.5, 22.5),
+            (5, -3.5, -14.5, 7.5), (6, -30, -30.5, -29.5),
+            (6, -23, -26.5, -19.5), (6, -11.5, -13.5, -9.5),
+            (6, -5, -5.5, -4.5), (6, 0, -2.5, 2.5),
+            (6, 14, 11.5, 16.5), (7, -12.5, -13.5, -11.5),
+            (7, -1, -7.5, 5.5), (7, 10, 6.5, 14.5),
+            (8, 1, -2.5, 4.5), (9, -6, -18.5, 6.5),
+        )
+        bounds = dict(connection_px=10.0, maximum_slope=math.tan(math.radians(4)),
+                      maximum_missing_lattice_steps=1)
+        module_name = associate_broad_material.__module__
+        storage_cases = set()
+        for reverse, mirror, polarity, input_reversed in itertools.product(
+                (False, True), (False, True), (-1, 1), (False, True)):
+            points = tuple(_broad_point(
+                traces, 10 - ordinal if reverse else ordinal,
+                100 - coordinate if mirror else 100 + coordinate,
+                identity=f"propagated:{index:02d}",
+                physical=(100 - high, 100 - low) if mirror else (100 + low, 100 + high),
+                polarity=polarity,
+                background=(MaterialBackgroundSide.RIGHT if polarity == 1
+                            else MaterialBackgroundSide.LEFT),
+            ) for index, (ordinal, coordinate, low, high) in enumerate(rows))
+            if input_reversed:
+                points = tuple(reversed(points))
+            observations, synchronized, propagated_pairs = [], [], []
+
+            def inspect_live(frame, event, argument):
+                if (event not in ("line", "return", "call")
+                        or frame.f_globals.get("__name__") != module_name):
+                    return inspect_live
+                slots, entries, _receipt = _broad_storage_snapshot(
+                    frame, event, argument, module_name)
+                if entries:
+                    observations.append(slots)
+                cursor, child = frame, None
+                while cursor:
+                    if cursor.f_globals.get("__name__") == module_name:
+                        values = cursor.f_locals
+                        if cursor.f_code.co_name == "propagate" and values.get("ranges") and values.get("result"):
+                            storage_cases.add("old_and_new_ranges")
+                        elif cursor.f_code.co_name == "visit":
+                            child = values
+                        elif cursor.f_code.co_name == "descend" and child is not None:
+                            if (isinstance(child.get("ranges"), dict)
+                                    and child["ranges"] is not values.get("child_ranges")):
+                                storage_cases.add("stale_descend_ranges")
+                            if child.get("mask") != values.get("child_mask"):
+                                storage_cases.add("stale_descend_mask")
+                    cursor = cursor.f_back
+                if event == "return" and frame.f_code.co_name == "propagate" and argument is not None:
+                    mask, ranges = argument
+                    component = frame.f_back.f_locals["component"]
+                    selected = {index for rank, index in enumerate(component) if mask & (1 << rank)}
+                    synchronized.append(set(ranges) == selected)
+                if (event == "call" and frame.f_code.co_name == "pair_bounds"
+                        and frame.f_back.f_code.co_name == "propagate"):
+                    parent = frame.f_back
+                    component = parent.f_back.f_locals["component"]
+                    rank = component.index(parent.f_locals["index"])
+                    propagated_pairs.append(bool(parent.f_locals["mask"] & (1 << rank)))
+                return inspect_live
+
+            previous_trace = sys.gettrace()
+            sys.settrace(inspect_live)
+            try:
+                result = self._associate(points, traces, **bounds)
+            finally:
+                sys.settrace(previous_trace)
+            with self.subTest(reverse=reverse, mirror=mirror, polarity=polarity,
+                              input_reversed=input_reversed):
+                expected = _oracle_maximal_sets(points, traces, **bounds)
+                self.assertEqual(sorted(map(len, expected)), [9, 10])
+                self.assertEqual(result.state, BroadAssociationState.COMPLETE)
+                self.assertEqual(_path_sets(result), expected)
+                self.assertLess(result.work.charged_work, 5 * len(points) ** 2)
+                self.assertTrue(synchronized)
+                self.assertTrue(all(synchronized))
+                self.assertTrue(propagated_pairs)
+                self.assertTrue(all(propagated_pairs))
+                self.assertTrue(observations)
+                self.assertLessEqual(max(observations), result.work.peak_point_reference_count)
+                self.assertLessEqual(result.work.peak_point_reference_count,
+                                     2 * len(points) * len(traces) + 2 * len(traces))
+        self.assertEqual(storage_cases, {
+            "old_and_new_ranges", "stale_descend_ranges", "stale_descend_mask",
+        })
+
+    def test_pairwise_physical_fits_do_not_replace_common_line_feasibility(self) -> None:
+        traces = tuple(range(12))
+        points = tuple(_broad_point(
+            traces, ordinal, 101.0 if 4 <= ordinal < 8 else 100.0,
+            identity=f"common-empty:{ordinal:02d}",
+            physical=(100.95, 101.05) if 4 <= ordinal < 8 else (99.95, 100.05),
+        ) for ordinal in range(12))
+        bounds = dict(connection_px=1.0, maximum_slope=1.0,
+                      maximum_missing_lattice_steps=1)
+        self.assertTrue(all(_physical_slope_feasible(pair, 1.0)
+                            for pair in itertools.combinations(points, 2)))
+        self.assertFalse(_physical_slope_feasible(points, 1.0))
+        expected = _oracle_maximal_sets(points, traces, **bounds)
+        self.assertEqual(expected, set())
+        result = self._associate(points, traces, **bounds)
+        self.assertEqual(result.state, BroadAssociationState.COMPLETE)
+        self.assertEqual(_path_sets(result), expected)
+        self.assertGreater(result.work.polygon_clip_count, 0)
+
     def test_curved_full_universes_keep_all_non_subset_explanations(self) -> None:
         traces = tuple(261 * index for index in range(13))
         # Two materials share several traces. Within the qualifying material,
@@ -767,11 +950,14 @@ class BroadMaterialAssociationContractTest(unittest.TestCase):
             legacy_values = []
 
             def inspect_live(frame, event, _argument):
-                if (event != "line"
+                if (event not in ("line", "return")
                         or frame.f_globals.get("__name__") != module_name
-                        or frame.f_code.co_name not in ("visit", "reference_peak")):
+                        or frame.f_code.co_name not in (
+                            "visit", "reference_peak", "propagate", "descend",
+                            "add_required", "members", "viability", "bit")):
                     return inspect_live
-                slots, entries, receipt = _live_broad_index_storage(frame, module_name)
+                slots, entries, receipt = _broad_storage_snapshot(
+                    frame, event, _argument, module_name)
                 if entries:
                     observed.append((slots, receipt, entries))
                 if frame.f_code.co_name == "reference_peak" and "value" in frame.f_locals:
@@ -876,12 +1062,15 @@ class BroadMaterialAssociationContractTest(unittest.TestCase):
             entry_states = []
 
             def inspect_live(frame, event, _argument):
-                if (event != "line" or frame.f_code.co_name != "visit"
+                if (event not in ("line", "return")
+                        or frame.f_code.co_name not in (
+                            "visit", "reference_peak", "propagate", "descend",
+                            "add_required", "members", "viability", "bit")
                         or frame.f_globals.get("__name__")
                         != associate_broad_material.__module__):
                     return inspect_live
-                slots, entries, _receipt = _live_broad_index_storage(
-                    frame, associate_broad_material.__module__)
+                slots, entries, _receipt = _broad_storage_snapshot(
+                    frame, event, _argument, associate_broad_material.__module__)
                 observed.append(slots)
                 entry_states.extend(entries)
                 return inspect_live
