@@ -8,7 +8,7 @@ from ..detection.workspace import DetectionWorkspace
 from .development import development_report_facts
 from .identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 from .read_models import gate_read_model, typed_read_model
-from .summary import measurement_summary, photo_geometry_summary
+from .summary import _photo_geometry_write_view, measurement_summary
 
 
 def capture_workspace_report_facts(
@@ -55,7 +55,7 @@ def report_record_for_final_detection(
         "input": {"profile": dict(profile)},
         "configuration": dict(configuration),
         "measurement": dict(measurement),
-        "photo_geometry": photo_geometry_summary(detection),
+        "photo_geometry": _photo_geometry_write_view(detection),
         "candidate_gate": gate_read_model(detection.candidate.gate),
         "decision": {
             "status": detection.decision.status,

@@ -7,7 +7,7 @@ from typing import Any
 from ..detection.photo_geometry.template_alignment_diagnostic import (
     template_alignment_diagnostic,
 )
-from .read_models import typed_read_model
+from .read_models import _report_write_view, typed_read_model
 
 
 def template_alignment_path(phase: object, alignment: object) -> str | None:
@@ -33,6 +33,15 @@ def measurement_summary(detection: object, workspace: object) -> dict[str, Any]:
 
 
 def photo_geometry_summary(detection: object) -> dict[str, Any]:
+    return typed_read_model(_photo_geometry_facts(detection))
+
+
+def _photo_geometry_write_view(detection: object) -> dict[str, Any]:
+    """Private snapshot consumed without mutation by record output sinks."""
+    return _report_write_view(_photo_geometry_facts(detection))
+
+
+def _photo_geometry_facts(detection: object) -> dict[str, Any]:
     core = detection.source_core
     geometry = detection.candidate.geometry
     holder = core.matched_holder
@@ -47,7 +56,7 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
         )
         for lane in geometry.lane_reconstructions
     }
-    return typed_read_model({
+    return {
         "selected_scan_canvas_profile_id": selected_profile_id,
         "matched_holder": holder,
         "resolved_slot_count": core.resolved_slot_count,
@@ -309,4 +318,4 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
             }
             for lane in geometry.lane_reconstructions
         ],
-    })
+    }

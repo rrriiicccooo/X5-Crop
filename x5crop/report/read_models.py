@@ -29,11 +29,24 @@ def _model_layout(model_type: type):
 
 
 def typed_read_model(value: Any) -> Any:
-    # A conversion template is local to this call. Copy it on every hit so
-    # repeated facts still produce independently mutable report branches.
-    # The report graph can retain thousands of shared frozen proof objects.
-    # Keep the same bounded capacity while retaining recently reused objects;
-    # the memo remains local so report branches cannot share mutable state.
+    """Return independently mutable branches, preserving opaque leaves."""
+    return _convert_read_model(value, share_frozen_templates=False)
+
+
+def _report_write_view(value: Any) -> Any:
+    """Owned JSON/CSV snapshot; consumers must only read this private view.
+
+    It has exactly the public projection's values and conversion rules, but
+    repeated frozen facts may share converted containers within this call.
+    No raw model is retained in place of a converted model, and mutable input
+    containers are still copied. The existing opaque-leaf policy is unchanged.
+    """
+    return _convert_read_model(value, share_frozen_templates=True)
+
+
+def _convert_read_model(value: Any, *, share_frozen_templates: bool) -> Any:
+    # One call-local bounded template memo. Public projections copy on hits;
+    # the private write-only snapshot can retain the same converted template.
     memo: OrderedDict[int, tuple[object, dict[str, Any]]] = OrderedDict()
     opaque_containers: set[int] = set()
 
@@ -73,7 +86,7 @@ def typed_read_model(value: Any) -> Any:
             previous = memo.get(key)
             if previous is not None and previous[0] is item:
                 memo.move_to_end(key)
-                return copy_tree(previous[1])
+                return previous[1] if share_frozen_templates else copy_tree(previous[1])
             result = {name: child if type(child := getattr(item, name)) in _SCALAR_TYPES else convert(child)
                       for name in names}
             if frozen:
