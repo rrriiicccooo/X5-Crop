@@ -69,6 +69,84 @@ def _intersect_affine_boundary(
     )
 
 
+def _clip_affine_polygon_interval(
+    polygon: tuple[tuple[float, float], ...],
+    interval: FiniteInterval,
+    *,
+    q_coefficient: float,
+    scale_coefficient: float,
+) -> tuple[tuple[float, float], ...]:
+    def projected(point: tuple[float, float]) -> float:
+        scale, normalized = point
+        return scale_coefficient * scale + q_coefficient * normalized
+
+    for value, keep_above in (
+        (interval.minimum, True),
+        (interval.maximum, False),
+    ):
+        polygon = _clip_joint_polygon(
+            polygon,
+            inside=(
+                (lambda point, bound=value: projected(point) >= bound - 1.0e-12)
+                if keep_above
+                else (lambda point, bound=value: projected(point) <= bound + 1.0e-12)
+            ),
+            intersect=lambda left, right, bound=value: _intersect_affine_boundary(
+                left,
+                right,
+                q_coefficient=q_coefficient,
+                scale_coefficient=scale_coefficient,
+                value=bound,
+            ),
+        )
+    if not polygon:
+        raise ValueError("joint affine interval is infeasible")
+    return tuple(polygon)
+
+
+def _intersect_joint_polygons(
+    left: tuple[tuple[float, float], ...],
+    right: tuple[tuple[float, float], ...],
+) -> tuple[tuple[float, float], ...]:
+    """Intersect the complete convex states, including point/segment states.
+
+    An ordered convex polygon is the intersection of its edge-normal support
+    slabs. Using both extrema avoids an orientation or area threshold. Axis
+    slabs also bound a segment along its line and determine a lone point.
+    At most 2V+4 half-planes for V right vertices; no solver or stored cache.
+    """
+    if left == right:
+        return left
+    polygon = left
+    for axis in (0, 1):
+        values = tuple(point[axis] for point in right)
+        polygon = _clip_affine_polygon_interval(
+            polygon, FiniteInterval(min(values), max(values)),
+            scale_coefficient=1.0 if axis == 0 else 0.0,
+            q_coefficient=1.0 if axis == 1 else 0.0,
+        )
+    previous = right[-1]
+    for current in right:
+        delta_scale = current[0] - previous[0]
+        delta_normalized = current[1] - previous[1]
+        previous = current
+        length = math.hypot(delta_scale, delta_normalized)
+        if length == 0.0:
+            continue
+        # Unit normals keep the existing 1e-12 coordinate tolerance from
+        # depending on an edge's length. Both extrema retain every vertex.
+        scale_coefficient = -delta_normalized / length
+        q_coefficient = delta_scale / length
+        values = tuple(scale_coefficient * scale + q_coefficient * normalized
+                       for scale, normalized in right)
+        polygon = _clip_affine_polygon_interval(
+            polygon, FiniteInterval(min(values), max(values)),
+            scale_coefficient=scale_coefficient,
+            q_coefficient=q_coefficient,
+        )
+    return polygon
+
+
 @dataclass(frozen=True)
 class JointAxisGeometry:
     """Correlated positive `(scale, normalized extent)` source state."""
@@ -307,33 +385,12 @@ class JointAxisGeometry:
         q_coefficient: float,
         scale_coefficient: float,
     ) -> tuple[tuple[float, float], ...]:
-        def projected(point: tuple[float, float]) -> float:
-            scale, normalized = point
-            return scale_coefficient * scale + q_coefficient * normalized
-
-        polygon = self.vertices
-        for value, keep_above in (
-            (interval.minimum, True),
-            (interval.maximum, False),
-        ):
-            polygon = _clip_joint_polygon(
-                polygon,
-                inside=(
-                    (lambda point, bound=value: projected(point) >= bound - 1.0e-12)
-                    if keep_above
-                    else (lambda point, bound=value: projected(point) <= bound + 1.0e-12)
-                ),
-                intersect=lambda left, right, bound=value: _intersect_affine_boundary(
-                    left,
-                    right,
-                    q_coefficient=q_coefficient,
-                    scale_coefficient=scale_coefficient,
-                    value=bound,
-                ),
-            )
-        if not polygon:
-            raise ValueError("joint affine interval is infeasible")
-        return tuple(polygon)
+        return _clip_affine_polygon_interval(
+            self.vertices,
+            interval,
+            q_coefficient=q_coefficient,
+            scale_coefficient=scale_coefficient,
+        )
 
     def intersect_state(self, other: "JointAxisGeometry") -> "JointAxisGeometry":
         if (
@@ -379,13 +436,14 @@ class JointAxisGeometry:
                 }
             )
         )
-        return self._from_constraints(
+        return JointAxisGeometry(
             axis_name=self.axis_name,
             design_extent_mm=self.design_extent_mm,
             scale_authority=PositiveInterval(scale_minimum, scale_maximum),
             factor_authority=PositiveInterval(factor_minimum, factor_maximum),
             observed_normalized_extent=observed,
             observation_ids=identities,
+            vertices=_intersect_joint_polygons(self.vertices, other.vertices),
         )
 
     def feasible_scale_interval(self) -> PositiveInterval:

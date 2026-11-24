@@ -87,6 +87,11 @@ W/H observation 分别保留自己的 identity；直接可见边界的 native co
 比例推断都不能把它拉回名义尺寸。相机 aperture 差异与该轴扫描比例差异在像素域可能不可区分，本项目
 只保存能够安全证明的 source-level extent 与相关推断。
 
+跨 lane 合并 source 状态时，W/H 两轴分别相交各自已保存的完整 `(scale, normalized extent)` 凸域。
+Scale／factor／direct observation 元数据仍取交集或合并身份，但不能用这些元数据重新生成较宽的域，
+丢弃此前的推导裁剪或 affine 观测。两个边际范围重叠不证明联合域相容；完整域为空时保持整源 Review。
+推导约束在合并后仍不增加 direct observation、角色或 rank；固定尺寸继续取合并后可行顶点重心。
+
 `G_format` 只决定首次理论搜索位置，不能单独建立 phase、pitch 或 placement。X5 长图不依赖齿孔。
 
 ### 2.1 画幅比例 authority
@@ -2673,6 +2678,11 @@ state、interval、成员和引用关系必须一致。编号预留只防止碰�
 成员注册线集合按角色、物理线类型与原生 transition 集合排序；新增线的运行内编号变化不得改变集合次序。
 
 ## 12. 工作量、性能与 TIFF
+
+Source 轴状态合并只处理既有二维凸域，不增加 TIFF query、拟合、LP 或缓存。右域有 V 个顶点时，
+两轴投影和边法向支撑区间至多产生 `2V+4` 个半平面；与 U 顶点左域相交的工作为 `O(V(U+V))`，
+同时存活的顶点／投影临时量为 `O(U+V)`，随本次合并释放。点／线段由同一闭集裁剪处理，不用面积阈值
+重建非退化域；联合坐标只沿用 `1e-12` 算术容差。当前至多两条 lane，单 lane 直接使用其原 source 状态。
 
 每次 development receipt 保存实际计数和编译上界：
 
