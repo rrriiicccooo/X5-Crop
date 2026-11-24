@@ -3185,10 +3185,14 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   `retained_placement_gold.safe_and_budget_passed` 只统计同一份完整提案同时满足黄金几何安全及全部 slot
   预算通过的 task；分别按 source SHA 去重，并按冻结 cohort role 列出自动／Review 分布和待审 task。
   多份安全提案只贡献一个 task；安全但预算失败与不安全但预算通过的两份提案不能拼成合格结果。
-  该离线统计不授予 Runtime 资格，也不改变发布判据。
-- 检测能力发布底线是当前 development nominal 全部安全 `approved_auto`，全部角色
-  `unsafe_approved_auto = 0`；challenge 的安全 auto 是能力发现，安全 review 同样合格，但不能替代
-  nominal 覆盖。未来建立 sealed cohort 后，其 nominal 也必须全部安全自动通过。不得把失败 nominal 改成
+  该离线统计不授予 Runtime 自动资格。发布另独立要求全部合法、受支持的黄金 task 均有至少一份上述
+  合格提案；`qualifying_proposal_coverage_complete`、`qualifying_proposal_missing_task_ids` 与
+  `qualifying_proposal_covered_task_count` 分别报告覆盖是否完整、缺失任务与已覆盖数。分析失败的任务
+  不贡献覆盖，即使其残留记录看起来有提案；challenge 的 Review 终态不能代替这项提案覆盖要求。
+- 检测能力发布底线是全部合法、受支持的 development task 都有同一份安全且预算通过的完整提案、
+  nominal 全部安全 `approved_auto`，全部角色 `unsafe_approved_auto = 0`；challenge 的安全 auto 是能力发现，
+  安全 review 同样合格，但不能替代提案覆盖或 nominal 自动覆盖。未来建立 sealed cohort 后，其 nominal
+  也必须全部安全自动通过。不得把失败 nominal 改成
   challenge、放宽黄金合同或隐藏 runner 来达标。
 - 工程发布底线独立检查正式 24-source mean `<= 5s`、TIFF/metadata、安装、Apple Silicon macOS、Intel
   macOS、Windows x64 三目标、打包以及 Hook/CI。检测能力与工程能力不得合并成一个模糊的“发布通过”。
@@ -3224,8 +3228,8 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   `result_disposition=development_only_not_release_ready`，终端必须明确显示 `DEVELOPMENT ONLY — NOT
   RELEASE READY` 与已知危险 auto 数量，不能把退出码 0 描述成验证通过或正式交付资格。`--gate release`
   只接受完整 development gold、detector/comparator source manifest 与 HEAD 一致，并硬性要求 nominal
-  全部安全 `approved_auto`、全部角色
-  `unsafe_approved_auto = 0`，以及全部 runtime calibration 的 cohort、eligibility、observation set 与登记数值
+  全部安全 `approved_auto`、全部角色 `unsafe_approved_auto = 0`、全部 task 的合格提案覆盖完整，
+  以及全部 runtime calibration 的 cohort、eligibility、observation set 与登记数值
   可复算一致；`tools/verify accuracy` 薄调用同一个 release analysis owner。任何已知错误 auto 或 calibration
   drift 都使 release detection gate 失败。
   保留开发分析产物使用 `tools/verify diagnostic --gold-analysis --output-root <path>`，可用重复的

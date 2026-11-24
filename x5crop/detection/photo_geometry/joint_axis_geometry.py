@@ -405,9 +405,9 @@ class JointAxisGeometry:
 
     def canonical_state(self) -> tuple[float, float, float]:
         # Every clipping operation preserves a convex polygon.  Its vertex
-        # centroid is therefore a feasible correlated state; independently
-        # taking projection midpoints would recreate a forbidden free
-        # scale/extent combination.
+        # centroid is therefore a feasible correlated state. This is the
+        # source-wide size convention, chosen before output budgets exist;
+        # the aperture factor is derived from this same joint point.
         scale = sum(point[0] for point in self.vertices) / len(self.vertices)
         normalized = (
             sum(point[1] for point in self.vertices) / len(self.vertices)

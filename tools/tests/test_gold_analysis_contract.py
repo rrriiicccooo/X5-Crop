@@ -468,6 +468,106 @@ class GoldAnalysisContractTest(unittest.TestCase):
             1,
         )
 
+    def test_release_gate_requires_qualified_proposal_coverage_for_challenge_tasks(
+        self,
+    ) -> None:
+        identity = {
+            "detector_paths_match_head": True,
+            "comparator_paths_match_head": True,
+        }
+        nominal = self._analysis_record(
+            "nominal",
+            source_sha256="n" * 64,
+            role="nominal",
+            decision="approved_auto",
+            candidate="safe",
+            unsafe_auto=False,
+            physical_frame_id="B1|B2",
+        )
+        for label, proposal, budget_failed in (
+            ("without-proposal", "not_available", False),
+            ("unsafe-proposal", "unsafe", False),
+            ("failed-budget", "safe", True),
+        ):
+            challenge = self._analysis_record(
+                f"challenge-{label}",
+                source_sha256=f"{label[0]}" * 64,
+                role="challenge",
+                decision="needs_review",
+                candidate="not_available",
+                proposal=proposal,
+                unsafe_auto=False,
+                physical_frame_id="B1|B2",
+            )
+            if budget_failed:
+                retained = challenge["retained_placement_gold_labels"][0]
+                retained["direct_use_budget_assessments"][0]["state"] = "contradicted"
+                retained["budget_state"] = "failed"
+            with self.subTest(label=label), patch.object(
+                gold_analysis,
+                "_physical_prior_calibration_failures",
+                return_value=(),
+            ):
+                summary = _summary((nominal, challenge), identity)
+            self.assertFalse(summary["qualifying_proposal_coverage_complete"])
+            self.assertEqual(
+                summary["qualifying_proposal_missing_task_ids"],
+                [challenge["sample_id"]],
+            )
+            self.assertFalse(summary["release_detection_gate_ready"])
+
+    def test_release_gate_accepts_review_challenge_with_complete_safe_budget_proposal(
+        self,
+    ) -> None:
+        identity = {
+            "detector_paths_match_head": True,
+            "comparator_paths_match_head": True,
+        }
+        nominal = self._analysis_record(
+            "nominal",
+            source_sha256="n" * 64,
+            role="nominal",
+            decision="approved_auto",
+            candidate="safe",
+            unsafe_auto=False,
+            physical_frame_id="B1|B2",
+        )
+        challenge = self._analysis_record(
+            "challenge",
+            source_sha256="c" * 64,
+            role="challenge",
+            decision="needs_review",
+            candidate="not_available",
+            proposal="safe",
+            unsafe_auto=False,
+            physical_frame_id="B1|B2",
+        )
+        with patch.object(
+            gold_analysis,
+            "_physical_prior_calibration_failures",
+            return_value=(),
+        ):
+            summary = _summary((nominal, challenge), identity)
+
+        self.assertTrue(summary["qualifying_proposal_coverage_complete"])
+        self.assertEqual(summary["qualifying_proposal_missing_task_ids"], [])
+        self.assertEqual(summary["qualifying_proposal_covered_task_count"], 2)
+        self.assertEqual(
+            summary["retained_placement_gold"]["safe_and_budget_passed"]["task_ids"],
+            ["challenge", "nominal"],
+        )
+        self.assertTrue(summary["release_detection_gate_ready"])
+        self.assertEqual(summary["decision_status_counts"]["needs_review"], 1)
+
+        failed = deepcopy(challenge)
+        failed["decision_status"] = None
+        with patch.object(gold_analysis, "_physical_prior_calibration_failures", return_value=()):
+            failed_summary = _summary((nominal, failed), identity)
+        self.assertEqual(failed_summary["analysis_error_count"], 1)
+        self.assertFalse(failed_summary["qualifying_proposal_coverage_complete"])
+        self.assertEqual(failed_summary["qualifying_proposal_missing_task_ids"], ["challenge"])
+        self.assertFalse(failed_summary["release_detection_gate_ready"])
+
     def test_ratio_height_authority_diagnostic_keeps_consumption_and_blocking_distinct(self) -> None:
         records = []
         for index, blocking in enumerate((False, True)):
@@ -591,7 +691,7 @@ class GoldAnalysisContractTest(unittest.TestCase):
 
     def test_safe_budget_coverage_requires_both_conditions_on_the_same_proposal(self) -> None:
         record = self._analysis_record(
-            "mixed", source_sha256="a" * 64, role="nominal", decision="needs_review",
+            "mixed", source_sha256="a" * 64, role="challenge", decision="needs_review",
             proposal="safe", candidate="not_available", unsafe_auto=False, physical_frame_id="B1|B2",
         )
         safe = record["retained_placement_gold_labels"][0]
@@ -605,8 +705,15 @@ class GoldAnalysisContractTest(unittest.TestCase):
         summary = _retained_placement_summary((record,))
         self.assertEqual(summary["at_least_one_safe_task_count"],1)
         self.assertEqual(summary["safe_and_budget_passed"],{
-            "task_count":0,"source_count":0,"by_cohort_role":{},
+            "task_count":0,"task_ids":[],"source_count":0,"by_cohort_role":{},
         })
+        with patch.object(gold_analysis, "_physical_prior_calibration_failures", return_value=()):
+            gated = _summary((record,), {
+                "detector_paths_match_head": True, "comparator_paths_match_head": True,
+            })
+        self.assertFalse(gated["qualifying_proposal_coverage_complete"])
+        self.assertEqual(gated["qualifying_proposal_missing_task_ids"], ["mixed"])
+        self.assertFalse(gated["release_detection_gate_ready"])
 
     def test_safe_budget_coverage_counts_tasks_and_sources_separately_from_placements(self) -> None:
         first = self._analysis_record(
@@ -623,7 +730,7 @@ class GoldAnalysisContractTest(unittest.TestCase):
         approved.update(sample_id="approved",source_sha256="c" * 64,decision_status="approved_auto")
         covered = _retained_placement_summary((first,second,approved))["safe_and_budget_passed"]
         self.assertEqual(covered,{
-            "task_count":3,"source_count":2,
+            "task_count":3,"task_ids":["approved","first","second"],"source_count":2,
             "by_cohort_role":{
                 "challenge":{"task_count":1,"source_count":1,
                     "decision_status_counts":{"needs_review":1},"needs_review_task_ids":["second"]},

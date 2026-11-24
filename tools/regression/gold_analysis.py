@@ -59,7 +59,7 @@ from .gold_native_connections import native_local_connection_diagnostic
 
 
 ANALYSIS_RECORD_SCHEMA = "x5crop_development_gold_analysis_record_v36"
-ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v38"
+ANALYSIS_SUMMARY_SCHEMA = "x5crop_development_gold_analysis_summary_v39"
 RETAINED_PLACEMENT_SCOPE = "retained_canonical_pair_conditional_cross_and_independent_phase_review_proposals"
 STAGE_INDEX_CONTRACT = "x5crop_gold_optimization_stage_index_v1"
 STAGE_ONE_MAX_LATTICE_RESIDUAL_FRACTION = 0.02
@@ -1170,6 +1170,7 @@ def _retained_placement_summary(records: Sequence[dict[str, Any]]) -> dict[str, 
         "at_least_one_safe_task_count": states["one_safe"] + states["multiple_safe"],
         "safe_and_budget_passed": {
             "task_count": len(safe_budget_tasks),
+            "task_ids": sorted(record["sample_id"] for record in safe_budget_tasks),
             "source_count": len({record["source_sha256"] for record in safe_budget_tasks}),
             "by_cohort_role": {
                 role: {
@@ -2896,6 +2897,21 @@ def _summary(
     physical_prior_calibration_failures = (
         _physical_prior_calibration_failures(physical_prior_validation)
     )
+    retained_placement_summary = _retained_placement_summary(completed)
+    qualifying_proposal_task_ids = set(
+        retained_placement_summary["safe_and_budget_passed"]["task_ids"]
+    )
+    qualifying_proposal_missing_task_ids = sorted(
+        {
+            record["sample_id"]
+            for record in records
+            if record["sample_id"] not in qualifying_proposal_task_ids
+        }
+    )
+    qualifying_proposal_coverage_complete = (
+        analysis_error_count == 0
+        and not qualifying_proposal_missing_task_ids
+    )
     release_analysis_identity_ready = (
         identity.get("detector_paths_match_head") is True
         and identity.get("comparator_paths_match_head") is True
@@ -2910,6 +2926,7 @@ def _summary(
             and not record["nominal_auto_goal_passed"]
             for record in records
         )
+        and qualifying_proposal_coverage_complete
     )
     return {
         "summary_schema": ANALYSIS_SUMMARY_SCHEMA,
@@ -2944,6 +2961,11 @@ def _summary(
         "unsafe_approved_auto_diagnostics": unsafe_auto_diagnostics,
         "release_analysis_identity_ready": release_analysis_identity_ready,
         "release_detection_gate_ready": release_detection_gate_ready,
+        "qualifying_proposal_coverage_complete": qualifying_proposal_coverage_complete,
+        "qualifying_proposal_missing_task_ids": qualifying_proposal_missing_task_ids,
+        "qualifying_proposal_covered_task_count": retained_placement_summary[
+            "safe_and_budget_passed"
+        ]["task_count"],
         "proposal_generation_state_counts": dict(
             sorted(proposal_generation_states.items())
         ),
@@ -2954,7 +2976,7 @@ def _summary(
         "proposal_geometry_conformance_counts": dict(
             sorted(proposal_states.items())
         ),
-        "retained_placement_gold": _retained_placement_summary(completed),
+        "retained_placement_gold": retained_placement_summary,
         "native_boundary_association": {
             "task_count": len(completed),
             "signal_class_counts": dict(sorted(Counter(boundary["signal_class"]
