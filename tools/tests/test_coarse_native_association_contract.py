@@ -709,6 +709,69 @@ class CoarseNativeAssociationContractTest(unittest.TestCase):
         proofs, _ = self._associate(case)
         self.assertEqual(proofs, ())
 
+    def test_complete_raw_membership_can_prove_association_before_fit_admission(self) -> None:
+        case = self._case()
+        top = case[3]
+        family = SimpleNamespace(
+            family_id="family:unfitted",
+            role=BoundaryRole.TOP,
+            member_observation_ids=(top.observation_id,),
+            member_transition_ids=top.transition_ids,
+            member_transition_groups=(top.transition_ids,),
+        )
+        scope = SimpleNamespace(
+            parent_family_id=family.family_id,
+            role=BoundaryRole.TOP,
+            state=MembershipState.COMPLETE,
+            raw_transition_count=len(top.transition_ids),
+            maximal_member_groups=((top.observation_id,),),
+        )
+        results = []
+        for state in (MembershipState.COMPLETE, MembershipState.FIT_BOUND_EXCEEDED):
+            membership = SimpleNamespace(state=state, scopes=(scope,))
+            base = self._ns_replace(case[2], family_resolutions=(family,), membership_receipt=membership)
+            proofs, work = self._associate((case[0], case[1], base, *case[3:]))
+            self.assertEqual(self._roles(proofs), {BoundaryRole.TOP, BoundaryRole.BOTTOM})
+            self.assertEqual(base.membership_receipt.state, state)
+            self.assertTrue(any(alternative.kind == "membership" for alternative in proofs[0].alternatives))
+            results.append((proofs, work))
+        self.assertEqual(results[0], results[1])
+
+    def test_unfitted_maximal_union_with_a_different_continuation_still_blocks(self) -> None:
+        case = self._case()
+        raw = case[3].transition_ids
+        # Neither individual atom contains all three corresponding peaks.
+        # The family union contains the full native line, but its unfitted
+        # maximal member has only the three shared peaks. It must remain a
+        # competing continuation without relying on a materialized fit.
+        atom_ids = tuple(ObservationId(f"unfitted:atom:{i}") for i in range(len(raw)))
+        family = SimpleNamespace(
+            family_id="family:unfitted-alternative",
+            role=BoundaryRole.TOP,
+            member_observation_ids=atom_ids,
+            member_transition_ids=raw,
+            member_transition_groups=tuple((identity,) for identity in raw),
+        )
+        scope = SimpleNamespace(
+            parent_family_id=family.family_id,
+            role=BoundaryRole.TOP,
+            state=MembershipState.COMPLETE,
+            raw_transition_count=len(raw),
+            maximal_member_groups=(atom_ids[:3],),
+        )
+        membership = SimpleNamespace(state=MembershipState.FIT_BOUND_EXCEEDED, scopes=(scope,))
+        base = self._ns_replace(case[2], family_resolutions=(family,), membership_receipt=membership)
+        proofs, _ = self._associate((case[0], case[1], base, *case[3:]))
+        self.assertEqual(self._roles(proofs), {BoundaryRole.BOTTOM})
+
+    def test_fit_exhaustion_cannot_hide_an_incomplete_raw_scope(self) -> None:
+        for state in (MembershipState.SEARCH_BOUND_EXCEEDED, MembershipState.NO_INDEPENDENT_ANCHOR):
+            scope = SimpleNamespace(state=state, raw_transition_count=0, maximal_member_groups=())
+            membership = SimpleNamespace(state=MembershipState.FIT_BOUND_EXCEEDED, scopes=(scope,))
+            with self.subTest(state=state):
+                proofs, _ = self._associate(self._case(membership=membership))
+                self.assertEqual(proofs, ())
+
     def test_budget_overflow_discards_all_proof_prefixes(self) -> None:
         proofs, work = self._associate(self._case(), maximum_value_visits=1)
         self.assertEqual(proofs, ())

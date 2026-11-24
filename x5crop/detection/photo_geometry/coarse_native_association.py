@@ -14,7 +14,11 @@ from .transition_peak_source import same_transition_peak
 def native_line_alternatives(base):
     """Include failed unions and every searched maximal whole-atom union."""
     membership = base.membership_receipt
-    if membership is None or membership.state != MembershipState.COMPLETE or any(
+    # Fit admission controls materializing additional conditional lines. The
+    # complete raw alternatives below already exist before that preflight;
+    # retaining all of them does not require any extra line to have a fit.
+    if membership is None or membership.state not in {
+            MembershipState.COMPLETE, MembershipState.FIT_BOUND_EXCEEDED} or any(
             scope.state != MembershipState.COMPLETE for scope in membership.scopes):
         return None
     alternatives = [NativeLineAlternative("observation", str(item.observation_id), item.role,
