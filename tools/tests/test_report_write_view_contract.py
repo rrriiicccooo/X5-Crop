@@ -2,6 +2,7 @@
 
 import json
 import math
+import os
 import pickle
 import unittest
 from dataclasses import dataclass
@@ -218,7 +219,7 @@ class ReportWriteViewContractTest(unittest.TestCase):
             path = Path(temporary) / "report.jsonl"
             append_report_jsonl(path, view)
             self.assertEqual(path.read_bytes(),
-                             (_json_text(view) + "\n").encode("utf-8"))
+                             (_json_text(view) + os.linesep).encode("utf-8"))
             self.assertIn("共享事实".encode("utf-8"), path.read_bytes())
             self.assertEqual(json.loads(path.read_bytes()), {
                 "left": view["left"],
