@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from hashlib import sha256
 import json
+import pickle
 import unittest
+from unittest.mock import patch
 
 from tools.tests.phase_test_support import _phase_candidate_group
 from tools.tests.template_test_support import (
@@ -29,10 +32,13 @@ from x5crop.detection.photo_geometry.template_model import (
     TemplateSearchReceipt,
 )
 from x5crop.detection.photo_geometry.template_phase_membership import (
+    PhaseCompetitionInputContext,
     PhaseCompetitionMember,
+    PhaseCompetitionScope,
     build_phase_competition_scope,
     combine_phase_competition_scopes,
 )
+import x5crop.detection.photo_geometry.template_phase_membership as phase_membership
 from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseCandidateAuthorityProjection,
     PhaseCandidateProjectionBasis,
@@ -46,7 +52,14 @@ from x5crop.detection.photo_geometry.template_residual import (
     derive_candidate_separator_relations,
 )
 from x5crop.detection.photo_geometry.template_source_domain import PhaseSourceDomain
-from x5crop.domain import Box, EvidenceState, FiniteInterval, ObservationId, WorkspaceExtent
+from x5crop.domain import (
+    Box,
+    EvidenceState,
+    FiniteInterval,
+    ObservationId,
+    PositiveInterval,
+    WorkspaceExtent,
+)
 
 
 class TemplatePhaseMembershipContractTest(unittest.TestCase):
@@ -120,6 +133,26 @@ class TemplatePhaseMembershipContractTest(unittest.TestCase):
             receipt,
             tuple(members),
         )
+
+    def _scope_id_oracle(self, scope):
+        identity = repr(
+            (
+                scope.template,
+                scope.phase_authority_px,
+                scope.holder_span_px,
+                scope.source_domain,
+                scope.adjacency_relations,
+                scope.phase_anchor_authority_ceiling,
+                scope.projection_evaluated,
+                scope.bound_exceeded,
+                scope.receipt,
+                scope.members,
+                scope.input_context,
+            )
+        )
+        return "phase-competition-scope:" + sha256(
+            identity.encode("utf-8")
+        ).hexdigest()
 
     def _authority(self, fit, basis):
         facts = tuple(
@@ -457,6 +490,138 @@ class TemplatePhaseMembershipContractTest(unittest.TestCase):
             scope.members,
         )
         self.assertEqual(rebuilt.scope_id, decoded["scope_id"])
+
+    def test_factory_explicit_and_replaced_scope_ids_match_independent_oracle(self):
+        template = placement_template(3)
+        fit = placement_sequence(template)
+        receipt = self._receipt(hypotheses=1)
+        with patch.object(
+            phase_membership,
+            "_deterministic_scope_id",
+            wraps=phase_membership._deterministic_scope_id,
+        ) as digest:
+            scope = self._scope(template, (self._member(fit, 0),), receipt)
+        self.assertEqual(digest.call_count, 1)
+        self.assertEqual(scope.scope_id, self._scope_id_oracle(scope))
+
+        explicit_values = {
+            "scope_id": self._scope_id_oracle(scope),
+            "template": scope.template,
+            "phase_authority_px": scope.phase_authority_px,
+            "holder_span_px": scope.holder_span_px,
+            "source_domain": scope.source_domain,
+            "adjacency_relations": scope.adjacency_relations,
+            "phase_anchor_authority_ceiling": scope.phase_anchor_authority_ceiling,
+            "projection_evaluated": scope.projection_evaluated,
+            "bound_exceeded": scope.bound_exceeded,
+            "receipt": scope.receipt,
+            "members": scope.members,
+            "input_context": scope.input_context,
+        }
+        with patch.object(
+            phase_membership,
+            "_deterministic_scope_id",
+            wraps=phase_membership._deterministic_scope_id,
+        ) as digest:
+            explicit = PhaseCompetitionScope(**explicit_values)
+        self.assertEqual(digest.call_count, 1)
+        self.assertEqual(explicit.scope_id, scope.scope_id)
+
+        with patch.object(
+            phase_membership,
+            "_deterministic_scope_id",
+            wraps=phase_membership._deterministic_scope_id,
+        ) as digest:
+            rebuilt = replace(scope, scope_id=scope.scope_id)
+        self.assertEqual(digest.call_count, 1)
+        self.assertEqual(rebuilt.scope_id, scope.scope_id)
+
+    def test_scope_id_impostors_are_rejected_and_meaningful_replace_is_stale(self):
+        template = placement_template(3)
+        fit = placement_sequence(template)
+        scope = self._scope(template, (self._member(fit, 0),), self._receipt(hypotheses=1))
+        for impostor in (None, "", object()):
+            with self.subTest(impostor=impostor):
+                expected = (ValueError if impostor == "" else TypeError)
+                with self.assertRaises(expected):
+                    replace(scope, scope_id=impostor)
+
+        with patch.object(
+            phase_membership,
+            "_deterministic_scope_id",
+            wraps=phase_membership._deterministic_scope_id,
+        ) as digest:
+            with self.assertRaises(ValueError):
+                replace(scope, holder_span_px=FiniteInterval(0.0, 501.0))
+        self.assertEqual(digest.call_count, 1)
+
+        bound = build_phase_competition_scope(
+            template,
+            None,
+            FiniteInterval(0.0, 500.0),
+            None,
+            (),
+            None,
+            False,
+            True,
+            self._receipt(hypotheses=1),
+            (),
+        )
+        with self.assertRaises(ValueError):
+            replace(bound, members=(self._member(fit, 0),))
+
+    def test_scope_id_oracle_binds_optional_fields_and_factory_result_is_pickleable(self):
+        template = placement_template(3)
+        fit = placement_sequence(template)
+        member = self._member(fit, 0)
+        source_domain = PhaseSourceDomain(
+            lane_id="lane:optional-fields",
+            sampling_authority_box=Box(0, 0, 500, 100),
+            source_extent=WorkspaceExtent(500, 100),
+            width_axis=BoundaryAxis.X,
+        )
+        input_context = PhaseCompetitionInputContext(
+            scale_px_per_mm=PositiveInterval.exact(1.0),
+            sequence_measurement_query_ids=("query:optional-fields",),
+            calibrated_nominal_grid_prior=None,
+            max_observations=6,
+        )
+        scope = build_phase_competition_scope(
+            template,
+            FiniteInterval(10.0, 20.0),
+            FiniteInterval(0.0, 500.0),
+            source_domain,
+            (),
+            ((0, ObservationId("ceiling:optional-fields")),),
+            False,
+            False,
+            self._receipt(hypotheses=1),
+            (member,),
+            input_context,
+        )
+
+        self.assertEqual(scope.scope_id, self._scope_id_oracle(scope))
+        self.assertIsInstance(scope.scope_id, str)
+        self.assertIsNot(scope.scope_id, phase_membership._SCOPE_ID_FACTORY_SENTINEL)
+        self.assertTrue(all(
+            value is not phase_membership._SCOPE_ID_FACTORY_SENTINEL
+            for value in vars(scope).values()
+        ))
+        restored = pickle.loads(pickle.dumps(scope))
+        self.assertEqual(restored, scope)
+        self.assertIsInstance(restored.scope_id, str)
+        self.assertIsNot(restored.scope_id, phase_membership._SCOPE_ID_FACTORY_SENTINEL)
+
+        stale_changes = (
+            {"phase_authority_px": FiniteInterval(11.0, 21.0)},
+            {"source_domain": replace(source_domain, lane_id="lane:changed")},
+            {"phase_anchor_authority_ceiling": ((1, ObservationId("ceiling:changed")),)},
+            {"input_context": replace(input_context, max_observations=7)},
+        )
+        for changes in stale_changes:
+            with self.subTest(changes=changes):
+                with self.assertRaises(ValueError):
+                    replace(scope, **changes)
 
     def test_scope_combine_deduplicates_only_exact_scopes_and_keeps_projection_provenance(self):
         template = placement_template(3)

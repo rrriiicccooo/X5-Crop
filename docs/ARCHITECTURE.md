@@ -2590,6 +2590,9 @@ anchor ceiling 均保留。过滤 holder、按 rank 排序、连续合并和 bes
 作用域保存原 template、phase/holder/source domain、关系、ceiling、scale、measurement query IDs、Grid prior
 及 topology 输入；确定性 identity 绑定全部记录。只去重完全相同的作用域；实际执行次数与各次记录数另外
 累计，重复执行同一作用域不伪造新成员，也不丢失已消耗工作。不同输入／输出／投影来源不得仅按最终 fit 去重。
+作用域 factory 由同一构造校验 owner 在完整结构核验后生成一次原完整内容摘要，省去预生成后再重算。
+内部构造标记在返回前替换为正式字符串；显式 identity 与 `dataclasses.replace` 仍重算并核对完整内容。
+不增加缓存、字段或资源额度，确定性 ID、成员、原始来源和报告内容保持。
 
 存在未解决的 plural phase 竞争时，`template_phase_output.py` 对所有已登记作用域中的成员建立
 `complete_recorded_phase_validation`。已失败 projection 与残差不相容成员保留缺口；早期未投影成员从自己的

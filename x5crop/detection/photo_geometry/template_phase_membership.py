@@ -33,6 +33,7 @@ from .template_source_domain import PhaseSourceDomain
 
 _LOGICAL_MEMBER_ROLE_BYTES = 128
 _ADJACENCY_RELATION_TYPES = (SeparatorRelation, ContactRelation, OverlapRelation)
+_SCOPE_ID_FACTORY_SENTINEL = object()
 
 
 @dataclass(frozen=True)
@@ -350,12 +351,14 @@ class PhaseCompetitionScope:
     input_context: PhaseCompetitionInputContext | None = None
 
     def __post_init__(self) -> None:
+        factory_scope = self.scope_id is _SCOPE_ID_FACTORY_SENTINEL
         if self.input_context is not None and not isinstance(self.input_context, PhaseCompetitionInputContext):
             raise TypeError("phase producer input context must be typed")
-        if not isinstance(self.scope_id, str):
-            raise TypeError("phase competition scope identity must be a string")
-        if not self.scope_id:
-            raise ValueError("phase competition scope identity must be non-empty")
+        if not factory_scope:
+            if not isinstance(self.scope_id, str):
+                raise TypeError("phase competition scope identity must be a string")
+            if not self.scope_id:
+                raise ValueError("phase competition scope identity must be non-empty")
         if not isinstance(self.template, TemplateSpec):
             raise TypeError("phase competition scope template must be typed")
         for value, name in (
@@ -428,7 +431,9 @@ class PhaseCompetitionScope:
             self.members,
             self.input_context,
         )
-        if self.scope_id != expected_id:
+        if factory_scope:
+            object.__setattr__(self, "scope_id", expected_id)
+        elif self.scope_id != expected_id:
             raise ValueError("phase competition scope identity does not match complete contents")
 
     @property
@@ -458,21 +463,8 @@ def build_phase_competition_scope(
 ) -> PhaseCompetitionScope:
     """Build a scope with an identity bound to every physical ledger field."""
 
-    scope_id = _deterministic_scope_id(
-        template,
-        phase_authority_px,
-        holder_span_px,
-        source_domain,
-        adjacency_relations,
-        phase_anchor_authority_ceiling,
-        projection_evaluated,
-        bound_exceeded,
-        receipt,
-        members,
-        input_context,
-    )
     return PhaseCompetitionScope(
-        scope_id,
+        _SCOPE_ID_FACTORY_SENTINEL,
         template,
         phase_authority_px,
         holder_span_px,
