@@ -376,6 +376,10 @@ class NativeTraceBridgeBatch:
                 raise ValueError('bridge peak selector lost its registered localization-width payload')
             if (strip.coordinate_start_px, strip.coordinate_stop_px) != _corridor_domain(plan):
                 raise ValueError("bridge strip changed its original query corridor")
+            capacity = _peak_row_count_bound(plan)
+            if any(right-left > capacity for left,right in zip(
+                    strip.peak_row_offsets,strip.peak_row_offsets[1:])):
+                raise ValueError('bridge row peak inventory exceeded its complete selector capacity')
             coverage[strip.plan_index].append((strip.trace_start_px, strip.trace_stop_px))
             expected = _original_in_strip(plan, strip.trace_start_px, strip.trace_stop_px)
             if tuple(s.trace_coordinate_px for s in strip.original_trace_sources) != expected:
@@ -485,19 +489,32 @@ class _Group:
     batch_rows: int = 1
 
 
+def _peak_row_count_bound(plan):
+    """Bound the unchanged selector's complete inventory before pixel access.
+
+    Without polarity splitting, each nonempty credible OR run emits at most
+    one peak. Distinct runs need one false coordinate between them, so even
+    singleton runs at both corridor edges fit ceil(width/2). Split selection
+    retains the original per-coordinate bound.
+    """
+    if not plan.record_peaks:
+        return 0
+    width = _corridor_domain(plan)[1] - _corridor_domain(plan)[0]
+    return width if plan.split_gradient_reversals else (width + 1) // 2
+
+
 def _storage_reservation(plans):
     rows = sum(b-a for p in plans for a,b in p.trace_intervals_px)
-    sites = sum(sum(b-a for a,b in p.trace_intervals_px)*(_corridor_domain(p)[1]-_corridor_domain(p)[0])
-                for p in plans if p.record_peaks)
-    localization_sites = sum(sum(b-a for a,b in p.trace_intervals_px)*(_corridor_domain(p)[1]-_corridor_domain(p)[0])
-                             for p in plans if p.record_peaks and not p.split_gradient_reversals)
+    peaks = sum(sum(b-a for a,b in p.trace_intervals_px)*_peak_row_count_bound(p) for p in plans)
+    localization_peaks = sum(sum(b-a for a,b in p.trace_intervals_px)*_peak_row_count_bound(p)
+                             for p in plans if not p.split_gradient_reversals)
     original_count = sum(sum(1 for _ in _included_original_traces(p)) for p in plans)
     metadata = (8192 + 4096*len(plans)+256*sum(len(p.trace_intervals_px) for p in plans)
                 +128*sum(len(p.original_trace_coordinates_px) for p in plans)
                 +4*sum(len(p.source_id)+len(p.original_query_id)+len(p.baseline_query_id) for p in plans))
     mask_hex = 6*sum(sum(b-a for a,b in p.trace_intervals_px)
                     *((_corridor_domain(p)[1]-_corridor_domain(p)[0]+7)//8) for p in plans)
-    return metadata,metadata+1120*rows+128*sites+16*localization_sites+mask_hex+1024*original_count
+    return metadata,metadata+1120*rows+128*peaks+16*localization_peaks+mask_hex+1024*original_count
 
 
 def native_trace_bridge_retained_byte_bound(plans):
@@ -508,13 +525,15 @@ def _value_reservation(plans,hash_work=0,*,reuse_masks=False):
     rows = sum(b-a for p in plans for a,b in p.trace_intervals_px)
     sites = lambda predicate: sum(sum(b-a for a,b in p.trace_intervals_px)
         *(_corridor_domain(p)[1]-_corridor_domain(p)[0]) for p in plans if predicate(p))
+    peaks = lambda predicate: sum(sum(b-a for a,b in p.trace_intervals_px)
+        *_peak_row_count_bound(p) for p in plans if predicate(p))
     # Reuse copies the three original packed rows, including unaligned bit
     # boundaries, then validates the same payload. It does not rebuild support
     # from responses. 16 visits/site covers unpack/repack and packed validation;
     # the original response comparisons and mask construction require 32.
     mask_work = (16 if reuse_masks else 32)*sites(lambda p:True)+96*rows
-    visits = (hash_work+704*sites(lambda p:p.record_peaks)
-        +64*sites(lambda p:p.record_peaks and not p.split_gradient_reversals)+160*rows+mask_work
+    visits = (hash_work+320*sites(lambda p:p.record_peaks)+384*peaks(lambda p:True)
+        +64*peaks(lambda p:not p.split_gradient_reversals)+160*rows+mask_work
         +128*(len(plans)+sum(len(p.trace_intervals_px) for p in plans)
               +sum(len(p.original_trace_coordinates_px) for p in plans))
         # Four float64 fields are read and copied (8 visits/site), and the
@@ -528,9 +547,9 @@ def _value_reservation(plans,hash_work=0,*,reuse_masks=False):
 def _completed_value_visit_bound(plans,strips,reserved):
     """Settle only a complete batch; all scans and all recorded peaks count.
 
-    The admission bound retains 704 sites: 256 for original peak extraction,
-    64 for full OR support, and 384 for a potential fixed record. Only fixed
-    record/width packing and validation depend on the emitted inventory.
+    Admission keeps 320 visits per scanned site: 256 for original peak
+    extraction and 64 for full OR support. Only fixed-record/width packing
+    and validation depend on the selector's bounded emitted inventory.
     """
     counts=[0]*len(plans)
     for strip in strips:
@@ -538,10 +557,9 @@ def _completed_value_visit_bound(plans,strips,reserved):
     unspent=0
     for plan,count in zip(plans,counts,strict=True):
         if not plan.record_peaks:continue
-        width=_corridor_domain(plan)[1]-_corridor_domain(plan)[0]
-        sites=width*sum(b-a for a,b in plan.trace_intervals_px)
-        if count>sites:raise ValueError('bridge peak inventory exceeded its complete coordinate domain')
-        unspent+=(384+(0 if plan.split_gradient_reversals else 64))*(sites-count)
+        peak_bound=_peak_row_count_bound(plan)*sum(b-a for a,b in plan.trace_intervals_px)
+        if count>peak_bound:raise ValueError('bridge peak inventory exceeded its complete selector capacity')
+        unspent+=(384+(0 if plan.split_gradient_reversals else 64))*(peak_bound-count)
     return reserved-unspent
 
 
@@ -562,7 +580,8 @@ def _prepare_refinement(plans,sources,maximum_temporary_bytes):
         # metadata stays live beside every encoded replacement.
         mixed += 1024*rows
         cached = 32*width
-        encoded = 1120+128*width+(0 if p.split_gradient_reversals else 16*width)+6*((width+7)//8)+1024
+        peak_count = _peak_row_count_bound(p)
+        encoded = 1120+128*peak_count+(0 if p.split_gradient_reversals else 16*peak_count)+6*((width+7)//8)+1024
         mixed += rows*max(cached,encoded)+4*width
         low,high = _normalization_domain(p)
         groups.append(_Group((i,),p.trace_intervals_px,_axis_lengths(p.source_extent,p.boundary_axis)[0],
@@ -601,10 +620,11 @@ def _prepare(plans, maximum_temporary_bytes, response_source_plans=None):
                              start, stop, max(_corridor_domain(plans[i])[1] - _corridor_domain(plans[i])[0]
                                               for i in members)))
     # One strip per row is a conservative reservation for every possible block
-    # partition. Each view coordinate can create at most one retained peak.
+    # partition. The original selector bounds the complete retained inventory;
+    # scans and masks still cover every corridor coordinate.
     metadata,retained_bound = _storage_reservation(plans)
-    # Keep the existing 256Q+32 peak scan reservation, and separately cover
-    # fixed-record packing, hexadecimal validation and one-record decoding.
+    # Keep the full coordinate peak-selection and OR-support scans, and
+    # separately cover fixed-record packing, hex validation and decoding.
     # The extra group-support mask, its subset checks and row metadata are
     # included before pixel access; the proof's flank scan is charged later.
     value_work,mask_work = _value_reservation(plans,hash_work)

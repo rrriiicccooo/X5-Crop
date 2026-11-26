@@ -2820,11 +2820,16 @@ baseline 数组的 view；坐标每 query 只复制一次。完整 kernel 和正
 回放逐行核对三份原 mask 和原 trace SHA，Cross 入口拒绝该复用上下文，不能借此获得另一类资格。
 Sequence 单峰桥接另保留每峰已测 localization width，固定 8-byte 编码；原 Cross 64-byte 峰记录及
 选择不变。附加编码、构造与访问在同一 bridge owner 的整批资源公式中预留和重放。
+最坏峰数由既有选择器的完整容量确定：单峰规则每个非空 credible OR 连续组至多一个峰，两个组之间
+至少隔一个 false 坐标，因此宽度 w 的一行至多 `ceil(w/2)` 个峰，包括触及两侧边缘的 singleton 组。
+反向分峰继续按每坐标一个峰预留；不提峰的信号阶段峰容量为零。固定峰编码与定位宽度的保留量分别
+按该容量的 128／16 bytes 计算；完整坐标扫描、mask、float64 响应缓存和 scratch 不按峰容量缩小。
 
 Bridge 将读取前预留与完整测量后结算分开。`value_visit_bound=required_value_visit_bound` 继续保存
 整批最坏预留 U，首像素前的 pixel／value 准入及最坏内存保持原合同；新增 `completed_value_visit_bound`
-保存完成费用 W。令 E 为全部提峰坐标数、P 为完整已编码峰数，L／P_L 为其中采用单峰定位宽度的
-坐标／峰数，完成费用为 `W=U−384(E−P)−64(L−P_L)`。每坐标的完整扫描与 OR 支撑仍按 `320E`
+保存完成费用 W。令 C 为全部提峰坐标数、E 为选择器的整批最坏峰容量、P 为完整已编码峰数，
+L／P_L 为其中采用单峰定位宽度的最坏／实际峰数，完成费用为
+`W=U−384(E−P)−64(L−P_L)`。每坐标的完整扫描与 OR 支撑仍按 `320C`
 计费，固定记录的编码、校验与访问按 `384P`，定位宽度按 `64P_L`；mask、来源 SHA、缓存、元数据、
 preflight、guard 和完整物理证明费用均保持。只有完整 strip coverage、offsets、payload 和来源通过后
 才结算；失败 batch 的 W 为 0，但已执行规划、preflight 与其它阶段继续独立收费。物理证明失败、
