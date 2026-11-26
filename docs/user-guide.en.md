@@ -53,8 +53,10 @@ which still require manual review.
 The primary and retained competing interpretation each check their own boundaries and relations between adjacent photos.
 Reports show evidence for registered partners and physical conflicts. Incomplete coverage of competing interpretations
 requires manual review; fitting two proposals into one window alone does not qualify the result for automatic output.
-Reports retain all competing members from each positioning stage and check each member's own width, height,
-top/bottom association, and protection budget. Reports distinguish qualified, physically refuted, and unresolved members.
+Production reports retain the original competing-member ledger, all existing proposals, independent Review proposals,
+and the final safety decision. When positioning still has unresolved plural competition, Debug Analysis development
+reports additionally check each historical member's own width, height, top/bottom association, and protection budget.
+These reports distinguish qualified, physically refuted, and unresolved members.
 Refuted records and their evidence remain visible; common windows cover the complete remaining set. Missing evidence,
 failed fitting, or failed budgets do not exclude an interpretation. This validation does not automatically select another proposal.
 Members with missing qualification evidence remain in the set;
@@ -295,6 +297,10 @@ x5_crop_output/
 ```
 
 The JSONL report uses compact UTF-8 encoding, with one complete record per line, and can be read with standard JSON tools.
+`photo_geometry.complete_phase_validation_requested` records whether complete historical-member qualification
+diagnostics were requested: `false` for ordinary cropping and `true` for Debug Analysis and golden verification.
+This post-selection development check does not participate in current candidate selection or automatic approval;
+all proposals and actual outputs still undergo the production safety checks.
 
 Exit codes:
 

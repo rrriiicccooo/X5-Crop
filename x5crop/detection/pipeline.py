@@ -50,6 +50,8 @@ class PhotoGeometryCandidate:
 def choose_detection(
     workspace: DetectionWorkspace,
     configuration: DetectionConfiguration,
+    *,
+    complete_phase_validation_requested: bool = False,
 ) -> PhotoGeometryCandidate:
     geometry = reconstruct_photo_geometry(
         workspace.boundary_measurement_field,
@@ -58,6 +60,7 @@ def choose_detection(
         layout=workspace.boundary_measurement_field.layout,
         configuration=configuration,
         resolved_slot_count=workspace.source_core.resolved_slot_count,
+        complete_phase_validation_requested=complete_phase_validation_requested,
     )
     facts = dict(geometry.assessment_facts)
     if workspace.source_core.scan_canvas_state != EvidenceState.SUPPORTED:

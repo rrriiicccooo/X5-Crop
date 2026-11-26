@@ -58,6 +58,7 @@ def _photo_geometry_facts(detection: object) -> dict[str, Any]:
     }
     return {
         "selected_scan_canvas_profile_id": selected_profile_id,
+        "complete_phase_validation_requested": geometry.complete_phase_validation_requested,
         "matched_holder": holder,
         "resolved_slot_count": core.resolved_slot_count,
         "resolved_output_slots": detection.resolved_output_slots,

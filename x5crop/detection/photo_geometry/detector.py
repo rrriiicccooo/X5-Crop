@@ -321,6 +321,7 @@ def _empty_result(
     *,
     lanes_available: bool,
     output_slot_gap: GateGap = GateGap.OUTPUT_SLOT_COUNT_UNAVAILABLE,
+    complete_phase_validation_requested: bool = False,
 ) -> PhotoGeometryDetectionResult:
     proposal_failure = failure_fact(output_slot_gap)
     proposal = TemplateSourceProposal(
@@ -358,7 +359,8 @@ def _empty_result(
         "enclosing_support_aperture_consistency": supported(),
         "direct_use_budget": unavailable(GateGap.DIRECT_USE_BUDGET_UNAVAILABLE),
     }
-    return PhotoGeometryDetectionResult(None, (), proposal, selection, (), facts)
+    return PhotoGeometryDetectionResult(None, (), proposal, selection, (), facts,
+        complete_phase_validation_requested=complete_phase_validation_requested)
 
 
 def reconstruct_photo_geometry(
@@ -369,7 +371,10 @@ def reconstruct_photo_geometry(
     layout: str,
     configuration: DetectionConfiguration,
     resolved_slot_count: ResolvedSlotCount | None,
+    complete_phase_validation_requested: bool = False,
 ) -> PhotoGeometryDetectionResult:
+    if type(complete_phase_validation_requested) is not bool:
+        raise TypeError("complete phase validation request must be a bool")
     lane_ids = tuple(lane.domain.lane_id for lane in lanes)
     if tuple(item.lane_id for item in content_observations) != lane_ids:
         raise ValueError("content observations must cover source lanes")
@@ -383,6 +388,7 @@ def reconstruct_photo_geometry(
         )
         return _empty_result(
             lanes_available=bool(lanes),
+            complete_phase_validation_requested=complete_phase_validation_requested,
             output_slot_gap=(
                 GateGap.UNSUPPORTED_DUAL_COUNT
                 if unsupported_dual_count
@@ -677,16 +683,20 @@ def reconstruct_photo_geometry(
         reconstructed,
         source_selection,
     )
-    # This Review-only branch runs after canonical selection and Gate facts.
-    # It cannot contribute a candidate, source proposal or selected output.
+    # Independent Review proposals remain available in every run. Complete
+    # historical qualification is post-Gate development analysis only; its
+    # request never changes candidate, source-proposal or output authority.
     from .template_phase_review import build_independent_phase_review
-    from .template_phase_output import build_complete_phase_output
+
+    if complete_phase_validation_requested:
+        from .template_phase_output import build_complete_phase_output
 
     evidence_lanes = []
     for lane in reconstructed:
         independent = build_independent_phase_review(lane.prepared)
         retained = (0 if independent is None else independent.peak_temporary_bytes)
-        complete = build_complete_phase_output(lane.prepared, retained_review_bytes=retained)
+        complete = (build_complete_phase_output(lane.prepared, retained_review_bytes=retained)
+                    if complete_phase_validation_requested else None)
         complete_peak = 0 if complete is None else complete.peak_temporary_bytes
         evidence_lanes.append(replace(lane, independent_phase_review=independent,
             complete_phase_output=complete, work=replace(lane.work,
@@ -701,4 +711,5 @@ def reconstruct_photo_geometry(
             lanes, resolved.lane_output_slot_counts
         ),
         assessment_facts=gate,
+        complete_phase_validation_requested=complete_phase_validation_requested,
     )

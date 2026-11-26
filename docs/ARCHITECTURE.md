@@ -2594,7 +2594,8 @@ anchor ceiling 均保留。过滤 holder、按 rank 排序、连续合并和 bes
 内部构造标记在返回前替换为正式字符串；显式 identity 与 `dataclasses.replace` 仍重算并核对完整内容。
 不增加缓存、字段或资源额度，确定性 ID、成员、原始来源和报告内容保持。
 
-存在未解决的 plural phase 竞争时，`template_phase_output.py` 对所有已登记作用域中的成员建立
+显式 Debug Analysis 与 verifier 请求完整历史资格诊断；存在未解决的 plural phase 竞争时，
+`template_phase_output.py` 对所有已登记作用域中的成员建立
 `complete_recorded_phase_validation`。已失败 projection 与残差不相容成员保留缺口；早期未投影成员从自己的
 原 fit 接受已登记原生事实检查，不能因无排名或旧作用域而消失。其它成员逐一从自身 fit 重建一次原生补边、
 至多一次晚期 projection、自身 direct/global/nominal/adjacency 权限、独立初始 source W/H 及本成员 source W。
@@ -2671,8 +2672,14 @@ format/source 状态测量共同 W。共同 H 只从每个成员都已完整关�
 `common_outputs` 可保留预算失败窗口作为诊断，只有 `state=supported` 且 `common_failure=null` 才表示窗口
 验证通过。当前该分支在规范 selection/Gate 后执行，不授予照片序号映射、canonical winner 或自动输出权限。
 
-当前报告 schema 为 140。普通报告保留完整账本、反证分区和条件成员证明；开发报告另外保留原注册输入，用同一纯 owner
-重放全部 producer 和独立成员，再比对结果、缺口和工作。成员 Cross 只重复自身 H／纵向域、best/runner、
+当前报告 schema 为 141。`PhotoGeometryDetectionResult.complete_phase_validation_requested` 使用严格 bool，
+由既有 `RunConfig.development_detail` 传入并保存到 `photo_geometry`。普通运行保留原 producer 账本、全部
+提案、独立 Review 方案与两级 Gate，完整历史资格诊断标记为未请求，`complete_phase_output` 为 `null`。
+开发诊断请求不改变测量、候选、选择或正式输出；该后置验证仍不授予自动资格。已请求时，当前有 runner
+且 phase 未 resolved 的 lane 必须保留完整 proof，包括 unavailable／bound-exceeded 结果；沿用原 guard
+无需该证明时仍可为 `null`，不据此宣称历史成员为空。开发报告保留反证分区、条件成员证明与原注册输入，
+用同一纯 owner 重放全部 producer 和独立成员，再比对结果、缺口和工作。请求标记与报告 detail 绑定，
+不得将开发报告改成未请求以跳过重放。成员 Cross 只重复自身 H／纵向域、best/runner、
 求解 receipt 和成员覆盖状态，共享原生测量仍归 lane，不在每个成员中复制全部原始线。
 外部重放恢复已有物理线及粗支撑的 run-local key，并保留已有编号；新证明编号允许双射重命名，已登记原生边界、source
 state、interval、成员和引用关系必须一致。编号预留只防止碰撞，不能产生证据或权限。
@@ -2686,6 +2693,9 @@ Source 轴状态合并只处理既有二维凸域，不增加 TIFF query、拟�
 两轴投影和边法向支撑区间至多产生 `2V+4` 个半平面；与 U 顶点左域相交的工作为 `O(V(U+V))`，
 同时存活的顶点／投影临时量为 `O(U+V)`，随本次合并释放。点／线段由同一闭集裁剪处理，不用面积阈值
 重建非退化域；联合坐标只沿用 `1e-12` 算术容差。当前至多两条 lane，单 lane 直接使用其原 source 状态。
+
+完整历史成员资格验证只在显式开发诊断中执行；原有完整输入、资源预检、成员、反证和重放合同保持。
+普通运行仍执行全部 proposal 生成与独立 Review，不为该未请求的后置验证计算或申报工作量。
 
 每次 development receipt 保存实际计数和编译上界：
 

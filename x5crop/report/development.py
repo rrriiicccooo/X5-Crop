@@ -62,6 +62,8 @@ def development_report_facts(
     workspace: DetectionWorkspace,
 ) -> dict[str, Any]:
     geometry = detection.candidate.geometry
+    if not geometry.complete_phase_validation_requested:
+        raise ValueError("development report requires complete phase validation to be requested")
     stability_by_lane = {}
     alignment_by_lane = {}
     separator_support_by_lane = {}

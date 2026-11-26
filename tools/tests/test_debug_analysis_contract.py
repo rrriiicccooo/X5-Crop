@@ -84,7 +84,8 @@ def _fixture(
         "horizontal",
         configuration,
     )
-    candidate = choose_detection(workspace, configuration)
+    candidate = choose_detection(workspace, configuration,
+        complete_phase_validation_requested=True)
     decision = apply_decision_gate(candidate.gate)
     detection = finalize_detection(
         candidate,

@@ -76,7 +76,8 @@ def _process_one_scoped(
             if config.layout == "auto"
             else config.layout
         )
-        config = replace(config, layout=layout)
+        config = replace(config, layout=layout,
+            development_detail=(config.debug_analysis or config.development_detail))
         failure_stage = FailureStage.IMAGE_READ
         arr, profile, page_warnings = read_tiff(input_file)
         for warning in page_warnings:
@@ -97,6 +98,7 @@ def _process_one_scoped(
         candidate = choose_detection(
             workspace,
             configuration,
+            complete_phase_validation_requested=config.development_detail,
         )
 
         failure_stage = FailureStage.DECISION

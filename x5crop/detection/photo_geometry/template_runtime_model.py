@@ -1416,8 +1416,18 @@ class PhotoGeometryDetectionResult:
     source_placement_selection: TemplateSourceSelection
     output_slot_identities: tuple[OutputSlotIdentity, ...]
     assessment_facts: Mapping[str, TypedAssessment]
+    complete_phase_validation_requested: bool = False
 
     def __post_init__(self) -> None:
+        if type(self.complete_phase_validation_requested) is not bool:
+            raise TypeError("complete phase validation request must be a bool")
+        for lane in self.lane_reconstructions:
+            required = False
+            if self.complete_phase_validation_requested:
+                phase = lane.prepared.phase_competition
+                required = phase.runner_up is not None and phase.status != PhaseFitStatus.RESOLVED
+            if required != (lane.complete_phase_output is not None):
+                raise ValueError("complete phase validation does not match its request and producer scope")
         lane_ids = tuple(item.lane_id for item in self.lane_reconstructions)
         if len(set(lane_ids)) != len(lane_ids):
             raise ValueError("detection result lane identities must be unique")

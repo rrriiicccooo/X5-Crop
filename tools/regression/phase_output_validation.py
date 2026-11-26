@@ -130,7 +130,10 @@ def _registered_replay_identity_context(lane, read_proof):
     return source_identity_scope(reserved_ids=names, registered_keys=keys)
 
 
-def validate_complete_phase_output(lane, production, measurement, *, layout, read_proof):
+def validate_complete_phase_output(lane, production, measurement, *, layout, read_proof,
+                                   complete_phase_validation_requested):
+    if type(complete_phase_validation_requested) is not bool or not complete_phase_validation_requested:
+        raise ValueError("development phase validation must be explicitly requested")
     phase = read_proof(lane["phase_competition"], PhaseFitResult)
     if production.get("phase_competition_scopes") != lane["phase_competition"]["competition_scopes"]:
         raise ValueError("complete phase producer scopes changed between reports")

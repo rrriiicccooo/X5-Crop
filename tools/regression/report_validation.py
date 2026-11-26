@@ -2930,6 +2930,10 @@ def _validate_geometry(
     record: dict[str, Any], expected_source_extent: WorkspaceExtent
 ) -> None:
     geometry = record["photo_geometry"]
+    complete_requested = geometry.get("complete_phase_validation_requested")
+    if (type(complete_requested) is not bool
+            or complete_requested != (record["detail_level"] == "development")):
+        raise ValueError("complete phase validation request disagrees with report detail")
     source_proposal = _validate_source_proposal(
         geometry.get("source_placement_proposal")
     )
@@ -3018,6 +3022,8 @@ def _validate_geometry(
         scopes = tuple(_read_common_proof(item, PhaseCompetitionScope) for item in raw_scopes)
         if "complete_phase_output" not in lane:
             raise ValueError("source lane lost complete phase output validation")
+        if not complete_requested and lane["complete_phase_output"] is not None:
+            raise ValueError("unrequested complete phase validation contains a result")
         if lane["complete_phase_output"] is not None:
             complete = _read_common_proof(lane["complete_phase_output"], CompletePhaseOutputProof)
             if complete.scopes != scopes:
@@ -4239,7 +4245,8 @@ def _validate_development(record: dict[str, Any]) -> None:
         )
         from .phase_output_validation import validate_complete_phase_output
         validate_complete_phase_output(lane, production_lane, development["measurement"],
-            layout=record["measurement"]["layout"], read_proof=_read_common_proof)
+            layout=record["measurement"]["layout"], read_proof=_read_common_proof,
+            complete_phase_validation_requested=production_geometry["complete_phase_validation_requested"])
         placements = placement.get("placements")
         if not isinstance(placements, list) or len(placements) > 4:
             raise ValueError("retained placement set exceeds its compiled bound")
