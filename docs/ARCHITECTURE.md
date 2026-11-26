@@ -422,6 +422,12 @@ TIFF 读取、候选或 LP。闭区间比较仅沿用 `1e-9 px` 数值容差，�
 `sequence_connections.py` 只沿父边实际首末 raw trace 之间的原 query corridor 补测，使用同一灰度、
 完整 baseline 归一化和原单峰选择器，不读取候选位置、W、照片模板或黄金。完整父集合先登记，
 原峰来源、极性、同源别名、源域或组侧翼缺证时逐项保存 unavailable，不按最终成功项缩小义务。
+Sequence corridor 使用原 query 的完整整数坐标域与同一 baseline 的 kernel 可观察整数域之交集，
+精确复现原 registered window 已实际测得的域；声明搜索范围触及 TIFF 外缘不再使内部已测数据失效。
+原 query、ownership、完整 baseline 归一化、trace SHA 与全部原峰／别名保持；任一必需原峰的完整
+physical interval 不在交集内、原组缺侧翼或交集为空时仍拒绝。不能按 parent、响应分量、模板或有利
+前缀裁窄该域；密集分量触及交集边界及密集 OR 组缺侧翼仍拒绝。共享 BridgePlan 与 Cross continuity
+的 kernel 可观察性合同不变。
 连接测量分两阶段：先按完整原域保存三份密集响应 mask、原 trace SHA 和原 corridor 的只读数值响应，
 不提取密集峰；完整重放原点分量及源上下文后，仅为必要连接仍成立的父边执行原查询的完整提峰。
 精测消费同次保存的响应和原三份 mask，不重新读取源行、归一化或计算完整域 SHA；四个选峰数值字段、

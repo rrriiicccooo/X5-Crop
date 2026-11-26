@@ -96,6 +96,23 @@ def _counts(parents, measurements):
     return visits,memory
 
 
+def _observable_query_corridor(query, baseline, source_extent):
+    """Keep the whole integer window that the original scalar owner measured.
+
+    Registered windows are slices of the kernel-observable baseline.  Their
+    declared search may reach the TIFF edge, but no scalar response exists in
+    that fringe.  Intersect those same two domains, independently of any
+    parent, template, response component or selected peak.
+    """
+    start, stop = native_trace_bridge_normalization_domain(
+        source_extent, query.boundary_axis, baseline.search_intervals_px[0],
+        query.boundary_axis_scale_px_per_mm.maximum)
+    interval = query.search_intervals_px[0]
+    start = max(start, math.ceil(interval.minimum))
+    stop = min(stop, math.floor(interval.maximum) + 1)
+    return None if stop <= start else FiniteInterval(float(start), float(stop - 1))
+
+
 def sequence_connection_requests(parents, measurements, *, source_extent):
     windows = tuple(m for m in measurements if m.query.purpose == QueryPurpose.SEQUENCE_ANCHOR_WINDOW)
     baseline = next(m for m in measurements if m.query.purpose == QueryPurpose.SEQUENCE_BASELINE)
@@ -124,9 +141,11 @@ def sequence_connection_requests(parents, measurements, *, source_extent):
                 failure = "source_context_conflict"
             if not trace_support_is_one_connected_run(query.trace_positions_px,parent.trace_coordinates_px,spec=SPEC):
                 failure = failure or "original_run_unavailable"
-            low, high = native_trace_bridge_normalization_domain(source_extent,query.boundary_axis,
-                baseline.query.search_intervals_px[0],query.boundary_axis_scale_px_per_mm.maximum)
-            if any(math.ceil(i.minimum)<low or math.floor(i.maximum)>=high for i in query.search_intervals_px):
+            corridor = _observable_query_corridor(query, baseline.query, source_extent)
+            if corridor is None or any(
+                    not corridor.contains(p.physical_position_interval_px.minimum)
+                    or not corridor.contains(p.physical_position_interval_px.maximum)
+                    for p in original):
                 failure = failure or "source_domain_unavailable"
             for p in original:
                 ref = p.peak_source
@@ -163,7 +182,8 @@ def sequence_connection_plans(field, requests, measurements):
             else:
                 intervals.append((low,high))
         plans.append(NativeTraceBridgePlan(field.source_id,field.source_extent,query.boundary_axis,
-            identity,baseline.query_id,baseline.search_intervals_px[0],query.search_intervals_px[0],
+            identity,baseline.query_id,baseline.search_intervals_px[0],
+            _observable_query_corridor(query, baseline, field.source_extent),
             tuple(intervals),query.boundary_axis_scale_px_per_mm.maximum,query.trace_positions_px,False))
     return tuple(plans)
 
